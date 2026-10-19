@@ -298,8 +298,7 @@ mod tests {
         assert_ne!(wrong.package_id(), library.package_id());
         assert!(stale.expected.is_some(), "{stale:?}");
         assert!(stale.actual.is_some());
-        let projected =
-            crate::routed::capability::ContractPackageRefusalProjection::from_reader(&stale);
+        let projected = crate::routed::capability::project_contract_package_refusal(&stale);
         let wire = serde_json::to_value(projected).expect("serialize dependency mismatch");
         assert_eq!(
             wire["expected"],
@@ -341,13 +340,22 @@ mod tests {
             panic!("reader refusal must stop negotiation: {result:?}");
         };
         assert_eq!(refusal.code, expected.code);
-        assert_eq!(refusal.path, expected.path);
+        assert_eq!(
+            refusal.path.as_deref(),
+            expected.path.as_ref().map(|path| path.as_str())
+        );
         assert_eq!(refusal.cause, expected.cause);
-        assert_eq!(refusal.locus.as_deref(), expected.locus.as_ref());
-        assert_eq!(refusal.contract_version, expected.contract_version);
-        assert_eq!(refusal.document_pointer, expected.document_pointer);
-        assert_eq!(refusal.expected.as_deref(), expected.expected.as_ref());
-        assert_eq!(refusal.actual.as_deref(), expected.actual.as_ref());
+        assert_eq!(refusal.locus.as_ref(), expected.locus.as_ref());
+        assert_eq!(
+            refusal.contract_version.as_deref(),
+            expected.contract_version.as_deref()
+        );
+        assert_eq!(
+            refusal.document_pointer.as_deref(),
+            expected.document_pointer.as_ref().map(|path| path.as_str())
+        );
+        assert_eq!(refusal.expected.as_ref(), expected.expected.as_ref());
+        assert_eq!(refusal.actual.as_ref(), expected.actual.as_ref());
         let serialized = serde_json::to_value(&refusal).expect("serialize reader projection");
         assert_eq!(
             serialized["code"],
@@ -471,6 +479,78 @@ mod tests {
                     .clone()
             })
             .collect()
+    }
+
+    #[trace("TC-030", "FR-019-AC-50", "FR-039-AC-5")]
+    #[test]
+    fn admitted_function_settlement_does_not_read_again() {
+        use exact_function_fixture::{
+            code_id, source_bound_call_package, SOURCE_BODY, SOURCE_CALL, SOURCE_FUNCTION,
+            SOURCE_PARAM_A, SOURCE_PARAM_B,
+        };
+        let (checked, ids) = source_bound_call_package().admit_resolved();
+        let function = ids.resolve(&code_id(SOURCE_FUNCTION));
+        let body = ids.resolve(&code_id(SOURCE_BODY));
+        let call = ids.resolve(&code_id(SOURCE_CALL));
+        let requested = [body, call.clone()];
+        let lowered = checked.lower(&requested, &routed_contract_lowering_profile());
+        let admitted = match ContractPackageWireV1::read(
+            lowered.package.canonical_bytes().expect("lowered bytes"),
+            CheckedPackageReadLimits::bounded(),
+            &ContractDependencies::new(),
+        ) {
+            ContractPackageReadResult::Admitted(package) => package,
+            other => panic!("package must admit: {other:?}"),
+        };
+        let request = RequestItem {
+            kind: RequestedKind::Known(CapabilityKind::ValueValidity),
+            extent: Some(ExtentClassification {
+                extent: Mode::Bounded,
+                finite_bound_available: true,
+                domains: Vec::new(),
+                bounds: Vec::new(),
+            }),
+            named_backend: None,
+            candidates: Candidates::Set(vec![Candidate {
+                identity: "kani".to_owned(),
+            }]),
+            kani_form: KaniForm::V2FunctionApplication {
+                package: Box::new(checked),
+                function_node_id: function,
+                call_node_id: call,
+                argument_node_ids: vec![
+                    ids.resolve(&code_id(SOURCE_PARAM_A)),
+                    ids.resolve(&code_id(SOURCE_PARAM_B)),
+                ],
+            },
+        };
+        let mut envelope = empty_backend_request(
+            2,
+            match &request.kani_form {
+                KaniForm::V2FunctionApplication { package, .. } => package,
+                _ => unreachable!(),
+            },
+            &requested[0],
+        );
+        envelope.manifest.push(BackendDescriptor {
+            identity: "kani".to_owned(),
+            advertised: vec![(CapabilityKind::ValueValidity, Mode::Bounded)],
+            origin: ProviderOrigin::Linked,
+            domains: None,
+            bounds: None,
+        });
+        envelope.items[1] = request;
+        assert_eq!(crate::oracle::function::take_function_preflight_reads(), 0);
+        let result = negotiate_contract_package(&admitted, &drivers(&requested), &envelope)
+            .expect("admitted package settles");
+        assert!(
+            matches!(result[1].backend.as_ref().map(|item| &item.disposition), Some(crate::routed::capability::Disposition::Supported { backend }) if backend == "kani")
+        );
+        assert_eq!(
+            crate::oracle::function::take_function_preflight_reads(),
+            0,
+            "FR-330 must not call the internal V1 reader"
+        );
     }
 
     fn source_function_body(checked: &CheckedPackageV2, name: &str) -> CheckedNodeId {

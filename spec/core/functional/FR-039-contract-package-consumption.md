@@ -219,6 +219,8 @@ This internal preflight re-lowers a `CheckedPackageV2` for the V2 function arm;
 it is distinct from FR-330 consumption. On the FR-330 production path, only
 the caller's `Admitted` package reaches CG's typed `&ContractPackageV1`
 consumer; CG performs no second read or checked-graph fallback there.
+TC-030 counts internal function-reader calls during admitted-package settlement
+and asserts that this path makes none.
 FR-039-AC-5 Analysis remains partial pending the full production-consumer
 audit and the Contract IR owner-evidence gap tracked by IR-893.
 

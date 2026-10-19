@@ -1643,18 +1643,30 @@ pub(crate) fn reference_node_id<'a>(
         .map(|node| &node.node_id)
 }
 
-/// Classify one source-backed integer function application with the same V1 reader and generator
-/// used after routed settlement. No source artifact is returned to the negotiation path.
+#[cfg(test)]
+thread_local! {
+    static FUNCTION_PREFLIGHT_READS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(crate) fn take_function_preflight_reads() -> usize {
+    FUNCTION_PREFLIGHT_READS.with(|count| count.replace(0))
+}
+
+/// Non-admitted result of the internal function-package reader.
 pub(crate) enum FunctionPackageReadFailure {
     Refused(Box<CheckedPackageRefusal>),
     Incomplete(CheckedPackageIncomplete),
 }
 
+/// Classify one source-backed integer function application with the same V1 reader and generator
+/// used after routed settlement. No source artifact is returned to the negotiation path.
 pub(crate) fn checked_integer_function_application_is_supported(
     checked: &CheckedPackageV2,
     function_node_id: &CheckedNodeId,
     call_node_id: &CheckedNodeId,
     argument_node_ids: &[CheckedNodeId],
+    admitted: Option<(&ContractPackageV1, &[ContractRequestPosition], usize)>,
 ) -> Result<bool, FunctionPackageReadFailure> {
     let graph: Graph<'_> = checked
         .graph()
@@ -1744,34 +1756,50 @@ pub(crate) fn checked_integer_function_application_is_supported(
         argument_node_ids: argument_node_ids.to_vec(),
     };
     let requested_ids = [body_id.clone(), call_node_id.clone()];
-    let lowered = checked.lower(&requested_ids, &routed_contract_lowering_profile());
-    let Some(bytes) = lowered.package.canonical_bytes() else {
-        return Ok(false);
-    };
-    let contract = match ContractPackageWireV1::read(
-        bytes,
-        CheckedPackageReadLimits::bounded(),
-        &ContractDependencies::new(),
-    ) {
-        ContractPackageReadResult::Admitted(package) => *package,
-        ContractPackageReadResult::Refused(refusal) => {
-            return Err(FunctionPackageReadFailure::Refused(Box::new(refusal)))
-        }
-        ContractPackageReadResult::Incomplete(incomplete) => {
-            return Err(FunctionPackageReadFailure::Incomplete(incomplete))
-        }
-    };
-    let positions = requested_ids.map(|node_id| ContractRequestPosition::DriverItem {
-        node_id,
-        result_selection: ContractDriverResultSelection::NotApplicable,
-    });
-    let declaration_position = [0usize];
-    let item_position = [1usize];
+    let owned_contract;
+    let owned_positions;
+    let (contract, positions, declaration_position, item_position) =
+        if let Some((package, positions, request_index)) = admitted {
+            let Some(body_index) = positions.iter().position(|position| {
+                matches!(
+                    position,
+                    ContractRequestPosition::DriverItem { node_id, .. } if node_id == body_id
+                )
+            }) else {
+                return Ok(false);
+            };
+            (package, positions, [body_index], [request_index])
+        } else {
+            let lowered = checked.lower(&requested_ids, &routed_contract_lowering_profile());
+            let Some(bytes) = lowered.package.canonical_bytes() else {
+                return Ok(false);
+            };
+            #[cfg(test)]
+            FUNCTION_PREFLIGHT_READS.with(|count| count.set(count.get() + 1));
+            owned_contract = match ContractPackageWireV1::read(
+                bytes,
+                CheckedPackageReadLimits::bounded(),
+                &ContractDependencies::new(),
+            ) {
+                ContractPackageReadResult::Admitted(package) => *package,
+                ContractPackageReadResult::Refused(refusal) => {
+                    return Err(FunctionPackageReadFailure::Refused(Box::new(refusal)))
+                }
+                ContractPackageReadResult::Incomplete(incomplete) => {
+                    return Err(FunctionPackageReadFailure::Incomplete(incomplete))
+                }
+            };
+            owned_positions = requested_ids.map(|node_id| ContractRequestPosition::DriverItem {
+                node_id,
+                result_selection: ContractDriverResultSelection::NotApplicable,
+            });
+            (&owned_contract, owned_positions.as_slice(), [0], [1])
+        };
     let declarations = [declaration];
     let items = [item];
     let Ok(oracles) = generate_exact_function_oracles(
-        &contract,
-        &positions,
+        contract,
+        positions,
         &declaration_position,
         &declarations,
         &item_position,
