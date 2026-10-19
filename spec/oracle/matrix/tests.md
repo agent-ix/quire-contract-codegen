@@ -58,6 +58,7 @@ type: TestMatrix
 | FR-031 | FR-031-AC-22, FR-031-AC-26 | TC-044 | 🚧 Planned (IR-602), contingent on the owner's decision OD-2 and gated on the lock prerequisite; the native oracle takes the whole `quire_exact` family, `rt::Meter` and `rt::Outcome` included, renders its connectives inline because `quire_exact::Outcome` has no `From<bool>`, and CG depends on `quire-exact` directly with one lock entry |
 | FR-031 | FR-031-AC-23 through FR-031-AC-25 | TC-044 | 🚧 Planned (IR-602; AC-25's native side is gated on the lock prerequisite); the Kani bundle oracle's divide (`/`) and remainder (`wrapping_rem`) shape, their falsifiable Kani checks (the `make kani` lane) and the bundle and native differential for divide and remainder. Not verified: any divide through `quire_exact` under Kani, which gave no verdict in 900 seconds (FR-031, Open decisions OD-4) |
 | FR-035 | FR-035-AC-1 through FR-035-AC-6 | TC-050 | 🚧 Planned (IR-494, IR-796); PR #381 has a generated caller-ingress oracle and symbolic harness candidate, but the original NFC `Text[1,1]` Kani run ended `MemoryExhausted`. AC-4/5 are unrun and have no real-Kani proof credit. For the kernel and toolchain measured in IR-796, no criterion-preserving harness shape fit the published 1 GiB / `--unwind 8` bound, because one concrete `admit_text` call already exceeded it. TC-050 records the disposition; the next owners are IR-705 (quire-exact metering integer cost) and IR-837 (CG harness on quire-exact admission, accessor meter comparison); twelve verified harnesses and the falsifying mutation control remain open. The six refused TC-024 conversion nodes give only negative boundary evidence |
+| FR-042 | FR-042-AC-1 | TC-057 | 🚧 PLANNED (IR-709): generated-oracle producer and QSL consumer tests follow the IR-497 typed-payload cutover |
 
 FR-018-AC-4, FR-018-AC-5, FR-018-AC-7 through FR-018-AC-9 are `🚧 Planned`: each names at least one
 clause TC-029 carries no test for. AC-4 requires a schedule assertion for a top-level quantity pair;
@@ -85,8 +86,6 @@ distinguish a runtime that snapshots a charge point before mutating it from one 
 snapshots the already-moved value; and `Meter::check_injected` reports `limit_kind: WorkUnits` for
 every denial regardless of the charge's real kind, so only one of ten `LimitKind` counters is ever in
 play.
-
-| FR-042 | FR-042-AC-1 | — | 🚧 PLANNED: generated-oracle producer test; no TC or trace tag is credited by this spec allocation |
 
 ## Test Case Summary
 

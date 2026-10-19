@@ -22,7 +22,7 @@ The code generator SHALL assign the shared quire-exact typed checked-invariant c
 
 ## Behavior
 
-The code generator SHALL use the nine CG-owned causes in quire-exact FR-369 at their owning constructors. The generated oracle SHALL preserve downstream replay payload and charge behavior.
+The code generator SHALL use the nine CG-owned causes in the second cause table of [quire-exact FR-369](ix://agent-ix/quire-exact/FR-369) at their owning constructors. CG owns generated Boolean, equality, function and pre-check placeholder constructors and the payload they emit. QSL `qsl-replay/src/scalar.rs` owns the downstream `Refusal::CheckedInvariant { cause }` consumer; its preservation and matching work is tracked at that owner. The generated oracle SHALL preserve its payload and charge behavior.
 
 ## Acceptance Criteria
 
@@ -33,8 +33,9 @@ The code generator SHALL use the nine CG-owned causes in quire-exact FR-369 at t
 ## Dependencies
 
 - [quire-exact FR-369](ix://agent-ix/quire-exact/FR-369) owns the shared typed cause vocabulary and nine CG cause assignments.
+- [FR-018](./FR-018-composite-equality-oracles.md) AC-8 and AC-17 still name the former unit `Refusal::CheckedInvariant` constructor; their producer/consumer updates must align with the required payload in FR-042-AC-1.
 - [IR-878](https://linear.app/agent-ix/issue/IR-878) tracks the allocation.
 
 ## Status
 
-PLANNED: owner tests are pending.
+PLANNED: IR-709 owns generated producer and consumer changes and tests. The former unit-variant removal is gated on the IR-497 coordinated cutover and the dependency bump that supplies the typed payload.
