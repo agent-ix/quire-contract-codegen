@@ -81,3 +81,10 @@ Round 1, reviewed at b1712d769910cc57dfed050e7b9886508e44b0e7 (fix commit d365b0
 | FND-004 | fixed | New FR-019-AC-51 and a SHALL paragraph pick the first failing item in request order, whatever its outcome kind, and give the reason it differs from AC-46. TC-030 covers both mixed orders and a preceding valid item |
 | FND-005 | fixed | New FR-019-AC-52 and a SHALL paragraph keep item-level `KaniFormRefused { OperationNotRendered }` for an admitted read with no claim and for a structural rejection before the read. TC-030 asserts both cases |
 | FND-006 | still-open | The fix leaves the FR-272 code choice to the driver owner, which is acceptable. It also says the driver change "tracked by IR-894 covers three variants" and that "the driver pin predates all three variants". Both claims are now false. IR-894 is Done, and its merged quire-driver#83 maps only `ManifestRepeatsBackendIdentity` and pins CG fb380d29, which already contains that variant. No open ticket tracks the driver's two reader variants. Name a new follow-up ticket for those two variants and drop the IR-894 and three-variant wording |
+
+Round 2, reviewed at 09796e8a (fix commit 09796e8a over b1712d76). `make spec` exits 0. `quire validate` on the changed spec files is clean. `quire matrix` still lists AC-48 to AC-52 as `untagged`, which matches Planned. The round's spec diff adds no hash or pin, and the spec no longer cites IR-894.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-006 | fixed | The driver paragraph now names IR-896 (Backlog) for `ContractPackageReadRefused` and `ContractPackageReadIncomplete` and leaves the FR-272 code to the driver owner. The false IR-894 three-variant claim and the "pin predates all three" sentence are removed |
+| FND-007 | fixed | AC-48 and AC-49 drop the "caller's single FR-330 read where available" disjunct. FR-019, FR-039's Analysis and TC-030 now say that on the FR-330 path only an `Admitted` package reaches CG, `Refused` and `Incomplete` stop before negotiation, and there is no re-read or fallback |
