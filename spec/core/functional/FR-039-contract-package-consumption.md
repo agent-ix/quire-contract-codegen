@@ -208,25 +208,19 @@ constructs `ContractPackageV1` from raw wire bytes or admits `Refused` or
 `Incomplete` as a package. This establishes the admitted-package type boundary;
 no CG path admits a package without Contract IR's reader or lowerer.
 
-The production call in `src/oracle/function/mod.rs` is a known deviation from
-AC-5's result-preservation clause: `checked_integer_function_application_is_supported`
-drops `Refused` and `Incomplete` with `_ => return false`. Its caller in
-`src/routed/capability.rs` then returns `KaniFormRefused` with
-`OperationNotRendered(quire.op.function.call)`, replacing the reader's typed
-refusal or limit result with a CG backend refusal. IR-892 tracks a tests-first
-fix under FR-019-AC-48 through FR-019-AC-52 and TC-030: the routed negotiation
-result must carry a CG-owned serializable projection of the reader's public
-`CheckedPackageRefusal` or `CheckedPackageIncomplete` fields as a whole-request
-`EnvelopeRefusal`, while an
-admitted read keeps its existing supported or genuine backend-refusal decision.
-These criteria are planned; this deviation remains until the code PR lands.
-The current oracle-function helper re-lowers `CheckedPackageV2` and reads the
-resulting wire. AC-48 and AC-49 describe that current helper's observable
-outcome; on the FR-330 production path, only an `Admitted` package reaches CG
-after the caller's authoritative read. The code PR must use that admitted
-result without re-reading or falling back to the checked graph. AC-5's
-preservation clause remains unmet; this Analysis is
-planned and does not claim full conformity.
+The previously recorded internal preflight result-preservation deviation is closed
+by FR-019-AC-48 through FR-019-AC-52 and TC-030. The source-backed
+`checked_integer_function_application_is_supported` path now returns the
+reader's `Refused` or `Incomplete` outcome to routed negotiation, which emits
+a CG-owned typed whole-envelope projection. A successful read retains its
+supported or genuine backend-refusal decision. TC-030 tests compare both
+projections with direct Contract IR reads and assert first-failing-item order.
+This internal preflight re-lowers a `CheckedPackageV2` for the V2 function arm;
+it is distinct from FR-330 consumption. On the FR-330 production path, only
+the caller's `Admitted` package reaches CG's typed `&ContractPackageV1`
+consumer; CG performs no second read or checked-graph fallback there.
+FR-039-AC-5 Analysis remains partial pending the full production-consumer
+audit and the Contract IR owner-evidence gap tracked by IR-893.
 
 Contract IR owner evidence on origin/main at 4213b98 separates criterion text
 from test tags. [FR-035-AC-10](ix://agent-ix/quire-contract-ir/FR-035-AC-10)
@@ -241,7 +235,7 @@ marks TC-044 planned/unrun for FR-330. TC-047 tests of stale identities are
 tagged AC-5, not AC-2. Malformed and noncanonical wires and invalid accounting
 have AC-5-tagged TC-047 tests, but no FR-035 criterion states those FR-330
 reader obligations. IR-893 tracks that owner-evidence gap. These IR tests are
-owner evidence only; CG implementation coverage remains planned.
+owner evidence only; the CG internal preflight correction is separately covered by TC-030.
 
 ## Dependencies
 

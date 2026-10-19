@@ -143,10 +143,11 @@ use crate::oracle::equality::EqualityOperatorKind;
 use crate::oracle::operator_catalog::IntegerOperator;
 use crate::oracle::{classify_lowering_failure, direct_unsupported_form, LoweringFailure};
 use quire_contract_model::{
-    CheckedNodeId, CheckedNodeTag, CheckedPackageReadLimits, CheckedPackageV2, CheckedSemanticId,
-    CheckedSemanticNodeV2, CheckedSourceMapEntry, CompleteLoweringProfileV2,
-    CompleteLoweringRecordV2, ContractDependencies, ContractFeatureRecordV1,
-    ContractPackageReadResult, ContractPackageV1, ContractPackageWireV1, ContractReachedClosureV1,
+    CheckedNodeId, CheckedNodeTag, CheckedPackageIncomplete, CheckedPackageReadLimits,
+    CheckedPackageRefusal, CheckedPackageV2, CheckedSemanticId, CheckedSemanticNodeV2,
+    CheckedSourceMapEntry, CompleteLoweringProfileV2, CompleteLoweringRecordV2,
+    ContractDependencies, ContractFeatureRecordV1, ContractPackageReadResult, ContractPackageV1,
+    ContractPackageWireV1, ContractReachedClosureV1,
 };
 use quire_contract_runtime::exact as rt;
 use serde::Serialize;
@@ -1644,12 +1645,17 @@ pub(crate) fn reference_node_id<'a>(
 
 /// Classify one source-backed integer function application with the same V1 reader and generator
 /// used after routed settlement. No source artifact is returned to the negotiation path.
+pub(crate) enum FunctionPackageReadFailure {
+    Refused(Box<CheckedPackageRefusal>),
+    Incomplete(CheckedPackageIncomplete),
+}
+
 pub(crate) fn checked_integer_function_application_is_supported(
     checked: &CheckedPackageV2,
     function_node_id: &CheckedNodeId,
     call_node_id: &CheckedNodeId,
     argument_node_ids: &[CheckedNodeId],
-) -> bool {
+) -> Result<bool, FunctionPackageReadFailure> {
     let graph: Graph<'_> = checked
         .graph()
         .nodes
@@ -1657,40 +1663,40 @@ pub(crate) fn checked_integer_function_application_is_supported(
         .map(|node| (&node.node_id, node))
         .collect();
     let Some(function_node) = graph.get(function_node_id).copied() else {
-        return false;
+        return Ok(false);
     };
     if &*function_node.node_tag != "function" || &*function_node.semantic_form != "pure_function" {
-        return false;
+        return Ok(false);
     }
     let Some(name_segments) = function_node
         .declaration
         .as_ref()
         .map(|declaration| declaration.qualified_name.as_slice())
     else {
-        return false;
+        return Ok(false);
     };
     if name_segments.len() != 1 {
-        return false;
+        return Ok(false);
     }
     let Some(parameter_terms) = binding_value(&function_node.body, "parameters")
         .and_then(|value| value.get("members"))
         .and_then(serde_json::Value::as_array)
     else {
-        return false;
+        return Ok(false);
     };
     let mut parameters = Vec::with_capacity(parameter_terms.len());
     for term in parameter_terms {
         let Some(parameter_id) = reference_node_id(term, graph.values().copied()) else {
-            return false;
+            return Ok(false);
         };
         let Some(parameter_node) = graph.get(parameter_id).copied() else {
-            return false;
+            return Ok(false);
         };
         let Some(name) = binding_value(&parameter_node.body, "name")
             .and_then(|value| value.get("value"))
             .and_then(serde_json::Value::as_str)
         else {
-            return false;
+            return Ok(false);
         };
         parameters.push(FunctionParameter {
             name: name.to_owned(),
@@ -1700,29 +1706,29 @@ pub(crate) fn checked_integer_function_application_is_supported(
     let Some(body_id) = binding_value(&function_node.body, "body")
         .and_then(|term| reference_node_id(term, graph.values().copied()))
     else {
-        return false;
+        return Ok(false);
     };
     let Some(body_node) = graph.get(body_id).copied() else {
-        return false;
+        return Ok(false);
     };
     let Some(operation_identity) = body_node
         .body
         .pointer("/operation/identity")
         .and_then(serde_json::Value::as_str)
     else {
-        return false;
+        return Ok(false);
     };
     let operator = match operation_identity {
         "quire.op.integer.add" => IntegerOperator::Add,
         "quire.op.integer.sub" => IntegerOperator::Subtract,
         "quire.op.integer.mul" => IntegerOperator::Multiply,
-        _ => return false,
+        _ => return Ok(false),
     };
     let Some(call_node) = graph.get(call_node_id).copied() else {
-        return false;
+        return Ok(false);
     };
     if !source_call_matches(&call_node.body, &graph, function_node_id, argument_node_ids) {
-        return false;
+        return Ok(false);
     }
     let declaration = ExactFunctionDeclaration {
         node_id: body_id.clone(),
@@ -1740,7 +1746,7 @@ pub(crate) fn checked_integer_function_application_is_supported(
     let requested_ids = [body_id.clone(), call_node_id.clone()];
     let lowered = checked.lower(&requested_ids, &routed_contract_lowering_profile());
     let Some(bytes) = lowered.package.canonical_bytes() else {
-        return false;
+        return Ok(false);
     };
     let contract = match ContractPackageWireV1::read(
         bytes,
@@ -1748,7 +1754,12 @@ pub(crate) fn checked_integer_function_application_is_supported(
         &ContractDependencies::new(),
     ) {
         ContractPackageReadResult::Admitted(package) => *package,
-        _ => return false,
+        ContractPackageReadResult::Refused(refusal) => {
+            return Err(FunctionPackageReadFailure::Refused(Box::new(refusal)))
+        }
+        ContractPackageReadResult::Incomplete(incomplete) => {
+            return Err(FunctionPackageReadFailure::Incomplete(incomplete))
+        }
     };
     let positions = requested_ids.map(|node_id| ContractRequestPosition::DriverItem {
         node_id,
@@ -1766,12 +1777,12 @@ pub(crate) fn checked_integer_function_application_is_supported(
         &item_position,
         &items,
     ) else {
-        return false;
+        return Ok(false);
     };
-    matches!(
+    Ok(matches!(
         oracles.claim_map.items.first().map(|claim| &claim.result),
         Some(ClaimDisposition::Generated(_))
-    )
+    ))
 }
 
 /// One supported operand kind: this generator's V1 scalar/equality operand

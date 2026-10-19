@@ -15,7 +15,11 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use qsl_replay::{DomainKey, DomainKind, ProofBound};
 use quire_contract_model::ClauseKind;
-use quire_contract_model::{CheckedNodeId, ContractPackageV1};
+use quire_contract_model::{
+    CheckedNodeId, CheckedPackageIncomplete, CheckedPackageLimit, CheckedPackageRefusal,
+    CheckedPackageRefusalCause, CheckedPackageRefusalCode, CheckedSemanticId, ContractPackageV1,
+    JsonPointer,
+};
 use serde::Serialize;
 
 use crate::core::contract_package::{
@@ -730,7 +734,10 @@ impl KaniForm {
         }
     }
 
-    fn preflight(&self, backend: &BackendDescriptor) -> Result<KaniFormReadiness, Box<Cause>> {
+    fn preflight(
+        &self,
+        backend: &BackendDescriptor,
+    ) -> Result<KaniFormPreflightOutcome, Box<Cause>> {
         let identity = self.identity();
         match self {
             Self::V1BoundClause { clause } => {
@@ -750,7 +757,7 @@ impl KaniForm {
                         refusal,
                         backend: backend.identity.clone(),
                     })),
-                    None => Ok(KaniFormReadiness::Ready),
+                    None => Ok(KaniFormPreflightOutcome::Ready),
                 }
             }
             Self::V2ScalarClaim {
@@ -768,8 +775,10 @@ impl KaniForm {
                     *request_index,
                     node_id,
                 ) {
-                    ScalarFormAssessment::Supported => Ok(KaniFormReadiness::Ready),
-                    ScalarFormAssessment::RequiresBound => Ok(KaniFormReadiness::RequiresBound),
+                    ScalarFormAssessment::Supported => Ok(KaniFormPreflightOutcome::Ready),
+                    ScalarFormAssessment::RequiresBound => {
+                        Ok(KaniFormPreflightOutcome::RequiresBound)
+                    }
                     ScalarFormAssessment::Unsupported(refusal) => {
                         Err(Box::new(Cause::KaniFormRefused {
                             form: identity,
@@ -837,7 +846,7 @@ impl KaniForm {
                     unwind: 4,
                 };
                 match crate::kani::generate::frame::classify_state_frame_role(&request, role) {
-                    Ok(()) => Ok(KaniFormReadiness::Ready),
+                    Ok(()) => Ok(KaniFormPreflightOutcome::Ready),
                     Err(refusal) => Err(Box::new(Cause::KaniStateFrameRefused {
                         form: identity,
                         refusal,
@@ -864,13 +873,39 @@ impl KaniForm {
                         backend: backend.identity.clone(),
                     }));
                 }
-                if crate::oracle::function::checked_integer_function_application_is_supported(
-                    package,
-                    function_node_id,
-                    call_node_id,
-                    argument_node_ids,
-                ) {
-                    Ok(KaniFormReadiness::Ready)
+                let supported =
+                    match crate::oracle::function::checked_integer_function_application_is_supported(
+                        package,
+                        function_node_id,
+                        call_node_id,
+                        argument_node_ids,
+                    ) {
+                        Ok(supported) => supported,
+                        Err(crate::oracle::function::FunctionPackageReadFailure::Refused(
+                            refusal,
+                        )) => {
+                            return Ok(KaniFormPreflightOutcome::EnvelopeRefusal(
+                                EnvelopeRefusal::ContractPackageReadRefused {
+                                    refusal: ContractPackageRefusalProjection::from_reader(
+                                        &refusal,
+                                    ),
+                                },
+                            ));
+                        }
+                        Err(crate::oracle::function::FunctionPackageReadFailure::Incomplete(
+                            incomplete,
+                        )) => {
+                            return Ok(KaniFormPreflightOutcome::EnvelopeRefusal(
+                                EnvelopeRefusal::ContractPackageReadIncomplete {
+                                    incomplete: ContractPackageIncompleteProjection::from_reader(
+                                        &incomplete,
+                                    ),
+                                },
+                            ));
+                        }
+                    };
+                if supported {
+                    Ok(KaniFormPreflightOutcome::Ready)
                 } else {
                     Err(Box::new(Cause::KaniFormRefused {
                         form: identity,
@@ -914,10 +949,11 @@ impl KaniForm {
     }
 }
 
-#[derive(Clone, Copy)]
-enum KaniFormReadiness {
+#[derive(Clone)]
+enum KaniFormPreflightOutcome {
     Ready,
     RequiresBound,
+    EnvelopeRefusal(EnvelopeRefusal),
 }
 
 /// One request item.
@@ -974,6 +1010,80 @@ pub enum EnvelopeRefusal {
         /// The bytewise-first identity repeated in the manifest.
         identity: String,
     },
+    /// The function preflight's internal Contract IR read refused the package.
+    ContractPackageReadRefused {
+        /// The reader's public diagnostic fields.
+        refusal: ContractPackageRefusalProjection,
+    },
+    /// The function preflight's internal Contract IR read exhausted a limit.
+    ContractPackageReadIncomplete {
+        /// The reader's public limit fields.
+        incomplete: ContractPackageIncompleteProjection,
+    },
+}
+
+/// Serializable CG view of the public fields of a Contract IR read refusal.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct ContractPackageRefusalProjection {
+    /// Stable reader refusal code.
+    pub code: CheckedPackageRefusalCode,
+    /// Pointer in the contract package, when the reader located a value.
+    pub path: Option<JsonPointer>,
+    /// Typed reason paired with the code, when available.
+    pub cause: Option<CheckedPackageRefusalCause>,
+    /// Offending semantic node, when available.
+    pub locus: Option<Box<CheckedNodeId>>,
+    /// Received version for a version refusal.
+    pub contract_version: Option<Box<str>>,
+    /// Pointer into a selected document, when relevant.
+    pub document_pointer: Option<JsonPointer>,
+    /// Expected semantic identity, when relevant.
+    pub expected: Option<Box<CheckedSemanticId>>,
+    /// Actual semantic identity, when relevant.
+    pub actual: Option<Box<CheckedSemanticId>>,
+}
+
+impl ContractPackageRefusalProjection {
+    /// Copy exactly the reader's public diagnostic fields into the CG wire view.
+    #[must_use]
+    pub fn from_reader(refusal: &CheckedPackageRefusal) -> Self {
+        Self {
+            code: refusal.code,
+            path: refusal.path.clone(),
+            cause: refusal.cause,
+            locus: refusal.locus.clone().map(Box::new),
+            contract_version: refusal.contract_version.clone(),
+            document_pointer: refusal.document_pointer.clone(),
+            expected: refusal.expected.clone().map(Box::new),
+            actual: refusal.actual.clone().map(Box::new),
+        }
+    }
+}
+
+/// Serializable CG view of the public fields of an incomplete Contract IR read.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct ContractPackageIncompleteProjection {
+    /// The first exhausted resource.
+    pub limit_kind: CheckedPackageLimit,
+    /// Caller-selected ceiling.
+    pub limit: u64,
+    /// Counter value at the failed charge.
+    pub consumed: u64,
+    /// Pointer of the failed charge, absent for a byte ceiling.
+    pub path: Option<JsonPointer>,
+}
+
+impl ContractPackageIncompleteProjection {
+    /// Copy the reader's complete limit result into the CG wire view.
+    #[must_use]
+    pub fn from_reader(incomplete: &CheckedPackageIncomplete) -> Self {
+        Self {
+            limit_kind: incomplete.limit_kind,
+            limit: incomplete.limit,
+            consumed: incomplete.consumed,
+            path: incomplete.path.clone(),
+        }
+    }
 }
 
 /// Why an item settled as something other than `supported`.
@@ -1314,19 +1424,21 @@ pub fn negotiate_backend_provider(
             identity: identity.to_owned(),
         });
     }
-    Ok(envelope
+    envelope
         .items
         .iter()
         .enumerate()
-        .map(|(request_index, item)| ItemSettlement {
-            request_index,
-            kind: match item.kind {
-                RequestedKind::Known(kind) => Some(kind),
-                RequestedKind::Absent | RequestedKind::Unknown(_) => None,
-            },
-            disposition: negotiate_item(&envelope.manifest, item),
+        .map(|(request_index, item)| {
+            Ok(ItemSettlement {
+                request_index,
+                kind: match item.kind {
+                    RequestedKind::Known(kind) => Some(kind),
+                    RequestedKind::Absent | RequestedKind::Unknown(_) => None,
+                },
+                disposition: negotiate_item(&envelope.manifest, item)?,
+            })
         })
-        .collect())
+        .collect()
 }
 
 /// The decision for one exact FR-330 request position.
@@ -1405,72 +1517,75 @@ pub fn negotiate_contract_package(
 }
 
 /// Settle one item, evaluating FR-290's rules in order; the first match settles.
-fn negotiate_item(manifest: &[BackendDescriptor], item: &RequestItem) -> Disposition {
+fn negotiate_item(
+    manifest: &[BackendDescriptor],
+    item: &RequestItem,
+) -> Result<Disposition, EnvelopeRefusal> {
     let kind = match &item.kind {
         RequestedKind::Absent => {
-            return Disposition::InvalidRequest {
+            return Ok(Disposition::InvalidRequest {
                 cause: Cause::AbsentKind,
-            }
+            })
         }
         RequestedKind::Unknown(received) => {
-            return Disposition::InvalidRequest {
+            return Ok(Disposition::InvalidRequest {
                 cause: Cause::UnknownKind {
                     received: received.clone(),
                 },
-            }
+            })
         }
         RequestedKind::Known(kind) => *kind,
     };
     let Some(extent) = item.extent.as_ref() else {
-        return Disposition::InvalidRequest {
+        return Ok(Disposition::InvalidRequest {
             cause: Cause::AbsentExtent,
-        };
+        });
     };
     let candidates = match &item.candidates {
         Candidates::UnknownBackend(backend) => {
-            return Disposition::InvalidRequest {
+            return Ok(Disposition::InvalidRequest {
                 cause: Cause::UnknownBackend {
                     backend: backend.clone(),
                 },
-            }
+            })
         }
         Candidates::Set(candidates) => candidates.as_slice(),
     };
     if let Some(backend) = unroutable_named_backend(manifest, item.named_backend.as_deref()) {
-        return Disposition::InvalidRequest {
+        return Ok(Disposition::InvalidRequest {
             cause: Cause::UnknownBackend { backend },
-        };
+        });
     }
     let offending = inconsistent_candidates(manifest, item, kind, candidates);
     if !offending.is_empty() {
-        return Disposition::InvalidRequest {
+        return Ok(Disposition::InvalidRequest {
             cause: Cause::InconsistentCandidates {
                 candidates: offending,
             },
-        };
+        });
     }
     match candidates {
-        [] => Disposition::Unsupported {
+        [] => Ok(Disposition::Unsupported {
             cause: Cause::UnsupportedRequestedCapability {
                 kind,
                 backend: item.named_backend.clone(),
             },
-        },
+        }),
         [single] => negotiate_single_candidate(manifest, single, kind, extent, &item.kani_form),
-        many if item.named_backend.is_none() => Disposition::InvalidRequest {
+        many if item.named_backend.is_none() => Ok(Disposition::InvalidRequest {
             cause: Cause::AmbiguousBackend {
                 candidates: many.to_vec(),
             },
-        },
+        }),
         // FR-290's candidate table has no row for "more than one candidate and
         // the request names one": a repeated candidate entry reaches this arm
         // even with a unique manifest. This fallback classifies the unmatched
         // many-candidate case as inconsistent candidates.
-        many => Disposition::InvalidRequest {
+        many => Ok(Disposition::InvalidRequest {
             cause: Cause::InconsistentCandidates {
                 candidates: many.to_vec(),
             },
-        },
+        }),
     }
 }
 
@@ -1536,20 +1651,20 @@ fn negotiate_single_candidate(
     kind: CapabilityKind,
     extent: &ExtentClassification,
     kani_form: &KaniForm,
-) -> Disposition {
+) -> Result<Disposition, EnvelopeRefusal> {
     let Some(backend) = descriptor(manifest, candidate) else {
-        return Disposition::InvalidRequest {
+        return Ok(Disposition::InvalidRequest {
             cause: Cause::InconsistentCandidates {
                 candidates: vec![candidate.clone()],
             },
-        };
+        });
     };
     let Some(routed) = BackendKind::from_descriptor(backend) else {
-        return Disposition::InvalidRequest {
+        return Ok(Disposition::InvalidRequest {
             cause: Cause::UnknownBackend {
                 backend: backend.identity.clone(),
             },
-        };
+        });
     };
     negotiate_arm(routed, backend, kind, extent, kani_form)
 }
@@ -1564,10 +1679,10 @@ fn negotiate_arm(
     kind: CapabilityKind,
     extent: &ExtentClassification,
     kani_form: &KaniForm,
-) -> Disposition {
+) -> Result<Disposition, EnvelopeRefusal> {
     match routed {
         BackendKind::Kani => negotiate_kani(backend, kind, extent, kani_form),
-        BackendKind::Process(_) => negotiate_process(backend, kind, extent),
+        BackendKind::Process(_) => Ok(negotiate_process(backend, kind, extent)),
     }
 }
 
@@ -1581,21 +1696,27 @@ fn negotiate_kani(
     kind: CapabilityKind,
     extent: &ExtentClassification,
     kani_form: &KaniForm,
-) -> Disposition {
+) -> Result<Disposition, EnvelopeRefusal> {
     let readiness = match kani_form.preflight(backend) {
         Ok(readiness) => readiness,
         Err(cause) => match *cause {
-            cause @ Cause::KaniFormInvalid { .. } => return Disposition::InvalidRequest { cause },
-            cause => return Disposition::Unsupported { cause },
+            cause @ Cause::KaniFormInvalid { .. } => {
+                return Ok(Disposition::InvalidRequest { cause })
+            }
+            cause => return Ok(Disposition::Unsupported { cause }),
         },
     };
-    if matches!(readiness, KaniFormReadiness::RequiresBound) {
-        return Disposition::RequiresBound {
-            backend: backend.identity.clone(),
-        };
+    match readiness {
+        KaniFormPreflightOutcome::EnvelopeRefusal(refusal) => return Err(refusal),
+        KaniFormPreflightOutcome::RequiresBound => {
+            return Ok(Disposition::RequiresBound {
+                backend: backend.identity.clone(),
+            })
+        }
+        KaniFormPreflightOutcome::Ready => {}
     }
     let modes = backend.modes_for(kind);
-    match extent.extent {
+    Ok(match extent.extent {
         Mode::Bounded if modes.contains(&Mode::Bounded) => Disposition::Supported {
             backend: backend.identity.clone(),
         },
@@ -1617,7 +1738,7 @@ fn negotiate_kani(
                 backend: backend.identity.clone(),
             },
         },
-    }
+    })
 }
 
 /// Settle a process provider solely from its manifest and the item's extent.

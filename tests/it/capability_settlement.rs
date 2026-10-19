@@ -62,8 +62,14 @@ fn reader_refusal_projection_preserves_every_public_field() {
     let fields = &wire["cause"]["refusal"];
     assert_eq!(fields["code"], serde_json::to_value(refusal.code).unwrap());
     assert_eq!(fields["path"], serde_json::to_value(refusal.path).unwrap());
-    assert_eq!(fields["cause"], serde_json::to_value(refusal.cause).unwrap());
-    assert_eq!(fields["locus"], serde_json::to_value(refusal.locus).unwrap());
+    assert_eq!(
+        fields["cause"],
+        serde_json::to_value(refusal.cause).unwrap()
+    );
+    assert_eq!(
+        fields["locus"],
+        serde_json::to_value(refusal.locus).unwrap()
+    );
     assert_eq!(
         fields["contract_version"],
         serde_json::to_value(refusal.contract_version).unwrap()
@@ -72,8 +78,14 @@ fn reader_refusal_projection_preserves_every_public_field() {
         fields["document_pointer"],
         serde_json::to_value(refusal.document_pointer).unwrap()
     );
-    assert_eq!(fields["expected"], serde_json::to_value(refusal.expected).unwrap());
-    assert_eq!(fields["actual"], serde_json::to_value(refusal.actual).unwrap());
+    assert_eq!(
+        fields["expected"],
+        serde_json::to_value(refusal.expected).unwrap()
+    );
+    assert_eq!(
+        fields["actual"],
+        serde_json::to_value(refusal.actual).unwrap()
+    );
     assert!(fields.get("expected_node_id").is_none());
 }
 
@@ -99,7 +111,193 @@ fn reader_incomplete_projection_preserves_the_exhausted_limit() {
     );
     assert_eq!(fields["limit"], incomplete.limit);
     assert_eq!(fields["consumed"], incomplete.consumed);
-    assert_eq!(fields["path"], serde_json::to_value(incomplete.path).unwrap());
+    assert_eq!(
+        fields["path"],
+        serde_json::to_value(incomplete.path).unwrap()
+    );
+}
+
+#[trace("TC-030", "FR-019-AC-50")]
+#[test]
+fn admitted_function_read_keeps_supported_settlement() {
+    use exact_function_fixture::{
+        code_id, source_bound_call_package, SOURCE_CALL, SOURCE_FUNCTION, SOURCE_PARAM_A,
+        SOURCE_PARAM_B,
+    };
+    let (package, ids) = source_bound_call_package().admit_resolved();
+    let mut request = item(
+        RequestedKind::Known(CapabilityKind::ValueValidity),
+        Candidates::Set(vec![candidate("kani")]),
+    );
+    request.kani_form = KaniForm::V2FunctionApplication {
+        package: Box::new(package),
+        function_node_id: ids.resolve(&code_id(SOURCE_FUNCTION)),
+        call_node_id: ids.resolve(&code_id(SOURCE_CALL)),
+        argument_node_ids: vec![
+            ids.resolve(&code_id(SOURCE_PARAM_A)),
+            ids.resolve(&code_id(SOURCE_PARAM_B)),
+        ],
+    };
+    assert_eq!(
+        settle_one(
+            vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)])],
+            request,
+        )
+        .disposition,
+        Disposition::Supported {
+            backend: "kani".to_owned()
+        }
+    );
+}
+
+#[trace("TC-030", "FR-019-AC-49")]
+#[test]
+fn oversized_admitted_function_read_stops_the_envelope() {
+    use exact_function_fixture::{
+        code_id, oversized_source_bound_call_package, SOURCE_CALL, SOURCE_FUNCTION, SOURCE_PARAM_A,
+        SOURCE_PARAM_B,
+    };
+    let (package, ids) = oversized_source_bound_call_package();
+    let body_id = package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| node.node_id == ids.resolve(&code_id(SOURCE_FUNCTION)))
+        .expect("resolved function")
+        .body["members"]
+        .as_array()
+        .expect("members")
+        .iter()
+        .find(|member| member["name"] == "body")
+        .expect("body binding")["value"]["target"]
+        .clone();
+    let body_id: CheckedNodeId = serde_json::from_value(body_id).expect("body id");
+    let call_id = ids.resolve(&code_id(SOURCE_CALL));
+    let lowered = package.lower(
+        &[body_id, call_id.clone()],
+        &routed_contract_lowering_profile(),
+    );
+    let bytes = lowered.package.canonical_bytes().expect("lowered bytes");
+    assert!(u64::try_from(bytes.len()).unwrap() > CheckedPackageReadLimits::bounded().bytes);
+    let direct = ContractPackageWireV1::read(
+        bytes,
+        CheckedPackageReadLimits::bounded(),
+        &ContractDependencies::new(),
+    );
+    let ContractPackageReadResult::Incomplete(expected) = direct else {
+        panic!("large lowered package must exhaust bytes: {direct:?}");
+    };
+    let mut request = item(
+        RequestedKind::Known(CapabilityKind::ValueValidity),
+        Candidates::Set(vec![candidate("kani")]),
+    );
+    request.kani_form = KaniForm::V2FunctionApplication {
+        package: Box::new(package),
+        function_node_id: ids.resolve(&code_id(SOURCE_FUNCTION)),
+        call_node_id: call_id,
+        argument_node_ids: vec![
+            ids.resolve(&code_id(SOURCE_PARAM_A)),
+            ids.resolve(&code_id(SOURCE_PARAM_B)),
+        ],
+    };
+    let outcome = negotiate_backend_provider(&envelope(
+        vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)])],
+        vec![request],
+    ));
+    let Err(EnvelopeRefusal::ContractPackageReadIncomplete { incomplete }) = outcome else {
+        panic!("reader limit must stop negotiation: {outcome:?}");
+    };
+    assert_eq!(incomplete.limit_kind, expected.limit_kind);
+    assert_eq!(incomplete.limit, expected.limit);
+    assert_eq!(incomplete.consumed, expected.consumed);
+    assert_eq!(incomplete.path, expected.path);
+}
+
+#[trace("TC-030", "FR-019-AC-52")]
+#[test]
+fn genuine_function_backend_refusals_stay_item_level() {
+    use exact_function_fixture::{
+        code_id, source_bound_call_package_with_name_len,
+        source_bound_call_package_with_name_segments, SOURCE_CALL, SOURCE_FUNCTION, SOURCE_PARAM_A,
+        SOURCE_PARAM_B,
+    };
+    let request_for = |package, ids: exact_function_fixture::FixtureIds| {
+        let mut request = item(
+            RequestedKind::Known(CapabilityKind::ValueValidity),
+            Candidates::Set(vec![candidate("kani")]),
+        );
+        request.kani_form = KaniForm::V2FunctionApplication {
+            package: Box::new(package),
+            function_node_id: ids.resolve(&code_id(SOURCE_FUNCTION)),
+            call_node_id: ids.resolve(&code_id(SOURCE_CALL)),
+            argument_node_ids: vec![
+                ids.resolve(&code_id(SOURCE_PARAM_A)),
+                ids.resolve(&code_id(SOURCE_PARAM_B)),
+            ],
+        };
+        request
+    };
+    let structural = source_bound_call_package_with_name_segments(vec![
+        "module".to_owned(),
+        "function".to_owned(),
+    ]);
+    let too_large_to_render = source_bound_call_package_with_name_len(450_000);
+    let body_id: CheckedNodeId = serde_json::from_value(
+        too_large_to_render
+            .0
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.node_id == too_large_to_render.1.resolve(&code_id(SOURCE_FUNCTION)))
+            .expect("resolved function")
+            .body["members"]
+            .as_array()
+            .expect("members")
+            .iter()
+            .find(|member| member["name"] == "body")
+            .expect("body binding")["value"]["target"]
+            .clone(),
+    )
+    .expect("body id");
+    let lowered = too_large_to_render.0.lower(
+        &[
+            body_id,
+            too_large_to_render.1.resolve(&code_id(SOURCE_CALL)),
+        ],
+        &routed_contract_lowering_profile(),
+    );
+    assert!(
+        matches!(
+            ContractPackageWireV1::read(
+                lowered.package.canonical_bytes().expect("lowered bytes"),
+                CheckedPackageReadLimits::bounded(),
+                &ContractDependencies::new(),
+            ),
+            ContractPackageReadResult::Admitted(_)
+        ),
+        "no-claim control must pass the internal reader"
+    );
+    for (label, (package, ids)) in [
+        ("structural", structural),
+        ("admitted-no-claim", too_large_to_render),
+    ] {
+        let settled = settle_one(
+            vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)])],
+            request_for(package, ids),
+        );
+        assert!(
+            matches!(
+                settled.disposition,
+                Disposition::Unsupported {
+                    cause: Cause::KaniFormRefused {
+                        refusal: UnsupportedObligation::OperationNotRendered { .. },
+                        ..
+                    }
+                }
+            ),
+            "{label} should retain item-level OperationNotRendered: {settled:?}"
+        );
+    }
 }
 
 fn candidate(identity: &str) -> Candidate {
