@@ -998,10 +998,8 @@ fn build_contract_scalar_oracles(
     let mut selected_keys = Vec::with_capacity(positions.len());
     for &request_index in positions {
         let node_id = items
-            .driver_node(request_index)
-            .ok_or(ContractScalarError::Request(
-                PackageRequestError::Position { request_index },
-            ))?;
+            .bound_driver_node(request_index)
+            .map_err(ContractScalarError::Request)?;
         let selection =
             items
                 .result_selection(request_index)
@@ -1016,10 +1014,8 @@ fn build_contract_scalar_oracles(
     }
     for (&request_index, selected_key) in positions.iter().zip(&selected_keys) {
         let node_id = items
-            .driver_node(request_index)
-            .ok_or(ContractScalarError::Request(
-                PackageRequestError::Position { request_index },
-            ))?;
+            .bound_driver_node(request_index)
+            .map_err(ContractScalarError::Request)?;
         let item = items
             .at(request_index, node_id)
             .map_err(ContractScalarError::Request)?;

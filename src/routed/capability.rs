@@ -25,6 +25,16 @@ use crate::core::contract_package::{
     AdmittedItemAccounting, ContractRequestPosition, PackageItem, PackageItems, PackageRequestError,
 };
 
+#[cfg(test)]
+thread_local! {
+    static PACKAGE_CLASSIFIER_INDICES: std::cell::RefCell<Vec<usize>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+#[cfg(test)]
+pub(crate) fn take_package_classifier_indices() -> Vec<usize> {
+    PACKAGE_CLASSIFIER_INDICES.with(|indices| std::mem::take(&mut *indices.borrow_mut()))
+}
+
 fn serialize_domain_kind<S: serde::Serializer>(
     kind: &DomainKind,
     serializer: S,
@@ -738,6 +748,10 @@ impl KaniForm {
         backend: &BackendDescriptor,
         admitted: Option<(&ContractPackageV1, &[ContractRequestPosition], usize)>,
     ) -> Result<KaniFormPreflightOutcome, Box<Cause>> {
+        #[cfg(test)]
+        if let Some((_, _, request_index)) = admitted {
+            PACKAGE_CLASSIFIER_INDICES.with(|indices| indices.borrow_mut().push(request_index));
+        }
         let identity = self.identity();
         match self {
             Self::V1BoundClause { clause } => {

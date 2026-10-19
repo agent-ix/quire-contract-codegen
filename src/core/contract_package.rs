@@ -134,6 +134,13 @@ pub enum PackageRequestError {
         /// Position outside the admitted accounting.
         request_index: usize,
     },
+    /// A generator selected an accounting-only driver position.
+    ExcludedDriverIndex {
+        /// Original driver request index.
+        request_index: usize,
+        /// Exact key of the excluded position.
+        node_id: CheckedNodeId,
+    },
     /// A context root follows an excluded position, so no bound item owns it.
     OrphanContextRoot {
         /// Position in the complete lowering sequence.
@@ -270,12 +277,14 @@ impl<'a> PackageItems<'a> {
         &self.bound_driver_indices
     }
 
-    /// Whether this original driver position is accounting-only.
-    pub(crate) fn is_excluded(&self, request_index: usize) -> bool {
-        self.driver_to_accounting
-            .get(request_index)
-            .and_then(|index| self.positions.get(*index))
-            .is_some_and(|position| matches!(position, ContractRequestPosition::Excluded { .. }))
+    /// Exact key when this original driver position is accounting-only.
+    pub(crate) fn excluded_node(&self, request_index: usize) -> Option<&'a CheckedNodeId> {
+        let accounting_index = *self.driver_to_accounting.get(request_index)?;
+        match self.positions.get(accounting_index)? {
+            ContractRequestPosition::Excluded { node_id } => Some(node_id),
+            ContractRequestPosition::DriverItem { .. }
+            | ContractRequestPosition::ContextRoot { .. } => None,
+        }
     }
 
     /// Exact key of one driver request, independently of context-root order.
@@ -286,6 +295,21 @@ impl<'a> PackageItems<'a> {
             .feature_accounting
             .get(accounting_index)
             .map(ContractFeatureRecordV1::node_id)
+    }
+
+    /// Exact key only for a bound driver position; refuse excluded indexes before generation.
+    pub(crate) fn bound_driver_node(
+        &self,
+        request_index: usize,
+    ) -> Result<&'a CheckedNodeId, PackageRequestError> {
+        if let Some(node_id) = self.excluded_node(request_index) {
+            return Err(PackageRequestError::ExcludedDriverIndex {
+                request_index,
+                node_id: node_id.clone(),
+            });
+        }
+        self.driver_node(request_index)
+            .ok_or(PackageRequestError::Position { request_index })
     }
 
     /// Caller-authored result selection for one driver position.
@@ -321,6 +345,7 @@ impl<'a> PackageItems<'a> {
         request_index: usize,
         node_id: &CheckedNodeId,
     ) -> Result<PackageItem<'a>, PackageRequestError> {
+        self.bound_driver_node(request_index)?;
         let accounting_index = *self
             .driver_to_accounting
             .get(request_index)

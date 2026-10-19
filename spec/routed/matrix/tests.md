@@ -13,7 +13,7 @@ type: TestMatrix
 | FR-019 | FR-019-AC-4, FR-019-AC-7 | TC-030 | ✅ Covered; tagged settlement tests assert both registration orders and whole-envelope vocabulary refusal before kind settlement |
 | FR-019 | FR-019-AC-45, FR-019-AC-46 | TC-030 | ✅ Covered; tagged tests assert whole-envelope repeated-identity refusal, descriptor and order cases, bytewise-first selection, case distinction, and carrier-refusal precedence |
 | FR-019 | FR-019-AC-48 through FR-019-AC-52 | TC-030 | ✅ Covered; tagged TC-030 tests assert typed whole-request reader projections, first-failing-item order, admitted support and item-level backend refusal |
-| FR-019 | FR-019-AC-53 | TC-030 | ✅ Covered; tagged tests assert bound-only envelope count, outer and nested driver indexes, no excluded settlement and typed count refusals |
+| FR-019 | FR-019-AC-53 | TC-030 | ✅ Covered; tagged tests assert bound-only envelope count, outer and nested driver indexes, no excluded settlement, indexed classifier and preflight observations, context-only root invariance, typed count refusals, and function-body lookup after exclusion |
 | FR-019 | FR-019-AC-1 (Kani arm), FR-019-AC-2, FR-019-AC-3, FR-019-AC-8 | TC-030 | 🚧 Planned; generic TC-030 tests exist, but these criteria have no complete criterion-level test; AC-1 process arm remains planned in TC-046 |
 | FR-019 | FR-019-AC-9, FR-019-AC-47 | Analysis | ✅ Covered |
 | FR-019 | FR-019-AC-10 | Analysis | Analysis (CG); owner evidence in quire-driver FR-001-AC-3 (TC-003) and QSL FR-057-AC-6 (TC-155) |

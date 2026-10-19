@@ -662,12 +662,10 @@ pub fn generate_composite_equality_oracles(
     let mut counts: BTreeMap<DescriptorKey, u32> = BTreeMap::new();
     let mut by_key: BTreeMap<DescriptorKey, (usize, &CompositeEqualityItem)> = BTreeMap::new();
     for (item, &request_index) in items.iter().zip(positions) {
-        if accounting.driver_node(request_index) != Some(&item.node_id) {
-            let Some(accounted) = accounting.driver_node(request_index) else {
-                return Err(OracleGenerationError::PackageRequest(
-                    PackageRequestError::Position { request_index },
-                ));
-            };
+        let accounted = accounting
+            .bound_driver_node(request_index)
+            .map_err(OracleGenerationError::PackageRequest)?;
+        if accounted != &item.node_id {
             return Err(OracleGenerationError::PackageRequest(
                 PackageRequestError::Identity {
                     request_index,

@@ -318,10 +318,10 @@ pub fn generate_routed(
         PackageItems::new(package, positions).map_err(RoutedGenerationError::Package)?;
 
     for item in &ordered {
-        if package_items.is_excluded(item.request_index) {
+        if let Some(node_id) = package_items.excluded_node(item.request_index) {
             return Err(RoutedGenerationError::ExcludedDriverIndex {
                 request_index: item.request_index,
-                node_id: item.node_id.clone(),
+                node_id: node_id.clone(),
             });
         }
     }
