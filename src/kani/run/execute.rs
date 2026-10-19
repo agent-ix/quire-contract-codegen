@@ -2045,6 +2045,31 @@ exit 0
             stand_in
         }
 
+        /// Hold the first real ready sample and first genuine cleanup confirmation once.
+        #[cfg(target_os = "linux")]
+        fn controlled_owners(&mut self) -> (OwnerControl, OwnerControl) {
+            use super::super::owners::{LaunchOwners, SystemPoll};
+            let (memory, observation) = OwnerGate::new();
+            let (cleanup, confirmation) = OwnerGate::new();
+            self.installation = KaniInstallation::with_owners(
+                self.installation.launcher.clone(),
+                std::sync::Arc::new(LaunchOwners {
+                    memory: std::sync::Arc::new(ControlledMemory {
+                        ready: self.directory.join("calls.ready"),
+                        gate: memory,
+                    }),
+                    stdout: std::sync::Arc::new(SystemPoll),
+                    stderr: std::sync::Arc::new(SystemPoll),
+                    confirmation: std::sync::Arc::new(ControlledPoll {
+                        ready: None,
+                        gate: cleanup,
+                        fail: false,
+                    }),
+                }),
+            );
+            (observation, confirmation)
+        }
+
         /// A stand-in that verifies every harness it is asked for.
         fn verifying(name: &str) -> Self {
             Self::running(name, VERIFY_EVERY_HARNESS)
@@ -2252,43 +2277,53 @@ printf 'ready' > "$CALLS.ready"
 exec sleep 45
 "#;
 
-    /// Wait for positive backend readiness or its actual early return, never for a guessed delay.
+    /// Record both causes while a genuine ready observation holds the ordinary stop decision.
     #[cfg(target_os = "linux")]
     fn cancel_running<R: Send + std::fmt::Debug>(
         stand_in: &StandIn,
         cancel: &Cancel,
         causes: [quire_exact::CancelCause; 2],
+        mut releases: OwnerReleases<'_>,
+        remaining_budget: Duration,
         run: impl FnOnce() -> R + Send,
     ) -> R {
         std::thread::scope(|scope| {
             let (sender, receiver) = std::sync::mpsc::sync_channel(1);
-            let worker = scope.spawn(move || sender.send(run()).unwrap());
-            let ready = stand_in.directory.join("calls.ready");
-            let deadline = Instant::now() + T;
-            while !ready.is_file() {
-                match receiver.try_recv() {
-                    Ok(result) => {
-                        panic!("the public execution returned before backend readiness: {result:?}")
-                    }
-                    Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                        panic!("execution worker disconnected")
-                    }
-                    Err(std::sync::mpsc::TryRecvError::Empty) => {}
-                }
-                assert!(
-                    Instant::now() < deadline,
-                    "backend readiness was not observed"
-                );
-                std::thread::yield_now();
+            let worker = scope.spawn(move || {
+                let _ = sender.send(run());
+            });
+            let scheduled = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                releases.memory.entered();
+                assert!(stand_in.directory.join("calls.ready").is_file());
+                cancel.cancel(causes[0]);
+                cancel.cancel(causes[1]);
+                assert_eq!(cancel.cause(), Some(causes[0]));
+                releases.release_memory();
+                releases.cleanup.entered();
+                releases.release_cleanup();
+            }));
+            if scheduled.is_err() {
+                releases.abort();
             }
-            cancel.cancel(causes[0]);
-            cancel.cancel(causes[1]);
-            let result = receiver
-                .recv_timeout(T)
-                .expect("execution returns after owned teardown");
-            worker.join().unwrap();
-            recorded_process_gone(&stand_in.directory.join("calls.child"));
-            result
+            // After first-group confirmation: its reap, then any independent group's
+            // namespace startup, cleanup and reap each have a five-second owner bound.
+            // One extra second covers both bounded capture-drain/poll settlements.
+            let settle = remaining_budget + Duration::from_secs(4 * 5 + 1);
+            let received = receiver.recv_timeout(settle);
+            if received.is_err() {
+                releases.abort();
+            }
+            let joined = worker.join();
+            releases.settled = scheduled.is_ok() && received.is_ok() && joined.is_ok();
+            drop(releases);
+            if stand_in.directory.join("calls.child").is_file() {
+                recorded_process_gone(&stand_in.directory.join("calls.child"));
+            }
+            if let Err(panic) = scheduled {
+                std::panic::resume_unwind(panic);
+            }
+            joined.expect("running cancellation worker joined after owned teardown");
+            received.expect("all sequential groups settled after owned teardown")
         })
     }
 
@@ -2409,7 +2444,7 @@ exec sleep 45
 
     /// Release gates before joining an aborted controller's real execution worker.
     #[cfg(target_os = "linux")]
-    struct DiagnosticReleases<'a> {
+    struct OwnerReleases<'a> {
         memory: OwnerControl,
         cleanup: OwnerControl,
         shared: &'a Cancel,
@@ -2420,7 +2455,24 @@ exec sleep 45
     }
 
     #[cfg(target_os = "linux")]
-    impl DiagnosticReleases<'_> {
+    impl<'a> OwnerReleases<'a> {
+        fn new(
+            memory: OwnerControl,
+            cleanup: OwnerControl,
+            shared: &'a Cancel,
+            independent: &'a Cancel,
+        ) -> Self {
+            Self {
+                memory,
+                cleanup,
+                shared,
+                independent,
+                memory_released: false,
+                cleanup_released: false,
+                settled: false,
+            }
+        }
+
         fn release_memory(&mut self) {
             self.memory.release();
             self.memory_released = true;
@@ -2446,7 +2498,7 @@ exec sleep 45
     }
 
     #[cfg(target_os = "linux")]
-    impl Drop for DiagnosticReleases<'_> {
+    impl Drop for OwnerReleases<'_> {
         fn drop(&mut self) {
             if !self.settled {
                 self.abort();
@@ -2744,12 +2796,18 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
             ([Deadline, Requested], KaniCancellationSource::Deadline),
         ] {
             let harness = member("live_cancel", "check", 4);
-            let stand_in = StandIn::running("live-first-cancellation", CANCELLATION_BARRIER);
+            let mut stand_in = StandIn::running("live-first-cancellation", CANCELLATION_BARRIER);
+            let (observation, confirmation) = stand_in.controlled_owners();
             stand_in.containing(&[&harness]);
             let caller = stand_in.cancel.clone();
-            let evidence = cancel_running(&stand_in, &caller, causes, || {
-                execute_kani_obligation(&stand_in.request(&harness, T))
-            })
+            let evidence = cancel_running(
+                &stand_in,
+                &caller,
+                causes,
+                OwnerReleases::new(observation, confirmation, &caller, &caller),
+                Duration::ZERO,
+                || execute_kani_obligation(&stand_in.request(&harness, T)),
+            )
             .unwrap();
             assert_eq!(stand_in.calls().len(), 1);
             assert_eq!(
@@ -2793,7 +2851,8 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
                 member("c", "check", 4),
             ];
             let body = format!("case \"$ids\" in *a::check*)\n{CANCELLATION_BARRIER};;\nesac\n{VERIFY_EVERY_HARNESS}");
-            let stand_in = StandIn::running("cancel-shared-batch", &body);
+            let mut stand_in = StandIn::running("cancel-shared-batch", &body);
+            let (observation, confirmation) = stand_in.controlled_owners();
             stand_in.containing(&harnesses.iter().collect::<Vec<_>>());
             let independent = Cancel::new();
             let clone = stand_in.cancel.clone();
@@ -2808,9 +2867,14 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
                     ..stand_in.request(&harnesses[2], T)
                 },
             ];
-            let groups = cancel_running(&stand_in, &stand_in.cancel, causes, || {
-                execute_kani_obligations(&requests)
-            })
+            let groups = cancel_running(
+                &stand_in,
+                &stand_in.cancel,
+                causes,
+                OwnerReleases::new(observation, confirmation, &stand_in.cancel, &independent),
+                T,
+                || execute_kani_obligations(&requests),
+            )
             .unwrap();
             assert_eq!(groups.len(), 2);
             assert_eq!(groups[0].members, [0, 1]);
@@ -2844,7 +2908,6 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
 
     #[cfg(target_os = "linux")]
     fn controlled_batch_cancellation_arm(withhold: bool) {
-        use super::super::owners::{LaunchOwners, SystemPoll};
         use quire_exact::CancelCause::{Deadline, Requested};
 
         let harnesses = [
@@ -2859,24 +2922,7 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
         stand_in.containing(&harnesses.iter().collect::<Vec<_>>());
         let independent = Cancel::new();
         let clone = stand_in.cancel.clone();
-        let (memory, observation) = OwnerGate::new();
-        let (cleanup, confirmation) = OwnerGate::new();
-        stand_in.installation = KaniInstallation::with_owners(
-            stand_in.installation.launcher.clone(),
-            std::sync::Arc::new(LaunchOwners {
-                memory: std::sync::Arc::new(ControlledMemory {
-                    ready: stand_in.directory.join("calls.ready"),
-                    gate: memory,
-                }),
-                stdout: std::sync::Arc::new(SystemPoll),
-                stderr: std::sync::Arc::new(SystemPoll),
-                confirmation: std::sync::Arc::new(ControlledPoll {
-                    ready: None,
-                    gate: cleanup,
-                    fail: false,
-                }),
-            }),
-        );
+        let (observation, confirmation) = stand_in.controlled_owners();
         let requests = [
             stand_in.request(&harnesses[0], T),
             KaniExecutionRequest {
@@ -2894,15 +2940,12 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
             let worker = scope.spawn(move || {
                 let _ = sender.send(execute_kani_obligations(requests));
             });
-            let mut releases = DiagnosticReleases {
-                memory: observation,
-                cleanup: confirmation,
-                shared: &stand_in.cancel,
-                independent: &independent,
-                memory_released: false,
-                cleanup_released: false,
-                settled: false,
-            };
+            let mut releases = OwnerReleases::new(
+                observation,
+                confirmation,
+                &stand_in.cancel,
+                &independent,
+            );
             let scheduled = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 releases.memory.entered();
                 assert_eq!(stand_in.cancel.cause(), None);
