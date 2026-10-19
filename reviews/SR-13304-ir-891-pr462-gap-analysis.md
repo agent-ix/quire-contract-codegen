@@ -67,3 +67,9 @@ Round 1, against fix commit 61a15bc2 (PR head 61a15bc22a1394afc04dfc936971bf2855
 | FND-001 | fixed | The TC-026 row in spec/replay/matrix/tests.md:40 now reads "✅ Covered for AC-6 ... AC-7 remains planned". Both paragraphs of TC-026-witness-native-replay.md now name the five AC-6 test files and keep AC-7 planned. |
 | FND-002 | fixed | The new tagged test `witness_decode_bounds_have_no_default` (TC-026, FR-016-AC-6) fails when `Default` is derived on `WitnessDecodeLimits`, and deriving it on `ReplayInputs` does not compile. The residual bypass through an impl in another module is recorded as FND-004. |
 | FND-003 | fixed | FR-016 Inputs is reworded: the bounds arrive "as a required parameter or through a required field of its inputs", the two `decode_falsification` methods also take a direct parameter, and the limit type and replay inputs have no `Default`. This matches the code. |
+
+Round 2, against fix commit 69d9d170 (PR head 69d9d1701230b8026da99259a200958d945bc640).
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-004 | fixed | `compile_fail` doctests on `WitnessDecodeLimits` (witness.rs:49) and `ReplayInputs` (function.rs:350) call `::default()`, and both pass at the head. Reviewer mutants that add an `impl Default` for each type in src/lib.rs make the matching doctest fail, so the guard holds for an impl in any module. `make test` and CI run plain `cargo test`, which runs doctests. |
