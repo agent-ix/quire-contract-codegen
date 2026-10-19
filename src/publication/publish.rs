@@ -270,13 +270,7 @@ mod tests {
     };
 
     fn temporary(name: &str) -> PathBuf {
-        let nonce = PUBLICATION_NONCE.fetch_add(1, Ordering::Relaxed);
-        let path = std::env::temp_dir().join(format!(
-            "quire-publication-{name}-{}-{nonce}",
-            std::process::id()
-        ));
-        fs::create_dir_all(&path).unwrap();
-        path
+        crate::core::test_support::discover_scratch(&format!("publication-{name}"))
     }
 
     fn generated(path: &str, contents: &str) -> Artifact {

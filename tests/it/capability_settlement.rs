@@ -18,7 +18,7 @@ use quire_contract_codegen::{
 use quire_contract_model::{
     CheckedNodeId, CheckedOccurrenceRole, CheckedPackageEvidence, CheckedPackageReadLimits,
     CheckedPackageV2, CheckedPackageV2ReadResult, ContractDependencies, ContractOccurrenceKeyV1,
-    ContractPackageReadResult, ContractPackageWireV1,
+    ContractPackageReadResult, ContractPackageWireV1, JsonPointer,
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -38,6 +38,380 @@ fn kani(advertised: Vec<(CapabilityKind, Mode)>) -> BackendDescriptor {
         origin: ProviderOrigin::Linked,
         domains: None,
         bounds: None,
+    }
+}
+
+#[trace("TC-030", "FR-019-AC-48")]
+#[test]
+fn reader_refusal_projection_preserves_every_public_field() {
+    let reader = ContractPackageWireV1::read(
+        b"{}",
+        CheckedPackageReadLimits::bounded(),
+        &ContractDependencies::new(),
+    );
+    let ContractPackageReadResult::Refused(refusal) = reader else {
+        panic!("malformed contract package must be refused: {reader:?}");
+    };
+    let projected = quire_contract_codegen::project_contract_package_refusal(&refusal);
+    let wire = serde_json::to_value(EnvelopeRefusal::ContractPackageReadRefused {
+        refusal: projected.clone(),
+    })
+    .expect("serialize typed refusal");
+    assert_eq!(wire["code"], "contract_package_read_refused");
+    let fields = &wire["cause"]["refusal"];
+    assert_eq!(fields["code"], serde_json::to_value(refusal.code).unwrap());
+    assert_eq!(fields["path"], serde_json::to_value(refusal.path).unwrap());
+    assert_eq!(
+        fields["cause"],
+        serde_json::to_value(refusal.cause).unwrap()
+    );
+    assert_eq!(
+        fields["locus"],
+        serde_json::to_value(refusal.locus).unwrap()
+    );
+    assert_eq!(
+        fields["contract_version"],
+        serde_json::to_value(refusal.contract_version).unwrap()
+    );
+    assert_eq!(
+        fields["document_pointer"],
+        serde_json::to_value(refusal.document_pointer).unwrap()
+    );
+    assert_eq!(
+        fields["expected"],
+        serde_json::to_value(refusal.expected).unwrap()
+    );
+    assert_eq!(
+        fields["actual"],
+        serde_json::to_value(refusal.actual).unwrap()
+    );
+    assert!(fields.get("expected_node_id").is_none());
+}
+
+#[trace("TC-030", "FR-019-AC-48")]
+#[test]
+fn named_refusal_adapter_preserves_unknown_version() {
+    let reader = ContractPackageWireV1::read(
+        br#"{"contract_version":"unknown"}"#,
+        CheckedPackageReadLimits::bounded(),
+        &ContractDependencies::new(),
+    );
+    let ContractPackageReadResult::Refused(refusal) = reader else {
+        panic!("unknown version must refuse: {reader:?}");
+    };
+    let projected = quire_contract_codegen::project_contract_package_refusal(&refusal);
+    assert_eq!(projected.contract_version.as_deref(), Some("unknown"));
+}
+
+#[trace("TC-030", "FR-019-AC-48")]
+#[test]
+fn refusal_adapter_preserves_selected_document_pointer() {
+    use exact_function_fixture::{source_bound_call_package, PackageBuilder};
+    use quire_contract_model::{CheckedPackageRefusalCause, CheckedPackageRefusalCode};
+    let digest = "ab".repeat(32);
+    let selection = serde_json::json!([{
+        "identity": "acme/orders",
+        "digest_domain": "sha256-jcs",
+        "digest": digest,
+    }]);
+    let mut wire = source_bound_call_package().wire();
+    wire["lock"]["model_selections"] = selection.clone();
+    wire["identity_preimage"]["model_selections"] = selection;
+    let (_, resolved, _) = PackageBuilder::from_wire(wire).read_resolved();
+    let mut evidence = CheckedPackageEvidence::new();
+    evidence.support_feature("quire.value.complete/v1");
+    evidence
+        .insert_domain_package_document(
+            digest,
+            br#"{"package":{"count":9007199254740993}}"#.to_vec(),
+        )
+        .expect("selected document evidence");
+    let bytes = serde_json::to_vec(&resolved).expect("canonical fixture wire");
+    let reader = CheckedPackageV2::read(&bytes, CheckedPackageReadLimits::bounded(), &evidence);
+    let CheckedPackageV2ReadResult::Refused(refusal) = reader else {
+        panic!("selected document number past 2^53 must refuse: {reader:?}");
+    };
+    assert_eq!(refusal.code, CheckedPackageRefusalCode::NoncanonicalWire);
+    assert_eq!(
+        refusal.cause,
+        Some(CheckedPackageRefusalCause::InexactInteger)
+    );
+    assert_eq!(
+        refusal.document_pointer.as_ref().map(JsonPointer::as_str),
+        Some("/package/count")
+    );
+    let projected = quire_contract_codegen::project_contract_package_refusal(&refusal);
+    assert_eq!(
+        projected.document_pointer.as_deref(),
+        Some("/package/count")
+    );
+}
+
+#[trace("TC-030", "FR-019-AC-48")]
+#[test]
+fn refusal_adapter_preserves_reader_node_locus() {
+    use exact_function_fixture::{source_bound_call_package, PackageBuilder};
+    let mut wire = source_bound_call_package().raw_wire();
+    let mut functions = wire["semantic_graph"]["nodes"]
+        .as_array_mut()
+        .expect("fixture nodes")
+        .iter_mut()
+        .filter(|node| node["node_tag"] == "function")
+        .collect::<Vec<_>>();
+    assert!(functions.len() >= 2);
+    let first_name = functions[0]["declaration"]["qualified_name"].clone();
+    functions[1]["declaration"]["qualified_name"] = first_name;
+    let (reader, _, _) = PackageBuilder::from_wire(wire).read_resolved();
+    let CheckedPackageV2ReadResult::Refused(refusal) = reader else {
+        panic!("duplicate function name must refuse: {reader:?}");
+    };
+    assert!(refusal.locus.is_some(), "reader must locate the node");
+    let projected = quire_contract_codegen::project_contract_package_refusal(&refusal);
+    assert_eq!(projected.locus, refusal.locus);
+}
+
+#[trace("TC-030", "FR-019-AC-49")]
+#[test]
+fn incomplete_adapter_preserves_present_count_limit_path() {
+    use exact_function_fixture::{code_id, source_bound_call_package, SOURCE_CALL};
+    let (checked, ids) = source_bound_call_package().admit_resolved();
+    let lowered = checked.lower(
+        &[ids.resolve(&code_id(SOURCE_CALL))],
+        &routed_contract_lowering_profile(),
+    );
+    let mut limits = CheckedPackageReadLimits::bounded();
+    limits.nodes = 0;
+    let reader = ContractPackageWireV1::read(
+        lowered.package.canonical_bytes().expect("lowered bytes"),
+        limits,
+        &ContractDependencies::new(),
+    );
+    let ContractPackageReadResult::Incomplete(incomplete) = reader else {
+        panic!("node ceiling must be incomplete: {reader:?}");
+    };
+    assert!(incomplete.path.is_some());
+    let projected = quire_contract_codegen::project_contract_package_incomplete(&incomplete);
+    assert_eq!(
+        projected.path.as_deref(),
+        incomplete.path.as_ref().map(JsonPointer::as_str)
+    );
+}
+
+#[trace("TC-030", "FR-019-AC-49")]
+#[test]
+fn reader_incomplete_projection_preserves_the_exhausted_limit() {
+    let mut limits = CheckedPackageReadLimits::bounded();
+    limits.bytes = 1;
+    let reader = ContractPackageWireV1::read(b"{}", limits, &ContractDependencies::new());
+    let ContractPackageReadResult::Incomplete(incomplete) = reader else {
+        panic!("byte ceiling must be incomplete: {reader:?}");
+    };
+    let projected = quire_contract_codegen::project_contract_package_incomplete(&incomplete);
+    let wire = serde_json::to_value(EnvelopeRefusal::ContractPackageReadIncomplete {
+        incomplete: projected,
+    })
+    .expect("serialize typed incomplete result");
+    assert_eq!(wire["code"], "contract_package_read_incomplete");
+    let fields = &wire["cause"]["incomplete"];
+    assert_eq!(
+        fields["limit_kind"],
+        serde_json::to_value(incomplete.limit_kind).unwrap()
+    );
+    assert_eq!(fields["limit"], incomplete.limit);
+    assert_eq!(fields["consumed"], incomplete.consumed);
+    assert_eq!(
+        fields["path"],
+        serde_json::to_value(incomplete.path).unwrap()
+    );
+}
+
+#[trace("TC-030", "FR-019-AC-50")]
+#[test]
+fn admitted_function_read_keeps_supported_settlement() {
+    use exact_function_fixture::{
+        code_id, source_bound_call_package, SOURCE_CALL, SOURCE_FUNCTION, SOURCE_PARAM_A,
+        SOURCE_PARAM_B,
+    };
+    let (package, ids) = source_bound_call_package().admit_resolved();
+    let mut request = item(
+        RequestedKind::Known(CapabilityKind::ValueValidity),
+        Candidates::Set(vec![candidate("kani")]),
+    );
+    request.kani_form = KaniForm::V2FunctionApplication {
+        package: Box::new(package),
+        function_node_id: ids.resolve(&code_id(SOURCE_FUNCTION)),
+        call_node_id: ids.resolve(&code_id(SOURCE_CALL)),
+        argument_node_ids: vec![
+            ids.resolve(&code_id(SOURCE_PARAM_A)),
+            ids.resolve(&code_id(SOURCE_PARAM_B)),
+        ],
+    };
+    assert_eq!(
+        settle_one(
+            vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)])],
+            request,
+        )
+        .disposition,
+        Disposition::Supported {
+            backend: "kani".to_owned()
+        }
+    );
+}
+
+#[trace("TC-030", "FR-019-AC-49")]
+#[test]
+fn oversized_admitted_function_read_stops_the_envelope() {
+    use exact_function_fixture::{
+        code_id, oversized_source_bound_call_package, SOURCE_CALL, SOURCE_FUNCTION, SOURCE_PARAM_A,
+        SOURCE_PARAM_B,
+    };
+    let (package, ids) = oversized_source_bound_call_package();
+    let body_id = package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| node.node_id == ids.resolve(&code_id(SOURCE_FUNCTION)))
+        .expect("resolved function")
+        .body["members"]
+        .as_array()
+        .expect("members")
+        .iter()
+        .find(|member| member["name"] == "body")
+        .expect("body binding")["value"]["target"]
+        .clone();
+    let body_id: CheckedNodeId = serde_json::from_value(body_id).expect("body id");
+    let call_id = ids.resolve(&code_id(SOURCE_CALL));
+    let lowered = package.lower(
+        &[body_id, call_id.clone()],
+        &routed_contract_lowering_profile(),
+    );
+    let bytes = lowered.package.canonical_bytes().expect("lowered bytes");
+    assert!(u64::try_from(bytes.len()).unwrap() > CheckedPackageReadLimits::bounded().bytes);
+    let direct = ContractPackageWireV1::read(
+        bytes,
+        CheckedPackageReadLimits::bounded(),
+        &ContractDependencies::new(),
+    );
+    let ContractPackageReadResult::Incomplete(expected) = direct else {
+        panic!("large lowered package must exhaust bytes: {direct:?}");
+    };
+    let mut request = item(
+        RequestedKind::Known(CapabilityKind::ValueValidity),
+        Candidates::Set(vec![candidate("kani")]),
+    );
+    request.kani_form = KaniForm::V2FunctionApplication {
+        package: Box::new(package),
+        function_node_id: ids.resolve(&code_id(SOURCE_FUNCTION)),
+        call_node_id: call_id,
+        argument_node_ids: vec![
+            ids.resolve(&code_id(SOURCE_PARAM_A)),
+            ids.resolve(&code_id(SOURCE_PARAM_B)),
+        ],
+    };
+    let outcome = negotiate_backend_provider(&envelope(
+        vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)])],
+        vec![request],
+    ));
+    let Err(EnvelopeRefusal::ContractPackageReadIncomplete { incomplete }) = outcome else {
+        panic!("reader limit must stop negotiation: {outcome:?}");
+    };
+    assert_eq!(incomplete.limit_kind, expected.limit_kind);
+    assert_eq!(incomplete.limit, expected.limit);
+    assert_eq!(incomplete.consumed, expected.consumed);
+    assert_eq!(
+        incomplete.path.as_deref(),
+        expected.path.as_ref().map(JsonPointer::as_str)
+    );
+}
+
+#[trace("TC-030", "FR-019-AC-52")]
+#[test]
+fn genuine_function_backend_refusals_stay_item_level() {
+    use exact_function_fixture::{
+        code_id, source_bound_call_package_with_name_len,
+        source_bound_call_package_with_name_segments, SOURCE_CALL, SOURCE_FUNCTION, SOURCE_PARAM_A,
+        SOURCE_PARAM_B,
+    };
+    let request_for = |package, ids: exact_function_fixture::FixtureIds| {
+        let mut request = item(
+            RequestedKind::Known(CapabilityKind::ValueValidity),
+            Candidates::Set(vec![candidate("kani")]),
+        );
+        request.kani_form = KaniForm::V2FunctionApplication {
+            package: Box::new(package),
+            function_node_id: ids.resolve(&code_id(SOURCE_FUNCTION)),
+            call_node_id: ids.resolve(&code_id(SOURCE_CALL)),
+            argument_node_ids: vec![
+                ids.resolve(&code_id(SOURCE_PARAM_A)),
+                ids.resolve(&code_id(SOURCE_PARAM_B)),
+            ],
+        };
+        request
+    };
+    let structural = source_bound_call_package_with_name_segments(vec![
+        "module".to_owned(),
+        "function".to_owned(),
+    ]);
+    let too_large_to_render = source_bound_call_package_with_name_len(450_000);
+    let body_id: CheckedNodeId = serde_json::from_value(
+        too_large_to_render
+            .0
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.node_id == too_large_to_render.1.resolve(&code_id(SOURCE_FUNCTION)))
+            .expect("resolved function")
+            .body["members"]
+            .as_array()
+            .expect("members")
+            .iter()
+            .find(|member| member["name"] == "body")
+            .expect("body binding")["value"]["target"]
+            .clone(),
+    )
+    .expect("body id");
+    let lowered = too_large_to_render.0.lower(
+        &[
+            body_id,
+            too_large_to_render.1.resolve(&code_id(SOURCE_CALL)),
+        ],
+        &routed_contract_lowering_profile(),
+    );
+    assert!(
+        matches!(
+            ContractPackageWireV1::read(
+                lowered.package.canonical_bytes().expect("lowered bytes"),
+                CheckedPackageReadLimits::bounded(),
+                &ContractDependencies::new(),
+            ),
+            ContractPackageReadResult::Admitted(_)
+        ),
+        "no-claim control must pass the internal reader"
+    );
+    for (label, (package, ids)) in [
+        ("structural", structural),
+        ("admitted-no-claim", too_large_to_render),
+    ] {
+        let settled = settle_one(
+            vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)])],
+            request_for(package, ids),
+        );
+        assert!(
+            matches!(
+                &settled.disposition,
+                Disposition::Unsupported {
+                    cause: Cause::KaniFormRefused {
+                        refusal: UnsupportedObligation::OperationNotRendered {
+                            operation_identity,
+                            ..
+                        },
+                        backend,
+                        ..
+                    }
+                } if operation_identity == "quire.op.function.call" && backend == "kani"
+            ),
+            "{label} should retain item-level OperationNotRendered: {settled:?}"
+        );
     }
 }
 
@@ -1040,7 +1414,7 @@ fn tc_030_an_empty_candidate_set_settles_unsupported_with_a_warning() {
 /// candidate in candidate order, identically under either registration order.
 ///
 /// Provenance: codegen#86
-#[trace("TC-030")]
+#[trace("FR-019-AC-4", "TC-030")]
 #[test]
 fn tc_030_two_candidates_with_no_named_backend_settle_ambiguous() {
     let second = BackendDescriptor {
@@ -1079,6 +1453,273 @@ fn tc_030_two_candidates_with_no_named_backend_settle_ambiguous() {
             },
             "registration order changed the disposition or the candidate order"
         );
+        let Disposition::InvalidRequest { cause } = &settlement.disposition else {
+            panic!("ambiguous candidates must be an invalid request");
+        };
+        assert_eq!(cause.code(), "invalid_capability");
+    }
+}
+
+/// Three candidates settle ambiguous in request order under every descriptor
+/// registration order, even when request order differs from bytewise order.
+#[trace("FR-019-AC-4", "TC-030")]
+#[test]
+fn tc_030_three_candidates_settle_ambiguous_in_candidate_order() {
+    let descriptors = [
+        kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)]),
+        BackendDescriptor {
+            identity: "kani-nightly".to_owned(),
+            advertised: vec![(CapabilityKind::ValueValidity, Mode::Unbounded)],
+            origin: ProviderOrigin::Process,
+            domains: None,
+            bounds: None,
+        },
+        BackendDescriptor {
+            identity: "alpha-backend".to_owned(),
+            advertised: vec![(CapabilityKind::ValueValidity, Mode::Bounded)],
+            origin: ProviderOrigin::Process,
+            domains: None,
+            bounds: None,
+        },
+    ];
+    let candidates = vec![
+        candidate("kani-nightly"),
+        candidate(BackendKind::Kani.identity()),
+        candidate("alpha-backend"),
+    ];
+    for order in [
+        [0, 1, 2],
+        [0, 2, 1],
+        [1, 0, 2],
+        [1, 2, 0],
+        [2, 0, 1],
+        [2, 1, 0],
+    ] {
+        let manifest = order.map(|index| descriptors[index].clone()).to_vec();
+        let settlement = settle_one(
+            manifest,
+            item(
+                RequestedKind::Known(CapabilityKind::ValueValidity),
+                Candidates::Set(candidates.clone()),
+            ),
+        );
+        assert_eq!(
+            settlement.disposition,
+            Disposition::InvalidRequest {
+                cause: Cause::AmbiguousBackend {
+                    candidates: candidates.clone()
+                }
+            },
+            "candidate list or cause changed for registration order {order:?}"
+        );
+        let Disposition::InvalidRequest { cause } = &settlement.disposition else {
+            panic!("ambiguous candidates must be an invalid request");
+        };
+        assert_eq!(cause.code(), "invalid_capability");
+    }
+}
+
+/// Differing descriptors of one identity refuse the whole envelope in either order.
+#[trace("TC-030", "FR-019-AC-45")]
+#[test]
+fn tc_030_repeated_backend_identity_refuses_in_both_orders() {
+    let kind = CapabilityKind::ValueValidity;
+    let bounded_only = kani(vec![(kind, Mode::Bounded)]);
+    let unbounded_advertisement = kani(vec![(kind, Mode::Unbounded)]);
+    let mut request = item(
+        RequestedKind::Known(kind),
+        Candidates::Set(vec![candidate(BackendKind::Kani.identity())]),
+    );
+    request.extent = unbounded(false);
+
+    assert!(matches!(
+        settle_one(vec![unbounded_advertisement.clone()], request.clone()).disposition,
+        Disposition::Supported { .. }
+    ));
+    assert!(matches!(
+        settle_one(vec![bounded_only.clone()], request.clone()).disposition,
+        Disposition::Unsupported {
+            cause: Cause::UnboundedExtent { .. }
+        }
+    ));
+
+    for manifest in [
+        vec![bounded_only.clone(), unbounded_advertisement.clone()],
+        vec![unbounded_advertisement.clone(), bounded_only.clone()],
+    ] {
+        assert_eq!(
+            negotiate_backend_provider(&envelope(manifest, vec![request.clone()])),
+            Err(EnvelopeRefusal::ManifestRepeatsBackendIdentity {
+                identity: BackendKind::Kani.identity().to_owned(),
+            }),
+            "a repeated identity cannot route in either registration order"
+        );
+    }
+}
+
+/// Every placement of a second descriptor refuses before any item settles.
+#[trace("TC-030", "FR-019-AC-45")]
+#[test]
+fn tc_030_repeated_descriptors_refuse_the_whole_envelope() {
+    let first = kani(vec![(CapabilityKind::ValueValidity, Mode::Unbounded)]);
+    let other = BackendDescriptor {
+        identity: "other".to_owned(),
+        ..first.clone()
+    };
+    let differing = kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)]);
+    let different_origin = BackendDescriptor {
+        origin: ProviderOrigin::Process,
+        ..first.clone()
+    };
+    let different_field = BackendDescriptor {
+        bounds: Some(BTreeMap::new()),
+        ..first.clone()
+    };
+    let request = item(
+        RequestedKind::Known(CapabilityKind::ValueValidity),
+        Candidates::Set(vec![candidate(BackendKind::Kani.identity())]),
+    );
+    let manifests = [
+        vec![first.clone(), first.clone()],
+        vec![first.clone(), other.clone(), first.clone()],
+        vec![first.clone(), differing.clone()],
+        vec![differing.clone(), first.clone()],
+        vec![first.clone(), other.clone(), differing.clone()],
+        vec![first.clone(), differing.clone(), other.clone()],
+        vec![other.clone(), first.clone(), differing.clone()],
+        vec![other.clone(), differing.clone(), first.clone()],
+        vec![differing.clone(), first.clone(), other.clone()],
+        vec![differing.clone(), other, first.clone()],
+        vec![first.clone(), different_origin.clone()],
+        vec![different_origin, first.clone()],
+        vec![first.clone(), different_field.clone()],
+        vec![different_field, first],
+    ];
+    for manifest in manifests {
+        assert_eq!(
+            negotiate_backend_provider(&envelope(manifest, vec![request.clone()])),
+            Err(EnvelopeRefusal::ManifestRepeatsBackendIdentity {
+                identity: BackendKind::Kani.identity().to_owned(),
+            }),
+            "a repeated descriptor must return Err with no settlements"
+        );
+    }
+}
+
+/// A domains-only descriptor change still repeats the same backend identity.
+#[trace("TC-030", "FR-019-AC-45")]
+#[test]
+fn tc_030_domains_only_change_refuses_without_settlements() {
+    let first = kani(vec![(CapabilityKind::ValueValidity, Mode::Unbounded)]);
+    let different_domains = BackendDescriptor {
+        domains: Some(BTreeSet::new()),
+        ..first.clone()
+    };
+    let request = item(
+        RequestedKind::Known(CapabilityKind::ValueValidity),
+        Candidates::Set(vec![candidate(BackendKind::Kani.identity())]),
+    );
+
+    for manifest in [
+        vec![first.clone(), different_domains.clone()],
+        vec![different_domains.clone(), first.clone()],
+    ] {
+        assert_eq!(
+            negotiate_backend_provider(&envelope(manifest, vec![request.clone()])),
+            Err(EnvelopeRefusal::ManifestRepeatsBackendIdentity {
+                identity: BackendKind::Kani.identity().to_owned(),
+            }),
+            "a domains-only change must refuse the whole envelope"
+        );
+    }
+}
+
+/// Identity comparison is bytewise, including case.
+#[trace("TC-030", "FR-019-AC-46")]
+#[test]
+fn tc_030_backend_identities_that_differ_only_in_case_are_distinct() {
+    let kind = CapabilityKind::ValueValidity;
+    let manifest = vec![
+        BackendDescriptor {
+            identity: "Kani".to_owned(),
+            ..kani(vec![(kind, Mode::Unbounded)])
+        },
+        kani(vec![(kind, Mode::Unbounded)]),
+    ];
+    let mut request = item(
+        RequestedKind::Known(kind),
+        Candidates::Set(vec![candidate(BackendKind::Kani.identity())]),
+    );
+    request.extent = unbounded(false);
+    assert!(matches!(
+        negotiate_backend_provider(&envelope(manifest, vec![request])),
+        Ok(settlements) if matches!(settlements.as_slice(), [ItemSettlement {
+            disposition: Disposition::Supported { backend }, ..
+        }] if backend == BackendKind::Kani.identity())
+    ));
+}
+
+/// Refusal selection is stable across manifest order and precedes carrier reads.
+#[trace("TC-030", "FR-019-AC-46")]
+#[test]
+fn tc_030_repeated_identity_precedence_and_bytewise_selection() {
+    let a = BackendDescriptor {
+        identity: "A".to_owned(),
+        ..kani(vec![])
+    };
+    let b = BackendDescriptor {
+        identity: "B".to_owned(),
+        ..kani(vec![])
+    };
+    let request = item(
+        RequestedKind::Unknown("unread-kind".to_owned()),
+        Candidates::Set(Vec::new()),
+    );
+    for manifest in [
+        vec![b.clone(), a.clone(), b.clone(), a.clone()],
+        vec![a.clone(), b.clone(), a.clone(), b.clone()],
+        vec![b.clone(), b.clone(), a.clone(), a.clone()],
+        vec![a.clone(), a.clone(), b.clone(), b.clone()],
+    ] {
+        let valid = envelope(manifest.clone(), vec![request.clone()]);
+        assert_eq!(
+            negotiate_backend_provider(&valid),
+            Err(EnvelopeRefusal::ManifestRepeatsBackendIdentity {
+                identity: "A".to_owned()
+            })
+        );
+        for invalid in [
+            BackendProviderEnvelope {
+                contract_version: "bad-version".to_owned(),
+                ..valid.clone()
+            },
+            BackendProviderEnvelope {
+                capability_vocabulary: "foreign".to_owned(),
+                ..valid.clone()
+            },
+            BackendProviderEnvelope {
+                capability_vocabulary: String::new(),
+                ..valid
+            },
+        ] {
+            let (member, received) = if invalid.contract_version != BACKEND_PROVIDER_CONTRACT {
+                ("contract_version", invalid.contract_version.clone())
+            } else {
+                (
+                    "capability_vocabulary",
+                    invalid.capability_vocabulary.clone(),
+                )
+            };
+            assert_eq!(
+                negotiate_backend_provider(&invalid),
+                Err(EnvelopeRefusal::InvalidCapability {
+                    cause: "unsupported-version",
+                    member,
+                    received,
+                }),
+                "carrier refusal must precede repeat detection and item settlement"
+            );
+        }
     }
 }
 
@@ -2318,16 +2959,24 @@ fn kani_form_identity_does_not_depend_on_display_or_debug_text() {
 /// refused whole, and no kind of it is read.
 ///
 /// Provenance: codegen#86
-#[trace("TC-030")]
+#[trace("FR-019-AC-7", "TC-030")]
 #[test]
 fn tc_030_a_foreign_capability_vocabulary_refuses_the_carrier() {
-    for supplied in ["", "quire.capability-kind/v2"] {
+    for supplied in [
+        "",
+        "quire.capability-kind/v2",
+        "quire.capability-kind/v1 ",
+        "QUIRE.CAPABILITY-KIND/V1",
+        "quire.capability-kind/v10",
+        "quire.capability-kind/v1.0",
+        "quire.capability-kind/",
+    ] {
         let refusal = negotiate_backend_provider(&BackendProviderEnvelope {
             capability_vocabulary: supplied.to_owned(),
             ..envelope(
                 vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)])],
                 vec![item(
-                    RequestedKind::Known(CapabilityKind::ValueValidity),
+                    RequestedKind::Unknown("foreign-kind".to_owned()),
                     Candidates::Set(vec![candidate(BackendKind::Kani.identity())]),
                 )],
             )
@@ -2341,6 +2990,10 @@ fn tc_030_a_foreign_capability_vocabulary_refuses_the_carrier() {
                 received: supplied.to_owned()
             },
             "no settlement is returned, so no label of the carrier was read"
+        );
+        assert_eq!(
+            serde_json::to_value(&refusal).expect("typed refusal serializes")["code"],
+            "invalid_capability"
         );
     }
 }

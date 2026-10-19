@@ -4,10 +4,7 @@
 //! native source and a test-authored domain model document. No Contract IR
 //! package wire is constructed in this module.
 
-use crate::{
-    kani_obligations::scratch,
-    scratch_crate::{runtime_dependency, write_manifest},
-};
+use crate::scratch_crate::{runtime_dependency, write_manifest, TemporaryDirectory};
 use ix_trace_rs::trace;
 use qsl_replay::{
     call_site, object_reference_witness, replay, write_object_environment, ByteDigest, Category,
@@ -168,10 +165,11 @@ fn model_document() -> Value {
     })
 }
 
+// `deref(input)` is object navigation, admitted under QSL's model layer.
 fn source_unit_with_body(model_digest: &str, body: &str) -> String {
     format!(
         "language \"ix:native\" edition \"1-draft\";\n\
-         profile v = \"quire.value.complete/v1\";\n\
+         profile v = \"quire.model.complete/v1\";\n\
          model M = \"ir268.test/domain\" version \"1.0.0\" digest \"sha256-jcs:{model_digest}\";\n\
          predicate inspect using v (input: M::Node): Boolean {{ {body} }}\n"
     )
@@ -356,12 +354,13 @@ fn collection_item_outcome(
     .expect("valid collection request")
 }
 
-fn write_collection_scratch(harness: &KaniCollectionObligationHarness) -> PathBuf {
-    let directory = scratch("collection-claim");
+fn write_collection_scratch(harness: &KaniCollectionObligationHarness) -> TemporaryDirectory {
+    let scratch = TemporaryDirectory::new("quire-kani-symbolic-domains-collection");
+    let directory = &scratch.path;
     fs::write(directory.join("src/lib.rs"), &harness.rust.contents)
         .expect("write the generated artifact byte for byte");
     write_manifest(
-        &directory,
+        directory,
         &format!(
             "[package]\nname = \"generated-kani-collection\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
             runtime_dependency(&["exact"])
@@ -372,7 +371,7 @@ fn write_collection_scratch(harness: &KaniCollectionObligationHarness) -> PathBu
         "fn main() { println!(\"cargo:rustc-check-cfg=cfg(kani)\"); }\n",
     )
     .expect("allow Kani's generated cfg");
-    directory
+    scratch
 }
 
 fn run_collection_kani(
@@ -380,13 +379,14 @@ fn run_collection_kani(
     harness: &KaniCollectionObligationHarness,
     label: &str,
 ) -> quire_contract_codegen::KaniExecutionEvidence {
-    let crate_directory = write_collection_scratch(harness);
+    let scratch = write_collection_scratch(harness);
+    let crate_directory = &scratch.path;
     let cancel = quire_exact::Cancel::new();
     let evidence = execute_kani_obligation(&KaniExecutionRequest {
         cancel: &cancel,
         installation,
         harness: KaniExecutableHarness::from(harness),
-        crate_directory: &crate_directory,
+        crate_directory,
         target_directory: &PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kani-collection"),
         home_directory: None,
     })
@@ -404,7 +404,6 @@ fn run_collection_kani(
         &harness.rust.contents,
     )
     .unwrap();
-    let _ = fs::remove_dir_all(crate_directory);
     evidence
 }
 
@@ -972,7 +971,14 @@ fn qsl_emits_and_ir_admits_the_authored_collection_and_reference_shapes() {
     );
 }
 
-#[trace("FR-015-AC-96", "FR-015-AC-100", "TC-025")]
+#[trace(
+    "FR-015-AC-96",
+    "FR-015-AC-100",
+    "TC-025",
+    "TC-001",
+    "NFR-002-AC-1",
+    "NFR-002-AC-2"
+)]
 #[test]
 fn negotiation_renders_the_selected_sequence_claims_deterministically() {
     let fixture = emitted();
@@ -1041,6 +1047,26 @@ fn negotiation_renders_the_selected_sequence_claims_deterministically() {
             records[0]
         );
         let harness = &harnesses[0];
+        crate::generated_headers::assert_header(
+            &harness.rust.path,
+            &harness.rust.contents,
+            &[
+                &format!("{}/{}", function_id.domain, function_id.digest),
+                &format!("{}/{}", quantifier.domain, quantifier.digest),
+            ],
+        );
+        for node in [
+            &harness.identity.projection_id,
+            &harness.identity.declaration_id,
+            &harness.identity.element_type_id,
+            &harness.identity.predicate_id,
+        ] {
+            crate::generated_headers::assert_header(
+                &harness.rust.path,
+                &harness.rust.contents,
+                &[&format!("{}/{}", node.domain, node.digest)],
+            );
+        }
         assert_eq!(harness.identity.function_id, function_id);
         assert_eq!(harness.identity.quantifier_id, quantifier);
         assert_eq!(

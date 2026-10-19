@@ -143,10 +143,11 @@ use crate::oracle::equality::EqualityOperatorKind;
 use crate::oracle::operator_catalog::IntegerOperator;
 use crate::oracle::{classify_lowering_failure, direct_unsupported_form, LoweringFailure};
 use quire_contract_model::{
-    CheckedNodeId, CheckedNodeTag, CheckedPackageReadLimits, CheckedPackageV2, CheckedSemanticId,
-    CheckedSemanticNodeV2, CheckedSourceMapEntry, CompleteLoweringProfileV2,
-    CompleteLoweringRecordV2, ContractDependencies, ContractFeatureRecordV1,
-    ContractPackageReadResult, ContractPackageV1, ContractPackageWireV1, ContractReachedClosureV1,
+    CheckedNodeId, CheckedNodeTag, CheckedPackageIncomplete, CheckedPackageReadLimits,
+    CheckedPackageRefusal, CheckedPackageV2, CheckedSemanticId, CheckedSemanticNodeV2,
+    CheckedSourceMapEntry, CompleteLoweringProfileV2, CompleteLoweringRecordV2,
+    ContractDependencies, ContractFeatureRecordV1, ContractPackageReadResult, ContractPackageV1,
+    ContractPackageWireV1, ContractReachedClosureV1,
 };
 use quire_contract_runtime::exact as rt;
 use serde::Serialize;
@@ -671,6 +672,27 @@ fn render_schedule_source(
     let flat_source = format!(
         "/// Deterministic target-neutral function schedule.\npub const FUNCTION_SCHEDULE_JSON: &str = {complete_json:?};\n"
     );
+    let subjects = functions
+        .iter()
+        .map(|function| crate::core::provenance::node_subject(&function.function_node_id))
+        .chain(
+            claims
+                .iter()
+                .map(|claim| crate::core::provenance::node_subject(&claim.call_node_id)),
+        )
+        .collect::<Vec<_>>();
+    let mut flat_subjects = subjects.clone();
+    flat_subjects.extend(functions.iter().flat_map(|function| {
+        function
+            .schedule
+            .instructions
+            .iter()
+            .map(|instruction| crate::core::provenance::node_subject(&instruction.node))
+    }));
+    let flat_source = crate::core::provenance::with_rust_header(
+        flat_source,
+        flat_subjects.iter().map(String::as_str),
+    );
     if flat_source.len() <= MAX_ARTIFACT_BYTES {
         let source_bytes = flat_source.len();
         if source_bytes > source_limit {
@@ -696,9 +718,11 @@ fn render_schedule_source(
         .collect::<Vec<_>>();
     let metadata_json = serde_json::to_string(&(metadata, refused_functions, claims))
         .map_err(|_| schedule::ScheduleRefusal::SerializationFailure)?;
-    let mut source = format!(
+    let source = format!(
         "/// Deterministic target-neutral function schedule metadata.\npub const FUNCTION_SCHEDULE_METADATA_JSON: &str = {metadata_json:?};\n"
     );
+    let mut source =
+        crate::core::provenance::with_rust_header(source, subjects.iter().map(String::as_str));
     let mut modules = Vec::new();
     let mut declarations = String::new();
     let mut module_values = String::new();
@@ -744,6 +768,19 @@ fn render_schedule_source(
             let module_name = format!("schedule_{function_ordinal:06}_{start:06}_{end:06}");
             let module_source = format!(
                 "/// Ordinal range {start}..{end} for function schedule {function_ordinal}.\npub const FUNCTION_SCHEDULE_PART_JSON: &str = {part_json:?};\n"
+            );
+            let part_subjects = std::iter::once(crate::core::provenance::node_subject(
+                &function.function_node_id,
+            ))
+            .chain(
+                part.instructions
+                    .iter()
+                    .map(|instruction| crate::core::provenance::node_subject(&instruction.node)),
+            )
+            .collect::<Vec<_>>();
+            let module_source = crate::core::provenance::with_rust_header(
+                module_source,
+                part_subjects.iter().map(String::as_str),
             );
             if module_source.len() > MAX_ARTIFACT_BYTES {
                 return Err(schedule::ScheduleRefusal::SourceArtifactTooLarge {
@@ -1642,6 +1679,22 @@ pub(crate) fn reference_node_id<'a>(
         .map(|node| &node.node_id)
 }
 
+#[cfg(test)]
+thread_local! {
+    static FUNCTION_PREFLIGHT_READS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(crate) fn take_function_preflight_reads() -> usize {
+    FUNCTION_PREFLIGHT_READS.with(|count| count.replace(0))
+}
+
+/// Non-admitted result of the internal function-package reader.
+pub(crate) enum FunctionPackageReadFailure {
+    Refused(Box<CheckedPackageRefusal>),
+    Incomplete(CheckedPackageIncomplete),
+}
+
 /// Classify one source-backed integer function application with the same V1 reader and generator
 /// used after routed settlement. No source artifact is returned to the negotiation path.
 pub(crate) fn checked_integer_function_application_is_supported(
@@ -1649,7 +1702,8 @@ pub(crate) fn checked_integer_function_application_is_supported(
     function_node_id: &CheckedNodeId,
     call_node_id: &CheckedNodeId,
     argument_node_ids: &[CheckedNodeId],
-) -> bool {
+    admitted: Option<(&ContractPackageV1, &[ContractRequestPosition], usize)>,
+) -> Result<bool, FunctionPackageReadFailure> {
     let graph: Graph<'_> = checked
         .graph()
         .nodes
@@ -1657,40 +1711,40 @@ pub(crate) fn checked_integer_function_application_is_supported(
         .map(|node| (&node.node_id, node))
         .collect();
     let Some(function_node) = graph.get(function_node_id).copied() else {
-        return false;
+        return Ok(false);
     };
     if &*function_node.node_tag != "function" || &*function_node.semantic_form != "pure_function" {
-        return false;
+        return Ok(false);
     }
     let Some(name_segments) = function_node
         .declaration
         .as_ref()
         .map(|declaration| declaration.qualified_name.as_slice())
     else {
-        return false;
+        return Ok(false);
     };
     if name_segments.len() != 1 {
-        return false;
+        return Ok(false);
     }
     let Some(parameter_terms) = binding_value(&function_node.body, "parameters")
         .and_then(|value| value.get("members"))
         .and_then(serde_json::Value::as_array)
     else {
-        return false;
+        return Ok(false);
     };
     let mut parameters = Vec::with_capacity(parameter_terms.len());
     for term in parameter_terms {
         let Some(parameter_id) = reference_node_id(term, graph.values().copied()) else {
-            return false;
+            return Ok(false);
         };
         let Some(parameter_node) = graph.get(parameter_id).copied() else {
-            return false;
+            return Ok(false);
         };
         let Some(name) = binding_value(&parameter_node.body, "name")
             .and_then(|value| value.get("value"))
             .and_then(serde_json::Value::as_str)
         else {
-            return false;
+            return Ok(false);
         };
         parameters.push(FunctionParameter {
             name: name.to_owned(),
@@ -1700,29 +1754,29 @@ pub(crate) fn checked_integer_function_application_is_supported(
     let Some(body_id) = binding_value(&function_node.body, "body")
         .and_then(|term| reference_node_id(term, graph.values().copied()))
     else {
-        return false;
+        return Ok(false);
     };
     let Some(body_node) = graph.get(body_id).copied() else {
-        return false;
+        return Ok(false);
     };
     let Some(operation_identity) = body_node
         .body
         .pointer("/operation/identity")
         .and_then(serde_json::Value::as_str)
     else {
-        return false;
+        return Ok(false);
     };
     let operator = match operation_identity {
         "quire.op.integer.add" => IntegerOperator::Add,
         "quire.op.integer.sub" => IntegerOperator::Subtract,
         "quire.op.integer.mul" => IntegerOperator::Multiply,
-        _ => return false,
+        _ => return Ok(false),
     };
     let Some(call_node) = graph.get(call_node_id).copied() else {
-        return false;
+        return Ok(false);
     };
     if !source_call_matches(&call_node.body, &graph, function_node_id, argument_node_ids) {
-        return false;
+        return Ok(false);
     }
     let declaration = ExactFunctionDeclaration {
         node_id: body_id.clone(),
@@ -1738,40 +1792,63 @@ pub(crate) fn checked_integer_function_application_is_supported(
         argument_node_ids: argument_node_ids.to_vec(),
     };
     let requested_ids = [body_id.clone(), call_node_id.clone()];
-    let lowered = checked.lower(&requested_ids, &routed_contract_lowering_profile());
-    let Some(bytes) = lowered.package.canonical_bytes() else {
-        return false;
-    };
-    let contract = match ContractPackageWireV1::read(
-        bytes,
-        CheckedPackageReadLimits::bounded(),
-        &ContractDependencies::new(),
-    ) {
-        ContractPackageReadResult::Admitted(package) => *package,
-        _ => return false,
-    };
-    let positions = requested_ids.map(|node_id| ContractRequestPosition::DriverItem {
-        node_id,
-        result_selection: ContractDriverResultSelection::NotApplicable,
-    });
-    let declaration_position = [0usize];
-    let item_position = [1usize];
+    let owned_contract;
+    let owned_positions;
+    let (contract, positions, declaration_position, item_position) =
+        if let Some((package, positions, request_index)) = admitted {
+            let Some(body_index) = positions
+                .iter()
+                .filter_map(|position| match position {
+                    ContractRequestPosition::DriverItem { node_id, .. } => Some(node_id),
+                    ContractRequestPosition::ContextRoot { .. } => None,
+                })
+                .position(|node_id| node_id == body_id)
+            else {
+                return Ok(false);
+            };
+            (package, positions, [body_index], [request_index])
+        } else {
+            let lowered = checked.lower(&requested_ids, &routed_contract_lowering_profile());
+            let Some(bytes) = lowered.package.canonical_bytes() else {
+                return Ok(false);
+            };
+            #[cfg(test)]
+            FUNCTION_PREFLIGHT_READS.with(|count| count.set(count.get() + 1));
+            owned_contract = match ContractPackageWireV1::read(
+                bytes,
+                CheckedPackageReadLimits::bounded(),
+                &ContractDependencies::new(),
+            ) {
+                ContractPackageReadResult::Admitted(package) => *package,
+                ContractPackageReadResult::Refused(refusal) => {
+                    return Err(FunctionPackageReadFailure::Refused(Box::new(refusal)))
+                }
+                ContractPackageReadResult::Incomplete(incomplete) => {
+                    return Err(FunctionPackageReadFailure::Incomplete(incomplete))
+                }
+            };
+            owned_positions = requested_ids.map(|node_id| ContractRequestPosition::DriverItem {
+                node_id,
+                result_selection: ContractDriverResultSelection::NotApplicable,
+            });
+            (&owned_contract, owned_positions.as_slice(), [0], [1])
+        };
     let declarations = [declaration];
     let items = [item];
     let Ok(oracles) = generate_exact_function_oracles(
-        &contract,
-        &positions,
+        contract,
+        positions,
         &declaration_position,
         &declarations,
         &item_position,
         &items,
     ) else {
-        return false;
+        return Ok(false);
     };
-    matches!(
+    Ok(matches!(
         oracles.claim_map.items.first().map(|claim| &claim.result),
         Some(ClaimDisposition::Generated(_))
-    )
+    ))
 }
 
 /// One supported operand kind: this generator's V1 scalar/equality operand
@@ -2536,7 +2613,21 @@ pub fn generate_exact_function_oracles(
         blocked: Vec::new(),
         items: claims,
     };
-    let lib = source.finish(&classified);
+    let subjects = classified
+        .iter()
+        .map(|function| crate::core::provenance::node_subject(&function.declaration.node_id))
+        .chain(
+            claim_map
+                .items
+                .iter()
+                .filter(|claim| matches!(&claim.result, ClaimDisposition::Generated(_)))
+                .map(|claim| crate::core::provenance::node_subject(&claim.node_id)),
+        )
+        .collect::<Vec<_>>();
+    let lib = crate::core::provenance::with_rust_header(
+        source.finish(&classified),
+        subjects.iter().map(String::as_str),
+    );
     if lib.len() > MAX_GENERATED_SOURCE_BYTES {
         return Err(OracleGenerationError::SourceTooLarge {
             bytes: lib.len(),

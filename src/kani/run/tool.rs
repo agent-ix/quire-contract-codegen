@@ -1,6 +1,12 @@
 //! The Kani backend this crate runs and where it is located (FR-017).
 
-use std::{env, ffi::OsString, fmt, fs, io, path::PathBuf, sync::Arc};
+use std::{
+    env,
+    ffi::OsString,
+    fmt, fs, io,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use super::owners::LaunchOwners;
 
@@ -61,11 +67,14 @@ pub struct KaniInstallation {
     /// The `cargo-kani` executable that is invoked directly.
     pub launcher: PathBuf,
     owners: Arc<LaunchOwners>,
+    scalar_native_launcher: PathBuf,
 }
 
 impl PartialEq for KaniInstallation {
     fn eq(&self, other: &Self) -> bool {
-        self.launcher == other.launcher && Arc::ptr_eq(&self.owners, &other.owners)
+        self.launcher == other.launcher
+            && self.scalar_native_launcher == other.scalar_native_launcher
+            && Arc::ptr_eq(&self.owners, &other.owners)
     }
 }
 
@@ -79,7 +88,22 @@ impl KaniInstallation {
 
     /// Construct with immutable owner dependencies; the public execution path stays identical.
     pub(super) fn with_owners(launcher: PathBuf, owners: Arc<LaunchOwners>) -> Self {
-        Self { launcher, owners }
+        Self {
+            launcher,
+            owners,
+            scalar_native_launcher: PathBuf::from("cargo"),
+        }
+    }
+
+    // The native program is an immutable dependency, separate from the proof launcher.
+    pub(super) fn scalar_native_launcher(&self) -> &Path {
+        &self.scalar_native_launcher
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_scalar_native_launcher(mut self, launcher: PathBuf) -> Self {
+        self.scalar_native_launcher = launcher;
+        self
     }
 
     /// The construction-time dependencies shared by every run of this installation.
@@ -159,7 +183,7 @@ mod tests {
     use std::fs;
 
     use super::*;
-    use crate::kani::test_support::discover_scratch;
+    use crate::core::test_support::discover_scratch;
 
     /// `discover_from` is a pure function of its arguments, so every `HOME`/`CARGO_HOME`/`PATH`
     /// combination is exercised directly here with no process environment mutation.

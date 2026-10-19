@@ -7,6 +7,7 @@ use std::{
     process::{Command, Output},
 };
 
+use ix_trace_rs::trace;
 use quire_contract_codegen::{
     classify_kani_run, ClassifiedRun, KaniCheckResult, KaniCheckStatus, KaniRunOutcome,
 };
@@ -761,16 +762,16 @@ fn empty_removed_and_absent_compiled_claims_fail() {
     );
 }
 
-/// Trace: FR-041-AC-1. An absent base declaration differs from an unreadable blob.
+/// An absent base declaration differs from an unreadable blob.
+#[trace("FR-041-AC-1")]
 #[test]
 fn base_claims_allow_proven_absence_but_refuse_failed_object_read() {
-    let directory = std::env::temp_dir().join(format!("cg-ir19-base-{}", std::process::id()));
-    let _ = fs::remove_dir_all(&directory);
-    fs::create_dir_all(&directory).expect("scratch Git directory");
+    let scratch = crate::scratch_crate::TemporaryDirectory::new("quire-kani-claims-base");
+    let directory = &scratch.path;
     let git = |args: &[&str]| {
         let output = Command::new("git")
             .arg("-C")
-            .arg(&directory)
+            .arg(directory)
             .args(args)
             .output()
             .expect("scratch Git must launch");
@@ -790,7 +791,7 @@ fn base_claims_allow_proven_absence_but_refuse_failed_object_read() {
     ]);
     let absent_base = git(&["rev-parse", "HEAD"]);
     assert_eq!(
-        base_names_at(&directory, absent_base.trim()),
+        base_names_at(directory, absent_base.trim()),
         Ok(BTreeSet::new())
     );
 
@@ -812,7 +813,7 @@ fn base_claims_allow_proven_absence_but_refuse_failed_object_read() {
     ]);
     let declared_base = git(&["rev-parse", "HEAD"]);
     assert_eq!(
-        base_names_at(&directory, declared_base.trim()),
+        base_names_at(directory, declared_base.trim()),
         Ok(BTreeSet::from(["claimed".to_owned()]))
     );
     let blob = git(&["rev-parse", &format!("HEAD:{DECLARATION}")]);
@@ -824,10 +825,9 @@ fn base_claims_allow_proven_absence_but_refuse_failed_object_read() {
             .join(&blob[2..]),
     )
     .expect("remove own loose blob to simulate a failed object read");
-    assert!(base_names_at(&directory, declared_base.trim())
+    assert!(base_names_at(directory, declared_base.trim())
         .expect_err("unreadable declared blob must fail closed")
         .contains("cannot read base claim declaration"));
-    fs::remove_dir_all(directory).expect("remove own scratch Git repository");
 }
 
 /// Trace: FR-041-AC-3.

@@ -797,7 +797,37 @@ pub fn generate_composite_equality_oracles(
         blocked: vec![UpstreamBlocker::OperationIdentityNotConsumed],
         items: claims,
     };
-    let source_artifacts = source.finish(limits.source_bytes)?;
+    let mut subjects = claim_map
+        .items
+        .iter()
+        .filter(|claim| matches!(&claim.result, ClaimDisposition::Generated(_)))
+        .map(|claim| crate::core::provenance::node_subject(&claim.node_id))
+        .collect::<Vec<_>>();
+    subjects.extend(
+        source
+            .inline_composite_subjects
+            .iter()
+            .map(crate::core::provenance::node_subject),
+    );
+    let source_artifacts = source
+        .finish(limits.source_bytes)?
+        .into_iter()
+        .map(|mut artifact| {
+            if artifact.path == "src/lib.rs" {
+                artifact.contents = crate::core::provenance::with_rust_header(
+                    artifact.contents,
+                    subjects.iter().map(String::as_str),
+                );
+            }
+            artifact
+        })
+        .collect::<Vec<_>>();
+    if source_artifacts.iter().fold(0usize, |total, artifact| {
+        total.saturating_add(artifact.contents.len())
+    }) > limits.source_bytes
+    {
+        return Err(source_too_large(limits.source_bytes));
+    }
     let mut map_bytes = serde_json::to_vec_pretty(&claim_map)
         .map_err(|_| OracleGenerationError::ClaimMapSerialization)?;
     map_bytes.push(b'\n');
@@ -1480,7 +1510,7 @@ impl From<OracleGenerationError> for RenderError {
 
 /// The rendered Rust expressions of one item, before it is named.
 struct RenderedItem {
-    composites: Vec<String>,
+    composites: Vec<(CheckedNodeId, String)>,
     left_source: String,
     left_target: Option<String>,
     right_source: String,
@@ -1491,7 +1521,7 @@ impl RenderedItem {
     fn source_bytes(&self) -> usize {
         self.composites
             .iter()
-            .map(String::len)
+            .map(|(_, source)| source.len())
             .chain([
                 self.left_source.len(),
                 self.left_target.as_ref().map_or(0, String::len),
@@ -1505,11 +1535,25 @@ impl RenderedItem {
 fn render_item(generated: &CheckedItem) -> Result<RenderedItem, RenderError> {
     // Every reachable record/tuple declaration, in the same `NodeKey`
     // order `TypeEnvironment::new` admitted at generation time.
-    let composites: Vec<String> = generated
+    let keys_by_runtime_key = generated
+        .declaration_keys
+        .iter()
+        .map(|id| NodeKey::from_hex(&id.digest).map(|key| (key, id)))
+        .collect::<Option<BTreeMap<_, _>>>()
+        .ok_or(OracleGenerationError::InvalidPlanState)?;
+    if keys_by_runtime_key.len() != generated.composites.len() {
+        return Err(OracleGenerationError::InvalidPlanState.into());
+    }
+    let composites = generated
         .composites
         .iter()
-        .map(render_composite_declaration)
-        .collect::<Result<_, _>>()?;
+        .map(|declaration| {
+            let id = keys_by_runtime_key
+                .get(&declaration.key())
+                .ok_or(OracleGenerationError::InvalidPlanState)?;
+            Ok(((**id).clone(), render_composite_declaration(declaration)?))
+        })
+        .collect::<Result<Vec<_>, RenderError>>()?;
     let target = |target: &Option<ValueType>| -> Result<Option<String>, RenderError> {
         target.as_ref().map(render_value_type).transpose()
     };
@@ -1592,6 +1636,7 @@ struct SourceBuilder {
     functions: String,
     modules: Vec<(String, String)>,
     module_declarations: String,
+    inline_composite_subjects: BTreeSet<CheckedNodeId>,
     charged_bytes: usize,
     limit: usize,
 }
@@ -1617,6 +1662,7 @@ impl SourceBuilder {
             functions: String::new(),
             modules: Vec::new(),
             module_declarations: String::new(),
+            inline_composite_subjects: BTreeSet::new(),
             charged_bytes: SOURCE_HEADER.len(),
             limit,
         })
@@ -1657,7 +1703,7 @@ impl SourceBuilder {
         let left_target = optional(left_target);
         let right_target = optional(right_target);
 
-        let composite_bytes = composites.iter().fold(0usize, |size, declaration| {
+        let composite_bytes = composites.iter().fold(0usize, |size, (_, declaration)| {
             size.saturating_add(declaration.len() + 2)
         });
         if composites.len() <= MAX_DECLARATIONS_PER_FUNCTION
@@ -1668,9 +1714,11 @@ impl SourceBuilder {
                     "\nfn composites_{symbol}() -> Result<Vec<rt::CompositeDeclaration>, ReconstructionError> {{\n    Ok(Vec::new())\n}}\n"
                 ))?;
             } else {
+                self.inline_composite_subjects
+                    .extend(composites.iter().map(|(id, _)| id.clone()));
                 let declarations = composites
                     .iter()
-                    .map(|value| format!("    declarations.push({value});\n"))
+                    .map(|(_, value)| format!("    declarations.push({value});\n"))
                     .collect::<String>();
                 self.append_function(format!(
                     "\nfn composites_{symbol}() -> Result<Vec<rt::CompositeDeclaration>, ReconstructionError> {{\n    let mut declarations = Vec::with_capacity({});\n{declarations}    Ok(declarations)\n}}\n",
@@ -1682,24 +1730,41 @@ impl SourceBuilder {
             let mut chunk = String::new();
             let mut chunk_index = 0usize;
             let mut chunk_count = 0usize;
-            for declaration in composites {
+            let mut chunk_subjects = Vec::new();
+            for (key, declaration) in composites {
                 if !chunk.is_empty()
                     && (chunk_count == MAX_DECLARATIONS_PER_FUNCTION
                         || chunk.len().saturating_add(declaration.len() + 26)
                             > MAX_ARTIFACT_BYTES / 2)
                 {
-                    self.add_composite_module(symbol, chunk_index, &chunk, &mut chunk_calls)?;
+                    self.add_composite_module(
+                        symbol,
+                        &crate::core::provenance::node_subject(&item.node_id),
+                        chunk_index,
+                        &chunk,
+                        &mut chunk_calls,
+                        &chunk_subjects,
+                    )?;
                     chunk_index += 1;
                     chunk.clear();
                     chunk_count = 0;
+                    chunk_subjects.clear();
                 }
                 chunk.push_str("    declarations.push(");
                 chunk.push_str(declaration);
                 chunk.push_str(");\n");
                 chunk_count += 1;
+                chunk_subjects.push(crate::core::provenance::node_subject(key));
             }
             if !chunk.is_empty() {
-                self.add_composite_module(symbol, chunk_index, &chunk, &mut chunk_calls)?;
+                self.add_composite_module(
+                    symbol,
+                    &crate::core::provenance::node_subject(&item.node_id),
+                    chunk_index,
+                    &chunk,
+                    &mut chunk_calls,
+                    &chunk_subjects,
+                )?;
             }
             self.append_function(format!(
                 "\nfn composites_{symbol}() -> Result<Vec<rt::CompositeDeclaration>, ReconstructionError> {{\n    let mut declarations = Vec::new();\n{chunk_calls}    Ok(declarations)\n}}\n"
@@ -1767,13 +1832,18 @@ impl SourceBuilder {
     fn add_composite_module(
         &mut self,
         symbol: &str,
+        subject: &str,
         index: usize,
         declarations: &str,
         calls: &mut String,
+        composite_subjects: &[String],
     ) -> Result<(), OracleGenerationError> {
         let name = format!("composites_{symbol}_{index}");
         let module_declaration = format!("mod {name};\n");
-        let module_source = format!("use super::*;\npub(super) fn declarations() -> Result<Vec<rt::CompositeDeclaration>, ReconstructionError> {{\n    let mut declarations = Vec::new();\n{declarations}    Ok(declarations)\n}}\n");
+        let module_source = crate::core::provenance::with_rust_header(
+            format!("use super::*;\npub(super) fn declarations() -> Result<Vec<rt::CompositeDeclaration>, ReconstructionError> {{\n    let mut declarations = Vec::new();\n{declarations}    Ok(declarations)\n}}\n"),
+            std::iter::once(subject).chain(composite_subjects.iter().map(String::as_str)),
+        );
         self.charge(module_declaration.len().saturating_add(module_source.len()))?;
         self.module_declarations.push_str(&module_declaration);
         self.modules.push((format!("src/{name}.rs"), module_source));
@@ -2713,7 +2783,7 @@ mod tests {
         assert!(source.functions.is_empty());
         assert_eq!(source.charged_bytes, limit);
         assert_eq!(
-            source.add_composite_module("test", 0, "x", &mut String::new()),
+            source.add_composite_module("test", "test", 0, "x", &mut String::new(), &[]),
             Err(OracleGenerationError::SourceTooLarge {
                 bytes: limit + 1,
                 limit,
@@ -2722,6 +2792,38 @@ mod tests {
         );
         assert!(source.modules.is_empty());
         assert!(source.module_declarations.is_empty());
+    }
+
+    #[trace("TC-001", "NFR-002-AC-1", "NFR-002-AC-2")]
+    #[test]
+    fn extra_equality_module_has_its_own_header() {
+        let mut source = SourceBuilder::default();
+        source
+            .add_composite_module("test", "test", 0, "", &mut String::new(), &[])
+            .expect("small module fits");
+        let artifacts = source
+            .finish(MAX_GENERATED_SOURCE_BYTES)
+            .expect("source fits");
+        let module = artifacts
+            .iter()
+            .find(|artifact| artifact.path.starts_with("src/composites_"))
+            .expect("extra module emitted");
+        let header = module
+            .contents
+            .lines()
+            .take_while(|line| !line.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(header.contains("// @generated by quire-contract-codegen"));
+        assert!(header.contains("// SPDX-License-Identifier: MIT OR Apache-2.0"));
+        assert!(header.contains("test"));
+        assert!(!header
+            .replacen("// @generated by quire-contract-codegen", "", 1)
+            .contains("// @generated by quire-contract-codegen"));
+        assert!(!header
+            .replacen("// SPDX-License-Identifier: MIT OR Apache-2.0", "", 1)
+            .contains("// SPDX-License-Identifier: MIT OR Apache-2.0"));
+        assert!(!header.replace("test", "").contains("test"));
     }
 
     #[trace("FR-018-AC-28", "FR-018-AC-30", "TC-029")]
@@ -2864,14 +2966,24 @@ mod tests {
                 let exact = source.finish(bytes).expect("exact source limit admits");
                 assert!(exact.iter().all(|artifact| artifact.contents.len() <= MAX_ARTIFACT_BYTES));
                 assert!(exact.iter().any(|artifact| artifact.path != "src/lib.rs"));
+                let claim = format!("// Subject: {}", crate::core::provenance::node_subject(&node_id('9')));
+                for module in exact.iter().filter(|artifact| artifact.path.starts_with("src/composites_")) {
+                    let header = module.contents.lines().take_while(|line| !line.is_empty())
+                        .collect::<BTreeSet<_>>();
+                    assert!(header.contains(claim.as_str()), "{} lacks its claim subject", module.path);
+                }
+                let first_module = exact.iter().find(|artifact| artifact.path.starts_with("src/composites_"))
+                    .expect("deep closure has extra modules");
+                let root_subject = format!("// Subject: {}", crate::core::provenance::node_subject(&root));
+                assert!(first_module.contents.lines().take_while(|line| !line.is_empty())
+                    .any(|line| line == root_subject), "first extra module lacks the root composite node");
                 (exact, root)
             })
             .expect("small-stack worker starts")
             .join()
             .expect("deep generation fits 512 KiB stack");
 
-        let scratch =
-            std::env::temp_dir().join(format!("cg-ir496-fr018-deep-{}", std::process::id()));
+        let scratch = crate::core::test_support::discover_scratch("oracle-equality-deep");
         std::fs::create_dir_all(scratch.join("src")).expect("scratch source directory");
         std::fs::create_dir_all(scratch.join("tests")).expect("scratch test directory");
         std::fs::write(

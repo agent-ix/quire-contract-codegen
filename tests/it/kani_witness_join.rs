@@ -17,13 +17,10 @@
 //! own `quire_contract_codegen::decode_falsification` — the actual production function, not a
 //! reimplementation of it.
 
-use std::{
-    env, fs,
-    path::PathBuf,
-    time::{Duration, SystemTime, UNIX_EPOCH},
-};
+use std::{fs, path::PathBuf, time::Duration};
 
-use crate::scratch_crate::{runtime_dependency, write_manifest};
+use crate::scratch_crate::{runtime_dependency, write_manifest, TemporaryDirectory};
+use ix_trace_rs::trace;
 use qsl_replay::WitnessValue;
 use quire_contract_codegen::{
     decode_falsification, execute_kani_obligation, negotiate_kani_obligations, write_bundle_atomic,
@@ -232,21 +229,9 @@ fn withdraw_harnesses() -> Vec<KaniObligationHarness> {
 
 // ---- real Kani execution plumbing (trimmed from tests/kani_obligations.rs) --------------------
 
-fn scratch(name: &str) -> PathBuf {
-    let nonce = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    let path = env::temp_dir().join(format!(
-        "quire-kani-witness-join-{name}-{}-{nonce}",
-        std::process::id()
-    ));
-    fs::create_dir_all(path.join("src")).unwrap();
-    path
-}
-
-fn write_crate(harness: &KaniObligationHarness, subject: &str) -> PathBuf {
-    let directory = scratch("crate");
+fn write_crate(harness: &KaniObligationHarness, subject: &str) -> TemporaryDirectory {
+    let scratch = TemporaryDirectory::new("quire-kani-witness-join-crate");
+    let directory = &scratch.path;
     fs::write(
         directory.join("src/lib.rs"),
         format!(
@@ -256,7 +241,7 @@ fn write_crate(harness: &KaniObligationHarness, subject: &str) -> PathBuf {
     )
     .unwrap();
     write_manifest(
-        &directory,
+        directory,
         &format!(
             "[package]\nname = \"generated-kani-witness-join\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
             runtime_dependency(&["exact"])
@@ -267,20 +252,21 @@ fn write_crate(harness: &KaniObligationHarness, subject: &str) -> PathBuf {
         "fn main() { println!(\"cargo:rustc-check-cfg=cfg(kani)\"); }\n",
     )
     .unwrap();
-    directory
+    scratch
 }
 
 /// Runs the seeded defect through the real `execute_kani_obligation` (the actual code path
 /// this test's join relies on) and returns its real counterexample transcript.
 fn run_falsifying(installation: &KaniInstallation, harness: &KaniObligationHarness) -> String {
     let cancel = quire_exact::Cancel::new();
-    let crate_directory = write_crate(harness, SEEDED_FAILING_SUBJECT);
+    let scratch = write_crate(harness, SEEDED_FAILING_SUBJECT);
+    let crate_directory = &scratch.path;
     let target_directory = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kani-witness-join");
     let evidence = execute_kani_obligation(&KaniExecutionRequest {
         cancel: &cancel,
         installation,
         harness: harness.into(),
-        crate_directory: &crate_directory,
+        crate_directory,
         target_directory: &target_directory,
         home_directory: None,
     })
@@ -289,7 +275,6 @@ fn run_falsifying(installation: &KaniInstallation, harness: &KaniObligationHarne
         KaniRunOutcome::Falsified { counterexample } => counterexample,
         other => panic!("the seeded defect must be falsified, got {other:?}"),
     };
-    let _ = fs::remove_dir_all(crate_directory);
     counterexample
 }
 
@@ -351,8 +336,7 @@ fn persisted_arguments(record: &Value) -> Vec<ObligationBinding> {
 /// off disk, and decodes the transcript with it. Then mutates the file two ways — drops a binding,
 /// and separately changes a declared primitive type (hence byte width) — and shows the decode
 /// refuses by name both times, against the very same transcript that decoded cleanly.
-///
-/// Trace: FR-016-AC-8, TC-026.
+#[trace("FR-016-AC-8", "TC-026")]
 #[test]
 #[ignore = "kani lane: run serially through `cargo test --test it kani_witness_join -- --ignored`"]
 fn tc_026_real_falsification_decodes_against_the_persisted_schema_and_mutation_refuses() {
@@ -371,7 +355,8 @@ fn tc_026_real_falsification_decodes_against_the_persisted_schema_and_mutation_r
         postcondition_harness.record.clone(),
     ])
     .expect("the harness's own artifacts form a valid bundle");
-    let publish_root = scratch("published");
+    let publish_scratch = TemporaryDirectory::new("quire-kani-witness-join-published");
+    let publish_root = &publish_scratch.path;
     let published = publish_root.join("out");
     write_bundle_atomic(&bundle, &published)
         .expect("publishing the harness's own artifacts must not fail");
@@ -404,6 +389,7 @@ fn tc_026_real_falsification_decodes_against_the_persisted_schema_and_mutation_r
         &module_symbol,
         &persisted_arguments(&record),
         &transcript,
+        crate::unbounded_decode_limits(),
     )
     .expect("the generator's own persisted schema must decode its own real transcript");
     assert_eq!(decoded.len(), 2);
@@ -444,6 +430,7 @@ fn tc_026_real_falsification_decodes_against_the_persisted_schema_and_mutation_r
         &module_symbol,
         &persisted_arguments(&dropped),
         &transcript,
+        crate::unbounded_decode_limits(),
     )
     .expect_err("a dropped binding must refuse, not silently decode fewer values");
     assert_eq!(
@@ -462,6 +449,7 @@ fn tc_026_real_falsification_decodes_against_the_persisted_schema_and_mutation_r
         &module_symbol,
         &persisted_arguments(&retyped),
         &transcript,
+        crate::unbounded_decode_limits(),
     )
     .expect_err("an 8-byte i64 value against a declared 1-byte boolean must refuse");
     assert_eq!(
@@ -470,6 +458,4 @@ fn tc_026_real_falsification_decodes_against_the_persisted_schema_and_mutation_r
     );
     assert_eq!(width_refusal.context, first_identifier);
     println!("IR-211 red (retyped binding) refusal: {width_refusal:?}");
-
-    let _ = fs::remove_dir_all(publish_root);
 }

@@ -30,9 +30,50 @@ relationships:
 
 Verify that every requested capability claim is settled by exactly one
 `negotiate_*` arm over a closed backend kind, that each FR-290 rule settles its
-own row, and that only an item settled `supported` routes a backend.
+own row, including whole-envelope refusal for a repeated backend identity.
 
 ## Test Procedure
+
+For FR-019-AC-53, use one admitted package with bound driver items at driver
+indexes 0 and 2 around an excluded accounting-only position at index 1. Give
+the excluded position `lowered` accounting for a Kani-supported form, and put
+a context-only root between the first bound item and excluded position. Supply
+exactly two FR-331 items and assert two settlements whose outer
+`ContractItemSettlement.request_index` and nested
+`ItemSettlement.request_index` both equal the driver indexes 0 and 2, not
+envelope positions 0 and 1. Assert no settlement or claim for the excluded
+position, zero classifier calls and zero Kani preflight reads attributable to
+it, using the existing `take_function_preflight_reads` counter for the latter.
+Repeat with one and three envelope items to assert the typed
+`EnvelopeItemCount` refusal in each case.
+
+For FR-019-AC-48 through AC-52, drive the public negotiation entry with a
+source-backed Kani `V2FunctionApplication`. Use an admitted checked source
+whose lowered function package selects a dependency: the internal reader's
+empty dependency set produces `Refused(MissingImport)`. Compare the returned
+`ContractPackageReadRefused` projection with a direct call to that reader on the
+same bytes and limits, including `code`, `path`, `cause`, `locus`,
+`contract_version`, `document_pointer`, `expected` and `actual` and every
+present and absent optional field. Assert that `expected_node_id` is not a
+projection member.
+Assert no settlements or artifact and no `KaniFormRefused` or
+`OperationNotRendered`. Repeat with a source-backed package larger than the
+internal reader's bounded byte limit so that it returns `Incomplete`; compare
+the entire `ContractPackageReadIncomplete` projection, including `limit_kind`,
+`limit`, `consumed` and `path`, with the direct reader result. Assert the same
+absence of settlements and artifact. Serialize both variants and assert the
+documented adjacent-tag wire shape, enum string names, RFC 6901 pointer text,
+identity objects, and explicit `null` for absent optional members, without a
+debug-string cause. Keep a valid admitted function control that generates a
+claim and settles `supported`. Use an admitted function whose exact generator
+emits no claim and a structural rejection before the read to assert item-level
+`KaniFormRefused { OperationNotRendered }` in both cases. Exercise several
+items with mixed `Refused` and `Incomplete` outcomes in both orders and a
+preceding valid item to assert that the first failing item in item request
+order alone selects the whole-envelope result and no partial settlement or
+artifact leaks. On the FR-330 path, instrument the caller read and assert that
+only its `Admitted` package reaches CG negotiation, without a second read or
+checked-graph fallback; `Refused` and `Incomplete` stop before CG.
 
 Settle envelopes whose items exercise each rule in FR-290's stated order: an
 absent kind; an unknown kind; an absent extent classification; an unknown
@@ -123,9 +164,18 @@ is another identity, and inspect which kinds were read.
 Enumerate the closed backend kind's variants and assert that settlement
 dispatches an arm for each.
 
-Ask each settlement that is not `supported`
-whether it routes a backend at all, and ask a manifest that repeats one backend
-identity the same question.
+For FR-019-AC-45, submit [A, A], [A, B, A], [A(Linked), A(Process)]
+and [A, A'] where A' changes another CG descriptor field. In each case,
+assert `negotiate_backend_provider` returns only
+`EnvelopeRefusal::ManifestRepeatsBackendIdentity { identity: "A" }` through
+its existing `Result<Vec<ItemSettlement>, EnvelopeRefusal>` signature, with
+no string cause, manifest or digest payload. Reverse the differing cases.
+
+For FR-019-AC-46, submit [B, A, B, A] in multiple orders and assert the
+bytewise-first repeated identity A is reported. Submit [A, a] and assert
+these case-distinct identities do not trigger this refusal. Pair a repeat
+with an invalid contract version, then with a foreign or absent capability
+vocabulary; assert `InvalidCapability` wins and no kind is read.
 
 For planned IR-516 arms, use admitted typed items with one registered candidate
 at a time. Derive the form, subject class, selected reduction and resolved
@@ -225,8 +275,38 @@ Both malformed-vocabulary envelopes refuse as
 
 Every variant of the closed backend kind has a dispatched arm.
 
-No settlement other than `supported` routes a backend, and a manifest repeating an
-identity routes none.
+Every second descriptor of one identity, identical or differing and adjacent
+or not, refuses the whole CG envelope with
+`ManifestRepeatsBackendIdentity { identity }`. The call returns no settlements,
+including for an item using another identity.
+The bytewise-first repeated identity is reported regardless of manifest
+order; case-distinct identities remain distinct, and contract-version or
+vocabulary refusal wins before repeat detection or kind reading
+(FR-019-AC-45 and FR-019-AC-46).
+
+For FR-019-AC-48, a refused read yields only the whole-request
+`ContractPackageReadRefused { refusal: ContractPackageRefusalProjection }`.
+Its serialized projection equals the reader's public code, path, cause, locus,
+contract version, document pointer, expected and actual data, with absent
+optional members represented as `null`; `expected_node_id` is absent. No
+settlement or artifact is returned.
+
+For FR-019-AC-49, an incomplete read yields only the whole-request
+`ContractPackageReadIncomplete { incomplete: ContractPackageIncompleteProjection }`.
+Its serialized projection equals the reader's limit kind, ceiling, consumed
+count and path, including a `null` byte-limit path. No settlement or artifact
+is returned. Both variants use the documented `code`/`cause` envelope wire
+shape, with stable enum string names and no debug-string cause.
+
+For FR-019-AC-50, an admitted exact function that generates a claim retains
+its `supported` settlement. For FR-019-AC-51, the first failing request item
+determines the whole-envelope variant and projection for either Refused then
+Incomplete or Incomplete then Refused; earlier valid items yield no partial
+result. For FR-019-AC-52, an admitted function with no generated claim and a
+structural rejection before the reader each retain item-level
+`KaniFormRefused { OperationNotRendered }`. On the FR-330 production path,
+only the caller's `Admitted` package reaches CG; negotiation performs no
+re-read or checked-graph fallback.
 
 For AC-34 through AC-41, every positive case uses a validated candidate and
 only a form, subject class and modifier its arm discharges. After candidate

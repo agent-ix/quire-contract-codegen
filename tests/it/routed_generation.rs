@@ -2417,7 +2417,7 @@ fn tc_033_a_selected_pair_routed_twice_retains_its_duplicate_refusal() {
 
 /// A refused derivation is an `Underived` claim carrying the node's operation
 /// identity. An absent sibling keeps IR's prior `InvalidInput` record.
-#[trace("FR-014-AC-18", "FR-022-AC-12", "TC-033")]
+#[trace("FR-014-AC-18", "FR-022-AC-12", "FR-015-AC-109", "TC-033")]
 #[test]
 fn tc_033_an_underivable_claim_is_underived_and_carries_the_nodes_identity() {
     let derived = derived();
@@ -2443,6 +2443,23 @@ fn tc_033_an_underivable_claim_is_underived_and_carries_the_nodes_identity() {
     assert_eq!(
         claim.operation.provenance,
         quire_contract_codegen::OperationProvenance::Underived
+    );
+    assert!(
+        matches!(claim.result, ClaimDisposition::Refused { .. }),
+        "remainder has no generated scalar family"
+    );
+    let (record, harness) = kani_parts(&generation.items[0].output);
+    assert!(harness.is_none(), "underived remainder emits no harness");
+    assert_eq!(
+        record.disposition,
+        ObligationDisposition::Unsupported {
+            reason: UnsupportedObligation::NoDerivableClaim {
+                node_id: derived.rem.clone(),
+                reason: ClaimDerivationRefusal::OperationNotDerivable {
+                    operation_identity: "quire.op.integer.rem".to_owned(),
+                },
+            },
+        }
     );
     assert_eq!(claim_map.items.len(), 1);
     assert_eq!(

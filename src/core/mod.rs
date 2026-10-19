@@ -22,5 +22,11 @@ pub(crate) mod identity;
 pub(crate) mod naming;
 // The version profile: the emitted oracle crate manifest, written once.
 pub(crate) mod profile;
+// Header identity for each generated Rust artifact.
+pub(crate) mod provenance;
 // Source-map records tracing generated source to a clause.
 pub(crate) mod source_map;
+
+// Target-owned scratch allocation shared by subsystem unit tests.
+#[cfg(test)]
+pub(crate) mod test_support;

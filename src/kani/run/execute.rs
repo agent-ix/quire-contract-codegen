@@ -277,7 +277,7 @@ pub struct KaniExecutionEvidence {
     /// How many checks the report lists as holding: the non-cover checks with status success,
     /// plus, for a precondition harness, whose one property is its cover, the satisfied covers.
     /// Zero when the run produced no report. It is the SUCCESS-check count FR-017 defines, which
-    /// the terminal maps (FR-029, FR-030) take as an explicit input.
+    /// FR-029 reads from this evidence; FR-030 takes it as an explicit input.
     pub success_checks: u32,
     /// Every check Kani reported, with its class, source location and status, in report order.
     /// Empty when the run produced no report. A consumer attributes proof to source with it.
@@ -1244,11 +1244,13 @@ mod tests {
     use std::path::PathBuf;
 
     use super::*;
-    use crate::kani::{
-        identity::StateFrameProperty,
-        test_support::{
-            discover_scratch, report, state_frame_harness, write_launcher, COVER_NO, COVER_OK,
-            PASSED,
+    use crate::{
+        core::test_support::discover_scratch,
+        kani::{
+            identity::StateFrameProperty,
+            test_support::{
+                report, state_frame_harness, write_launcher, COVER_NO, COVER_OK, PASSED,
+            },
         },
     };
 
@@ -1569,21 +1571,21 @@ mod tests {
 }
 
 #[cfg(test)]
-mod batch_tests {
+pub(crate) mod batch_tests {
     use ix_trace_rs::trace;
     use quire_contract_ir::kani::KaniOutcomeKind;
     use std::path::PathBuf;
 
     use super::*;
     use crate::{
-        core::artifact::Artifact,
+        core::{artifact::Artifact, test_support::discover_scratch},
         kani::{
             abi::adapter_options,
             identity::{StateFrameHarness, StateFrameProperty},
             run::launch::CAPTURE_LIMIT,
             test_support::{
-                batch_report, discover_scratch, named_state_frame_harness, write_launcher,
-                BatchEntry, COVER_OK, PASSED,
+                batch_report, named_state_frame_harness, write_launcher, BatchEntry, COVER_OK,
+                PASSED,
             },
         },
     };
@@ -3818,7 +3820,7 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
     /// The diagnostic record of a run Kani gave no verdict for, or whose CBMC failed, over launcher stand-ins
     /// (FR-017-AC-32 to FR-017-AC-36).
     #[cfg(target_os = "linux")]
-    mod no_verdict_diagnostics {
+    pub(crate) mod no_verdict_diagnostics {
         use super::*;
         use crate::kani::{
             output::diagnostics::KaniFailurePhase,
@@ -4494,7 +4496,7 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
         }
 
         /// The CBMC failure cause kept on `FailedWithoutCounterexample` evidence.
-        mod failure_cause {
+        pub(crate) mod failure_cause {
             use serde_json::{json, Value};
 
             use super::*;
@@ -4571,9 +4573,9 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
             /// A `FailedWithoutCounterexample` run keeps the cause the report states, and a
             /// cause that names a CBMC failure brings the diagnostic record.
             ///
-            #[trace("FR-017-AC-37", "TC-027")]
-            #[test]
-            fn tc_027_every_exit_status_gives_its_cause_and_a_diagnostic_record() {
+            pub(crate) fn single_failure_reports(
+                mut observe: impl FnMut(&str, &KaniExecutionEvidence),
+            ) {
                 let stand_in = cbmc_failed("cause-vocabulary", &failing_with("exit_code_64"));
                 let harness = proofs();
                 let evidence = run(&stand_in, &harness);
@@ -4582,6 +4584,7 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
                     wire(&evidence)["failureCause"],
                     json!({ "kind": "exit_code", "code": 64 })
                 );
+                observe("exit_code_64", &evidence);
                 let record = diagnostics(&evidence);
                 assert_eq!(record.phase, KaniFailurePhase::Unknown);
                 assert!(record
@@ -4649,15 +4652,42 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
                     assert_eq!(evidence.outcome, NO_COUNTEREXAMPLE, "{status}");
                     assert_eq!(wire(&evidence)["failureCause"], expected, "{status}");
                     assert!(evidence.diagnostics.is_some(), "{status}");
+                    observe(&status, &evidence);
+                }
+                for (label, details) in [
+                    (
+                        "properties_failed",
+                        Some(json!([entry_for(HARNESS, json!("properties_failed"))])),
+                    ),
+                    ("absent", None),
+                    ("null", Some(json!([entry_for(HARNESS, Value::Null)]))),
+                ] {
+                    fs::write(
+                        stand_in.directory.join("report.json"),
+                        document(Some(HARNESS), "Failure", &[], details),
+                    )
+                    .unwrap();
+                    let evidence = run(&stand_in, &harness);
+                    assert_eq!(evidence.outcome, NO_COUNTEREXAMPLE, "{label}");
+                    if label == "properties_failed" {
+                        assert_eq!(
+                            evidence.failure_cause,
+                            Some(KaniFailureCause::PropertiesFailed)
+                        );
+                    } else {
+                        assert_eq!(evidence.failure_cause, None);
+                    }
+                    assert!(evidence.diagnostics.is_none());
+                    observe(label, &evidence);
                 }
             }
 
             /// A failed property keeps its cause and no record; a report naming no single entry
             /// for the harness keeps neither.
             ///
-            #[trace("FR-017-AC-38", "TC-027")]
-            #[test]
-            fn tc_027_a_failed_property_has_no_record_and_an_unnamed_entry_has_no_cause() {
+            pub(crate) fn unattributed_failure_reports(
+                mut observe: impl FnMut(&str, &KaniExecutionEvidence),
+            ) {
                 let harness = proofs();
                 let failing = |details: Option<Value>, id: Option<&str>| {
                     document(id, "Failure", &[FAILED], details)
@@ -4678,6 +4708,7 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
                 );
                 assert!(!has_member(&evidence, "diagnostics"));
 
+                observe("properties_failed", &evidence);
                 let exit_64 = entry_for(HARNESS, json!("exit_code_64"));
                 let silent: [(&str, Vec<u8>); 5] = [
                     ("no error_details", failing(None, Some(HARNESS))),
@@ -4712,6 +4743,7 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
                     assert_eq!(evidence.outcome, NO_COUNTEREXAMPLE, "{label}");
                     assert!(!has_member(&evidence, "failureCause"), "{label}");
                     assert!(!has_member(&evidence, "diagnostics"), "{label}");
+                    observe(label, &evidence);
                 }
             }
 
@@ -4839,9 +4871,7 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
 
             /// A batch member keeps the cause beside the batch timeout rule.
             ///
-            #[trace("FR-017-AC-39", "TC-043")]
-            #[test]
-            fn tc_043_batch_members_keep_their_cause_beside_the_timeout_rule() {
+            pub(crate) fn batch_failure_reports(mut observe: impl FnMut(&[KaniExecutionEvidence])) {
                 let members = ["a", "b", "c", "d", "e"].map(|module| member(module, "check", 4));
                 let entry_with = |id: &'static str, status, checks, exit_status| BatchEntry {
                     harness_id: id,
@@ -4860,6 +4890,7 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
                 let stand_in =
                     printing("cause-batch", Some(&report), &stdout, "Unknown option\n", 1);
                 let evidence = only_group(stand_in.batch(&members, T)).unwrap();
+                observe(&evidence);
                 let causes: Vec<_> = evidence
                     .iter()
                     .map(|member| wire(member).get("failureCause").cloned())
@@ -4942,9 +4973,9 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
             /// classify alike and have equal evidence outside the cause, the record, the memory
             /// observation and the report path.
             ///
-            #[trace("FR-017-AC-40", "TC-027")]
-            #[test]
-            fn tc_027_the_cause_never_feeds_classification() {
+            pub(crate) fn cause_independent_classification(
+                mut observe: impl FnMut(&str, &KaniExecutionEvidence),
+            ) {
                 let harness = proofs();
                 let mut stripped = Vec::new();
                 let stand_in = printing("cause-independent", Some(&[]), "", "", 1);
@@ -4962,6 +4993,7 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
                     let mut evidence = run(&stand_in, &harness);
                     assert_eq!(evidence.outcome, NO_COUNTEREXAMPLE, "{status}");
                     assert!(evidence.failure_cause.is_some() && evidence.diagnostics.is_some());
+                    observe(status, &evidence);
                     evidence.failure_cause = None;
                     evidence.diagnostics = None;
                     evidence.arguments.pop().expect("a report path");

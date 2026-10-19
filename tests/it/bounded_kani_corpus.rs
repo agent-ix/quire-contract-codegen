@@ -1,10 +1,10 @@
 //! Public integration coverage for the bounded Kani corpus API.
 //!
 //! `--harness <name>` below is a substring filter over the fully qualified harness name, not an
-//! exact match (`--exact` is not passed), so e.g. `--harness corpus_case_arithmetic` matches the
-//! generated `corpus_case_arithmetic_<digest>` symbol. Each temporary crate here writes exactly
+//! exact match (`--exact` is not passed), so e.g. `--harness corpus_case_collection` matches the
+//! generated `corpus_case_collection_<digest>` symbol. Each temporary crate here writes exactly
 //! one harness, so the filter is effectively exact in this file today, but read literally it is a
-//! prefix over the whole `arithmetic`/`graph`/`collection` family: a crate containing more than one
+//! prefix over the whole `graph`/`collection` family: a crate containing more than one
 //! case of the same family would have every one of them selected by this same filter.
 
 use std::{fs, process::Command};
@@ -14,17 +14,16 @@ use ix_trace_rs::trace;
 use jsonschema::{Draft, JSONSchema};
 use quire_contract_codegen::{
     classify_kani_run, generate_bounded_kani_corpus_case, prepare_finite_graph_reaches,
-    BoundedCorpusRequest, CheckedArithmeticRequest, CollectionQuery, CorpusProofDependencyGraph,
-    EmittedCorpusIdentities, GraphRequest, KaniInconclusiveReason, KaniRunOutcome,
-    ProofDependencyKind, ProofDependencyRequest, ProofDependencyState, ProofReadiness, QueryKind,
-    ReplayVerdict, CORPUS_PROOF_GRAPH_SCHEMA,
+    BoundedCorpusRequest, CollectionQuery, CorpusProofDependencyGraph, EmittedCorpusIdentities,
+    GraphRequest, KaniInconclusiveReason, KaniRunOutcome, ProofDependencyKind,
+    ProofDependencyRequest, ProofDependencyState, ProofReadiness, QueryKind, ReplayVerdict,
+    CORPUS_PROOF_GRAPH_SCHEMA,
 };
 use quire_contract_ir::kani::{
     CapabilityDisposition, CapabilityEntry, DispatchIndex, FiniteInput, FiniteObject,
     FiniteReference, KaniOutcomeKind, KaniProfile, ModuleDescriptor, PopulationCompleteness,
     ProfileSelection, ResourceBounds, SemanticFamily,
 };
-use quire_contract_model::NumericOperator;
 
 fn fixture() -> (
     KaniProfile,
@@ -39,12 +38,6 @@ fn fixture() -> (
     let profile = KaniProfile::new(
         selection.clone(),
         vec![
-            CapabilityEntry {
-                construct: "checked-arithmetic".to_owned(),
-                disposition: CapabilityDisposition::Supported {
-                    module: "arithmetic".to_owned(),
-                },
-            },
             CapabilityEntry {
                 construct: "bounded-collection-query".to_owned(),
                 disposition: CapabilityDisposition::Supported {
@@ -61,12 +54,6 @@ fn fixture() -> (
     )
     .unwrap();
     let dispatch = DispatchIndex::new(vec![
-        ModuleDescriptor {
-            module_id: "arithmetic".to_owned(),
-            family: SemanticFamily::DefinednessArithmetic,
-            abi_revision: "abi".to_owned(),
-            constructs: vec!["checked-arithmetic".to_owned()],
-        },
         ModuleDescriptor {
             module_id: "collections".to_owned(),
             family: SemanticFamily::CollectionsQueries,
@@ -115,35 +102,47 @@ fn fixture() -> (
     (profile, dispatch, input)
 }
 
-#[trace("TC-023")]
+#[trace("TC-023", "TC-001", "NFR-002-AC-1", "NFR-002-AC-2")]
 #[test]
 fn tc_023_public_corpus_uses_the_validated_profile_boundary() {
     let (profile, dispatch, input) = fixture();
     let mut emitted = EmittedCorpusIdentities::new();
-    let arithmetic = generate_bounded_kani_corpus_case(
+    let collection = generate_bounded_kani_corpus_case(
         crate::common::proof_ceilings::proof_ceilings(),
         &profile,
         &dispatch,
         &input,
-        BoundedCorpusRequest::Arithmetic(CheckedArithmeticRequest {
-            source_id: "source",
-            operator: NumericOperator::Add,
-            left: 1,
-            right: 1,
-            minimum: 0,
-            maximum: 2,
+        BoundedCorpusRequest::Collection(CollectionQuery {
+            source_id: "source".to_owned(),
+            values: vec![1, 2],
+            max_items: 2,
+            kind: QueryKind::ForAllNonNegative,
         }),
         &[],
         &mut emitted,
     )
     .unwrap();
-    assert_eq!(arithmetic.outcome.boolean_claim(), Some(true));
-    assert!(arithmetic
+    assert_eq!(collection.outcome.boolean_claim(), Some(true));
+    for artifact in [
+        &collection.artifacts.oracle,
+        &collection.artifacts.strategy,
+        &collection.artifacts.kani_harness,
+    ] {
+        let case = artifact
+            .path
+            .strip_prefix("corpus/")
+            .unwrap()
+            .split('.')
+            .next()
+            .unwrap();
+        crate::generated_headers::assert_header(&artifact.path, &artifact.contents, &[case]);
+    }
+    assert!(collection
         .artifacts
         .oracle
         .contents
-        .contains("1i128.checked_add(1i128)"));
-    assert!(!arithmetic
+        .contains("values.iter().all(|value| *value >= 0i128)"));
+    assert!(!collection
         .artifacts
         .kani_harness
         .contents
@@ -186,34 +185,6 @@ fn tc_023_public_corpus_uses_the_validated_profile_boundary() {
     )
     .unwrap();
     assert_eq!(counterexample.outcome.boolean_claim(), Some(false));
-}
-
-#[trace("FR-015-AC-57", "TC-023")]
-#[test]
-#[ignore = "kani lane: run serially through `make kani`"]
-fn tc_023_kani_executes_the_generated_arithmetic_harness() {
-    let (profile, dispatch, input) = fixture();
-    let generated = generate_bounded_kani_corpus_case(
-        crate::common::proof_ceilings::proof_ceilings(),
-        &profile,
-        &dispatch,
-        &input,
-        BoundedCorpusRequest::Arithmetic(CheckedArithmeticRequest {
-            source_id: "source",
-            operator: NumericOperator::Add,
-            left: 1,
-            right: 1,
-            minimum: 0,
-            maximum: 2,
-        }),
-        &[],
-        &mut EmittedCorpusIdentities::new(),
-    )
-    .unwrap();
-    assert_eq!(
-        classify_corpus(&generated, "corpus_case_arithmetic"),
-        KaniRunOutcome::Verified
-    );
 }
 
 #[trace("FR-015-AC-57", "TC-023")]
@@ -422,13 +393,11 @@ fn tc_023_kani_reads_a_corpus_harness_without_its_cover_as_missing_the_cover_sum
         &profile,
         &dispatch,
         &input,
-        BoundedCorpusRequest::Arithmetic(CheckedArithmeticRequest {
-            source_id: "source",
-            operator: NumericOperator::Add,
-            left: 1,
-            right: 1,
-            minimum: 0,
-            maximum: 2,
+        BoundedCorpusRequest::Collection(CollectionQuery {
+            source_id: "source".to_owned(),
+            values: vec![1, 2],
+            max_items: 2,
+            kind: QueryKind::ForAllNonNegative,
         }),
         &[],
         &mut EmittedCorpusIdentities::new(),
@@ -443,7 +412,7 @@ fn tc_023_kani_reads_a_corpus_harness_without_its_cover_as_missing_the_cover_sum
         .collect::<Vec<_>>()
         .join("\n");
     assert_eq!(
-        classify_corpus(&generated, "corpus_case_arithmetic"),
+        classify_corpus(&generated, "corpus_case_collection"),
         KaniRunOutcome::Inconclusive {
             reason: KaniInconclusiveReason::MissingCoverSummary
         }
@@ -517,11 +486,116 @@ fn tc_023_real_corpus_playback_replays_through_its_qsl_source() {
     ] {
         let playback = falsification_playback(classify_corpus(&case, harness_filter));
         assert_eq!(
-            case.replay_counterexample(&playback).unwrap(),
+            case.replay_counterexample(
+                &playback,
+                quire_contract_codegen::WitnessDecodeLimits {
+                    bytes: playback.len(),
+                    values: 0
+                }
+            )
+            .unwrap(),
             ReplayVerdict::Reproduced,
             "{harness_filter} counterexample should replay through its source"
         );
     }
+}
+
+/// The public corpus replay entry point receives both limits and refuses before reading a
+/// poisoned second assertion or first concrete value.
+#[trace("TC-026", "FR-016-AC-6")]
+#[test]
+#[ignore = "kani lane: run serially through `make kani`"]
+fn tc_026_corpus_replay_refuses_poisoned_suffixes_at_both_decode_bounds() {
+    let (profile, dispatch, input) = fixture();
+    let case = generate_bounded_kani_corpus_case(
+        crate::common::proof_ceilings::proof_ceilings(),
+        &profile,
+        &dispatch,
+        &input,
+        BoundedCorpusRequest::Collection(CollectionQuery {
+            source_id: "source".to_owned(),
+            values: vec![2, 2],
+            max_items: 2,
+            kind: QueryKind::ExistsEqual(7),
+        }),
+        &[],
+        &mut EmittedCorpusIdentities::new(),
+    )
+    .unwrap();
+    let playback = falsification_playback(classify_corpus(&case, "corpus_case_collection"));
+    assert_eq!(
+        case.replay_counterexample(
+            &playback,
+            quire_contract_codegen::WitnessDecodeLimits {
+                bytes: playback.len(),
+                values: 0
+            },
+        )
+        .unwrap(),
+        ReplayVerdict::Reproduced,
+    );
+    let poisoned = format!("{playback}{playback}");
+    let verdict = case
+        .replay_counterexample(
+            &poisoned,
+            quire_contract_codegen::WitnessDecodeLimits {
+                bytes: playback.len(),
+                values: 0,
+            },
+        )
+        .expect("over-bound evidence yields a verdict");
+    assert!(matches!(
+        verdict,
+        ReplayVerdict::EvidenceFailure(quire_contract_codegen::EvidenceFailureCause::Decode(ref cause))
+        if cause.code == "cg_witness_decode_bytes_limit"
+    ));
+    let control = case
+        .replay_counterexample(
+            &poisoned,
+            quire_contract_codegen::WitnessDecodeLimits {
+                bytes: poisoned.len(),
+                values: 0,
+            },
+        )
+        .expect("duplicate assertion yields a decode verdict");
+    assert!(matches!(
+        control,
+        ReplayVerdict::EvidenceFailure(quire_contract_codegen::EvidenceFailureCause::Decode(ref cause))
+        if cause.code == "kani_witness_multiple_assertions_refused"
+    ));
+    let poisoned_value = playback.replace(
+        "let concrete_vals: Vec<Vec<u8>> = vec![\n    ];",
+        "let concrete_vals: Vec<Vec<u8>> = vec![\n        // 0\n        vec![not_a_byte],\n    ];",
+    );
+    assert_ne!(poisoned_value, playback);
+    let verdict = case
+        .replay_counterexample(
+            &poisoned_value,
+            quire_contract_codegen::WitnessDecodeLimits {
+                bytes: poisoned_value.len(),
+                values: 0,
+            },
+        )
+        .expect("over-bound value yields a verdict");
+    assert!(matches!(
+        verdict,
+        ReplayVerdict::EvidenceFailure(quire_contract_codegen::EvidenceFailureCause::Decode(ref cause))
+        if cause.code == "cg_witness_decode_values_limit"
+    ));
+    let control = case
+        .replay_counterexample(
+            &poisoned_value,
+            quire_contract_codegen::WitnessDecodeLimits {
+                bytes: poisoned_value.len(),
+                values: 1,
+            },
+        )
+        .expect("invalid byte yields a decode verdict");
+    assert!(matches!(
+        control,
+        ReplayVerdict::EvidenceFailure(quire_contract_codegen::EvidenceFailureCause::Decode(ref cause))
+        if cause.code == "kani_witness_byte_invalid"
+    ));
 }
 
 /// Runs the corpus case's oracle and harness as one crate under the installed backend and
@@ -627,17 +701,6 @@ pub(crate) fn guard_sources() -> Vec<(&'static str, String)> {
     let (profile, dispatch, input) = fixture();
     let requests = [
         (
-            "corpus arithmetic",
-            BoundedCorpusRequest::Arithmetic(CheckedArithmeticRequest {
-                source_id: "source",
-                operator: NumericOperator::Add,
-                left: 1,
-                right: 1,
-                minimum: 0,
-                maximum: 2,
-            }),
-        ),
-        (
             "corpus graph",
             BoundedCorpusRequest::Graph(GraphRequest {
                 source_id: "source".to_owned(),
@@ -685,14 +748,6 @@ pub(crate) fn guard_sources() -> Vec<(&'static str, String)> {
 fn tc_023_proof_graph_artifact_validates_against_its_published_schema() {
     let (profile, dispatch, input) = fixture();
     let cases = [
-        BoundedCorpusRequest::Arithmetic(CheckedArithmeticRequest {
-            source_id: "source",
-            operator: NumericOperator::Add,
-            left: 1,
-            right: 1,
-            minimum: 0,
-            maximum: 2,
-        }),
         BoundedCorpusRequest::Graph(GraphRequest {
             source_id: "source".to_owned(),
             start_id: "a".to_owned(),
@@ -762,13 +817,11 @@ fn tc_023_proof_graph_with_a_declared_dependency_validates_against_its_published
         &profile,
         &dispatch,
         &input,
-        BoundedCorpusRequest::Arithmetic(CheckedArithmeticRequest {
-            source_id: "source",
-            operator: NumericOperator::Add,
-            left: 1,
-            right: 1,
-            minimum: 0,
-            maximum: 2,
+        BoundedCorpusRequest::Collection(CollectionQuery {
+            source_id: "source".to_owned(),
+            values: vec![1, 2],
+            max_items: 2,
+            kind: QueryKind::ForAllNonNegative,
         }),
         &[dependency],
         &mut EmittedCorpusIdentities::new(),

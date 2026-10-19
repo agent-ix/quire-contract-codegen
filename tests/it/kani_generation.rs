@@ -496,10 +496,14 @@ fn tc_025_real_kani_classifies_the_v1_bundle_verified_vacuous_and_falsified() {
     );
 }
 
-/// TC-003
-/// TC-005
-/// TC-007
-/// NFR-001-M-1
+#[trace(
+    "FR-015-AC-25",
+    "NFR-001-AC-1",
+    "TC-005",
+    "TC-001",
+    "NFR-002-AC-1",
+    "NFR-002-AC-2"
+)]
 #[test]
 fn kani_bundle_is_deterministic_schema_valid_and_stable_rust_compiles() {
     let dependencies = [ProofDependencyRequest {
@@ -512,6 +516,11 @@ fn kani_bundle_is_deterministic_schema_valid_and_stable_rust_compiles() {
     let first = fixture_bundle(&dependencies);
     let second = fixture_bundle(&dependencies);
     assert_eq!(first, second);
+    crate::generated_headers::assert_header(
+        &first.rust.path,
+        &first.rust.contents,
+        &["FR-003@4", "precondition", "postcondition"],
+    );
     assert!(first.rust.contents.contains("// BEGIN framing"));
     assert!(first.rust.contents.contains("// BEGIN binding"));
     assert!(first.rust.contents.contains("// BEGIN contract"));
@@ -569,7 +578,7 @@ fn kani_bundle_is_deterministic_schema_valid_and_stable_rust_compiles() {
     );
 }
 
-/// TC-014
+#[trace("FR-015-AC-11", "TC-014")]
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn numeric_state_bindings_are_normalized_bounded_and_schema_valid() {
@@ -769,7 +778,7 @@ fn numeric_state_bindings_are_normalized_bounded_and_schema_valid() {
     );
 }
 
-/// TC-014
+#[trace("TC-014")]
 #[test]
 fn every_integer_comparison_supports_a_zero_result_bounded_subject() {
     let bounded = integer_type(0, 1000);
@@ -841,8 +850,7 @@ fn every_integer_comparison_supports_a_zero_result_bounded_subject() {
     }
 }
 
-/// TC-007
-/// TC-014
+#[trace("FR-005-AC-4", "FR-015-AC-20", "TC-007", "TC-014")]
 #[test]
 fn generated_numeric_oracles_execute_the_shared_inside_and_outside_corpus() {
     let bounded = integer_type(0, 1000);
@@ -955,7 +963,7 @@ fn generated_numeric_oracles_execute_the_shared_inside_and_outside_corpus() {
     );
 }
 
-/// TC-014
+#[trace("TC-014")]
 #[test]
 fn declaration_and_dependency_order_do_not_change_the_normalized_bundle() {
     let bounded = integer_type(0, 1000);
@@ -1037,7 +1045,7 @@ fn declaration_and_dependency_order_do_not_change_the_normalized_bundle() {
     );
 }
 
-/// TC-014
+#[trace("FR-015-AC-19", "FR-015-AC-24", "TC-014")]
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn kani_proves_identity_and_prints_numeric_counterexamples() {
@@ -1212,7 +1220,7 @@ fn kani_proves_identity_and_prints_numeric_counterexamples() {
     );
 }
 
-/// TC-005
+#[trace("FR-015-AC-25", "TC-005")]
 #[test]
 fn proof_dependency_graph_derives_readiness_and_preserves_source_sites() {
     let missing = [ProofDependencyRequest {
@@ -1528,7 +1536,7 @@ fn invalid_kani_requests_return_structured_non_generated_states() {
     assert_eq!(diagnostic.path, "generated.rust");
 }
 
-/// TC-007
+#[trace("FR-005-AC-4", "FR-015-AC-20", "TC-007")]
 #[test]
 fn generated_kani_predicates_are_the_exact_executable_oracles_for_the_boolean_corpus() {
     let environment = environment();
@@ -1602,7 +1610,7 @@ fn generated_kani_predicates_are_the_exact_executable_oracles_for_the_boolean_co
     }
 }
 
-/// TC-007
+#[trace("TC-005")]
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn kani_executes_the_generated_contract_proof() {

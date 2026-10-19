@@ -788,6 +788,74 @@ fn run_of(harness: &StateFrameIdentity, values: [i64; 2]) -> Run {
     }
 }
 
+#[trace("TC-026", "FR-016-AC-6")]
+#[test]
+fn tc_026_frame_replay_refuses_poisoned_suffixes_at_both_decode_bounds() {
+    let twin = Twin::new();
+    let harness = frame_harness(&twin);
+    let invocation = twin.invocation("account", (5, 0), (6, 1));
+    let run = run_of(&harness, [5, 0]);
+    let limits = quire_contract_codegen::WitnessDecodeLimits {
+        bytes: run.playback.len(),
+        values: 2,
+    };
+    twin.try_frame_replay_with_limits("deposit", &invocation, "account", "audit", &run, limits)
+        .expect("at both bounds");
+    for (poisoned, limits, code) in [
+        (
+            format!("{}{}", run.playback, run.playback),
+            limits,
+            "cg_witness_decode_bytes_limit",
+        ),
+        (
+            run.playback
+                .replace("    ];", "        // 0\n        vec![not_a_byte],\n    ];"),
+            quire_contract_codegen::WitnessDecodeLimits {
+                bytes: usize::MAX,
+                values: 2,
+            },
+            "cg_witness_decode_values_limit",
+        ),
+    ] {
+        let mut candidate = run.clone();
+        candidate.playback = poisoned.clone();
+        let error = match twin.try_frame_replay_with_limits(
+            "deposit",
+            &invocation,
+            "account",
+            "audit",
+            &candidate,
+            limits,
+        ) {
+            Ok(_) => panic!("over-bound playback must refuse"),
+            Err(error) => error,
+        };
+        assert!(matches!(error, FrameReplayError::Decode(cause) if cause.code == code));
+        candidate.playback = poisoned;
+        let control = twin.try_frame_replay_with_limits(
+            "deposit",
+            &invocation,
+            "account",
+            "audit",
+            &candidate,
+            quire_contract_codegen::WitnessDecodeLimits {
+                bytes: candidate.playback.len(),
+                values: 3,
+            },
+        );
+        let error = match control {
+            Ok(_) => panic!("poisoned suffix must refuse when read"),
+            Err(error) => error,
+        };
+        let poisoned_code = if code == "cg_witness_decode_bytes_limit" {
+            "kani_witness_multiple_assertions_refused"
+        } else {
+            "kani_witness_byte_invalid"
+        };
+        assert!(matches!(error, FrameReplayError::Decode(cause) if cause.code == poisoned_code));
+    }
+}
+
 /// The forbidden-write run at the pre state `(balance, audit) = (5, 0)`.
 fn forbidden_run(twin: &Twin) -> Run {
     run_of(&frame_harness(twin), [5, 0])
@@ -924,12 +992,36 @@ fn tc_025_frame_grants_rekey_to_admitted_order_without_dropping_effects() {
     "FR-015-AC-26",
     "FR-015-AC-27",
     "FR-015-AC-28",
-    "TC-025"
+    "TC-025",
+    "TC-001",
+    "NFR-002-AC-1",
+    "NFR-002-AC-2"
 )]
 #[test]
 fn tc_025_a_postcondition_yields_a_contract_harness_and_a_scoped_frame_harness() {
     let fixture = emitted_fixture(&Twin::new(), "BalanceNeverDrops");
     let generated = generate(&fixture);
+    for harness in [&generated.postcondition, &generated.frame] {
+        crate::generated_headers::assert_header(
+            &harness.rust.path,
+            &harness.rust.contents,
+            &[
+                "deposit",
+                &format!("{}/{}", fixture.clause.domain, fixture.clause.digest),
+            ],
+        );
+        for node in [
+            &harness.identity.scope.object,
+            &harness.identity.scope.anchor,
+            &harness.identity.scope.frame,
+        ] {
+            crate::generated_headers::assert_header(
+                &harness.rust.path,
+                &harness.rust.contents,
+                &[&format!("{}/{}", node.domain, node.digest)],
+            );
+        }
+    }
     let scope = &generated.postcondition.identity.scope;
     assert_eq!(scope.operation, "deposit");
     assert_eq!(scope.object, fixture.object);
@@ -2291,6 +2383,32 @@ fn tc_025_the_frame_replay_envelope_names_the_payloads_frame_and_occurrence() {
     );
 }
 
+/// The non-Kani frame path carries QSL's call-site identities through the packet and succeeds
+/// through `FrameReplay::replay`, whose implementation calls `qsl_replay::replay_frame`.
+#[trace("TC-035", "FR-024-AC-6")]
+#[test]
+fn tc_035_frame_packet_reaches_qsl_with_call_site_identities() {
+    let twin = Twin::new();
+    let site = twin.operation_site("deposit").expect("operation site");
+    let invocation = twin.invocation("account", (5, 0), (6, 1));
+    let replay = twin.frame_replay(&invocation, "account", "audit", &forbidden_run(&twin));
+    let payload = replay
+        .packet
+        .family_payload
+        .as_ref()
+        .expect("frame payload");
+    assert_eq!(payload.frame, site.frame);
+    assert_eq!(payload.anchor, site.anchor);
+    assert_eq!(payload.occurrence, site.frame_occurrence);
+    assert_eq!(replay.packet.clause_node, Some(site.frame));
+    assert_eq!(
+        replay.packet.occurrence_key.as_ref(),
+        Some(&site.frame_occurrence)
+    );
+    let result = replay.replay().expect("QSL admits the frame envelope");
+    assert!(matches!(result.result(), ReplayResult::Witness(_)));
+}
+
 /// `FrameReplay::replay` returns QSL's result without Kani: a forbidden write settles a reproduced
 /// violation that names the written field, and a write the frame grants is a respected frame.
 #[trace("FR-015-AC-36", "TC-025")]
@@ -2915,10 +3033,12 @@ fn tc_035_a_field_with_no_declared_range_is_decoded_and_not_checked() {
     };
     assert_eq!(unranged, &harness.unranged);
     let terminal = quire_contract_codegen::run_terminal_value(
-        &KaniRunOutcome::Falsified {
-            counterexample: "model-type mismatch".to_owned(),
-        },
-        0,
+        &crate::terminal_map::synthetic_evidence(
+            KaniRunOutcome::Falsified {
+                counterexample: "model-type mismatch".to_owned(),
+            },
+            0,
+        ),
         Some((&error).into()),
     )
     .expect("a falsified run has a settlement");
@@ -3091,10 +3211,12 @@ fn tc_025_wide_model_override_preserves_unranged_context_without_a_replay_claim(
         unreachable!("the QSL refusal was checked above")
     };
     let terminal = quire_contract_codegen::run_terminal_value(
-        &KaniRunOutcome::Falsified {
-            counterexample: "model-type mismatch".to_owned(),
-        },
-        0,
+        &crate::terminal_map::synthetic_evidence(
+            KaniRunOutcome::Falsified {
+                counterexample: "model-type mismatch".to_owned(),
+            },
+            0,
+        ),
         Some((&error).into()),
     )
     .expect("a falsified run has a settlement");
@@ -3119,7 +3241,7 @@ fn tc_025_wide_model_override_preserves_unranged_context_without_a_replay_claim(
 /// The transcript `Witness::parse` is given is the one rendering function's, over the decoded
 /// values, the harness path and the check text the decode names: it is not a fixed text, and a
 /// different playback gives a different transcript.
-#[trace("FR-024-AC-25", "TC-035")]
+#[trace("FR-024-AC-25", "FR-024-AC-2", "TC-035")]
 #[test]
 fn tc_035_the_frame_witness_is_rendered_from_the_decoded_playback() {
     let twin = Twin::new();
@@ -3199,7 +3321,7 @@ fn tc_035_a_playback_that_does_not_decode_is_refused_before_the_call_site() {
 /// A decoded value at either end of its field's declared range is admitted, and the values one
 /// below and one above are refused naming the field and the value, before the call site (the
 /// operation the unit does not name would otherwise be a `CallSite` refusal).
-#[trace("FR-024-AC-26", "TC-035")]
+#[trace("FR-024-AC-26", "FR-024-AC-3", "TC-035")]
 #[test]
 fn tc_035_a_decoded_value_outside_its_declared_range_is_refused_at_the_endpoints() {
     let twin = Twin::new();
@@ -3232,7 +3354,9 @@ fn tc_035_a_decoded_value_outside_its_declared_range_is_refused_at_the_endpoints
                 "audit",
                 &run_of(&harness, values),
             )
-            .unwrap_or_else(|error| panic!("{} = {admitted} is admitted: {error}", domain.field));
+            .unwrap_or_else(|error| panic!("{} = {admitted} is admitted: {error}", domain.field))
+            .replay()
+            .unwrap_or_else(|error| panic!("{} = {admitted} reaches QSL: {error}", domain.field));
         }
         for outside in [domain.minimum - 1, domain.maximum + 1] {
             let error = refused(replay_of(
@@ -3675,6 +3799,13 @@ fn scratch(name: &str) -> PathBuf {
 
 /// Runs `harness` with the real prover over the subject module every generated harness names.
 pub(crate) fn prove(harness: &StateFrameHarness) -> KaniRunOutcome {
+    prove_evidence(harness).outcome
+}
+
+/// Retains real run evidence for terminal projection after replay.
+pub(crate) fn prove_evidence(
+    harness: &StateFrameHarness,
+) -> quire_contract_codegen::KaniExecutionEvidence {
     let cancel = quire_exact::Cancel::new();
     let installation = KaniInstallation::discover().expect("cargo-kani is installed");
     let directory = scratch("crate");
@@ -3706,7 +3837,7 @@ pub(crate) fn prove(harness: &StateFrameHarness) -> KaniRunOutcome {
     })
     .unwrap_or_else(|refusal| panic!("the run must start: {refusal}"));
     let _ = fs::remove_dir_all(directory);
-    evidence.outcome
+    evidence
 }
 
 /// The counterexample of a falsified proof, which must name `reason`.

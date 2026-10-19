@@ -17,23 +17,23 @@
 //! `#[ignore]` here, not part of `make ci`) runs the real prover.
 
 use ix_trace_rs::trace;
-use std::{collections::BTreeMap, fs, path::PathBuf};
+use std::{collections::BTreeMap, path::PathBuf};
 
 use qsl_replay::WitnessValue;
 use qsl_replay::{
     call_site, ByteDigest, CallSiteRefusal, CanonicalAssignment, Category, Code, DeclaredDomain,
     DependencyInput, DependencyInputRefusal, DependencySelectionsCause, DigestDomain, DigestRecord,
-    DisagreementCause, DomainKey, DomainKind, FiniteBound, Identifier, Integer, ObligationIdentity,
-    ProofBound, QualifiedName, ReplayLimits, ReplayRefusal, ReplayRequestRefusal, ReplaySource,
-    ScalarLimits, SourceIdentity, Verdict, WireNodeId, WitnessSettlement,
-    DEFAULT_REPLAY_INPUT_BYTES,
+    DisagreementCause, DomainKey, DomainKind, FiniteBound, Identifier, Integer, InternalFault,
+    ObligationIdentity, ProofBound, QualifiedName, ReplayLimits, ReplayRefusal,
+    ReplayRequestRefusal, ReplaySource, ScalarLimits, SourceIdentity, Verdict, WireNodeId,
+    WitnessSettlement, DEFAULT_REPLAY_INPUT_BYTES,
 };
 use quire_contract_codegen::{
     decode_falsification, execute_kani_obligation, replay_counterexample,
     replay_counterexample_through, replay_falsification, DependencyLock, DependencyLockError,
     EvidenceFailureCause, KaniExecutionRequest, KaniInstallation, KaniObligationHarness,
     KaniRunOutcome, LockedSource, ObligationKind, ReplayInputs, ReplayPackage, ReplayPackageError,
-    ReplayParameter, ReplayVerdict, SpineReplayError,
+    ReplayParameter, ReplayVerdict, SpineReplayError, WitnessDecodeLimits,
 };
 
 use super::kani_obligations::{bound_package, supported_contract_harnesses, write_crate};
@@ -97,6 +97,7 @@ fn locked(identity: &str, bytes: &[u8]) -> LockedSource {
 /// proving run carries limits.
 fn inputs(source: &str, dependencies: Vec<DependencyLock>) -> ReplayInputs {
     ReplayInputs {
+        decode_limits: crate::unbounded_decode_limits(),
         source: locked(IDENTITY, source.as_bytes()),
         dependencies,
         accounting_limits: UNLIMITED,
@@ -1054,6 +1055,127 @@ fn tc_026_an_in_domain_counterexample_the_twin_falsifies_is_reproduced() {
     assert_eq!(verdict, ReplayVerdict::Reproduced);
 }
 
+#[trace("TC-026", "FR-016-AC-6")]
+#[test]
+fn tc_026_function_replay_refuses_poisoned_suffixes_at_both_decode_bounds() {
+    let harness = spine_harness();
+    let transcript = playback(&harness, 1, 5);
+    let source = native_source(VIOLATING_TWIN);
+    let limits = WitnessDecodeLimits {
+        bytes: transcript.len(),
+        values: 2,
+    };
+    let make_package = |limits| {
+        let mut run = inputs(&source, Vec::new());
+        run.decode_limits = limits;
+        ReplayPackage::new(run, FUNCTION).expect("native twin compiles")
+    };
+    let package = make_package(limits);
+    assert_eq!(
+        replay_counterexample(&harness.identity, &transcript, &package).expect("at bounds"),
+        ReplayVerdict::Reproduced
+    );
+    let mut separate = inputs(&source, Vec::new());
+    separate.decode_limits = limits;
+    separate.replay_limits = ReplayLimits::default().with_input_bytes(1);
+    let separate = ReplayPackage::new(separate, FUNCTION).expect("native twin compiles");
+    let mut calls = 0;
+    let _ = replay_counterexample_through(&harness.identity, &transcript, &separate, |_| {
+        calls += 1;
+        Err(ReplayRefusal::Fault(InternalFault::new(
+            "replay",
+            "stop after decode",
+        )))
+    });
+    assert_eq!(
+        calls, 1,
+        "QSL's input_bytes bound must not limit CG decoding"
+    );
+    for (poisoned, limits, code) in [
+        (
+            format!("{transcript}{transcript}"),
+            limits,
+            "cg_witness_decode_bytes_limit",
+        ),
+        (
+            transcript.replace("    ];", "        // 0\n        vec![not_a_byte],\n    ];"),
+            WitnessDecodeLimits {
+                bytes: usize::MAX,
+                values: 2,
+            },
+            "cg_witness_decode_values_limit",
+        ),
+    ] {
+        let package = make_package(limits);
+        let verdict = replay_counterexample(&harness.identity, &poisoned, &package)
+            .expect("over-bound evidence yields a verdict");
+        assert!(
+            matches!(
+                verdict,
+                ReplayVerdict::EvidenceFailure(EvidenceFailureCause::Decode(ref cause))
+                    if cause.code == code
+            ),
+            "{verdict:?}"
+        );
+        let through = replay_counterexample_through(&harness.identity, &poisoned, &package, |_| {
+            panic!("over-bound playback must not reach the executor")
+        })
+        .expect("over-bound evidence yields a verdict");
+        assert!(
+            matches!(
+                through,
+                ReplayVerdict::EvidenceFailure(EvidenceFailureCause::Decode(ref cause))
+                    if cause.code == code
+            ),
+            "{through:?}"
+        );
+        let unbounded = make_package(WitnessDecodeLimits {
+            bytes: poisoned.len(),
+            values: 3,
+        });
+        let control = replay_counterexample(&harness.identity, &poisoned, &unbounded)
+            .expect("poisoned suffix produces a decode verdict");
+        let poisoned_code = if code == "cg_witness_decode_bytes_limit" {
+            "kani_witness_multiple_assertions_refused"
+        } else {
+            "kani_witness_byte_invalid"
+        };
+        assert!(
+            matches!(
+                control,
+                ReplayVerdict::EvidenceFailure(EvidenceFailureCause::Decode(ref cause))
+                    if cause.code == poisoned_code
+            ),
+            "{control:?}"
+        );
+    }
+}
+
+/// An executor fault crosses the public counterexample replay path as the same typed refusal.
+#[trace("FR-016-AC-12", "TC-026")]
+#[test]
+fn tc_026_an_executor_fault_remains_a_typed_replay_refusal() {
+    let harness = spine_harness();
+    let package = compile_native_twin(&native_source(VIOLATING_TWIN), FUNCTION);
+    let fault = InternalFault::new("replay", "injected-executor-fault");
+    let mut calls = 0;
+    let result = replay_counterexample_through(
+        &harness.identity,
+        &playback(&harness, 1, 5),
+        &package,
+        |_| {
+            calls += 1;
+            Err(ReplayRefusal::Fault(fault.clone()))
+        },
+    );
+    assert_eq!(calls, 1, "the decoded counterexample reached the executor");
+    assert!(
+        matches!(result, Err(SpineReplayError::Refused(refusal))
+            if matches!(refusal.as_ref(), ReplayRefusal::Fault(returned) if *returned == fault)),
+        "the fault must remain a typed replay refusal"
+    );
+}
+
 /// A decoded value outside its argument's domain is evidence failure, and the replay never
 /// runs: the same value inside the domain reproduces against the same twin.
 #[trace("FR-016-AC-2", "TC-026")]
@@ -1069,6 +1191,48 @@ fn tc_026_an_out_of_domain_counterexample_is_evidence_failure() {
             argument: "balance_pre".to_owned()
         })
     );
+}
+
+/// The public replay entry point admits both endpoints of each argument's declared domain and
+/// refuses the adjacent values before invoking its executor.
+#[trace("TC-035", "FR-024-AC-3")]
+#[test]
+fn tc_035_public_function_domain_boundaries_stop_before_replay() {
+    let harness = spine_harness();
+    let package = compile_native_twin(&native_source(VIOLATING_TWIN), FUNCTION);
+    for (argument, amount, balance, expected_domain_failure) in [
+        ("amount_current", 0, 5, false),
+        ("amount_current", 1000, 5, false),
+        ("amount_current", -1, 5, true),
+        ("amount_current", 1001, 5, true),
+        ("balance_pre", 5, 0, false),
+        ("balance_pre", 5, 1000, false),
+        ("balance_pre", 5, -1, true),
+        ("balance_pre", 5, 1001, true),
+    ] {
+        let mut calls = 0;
+        let result = replay_counterexample_through(
+            &harness.identity,
+            &playback(&harness, amount, balance),
+            &package,
+            |wire| {
+                calls += 1;
+                qsl_replay::replay(wire, ReplayLimits::default())
+            },
+        );
+        if expected_domain_failure {
+            assert_eq!(calls, 0, "{argument}={amount},{balance} reached replay");
+            assert_eq!(
+                result.expect("domain failure is an evidence verdict"),
+                ReplayVerdict::EvidenceFailure(EvidenceFailureCause::Domain {
+                    argument: argument.to_owned(),
+                })
+            );
+        } else {
+            assert_eq!(calls, 1, "{argument}={amount},{balance}: {result:?}");
+            assert!(result.is_ok(), "{argument}={amount},{balance}: {result:?}");
+        }
+    }
 }
 
 /// Each class of malformed transcript is a decode evidence failure carrying the decoder's own
@@ -1208,17 +1372,17 @@ fn printed_values(transcript: &str) -> (Vec<i64>, Vec<i64>) {
 fn prove(harness: &KaniObligationHarness, subject: &str) -> KaniRunOutcome {
     let cancel = quire_exact::Cancel::new();
     let installation = KaniInstallation::discover().expect("cargo-kani is installed");
-    let directory = write_crate(harness, subject);
+    let scratch = write_crate(harness, subject);
+    let directory = &scratch.path;
     let evidence = execute_kani_obligation(&KaniExecutionRequest {
         cancel: &cancel,
         installation: &installation,
         harness: harness.into(),
-        crate_directory: &directory,
+        crate_directory: directory,
         target_directory: &PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kani-spine"),
         home_directory: None,
     })
     .unwrap_or_else(|refusal| panic!("{refusal}"));
-    let _ = fs::remove_dir_all(directory);
     evidence.outcome
 }
 
@@ -1263,6 +1427,7 @@ fn tc_026_one_boolean_clause_goes_from_a_bound_package_through_kani_to_native_re
         harness.identity.module_symbol.as_str(),
         &harness.identity.arguments,
         counterexample,
+        crate::unbounded_decode_limits(),
     )
     .expect("the counterexample decodes");
     let get = |name: &str| match decoded.iter().find(|(n, _)| n == name) {

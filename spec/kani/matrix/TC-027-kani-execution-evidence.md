@@ -246,9 +246,10 @@ evidence. The
 equal outcome, checks, SUCCESS count and playback, equal evidence in every field but
 `failureCause`, `diagnostics`, `memory` and the report-path argument, and FR-029 terminal value
 `Incomplete(ResourceExhausted)` for the `out_of_memory` run and `Failed` for the `exit_code_64` and
-`cbmc_exploded` runs (IR-848, FR-029-AC-32; planned, and the bound test
-`tests/it/kani_obligations.rs` `tc_027_the_terminal_value_of_a_cbmc_failure_ignores_its_cause`
-asserts the old value `Failed` for every cause until the code change flips it). The real run whose manifest passes `--no-such-option` to CBMC exits
+`cbmc_exploded` runs (FR-029-AC-32), as asserted by
+`cbmc_failure_terminal_value_reads_the_retained_cause` in `tests/it/kani_obligations.rs` and
+`bounded_cause_changes_only_terminal_projection_and_retains_evidence` in
+`tests/it/kani_terminal_private.rs`. The real run whose manifest passes `--no-such-option` to CBMC exits
 unsuccessfully, exports a report and is `FailedWithoutCounterexample` with
 `{ kind: "exit_code", code: 64 }` and a stderr excerpt holding `Unknown option: --no-such-option`.
 
@@ -339,7 +340,18 @@ class enum is closed by a compiling control that matches `KaniScalarNativeErrorC
 with exactly `CompletionRefusal` and `EnvironmentFault` and no wildcard, together with the absence of
 `#[non_exhaustive]` on it; the doctests run by `cargo test --doc`, the pattern of the AC-38
 serialize-only check.
-These steps are Planned until the IR-847 code slice lands.
+These controls are implemented in the scalar runner's unit tests and public rustdoc examples.
+The crate-root private scalar-native tests exercise cancellation and timeout with bounded
+single-run launcher stand-ins. Their real-Kani seeded false-bound fixture keeps the routed
+package and embedded oracle intact, changes the asserted bound before the normal renderer and
+origin seal, and requires the paired runner to return real `Falsified` evidence without starting
+native execution. It is a deliberately defective proof property, not a naturally failing admitted
+production claim. A separate real-proof control selects a bounded native-helper protocol
+stand-in through an immutable private installation dependency; it records the actual native
+arguments and emits an oracle-stop record, and the public paired runner must return
+`OracleStop` / `oracle_stop` / `CompletionRefusal`. This exercises runner propagation without
+claiming an actual runtime-produced stop for a supported admitted integer operation. Fabricated
+proof evidence is confined to the exhaustive classification table.
 
 Snapshot controls (FR-017-AC-29 and AC-30): measure the staged path/byte set for the complete
 generated package, retained harness, native invocation adapter and resolved dependency lock;
@@ -417,18 +429,16 @@ tests of the phase rules, the excerpt bounds and every redaction pair. The seria
 the rustdoc `compile_fail` example on `KaniNoVerdictDiagnostics`, run by `cargo test --doc`, with
 its compiling `serde_json::to_string` control beside it.
 
-The CBMC failure cause (FR-017-AC-37, FR-017-AC-38, FR-017-AC-40) is covered by the stand-in tests
-in `batch_tests::no_verdict_diagnostics::failure_cause` in `src/kani/run/execute.rs`
-(`tc_027_every_exit_status_gives_its_cause_and_a_diagnostic_record`,
-`tc_027_a_failed_property_has_no_record_and_an_unnamed_entry_has_no_cause`,
-`tc_027_the_cause_is_kept_for_no_other_outcome`,
-`tc_027_a_malformed_exit_status_still_refuses_the_report` and
-`tc_027_the_cause_never_feeds_classification`) and, for the FR-029 terminal value,
-`tc_027_the_terminal_value_of_a_cbmc_failure_ignores_its_cause` in `tests/it/kani_obligations.rs`
-(IR-848 replaces this test: the value is read from the cause by `run_terminal_value`, which takes
-`&KaniExecutionEvidence` and reads the cause from it; `out_of_memory` gives `Incomplete(ResourceExhausted)` and `exit_code_64` and
-`cbmc_exploded` give `Failed`, FR-029-AC-32; independence from the diagnostic record holds because the
-map never reads the diagnostics record); by the tests of the exit-status
+The CBMC failure cause (FR-017-AC-37, FR-017-AC-38, FR-017-AC-40) is covered by the bounded
+report controls in `tests/it/kani_terminal_private.rs`, which reuse
+`batch_tests::no_verdict_diagnostics::failure_cause` in `src/kani/run/execute.rs`, and the
+remaining execution tests `tc_027_the_cause_is_kept_for_no_other_outcome` and
+`tc_027_a_malformed_exit_status_still_refuses_the_report`. For the FR-029 terminal value,
+`cbmc_failure_terminal_value_reads_the_retained_cause` in `tests/it/kani_obligations.rs`
+passes `&KaniExecutionEvidence` to `run_terminal_value`: `out_of_memory` gives
+`Incomplete(ResourceExhausted)`, `timeout` gives `Incomplete(TimedOut)`, and `exit_code_64` and
+`cbmc_exploded` give `Failed` (FR-029-AC-32, FR-029-AC-33). The map never reads the diagnostic
+record. The cause is also covered by the tests of the exit-status
 vocabulary, the 64-byte cut and the one-entry rule in `src/kani/output/report.rs`; by the serialize-only
 check, which is the rustdoc `compile_fail` example on `KaniFailureCause` run by `cargo test --doc`
 beside its `serde_json::to_string` control and the `tc_027_the_cause_implements_no_deserialize`
@@ -469,4 +479,10 @@ literal `Cargo.lock` and adapter and not a real staged run, and pin `(schema str
 assertion. Change the `Cargo.lock` bytes in a test seam to see the digest change with the schema
 unchanged. A golden edited without a schema bump is a review rule, not a test. (7) Meter limits (FR-017-AC-50): require the meter observation's `ScalarLimits` equal the request's and `scalar_limits()`, equal and unchanged after the snapshot is gone; through a seam that makes the adapter report a different limit, require `native_result`, `EnvironmentFault` and no receipt. (8) Name `quire_contract_codegen::DigestRecord` and `qsl_replay::DigestRecord` as the same type, and make the snapshot directory removal fail through a seam: require the same verdict, exposed entries and digest as an un-failed run, a non-empty `cleanup_diagnostic()` naming the removal failure, and an empty `cleanup_diagnostic()` when removal succeeds; the diagnostic is in neither the digest nor the entries No
 driver-side authentication coverage is claimed here: the driver's recomputation and refusal are
-driver-owned (FR-032 boundary), as is the quire-driver FR-009 amendment named in FR-017. These steps are Planned until the IR-846 code slice lands.
+driver-owned (FR-032 boundary), as is the quire-driver FR-009 amendment named in FR-017. These controls are implemented by the scalar runner unit tests, the real paired receipt and
+subtraction tests in `tests/it/kani_obligations.rs`, and the private cleanup control in
+`tests/it/kani_scalar_native_private.rs`. The private real controls run separately from the
+integration lane with `cargo test --locked --lib kani_scalar_native_private -- --ignored
+--test-threads=1`; the default private control covers cancellation and timeout stand-ins.
+The literal JCS/SHA-256 golden stays independent of real lock contents, and schema/golden
+changes remain subject to review. No driver authentication coverage is claimed.

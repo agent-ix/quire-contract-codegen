@@ -693,7 +693,7 @@ mod tests {
     use std::{fs, io::Write};
 
     use super::*;
-    use crate::kani::test_support::discover_scratch;
+    use crate::core::test_support::discover_scratch;
 
     #[trace("FR-028-AC-2")]
     #[test]
@@ -1461,7 +1461,7 @@ mod tests {
     #[test]
     fn observation_failure_after_spawn_refuses_a_valid_report_and_stops_the_run() {
         use std::os::unix::fs::symlink;
-        let root = crate::kani::test_support::discover_scratch("memory-observation-failure");
+        let root = crate::core::test_support::discover_scratch("memory-observation-failure");
         let procfs = root.join("proc");
         fs::create_dir(&procfs).unwrap();
         symlink(

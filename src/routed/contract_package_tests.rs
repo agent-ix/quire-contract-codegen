@@ -4,15 +4,21 @@
 //! FR-039 admitted-package routing controls.
 
 #[cfg(test)]
+#[allow(clippy::duplicate_mod)] // Reuse the integration fixture in this crate's unit test binary.
+#[path = "../../tests/exact_function_support/package.rs"]
+mod exact_function_fixture;
+
+#[cfg(test)]
 mod tests {
     use crate::core::contract_package::{
         routed_contract_lowering_profile, ContractDriverResultSelection, ContractRequestPosition,
         PackageItem, PackageItems, PackageRequestError,
     };
     use crate::routed::capability::{
-        negotiate_contract_package, BackendDescriptor, BackendProviderEnvelope, Candidate,
-        Candidates, ContractItemSettlement, ProviderOrigin, RequestItem, RequestedKind,
-        BACKEND_PROVIDER_CONTRACT, CAPABILITY_VOCABULARY,
+        negotiate_backend_provider, negotiate_contract_package, BackendDescriptor,
+        BackendProviderEnvelope, Candidate, Candidates, CapabilityKind, ContractItemSettlement,
+        EnvelopeRefusal, ExtentClassification, KaniForm, Mode, ProviderOrigin, RequestItem,
+        RequestedKind, BACKEND_PROVIDER_CONTRACT, CAPABILITY_VOCABULARY,
     };
     use crate::routed::generate::{
         generate_routed, GenerationContexts, KaniGenerationContext, KindOutput,
@@ -30,6 +36,361 @@ mod tests {
         ContractDependencyInput, ContractFeatureRecordV1, ContractOccurrenceKeyV1,
         ContractPackageReadResult, ContractPackageWireV1, ContractRootViewV1, LoweringProfileRef,
     };
+
+    use super::exact_function_fixture;
+
+    fn oversized_function_item() -> RequestItem {
+        use exact_function_fixture::{
+            code_id, oversized_source_bound_call_package, SOURCE_CALL, SOURCE_FUNCTION,
+            SOURCE_PARAM_A, SOURCE_PARAM_B,
+        };
+        let (package, ids) = oversized_source_bound_call_package();
+        RequestItem {
+            kind: RequestedKind::Known(CapabilityKind::ValueValidity),
+            extent: Some(ExtentClassification {
+                extent: Mode::Bounded,
+                finite_bound_available: true,
+                domains: Vec::new(),
+                bounds: Vec::new(),
+            }),
+            named_backend: None,
+            candidates: Candidates::Set(vec![Candidate {
+                identity: "kani".to_owned(),
+            }]),
+            kani_form: KaniForm::V2FunctionApplication {
+                package: Box::new(package),
+                function_node_id: ids.resolve(&code_id(SOURCE_FUNCTION)),
+                call_node_id: ids.resolve(&code_id(SOURCE_CALL)),
+                argument_node_ids: vec![
+                    ids.resolve(&code_id(SOURCE_PARAM_A)),
+                    ids.resolve(&code_id(SOURCE_PARAM_B)),
+                ],
+            },
+        }
+    }
+
+    #[trace("TC-030", "FR-019-AC-51")]
+    #[test]
+    fn first_reader_failure_wins_after_an_earlier_supported_item() {
+        let (checked, ids, _) = imported_integer_function_case();
+        let refused_item = RequestItem {
+            kind: RequestedKind::Known(CapabilityKind::ValueValidity),
+            extent: Some(ExtentClassification {
+                extent: Mode::Bounded,
+                finite_bound_available: true,
+                domains: Vec::new(),
+                bounds: Vec::new(),
+            }),
+            named_backend: None,
+            candidates: Candidates::Set(vec![Candidate {
+                identity: "kani".to_owned(),
+            }]),
+            kani_form: KaniForm::V2FunctionApplication {
+                package: checked,
+                function_node_id: ids[0].clone(),
+                call_node_id: ids[2].clone(),
+                argument_node_ids: vec![ids[3].clone()],
+            },
+        };
+        let incomplete_item = oversized_function_item();
+        let mut valid = refused_item.clone();
+        valid.candidates = Candidates::Set(vec![Candidate {
+            identity: "process".to_owned(),
+        }]);
+        let manifest = vec![
+            BackendDescriptor {
+                identity: "kani".to_owned(),
+                advertised: vec![(CapabilityKind::ValueValidity, Mode::Bounded)],
+                origin: ProviderOrigin::Linked,
+                domains: None,
+                bounds: None,
+            },
+            BackendDescriptor {
+                identity: "process".to_owned(),
+                advertised: vec![(CapabilityKind::ValueValidity, Mode::Bounded)],
+                origin: ProviderOrigin::Process,
+                domains: Some(Default::default()),
+                bounds: None,
+            },
+        ];
+        let envelope = |items| BackendProviderEnvelope {
+            contract_version: BACKEND_PROVIDER_CONTRACT.to_owned(),
+            capability_vocabulary: CAPABILITY_VOCABULARY.to_owned(),
+            manifest: manifest.clone(),
+            items,
+        };
+        let valid_result = negotiate_backend_provider(&envelope(vec![valid.clone()]))
+            .expect("process item settles");
+        assert!(matches!(
+            valid_result[0].disposition,
+            crate::routed::capability::Disposition::Supported { .. }
+        ));
+        let refused = negotiate_backend_provider(&envelope(vec![refused_item.clone()]))
+            .expect_err("imported package read must refuse");
+        let incomplete = negotiate_backend_provider(&envelope(vec![incomplete_item.clone()]))
+            .expect_err("oversized package read must be incomplete");
+        assert!(matches!(
+            refused,
+            EnvelopeRefusal::ContractPackageReadRefused { .. }
+        ));
+        assert!(matches!(
+            incomplete,
+            EnvelopeRefusal::ContractPackageReadIncomplete { .. }
+        ));
+        assert_eq!(
+            negotiate_backend_provider(&envelope(vec![
+                valid.clone(),
+                refused_item.clone(),
+                incomplete_item.clone(),
+            ])),
+            Err(refused)
+        );
+        assert_eq!(
+            negotiate_backend_provider(&envelope(vec![valid, incomplete_item, refused_item])),
+            Err(incomplete)
+        );
+    }
+
+    fn imported_integer_function_case(
+    ) -> (Box<CheckedPackageV2>, Vec<CheckedNodeId>, CheckedPackageV2) {
+        let library_source = "language \"ix:native\" edition \"1-draft\";\n\
+            profile v = \"quire.value.complete/v1\";\n\
+            function add using v(a: Integer): Integer pure { a + a }\n";
+        let library_source_id = SourceIdentity::new("test", "reader-library", "git", "fixture");
+        let library_compiled = compile_package(
+            library_source_id.clone(),
+            "reader-library.native",
+            library_source.as_bytes(),
+            [],
+            &DependencyInput::default(),
+            StageLimits::default(),
+            ReplayLimits::default(),
+        )
+        .expect("integer library compiles");
+        let mut library_evidence = CheckedPackageEvidence::new();
+        library_evidence.support_feature("quire.value.complete/v1");
+        let library = match CheckedPackageV2::read(
+            library_compiled.bytes(),
+            CheckedPackageReadLimits::bounded(),
+            &library_evidence,
+        ) {
+            CheckedPackageV2ReadResult::Admitted(package) => package,
+            other => panic!("integer library must admit: {other:?}"),
+        };
+        let program_source = "language \"ix:native\" edition \"1-draft\";\n\
+            profile v = \"quire.value.complete/v1\";\n\
+            import \"test/reader-library\" as g;\n\
+            function q using v(a: Integer): Integer pure { a + g::add(a) }\n\
+            function r using v(a: Integer): Integer pure { q(a) }\n";
+        let dependencies = DependencyInput::new([SuppliedLibrary {
+            identity: "test/reader-library".to_owned(),
+            source: library_source_id,
+            path: "reader-library.native".to_owned(),
+            bytes: library_source.as_bytes().to_vec(),
+        }])
+        .expect("one imported library");
+        let program = compile_package(
+            SourceIdentity::new("test", "reader-program", "git", "fixture"),
+            "reader-program.native",
+            program_source.as_bytes(),
+            [],
+            &dependencies,
+            StageLimits::default(),
+            ReplayLimits::default(),
+        )
+        .expect("imported integer call compiles");
+        let mut evidence = CheckedPackageEvidence::new();
+        evidence.support_feature("quire.value.complete/v1");
+        let library_copy = (*library).clone();
+        evidence
+            .insert_dependency_package("test/reader-library", std::sync::Arc::new(*library))
+            .expect("retain imported library");
+        let checked = match CheckedPackageV2::read(
+            program.bytes(),
+            CheckedPackageReadLimits::bounded(),
+            &evidence,
+        ) {
+            CheckedPackageV2ReadResult::Admitted(package) => package,
+            other => panic!("imported integer program must admit: {other:?}"),
+        };
+        let function = checked
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| {
+                node.declaration.as_ref().is_some_and(|declaration| {
+                    declaration.qualified_name.len() == 1
+                        && declaration.qualified_name[0].as_ref() == "q"
+                })
+            })
+            .expect("q function");
+        let function_id = function.node_id.clone();
+        let body_id = function.body["members"]
+            .as_array()
+            .expect("function body members")
+            .iter()
+            .find(|member| member["name"] == "body")
+            .expect("body binding")["value"]["target"]
+            .clone();
+        let body_id: CheckedNodeId = serde_json::from_value(body_id).expect("body node id");
+        let call = checked
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| {
+                node.body
+                    .pointer("/operation/identity")
+                    .and_then(serde_json::Value::as_str)
+                    == Some("quire.op.function.call")
+                    && node
+                        .body
+                        .pointer("/arguments/0/target")
+                        .and_then(|target| {
+                            serde_json::from_value::<CheckedNodeId>(target.clone()).ok()
+                        })
+                        .as_ref()
+                        == Some(&function_id)
+            })
+            .expect("r calls q");
+        let call_id = call.node_id.clone();
+        let argument_id: CheckedNodeId =
+            serde_json::from_value(call.body["arguments"][1]["target"].clone())
+                .expect("call argument id");
+        (
+            checked,
+            vec![function_id, body_id, call_id, argument_id],
+            library_copy,
+        )
+    }
+
+    #[trace("TC-030", "FR-019-AC-48")]
+    #[test]
+    fn imported_function_reader_refusal_is_whole_envelope() {
+        let (checked, ids, library) = imported_integer_function_case();
+        let requested = [ids[1].clone(), ids[2].clone()];
+        let lowered = checked.lower(&requested, &routed_contract_lowering_profile());
+        let direct = ContractPackageWireV1::read(
+            lowered.package.canonical_bytes().expect("lowered bytes"),
+            CheckedPackageReadLimits::bounded(),
+            &ContractDependencies::new(),
+        );
+        let ContractPackageReadResult::Refused(expected) = direct else {
+            panic!("missing imported package must refuse: {direct:?}");
+        };
+        assert_eq!(expected.code, CheckedPackageRefusalCode::MissingImport);
+        let wrong = admitted_source(SOURCE);
+        let mut dependencies = ContractDependencies::new();
+        dependencies.insert(
+            "test/reader-library",
+            ContractDependencyInput {
+                identity: "test/reader-library",
+                package: &wrong,
+            },
+        );
+        let stale = ContractPackageWireV1::read(
+            lowered.package.canonical_bytes().expect("lowered bytes"),
+            CheckedPackageReadLimits::bounded(),
+            &dependencies,
+        );
+        let ContractPackageReadResult::Refused(stale) = stale else {
+            panic!("wrong admitted dependency must refuse: {stale:?}");
+        };
+        assert_ne!(wrong.package_id(), library.package_id());
+        assert!(stale.expected.is_some(), "{stale:?}");
+        assert!(stale.actual.is_some());
+        let projected = crate::routed::capability::project_contract_package_refusal(&stale);
+        let wire = serde_json::to_value(projected).expect("serialize dependency mismatch");
+        assert_eq!(
+            wire["expected"],
+            serde_json::to_value(stale.expected).unwrap()
+        );
+        assert_eq!(wire["actual"], serde_json::to_value(stale.actual).unwrap());
+        let item = RequestItem {
+            kind: RequestedKind::Known(CapabilityKind::ValueValidity),
+            extent: Some(ExtentClassification {
+                extent: Mode::Bounded,
+                finite_bound_available: true,
+                domains: Vec::new(),
+                bounds: Vec::new(),
+            }),
+            named_backend: None,
+            candidates: Candidates::Set(vec![Candidate {
+                identity: "kani".to_owned(),
+            }]),
+            kani_form: KaniForm::V2FunctionApplication {
+                package: checked,
+                function_node_id: ids[0].clone(),
+                call_node_id: ids[2].clone(),
+                argument_node_ids: vec![ids[3].clone()],
+            },
+        };
+        let result = negotiate_backend_provider(&BackendProviderEnvelope {
+            contract_version: BACKEND_PROVIDER_CONTRACT.to_owned(),
+            capability_vocabulary: CAPABILITY_VOCABULARY.to_owned(),
+            manifest: vec![BackendDescriptor {
+                identity: "kani".to_owned(),
+                advertised: vec![(CapabilityKind::ValueValidity, Mode::Bounded)],
+                origin: ProviderOrigin::Linked,
+                domains: None,
+                bounds: None,
+            }],
+            items: vec![item],
+        });
+        let Err(EnvelopeRefusal::ContractPackageReadRefused { refusal }) = result else {
+            panic!("reader refusal must stop negotiation: {result:?}");
+        };
+        assert_eq!(refusal.code, expected.code);
+        assert_eq!(
+            refusal.path.as_deref(),
+            expected.path.as_ref().map(|path| path.as_str())
+        );
+        assert_eq!(refusal.cause, expected.cause);
+        assert_eq!(refusal.locus.as_ref(), expected.locus.as_ref());
+        assert_eq!(
+            refusal.contract_version.as_deref(),
+            expected.contract_version.as_deref()
+        );
+        assert_eq!(
+            refusal.document_pointer.as_deref(),
+            expected.document_pointer.as_ref().map(|path| path.as_str())
+        );
+        assert_eq!(refusal.expected.as_ref(), expected.expected.as_ref());
+        assert_eq!(refusal.actual.as_ref(), expected.actual.as_ref());
+        let serialized = serde_json::to_value(&refusal).expect("serialize reader projection");
+        assert_eq!(
+            serialized["code"],
+            serde_json::to_value(expected.code).unwrap()
+        );
+        assert_eq!(
+            serialized["path"],
+            serde_json::to_value(&expected.path).unwrap()
+        );
+        assert_eq!(
+            serialized["cause"],
+            serde_json::to_value(expected.cause).unwrap()
+        );
+        assert_eq!(
+            serialized["locus"],
+            serde_json::to_value(&expected.locus).unwrap()
+        );
+        assert_eq!(
+            serialized["contract_version"],
+            serde_json::to_value(&expected.contract_version).unwrap()
+        );
+        assert_eq!(
+            serialized["document_pointer"],
+            serde_json::to_value(&expected.document_pointer).unwrap()
+        );
+        assert_eq!(
+            serialized["expected"],
+            serde_json::to_value(&expected.expected).unwrap()
+        );
+        assert_eq!(
+            serialized["actual"],
+            serde_json::to_value(&expected.actual).unwrap()
+        );
+        assert!(serialized.get("expected_node_id").is_none());
+    }
 
     const SOURCE: &str = "language \"ix:native\" edition \"1-draft\";\n\
         profile v = \"quire.value.complete/v1\";\n\
@@ -118,6 +479,97 @@ mod tests {
                     .clone()
             })
             .collect()
+    }
+
+    #[trace("TC-030", "FR-019-AC-50", "FR-039-AC-5")]
+    #[test]
+    fn admitted_function_settlement_does_not_read_again() {
+        assert_admitted_function_settlement(false);
+    }
+
+    #[trace("TC-030", "FR-019-AC-50", "FR-039-AC-5")]
+    #[test]
+    fn admitted_function_settlement_with_context_root_is_supported() {
+        assert_admitted_function_settlement(true);
+    }
+
+    fn assert_admitted_function_settlement(context_first: bool) {
+        use exact_function_fixture::{
+            code_id, source_bound_call_package, SOURCE_BODY, SOURCE_CALL, SOURCE_FUNCTION,
+            SOURCE_PARAM_A, SOURCE_PARAM_B,
+        };
+        let (checked, ids) = source_bound_call_package().admit_resolved();
+        let function = ids.resolve(&code_id(SOURCE_FUNCTION));
+        let body = ids.resolve(&code_id(SOURCE_BODY));
+        let call = ids.resolve(&code_id(SOURCE_CALL));
+        let mut requested = vec![body.clone(), call.clone()];
+        if context_first {
+            requested.insert(0, function.clone());
+        }
+        let lowered = checked.lower(&requested, &routed_contract_lowering_profile());
+        let admitted = match ContractPackageWireV1::read(
+            lowered.package.canonical_bytes().expect("lowered bytes"),
+            CheckedPackageReadLimits::bounded(),
+            &ContractDependencies::new(),
+        ) {
+            ContractPackageReadResult::Admitted(package) => package,
+            other => panic!("package must admit: {other:?}"),
+        };
+        let request = RequestItem {
+            kind: RequestedKind::Known(CapabilityKind::ValueValidity),
+            extent: Some(ExtentClassification {
+                extent: Mode::Bounded,
+                finite_bound_available: true,
+                domains: Vec::new(),
+                bounds: Vec::new(),
+            }),
+            named_backend: None,
+            candidates: Candidates::Set(vec![Candidate {
+                identity: "kani".to_owned(),
+            }]),
+            kani_form: KaniForm::V2FunctionApplication {
+                package: Box::new(checked),
+                function_node_id: function.clone(),
+                call_node_id: call,
+                argument_node_ids: vec![
+                    ids.resolve(&code_id(SOURCE_PARAM_A)),
+                    ids.resolve(&code_id(SOURCE_PARAM_B)),
+                ],
+            },
+        };
+        let mut envelope = empty_backend_request(
+            2,
+            match &request.kani_form {
+                KaniForm::V2FunctionApplication { package, .. } => package,
+                _ => unreachable!(),
+            },
+            &body,
+        );
+        envelope.manifest.push(BackendDescriptor {
+            identity: "kani".to_owned(),
+            advertised: vec![(CapabilityKind::ValueValidity, Mode::Bounded)],
+            origin: ProviderOrigin::Linked,
+            domains: None,
+            bounds: None,
+        });
+        envelope.items[1] = request;
+        assert_eq!(crate::oracle::function::take_function_preflight_reads(), 0);
+        let mut positions = drivers(&requested);
+        if context_first {
+            positions[0] = ContractRequestPosition::ContextRoot {
+                node_id: function.clone(),
+            };
+        }
+        let result = negotiate_contract_package(&admitted, &positions, &envelope)
+            .expect("admitted package settles");
+        assert!(
+            matches!(result[1].backend.as_ref().map(|item| &item.disposition), Some(crate::routed::capability::Disposition::Supported { backend }) if backend == "kani")
+        );
+        assert_eq!(
+            crate::oracle::function::take_function_preflight_reads(),
+            0,
+            "FR-330 must not call the internal V1 reader"
+        );
     }
 
     fn source_function_body(checked: &CheckedPackageV2, name: &str) -> CheckedNodeId {
@@ -614,7 +1066,14 @@ mod tests {
     }
 
     /// A scalar caller must select its own checked application occurrence.
-    #[trace("FR-039-AC-2", "FR-049-AC-1", "TC-053")]
+    #[trace(
+        "FR-039-AC-2",
+        "FR-049-AC-1",
+        "TC-053",
+        "TC-001",
+        "NFR-002-AC-1",
+        "NFR-002-AC-2"
+    )]
     #[test]
     fn scalar_own_result_without_conversion_differs_from_not_applicable() {
         use crate::oracle::claim::ClaimDisposition;
@@ -664,6 +1123,22 @@ mod tests {
         }];
         let (generated, _) = generate_contract_scalar_oracles(&admitted, &selected, &[0])
             .expect("selected scalar generation");
+        let lib = generated
+            .artifacts
+            .iter()
+            .find(|artifact| artifact.path == "src/lib.rs")
+            .expect("contract scalar library");
+        let subject = format!("{}/{}", expression.domain, expression.digest);
+        let header = lib
+            .contents
+            .lines()
+            .take_while(|line| !line.is_empty())
+            .collect::<Vec<_>>();
+        assert!(header.contains(&"// SPDX-License-Identifier: MIT OR Apache-2.0"));
+        assert!(header
+            .iter()
+            .any(|line| line.starts_with("// @generated by quire-contract-codegen")));
+        assert!(header.contains(&format!("// Subject: {subject}").as_str()));
         assert!(matches!(
             &generated.claim_map.items[0].result,
             ClaimDisposition::Generated(_)

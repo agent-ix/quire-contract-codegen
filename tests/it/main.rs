@@ -37,6 +37,13 @@
 #[path = "../common/mod.rs"]
 pub(crate) mod common;
 
+pub(crate) const fn unbounded_decode_limits() -> quire_contract_codegen::WitnessDecodeLimits {
+    quire_contract_codegen::WitnessDecodeLimits {
+        bytes: usize::MAX,
+        values: usize::MAX,
+    }
+}
+
 mod bound_census;
 mod bound_coverage;
 mod bound_generation;
@@ -53,6 +60,7 @@ mod exact_function_agreement;
 mod exact_function_generation;
 mod exact_scalar_agreement;
 mod exact_scalar_generation;
+mod generated_headers;
 mod harness_generation;
 mod kani_argument_order;
 mod kani_batching;
