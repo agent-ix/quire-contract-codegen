@@ -85,5 +85,11 @@ AC-47 and the Behavior note) is merged on CG main.
 | FND-001 | fixed | FR-019 now names the refusal: AC-45, AC-46, Outputs and the Behavior note. It is a CG-owned input-precondition defense distinct from FR-290 registration semantics. The code returns the new typed `EnvelopeRefusal::ManifestRepeatsBackendIdentity { identity }` and no longer uses `InvalidCapability`/`duplicate-backend` (capability.rs:972-976, 1305-1316) |
 | FND-002 | fixed | A repeated identity is its own typed variant. `InvalidCapability` again carries only the two `unsupported-version` members, so the doc "Both carrier members refuse with `unsupported-version`" is now true (capability.rs:961) |
 | FND-003 | fixed | The new tests cover [A,B,A] non-adjacent repeats, every permutation of [A1,B,A2], and bytewise-first selection among the repeated identities A and B in four orders. The adjacent-only and `.max()` mutants are both killed |
-| FND-004 | fixed | The comment now identifies a repeated candidate entry as the way to reach the named-backend `many` arm with a unique manifest, and describes the arm's fallback classification without claiming the candidates disagree with the name (capability.rs:1465-1469) |
+| FND-004 | still-open | The comment at capability.rs:1465-1470 still says reaching the arm "needs a manifest that repeats a backend identity", and in the same sentence says CG refuses such a manifest before settling any item. The arm is in fact reached with a unique manifest and repeated candidate entries (candidates [kani, kani], named kani): `inconsistent_candidates` flags neither. The rationale is still false |
 | FND-005 | fixed | `reviews/26-10-19-ir-887-repeated-backend-identity.md` is absent at the head and in `git diff origin/main...HEAD` |
+
+Round 2, against head 29e8f650b36869d4b3769b637247ed0d6e9a0bc1.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-004 | fixed | capability.rs:1465-1468 now says a repeated candidate entry reaches the arm even with a unique manifest. A reviewer probe confirms it: manifest [kani] and candidates [kani, kani] named kani settle `InconsistentCandidates` with both candidates |

@@ -81,8 +81,8 @@ that differs only in `domains`. A mutant that keys detection on (identity, domai
 
 ## Dispositions
 
-Round 2, after the domains-only test was added to PR #451.
+Round 1, against head 29e8f650b36869d4b3769b637247ed0d6e9a0bc1.
 
 | FND | Outcome | Reason |
 | --- | --- | --- |
-| FND-001 | fixed | `tc_030_domains_only_change_refuses_without_settlements` compares `domains: None` with `Some(BTreeSet::new())` in both orders, asserts the typed identity refusal, and therefore asserts that no settlements are returned. A temporary detector keyed on `(identity, domains)` made the test fail; the mutation was reverted |
+| FND-001 | fixed | `tc_030_domains_only_change_refuses_without_settlements` (tagged TC-030 and FR-019-AC-45 only) varies only `domains` (`None` against `Some(BTreeSet::new())`) in both orders and asserts the typed refusal. The reviewer-run mutant keying detection on (identity, domains) now fails that test |
