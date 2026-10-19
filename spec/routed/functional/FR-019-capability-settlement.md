@@ -111,6 +111,12 @@ nothing says so.
 - For a manifest that repeats a backend identity, a whole-envelope
   `EnvelopeRefusal::ManifestRepeatsBackendIdentity { identity: String }`.
   The refusing negotiation call returns no item settlements.
+- For the Kani function-application preflight's internal FR-330 package read,
+  a `Refused` or `Incomplete` result ends the whole negotiation with, respectively,
+  `EnvelopeRefusal::ContractPackageReadRefused { refusal: CheckedPackageRefusal }`
+  or `EnvelopeRefusal::ContractPackageReadIncomplete { incomplete: CheckedPackageIncomplete }`.
+  Each payload is the exact Contract IR reader value; neither variant has a
+  string cause. The call returns no item settlements or artifact.
 - A Kani arm that does not discharge an admitted IR form uses
   `unsupported_projection`/`unsupported-requested-capability` and names the
   typed form and Kani candidate.
@@ -397,6 +403,24 @@ and render this variant. Because a driver-built manifest comes from QSL's unique
 snapshot, receiving this refusal is a broken internal invariant; the driver should report
 FR-272's `runtime_invariant` code, consistent with its existing internal faults.
 
+IR-892 adds `EnvelopeRefusal::ContractPackageReadRefused` and
+`EnvelopeRefusal::ContractPackageReadIncomplete` to that same public enum without
+changing `negotiate_backend_provider`'s result type. The reader supplies
+`CheckedPackageRefusal` (`code`, `cause`, `path`, `locus`, `contract_version`,
+`document_pointer`) or `CheckedPackageIncomplete` (`limit_kind`, `limit`,
+`consumed`, `path`); CG retains the entire typed value, including optional fields,
+without deriving a backend cause or stringifying it. The paired quire-driver
+change must extend the exhaustive `DriverRefusal::code` and `envelope_message`
+matches in `src/refusal.rs` to classify and render both reader outcomes; its
+`src/upstream.rs` negotiation seam already returns `EnvelopeRefusal`. A search
+of `quire-spec-language` Rust sources found no `EnvelopeRefusal` match; QSL
+consumes the result through the driver, so there is no direct QSL enum-match
+change. Those repositories are outside this spec PR.
+
+The existing `Serialize` surface of `EnvelopeRefusal` remains available for
+both variants, with the reader's typed fields represented directly rather
+than a debug string.
+
 IR-629 follow-on decisions (the process-provider criteria remain planned; IR-633 implements none
 of their arms):
 
@@ -437,6 +461,9 @@ requires its exhaustive arms to compile. FR-019-AC-14 is a property of the retur
 | FR-019-AC-45 | A manifest with a second descriptor of one backend identity causes a whole-envelope `EnvelopeRefusal::ManifestRepeatsBackendIdentity { identity: String }`, whether the descriptors are identical, differ in `ProviderOrigin` alone, or differ in any other CG descriptor field, and whether adjacent or non-adjacent. The call returns no item settlements. The variant has no string cause, manifest or digest payload; `negotiate_backend_provider` keeps its return signature. | Test (TC-030) |
 | FR-019-AC-46 | With several repeated identities, the refusal names the bytewise-first repeated identity independent of manifest order; identities differing only in case are distinct. An invalid contract version or capability vocabulary is refused as `EnvelopeRefusal::InvalidCapability` before repeat detection or any kind read. | Test (TC-030) |
 | FR-019-AC-47 | QSL's registry snapshot holds each backend identity at most once (FR-290:258-265; FR-331:57), so no driver-built FR-331 manifest repeats an identity. | Analysis (FR-290:258-265; FR-331:57; CG takes no `qsl-route` dependency under FR-019's Rust input boundary paragraph, which cites FR-022 "Where the input type lives", and `generate_routed` accepts routed items rather than settlements) |
+| FR-019-AC-48 | If the Kani function-application preflight's internal `ContractPackageWireV1::read` returns `Refused(refusal)`, then the generator shall return the whole-request result `Err(EnvelopeRefusal::ContractPackageReadRefused { refusal })` with the exact `CheckedPackageRefusal` value, including its code, cause, path, locus and optional context. | Test (TC-030) |
+| FR-019-AC-49 | If the Kani function-application preflight's internal `ContractPackageWireV1::read` returns `Incomplete(incomplete)`, then the generator shall return the whole-request result `Err(EnvelopeRefusal::ContractPackageReadIncomplete { incomplete })` with the exact `CheckedPackageIncomplete` value, including limit kind, limit, consumed and path. | Test (TC-030) |
+| FR-019-AC-50 | If the Kani function-application preflight's internal reader returns `Admitted` and the exact function generator produces a claim for an otherwise supported Kani item, then the generator shall retain the existing `supported` settlement. | Test (TC-030) |
 | FR-019-AC-7 | An envelope whose `capability_vocabulary` is not exactly `quire.capability-kind/v1`, or is absent, is refused as `invalid_capability`/`unsupported-version` with none of its kinds read. | Test (TC-030) |
 | FR-019-AC-8 | An item with an absent extent classification settles `invalid-request` with `invalid_capability`/`absent-extent`, and an absent or unknown kind settles before the candidate table is consulted. | Test (TC-030) |
 | FR-019-AC-9 | A backend kind added without a negotiation arm does not compile: the dispatch is an exhaustive `match` over the closed kind with no catch-all arm. | Analysis |

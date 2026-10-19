@@ -34,6 +34,24 @@ own row, including whole-envelope refusal for a repeated backend identity.
 
 ## Test Procedure
 
+For FR-019-AC-48 through AC-50, drive the public negotiation entry with a
+source-backed Kani `V2FunctionApplication`. Use an admitted checked source
+whose lowered function package selects a dependency: the internal reader's
+empty dependency set produces `Refused(MissingImport)`. Compare the returned
+`ContractPackageReadRefused` payload with a direct call to that reader on the
+same bytes and limits, including every present and absent optional field.
+Assert no settlements or artifact and no `KaniFormRefused` or
+`OperationNotRendered`. Repeat with a source-backed package larger than the
+internal reader's bounded byte limit so that it returns `Incomplete`; compare
+the entire `ContractPackageReadIncomplete` payload, including byte limit,
+consumed count and absent path, with the direct reader result. Assert the same
+absence of settlements and artifact. Assert that both new variants serialize
+the reader's typed fields, without a debug-string cause. Keep a valid admitted
+function control that generates a claim and settles `supported`, plus a
+genuinely unrenderable function that retains item-level `OperationNotRendered`.
+Exercise a preceding valid item in each refusal case to prove that an internal
+reader failure does not leak partial settlements.
+
 Settle envelopes whose items exercise each rule in FR-290's stated order: an
 absent kind; an unknown kind; an absent extent classification; an unknown
 backend; a candidate absent from the registered descriptors; a candidate not advertising the

@@ -214,7 +214,12 @@ drops `Refused` and `Incomplete` with `_ => return false`. Its caller in
 `src/routed/capability.rs` then returns `KaniFormRefused` with
 `OperationNotRendered(quire.op.function.call)`, replacing the reader's typed
 refusal or limit result with a CG backend refusal. IR-892 tracks a tests-first
-fix. The production request boundary also needs analysis for a second parse or
+fix under FR-019-AC-48 through FR-019-AC-50 and TC-030: the routed negotiation
+result must carry the reader's exact `CheckedPackageRefusal` or
+`CheckedPackageIncomplete` as a whole-request `EnvelopeRefusal`, while an
+admitted read keeps its existing supported or genuine backend-refusal decision.
+These criteria are planned; this deviation remains until the code PR lands.
+The production request boundary also needs analysis for a second parse or
 checked-graph fallback. AC-5's preservation clause remains unmet; this Analysis
 is planned and does not claim full conformity.
 
