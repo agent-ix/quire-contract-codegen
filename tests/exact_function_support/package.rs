@@ -474,6 +474,48 @@ pub fn source_bound_call_package() -> PackageBuilder {
     builder
 }
 
+/// A V2-admitted source function whose lowered FR-330 package exceeds the
+/// function preflight reader's bounded byte ceiling.
+pub fn oversized_source_bound_call_package() -> (CheckedPackageV2, FixtureIds) {
+    source_bound_call_package_with_name_len(1_100_000)
+}
+
+/// Admit a source-backed function after changing only its declared name length.
+pub fn source_bound_call_package_with_name_len(name_len: usize) -> (CheckedPackageV2, FixtureIds) {
+    source_bound_call_package_with_name_segments(vec!["f".repeat(name_len)])
+}
+
+/// Change only the source function's qualified name, retaining its admitted call.
+pub fn source_bound_call_package_with_name_segments(
+    segments: Vec<String>,
+) -> (CheckedPackageV2, FixtureIds) {
+    let builder = source_bound_call_package();
+    let (ordinary, ids) = builder.admit_resolved();
+    let function_id = ids.resolve(&code_id(SOURCE_FUNCTION));
+    let function_name = ordinary
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| node.node_id == function_id)
+        .expect("resolved source function")
+        .declaration
+        .as_ref()
+        .expect("function declaration")
+        .qualified_name
+        .clone();
+    let mut wire = builder.raw_wire();
+    let function = wire["semantic_graph"]["nodes"]
+        .as_array_mut()
+        .expect("graph nodes")
+        .iter_mut()
+        .find(|node| node["declaration"]["qualified_name"][0] == function_name[0].as_ref())
+        .expect("source function node");
+    function["declaration"]["qualified_name"] = serde_json::json!(segments);
+    let mut limits = CheckedPackageReadLimits::bounded();
+    limits.bytes = 4_000_000;
+    PackageBuilder::from_wire(wire).admit_with_resolved(limits)
+}
+
 pub fn source_function(name: &str, body_code: u32) -> ExactFunctionDeclaration {
     ExactFunctionDeclaration {
         node_id: code_id(body_code),

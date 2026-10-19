@@ -18,7 +18,7 @@ use quire_contract_codegen::{
 use quire_contract_model::{
     CheckedNodeId, CheckedOccurrenceRole, CheckedPackageEvidence, CheckedPackageReadLimits,
     CheckedPackageV2, CheckedPackageV2ReadResult, ContractDependencies, ContractOccurrenceKeyV1,
-    ContractPackageReadResult, ContractPackageWireV1,
+    ContractPackageReadResult, ContractPackageWireV1, JsonPointer,
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -38,6 +38,380 @@ fn kani(advertised: Vec<(CapabilityKind, Mode)>) -> BackendDescriptor {
         origin: ProviderOrigin::Linked,
         domains: None,
         bounds: None,
+    }
+}
+
+#[trace("TC-030", "FR-019-AC-48")]
+#[test]
+fn reader_refusal_projection_preserves_every_public_field() {
+    let reader = ContractPackageWireV1::read(
+        b"{}",
+        CheckedPackageReadLimits::bounded(),
+        &ContractDependencies::new(),
+    );
+    let ContractPackageReadResult::Refused(refusal) = reader else {
+        panic!("malformed contract package must be refused: {reader:?}");
+    };
+    let projected = quire_contract_codegen::project_contract_package_refusal(&refusal);
+    let wire = serde_json::to_value(EnvelopeRefusal::ContractPackageReadRefused {
+        refusal: projected.clone(),
+    })
+    .expect("serialize typed refusal");
+    assert_eq!(wire["code"], "contract_package_read_refused");
+    let fields = &wire["cause"]["refusal"];
+    assert_eq!(fields["code"], serde_json::to_value(refusal.code).unwrap());
+    assert_eq!(fields["path"], serde_json::to_value(refusal.path).unwrap());
+    assert_eq!(
+        fields["cause"],
+        serde_json::to_value(refusal.cause).unwrap()
+    );
+    assert_eq!(
+        fields["locus"],
+        serde_json::to_value(refusal.locus).unwrap()
+    );
+    assert_eq!(
+        fields["contract_version"],
+        serde_json::to_value(refusal.contract_version).unwrap()
+    );
+    assert_eq!(
+        fields["document_pointer"],
+        serde_json::to_value(refusal.document_pointer).unwrap()
+    );
+    assert_eq!(
+        fields["expected"],
+        serde_json::to_value(refusal.expected).unwrap()
+    );
+    assert_eq!(
+        fields["actual"],
+        serde_json::to_value(refusal.actual).unwrap()
+    );
+    assert!(fields.get("expected_node_id").is_none());
+}
+
+#[trace("TC-030", "FR-019-AC-48")]
+#[test]
+fn named_refusal_adapter_preserves_unknown_version() {
+    let reader = ContractPackageWireV1::read(
+        br#"{"contract_version":"unknown"}"#,
+        CheckedPackageReadLimits::bounded(),
+        &ContractDependencies::new(),
+    );
+    let ContractPackageReadResult::Refused(refusal) = reader else {
+        panic!("unknown version must refuse: {reader:?}");
+    };
+    let projected = quire_contract_codegen::project_contract_package_refusal(&refusal);
+    assert_eq!(projected.contract_version.as_deref(), Some("unknown"));
+}
+
+#[trace("TC-030", "FR-019-AC-48")]
+#[test]
+fn refusal_adapter_preserves_selected_document_pointer() {
+    use exact_function_fixture::{source_bound_call_package, PackageBuilder};
+    use quire_contract_model::{CheckedPackageRefusalCause, CheckedPackageRefusalCode};
+    let digest = "ab".repeat(32);
+    let selection = serde_json::json!([{
+        "identity": "acme/orders",
+        "digest_domain": "sha256-jcs",
+        "digest": digest,
+    }]);
+    let mut wire = source_bound_call_package().wire();
+    wire["lock"]["model_selections"] = selection.clone();
+    wire["identity_preimage"]["model_selections"] = selection;
+    let (_, resolved, _) = PackageBuilder::from_wire(wire).read_resolved();
+    let mut evidence = CheckedPackageEvidence::new();
+    evidence.support_feature("quire.value.complete/v1");
+    evidence
+        .insert_domain_package_document(
+            digest,
+            br#"{"package":{"count":9007199254740993}}"#.to_vec(),
+        )
+        .expect("selected document evidence");
+    let bytes = serde_json::to_vec(&resolved).expect("canonical fixture wire");
+    let reader = CheckedPackageV2::read(&bytes, CheckedPackageReadLimits::bounded(), &evidence);
+    let CheckedPackageV2ReadResult::Refused(refusal) = reader else {
+        panic!("selected document number past 2^53 must refuse: {reader:?}");
+    };
+    assert_eq!(refusal.code, CheckedPackageRefusalCode::NoncanonicalWire);
+    assert_eq!(
+        refusal.cause,
+        Some(CheckedPackageRefusalCause::InexactInteger)
+    );
+    assert_eq!(
+        refusal.document_pointer.as_ref().map(JsonPointer::as_str),
+        Some("/package/count")
+    );
+    let projected = quire_contract_codegen::project_contract_package_refusal(&refusal);
+    assert_eq!(
+        projected.document_pointer.as_deref(),
+        Some("/package/count")
+    );
+}
+
+#[trace("TC-030", "FR-019-AC-48")]
+#[test]
+fn refusal_adapter_preserves_reader_node_locus() {
+    use exact_function_fixture::{source_bound_call_package, PackageBuilder};
+    let mut wire = source_bound_call_package().raw_wire();
+    let mut functions = wire["semantic_graph"]["nodes"]
+        .as_array_mut()
+        .expect("fixture nodes")
+        .iter_mut()
+        .filter(|node| node["node_tag"] == "function")
+        .collect::<Vec<_>>();
+    assert!(functions.len() >= 2);
+    let first_name = functions[0]["declaration"]["qualified_name"].clone();
+    functions[1]["declaration"]["qualified_name"] = first_name;
+    let (reader, _, _) = PackageBuilder::from_wire(wire).read_resolved();
+    let CheckedPackageV2ReadResult::Refused(refusal) = reader else {
+        panic!("duplicate function name must refuse: {reader:?}");
+    };
+    assert!(refusal.locus.is_some(), "reader must locate the node");
+    let projected = quire_contract_codegen::project_contract_package_refusal(&refusal);
+    assert_eq!(projected.locus, refusal.locus);
+}
+
+#[trace("TC-030", "FR-019-AC-49")]
+#[test]
+fn incomplete_adapter_preserves_present_count_limit_path() {
+    use exact_function_fixture::{code_id, source_bound_call_package, SOURCE_CALL};
+    let (checked, ids) = source_bound_call_package().admit_resolved();
+    let lowered = checked.lower(
+        &[ids.resolve(&code_id(SOURCE_CALL))],
+        &routed_contract_lowering_profile(),
+    );
+    let mut limits = CheckedPackageReadLimits::bounded();
+    limits.nodes = 0;
+    let reader = ContractPackageWireV1::read(
+        lowered.package.canonical_bytes().expect("lowered bytes"),
+        limits,
+        &ContractDependencies::new(),
+    );
+    let ContractPackageReadResult::Incomplete(incomplete) = reader else {
+        panic!("node ceiling must be incomplete: {reader:?}");
+    };
+    assert!(incomplete.path.is_some());
+    let projected = quire_contract_codegen::project_contract_package_incomplete(&incomplete);
+    assert_eq!(
+        projected.path.as_deref(),
+        incomplete.path.as_ref().map(JsonPointer::as_str)
+    );
+}
+
+#[trace("TC-030", "FR-019-AC-49")]
+#[test]
+fn reader_incomplete_projection_preserves_the_exhausted_limit() {
+    let mut limits = CheckedPackageReadLimits::bounded();
+    limits.bytes = 1;
+    let reader = ContractPackageWireV1::read(b"{}", limits, &ContractDependencies::new());
+    let ContractPackageReadResult::Incomplete(incomplete) = reader else {
+        panic!("byte ceiling must be incomplete: {reader:?}");
+    };
+    let projected = quire_contract_codegen::project_contract_package_incomplete(&incomplete);
+    let wire = serde_json::to_value(EnvelopeRefusal::ContractPackageReadIncomplete {
+        incomplete: projected,
+    })
+    .expect("serialize typed incomplete result");
+    assert_eq!(wire["code"], "contract_package_read_incomplete");
+    let fields = &wire["cause"]["incomplete"];
+    assert_eq!(
+        fields["limit_kind"],
+        serde_json::to_value(incomplete.limit_kind).unwrap()
+    );
+    assert_eq!(fields["limit"], incomplete.limit);
+    assert_eq!(fields["consumed"], incomplete.consumed);
+    assert_eq!(
+        fields["path"],
+        serde_json::to_value(incomplete.path).unwrap()
+    );
+}
+
+#[trace("TC-030", "FR-019-AC-50")]
+#[test]
+fn admitted_function_read_keeps_supported_settlement() {
+    use exact_function_fixture::{
+        code_id, source_bound_call_package, SOURCE_CALL, SOURCE_FUNCTION, SOURCE_PARAM_A,
+        SOURCE_PARAM_B,
+    };
+    let (package, ids) = source_bound_call_package().admit_resolved();
+    let mut request = item(
+        RequestedKind::Known(CapabilityKind::ValueValidity),
+        Candidates::Set(vec![candidate("kani")]),
+    );
+    request.kani_form = KaniForm::V2FunctionApplication {
+        package: Box::new(package),
+        function_node_id: ids.resolve(&code_id(SOURCE_FUNCTION)),
+        call_node_id: ids.resolve(&code_id(SOURCE_CALL)),
+        argument_node_ids: vec![
+            ids.resolve(&code_id(SOURCE_PARAM_A)),
+            ids.resolve(&code_id(SOURCE_PARAM_B)),
+        ],
+    };
+    assert_eq!(
+        settle_one(
+            vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)])],
+            request,
+        )
+        .disposition,
+        Disposition::Supported {
+            backend: "kani".to_owned()
+        }
+    );
+}
+
+#[trace("TC-030", "FR-019-AC-49")]
+#[test]
+fn oversized_admitted_function_read_stops_the_envelope() {
+    use exact_function_fixture::{
+        code_id, oversized_source_bound_call_package, SOURCE_CALL, SOURCE_FUNCTION, SOURCE_PARAM_A,
+        SOURCE_PARAM_B,
+    };
+    let (package, ids) = oversized_source_bound_call_package();
+    let body_id = package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| node.node_id == ids.resolve(&code_id(SOURCE_FUNCTION)))
+        .expect("resolved function")
+        .body["members"]
+        .as_array()
+        .expect("members")
+        .iter()
+        .find(|member| member["name"] == "body")
+        .expect("body binding")["value"]["target"]
+        .clone();
+    let body_id: CheckedNodeId = serde_json::from_value(body_id).expect("body id");
+    let call_id = ids.resolve(&code_id(SOURCE_CALL));
+    let lowered = package.lower(
+        &[body_id, call_id.clone()],
+        &routed_contract_lowering_profile(),
+    );
+    let bytes = lowered.package.canonical_bytes().expect("lowered bytes");
+    assert!(u64::try_from(bytes.len()).unwrap() > CheckedPackageReadLimits::bounded().bytes);
+    let direct = ContractPackageWireV1::read(
+        bytes,
+        CheckedPackageReadLimits::bounded(),
+        &ContractDependencies::new(),
+    );
+    let ContractPackageReadResult::Incomplete(expected) = direct else {
+        panic!("large lowered package must exhaust bytes: {direct:?}");
+    };
+    let mut request = item(
+        RequestedKind::Known(CapabilityKind::ValueValidity),
+        Candidates::Set(vec![candidate("kani")]),
+    );
+    request.kani_form = KaniForm::V2FunctionApplication {
+        package: Box::new(package),
+        function_node_id: ids.resolve(&code_id(SOURCE_FUNCTION)),
+        call_node_id: call_id,
+        argument_node_ids: vec![
+            ids.resolve(&code_id(SOURCE_PARAM_A)),
+            ids.resolve(&code_id(SOURCE_PARAM_B)),
+        ],
+    };
+    let outcome = negotiate_backend_provider(&envelope(
+        vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)])],
+        vec![request],
+    ));
+    let Err(EnvelopeRefusal::ContractPackageReadIncomplete { incomplete }) = outcome else {
+        panic!("reader limit must stop negotiation: {outcome:?}");
+    };
+    assert_eq!(incomplete.limit_kind, expected.limit_kind);
+    assert_eq!(incomplete.limit, expected.limit);
+    assert_eq!(incomplete.consumed, expected.consumed);
+    assert_eq!(
+        incomplete.path.as_deref(),
+        expected.path.as_ref().map(JsonPointer::as_str)
+    );
+}
+
+#[trace("TC-030", "FR-019-AC-52")]
+#[test]
+fn genuine_function_backend_refusals_stay_item_level() {
+    use exact_function_fixture::{
+        code_id, source_bound_call_package_with_name_len,
+        source_bound_call_package_with_name_segments, SOURCE_CALL, SOURCE_FUNCTION, SOURCE_PARAM_A,
+        SOURCE_PARAM_B,
+    };
+    let request_for = |package, ids: exact_function_fixture::FixtureIds| {
+        let mut request = item(
+            RequestedKind::Known(CapabilityKind::ValueValidity),
+            Candidates::Set(vec![candidate("kani")]),
+        );
+        request.kani_form = KaniForm::V2FunctionApplication {
+            package: Box::new(package),
+            function_node_id: ids.resolve(&code_id(SOURCE_FUNCTION)),
+            call_node_id: ids.resolve(&code_id(SOURCE_CALL)),
+            argument_node_ids: vec![
+                ids.resolve(&code_id(SOURCE_PARAM_A)),
+                ids.resolve(&code_id(SOURCE_PARAM_B)),
+            ],
+        };
+        request
+    };
+    let structural = source_bound_call_package_with_name_segments(vec![
+        "module".to_owned(),
+        "function".to_owned(),
+    ]);
+    let too_large_to_render = source_bound_call_package_with_name_len(450_000);
+    let body_id: CheckedNodeId = serde_json::from_value(
+        too_large_to_render
+            .0
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.node_id == too_large_to_render.1.resolve(&code_id(SOURCE_FUNCTION)))
+            .expect("resolved function")
+            .body["members"]
+            .as_array()
+            .expect("members")
+            .iter()
+            .find(|member| member["name"] == "body")
+            .expect("body binding")["value"]["target"]
+            .clone(),
+    )
+    .expect("body id");
+    let lowered = too_large_to_render.0.lower(
+        &[
+            body_id,
+            too_large_to_render.1.resolve(&code_id(SOURCE_CALL)),
+        ],
+        &routed_contract_lowering_profile(),
+    );
+    assert!(
+        matches!(
+            ContractPackageWireV1::read(
+                lowered.package.canonical_bytes().expect("lowered bytes"),
+                CheckedPackageReadLimits::bounded(),
+                &ContractDependencies::new(),
+            ),
+            ContractPackageReadResult::Admitted(_)
+        ),
+        "no-claim control must pass the internal reader"
+    );
+    for (label, (package, ids)) in [
+        ("structural", structural),
+        ("admitted-no-claim", too_large_to_render),
+    ] {
+        let settled = settle_one(
+            vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)])],
+            request_for(package, ids),
+        );
+        assert!(
+            matches!(
+                &settled.disposition,
+                Disposition::Unsupported {
+                    cause: Cause::KaniFormRefused {
+                        refusal: UnsupportedObligation::OperationNotRendered {
+                            operation_identity,
+                            ..
+                        },
+                        backend,
+                        ..
+                    }
+                } if operation_identity == "quire.op.function.call" && backend == "kani"
+            ),
+            "{label} should retain item-level OperationNotRendered: {settled:?}"
+        );
     }
 }
 
