@@ -236,6 +236,8 @@ pub fn generate_bound_strategy(
         &oracle.bundle().rust.contents,
     )?;
     let path = format!("src/generated/bound_strategy_{suffix}.rs");
+    let subject = full_clause_ref(request.clause);
+    let source = crate::core::provenance::with_rust_header(source, [subject.as_str()]);
     if source.len() > MAX_GENERATED_SOURCE_BYTES {
         return Err(bound_diagnostic(
             StrategyErrorCode::ResourceLimitExceeded,
@@ -497,7 +499,6 @@ fn render_complete_source(
     let full_clause = full_clause_ref(request.clause);
     let mut source = format!(
         "#![deny(missing_docs)]\n//! Generated bound numeric strategy artifact.\n\
-// SPDX-License-Identifier: MIT OR Apache-2.0\n\
 // ClauseRef: {full_clause}\n\n"
     );
     source.push_str(oracle_source);

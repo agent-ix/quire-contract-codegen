@@ -1225,6 +1225,25 @@ fn render(
         source.push('\n');
     }
     source.push_str(&body);
+    let subject = format!(
+        "{}@{}/{}",
+        clause.requirement().requirement().as_str(),
+        clause.requirement().revision().get(),
+        clause.clause().as_str()
+    );
+    let subjects = std::iter::once(subject)
+        .chain(embedded.iter().map(|oracle| {
+            let clause = &oracle.clause;
+            format!(
+                "{}@{}/{}",
+                clause.requirement().requirement().as_str(),
+                clause.requirement().revision().get(),
+                clause.clause().as_str()
+            )
+        }))
+        .collect::<Vec<_>>();
+    let source =
+        crate::core::provenance::with_rust_header(source, subjects.iter().map(String::as_str));
     if source.len() > MAX_GENERATED_SOURCE_BYTES {
         return Err(UnsupportedObligation::ResourceLimitExceeded {
             bytes: source.len(),

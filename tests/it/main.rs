@@ -60,6 +60,7 @@ mod exact_function_agreement;
 mod exact_function_generation;
 mod exact_scalar_agreement;
 mod exact_scalar_generation;
+mod generated_headers;
 mod harness_generation;
 mod kani_argument_order;
 mod kani_batching;

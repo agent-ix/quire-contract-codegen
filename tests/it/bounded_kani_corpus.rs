@@ -102,7 +102,7 @@ fn fixture() -> (
     (profile, dispatch, input)
 }
 
-#[trace("TC-023")]
+#[trace("TC-023", "TC-001", "NFR-002-AC-1", "NFR-002-AC-2")]
 #[test]
 fn tc_023_public_corpus_uses_the_validated_profile_boundary() {
     let (profile, dispatch, input) = fixture();
@@ -123,6 +123,20 @@ fn tc_023_public_corpus_uses_the_validated_profile_boundary() {
     )
     .unwrap();
     assert_eq!(collection.outcome.boolean_claim(), Some(true));
+    for artifact in [
+        &collection.artifacts.oracle,
+        &collection.artifacts.strategy,
+        &collection.artifacts.kani_harness,
+    ] {
+        let case = artifact
+            .path
+            .strip_prefix("corpus/")
+            .unwrap()
+            .split('.')
+            .next()
+            .unwrap();
+        crate::generated_headers::assert_header(&artifact.path, &artifact.contents, &[case]);
+    }
     assert!(collection
         .artifacts
         .oracle

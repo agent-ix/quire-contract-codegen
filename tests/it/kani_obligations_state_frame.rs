@@ -992,12 +992,36 @@ fn tc_025_frame_grants_rekey_to_admitted_order_without_dropping_effects() {
     "FR-015-AC-26",
     "FR-015-AC-27",
     "FR-015-AC-28",
-    "TC-025"
+    "TC-025",
+    "TC-001",
+    "NFR-002-AC-1",
+    "NFR-002-AC-2"
 )]
 #[test]
 fn tc_025_a_postcondition_yields_a_contract_harness_and_a_scoped_frame_harness() {
     let fixture = emitted_fixture(&Twin::new(), "BalanceNeverDrops");
     let generated = generate(&fixture);
+    for harness in [&generated.postcondition, &generated.frame] {
+        crate::generated_headers::assert_header(
+            &harness.rust.path,
+            &harness.rust.contents,
+            &[
+                "deposit",
+                &format!("{}/{}", fixture.clause.domain, fixture.clause.digest),
+            ],
+        );
+        for node in [
+            &harness.identity.scope.object,
+            &harness.identity.scope.anchor,
+            &harness.identity.scope.frame,
+        ] {
+            crate::generated_headers::assert_header(
+                &harness.rust.path,
+                &harness.rust.contents,
+                &[&format!("{}/{}", node.domain, node.digest)],
+            );
+        }
+    }
     let scope = &generated.postcondition.identity.scope;
     assert_eq!(scope.operation, "deposit");
     assert_eq!(scope.object, fixture.object);
