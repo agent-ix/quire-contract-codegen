@@ -34,6 +34,14 @@ own row, including whole-envelope refusal for a repeated backend identity.
 
 ## Test Procedure
 
+For FR-019-AC-53, use one admitted package with bound driver items on either
+side of an excluded accounting-only position and a context-only root between
+the first bound item and the excluded position. Supply exactly two FR-331 items
+and assert two settlements at the bound
+items' original driver indexes, with no settlement, negotiation call or claim
+for the excluded position. Repeat with one and three envelope items to assert
+the typed `EnvelopeItemCount` refusal in each case.
+
 For FR-019-AC-48 through AC-52, drive the public negotiation entry with a
 source-backed Kani `V2FunctionApplication`. Use an admitted checked source
 whose lowered function package selects a dependency: the internal reader's

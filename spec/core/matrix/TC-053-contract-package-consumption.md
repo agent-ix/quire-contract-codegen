@@ -75,6 +75,15 @@ decisions the original checked graph or detached lowering records would make.
    a complete reached closure. Inspect the call path for a
    second lowering, reconstructed checked graph or wire-fragment-derived
    per-node identifier.
+7. Lower an admitted request with a bound driver item, an excluded
+   accounting-only position and a second bound driver item, with an optional
+   context-only root immediately after the first bound item and before the
+   excluded position. Verify exact accounting position and node ID
+   for every entry, the two bound items' original driver indexes, and the
+   absence of a claim, routed item and artifact for the excluded position.
+   Remove, duplicate or change the excluded position's node ID while holding
+   the admitted package fixed; each mismatch must refuse the whole request
+   before any artifact.
 
 ## Expected Results
 
@@ -95,3 +104,7 @@ different-node/same-package controls both change the identity pair. Reached
 keys agree with Contract IR's total traversal of admitted lowered items;
 unresolved required references never reach CG as lowered items, and reader
 refusals stop the request.
+The excluded position retains its admitted accounting identity and driver
+index without a claim, route or artifact; an interleaved context root changes
+neither driver nor envelope indexes. Correspondence mismatches refuse the
+whole request.

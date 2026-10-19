@@ -140,9 +140,11 @@ output belong to IR-629; they do not change this crate boundary.
   expected; that is the IR reader's.
 - The complete `ContractRequestPosition` lowering sequence, one entry per
   admitted accounting record. A `DriverItem` carries the original node key and
-  caller-authored `ContractDriverResultSelection`; a `ContextRoot` carries a
-  context-only key and belongs to the preceding driver's contiguous context
-  span. Driver indexes count `DriverItem` entries only (FR-039).
+  caller-authored `ContractDriverResultSelection`; an excluded accounting-only
+  position carries its original key and occupies a driver index but is never
+  routed; a `ContextRoot` carries a context-only key and belongs to the
+  preceding driver's contiguous context span. Driver indexes count driver items
+  and excluded positions, but not context-only roots (FR-039).
 - For every routed scalar item, the driver's typed projection of QSL's
   `RequirementItem::{occurrence, result_bound, conversion_context,
   path_condition}` at that request index, and the originating checked
