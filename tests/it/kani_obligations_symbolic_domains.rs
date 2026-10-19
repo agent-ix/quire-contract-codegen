@@ -165,10 +165,11 @@ fn model_document() -> Value {
     })
 }
 
+// `deref(input)` is object navigation, admitted under QSL's model layer.
 fn source_unit_with_body(model_digest: &str, body: &str) -> String {
     format!(
         "language \"ix:native\" edition \"1-draft\";\n\
-         profile v = \"quire.value.complete/v1\";\n\
+         profile v = \"quire.model.complete/v1\";\n\
          model M = \"ir268.test/domain\" version \"1.0.0\" digest \"sha256-jcs:{model_digest}\";\n\
          predicate inspect using v (input: M::Node): Boolean {{ {body} }}\n"
     )
