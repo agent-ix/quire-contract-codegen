@@ -1,4 +1,4 @@
-//! AD-004 layout decisions L-1 and L-2, checked over the source text of `src/`.
+//! AD-004 layout decisions L-1 and L-2 and FR-024-AC-10, checked over `src/`.
 //!
 //! L-1: `src/` holds the eight subsystem directories and `lib.rs`, and every module the AD's
 //! module-to-subsystem map names sits in the directory the map names.
@@ -12,11 +12,311 @@
 //! imports. A `super::` path, a path built in a macro and an intra-doc link escape it, as the
 //! AD's Risks section records.
 
+use ix_trace_rs::trace;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
 };
+use syn::{spanned::Spanned, visit::Visit, Item, UseTree};
+
+const QSL_OWNED_TYPES: [&str; 5] = [
+    "Witness",
+    "ReplaySource",
+    "WitnessEnvelope",
+    "TerminalRecord",
+    "ObligationIdentity",
+];
+
+type AliasMap = BTreeMap<Vec<String>, Vec<String>>;
+
+fn use_paths(
+    tree: &UseTree,
+    prefix: &mut Vec<String>,
+    found: &mut Vec<(Vec<String>, String, bool)>,
+) {
+    match tree {
+        UseTree::Path(item) => {
+            prefix.push(item.ident.to_string());
+            use_paths(&item.tree, prefix, found);
+            prefix.pop();
+        }
+        UseTree::Name(item) => {
+            let mut target = prefix.clone();
+            if item.ident != "self" {
+                target.push(item.ident.to_string());
+            }
+            let binding = if item.ident == "self" {
+                prefix.last().cloned().unwrap_or_default()
+            } else {
+                item.ident.to_string()
+            };
+            found.push((target, binding, false));
+        }
+        UseTree::Rename(item) => {
+            let mut target = prefix.clone();
+            if item.ident != "self" {
+                target.push(item.ident.to_string());
+            }
+            found.push((target, item.rename.to_string(), false));
+        }
+        UseTree::Glob(_) => found.push((prefix.clone(), String::new(), true)),
+        UseTree::Group(item) => {
+            for tree in &item.items {
+                use_paths(tree, prefix, found);
+            }
+        }
+    }
+}
+
+fn resolve_path(
+    path: &[String],
+    module: &[String],
+    aliases: &AliasMap,
+    depth: usize,
+) -> Vec<String> {
+    if depth > 32 || path.is_empty() {
+        return path.to_vec();
+    }
+    let mut relative = path.to_vec();
+    let mut base = module.to_vec();
+    if relative.first().is_some_and(|part| part == "crate") {
+        relative.remove(0);
+        base.clear();
+    } else {
+        while relative
+            .first()
+            .is_some_and(|part| part == "self" || part == "super")
+        {
+            if relative.remove(0) == "super" {
+                base.pop();
+            }
+        }
+    }
+    if relative
+        .first()
+        .is_some_and(|part| part == "quire_contract_ir")
+    {
+        return relative;
+    }
+    for count in (0..=base.len()).rev() {
+        let mut candidate = base[..count].to_vec();
+        candidate.extend(relative.iter().cloned());
+        for end in (1..=candidate.len()).rev() {
+            if let Some(target) = aliases.get(&candidate[..end]) {
+                let mut expanded = resolve_path(target, &candidate[..end - 1], aliases, depth + 1);
+                expanded.extend_from_slice(&candidate[end..]);
+                return expanded;
+            }
+        }
+    }
+    let mut result = base;
+    result.extend(relative);
+    result
+}
+
+fn banned_name(path: &[String]) -> Option<&str> {
+    if path.first().is_some_and(|part| part == "quire_contract_ir") {
+        path.iter()
+            .skip(1)
+            .map(String::as_str)
+            .find(|name| QSL_OWNED_TYPES.contains(name))
+    } else {
+        None
+    }
+}
+
+fn macro_definitions(
+    tokens: proc_macro2::TokenStream,
+    names: &mut Vec<(String, proc_macro2::Span)>,
+) {
+    let mut previous = None;
+    for token in tokens {
+        match token {
+            proc_macro2::TokenTree::Ident(ident) => {
+                if previous.as_deref().is_some_and(|word| {
+                    ["struct", "enum", "union", "trait", "type"].contains(&word)
+                }) && QSL_OWNED_TYPES.contains(&ident.to_string().as_str())
+                {
+                    names.push((ident.to_string(), ident.span()));
+                }
+                previous = Some(ident.to_string());
+            }
+            proc_macro2::TokenTree::Group(group) => {
+                macro_definitions(group.stream(), names);
+                previous = None;
+            }
+            _ => previous = None,
+        }
+    }
+}
+
+/// Scans every parsed Rust file under `src/` for the five QSL-owned declarations,
+/// Contract IR imports and qualified paths, including alias chains across files.
+/// Macro tokens are checked for literal declaration keywords followed by a banned name;
+/// imports and qualified paths inside opaque macro tokens, macro expansion,
+/// generated files outside `src/`, and constructed identifiers are outside this scan.
+#[trace("TC-035", "FR-024-AC-10")]
+#[test]
+fn qsl_replay_types_are_neither_defined_nor_imported_from_contract_ir() {
+    struct AliasScan<'a> {
+        module: Vec<String>,
+        aliases: &'a mut AliasMap,
+    }
+    impl Visit<'_> for AliasScan<'_> {
+        fn visit_item_mod(&mut self, item: &syn::ItemMod) {
+            if let Some((_, content)) = &item.content {
+                self.module.push(item.ident.to_string());
+                for item in content {
+                    self.visit_item(item);
+                }
+                self.module.pop();
+            }
+        }
+        fn visit_item_use(&mut self, item: &syn::ItemUse) {
+            let mut paths = Vec::new();
+            use_paths(&item.tree, &mut Vec::new(), &mut paths);
+            for (target, binding, glob) in paths {
+                if !glob && !binding.is_empty() {
+                    let mut key = self.module.clone();
+                    key.push(binding);
+                    self.aliases.insert(key, target);
+                }
+            }
+        }
+        fn visit_item_extern_crate(&mut self, item: &syn::ItemExternCrate) {
+            if item.ident == "quire_contract_ir" {
+                let mut key = self.module.clone();
+                key.push(
+                    item.rename
+                        .as_ref()
+                        .map_or_else(|| item.ident.to_string(), |(_, name)| name.to_string()),
+                );
+                self.aliases
+                    .insert(key, vec!["quire_contract_ir".to_owned()]);
+            }
+        }
+    }
+
+    struct BoundaryScan<'a> {
+        violations: &'a mut Vec<String>,
+        file: &'a str,
+        module: Vec<String>,
+        aliases: &'a AliasMap,
+    }
+    impl BoundaryScan<'_> {
+        fn report(&mut self, name: &str, span: proc_macro2::Span, action: &str) {
+            self.violations.push(format!(
+                "{}:{}: {action} {name}",
+                self.file,
+                span.start().line
+            ));
+        }
+        fn check(&mut self, path: Vec<String>, span: proc_macro2::Span) {
+            let resolved = resolve_path(&path, &self.module, self.aliases, 0);
+            if let Some(name) = banned_name(&resolved) {
+                self.report(name, span, "uses Contract IR type");
+            }
+        }
+    }
+    impl Visit<'_> for BoundaryScan<'_> {
+        fn visit_item_mod(&mut self, item: &syn::ItemMod) {
+            if let Some((_, content)) = &item.content {
+                self.module.push(item.ident.to_string());
+                for item in content {
+                    self.visit_item(item);
+                }
+                self.module.pop();
+            }
+        }
+        fn visit_item(&mut self, item: &Item) {
+            let name = match item {
+                Item::Struct(item) => Some(&item.ident),
+                Item::Enum(item) => Some(&item.ident),
+                Item::Union(item) => Some(&item.ident),
+                Item::Trait(item) => Some(&item.ident),
+                Item::Type(item) => Some(&item.ident),
+                _ => None,
+            };
+            if let Some(name) =
+                name.filter(|name| QSL_OWNED_TYPES.contains(&name.to_string().as_str()))
+            {
+                self.report(&name.to_string(), name.span(), "defines");
+            }
+            if let Item::Use(item) = item {
+                let mut paths = Vec::new();
+                use_paths(&item.tree, &mut Vec::new(), &mut paths);
+                for (path, _, glob) in paths {
+                    if glob {
+                        let resolved = resolve_path(&path, &self.module, self.aliases, 0);
+                        if resolved
+                            .first()
+                            .is_some_and(|part| part == "quire_contract_ir")
+                        {
+                            for name in QSL_OWNED_TYPES {
+                                self.report(
+                                    name,
+                                    item.use_token.span,
+                                    "may import Contract IR type via glob",
+                                );
+                            }
+                        }
+                    } else {
+                        self.check(path, item.use_token.span);
+                    }
+                }
+            }
+            syn::visit::visit_item(self, item);
+        }
+        fn visit_path(&mut self, path: &syn::Path) {
+            self.check(
+                path.segments
+                    .iter()
+                    .map(|segment| segment.ident.to_string())
+                    .collect(),
+                path.segments
+                    .first()
+                    .map_or(path.span(), |segment| segment.ident.span()),
+            );
+            syn::visit::visit_path(self, path);
+        }
+        fn visit_macro(&mut self, item: &syn::Macro) {
+            let mut names = Vec::new();
+            macro_definitions(item.tokens.clone(), &mut names);
+            for (name, span) in names {
+                self.report(&name, span, "macro tokens define");
+            }
+            syn::visit::visit_macro(self, item);
+        }
+    }
+
+    let files: Vec<_> = source_files()
+        .into_iter()
+        .map(|(file, source)| {
+            let parsed = syn::parse_file(&source).unwrap_or_else(|error| panic!("{file}: {error}"));
+            (file, parsed)
+        })
+        .collect();
+    let mut aliases = AliasMap::new();
+    for (file, parsed) in &files {
+        let mut scan = AliasScan {
+            module: module_of(file),
+            aliases: &mut aliases,
+        };
+        scan.visit_file(parsed);
+    }
+    let mut violations = Vec::new();
+    for (file, parsed) in &files {
+        let mut scan = BoundaryScan {
+            violations: &mut violations,
+            file,
+            module: module_of(file),
+            aliases: &aliases,
+        };
+        scan.visit_file(parsed);
+    }
+    assert!(violations.is_empty(), "{}", violations.join("\n"));
+}
 
 /// The directories of `src/`, one per subsystem.
 const DIRECTORIES: [&str; 8] = [
