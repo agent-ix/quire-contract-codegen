@@ -53,6 +53,12 @@ atomicity. Fix FND-002 together with SR-13170 FND-001 to FND-004.
 | --- | --- | --- | --- |
 | FND-004 | medium | FR-019-AC-47 has a split verification, "Test (TC-030) for CG; Analysis for QSL routing precondition", in a single criterion. Its Test half adds nothing CG can observe beyond AC-45: an `Err` already means no settlements. Its "produces no generation input or artifact" is not CG behaviour either, because `RoutedGenerationItem::from_descriptor` and `generate_routed` take descriptors and routed items, not a settlement, so the caller decides. One tag on AC-47 would mark the Analysis half Covered. Fold "returns no item settlements" into AC-45, and make AC-47 an Analysis-only criterion stating the corrected QSL premise (SR-13170 FND-006) | spec/routed/functional/FR-019-capability-settlement.md:439, src/routed/generate.rs:79-101, src/routed/generate.rs:295-300 |
 
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | low | The Analysis cells of AC-10 and AC-47 cite "FR-019:388" for the "no `qsl-route` dependency" fact. After this round's edits that sentence is at FR-019:383, and line 388 is now about `BackendKind::from_identity`. Cite the paragraph, for example the FR-022 "Where the input type lives" reference, or fix the line number | spec/routed/functional/FR-019-capability-settlement.md:383, spec/routed/functional/FR-019-capability-settlement.md:436, spec/routed/functional/FR-019-capability-settlement.md:439 |
+
 ## Dispositions
 
 Round 1, reviewed at def6c3f4529e4439f83cc8b5972d7600eb40e364.
@@ -62,3 +68,9 @@ Round 1, reviewed at def6c3f4529e4439f83cc8b5972d7600eb40e364.
 | FND-001 | fixed | The Note says CG's check "defends that precondition rather than establishing it". Inputs states the FR-331 uniqueness precondition, and the `manifest` doc reads "One descriptor per backend identity in a valid FR-331 registry snapshot" with the repeat rule |
 | FND-002 | fixed | AC-45 is split into AC-45 (refusal and payload), AC-46 (ordering, case and precedence) and AC-47. Each of AC-45 and AC-46 can fail on its own in TC-030. AC-47's split verification is the new FND-004 |
 | FND-003 | fixed | The note is now a **Note:** paragraph outside the shall bullets. It states plainly that byte-equal repeats, which routed nothing under the old AC-10, now cause a typed precondition refusal |
+
+Round 2, reviewed at 00f156ccd5e4c81fa3de7539d45cee0b5dc26e98. FND-001 to FND-003 still hold.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-004 | fixed | AC-45 now says "The call returns no item settlements". AC-47 is Analysis-only, and its facts check out: Cargo.toml depends only on `qsl-replay`, and `generate_routed(package, positions, routed, contexts)` takes no settlement. The TC-030 AC-47 procedure is removed, and AC-47 sits in the Analysis matrix row |

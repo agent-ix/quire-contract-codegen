@@ -59,6 +59,12 @@ remaining spec gap.
 | --- | --- | --- | --- |
 | FND-001 | medium | FR-019-AC-10 ("Only an item settled `supported` routes") and AC-45's "route no item through it" and "still settles and routes" make claims about routing. CG does not route: QSL `route` picks the backend (generate.rs:3-7), CG takes no `qsl-route` dependency (FR-019:377-378), and `RoutedGenerationItem::from_descriptor` and `generate_routed` take no settlement (generate.rs:79, 295). `RequiresBound` also carries a backend, so a backend in a disposition is no marker of routing either. No CG test can fail on these clauses as written, so this is a spec gap, not only a missing test. Restate them as something CG can observe (for example, only a `Supported` settlement yields a value FR-022 accepts), or move routing to QSL or the driver as a referenced precondition with Verification "Analysis" | spec/routed/functional/FR-019-capability-settlement.md:425-426, src/routed/generate.rs:3-7, src/routed/generate.rs:79-101, src/routed/generate.rs:295 |
 
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-002 | low | The AC-10 Analysis argues that CG cannot route, not that only `supported` items route. The matrix marks it ✅ Covered, which then rests on the owners' criteria, but the cell does not cite them: quire-driver FR-001-AC-3 ("`route` is called only after negotiation, and only for `supported` items", Test TC-003) and QSL FR-057-AC-6 (TC-155). Add those citations so the Analysis establishes the claim | spec/routed/functional/FR-019-capability-settlement.md:436, spec/routed/matrix/tests.md:15 |
+
 ## Dispositions
 
 Round 1, reviewed at def6c3f4529e4439f83cc8b5972d7600eb40e364. All eleven listed tests are now covered by criteria: AC-45 covers 1-4, 8 and 11; AC-46 covers 6, 9 and 10; AC-47 covers 5. Item 7 is moot under decision C, since every repeat refuses.
@@ -66,3 +72,9 @@ Round 1, reviewed at def6c3f4529e4439f83cc8b5972d7600eb40e364. All eleven listed
 | FND | Outcome | Reason |
 | --- | --- | --- |
 | FND-001 | still-open | AC-45 to AC-47 no longer make CG routing claims, and AC-47 sends routing to Analysis citing FR-019:388 and the `generate_routed` signature (both verified). FR-019-AC-10 ("Only an item settled `supported` routes.") is still `Test (TC-030)`, and TC-030 still says "Ask each settlement that is not `supported` whether it routes a backend at all", which CG cannot observe. Change AC-10's verification to Analysis with the same argument, or ticket it |
+
+Round 2, reviewed at 00f156ccd5e4c81fa3de7539d45cee0b5dc26e98.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | AC-10's statement is unchanged verbatim and its verification is now Analysis. TC-030 drops the "routes a backend" procedure, objective and expected-result text and its AC-10 trace, and the matrix moves AC-10 to the Analysis row |

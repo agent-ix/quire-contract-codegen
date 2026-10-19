@@ -93,3 +93,10 @@ Round 1, reviewed at def6c3f4529e4439f83cc8b5972d7600eb40e364. The planner super
 | FND-002 | fixed | Superseded by decision C. CG no longer uses FR-272 `duplicate-backend`; it uses its own variant carrying only the identity. The Note states that FR-290 and FR-272 still govern registration, including the per-distinct-manifest refusal and its manifest payload |
 | FND-003 | fixed | The refusal is an `EnvelopeRefusal` variant inside the unchanged `Result<Vec<ItemSettlement>, EnvelopeRefusal>`. No name in CG, quire-driver or QSL collides with it |
 | FND-004 | fixed | The whole envelope is refused, so no item settles, including items for other identities (AC-47 and the Outputs bullet) |
+
+Round 2, reviewed at 00f156ccd5e4c81fa3de7539d45cee0b5dc26e98. The round-1 fixes FND-001 to FND-004 still hold at this head.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-005 | fixed | FR-019 now records, beside the `BackendKind` precedent, that the new variant breaks quire-driver's exhaustive `EnvelopeRefusal` matches in `src/refusal.rs`. It names the paired driver change and says the driver should report FR-272 `runtime_invariant`, a code in both FR-272 and the driver's `Code::RuntimeInvariant` vocabulary. No driver file is edited |
+| FND-006 | fixed | Every "withdraws repeats" and "routes nothing" sentence is gone. The Note quotes FR-290:258-260 verbatim, and AC-47 now states that the snapshot holds each identity at most once (FR-290:258-265; FR-331:57), which matches QSpec 6fd431e |

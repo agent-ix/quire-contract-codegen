@@ -49,3 +49,11 @@ Round 1, reviewed at def6c3f4529e4439f83cc8b5972d7600eb40e364. The Behavior bull
 | FND-001 | fixed | Rewritten as "If ..., then the generator shall refuse the whole envelope ..." with the generator as subject |
 | FND-002 | fixed | The "choice" sentence is gone; replaced by "If several identities repeat, then the generator shall report the bytewise-first repeated identity, independent of manifest order or adjacency" |
 | FND-003 | fixed | The generator is now the actor of every new shall |
+
+Round 2, reviewed at 00f156ccd5e4c81fa3de7539d45cee0b5dc26e98.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | Still holds: the remaining Behavior bullets keep "If ..., then the generator shall" |
+| FND-002 | fixed | Still holds |
+| FND-003 | fixed | Still holds |
