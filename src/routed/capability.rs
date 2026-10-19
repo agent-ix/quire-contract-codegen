@@ -954,24 +954,25 @@ pub struct BackendProviderEnvelope {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case", tag = "code", content = "cause")]
 pub enum EnvelopeRefusal {
-    /// The contract version or capability vocabulary is invalid, or the manifest
-    /// repeats a backend identity.
+    /// The contract version or capability vocabulary is invalid.
     ///
     /// A foreign vocabulary makes every label in the carrier unreadable.
-    /// A repeated identity makes its descriptor selection depend on manifest
-    /// order, so it is refused before any item is settled.
     InvalidCapability {
-        /// `unsupported-version` for a carrier identity, or `duplicate-backend`
-        /// for a repeated manifest identity, both under `invalid_capability`.
+        /// Both carrier members refuse with `unsupported-version`.
         cause: &'static str,
-        /// Which member of the carrier was wrong (`manifest` for a duplicate).
+        /// Which member of the carrier was wrong.
         ///
         /// Both members refuse with one cause, so without this a consumer that
         /// got both wrong is told only about the first and cannot tell which
         /// field to fix from the refusal it was handed.
         member: &'static str,
-        /// The supplied carrier identity, or the repeated backend identity.
+        /// The supplied carrier identity.
         received: String,
+    },
+    /// The manifest repeats a backend identity, so no item settles.
+    ManifestRepeatsBackendIdentity {
+        /// The bytewise-first identity repeated in the manifest.
+        identity: String,
     },
 }
 
@@ -1309,10 +1310,8 @@ pub fn negotiate_backend_provider(
         .filter(|identity| !identities.insert(*identity))
         .min()
     {
-        return Err(EnvelopeRefusal::InvalidCapability {
-            cause: "duplicate-backend",
-            member: "manifest",
-            received: identity.to_owned(),
+        return Err(EnvelopeRefusal::ManifestRepeatsBackendIdentity {
+            identity: identity.to_owned(),
         });
     }
     Ok(envelope
@@ -1465,8 +1464,9 @@ fn negotiate_item(manifest: &[BackendDescriptor], item: &RequestItem) -> Disposi
         },
         // FR-290's candidate table has no row for "more than one candidate and
         // the request names one": reaching it needs a manifest that repeats a
-        // backend identity, which the registry refuses as `duplicate-backend`
-        // before a request is built. A set that disagrees with the named backend
+        // backend identity. Registration establishes unique identities before
+        // building the request; CG also refuses a caller-supplied repeated
+        // manifest before settling any item. A set that disagrees with the named backend
         // is the nearest stated row, and is what such a set is.
         many => Disposition::InvalidRequest {
             cause: Cause::InconsistentCandidates {
