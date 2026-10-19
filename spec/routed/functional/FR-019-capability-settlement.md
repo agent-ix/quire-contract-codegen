@@ -100,6 +100,10 @@ nothing says so.
 - `candidates` is read, never computed. The `quire-spec-language` registry
   computes it under FR-290's candidate-set rule; this generator is the consumer
   on the far side of that seam.
+- On the admitted FR-330 package path, the full lowering-position sequence may
+  include an excluded accounting-only position. The FR-331 envelope contains
+  one item for each bound driver item only, in that order. Excluded positions
+  keep their driver indexes but supply no envelope item or capability claim.
 
 ## Outputs
 
@@ -156,6 +160,15 @@ that precondition; CG's typed refusal defends it rather than establishing it.
 - The generator shall dispatch settlement through one `negotiate_*` arm per
   variant of a closed backend kind, with no catch-all arm. A backend kind with
   no arm shall fail to compile.
+- While settling an admitted FR-330 package, CG SHALL check the envelope item
+  count against bound driver items (`DriverItem` positions), excluding
+  accounting-only positions and context roots. CG SHALL settle only those bound
+  items and SHALL put each item's original driver index in both the outer
+  `ContractItemSettlement.request_index` and nested
+  `ItemSettlement.request_index`, independently of its FR-331 envelope item
+  position. CG SHALL NOT classify, run Kani preflight, negotiate or emit a
+  disposition for an excluded position, even if its accounting record is
+  `lowered`.
 - The generator shall refuse an envelope whose `capability_vocabulary` is not
   exactly `quire.capability-kind/v1`, or is absent, as
   `invalid_capability`/`unsupported-version`, and shall read none of its kinds.
@@ -514,6 +527,7 @@ requires its exhaustive arms to compile. FR-019-AC-14 is a property of the retur
 | FR-019-AC-50 | An `Admitted` Kani function-application preflight read whose exact generator produces a claim for an otherwise supported item retains the existing `supported` settlement. | Test (TC-030) |
 | FR-019-AC-51 | Among several request items with non-`Admitted` preflight outcomes, the first failing item in manifest/item request order determines the whole-request `ContractPackageReadRefused` or `ContractPackageReadIncomplete` variant and projection, irrespective of outcome kind. Earlier successful items contribute no returned settlement or artifact. | Test (TC-030) |
 | FR-019-AC-52 | An `Admitted` Kani function-application read whose exact generator emits no claim, and a structural preflight rejection before any read, each retain item-level `KaniFormRefused { OperationNotRendered }` without a reader envelope refusal. | Test (TC-030) |
+| FR-019-AC-53 | Given an admitted package with bound driver items at driver indexes 0 and 2 around an excluded accounting-only position at index 1 whose accounting is `lowered` with a Kani-supported form, an FR-331 envelope with exactly two items settles the bound items without an `EnvelopeItemCount` refusal. Both `ContractItemSettlement.request_index` and its nested `ItemSettlement.request_index` equal 0 and 2 respectively, not envelope indexes 0 and 1. The excluded position produces no settlement or claim, and its own classifier-call and Kani-preflight-read counts are both zero. An envelope with fewer or more than two items returns the typed `EnvelopeItemCount` refusal. A context-only root changes neither count nor driver indexes. | Test (TC-030) |
 | FR-019-AC-7 | An envelope whose `capability_vocabulary` is not exactly `quire.capability-kind/v1`, or is absent, is refused as `invalid_capability`/`unsupported-version` with none of its kinds read. | Test (TC-030) |
 | FR-019-AC-8 | An item with an absent extent classification settles `invalid-request` with `invalid_capability`/`absent-extent`, and an absent or unknown kind settles before the candidate table is consulted. | Test (TC-030) |
 | FR-019-AC-9 | A backend kind added without a negotiation arm does not compile: the dispatch is an exhaustive `match` over the closed kind with no catch-all arm. | Analysis |

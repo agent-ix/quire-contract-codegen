@@ -75,6 +75,23 @@ decisions the original checked graph or detached lowering records would make.
    a complete reached closure. Inspect the call path for a
    second lowering, reconstructed checked graph or wire-fragment-derived
    per-node identifier.
+7. Lower an admitted request with a bound driver item, an excluded
+   accounting-only position and a second bound driver item, with an optional
+   context-only root immediately after the first bound item and before the
+   excluded position. Verify exact accounting position and node ID
+   for every entry, the two bound items' original driver indexes, and the
+   absence of a claim and artifact for the excluded position.
+   Remove, duplicate or change the excluded position's node ID while holding
+   the admitted package fixed; each mismatch must refuse the whole request
+   before any artifact.
+8. For FR-039-AC-10, place a selected conversion context root immediately
+   before the excluded position and confirm that the preceding bound item
+   retains its selected result context. In a separate otherwise valid request,
+   put that conversion root after the next bound driver item; the preceding
+   item must receive typed `IncompleteContext`. Finally place a context-only root directly after
+   the excluded position and before the next bound item, with matching admitted
+   accounting and node ID. Confirm a typed whole-request correspondence
+   refusal before any artifact because the root has no owning bound item.
 
 ## Expected Results
 
@@ -95,3 +112,8 @@ different-node/same-package controls both change the identity pair. Reached
 keys agree with Contract IR's total traversal of admitted lowered items;
 unresolved required references never reach CG as lowered items, and reader
 refusals stop the request.
+The excluded position retains its admitted accounting identity and driver
+index without a claim or artifact; an interleaved context root changes
+neither driver nor envelope indexes. Correspondence mismatches and an orphan
+context root after the excluded position refuse the whole request. A selected
+conversion outside an otherwise valid preceding span yields `IncompleteContext`.

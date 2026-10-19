@@ -17,6 +17,10 @@ relationships:
     type: references
   - target: ix://agent-ix/quire-contract-ir/FR-035
     type: references
+  - target: ix://agent-ix/quire-driver/FR-001
+    type: references
+  - target: ix://agent-ix/quire-driver/FR-010
+    type: references
 ---
 # FR-039: Consume one admitted ContractPackage for production decisions
 
@@ -47,8 +51,14 @@ for package meaning or a source of native bounds.
   index, plus the existing FR-019 routing envelope and backend descriptors.
   The package's `feature_accounting` order is the lowering call's request
   order. The driver supplies that full order with each root typed as a driver
-  item or a context-only root. Driver request indexes count only driver items;
-  context-only roots have accounting but no independent settlement or artifact.
+  item, an excluded accounting-only position, or a context-only root. A **bound
+  driver item** is a `DriverItem` position with its own FR-331 envelope item,
+  settlement and possible generated artifact. An **excluded accounting-only
+  position** has its own accounting record and driver index but is not a
+  `DriverItem`. Driver request indexes count bound driver items and excluded
+  positions; context-only roots have accounting but no independent settlement
+  or artifact. An excluded position retains its requested node ID and driver index but has no envelope
+  item, negotiation, routing, generated claim or artifact.
   Repeated requested IDs remain distinct positions, including when context
   roots are interleaved.
 - CG-owned generation context and customer subject inputs required by the
@@ -56,7 +66,7 @@ for package meaning or a source of native bounds.
 
 ## Outputs
 
-- One production decision for each request position, retaining its exact
+- One production decision for each bound driver item, retaining its exact
   requested node ID and source occurrences: a supported routing/generation
   result, a typed CG refusal derived from its package accounting record, or
   the existing backend-specific refusal after a `lowered` record.
@@ -73,14 +83,29 @@ for package meaning or a source of native bounds.
 - CG SHALL inspect the admitted package's seven-member
   `feature_accounting` vocabulary as a closed typed enum. It SHALL match a
   record to every root in the full lowering order by both accounting position
-  and exact node ID, then map each driver item to its own accounting position.
+  and exact node ID, then map each bound driver item to its own accounting
+  position.
   It SHALL preserve duplicate IDs and refuse a missing, extra or mismatched
-  record, including a context-only record, before generating an artifact. A
-  context-only record SHALL NOT be counted as a driver item or substituted for
-  one. For a `lowered` driver record, CG SHALL read
+  record, including an excluded or context-only record, before generating an artifact. A
+  context-only record SHALL NOT be counted as a bound driver item or substituted
+  for one. For a `lowered` bound driver item record, CG SHALL read
   its root and reached closure from `semantic_graph` by typed key. It SHALL
   never infer a success from a missing record or substitute a graph node for a
   refused item.
+- CG SHALL map an excluded accounting-only position to its exact admitted
+  `feature_accounting` position and `node_id`, advance the driver request index
+  over it, and consume no FR-331 envelope item for it. CG SHALL NOT negotiate,
+  route, generate or emit a claim for that position, regardless of its admitted
+  accounting disposition. CG SHALL retain the original driver indexes of later
+  bound driver items; CG SHALL advance neither driver nor envelope item indexes
+  for context-only roots. CG SHALL end the preceding bound driver item's
+  contiguous context span at an excluded position and SHALL assign no context
+  span to that excluded position. CG SHALL refuse a context-only root directly
+  after an excluded position and before the next bound driver item as an orphan
+  with a typed whole-request correspondence refusal. CG SHALL NOT associate
+  that root with the excluded position or the earlier bound driver item. CG SHALL
+  refuse a missing, extra or mismatched excluded accounting record as a typed
+  whole-request correspondence refusal before generating any artifact.
 - CG SHALL preserve `unsupported`, `requires_bound`, `invalid_input`,
   `failed`, `invalid_body` and `body_incomplete` as distinguishable typed
   causes. It SHALL retain each record's exact payload, requested identity and
@@ -88,7 +113,7 @@ for package meaning or a source of native bounds.
   admitted package gives it. An absent requested key retains an empty
   occurrence list and its exact identity; CG SHALL NOT invent a source region.
   CG SHALL NOT convert a package refusal to backend support.
-- CG SHALL settle and generate each `lowered` item from its represented typed
+- CG SHALL settle and generate each `lowered` bound driver item from its represented typed
   node, type, operation, bounds, clause or function and reached local
   dependencies in that same package. It SHALL use the package's exact source
   lock, selected profile and identity when forming an artifact or proof claim.
@@ -139,8 +164,9 @@ for package meaning or a source of native bounds.
 - For a scalar expression item, the driver SHALL supply the exact QSL-checked
   application occurrence and optional conversion occurrence described by
   Contract IR FR-049. The lowering request SHALL place each selected conversion
-  as a context-only root in that driver's contiguous context span, before the
-  next driver item. CG SHALL match the full root sequence and each root key to
+  as a context-only root in that bound driver item's contiguous context span,
+  before the next bound driver item or excluded position. CG SHALL match the
+  full root sequence and each root key to
   admitted accounting, check the selected occurrence keys and context-root
   association, and read the result bound only through the admitted FR-049
   `result_context` view. Two driver items sharing one expression key but
@@ -182,13 +208,15 @@ for package meaning or a source of native bounds.
 | ID | Criteria | Verification |
 | --- | --- | --- |
 | FR-039-AC-1 | Each of two genuine QSL-admitted source graphs with a different clause or pure-function operation lowers through IR to its own admitted FR-330 package. CG's production settlement and generation use each package's typed graph and accounting for its exact request index and node ID; supplying the two packages with each one's corresponding node ID at the same request position changes the generated bytes to reflect the represented operation while backend and generation context stay fixed. If the production API still accepts an original checked graph, holding that legacy input fixed across the two calls does not prevent the package-driven byte change; if it no longer accepts one, its signature and call path have no original-graph fallback. Independently changing an admitted accounting disposition changes the item's decision and cannot replace the lowered-operation byte control. | Test |
-| FR-039-AC-2 | A mixed request with a representable clause or function and an independent `unsupported`, `requires_bound` or `invalid_input` sibling retains one typed decision per driver position, including duplicate requested IDs, and emits only the representable sibling's artifact. An interleaved context-only root retains its own exact accounting position and key without creating a driver decision. For two QSL scalar items sharing one expression key but selecting different checked application/conversion pairs, CG retains each pair's own admitted FR-049 result bound; a conversion outside its driver's contiguous context span yields typed `IncompleteContext`, while repeating one pair retains `DuplicateRequest`. An IR accounting refusal retains its exact record payload and available source occurrences; a backend refusal after a `lowered` record retains that requested identity, the admitted `lowered` accounting disposition and available source occurrences, with its own distinguishable typed cause. A CG scalar `RequiresBound` refusal after `lowered` is not relabelled as an IR `requires_bound` record. An absent ID has no fabricated region. | Test |
+| FR-039-AC-2 | A mixed request with a representable clause or function and an independent `unsupported`, `requires_bound` or `invalid_input` sibling retains one typed decision per bound driver item, including duplicate requested IDs, and emits only the representable sibling's artifact. An interleaved context-only root retains its own exact accounting position and key without creating a driver decision. For two QSL scalar items sharing one expression key but selecting different checked application/conversion pairs, CG retains each pair's own admitted FR-049 result bound; a conversion outside its driver's contiguous context span yields typed `IncompleteContext`, while repeating one pair retains `DuplicateRequest`. An IR accounting refusal retains its exact record payload and available source occurrences; a backend refusal after a `lowered` record retains that requested identity, the admitted `lowered` accounting disposition and available source occurrences, with its own distinguishable typed cause. A CG scalar `RequiresBound` refusal after `lowered` is not relabelled as an IR `requires_bound` record. An absent ID has no fabricated region. | Test |
 | FR-039-AC-3 | A selected dependency function reference resolves only through the reader-validated selected package identity and target key. A missing, wrong-identity or stale selected dependency refuses before CG; an identically keyed local node or extra unselected dependency cannot redirect generation. | Test |
 | FR-039-AC-4 | For a genuinely admitted FR-330 package, CG binds a `protocol`/`protocol_reference` carrier's exact `body.target` to the local `protocol` node, retaining its typed key, requested identity and source occurrences; changing that local target and recomputing the admitted carrier and package identities changes the selected target and package identity. A matching key only in a selected dependency does not bind locally. An absent local target, a present non-`protocol` target and a target with unequal `semantic_type` are refused by the FR-322 reader before CG with the respective `missing_declaration`/`missing-name` or `ill_typed`/`operator-ineligible` cause at `/body/target`; no artifact is emitted. An ordinary local reference or display text does not supply protocol-target binding. A backend that cannot encode an admitted protocol form returns its typed refusal and no artifact. | Test |
 | FR-039-AC-5 | A malformed or noncanonical FR-330 wire, wrong version, invalid accounting/source map, stale semantic identity or incomplete reader result reaches no CG consumer and emits no artifact. CG preserves the reader's typed refusal or limit result and performs no second parse or checked-graph fallback. | Analysis |
 | FR-039-AC-6 | An item whose admitted package accounting is `failed`, `invalid_body` or `body_incomplete`, or whose `lowered` form is unrepresentable by the selected backend, emits no artifact and retains a distinct typed cause; the package byte-ceiling case emits no artifact for any sibling. | Test |
 | FR-039-AC-7 | Generated scalar, composite equality and exact function claims each serialize `contract_package_identity` equal to the admitted FR-330 `identity` and `node_id` equal to the requested `CheckedNodeId`, with no generated-claim `ir_id` key. Each retains exact `semantic_type`, admitted `source_map`, family-specific provenance, and `package_id` denoting the originating checked package; each serializes typed `claims`, `bounds` and `dependencies`. For the same requested node in two genuinely admitted packages with different identities, the claim identity differs; for two different requested nodes in one admitted package, it also differs. A downstream consumer can join a claim to its admitted meaning by this pair and can use request index only to distinguish repeated request positions. | Test |
-| FR-039-AC-8 | For each admitted `lowered` item, Contract IR's authoritative traversal is total over the required root, bounds and selected dependencies, and the generated claim's reached claim, bound and dependency keys and dependent declaration closure equal its output. An unresolved required reference cannot reach CG as an admitted `lowered` item: Contract IR records a typed item refusal or its strict reader refuses the package; a refused or incomplete reader result yields no item claim or artifact. Inspection finds no per-node ID from a second lowering or wire-fragment hash. | Test |
+| FR-039-AC-8 | For each admitted `lowered` bound driver item, Contract IR's authoritative traversal is total over the required root, bounds and selected dependencies, and the generated claim's reached claim, bound and dependency keys and dependent declaration closure equal its output. An unresolved required reference cannot reach CG as an admitted `lowered` item: Contract IR records a typed item refusal or its strict reader refuses the package; a refused or incomplete reader result yields no item claim or artifact. Inspection finds no per-node ID from a second lowering or wire-fragment hash. | Test |
+| FR-039-AC-9 | In an admitted package with a bound driver item, an excluded accounting-only position and another bound driver item, CG matches all three positions and exact `node_id` values to `feature_accounting`; the excluded position keeps its driver index but has no claim or generated artifact, and the following bound item keeps its original driver index. An interleaved context-only root has accounting but advances neither driver nor envelope item indexes. Removing the excluded position, adding an extra one or changing its `node_id` causes a typed whole-request correspondence refusal before any artifact. | Test |
+| FR-039-AC-10 | Given a bound driver item followed by an excluded accounting-only position, a selected conversion context root outside the preceding item's contiguous span yields typed `IncompleteContext` for that item when the complete root sequence is otherwise valid. A context-only root directly after the excluded position and before the next bound driver item is orphaned and causes a typed whole-request correspondence refusal before any artifact, even when its accounting position and `node_id` match. A conversion root immediately before the excluded position remains in the preceding item's span. | Test |
 
 ## Verification
 
@@ -250,3 +278,6 @@ controls now. QSL-764 must produce the carrier from source before genuine
 QSL/IR positive and changed-binding controls can verify CG consumption.
 Contract IR's planned IR-766 admitted-package traversal is required for the
 reached-key portion of generated claims.
+Quire-driver [FR-001](ix://agent-ix/quire-driver/FR-001) and
+[FR-010](ix://agent-ix/quire-driver/FR-010) produce the typed lowering-position
+sequence and preserve excluded positions with their original indexes.

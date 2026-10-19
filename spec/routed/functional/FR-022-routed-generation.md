@@ -139,10 +139,13 @@ output belong to IR-629; they do not change this crate boundary.
   reader. This generator does not re-check the package identity the driver
   expected; that is the IR reader's.
 - The complete `ContractRequestPosition` lowering sequence, one entry per
-  admitted accounting record. A `DriverItem` carries the original node key and
-  caller-authored `ContractDriverResultSelection`; a `ContextRoot` carries a
-  context-only key and belongs to the preceding driver's contiguous context
-  span. Driver indexes count `DriverItem` entries only (FR-039).
+  admitted accounting record. A bound driver item is the `DriverItem` position
+  defined in FR-039; it carries the original node key and
+  caller-authored `ContractDriverResultSelection`; an excluded accounting-only
+  position carries its original key and occupies a driver index but is never
+  routed; a `ContextRoot` carries a context-only key and belongs to the
+  preceding bound driver item's contiguous context span. Driver indexes count
+  bound driver items and excluded positions, but not context-only roots (FR-039).
 - For every routed scalar item, the driver's typed projection of QSL's
   `RequirementItem::{occurrence, result_bound, conversion_context,
   path_condition}` at that request index, and the originating checked
@@ -152,8 +155,10 @@ output belong to IR-629; they do not change this crate boundary.
   constructor `RoutedGenerationItem::from_descriptor(request_index, node_id,
   backend, descriptor) -> Result<RoutedGenerationItem,
   RoutedItemConstructionError>`:
-  - `request_index` (public): the item's index in the driver's request, as FR-019's
-    `ItemSettlement::request_index` numbered it;
+  - `request_index` (public): the bound driver's index in the full request,
+    including excluded accounting-only positions but not context roots, as
+    recorded in both FR-019 settlement `request_index` fields; it is not the
+    FR-331 envelope item index;
   - `node_id` (public): the IR `CheckedNodeId` of the item's checked node. The driver
     reads it from its own request item at that index;
   - `backend` (private): the routed `Candidate` fixed by the constructor;
@@ -237,6 +242,12 @@ output belong to IR-629; they do not change this crate boundary.
   request-index-ordered output for every permutation of the routed-item slice.
 - The generator shall take each item's backend and backend kind from its
   routed input.
+- CG SHALL verify before dispatching any generation arm that each routed
+  item's `request_index` names a bound driver item in the complete lowering
+  sequence and that its `node_id` matches that position. CG SHALL refuse a
+  routed item naming an excluded accounting-only driver index as
+  `RoutedGenerationError::ExcludedDriverIndex { request_index, node_id }` for
+  the whole call, before any oracle or harness is produced.
 - CG shall make `RoutedGenerationItem.backend` and `.kind` private.
 - CG shall leave `RoutedGenerationItem.request_index` and `.node_id` public.
 - CG shall require the public constructor above for a caller to create a
@@ -350,6 +361,7 @@ output belong to IR-629; they do not change this crate boundary.
 | FR-022-AC-26 | Given the checked QSL RR-16 package with two `x + 1` occurrences of one application node, directly narrowed to `Int[0, 10]` and `Int[0, 20]`, the driver supplies two distinct request indexes and occurrence keys. CG matches each to its own requirement record and selected narrow; both supported scalar outputs use the shared application operation and their respective result bounds, and their obligation and harness identities differ by application occurrence. Reversing routed-item order leaves these pairings unchanged. | Test (TC-033) |
 | FR-022-AC-27 | For `if p then x + 1 else x + 1`, each occurrence's generated scalar claim is conditional on its own QSL path guard: the same guard occurrence with `holds=true` for the then item and `holds=false` for the else item. CG preserves the full outermost-first guard sequence and uses it when forming the proof obligation; a result under `p=false` cannot prove the then claim and one under `p=true` cannot prove the else claim. An empty path condition remains unguarded. | Test (TC-033) |
 | FR-022-AC-28 | If a routed scalar item's occurrence has no entry in the supplied requirement records, its key's node disagrees with the authenticated application selection, or the keyed record disagrees with the item's result bound, direct conversion occurrence or ordered path condition, CG returns a typed refusal identifying the request index and occurrence before emitting an oracle, harness or obligation identity for that request; it does not use another record with the same node or reconstruct missing values from the IR graph or source text. | Test (TC-033) |
+| FR-022-AC-29 | Given an admitted package whose complete lowering sequence has bound driver items at indexes 0 and 2 and an excluded accounting-only position at index 1, a routed item with `request_index` 1 and the excluded position's exact `node_id` refuses the whole call as `ExcludedDriverIndex { request_index: 1, node_id }` before any generation arm, oracle or harness. The same routed backend and descriptor at indexes 0 and 2 remain valid controls, and CG never substitutes an envelope position or the next bound item's selection for index 1. | Test (TC-033) |
 
 ## Dependencies
 
