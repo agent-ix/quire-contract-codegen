@@ -1437,7 +1437,7 @@ fn tc_029_ac8_a_duplicate_field_is_refused_with_its_declaration_cause() {
     }
 }
 
-#[trace("FR-018-AC-10", "TC-029", "TC-001", "NFR-002-AC-1", "NFR-002-AC-2")]
+#[trace("FR-018-AC-10", "TC-029")]
 #[test]
 fn tc_029_ac10_bytes_are_deterministic_across_request_permutations() {
     let package = admit(corpus_package());
@@ -1464,7 +1464,7 @@ fn tc_029_ac10_bytes_are_deterministic_across_request_permutations() {
     }
 }
 
-#[trace("FR-018-AC-10", "TC-029")]
+#[trace("FR-018-AC-10", "TC-029", "TC-001", "NFR-002-AC-1", "NFR-002-AC-2")]
 #[test]
 fn tc_029_ac10_claim_map_entries_ascend_by_the_descriptor_key() {
     let package = admit(corpus_package());

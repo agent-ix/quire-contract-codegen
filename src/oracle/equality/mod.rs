@@ -2933,6 +2933,17 @@ mod tests {
                 let exact = source.finish(bytes).expect("exact source limit admits");
                 assert!(exact.iter().all(|artifact| artifact.contents.len() <= MAX_ARTIFACT_BYTES));
                 assert!(exact.iter().any(|artifact| artifact.path != "src/lib.rs"));
+                let claim = format!("// Subject: {:?}", node_id('9'));
+                for module in exact.iter().filter(|artifact| artifact.path.starts_with("src/composites_")) {
+                    let header = module.contents.lines().take_while(|line| !line.is_empty())
+                        .collect::<BTreeSet<_>>();
+                    assert!(header.contains(claim.as_str()), "{} lacks its claim subject", module.path);
+                }
+                let first_module = exact.iter().find(|artifact| artifact.path.starts_with("src/composites_"))
+                    .expect("deep closure has extra modules");
+                let root_subject = format!("// Subject: {:?}", root);
+                assert!(first_module.contents.lines().take_while(|line| !line.is_empty())
+                    .any(|line| line == root_subject), "first extra module lacks the root composite node");
                 (exact, root)
             })
             .expect("small-stack worker starts")

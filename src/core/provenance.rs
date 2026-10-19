@@ -18,3 +18,19 @@ pub(crate) fn with_rust_header<'a>(
     header.push_str(source);
     header
 }
+
+#[cfg(test)]
+mod tests {
+    use super::with_rust_header;
+    use ix_trace_rs::trace;
+
+    #[trace("TC-001", "NFR-002-AC-1")]
+    #[test]
+    fn newline_in_subject_stays_inside_header_comment() {
+        let source = with_rust_header("pub fn safe() {}\n".to_owned(), ["deposit\npub fn injected() {}"]);
+        let header = source.split("\n\n").next().expect("header");
+        assert!(header.lines().all(|line| line.starts_with("// ")));
+        assert!(!source.lines().any(|line| line == "pub fn injected() {}"));
+        syn::parse_file(&source).expect("generated Rust parses");
+    }
+}

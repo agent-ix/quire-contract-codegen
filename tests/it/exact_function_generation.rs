@@ -1016,6 +1016,12 @@ fn tc_031_ac7_admitted_hundred_thousand_call_nodes_generate_on_a_512_kib_stack()
                 &raised.source,
                 &[helper_function_node_id.digest.as_ref(), outer_function_node_id.digest.as_ref()],
             );
+            let root_header = raised.source.lines().take_while(|line| !line.is_empty())
+                .collect::<std::collections::BTreeSet<_>>();
+            for claim in &raised.claims {
+                let subject = format!("// Subject: {:?}", claim.call_node_id);
+                assert!(root_header.contains(subject.as_str()), "split root lacks claim {subject}");
+            }
             for module in &raised.modules {
                 let parts = module.path.strip_prefix("src/schedule_").and_then(|tail| tail.strip_suffix(".rs")).expect("schedule part path").split('_').map(|part| part.parse::<usize>().expect("numeric schedule part")).collect::<Vec<_>>();
                 let [ordinal, start, end] = parts.as_slice() else { panic!("schedule module names ordinal and range") };
@@ -3413,6 +3419,13 @@ fn tc_031_ac13_generation_is_deterministic_across_runs_and_permutations() {
     let items = main_items();
 
     let first = generate(&package, &functions, &items);
+    let lib = contents(&first, "src/lib.rs");
+    let header = lib.lines().take_while(|line| !line.is_empty())
+        .collect::<std::collections::BTreeSet<_>>();
+    for function in &functions {
+        let subject = format!("// Subject: {:?}", function.node_id);
+        assert!(header.contains(subject.as_str()), "function library lacks declaration {subject}");
+    }
     let subjects = first
         .claim_map
         .items

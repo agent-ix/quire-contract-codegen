@@ -451,7 +451,10 @@ fn tc_018_generated_sources_are_constructive_and_byte_identical() {
                 crate::generated_headers::assert_header(
                     "population.rs",
                     &first.source,
-                    &[&format!("{population:?}")],
+                    &[&format!(
+                        "Relation: {relation}; Domain: {domain}; Population: {}",
+                        population.name()
+                    )],
                 );
                 for forbidden in [
                     "prop_filter",
