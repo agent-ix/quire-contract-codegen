@@ -1557,12 +1557,44 @@ pub(super) fn corpus_oracles() -> FixtureOracles {
 
 /// Generating the corpus twice, each time from a freshly built and admitted
 /// package, yields equal output: every artifact's bytes and the claim map.
-#[trace("FR-018-AC-10", "TC-029")]
+#[trace("FR-018-AC-10", "TC-029", "TC-001", "NFR-002-AC-1", "NFR-002-AC-2")]
 #[test]
 fn tc_029_ac10_generation_is_repeatable_from_a_fresh_package() {
     let first = corpus_oracles();
     let second = corpus_oracles();
     assert_eq!(first, second);
+    let subjects = first
+        .claim_map
+        .items
+        .iter()
+        .filter(|claim| matches!(&claim.result, ClaimDisposition::Generated(_)))
+        .map(|claim| format!("{}/{}", claim.node_id.domain, claim.node_id.digest))
+        .collect::<Vec<String>>();
+    let subject_refs = subjects.iter().map(String::as_str).collect::<Vec<_>>();
+    let declaration_subjects = first
+        .claim_map
+        .items
+        .iter()
+        .filter_map(|claim| match &claim.result {
+            ClaimDisposition::Generated(generated) => Some(&generated.declaration_keys),
+            ClaimDisposition::Refused { .. } => None,
+        })
+        .flatten()
+        .map(|id| format!("{}/{}", id.domain, id.digest))
+        .collect::<Vec<_>>();
+    let declaration_refs = declaration_subjects
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    let lib = contents(&first, "src/lib.rs");
+    crate::generated_headers::assert_header("src/lib.rs", lib, &declaration_refs);
+    for artifact in first
+        .artifacts
+        .iter()
+        .filter(|artifact| artifact.path.ends_with(".rs"))
+    {
+        crate::generated_headers::assert_header(&artifact.path, &artifact.contents, &subject_refs);
+    }
     for path in ["Cargo.toml", "src/lib.rs", "claim-map.json"] {
         assert_eq!(contents(&first, path), contents(&second, path), "{path}");
     }

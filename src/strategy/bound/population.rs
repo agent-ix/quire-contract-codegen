@@ -610,7 +610,6 @@ pub fn render_population(
     let source = format!(
         "#![deny(missing_docs)]\n\
 //! Generated bound numeric population artifact.\n\
-// SPDX-License-Identifier: MIT OR Apache-2.0\n\
 // Relation: {relation}; Domain: {domain}; Population: {population}\n\
 \n\
 /// Value the relation's generated oracle returns for one case.\n\
@@ -648,6 +647,11 @@ pub fn {strategy_function}() -> proptest::strategy::BoxedStrategy<{case_type}> {
         minimum = rust_i64(request.domain.minimum),
         maximum = rust_i64(request.domain.maximum),
     );
+    let subject = format!(
+        "Relation: {relation}; Domain: {domain}; Population: {}",
+        request.population.name()
+    );
+    let source = crate::core::provenance::with_rust_header(source, [subject.as_str()]);
     if source.len() > MAX_GENERATED_SOURCE_BYTES {
         return Err(diagnostic_with_generation(
             StrategyErrorCode::ResourceLimitExceeded,
