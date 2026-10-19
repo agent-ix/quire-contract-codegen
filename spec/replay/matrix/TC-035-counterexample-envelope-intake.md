@@ -14,7 +14,7 @@ relationships:
 
 Verify that every counterexample reaches QSL as QSL's counterexample envelope keyed by QSL's
 obligation identity, that out-of-domain and incomplete counterexamples are refused before any
-replay, that corpus and frame counterexamples take their own arms, that minimization keeps only
+replay, that frame counterexamples carry their QSL identities, that minimization keeps only
 failure-preserving envelopes, and that the generator holds no copy of QSL's replay types.
 
 ## Test Procedure
@@ -29,7 +29,7 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
 4. Build one `WitnessPacket` per member QSL defines, each missing only that member, and submit
    each. Then submit a complete packet whose trace position is
    present with the value none.
-5. Submit a corpus counterexample that agrees with native execution.
+5. Retired (FR-024-AC-5, IR-890): no corpus `Input`-arm submission is tested.
 6. Submit a frame counterexample through `replay_frame`, and read back the clause, frame, anchor and
    occurrence identities QSL reports.
 7. Reduce one `Witness`-arm and one `Input`-arm counterexample with a candidate set that holds a
@@ -113,8 +113,7 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
    out-of-domain, and `replay` is not called for either (FR-024-AC-3).
 4. Each incomplete packet is refused by `WitnessEnvelope::reconstruct` with `MissingMember` naming
    its member, and no replay runs. The packet with trace position none is admitted (FR-024-AC-4).
-5. The corpus counterexample is an `Input`-arm envelope keyed by parameter node id. It settles
-   `reproduced-without-witness`, and no `Witness` was built (FR-024-AC-5).
+5. Retired (FR-024-AC-5, IR-890): this step asserts no result.
 6. Each identity QSL reports equals the one submitted (FR-024-AC-6).
 7. Only valid failure-preserving candidates are retained (FR-024-AC-7, FR-024-AC-9). The root
    and both retained revisions refer to their exact QSL envelopes and unchanged obligation;
@@ -230,7 +229,7 @@ Partly implemented. Steps 1 to 8 and 28 are planned: the skeleton spine renders 
 values (`src/replay/function.rs`, TC-026, now through `render_witness`), which is the shape step 2
 checks, but it builds no envelope. Step 8 holds for the decode path: `src/replay/witness.rs` uses
 no Contract IR witness type. The bounded-Kani corpus retains no counterexample packet, so step 5
-(FR-024-AC-5) has nothing to submit. Steps 9 to 17 (FR-024-AC-11 to FR-024-AC-19, IR-460) are
+(FR-024-AC-5) is retired. Steps 9 to 17 (FR-024-AC-11 to FR-024-AC-19, IR-460) are
 implemented by `src/replay/state_clause.rs` and the tests of
 `tests/it/kani_obligations_state_clause_replay.rs`, plus the `src` unit tests of step 12. Step 16
 is a real-Kani test in the module `kani_obligations_state_clause_replay`, run through the

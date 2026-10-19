@@ -80,17 +80,14 @@ members against the operation's declaration in the domain package.
 - A typed adapter submission containing parameter-node-keyed assignments, the producing backend's
   identity, QSL's opaque `ObligationIdentity`, each binding's declared domain, the source arm and
   its provenance, and the replay packet members supplied by the proving run. A
-  backend witness submission carries decoded values and the adapter's rendered transcript; a
-  corpus submission carries canonical assignments and `Input` provenance. Backend-native text
-  is consumed only inside its adapter and never crosses this boundary.
+  backend witness submission carries decoded values and the adapter's rendered transcript.
+  Backend-native text is consumed only inside its adapter and never crosses this boundary.
 - The adapter outcome is either that successful typed submission or a typed decode refusal
   containing the producing backend identity, opaque obligation identity and adapter-owned decode
   cause. The refusal arm contains no assignments, replay packet or backend-native text. FR-016
   defines Kani's decode causes and its mapping into this arm.
-- A counterexample from one of two sources:
-  - a backend counterexample: an [FR-017](../../kani/functional/FR-017-kani-execution-evidence.md) `falsified`
-    run's playback, decoded by FR-016 into values named by their argument bindings;
-  - a corpus counterexample: canonical assignments that no backend run produced.
+- A backend counterexample: an [FR-017](../../kani/functional/FR-017-kani-execution-evidence.md)
+  `falsified` run's playback, decoded by FR-016 into values named by their argument bindings.
 - The obligation's `KaniObligationIdentity` and its argument bindings, each naming its parameter
   node id and declared domain ([FR-025](../../kani/functional/FR-025-generated-subject-abi.md)).
 - The proving run's envelope members, supplied by the caller: every `WitnessPacket` member QSL
@@ -122,7 +119,7 @@ members against the operation's declaration in the domain package.
 ## Outputs
 
 - A `WitnessEnvelope` admitted through `WitnessEnvelope::reconstruct`, whose `ReplaySource` is
-  `Witness` for a backend counterexample and `Input` for a corpus counterexample.
+  `Witness` for a backend counterexample.
 - A typed evidence failure naming decode, out-of-domain, QSL admission or replay-verdict
   disagreement when that stage refuses; none is a contract success or contract failure.
 - For each retained minimization revision, a CG-owned immutable lineage record referring to its
@@ -179,8 +176,6 @@ members against the operation's declaration in the domain package.
   request members, and shall invent no request member. The state-clause path's invocation and
   snapshot documents are the one addition to the byte provision, built as the state-clause
   bullets below state, and no other document is added.
-- When a counterexample did not come from a backend transcript, the generator shall submit it as
-  the `Input` arm, keyed by parameter node id, and shall never build a `Witness` for it.
 - When a counterexample is a frame counterexample, the generator shall submit a
   `WitnessEnvelope<FrameCounterexample>` through `qsl_replay::replay_frame`.
 - The generator shall mint every obligation identity, for a function and for a state frame, by
@@ -355,7 +350,6 @@ members against the operation's declaration in the domain package.
 | FR-024-AC-2 | Every backend-witness transcript the generator passes to `Witness::parse` is produced by the one adapter rendering function from decoded values, and that function takes no backend-native text as input. | Test (TC-035) |
 | FR-024-AC-3 | A counterexample with any value outside its declared domain is reported out-of-domain and neither `replay` nor `replay_frame` is called. The endpoints of each declared domain are admitted, and the values immediately outside it are not. | Test (TC-035) |
 | FR-024-AC-4 | For each `WitnessPacket` member in turn, a packet missing that member is refused by `WitnessEnvelope::reconstruct` with QSL's `MissingMember` naming it, and no replay runs. A packet whose trace position is present with the value none is admitted. | Test (TC-035) |
-| FR-024-AC-5 | A corpus counterexample is submitted as the `Input` arm keyed by parameter node id. It settles `reproduced-without-witness` when it agrees, and no `Witness` is built for it. | Test (TC-035) |
 | FR-024-AC-6 | A frame counterexample is submitted as a `WitnessEnvelope<FrameCounterexample>` through `qsl_replay::replay_frame`, and its clause, frame, anchor and occurrence identities reach QSL unchanged. | Test (TC-035) |
 | FR-024-AC-7 | A reduced `Witness`-arm candidate is retained only when a backend re-run and native replay both preserve domain validity and the failure; a candidate that changes domain validity or the verdict is discarded. | Test (TC-035) |
 | FR-024-AC-8 | A retained reduced `Witness`-arm envelope carries its own backend re-run's transcript, never the original counterexample's. | Test (TC-035) |
@@ -411,16 +405,17 @@ FR-024-AC-2, FR-024-AC-3, FR-024-AC-4 and FR-024-AC-6 are backed by focused
 TC-035 tests: the `Witness::parse` source scan in `tests/it/layout.rs`, the function and
 frame domain-endpoint tests, the missing-packet-member test in
 `tests/it/kani_obligations_state_clause_replay.rs`, and the frame packet identity test in
-`tests/it/kani_obligations_state_frame.rs`. FR-024-AC-1, FR-024-AC-5 and FR-024-AC-7 to
-FR-024-AC-9 remain planned. FR-024-AC-10 has a source-scan test over `src/`;
+`tests/it/kani_obligations_state_frame.rs`. FR-024-AC-1 and FR-024-AC-7 to
+FR-024-AC-9 remain planned. FR-024-AC-5 is retired (IR-890); its ID is not reused.
+FR-024-AC-10 has a source-scan test over `src/`;
 FR-024-AC-11 to FR-024-AC-30 are met:
 
 - `src/replay/witness.rs` decodes the playback into `qsl_replay::WitnessValue` and imports no
   Contract IR witness type.
 - The bounded-Kani corpus retains no counterexample packet, so no corpus counterexample reaches
-  QSL as the `Input` arm and FR-024-AC-5 is unbacked. The corpus path is to be removed, not
-  built on: FR-015-AC-109 to FR-015-AC-111 plan its deletion per family, and FR-015-AC-111 drops
-  its replay, so FR-024-AC-5 stays unbacked.
+  QSL as the `Input` arm. Its replay uses Kani playback on the witness path. The corpus path is
+  planned for removal under FR-015-AC-109 to FR-015-AC-111, so the former `Input`-arm obligation
+  FR-024-AC-5 is retired without replacement.
 - A postcondition state-clause counterexample is replayed (IR-460): `src/replay/state_clause.rs`
   builds the invocation and snapshot documents through `core::canonical` and replays through
   `qsl_replay::replay_state_clause`, so FR-024-AC-11 to FR-024-AC-19 are backed by tagged tests
