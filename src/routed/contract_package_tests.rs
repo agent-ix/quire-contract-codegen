@@ -536,8 +536,81 @@ mod tests {
                 wrong
             },
         ] {
-            assert!(PackageItems::new(&admitted, &changed).is_err());
+            let expected = if changed.len() == positions.len() {
+                PackageRequestError::AccountingIdentity {
+                    accounting_index: 1,
+                    requested: function.clone(),
+                    accounted: excluded.clone(),
+                }
+            } else {
+                PackageRequestError::Count {
+                    requested: changed.len(),
+                    accounted: positions.len(),
+                }
+            };
+            assert_eq!(
+                PackageItems::new(&admitted, &changed).err(),
+                Some(expected.clone())
+            );
+            assert_eq!(
+                negotiate_contract_package(
+                    &admitted,
+                    &changed,
+                    &empty_backend_request(2, &admitted_source(SOURCE), &function)
+                )
+                .err(),
+                Some(crate::routed::capability::ContractNegotiationError::Package(expected))
+            );
         }
+    }
+
+    #[trace("TC-053", "FR-039-AC-9")]
+    #[test]
+    fn excluded_position_refuses_function_oracle_before_claim_or_artifact() {
+        use crate::oracle::claim::OracleGenerationError;
+        use crate::oracle::function::{generate_exact_function_oracles, ExactFunctionItem};
+        let (_, admitted, positions, _, excluded) = excluded_fixture();
+        let result = generate_exact_function_oracles(
+            &admitted,
+            &positions,
+            &[],
+            &[],
+            &[1],
+            &[ExactFunctionItem {
+                call_node_id: excluded.clone(),
+                function: "f".to_owned(),
+                argument_node_ids: Vec::new(),
+            }],
+        );
+        assert!(
+            matches!(result, Err(OracleGenerationError::PackageRequest(PackageRequestError::ExcludedDriverIndex { request_index: 1, node_id })) if node_id == excluded)
+        );
+    }
+
+    #[trace("TC-053", "FR-039-AC-9")]
+    #[test]
+    fn excluded_position_refuses_equality_oracle_before_claim_or_artifact() {
+        use crate::oracle::claim::OracleGenerationError;
+        use crate::oracle::equality::{
+            generate_composite_equality_oracles, CompositeEqualityItem, EqualityOperandDescriptor,
+            EqualityOperatorKind,
+        };
+        let (_, admitted, positions, _, excluded) = excluded_fixture();
+        let result = generate_composite_equality_oracles(
+            &admitted,
+            &positions,
+            &[1],
+            &[CompositeEqualityItem {
+                node_id: excluded.clone(),
+                operator: EqualityOperatorKind::Equal,
+                left: EqualityOperandDescriptor::typed(excluded.clone()),
+                right: EqualityOperandDescriptor::typed(excluded.clone()),
+            }],
+            Default::default(),
+        );
+        assert!(
+            matches!(result, Err(OracleGenerationError::PackageRequest(PackageRequestError::ExcludedDriverIndex { request_index: 1, node_id })) if node_id == excluded)
+        );
     }
 
     #[trace("TC-053", "FR-039-AC-10")]
@@ -628,6 +701,43 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![0, 2]
         );
+        let mut with_context = positions.clone();
+        with_context.insert(
+            1,
+            ContractRequestPosition::ContextRoot {
+                node_id: function.clone(),
+            },
+        );
+        let roots = with_context
+            .iter()
+            .map(|position| position.node_id().clone())
+            .collect::<Vec<_>>();
+        let lowered = source.lower(&roots, &routed_contract_lowering_profile());
+        let contextual = match ContractPackageWireV1::read(
+            lowered.package.canonical_bytes().expect("FR-330 bytes"),
+            CheckedPackageReadLimits::bounded(),
+            &ContractDependencies::new(),
+        ) {
+            ContractPackageReadResult::Admitted(package) => package,
+            other => panic!("FR-330 admission: {other:?}"),
+        };
+        let contextual_settled = negotiate_contract_package(&contextual, &with_context, &envelope)
+            .expect("context root has no envelope item");
+        assert_eq!(contextual_settled.len(), 2);
+        assert_eq!(
+            contextual_settled
+                .iter()
+                .map(|item| item.request_index)
+                .collect::<Vec<_>>(),
+            vec![0, 2]
+        );
+        assert_eq!(
+            contextual_settled
+                .iter()
+                .map(|item| item.backend.as_ref().expect("lowered").request_index)
+                .collect::<Vec<_>>(),
+            vec![0, 2]
+        );
         for count in [1, 3] {
             let error = negotiate_contract_package(
                 &admitted,
@@ -657,6 +767,16 @@ mod tests {
     #[trace("TC-030", "FR-019-AC-53")]
     #[test]
     fn kani_function_after_excluded_position_settles_at_driver_index() {
+        assert_kani_function_with_exclusion(false);
+    }
+
+    #[trace("TC-030", "FR-019-AC-53")]
+    #[test]
+    fn excluded_position_before_function_body_preserves_body_driver_index() {
+        assert_kani_function_with_exclusion(true);
+    }
+
+    fn assert_kani_function_with_exclusion(before_body: bool) {
         use exact_function_fixture::{
             code_id, source_bound_call_package, SOURCE_BODY, SOURCE_CALL, SOURCE_FUNCTION,
             SOURCE_PARAM_A, SOURCE_PARAM_B,
@@ -665,7 +785,11 @@ mod tests {
         let body = ids.resolve(&code_id(SOURCE_BODY));
         let function = ids.resolve(&code_id(SOURCE_FUNCTION));
         let call = ids.resolve(&code_id(SOURCE_CALL));
-        let roots = [body.clone(), function.clone(), call.clone()];
+        let roots = if before_body {
+            [function.clone(), body.clone(), call.clone()]
+        } else {
+            [body.clone(), function.clone(), call.clone()]
+        };
         let lowered = checked.lower(&roots, &routed_contract_lowering_profile());
         let admitted = match ContractPackageWireV1::read(
             lowered.package.canonical_bytes().expect("FR-330 bytes"),
@@ -676,16 +800,26 @@ mod tests {
             other => panic!("FR-330 admission: {other:?}"),
         };
         assert!(matches!(
-            &admitted.wire().feature_accounting[1],
+            &admitted.wire().feature_accounting[usize::from(!before_body)],
             ContractFeatureRecordV1::Lowered { node_id } if node_id == &function
         ));
+        let bound_body = ContractRequestPosition::DriverItem {
+            node_id: body.clone(),
+            result_selection: ContractDriverResultSelection::NotApplicable,
+        };
+        let excluded_function = ContractRequestPosition::Excluded {
+            node_id: function.clone(),
+        };
         let positions = [
-            ContractRequestPosition::DriverItem {
-                node_id: body.clone(),
-                result_selection: ContractDriverResultSelection::NotApplicable,
+            if before_body {
+                excluded_function.clone()
+            } else {
+                bound_body.clone()
             },
-            ContractRequestPosition::Excluded {
-                node_id: function.clone(),
+            if before_body {
+                bound_body
+            } else {
+                excluded_function
             },
             ContractRequestPosition::DriverItem {
                 node_id: call.clone(),
@@ -722,10 +856,13 @@ mod tests {
                 ],
             },
         };
+        assert!(crate::routed::capability::take_package_classifier_indices().is_empty());
+        assert!(crate::oracle::function::take_function_preflight_indices().is_empty());
         assert_eq!(crate::oracle::function::take_function_preflight_reads(), 0);
         let settled = negotiate_contract_package(&admitted, &positions, &envelope)
             .expect("Kani settles bound call");
         assert_eq!(settled.len(), 2);
+        assert_eq!(settled[0].request_index, usize::from(before_body));
         assert_eq!(settled[1].request_index, 2);
         let backend = settled[1].backend.as_ref().expect("lowered bound item");
         assert_eq!(backend.request_index, 2);
@@ -734,6 +871,11 @@ mod tests {
             crate::routed::capability::Disposition::Supported { .. }
         ));
         assert!(settled.iter().all(|item| item.node_id != function));
+        assert_eq!(
+            crate::routed::capability::take_package_classifier_indices(),
+            vec![2]
+        );
+        assert!(crate::oracle::function::take_function_preflight_indices().is_empty());
         assert_eq!(crate::oracle::function::take_function_preflight_reads(), 0);
     }
 
@@ -763,6 +905,11 @@ mod tests {
         assert!(
             matches!(generate_routed(&admitted, &positions, &[invalid], &GenerationContexts::default()), Err(crate::routed::generate::RoutedGenerationError::ExcludedDriverIndex { request_index: 1, node_id }) if node_id == excluded)
         );
+        let mismatched = route(1, function.clone());
+        assert!(matches!(
+            generate_routed(&admitted, &positions, &[mismatched], &GenerationContexts::default()),
+            Err(crate::routed::generate::RoutedGenerationError::ExcludedDriverIndex { request_index: 1, node_id }) if node_id == excluded
+        ));
         let valid = [route(0, function.clone()), route(2, function)];
         let generated = generate_routed(
             &admitted,
