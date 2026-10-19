@@ -43,3 +43,13 @@ AC-4 covers all 13 `WitnessPacket` members of the pinned `qsl-replay`. `StateCla
 ## Verdict
 
 **PASS with findings.** The AC-3, AC-4 and AC-6 tests exercise their criteria, and production mutants fail them. FND-001 is a real hole in the AC-2 scan that is cheap to close. Fix it in this PR before merge. FND-002 and FND-003 are low-severity hardening.
+
+## Dispositions
+
+Disposition pass 1, against head 34704a9a9146bc9f581c34c00aa0e9397882ef4a.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The scan now visits every `ExprPath` whose last two segments are `Witness`, `parse` (tests/it/layout.rs). Reviewer mutants now fail the test: a qualified `qsl_replay::Witness::parse(..)` call, and `.map(qsl_replay::Witness::parse)`, each added in src/replay/frame.rs |
+| FND-002 | fixed | An exhaustive `let WitnessPacket { obligation_identity: _, ... family_payload: _ } = &replay.packet;` with no `..` now breaks the build if QSL adds a member |
+| FND-003 | fixed | New `skeleton_spine::tc_035_public_function_domain_boundaries_stop_before_replay` runs endpoints and adjacent values through `replay_counterexample_through` with a counting executor. A reviewer mutant that bypasses its `first_out_of_domain` fails the test at `amount_current=-1` |

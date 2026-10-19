@@ -46,3 +46,11 @@ The PR leaves NFR-002-AC-2 untagged. The reviewer confirmed the coder's reason: 
 ## Verdict
 
 **PASS with one medium finding.** The four criteria are backed by tests that exercise them. The coverage delta is exactly +4 and is correctly explained. The FR-024 "Current state" prose must be updated in this PR to match.
+
+## Dispositions
+
+Disposition pass 1, against head 34704a9a9146bc9f581c34c00aa0e9397882ef4a.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The "Current state" section now names AC-2, AC-3, AC-4 and AC-6 as backed, and AC-1, AC-5 and AC-7 to AC-9 as planned. The false domain/envelope sentence is deleted. The coverage paragraph states 555/909 backed and 232 unbacked rows, which the reviewer re-measured at this head (0 contradicted) |
