@@ -30,7 +30,7 @@ relationships:
 
 Verify that every requested capability claim is settled by exactly one
 `negotiate_*` arm over a closed backend kind, that each FR-290 rule settles its
-own row, and that only an item settled `supported` routes a backend.
+own row, including whole-envelope refusal for a repeated backend identity.
 
 ## Test Procedure
 
@@ -123,9 +123,18 @@ is another identity, and inspect which kinds were read.
 Enumerate the closed backend kind's variants and assert that settlement
 dispatches an arm for each.
 
-Ask each settlement that is not `supported`
-whether it routes a backend at all, and ask a manifest that repeats one backend
-identity the same question.
+For FR-019-AC-45, submit [A, A], [A, B, A], [A(Linked), A(Process)]
+and [A, A'] where A' changes another CG descriptor field. In each case,
+assert `negotiate_backend_provider` returns only
+`EnvelopeRefusal::ManifestRepeatsBackendIdentity { identity: "A" }` through
+its existing `Result<Vec<ItemSettlement>, EnvelopeRefusal>` signature, with
+no string cause, manifest or digest payload. Reverse the differing cases.
+
+For FR-019-AC-46, submit [B, A, B, A] in multiple orders and assert the
+bytewise-first repeated identity A is reported. Submit [A, a] and assert
+these case-distinct identities do not trigger this refusal. Pair a repeat
+with an invalid contract version, then with a foreign or absent capability
+vocabulary; assert `InvalidCapability` wins and no kind is read.
 
 For planned IR-516 arms, use admitted typed items with one registered candidate
 at a time. Derive the form, subject class, selected reduction and resolved
@@ -225,8 +234,14 @@ Both malformed-vocabulary envelopes refuse as
 
 Every variant of the closed backend kind has a dispatched arm.
 
-No settlement other than `supported` routes a backend, and a manifest repeating an
-identity routes none.
+Every second descriptor of one identity, identical or differing and adjacent
+or not, refuses the whole CG envelope with
+`ManifestRepeatsBackendIdentity { identity }`. The call returns no settlements,
+including for an item using another identity.
+The bytewise-first repeated identity is reported regardless of manifest
+order; case-distinct identities remain distinct, and contract-version or
+vocabulary refusal wins before repeat detection or kind reading
+(FR-019-AC-45 and FR-019-AC-46).
 
 For AC-34 through AC-41, every positive case uses a validated candidate and
 only a form, subject class and modifier its arm discharges. After candidate
