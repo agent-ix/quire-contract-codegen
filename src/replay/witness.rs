@@ -399,6 +399,35 @@ fn kani_concrete_playback_synthetic() {{\n\
         )
     }
 
+    #[trace("TC-026", "FR-016-AC-6")]
+    #[test]
+    fn decode_refuses_a_poisoned_suffix_past_each_bound() {
+        let transcript = synthetic_transcript("mod::h", 42);
+        let argument = [argument("value", KaniPrimitiveType::I64)];
+        let exact = WitnessDecodeLimits {
+            bytes: transcript.len(),
+            values: 1,
+        };
+        assert_eq!(
+            decode_falsification("h", "mod", &argument, &transcript, exact)
+                .expect("at both bounds")[0].1,
+            WitnessValue::Integer(42)
+        );
+        let poisoned_bytes = format!("{transcript}not a playback");
+        let error = decode_falsification("h", "mod", &argument, &poisoned_bytes, exact)
+            .expect_err("suffix beyond byte bound");
+        assert_eq!(error.code, "cg_witness_decode_bytes_limit");
+
+        let poisoned_value = two_value_transcript("mod::h", 42, false)
+            .replace("vec![0],", "vec![not_a_byte],");
+        let error = decode_falsification(
+            "h", "mod", &argument, &poisoned_value,
+            WitnessDecodeLimits { bytes: poisoned_value.len(), values: 1 },
+        )
+        .expect_err("poisoned second value beyond count bound");
+        assert_eq!(error.code, "cg_witness_decode_values_limit");
+    }
+
     /// A transcript whose value count or byte width disagrees with the
     /// persisted schema refuses by name rather than decoding: one `i64`
     /// value against a two-argument schema is an arity mismatch, and against
