@@ -47,4 +47,10 @@ Driver IR-773 fit: quire-driver depends on CG, QSL, IR, quire-exact and quire-se
 
 ## Dispositions
 
-No disposition pass has run yet. Rows are appended here, one per finding per round.
+Disposition pass 1, against head 02bb0b01963bd640e0ab8fcb6fa4cd514809f783 (merge-base 954af757, origin/main). The reviewer measured the following in a fresh worktree with its own target dir. `Cargo.lock` changes only first-party `source` lines and adds the existing `base64`, `num-bigint` and `num-integer` packages as `qsl-replay` dependencies; no crates.io `version` line and no `[[package]]` entry changes. One revision per first-party crate. `make deny` (one-copy check included), `cargo check --locked --all-targets`, `make fmt-check lint spec` and the 20 symbolic collection tests pass (real-Kani test still ignored). QSL 5b7927de, Contract IR 9ff7d489, quire-exact c2cd5f56, quire-semantic-value f3dba824 and filament-core-data 3173a8f7 each equal their upstream `main`; runtime main is still 62a02532. `make deny` warns that yoke-derive 0.8.3 is yanked; that lock entry is the same on origin/main, so the PR does not cause it.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The PR body now says "Contract runtime `main` was re-measured at `62a02532`", which matches upstream main |
+| FND-002 | fixed | The crates.io changes were reverted: the PR diff has no `version` line change, and the body says "All crates.io package records match CG `main`; the cohort was updated selectively with `cargo update -p`." |
+| FND-003 | fixed | The body has a "Merge order and driver handoff" section: "In quire-driver, update selectively with `cargo update -p` ... Keep quire-contract-runtime at `3cc88c48` until PR #397 lands; a plain `cargo update` picks runtime `main` and CG then fails to compile on the removed exact re-exports." |

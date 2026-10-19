@@ -37,4 +37,4 @@ The FR-015 prose cites test line numbers (for example `:705`) that are now one l
 
 ## Dispositions
 
-No disposition pass has run yet. Rows are appended here, one per finding per round.
+Disposition pass 1, against head 02bb0b01963bd640e0ab8fcb6fa4cd514809f783. No finding to dispose of (clean review). The fix round changes only `Cargo.lock` revisions and adds the review files; `quoin matrix` bindings for FR-015-AC-96..102 are unchanged, and the 20 symbolic collection tests pass at the new head.
