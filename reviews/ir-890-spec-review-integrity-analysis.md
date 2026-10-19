@@ -47,6 +47,7 @@ counterexample but keeps the criteria that reduce one, and two texts still rely 
 | FND-001 | fixed | 835d61d9: FR-024 `Input`-arm reduction statement deleted, FR-024-AC-9 row removed and recorded retired with ID not reused (FR-024:405-406, :416), AC-40 reduced to its `Witness` sentence, TC-035 step 7 and expected 7 reduced to the `Witness` arm, matrix row, TC-035 Traces To and spec/tests.md Replay line updated; no remaining `Input`-arm reduction text in spec/replay. |
 | FND-002 | fixed | 835d61d9: FR-016-AC-4 now reads "yields a typed mismatch, and never a failure or a replay error." |
 | FND-003 | fixed | 835d61d9: FR-016-AC-8 and TC-026:49 now read "none of the replay results"; FR-016:63 rewritten (see FND-004). |
+| FND-004 | fixed | Round 2, 8edcc438: FR-016:62-63 now reads "so it is not a replay result." |
 
 ## New findings (disposition pass 1)
 
