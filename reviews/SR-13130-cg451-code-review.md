@@ -76,3 +76,14 @@ medium and low.
 | FND-005 | low | The PR commits the author's own review artifact `reviews/26-10-19-ir-887-repeated-backend-identity.md` (SR-13102). Its scope lists `.github/workflows/ci.yml`, which the diff does not touch. It records PASS "against ... the referenced FR-290 refusal vocabulary" without noting the FR-290 semantic differences in FND-001. Its file name carries an agent-typed date prefix | reviews/26-10-19-ir-887-repeated-backend-identity.md:6-16 |
 
 ## Dispositions
+
+Round 1, against head 5c07c891b630056da636f5925de496def23b7f75. The FR-019 amendment (#453, AC-45, AC-46,
+AC-47 and the Behavior note) is merged on CG main.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | FR-019 now names the refusal: AC-45, AC-46, Outputs and the Behavior note. It is a CG-owned input-precondition defense distinct from FR-290 registration semantics. The code returns the new typed `EnvelopeRefusal::ManifestRepeatsBackendIdentity { identity }` and no longer uses `InvalidCapability`/`duplicate-backend` (capability.rs:972-976, 1305-1316) |
+| FND-002 | fixed | A repeated identity is its own typed variant. `InvalidCapability` again carries only the two `unsupported-version` members, so the doc "Both carrier members refuse with `unsupported-version`" is now true (capability.rs:961) |
+| FND-003 | fixed | The new tests cover [A,B,A] non-adjacent repeats, every permutation of [A1,B,A2], and bytewise-first selection among the repeated identities A and B in four orders. The adjacent-only and `.max()` mutants are both killed |
+| FND-004 | fixed | The comment now identifies a repeated candidate entry as the way to reach the named-backend `many` arm with a unique manifest, and describes the arm's fallback classification without claiming the candidates disagree with the name (capability.rs:1465-1469) |
+| FND-005 | fixed | `reviews/26-10-19-ir-887-repeated-backend-identity.md` is absent at the head and in `git diff origin/main...HEAD` |

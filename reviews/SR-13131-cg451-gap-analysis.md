@@ -61,3 +61,9 @@ and are not repeated here.
 - Plan completion: not assessed
 
 ## Dispositions
+
+Round 1, against head 5c07c891b630056da636f5925de496def23b7f75.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | The merged FR-019 amendment (#453) split AC-10. AC-10 is now "Only an item settled `supported` routes.", verified by Analysis against quire-driver FR-001-AC-3 (TC-003) and QSL FR-057-AC-6 (TC-155). The repeat clause moved to AC-45. The PR's tests carry only AC-45 and AC-46 tags, and the matrix row lists AC-10 as Analysis, so the over-claimed AC-10 tag is gone |
