@@ -39,3 +39,13 @@ findings.
 | FND-001 | low | "If an identity has differing descriptors, it shall refuse every registration of that identity" is unwanted-behaviour form without "then" and with the pronoun "it" as subject. In the same bullet, "registrations of other identities shall remain eligible" makes the registrations the subject rather than the system. Rewrite as "If ..., then the generator shall ..." and "the generator shall keep registrations of other identities eligible" | spec/routed/functional/FR-019-capability-settlement.md:129-132 |
 | FND-002 | low | "The choice and reported identity shall not depend on manifest order": "the choice" has no antecedent. Byte-equal repeats need no choice, and for differing repeats nothing is chosen | spec/routed/functional/FR-019-capability-settlement.md:132-133 |
 | FND-003 | low | "The conflicting identity shall produce a dedicated typed registration refusal" makes the identity, not the generator, the actor. Use "the generator shall return ... for the conflicting identity" | spec/routed/functional/FR-019-capability-settlement.md:135-137 |
+
+## Dispositions
+
+Round 1, reviewed at def6c3f4529e4439f83cc8b5972d7600eb40e364. The Behavior bullets were rewritten. `make spec` reports no EARS warning in FR-019.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | Rewritten as "If ..., then the generator shall refuse the whole envelope ..." with the generator as subject |
+| FND-002 | fixed | The "choice" sentence is gone; replaced by "If several identities repeat, then the generator shall report the bytewise-first repeated identity, independent of manifest order or adjacency" |
+| FND-003 | fixed | The generator is now the actor of every new shall |

@@ -46,3 +46,19 @@ atomicity. Fix FND-002 together with SR-13170 FND-001 to FND-004.
 | FND-001 | low | "QSpec FR-331's manifest has unique registered identities after this rule is applied" turns FR-331:57 around. FR-331 requires the manifest as produced, the FR-290 snapshot, to have unique identities. So a manifest with a repeat is already not FR-331-conformant, and CG's rule is a defence at its public API, not the step that makes FR-331 hold. FR-019 Inputs ("the registered backend descriptors") and the `BackendProviderEnvelope.manifest` doc ("One descriptor per registered backend in the registry snapshot") are also not updated to say the public boundary may receive repeats | spec/routed/functional/FR-019-capability-settlement.md:132-134, spec/routed/functional/FR-019-capability-settlement.md:74-76, src/routed/capability.rs:945 |
 | FND-002 | medium | FR-019-AC-45 combines about six separately failing claims in one criterion: byte-equal repeats held once, differing repeats refused with a typed payload, no descriptor retained, other identities isolated, independence from order and adjacency, and several conflicting identities. One tag on AC-45 could back part of it, as SR-13131 FND-001 found for the old compound AC-10. Split it into two or three ACs, for example hold-once, refusal and payload, and isolation and order | spec/routed/functional/FR-019-capability-settlement.md:426 |
 | FND-003 | low | The conflict note is a Behavior bullet with no "shall", and ends "not a change in the number of accepted repeats". That is inaccurate: byte-equal repeats change from routing nothing (old AC-10) to being held once. Move the note to rationale or change-note prose, and state the behaviour change plainly | spec/routed/functional/FR-019-capability-settlement.md:121-125 |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | medium | FR-019-AC-47 has a split verification, "Test (TC-030) for CG; Analysis for QSL routing precondition", in a single criterion. Its Test half adds nothing CG can observe beyond AC-45: an `Err` already means no settlements. Its "produces no generation input or artifact" is not CG behaviour either, because `RoutedGenerationItem::from_descriptor` and `generate_routed` take descriptors and routed items, not a settlement, so the caller decides. One tag on AC-47 would mark the Analysis half Covered. Fold "returns no item settlements" into AC-45, and make AC-47 an Analysis-only criterion stating the corrected QSL premise (SR-13170 FND-006) | spec/routed/functional/FR-019-capability-settlement.md:439, src/routed/generate.rs:79-101, src/routed/generate.rs:295-300 |
+
+## Dispositions
+
+Round 1, reviewed at def6c3f4529e4439f83cc8b5972d7600eb40e364.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | The Note says CG's check "defends that precondition rather than establishing it". Inputs states the FR-331 uniqueness precondition, and the `manifest` doc reads "One descriptor per backend identity in a valid FR-331 registry snapshot" with the repeat rule |
+| FND-002 | fixed | AC-45 is split into AC-45 (refusal and payload), AC-46 (ordering, case and precedence) and AC-47. Each of AC-45 and AC-46 can fail on its own in TC-030. AC-47's split verification is the new FND-004 |
+| FND-003 | fixed | The note is now a **Note:** paragraph outside the shall bullets. It states plainly that byte-equal repeats, which routed nothing under the old AC-10, now cause a typed precondition refusal |
