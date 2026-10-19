@@ -10,7 +10,8 @@ use qsl_replay::{
 use quire_contract_codegen::{
     negotiate_backend_provider, routed_contract_lowering_profile, BackendDescriptor, BackendKind,
     BackendProviderEnvelope, Candidate, Candidates, CapabilityKind, Cause,
-    ContractDriverResultSelection, ContractRequestPosition, Disposition, EnvelopeRefusal,
+    ContractDriverResultSelection, ContractPackageIncompleteProjection,
+    ContractPackageRefusalProjection, ContractRequestPosition, Disposition, EnvelopeRefusal,
     ExtentClassification, ExtentDomain, InvalidObligationItem, ItemSettlement, KaniForm, Mode,
     ProviderOrigin, RequestItem, RequestedKind, UnsupportedObligation, BACKEND_PROVIDER_CONTRACT,
     CAPABILITY_VOCABULARY,
@@ -39,6 +40,66 @@ fn kani(advertised: Vec<(CapabilityKind, Mode)>) -> BackendDescriptor {
         domains: None,
         bounds: None,
     }
+}
+
+#[trace("TC-030", "FR-019-AC-48")]
+#[test]
+fn reader_refusal_projection_preserves_every_public_field() {
+    let reader = ContractPackageWireV1::read(
+        b"{}",
+        CheckedPackageReadLimits::bounded(),
+        &ContractDependencies::new(),
+    );
+    let ContractPackageReadResult::Refused(refusal) = reader else {
+        panic!("malformed contract package must be refused: {reader:?}");
+    };
+    let projected = ContractPackageRefusalProjection::from_reader(&refusal);
+    let wire = serde_json::to_value(EnvelopeRefusal::ContractPackageReadRefused {
+        refusal: projected.clone(),
+    })
+    .expect("serialize typed refusal");
+    assert_eq!(wire["code"], "contract_package_read_refused");
+    let fields = &wire["cause"]["refusal"];
+    assert_eq!(fields["code"], serde_json::to_value(refusal.code).unwrap());
+    assert_eq!(fields["path"], serde_json::to_value(refusal.path).unwrap());
+    assert_eq!(fields["cause"], serde_json::to_value(refusal.cause).unwrap());
+    assert_eq!(fields["locus"], serde_json::to_value(refusal.locus).unwrap());
+    assert_eq!(
+        fields["contract_version"],
+        serde_json::to_value(refusal.contract_version).unwrap()
+    );
+    assert_eq!(
+        fields["document_pointer"],
+        serde_json::to_value(refusal.document_pointer).unwrap()
+    );
+    assert_eq!(fields["expected"], serde_json::to_value(refusal.expected).unwrap());
+    assert_eq!(fields["actual"], serde_json::to_value(refusal.actual).unwrap());
+    assert!(fields.get("expected_node_id").is_none());
+}
+
+#[trace("TC-030", "FR-019-AC-49")]
+#[test]
+fn reader_incomplete_projection_preserves_the_exhausted_limit() {
+    let mut limits = CheckedPackageReadLimits::bounded();
+    limits.bytes = 1;
+    let reader = ContractPackageWireV1::read(b"{}", limits, &ContractDependencies::new());
+    let ContractPackageReadResult::Incomplete(incomplete) = reader else {
+        panic!("byte ceiling must be incomplete: {reader:?}");
+    };
+    let projected = ContractPackageIncompleteProjection::from_reader(&incomplete);
+    let wire = serde_json::to_value(EnvelopeRefusal::ContractPackageReadIncomplete {
+        incomplete: projected,
+    })
+    .expect("serialize typed incomplete result");
+    assert_eq!(wire["code"], "contract_package_read_incomplete");
+    let fields = &wire["cause"]["incomplete"];
+    assert_eq!(
+        fields["limit_kind"],
+        serde_json::to_value(incomplete.limit_kind).unwrap()
+    );
+    assert_eq!(fields["limit"], incomplete.limit);
+    assert_eq!(fields["consumed"], incomplete.consumed);
+    assert_eq!(fields["path"], serde_json::to_value(incomplete.path).unwrap());
 }
 
 fn candidate(identity: &str) -> Candidate {
