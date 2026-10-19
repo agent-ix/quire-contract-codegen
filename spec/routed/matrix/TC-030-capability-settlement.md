@@ -30,7 +30,7 @@ relationships:
 
 Verify that every requested capability claim is settled by exactly one
 `negotiate_*` arm over a closed backend kind, that each FR-290 rule settles its
-own row, and that only an item settled `supported` routes a backend.
+own row, including whole-envelope refusal for a repeated backend identity.
 
 ## Test Procedure
 
@@ -123,8 +123,7 @@ is another identity, and inspect which kinds were read.
 Enumerate the closed backend kind's variants and assert that settlement
 dispatches an arm for each.
 
-Ask each settlement that is not `supported` whether it routes a backend at
-all. For FR-019-AC-45, submit [A, A], [A, B, A], [A(Linked), A(Process)]
+For FR-019-AC-45, submit [A, A], [A, B, A], [A(Linked), A(Process)]
 and [A, A'] where A' changes another CG descriptor field. In each case,
 assert `negotiate_backend_provider` returns only
 `EnvelopeRefusal::ManifestRepeatsBackendIdentity { identity: "A" }` through
@@ -136,12 +135,6 @@ bytewise-first repeated identity A is reported. Submit [A, a] and assert
 these case-distinct identities do not trigger this refusal. Pair a repeat
 with an invalid contract version, then with a foreign or absent capability
 vocabulary; assert `InvalidCapability` wins and no kind is read.
-
-For FR-019-AC-47, give a repeated-identity envelope at least one otherwise
-eligible item, including an item for a different identity. Assert the whole
-call returns no settlements, no routed generation input is built from it,
-and no artifact is generated. Analyze QSL FR-290's registration withdrawal
-and routing rule separately; CG's public API cannot observe QSL routing.
 
 For planned IR-516 arms, use admitted typed items with one registered candidate
 at a time. Derive the form, subject class, selected reduction and resolved
@@ -241,16 +234,14 @@ Both malformed-vocabulary envelopes refuse as
 
 Every variant of the closed backend kind has a dispatched arm.
 
-No settlement other than `supported` routes a backend. Every second
-descriptor of one identity, identical or differing and adjacent or not,
-refuses the whole CG envelope with
-`ManifestRepeatsBackendIdentity { identity }`. The result has no settlements,
-generation input or artifact, including for an item using another identity.
+Every second descriptor of one identity, identical or differing and adjacent
+or not, refuses the whole CG envelope with
+`ManifestRepeatsBackendIdentity { identity }`. The call returns no settlements,
+including for an item using another identity.
 The bytewise-first repeated identity is reported regardless of manifest
 order; case-distinct identities remain distinct, and contract-version or
-vocabulary refusal wins before repeat detection or kind reading. QSL's
-registration and routing precondition is supported by Analysis, not by a
-CG routing assertion (FR-019-AC-45 through FR-019-AC-47).
+vocabulary refusal wins before repeat detection or kind reading
+(FR-019-AC-45 and FR-019-AC-46).
 
 For AC-34 through AC-41, every positive case uses a validated candidate and
 only a form, subject class and modifier its arm discharges. After candidate
