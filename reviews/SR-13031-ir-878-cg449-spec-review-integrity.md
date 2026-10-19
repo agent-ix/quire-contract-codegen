@@ -47,3 +47,5 @@ Disposition pass 1, against head 5d0c8f3c2f5731a7044e9ed4d30fef294683616f. `quir
 | --- | --- | --- |
 | FND-001 | fixed | The FR-042 row is now inside the Functional Requirement Coverage table at line 61, right after FR-035, and coverage reads it as `unbacked-row FR-042 functional-coverage` |
 | FND-002 | fixed | The spec/tests.md Oracle row now lists FR-014, FR-018, FR-021, FR-031, FR-035, FR-042, and the spec.md Complete-V1 oracles row names FR-042 |
+| FND-003 | fixed | Disposition pass 2, head f55ccd6f50502ff3986ff7d48518497b4edf4aea (fix commit 7ea126f4): the row now reads "🚧 PLANNED (IR-709): generated-oracle producer tests follow the IR-497 typed-payload cutover", with no QSL consumer credit |
+| FND-004 | fixed | Disposition pass 2: a TC-057 row is now in the Test Case Summary table, tracing to FR-042-AC-1, and coverage emits `unbacked-row TC-057 traces-to` (tests.md:104). Strict coverage shows 229 unbacked and 0 contradicted against 226 and 0 on main; the +3 are all FR-042/TC-057 rows and nothing is credited as backed. `make spec` is clean, and the AC text is still byte-identical to FR-369-AC-7 on quire-exact origin/main b83cab9 |
