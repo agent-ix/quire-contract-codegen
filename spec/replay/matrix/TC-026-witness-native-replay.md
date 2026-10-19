@@ -119,7 +119,9 @@ What stays unbacked: the native twin is hand-mirrored QSL source, not derived fr
 the Rust subject, and the input package is hand-built, so the contract-to-Contract-IR step does not
 run. The Kani lane is `#[ignore]` and outside `make ci`, so the real-prover mutations above are
 not gated in CI; the default suite pins the replay end and the decoder against a synthetic
-transcript only. FR-016-AC-6 and AC-7 are planned. FR-016-AC-12 is covered by
+transcript only. FR-016-AC-6 is covered by tagged witness unit, spine, frame, state-clause and
+bounded-corpus tests; the bounded-corpus test runs in the Kani lane. FR-016-AC-7 remains planned.
+FR-016-AC-12 is covered by
 `tc_026_an_executor_fault_remains_a_typed_replay_refusal`. FR-029-AC-10 already
 tests the terminal mapping for a fault wrapped in `SpineReplayError::Refused`.
 
@@ -138,8 +140,11 @@ counterexample the native twin falsifies is reproduced (AC-3); a twin that holds
 the clause, or any settlement other than a reproduced violation, is a verdict
 evidence failure (AC-4, AC-13, `src/replay/function.rs` unit tests). Decode, domain
 and verdict mismatches are one evidence-failure verdict with a typed cause. The
-caller-supplied byte and value-count decode limits (AC-6) and the charge, counter
-and limit comparison (AC-7) are planned. Replay-layer propagation of an executor
+caller-supplied byte and value-count decode limits (AC-6) are covered by tagged tests in
+`src/replay/witness.rs`, `tests/it/skeleton_spine.rs`,
+`tests/it/kani_obligations_state_frame.rs`,
+`tests/it/kani_obligations_state_clause_replay.rs` and `tests/it/bounded_kani_corpus.rs`.
+The charge, counter and limit comparison (AC-7) remains planned. Replay-layer propagation of an executor
 fault (AC-12) is covered by
 `tc_026_an_executor_fault_remains_a_typed_replay_refusal`; the terminal mapping is
 covered by FR-029-AC-10.

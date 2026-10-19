@@ -29,9 +29,10 @@ failure is reported.
   produced it.
 - The obligation's declared input domains.
 - Caller-supplied witness decode limits, in bytes and value count. Both bounds are required,
-  non-optional fields of replay inputs and required parameters of every witness-decoding entry
-  point, including the public `decode_falsification` and
-  `StateClauseReplayInputs::decode_falsification`; the decode-limit type has no `Default`.
+  non-optional fields of replay inputs. Every witness-decoding entry point receives them as a
+  required parameter or through a required field of its inputs; the public
+  `decode_falsification` and `StateClauseReplayInputs::decode_falsification` also take a direct
+  parameter. The decode-limit type and replay inputs have no `Default`.
   QSL's `ReplayLimits.input_bytes` bounds the replay request after CG decodes playback and does
   not bound CG's witness decoding.
 

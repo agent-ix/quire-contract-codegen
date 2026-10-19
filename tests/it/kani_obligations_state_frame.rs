@@ -788,6 +788,74 @@ fn run_of(harness: &StateFrameIdentity, values: [i64; 2]) -> Run {
     }
 }
 
+#[trace("TC-026", "FR-016-AC-6")]
+#[test]
+fn tc_026_frame_replay_refuses_poisoned_suffixes_at_both_decode_bounds() {
+    let twin = Twin::new();
+    let harness = frame_harness(&twin);
+    let invocation = twin.invocation("account", (5, 0), (6, 1));
+    let run = run_of(&harness, [5, 0]);
+    let limits = quire_contract_codegen::WitnessDecodeLimits {
+        bytes: run.playback.len(),
+        values: 2,
+    };
+    twin.try_frame_replay_with_limits("deposit", &invocation, "account", "audit", &run, limits)
+        .expect("at both bounds");
+    for (poisoned, limits, code) in [
+        (
+            format!("{}{}", run.playback, run.playback),
+            limits,
+            "cg_witness_decode_bytes_limit",
+        ),
+        (
+            run.playback
+                .replace("    ];", "        // 0\n        vec![not_a_byte],\n    ];"),
+            quire_contract_codegen::WitnessDecodeLimits {
+                bytes: usize::MAX,
+                values: 2,
+            },
+            "cg_witness_decode_values_limit",
+        ),
+    ] {
+        let mut candidate = run.clone();
+        candidate.playback = poisoned.clone();
+        let error = match twin.try_frame_replay_with_limits(
+            "deposit",
+            &invocation,
+            "account",
+            "audit",
+            &candidate,
+            limits,
+        ) {
+            Ok(_) => panic!("over-bound playback must refuse"),
+            Err(error) => error,
+        };
+        assert!(matches!(error, FrameReplayError::Decode(cause) if cause.code == code));
+        candidate.playback = poisoned;
+        let control = twin.try_frame_replay_with_limits(
+            "deposit",
+            &invocation,
+            "account",
+            "audit",
+            &candidate,
+            quire_contract_codegen::WitnessDecodeLimits {
+                bytes: candidate.playback.len(),
+                values: 3,
+            },
+        );
+        let error = match control {
+            Ok(_) => panic!("poisoned suffix must refuse when read"),
+            Err(error) => error,
+        };
+        let poisoned_code = if code == "cg_witness_decode_bytes_limit" {
+            "kani_witness_multiple_assertions_refused"
+        } else {
+            "kani_witness_byte_invalid"
+        };
+        assert!(matches!(error, FrameReplayError::Decode(cause) if cause.code == poisoned_code));
+    }
+}
+
 /// The forbidden-write run at the pre state `(balance, audit) = (5, 0)`.
 fn forbidden_run(twin: &Twin) -> Run {
     run_of(&frame_harness(twin), [5, 0])

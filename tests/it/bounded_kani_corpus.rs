@@ -486,11 +486,116 @@ fn tc_023_real_corpus_playback_replays_through_its_qsl_source() {
     ] {
         let playback = falsification_playback(classify_corpus(&case, harness_filter));
         assert_eq!(
-            case.replay_counterexample(&playback).unwrap(),
+            case.replay_counterexample(
+                &playback,
+                quire_contract_codegen::WitnessDecodeLimits {
+                    bytes: playback.len(),
+                    values: 0
+                }
+            )
+            .unwrap(),
             ReplayVerdict::Reproduced,
             "{harness_filter} counterexample should replay through its source"
         );
     }
+}
+
+/// The public corpus replay entry point receives both limits and refuses before reading a
+/// poisoned second assertion or first concrete value.
+#[trace("TC-026", "FR-016-AC-6")]
+#[test]
+#[ignore = "kani lane: run serially through `make kani`"]
+fn tc_026_corpus_replay_refuses_poisoned_suffixes_at_both_decode_bounds() {
+    let (profile, dispatch, input) = fixture();
+    let case = generate_bounded_kani_corpus_case(
+        crate::common::proof_ceilings::proof_ceilings(),
+        &profile,
+        &dispatch,
+        &input,
+        BoundedCorpusRequest::Collection(CollectionQuery {
+            source_id: "source".to_owned(),
+            values: vec![2, 2],
+            max_items: 2,
+            kind: QueryKind::ExistsEqual(7),
+        }),
+        &[],
+        &mut EmittedCorpusIdentities::new(),
+    )
+    .unwrap();
+    let playback = falsification_playback(classify_corpus(&case, "corpus_case_collection"));
+    assert_eq!(
+        case.replay_counterexample(
+            &playback,
+            quire_contract_codegen::WitnessDecodeLimits {
+                bytes: playback.len(),
+                values: 0
+            },
+        )
+        .unwrap(),
+        ReplayVerdict::Reproduced,
+    );
+    let poisoned = format!("{playback}{playback}");
+    let verdict = case
+        .replay_counterexample(
+            &poisoned,
+            quire_contract_codegen::WitnessDecodeLimits {
+                bytes: playback.len(),
+                values: 0,
+            },
+        )
+        .expect("over-bound evidence yields a verdict");
+    assert!(matches!(
+        verdict,
+        ReplayVerdict::EvidenceFailure(quire_contract_codegen::EvidenceFailureCause::Decode(ref cause))
+        if cause.code == "cg_witness_decode_bytes_limit"
+    ));
+    let control = case
+        .replay_counterexample(
+            &poisoned,
+            quire_contract_codegen::WitnessDecodeLimits {
+                bytes: poisoned.len(),
+                values: 0,
+            },
+        )
+        .expect("duplicate assertion yields a decode verdict");
+    assert!(matches!(
+        control,
+        ReplayVerdict::EvidenceFailure(quire_contract_codegen::EvidenceFailureCause::Decode(ref cause))
+        if cause.code == "kani_witness_multiple_assertions_refused"
+    ));
+    let poisoned_value = playback.replace(
+        "let concrete_vals: Vec<Vec<u8>> = vec![\n    ];",
+        "let concrete_vals: Vec<Vec<u8>> = vec![\n        // 0\n        vec![not_a_byte],\n    ];",
+    );
+    assert_ne!(poisoned_value, playback);
+    let verdict = case
+        .replay_counterexample(
+            &poisoned_value,
+            quire_contract_codegen::WitnessDecodeLimits {
+                bytes: poisoned_value.len(),
+                values: 0,
+            },
+        )
+        .expect("over-bound value yields a verdict");
+    assert!(matches!(
+        verdict,
+        ReplayVerdict::EvidenceFailure(quire_contract_codegen::EvidenceFailureCause::Decode(ref cause))
+        if cause.code == "cg_witness_decode_values_limit"
+    ));
+    let control = case
+        .replay_counterexample(
+            &poisoned_value,
+            quire_contract_codegen::WitnessDecodeLimits {
+                bytes: poisoned_value.len(),
+                values: 1,
+            },
+        )
+        .expect("invalid byte yields a decode verdict");
+    assert!(matches!(
+        control,
+        ReplayVerdict::EvidenceFailure(quire_contract_codegen::EvidenceFailureCause::Decode(ref cause))
+        if cause.code == "kani_witness_byte_invalid"
+    ));
 }
 
 /// Runs the corpus case's oracle and harness as one crate under the installed backend and
