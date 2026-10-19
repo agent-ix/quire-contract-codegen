@@ -1475,6 +1475,7 @@ fn generate_in_request(
     for (position, root) in input.roots.iter().enumerate() {
         let node_id = match root {
             quire_contract_codegen::ContractRequestPosition::DriverItem { node_id, .. }
+            | quire_contract_codegen::ContractRequestPosition::Excluded { node_id }
             | quire_contract_codegen::ContractRequestPosition::ContextRoot { node_id } => node_id,
         };
         available

@@ -88,17 +88,20 @@ fn generate_routed(
         .filter_map(|position| match position {
             ContractRequestPosition::DriverItem {
                 result_selection, ..
-            } => Some(result_selection),
+            } => Some(Some(result_selection)),
+            ContractRequestPosition::Excluded { .. } => Some(None),
             ContractRequestPosition::ContextRoot { .. } => None,
         })
         .collect::<Vec<_>>();
     let bound = routed
         .iter()
         .cloned()
-        .map(|item| match selections.get(item.request_index) {
-            Some(selection) => item.with_scalar_selection(package, (*selection).clone()),
-            None => item,
-        })
+        .map(
+            |item| match selections.get(item.request_index).copied().flatten() {
+                Some(selection) => item.with_scalar_selection(package, selection.clone()),
+                None => item,
+            },
+        )
         .collect::<Vec<_>>();
     generate_routed_impl(package, positions, &bound, contexts)
 }
@@ -510,7 +513,9 @@ fn routed_scalar_selection_must_match_admitted_driver_position() {
         ContractRequestPosition::DriverItem {
             result_selection, ..
         } => result_selection.clone(),
-        ContractRequestPosition::ContextRoot { .. } => unreachable!("first position is a driver"),
+        ContractRequestPosition::Excluded { .. } | ContractRequestPosition::ContextRoot { .. } => {
+            unreachable!("first position is a driver")
+        }
     };
     let changed = if selection == ContractDriverResultSelection::NotApplicable {
         ContractDriverResultSelection::OwnResult {

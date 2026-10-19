@@ -457,24 +457,52 @@ mod tests {
             .collect()
     }
 
-    fn excluded_fixture() -> (CheckedPackageV2, quire_contract_model::ContractPackageV1, Vec<ContractRequestPosition>, CheckedNodeId, CheckedNodeId) {
+    fn excluded_fixture() -> (
+        CheckedPackageV2,
+        quire_contract_model::ContractPackageV1,
+        Vec<ContractRequestPosition>,
+        CheckedNodeId,
+        CheckedNodeId,
+    ) {
         let source = admitted_source(SOURCE);
-        let function = source.graph().nodes.iter().find(|node| {
-            node.declaration.as_ref().is_some_and(|declaration| declaration.qualified_name.len() == 1 && declaration.qualified_name[0].as_ref() == "f")
-        }).expect("function").node_id.clone();
+        let function = source
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| {
+                node.declaration.as_ref().is_some_and(|declaration| {
+                    declaration.qualified_name.len() == 1
+                        && declaration.qualified_name[0].as_ref() == "f"
+                })
+            })
+            .expect("function")
+            .node_id
+            .clone();
         let excluded = source_function_body(&source, "f");
         let positions = vec![
-            ContractRequestPosition::DriverItem { node_id: function.clone(), result_selection: ContractDriverResultSelection::NotApplicable },
-            ContractRequestPosition::Excluded { node_id: excluded.clone() },
-            ContractRequestPosition::DriverItem { node_id: function.clone(), result_selection: ContractDriverResultSelection::NotApplicable },
+            ContractRequestPosition::DriverItem {
+                node_id: function.clone(),
+                result_selection: ContractDriverResultSelection::NotApplicable,
+            },
+            ContractRequestPosition::Excluded {
+                node_id: excluded.clone(),
+            },
+            ContractRequestPosition::DriverItem {
+                node_id: function.clone(),
+                result_selection: ContractDriverResultSelection::NotApplicable,
+            },
         ];
-        let requested = positions.iter().map(|position| position.node_id().clone()).collect::<Vec<_>>();
+        let requested = positions
+            .iter()
+            .map(|position| position.node_id().clone())
+            .collect::<Vec<_>>();
         let lowered = source.lower(&requested, &profile());
         let admitted = match ContractPackageWireV1::read(
             lowered.package.canonical_bytes().expect("FR-330 bytes"),
-            CheckedPackageReadLimits::bounded(), &ContractDependencies::new(),
+            CheckedPackageReadLimits::bounded(),
+            &ContractDependencies::new(),
         ) {
-            ContractPackageReadResult::Admitted(package) => package,
+            ContractPackageReadResult::Admitted(package) => *package,
             other => panic!("FR-330 admission: {other:?}"),
         };
         (source, admitted, positions, function, excluded)
@@ -485,45 +513,272 @@ mod tests {
     fn excluded_position_keeps_accounting_and_driver_index() {
         let (_, admitted, positions, function, excluded) = excluded_fixture();
         let items = PackageItems::new(&admitted, &positions).expect("all positions correspond");
-        assert_eq!(items.driver_count(), 3);
+        assert!(items.driver_node(3).is_none());
         assert_eq!(items.bound_count(), 2);
         assert_eq!(items.driver_node(1), Some(&excluded));
         assert_eq!(items.driver_node(2), Some(&function));
         for changed in [
-            positions[..1].iter().chain(&positions[2..]).cloned().collect::<Vec<_>>(),
-            { let mut extra = positions.clone(); extra.insert(1, positions[1].clone()); extra },
-            { let mut wrong = positions.clone(); wrong[1] = ContractRequestPosition::Excluded { node_id: function.clone() }; wrong },
+            positions[..1]
+                .iter()
+                .chain(&positions[2..])
+                .cloned()
+                .collect::<Vec<_>>(),
+            {
+                let mut extra = positions.clone();
+                extra.insert(1, positions[1].clone());
+                extra
+            },
+            {
+                let mut wrong = positions.clone();
+                wrong[1] = ContractRequestPosition::Excluded {
+                    node_id: function.clone(),
+                };
+                wrong
+            },
         ] {
             assert!(PackageItems::new(&admitted, &changed).is_err());
         }
     }
 
+    #[trace("TC-053", "FR-039-AC-10")]
+    #[test]
+    fn excluded_position_ends_context_span_and_orphans_following_root() {
+        let (source, _, positions, function, _) = excluded_fixture();
+        let admit = |positions: &[ContractRequestPosition]| {
+            let requested = positions
+                .iter()
+                .map(|position| position.node_id().clone())
+                .collect::<Vec<_>>();
+            let lowered = source.lower(&requested, &profile());
+            match ContractPackageWireV1::read(
+                lowered.package.canonical_bytes().expect("FR-330 bytes"),
+                CheckedPackageReadLimits::bounded(),
+                &ContractDependencies::new(),
+            ) {
+                ContractPackageReadResult::Admitted(package) => package,
+                other => panic!("FR-330 admission: {other:?}"),
+            }
+        };
+        let mut before = positions.clone();
+        before.insert(
+            1,
+            ContractRequestPosition::ContextRoot {
+                node_id: function.clone(),
+            },
+        );
+        let admitted_before = admit(&before);
+        let items = PackageItems::new(&admitted_before, &before).expect("owned context");
+        assert!(items.has_context_root(0, &function));
+        assert_eq!(items.bound_driver_index(1), Some(2));
+
+        let mut after = positions;
+        after.insert(
+            2,
+            ContractRequestPosition::ContextRoot {
+                node_id: function.clone(),
+            },
+        );
+        let admitted_after = admit(&after);
+        assert!(matches!(
+            PackageItems::new(&admitted_after, &after),
+            Err(PackageRequestError::OrphanContextRoot { accounting_index: 2, node_id }) if node_id == function
+        ));
+        assert!(matches!(
+            negotiate_contract_package(
+                &admitted_after,
+                &after,
+                &empty_backend_request(2, &source, &function)
+            ),
+            Err(
+                crate::routed::capability::ContractNegotiationError::Package(
+                    PackageRequestError::OrphanContextRoot {
+                        accounting_index: 2,
+                        ..
+                    }
+                )
+            )
+        ));
+    }
+
     #[trace("TC-030", "FR-019-AC-53")]
     #[test]
     fn excluded_position_consumes_no_envelope_item_and_preserves_both_indices() {
-        let (source, admitted, positions, function, _) = excluded_fixture();
+        let (source, admitted, positions, function, excluded) = excluded_fixture();
+        assert!(matches!(
+            &admitted.wire().feature_accounting[1],
+            ContractFeatureRecordV1::Lowered { node_id } if node_id == &excluded
+        ));
         let envelope = empty_backend_request(2, &source, &function);
-        let settled = negotiate_contract_package(&admitted, &positions, &envelope).expect("two bound items");
+        let settled =
+            negotiate_contract_package(&admitted, &positions, &envelope).expect("two bound items");
         assert_eq!(settled.len(), 2);
-        assert_eq!(settled.iter().map(|item| item.request_index).collect::<Vec<_>>(), vec![0, 2]);
-        assert_eq!(settled.iter().map(|item| item.backend.as_ref().expect("lowered").request_index).collect::<Vec<_>>(), vec![0, 2]);
+        assert!(settled.iter().all(|item| item.node_id != excluded));
+        assert_eq!(crate::oracle::function::take_function_preflight_reads(), 0);
+        assert_eq!(
+            settled
+                .iter()
+                .map(|item| item.request_index)
+                .collect::<Vec<_>>(),
+            vec![0, 2]
+        );
+        assert_eq!(
+            settled
+                .iter()
+                .map(|item| item.backend.as_ref().expect("lowered").request_index)
+                .collect::<Vec<_>>(),
+            vec![0, 2]
+        );
         for count in [1, 3] {
-            let error = negotiate_contract_package(&admitted, &positions, &empty_backend_request(count, &source, &function)).expect_err("envelope count");
-            assert!(matches!(error, crate::routed::capability::ContractNegotiationError::EnvelopeItemCount { requested: 2, supplied } if supplied == count));
+            let error = negotiate_contract_package(
+                &admitted,
+                &positions,
+                &empty_backend_request(count, &source, &function),
+            )
+            .expect_err("envelope count");
+            assert!(
+                matches!(error, crate::routed::capability::ContractNegotiationError::EnvelopeItemCount { requested: 2, supplied } if supplied == count)
+            );
         }
+        let mut invalid_version = empty_backend_request(1, &source, &function);
+        invalid_version.contract_version = "unsupported-version".to_owned();
+        assert!(matches!(
+            negotiate_contract_package(&admitted, &positions, &invalid_version),
+            Err(
+                crate::routed::capability::ContractNegotiationError::Envelope(
+                    EnvelopeRefusal::InvalidCapability {
+                        member: "contract_version",
+                        ..
+                    }
+                )
+            )
+        ));
+    }
+
+    #[trace("TC-030", "FR-019-AC-53")]
+    #[test]
+    fn kani_function_after_excluded_position_settles_at_driver_index() {
+        use exact_function_fixture::{
+            code_id, source_bound_call_package, SOURCE_BODY, SOURCE_CALL, SOURCE_FUNCTION,
+            SOURCE_PARAM_A, SOURCE_PARAM_B,
+        };
+        let (checked, ids) = source_bound_call_package().admit_resolved();
+        let body = ids.resolve(&code_id(SOURCE_BODY));
+        let function = ids.resolve(&code_id(SOURCE_FUNCTION));
+        let call = ids.resolve(&code_id(SOURCE_CALL));
+        let roots = [body.clone(), function.clone(), call.clone()];
+        let lowered = checked.lower(&roots, &routed_contract_lowering_profile());
+        let admitted = match ContractPackageWireV1::read(
+            lowered.package.canonical_bytes().expect("FR-330 bytes"),
+            CheckedPackageReadLimits::bounded(),
+            &ContractDependencies::new(),
+        ) {
+            ContractPackageReadResult::Admitted(package) => package,
+            other => panic!("FR-330 admission: {other:?}"),
+        };
+        assert!(matches!(
+            &admitted.wire().feature_accounting[1],
+            ContractFeatureRecordV1::Lowered { node_id } if node_id == &function
+        ));
+        let positions = [
+            ContractRequestPosition::DriverItem {
+                node_id: body.clone(),
+                result_selection: ContractDriverResultSelection::NotApplicable,
+            },
+            ContractRequestPosition::Excluded {
+                node_id: function.clone(),
+            },
+            ContractRequestPosition::DriverItem {
+                node_id: call.clone(),
+                result_selection: ContractDriverResultSelection::NotApplicable,
+            },
+        ];
+        let mut envelope = empty_backend_request(2, &checked, &body);
+        envelope.manifest.push(BackendDescriptor {
+            identity: "kani".to_owned(),
+            advertised: vec![(CapabilityKind::ValueValidity, Mode::Bounded)],
+            origin: ProviderOrigin::Linked,
+            domains: None,
+            bounds: None,
+        });
+        envelope.items[1] = RequestItem {
+            kind: RequestedKind::Known(CapabilityKind::ValueValidity),
+            extent: Some(ExtentClassification {
+                extent: Mode::Bounded,
+                finite_bound_available: true,
+                domains: Vec::new(),
+                bounds: Vec::new(),
+            }),
+            named_backend: None,
+            candidates: Candidates::Set(vec![Candidate {
+                identity: "kani".to_owned(),
+            }]),
+            kani_form: KaniForm::V2FunctionApplication {
+                package: Box::new(checked),
+                function_node_id: function.clone(),
+                call_node_id: call,
+                argument_node_ids: vec![
+                    ids.resolve(&code_id(SOURCE_PARAM_A)),
+                    ids.resolve(&code_id(SOURCE_PARAM_B)),
+                ],
+            },
+        };
+        assert_eq!(crate::oracle::function::take_function_preflight_reads(), 0);
+        let settled = negotiate_contract_package(&admitted, &positions, &envelope)
+            .expect("Kani settles bound call");
+        assert_eq!(settled.len(), 2);
+        assert_eq!(settled[1].request_index, 2);
+        let backend = settled[1].backend.as_ref().expect("lowered bound item");
+        assert_eq!(backend.request_index, 2);
+        assert!(matches!(
+            backend.disposition,
+            crate::routed::capability::Disposition::Supported { .. }
+        ));
+        assert!(settled.iter().all(|item| item.node_id != function));
+        assert_eq!(crate::oracle::function::take_function_preflight_reads(), 0);
     }
 
     #[trace("TC-033", "FR-022-AC-29")]
     #[test]
     fn routed_excluded_driver_index_is_refused_before_generation() {
         let (_, admitted, positions, function, excluded) = excluded_fixture();
-        let process = BackendDescriptor { identity: "process".to_owned(), advertised: Vec::new(), origin: ProviderOrigin::Process, domains: None, bounds: None };
-        let route = |request_index, node_id| RoutedGenerationItem::from_descriptor(request_index, node_id, Candidate { identity: process.identity.clone() }, &process).expect("process route");
+        let process = BackendDescriptor {
+            identity: "process".to_owned(),
+            advertised: Vec::new(),
+            origin: ProviderOrigin::Process,
+            domains: None,
+            bounds: None,
+        };
+        let route = |request_index, node_id| {
+            RoutedGenerationItem::from_descriptor(
+                request_index,
+                node_id,
+                Candidate {
+                    identity: process.identity.clone(),
+                },
+                &process,
+            )
+            .expect("process route")
+        };
         let invalid = route(1, excluded.clone());
-        assert!(matches!(generate_routed(&admitted, &positions, &[invalid], &GenerationContexts::default()), Err(crate::routed::generate::RoutedGenerationError::ExcludedDriverIndex { request_index: 1, node_id }) if node_id == excluded));
+        assert!(
+            matches!(generate_routed(&admitted, &positions, &[invalid], &GenerationContexts::default()), Err(crate::routed::generate::RoutedGenerationError::ExcludedDriverIndex { request_index: 1, node_id }) if node_id == excluded)
+        );
         let valid = [route(0, function.clone()), route(2, function)];
-        let generated = generate_routed(&admitted, &positions, &valid, &GenerationContexts::default()).expect("bound routes");
-        assert_eq!(generated.items.iter().map(|item| item.request_index).collect::<Vec<_>>(), vec![0, 2]);
+        let generated = generate_routed(
+            &admitted,
+            &positions,
+            &valid,
+            &GenerationContexts::default(),
+        )
+        .expect("bound routes");
+        assert_eq!(
+            generated
+                .items
+                .iter()
+                .map(|item| item.request_index)
+                .collect::<Vec<_>>(),
+            vec![0, 2]
+        );
     }
 
     fn source_call_arguments(
@@ -826,7 +1081,7 @@ mod tests {
                 admitted.wire().source_map.requested_items[accounting_index].occurrences
             );
         }
-        assert_eq!(items.driver_count(), 3);
+        assert!(items.driver_node(3).is_none());
         assert_eq!(items.driver_node(2), Some(&function));
         assert!(matches!(
             &settled[1].admitted.record,
@@ -1223,6 +1478,7 @@ mod tests {
         "FR-019-AC-44",
         "FR-022-AC-23",
         "FR-022-AC-24",
+        "FR-039-AC-10",
         "TC-030",
         "TC-033",
         "TC-053"
@@ -1360,6 +1616,51 @@ mod tests {
             };
             assert_eq!(claim.checked_bounds.first(), Some(expected));
         }
+        let admit_positions = |positions: &[ContractRequestPosition]| {
+            let roots = positions
+                .iter()
+                .map(|position| position.node_id().clone())
+                .collect::<Vec<_>>();
+            let lowered = checked.lower(&roots, &routed_contract_lowering_profile());
+            match ContractPackageWireV1::read(
+                lowered.package.canonical_bytes().expect("FR-330 bytes"),
+                CheckedPackageReadLimits::bounded(),
+                &ContractDependencies::new(),
+            ) {
+                ContractPackageReadResult::Admitted(package) => package,
+                other => panic!("excluded-context package admission: {other:?}"),
+            }
+        };
+        let mut before_excluded = positions.to_vec();
+        before_excluded.insert(
+            2,
+            ContractRequestPosition::Excluded {
+                node_id: add.clone(),
+            },
+        );
+        let admitted_before = admit_positions(&before_excluded);
+        let (with_excluded, _) =
+            generate_contract_scalar_oracles(&admitted_before, &before_excluded, &[0, 2])
+                .expect("selected root before excluded position remains owned");
+        assert!(with_excluded
+            .claim_map
+            .items
+            .iter()
+            .all(|item| matches!(&item.result, ClaimDisposition::Generated(_))));
+        let mut after_next_bound = before_excluded.clone();
+        let first_root = after_next_bound.remove(1);
+        after_next_bound.insert(3, first_root);
+        let admitted_after = admit_positions(&after_next_bound);
+        let (outside_span, _) =
+            generate_contract_scalar_oracles(&admitted_after, &after_next_bound, &[0])
+                .expect("typed incomplete result context");
+        assert!(matches!(
+            &outside_span.claim_map.items[0].result,
+            ClaimDisposition::Refused {
+                refusal: ExactScalarRefusal::IncompleteContext,
+                ..
+            }
+        ));
         // The same admitted source and node must settle each selected result
         // occurrence independently before a generation artifact exists.
         // Trace: FR-019-AC-43, FR-019-AC-44, TC-030.
@@ -1532,6 +1833,44 @@ mod tests {
             domains: None,
             bounds: None,
         };
+        let second_selection = match &before_excluded[3] {
+            ContractRequestPosition::DriverItem {
+                result_selection, ..
+            } => result_selection.clone(),
+            ContractRequestPosition::Excluded { .. }
+            | ContractRequestPosition::ContextRoot { .. } => unreachable!("second bound item"),
+        };
+        let route_after_excluded = RoutedGenerationItem::from_descriptor(
+            2,
+            add.clone(),
+            Candidate {
+                identity: "kani".to_owned(),
+            },
+            &descriptor,
+        )
+        .expect("Kani route")
+        .with_scalar_selection(&admitted_before, second_selection);
+        let after_excluded_output = generate_routed(
+            &admitted_before,
+            &before_excluded,
+            &[route_after_excluded],
+            &GenerationContexts {
+                kani: Some(KaniGenerationContext {
+                    ceilings: crate::kani::identity::ProofCeilings {
+                        memory_bytes: std::num::NonZeroU64::new(64 * 1024 * 1024).expect("nonzero"),
+                        wall_clock: std::time::Duration::from_secs(10),
+                    },
+                    subject_path: "crate::subject",
+                    unwind: 1,
+                }),
+            },
+        )
+        .expect("bound item after excluded position routes by driver index");
+        assert_eq!(after_excluded_output.items[0].request_index, 2);
+        assert!(matches!(
+            after_excluded_output.items[0].output,
+            KindOutput::Kani { .. }
+        ));
         let routes = (0..2)
             .map(|request_index| {
                 RoutedGenerationItem::from_descriptor(
@@ -1549,7 +1888,8 @@ mod tests {
                         ContractRequestPosition::DriverItem {
                             result_selection, ..
                         } => result_selection.clone(),
-                        ContractRequestPosition::ContextRoot { .. } => {
+                        ContractRequestPosition::Excluded { .. }
+                        | ContractRequestPosition::ContextRoot { .. } => {
                             unreachable!("driver position")
                         }
                     },
@@ -1560,7 +1900,8 @@ mod tests {
             ContractRequestPosition::DriverItem {
                 result_selection, ..
             } => result_selection.clone(),
-            ContractRequestPosition::ContextRoot { .. } => unreachable!("second driver"),
+            ContractRequestPosition::Excluded { .. }
+            | ContractRequestPosition::ContextRoot { .. } => unreachable!("second driver"),
         };
         let changed_routes = [
             routes[0].clone(),
