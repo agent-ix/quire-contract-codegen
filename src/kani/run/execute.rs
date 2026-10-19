@@ -2045,7 +2045,7 @@ exit 0
             stand_in
         }
 
-        /// Hold the first real ready sample and first genuine cleanup confirmation once.
+        /// Hold the first real ready sample and first real cleanup poll return once.
         #[cfg(target_os = "linux")]
         fn controlled_owners(&mut self) -> (OwnerControl, OwnerControl) {
             use super::super::owners::{LaunchOwners, SystemPoll};
@@ -2305,17 +2305,18 @@ exec sleep 45
             if scheduled.is_err() {
                 releases.abort();
             }
-            // After first-group confirmation: its reap, then any independent group's
-            // namespace startup, cleanup and reap each have a five-second owner bound.
-            // One extra second covers both bounded capture-drain/poll settlements.
-            let settle = remaining_budget + Duration::from_secs(4 * 5 + 1);
-            let received = receiver.recv_timeout(settle);
+            let received = receiver.recv_timeout(cancellation_settlement_budget(remaining_budget));
             if received.is_err() {
                 releases.abort();
             }
             let joined = worker.join();
             releases.settled = scheduled.is_ok() && received.is_ok() && joined.is_ok();
             drop(releases);
+            if scheduled.is_err() || received.is_err() || joined.is_err() {
+                eprintln!(
+                    "running cancellation: drained public result {received:#?}; worker state {joined:?}"
+                );
+            }
             if stand_in.directory.join("calls.child").is_file() {
                 recorded_process_gone(&stand_in.directory.join("calls.child"));
             }
@@ -2325,6 +2326,15 @@ exec sleep 45
             joined.expect("running cancellation worker joined after owned teardown");
             received.expect("all sequential groups settled after owned teardown")
         })
+    }
+
+    /// After the first cleanup poll returns: allow its reap, then an independent group's
+    /// startup, cleanup and reap (five seconds each) in addition to that group's work budget.
+    /// Startup is already inside the work budget; counting it again is conservative slack.
+    /// One extra second covers both groups' bounded capture-drain/poll settlements.
+    #[cfg(target_os = "linux")]
+    fn cancellation_settlement_budget(remaining_budget: Duration) -> Duration {
+        remaining_budget + Duration::from_secs(4 * 5 + 1)
     }
 
     /// One positively acknowledged owner operation; its production dependency remains real.
@@ -2959,7 +2969,7 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
                     .entered
                     .recv_timeout(Duration::from_secs(65))
                     .expect("real owned cleanup confirmation reached");
-                eprintln!("controlled withhold={withhold}: real cleanup acknowledged");
+                eprintln!("controlled withhold={withhold}: real cleanup poll returned; readiness validation follows release");
                 if withhold {
                     assert_eq!(stand_in.cancel.cause(), None);
                     stand_in.cancel.cancel(Requested);
@@ -2971,14 +2981,14 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
             if scheduled.is_err() {
                 releases.abort();
             }
-            let received = receiver.recv_timeout(Duration::from_secs(40));
+            let received = receiver.recv_timeout(cancellation_settlement_budget(T));
             if received.is_err() {
                 releases.abort();
             }
             let joined = worker.join();
             releases.settled = scheduled.is_ok() && received.is_ok() && joined.is_ok();
             drop(releases);
-            eprintln!("controlled withhold={withhold}: settled public result {received:#?}");
+            eprintln!("controlled withhold={withhold}: settled public result {received:#?}; worker state {joined:?}");
             for name in ["calls", "calls.ready", "calls.namespace", "calls.child"] {
                 eprintln!(
                     "controlled withhold={withhold}: {name}={:?}",
