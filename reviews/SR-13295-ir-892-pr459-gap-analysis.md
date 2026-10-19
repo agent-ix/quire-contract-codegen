@@ -39,3 +39,13 @@ All seven bind to the criterion they assert. `make spec` passes. `spec/tests.md`
 ## Verdict
 
 **PASS with findings for traceability; FAIL for the evidence claims.** Every new criterion has correctly bound, criterion-level `#[trace]` tests, and the matrix, tests.md and TC-030 rows agree with one another. The Analysis claim that the FR-330 path does no second read, and the Covered status for full field copying, are not yet supported by the code and tests.
+
+## Dispositions
+
+Disposition pass 1, against head d132db3510170a80379ed5975c8d36cc1419ab00.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The FR-330 path now settles from the admitted package with no second read. `admitted_function_settlement_does_not_read_again` (tagged FR-019-AC-50 and FR-039-AC-5) asserts zero internal reads, and the FR-039 Analysis now cites that test. The core matrix row stays Partial, which matches the Analysis |
+| FND-002 | fixed | Every field in AC-48 and AC-49 now has a test that fails when the field is dropped, as the reviewer's mutants confirm, so the Covered status for AC-48 to AC-52 is supported |
+| FND-003 | fixed | FR-019 now says the internal path "preserves `Refused` and `Incomplete` as typed whole-envelope outcomes under FR-019-AC-48 and AC-49" |

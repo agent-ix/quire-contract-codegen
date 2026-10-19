@@ -1760,12 +1760,14 @@ pub(crate) fn checked_integer_function_application_is_supported(
     let owned_positions;
     let (contract, positions, declaration_position, item_position) =
         if let Some((package, positions, request_index)) = admitted {
-            let Some(body_index) = positions.iter().position(|position| {
-                matches!(
-                    position,
-                    ContractRequestPosition::DriverItem { node_id, .. } if node_id == body_id
-                )
-            }) else {
+            let Some(body_index) = positions
+                .iter()
+                .filter_map(|position| match position {
+                    ContractRequestPosition::DriverItem { node_id, .. } => Some(node_id),
+                    ContractRequestPosition::ContextRoot { .. } => None,
+                })
+                .position(|node_id| node_id == body_id)
+            else {
                 return Ok(false);
             };
             (package, positions, [body_index], [request_index])

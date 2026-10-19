@@ -47,3 +47,27 @@ Reviewer production mutants, each run against the seven tests:
 ## Verdict
 
 **FAIL: not mergeable as is.** The core mechanism is sound. The first failing item wins through `Result` collection, item-level `OperationNotRendered` is kept, the wire shape is `{"code":..., "cause":{"refusal"|"incomplete":{...}}}` with explicit nulls, and production mutants for order, kind mapping and the four tested fields fail the tests. FND-001 and FND-002 are spec SHALL violations that must be fixed in code, or settled by an amendment to FR-019 in this PR. FND-003 leaves a third of the projected fields without a test that can fail.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-006 | medium | On the new admitted (FR-330) path, `body_index` is the body's index in the whole `positions` slice, so it counts `ContextRoot` entries. It is passed as a function position, which `check_position` and `PackageItems::driver_node` treat as a driver-item index. When a `ContextRoot` precedes the body's `DriverItem`, the index names the wrong driver node, the generator returns an identity error, and the preflight returns `Ok(false)`. A supported function application then settles as item-level `KaniFormRefused { OperationNotRendered }`. In a reviewer scratch test, `[ContextRoot(function), DriverItem(body), DriverItem(call)]` settles as OperationNotRendered, while `[DriverItem(body), DriverItem(call)]` settles as Supported. Fix: compute the driver index by counting only `DriverItem` positions, then add a TC-030 case with a context root before the body that asserts `Supported`. | src/oracle/function/mod.rs:1763-1771 |
+
+## Dispositions
+
+Disposition pass 1, against head d132db3510170a80379ed5975c8d36cc1419ab00. The reviewer measured the following in a fresh worktree with its own target dir:
+
+- The 12 focused TC-030 tests pass: the original seven plus five new ones.
+- `make fmt-check`, `make lint` and `make spec` pass.
+- Reviewer mutants that set `locus`, `contract_version`, `document_pointer`, refusal `path` or incomplete `path` to `None` each fail a test.
+- Passing `None` instead of the admitted package in `negotiate_contract_package` (the second-read mutant) fails `admitted_function_settlement_does_not_read_again`.
+- Reversing item order fails the order and admitted-path tests.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The free functions `project_contract_package_refusal` and `project_contract_package_incomplete` are exported from lib.rs, and `from_reader` is removed. The fields are now `Option<String>`, `Option<CheckedNodeId>` and `Option<CheckedSemanticId>`, as FR-019 states. The wire is unchanged, because the pointers are copied as `as_str()` text |
+| FND-002 | fixed | `negotiate_contract_package` calls `negotiate_backend_provider_with_package(envelope, Some((package, positions)))`. The function preflight then uses the admitted `ContractPackageV1` and does not lower or read. A test-only read counter asserts zero reads, and the second-read mutant fails the test |
+| FND-003 | fixed | Four new adapter tests cover an unknown `contract_version`, a selected-document `document_pointer` of `/package/count`, a node-located `locus` from a duplicate function name, and a node-ceiling incomplete `path`. Each field-drop mutant now fails its test |
+| FND-004 | fixed | The enum has its own doc, `/// Non-admitted result of the internal function-package reader.`, and the original doc is back above `checked_integer_function_application_is_supported` |
+| FND-005 | fixed | The AC-52 match now pins `operation_identity == "quire.op.function.call"` and `backend == "kani"` |
