@@ -12,11 +12,131 @@
 //! imports. A `super::` path, a path built in a macro and an intra-doc link escape it, as the
 //! AD's Risks section records.
 
+use ix_trace_rs::trace;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
 };
+use syn::{visit::Visit, Item, UseTree};
+
+const QSL_OWNED_TYPES: [&str; 5] = [
+    "Witness",
+    "ReplaySource",
+    "WitnessEnvelope",
+    "TerminalRecord",
+    "ObligationIdentity",
+];
+
+fn forbidden_import(tree: &UseTree, path: &mut Vec<String>, roots: &BTreeSet<String>) -> bool {
+    match tree {
+        UseTree::Path(item) => {
+            path.push(item.ident.to_string());
+            let forbidden = forbidden_import(&item.tree, path, roots);
+            path.pop();
+            forbidden
+        }
+        UseTree::Name(item) => {
+            path.first().is_some_and(|root| roots.contains(root))
+                && QSL_OWNED_TYPES.contains(&item.ident.to_string().as_str())
+        }
+        UseTree::Rename(item) => {
+            path.first().is_some_and(|root| roots.contains(root))
+                && QSL_OWNED_TYPES.contains(&item.ident.to_string().as_str())
+        }
+        UseTree::Glob(_) => path.first().is_some_and(|root| roots.contains(root)),
+        UseTree::Group(item) => item
+            .items
+            .iter()
+            .any(|tree| forbidden_import(tree, path, roots)),
+    }
+}
+
+fn collect_contract_ir_aliases(
+    tree: &UseTree,
+    path: &mut Vec<String>,
+    roots: &mut BTreeSet<String>,
+) {
+    match tree {
+        UseTree::Path(item) => {
+            path.push(item.ident.to_string());
+            collect_contract_ir_aliases(&item.tree, path, roots);
+            path.pop();
+        }
+        UseTree::Rename(item)
+            if (path.is_empty() && item.ident == "quire_contract_ir")
+                || (path.as_slice() == ["quire_contract_ir"] && item.ident == "self") =>
+        {
+            roots.insert(item.rename.to_string());
+        }
+        UseTree::Group(item) => {
+            for tree in &item.items {
+                collect_contract_ir_aliases(tree, path, roots);
+            }
+        }
+        _ => {}
+    }
+}
+
+#[trace("TC-035", "FR-024-AC-10")]
+#[test]
+fn qsl_replay_types_are_neither_defined_nor_imported_from_contract_ir() {
+    struct AliasScan(BTreeSet<String>);
+
+    impl Visit<'_> for AliasScan {
+        fn visit_item_use(&mut self, item: &syn::ItemUse) {
+            collect_contract_ir_aliases(&item.tree, &mut Vec::new(), &mut self.0);
+        }
+    }
+
+    struct BoundaryScan<'a> {
+        violations: &'a mut Vec<String>,
+        file: &'a str,
+        roots: BTreeSet<String>,
+    }
+
+    impl Visit<'_> for BoundaryScan<'_> {
+        fn visit_item(&mut self, item: &Item) {
+            let name = match item {
+                Item::Struct(item) => Some(&item.ident),
+                Item::Enum(item) => Some(&item.ident),
+                Item::Union(item) => Some(&item.ident),
+                Item::Trait(item) => Some(&item.ident),
+                Item::Type(item) => Some(&item.ident),
+                _ => None,
+            };
+            if let Some(name) = name {
+                if QSL_OWNED_TYPES.contains(&name.to_string().as_str()) {
+                    self.violations
+                        .push(format!("{} defines {name}", self.file));
+                }
+            }
+            if let Item::Use(item) = item {
+                if forbidden_import(&item.tree, &mut Vec::new(), &self.roots) {
+                    self.violations.push(format!(
+                        "{} imports a QSL-owned type from Contract IR",
+                        self.file
+                    ));
+                }
+            }
+            syn::visit::visit_item(self, item);
+        }
+    }
+
+    let mut violations = Vec::new();
+    for (file, source) in source_files() {
+        let parsed = syn::parse_file(&source).unwrap_or_else(|error| panic!("{file}: {error}"));
+        let mut aliases = AliasScan(BTreeSet::from(["quire_contract_ir".to_owned()]));
+        aliases.visit_file(&parsed);
+        let mut scan = BoundaryScan {
+            violations: &mut violations,
+            file: &file,
+            roots: aliases.0,
+        };
+        scan.visit_file(&parsed);
+    }
+    assert!(violations.is_empty(), "{}", violations.join("\n"));
+}
 
 /// The directories of `src/`, one per subsystem.
 const DIRECTORIES: [&str; 8] = [
