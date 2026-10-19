@@ -59,8 +59,8 @@ failure is reported.
   same persisted order (FR-015).
 - If an obligation binding is not an argument, then the generator shall refuse
   the witness schema with a typed schema refusal that reports no failure. The
-  refusal is a fault in the schema, not in the witness, so it is not one of
-  any replay result. A binding that is not an argument has no symbolic
+  refusal is a fault in the schema, not in the witness, so it is not a
+  replay result. A binding that is not an argument has no symbolic
   position, and typing it would mistype a position that does not exist in the
   witness bytes.
 - If a witness is bound to a different harness identity, fails to

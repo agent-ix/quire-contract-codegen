@@ -29,3 +29,9 @@ statements.
 ## Verdict
 
 **PASS WITH NITS.** One low compound-response finding.
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | 835d61d9: FR-016:93-95 now ends at "retain it as `SpineReplayError::Refused(ReplayRefusal::Fault)`." followed by the separate sentence "FR-029-AC-10 reads that fault as terminal `Failed`." |

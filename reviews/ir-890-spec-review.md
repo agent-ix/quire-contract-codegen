@@ -58,3 +58,9 @@ survives in FR-016-AC-4 and the "five replay results" count (SR-13287 FND-002, F
 
 **CHANGES REQUESTED.** The direction is right and every code claim re-measures true. Fix FND-001
 here and the integrity findings in SR-13287 (one high) before merge.
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | 835d61d9: FR-016-AC-12 now reads "A `replay` call that returns `ReplayRefusal::Fault` is returned as `SpineReplayError::Refused` carrying that fault."; TC-026:29 now "Inspect the replay error for the fault"; TC-026 expected results say FR-029-AC-10 owns the terminal `Failed` reading. |

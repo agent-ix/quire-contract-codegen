@@ -35,3 +35,9 @@ and the code paths the PR cites.
 ## Verdict
 
 **PASS WITH NITS.** Code claims re-measure true; one low coverage gap.
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | 835d61d9: `tc_026_an_executor_fault_remains_a_typed_replay_refusal` (tests/it/skeleton_spine.rs:1057-1080, `#[trace("FR-016-AC-12", "TC-026")]`) injects `ReplayRefusal::Fault(InternalFault)` through `replay_counterexample_through` and asserts `SpineReplayError::Refused` carrying the same fault; passes; a mutation mapping `Fault` to `WrongArm` at src/replay/function.rs:270 makes it fail; `quoin matrix` reports FR-016-AC-12 tagged; matrix row moved to Covered. |

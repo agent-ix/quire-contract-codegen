@@ -39,3 +39,17 @@ counterexample but keeps the criteria that reduce one, and two texts still rely 
 ## Verdict
 
 **CHANGES REQUESTED.** FND-001 is introduced by this PR's own Inputs edit and must be fixed here.
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | 835d61d9: FR-024 `Input`-arm reduction statement deleted, FR-024-AC-9 row removed and recorded retired with ID not reused (FR-024:405-406, :416), AC-40 reduced to its `Witness` sentence, TC-035 step 7 and expected 7 reduced to the `Witness` arm, matrix row, TC-035 Traces To and spec/tests.md Replay line updated; no remaining `Input`-arm reduction text in spec/replay. |
+| FND-002 | fixed | 835d61d9: FR-016-AC-4 now reads "yields a typed mismatch, and never a failure or a replay error." |
+| FND-003 | fixed | 835d61d9: FR-016-AC-8 and TC-026:49 now read "none of the replay results"; FR-016:63 rewritten (see FND-004). |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | low | The FND-003 fix left an ungrammatical clause: "so it is not one of any replay result". Fix: "so it is not a replay result" (or "none of the replay results", matching AC-8). | spec/replay/functional/FR-016-witness-native-replay.md:62-63 |
