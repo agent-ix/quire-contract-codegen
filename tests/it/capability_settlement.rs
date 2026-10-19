@@ -89,6 +89,21 @@ fn reader_refusal_projection_preserves_every_public_field() {
     assert!(fields.get("expected_node_id").is_none());
 }
 
+#[trace("TC-030", "FR-019-AC-48")]
+#[test]
+fn named_refusal_adapter_preserves_unknown_version() {
+    let reader = ContractPackageWireV1::read(
+        br#"{"contract_version":"unknown"}"#,
+        CheckedPackageReadLimits::bounded(),
+        &ContractDependencies::new(),
+    );
+    let ContractPackageReadResult::Refused(refusal) = reader else {
+        panic!("unknown version must refuse: {reader:?}");
+    };
+    let projected = quire_contract_codegen::project_contract_package_refusal(&refusal);
+    assert_eq!(projected.contract_version.as_deref(), Some("unknown"));
+}
+
 #[trace("TC-030", "FR-019-AC-49")]
 #[test]
 fn reader_incomplete_projection_preserves_the_exhausted_limit() {
