@@ -550,8 +550,8 @@ fn tc_026_corpus_replay_refuses_poisoned_suffixes_at_both_decode_bounds() {
         if cause.code == "kani_witness_multiple_assertions_refused"
     ));
     let poisoned_value = playback.replace(
-        "let concrete_vals: Vec<Vec<u8>> = vec![];",
-        "let concrete_vals: Vec<Vec<u8>> = vec![\n// 0\nvec![not_a_byte],\n];",
+        "let concrete_vals: Vec<Vec<u8>> = vec![\n    ];",
+        "let concrete_vals: Vec<Vec<u8>> = vec![\n        // 0\n        vec![not_a_byte],\n    ];",
     );
     assert_ne!(poisoned_value, playback);
     let verdict = case
