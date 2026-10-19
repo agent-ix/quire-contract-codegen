@@ -824,6 +824,9 @@ fn render_artifacts(
         "    kani::cover!(true, \"the harness runs to its end past the oracle assertion\");"
     );
     let _ = writeln!(harness, "}}");
+    let oracle = crate::core::provenance::with_rust_header(oracle, [name]);
+    let strategy = crate::core::provenance::with_rust_header(strategy, [name]);
+    let harness = crate::core::provenance::with_rust_header(harness, [name]);
     let proof_graph_value = CorpusProofDependencyGraph {
         ceilings,
         schema_version: CORPUS_PROOF_GRAPH_SCHEMA.to_owned(),

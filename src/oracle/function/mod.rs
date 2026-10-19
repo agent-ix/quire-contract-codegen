@@ -672,6 +672,27 @@ fn render_schedule_source(
     let flat_source = format!(
         "/// Deterministic target-neutral function schedule.\npub const FUNCTION_SCHEDULE_JSON: &str = {complete_json:?};\n"
     );
+    let subjects = functions
+        .iter()
+        .map(|function| crate::core::provenance::node_subject(&function.function_node_id))
+        .chain(
+            claims
+                .iter()
+                .map(|claim| crate::core::provenance::node_subject(&claim.call_node_id)),
+        )
+        .collect::<Vec<_>>();
+    let mut flat_subjects = subjects.clone();
+    flat_subjects.extend(functions.iter().flat_map(|function| {
+        function
+            .schedule
+            .instructions
+            .iter()
+            .map(|instruction| crate::core::provenance::node_subject(&instruction.node))
+    }));
+    let flat_source = crate::core::provenance::with_rust_header(
+        flat_source,
+        flat_subjects.iter().map(String::as_str),
+    );
     if flat_source.len() <= MAX_ARTIFACT_BYTES {
         let source_bytes = flat_source.len();
         if source_bytes > source_limit {
@@ -697,9 +718,11 @@ fn render_schedule_source(
         .collect::<Vec<_>>();
     let metadata_json = serde_json::to_string(&(metadata, refused_functions, claims))
         .map_err(|_| schedule::ScheduleRefusal::SerializationFailure)?;
-    let mut source = format!(
+    let source = format!(
         "/// Deterministic target-neutral function schedule metadata.\npub const FUNCTION_SCHEDULE_METADATA_JSON: &str = {metadata_json:?};\n"
     );
+    let mut source =
+        crate::core::provenance::with_rust_header(source, subjects.iter().map(String::as_str));
     let mut modules = Vec::new();
     let mut declarations = String::new();
     let mut module_values = String::new();
@@ -745,6 +768,19 @@ fn render_schedule_source(
             let module_name = format!("schedule_{function_ordinal:06}_{start:06}_{end:06}");
             let module_source = format!(
                 "/// Ordinal range {start}..{end} for function schedule {function_ordinal}.\npub const FUNCTION_SCHEDULE_PART_JSON: &str = {part_json:?};\n"
+            );
+            let part_subjects = std::iter::once(crate::core::provenance::node_subject(
+                &function.function_node_id,
+            ))
+            .chain(
+                part.instructions
+                    .iter()
+                    .map(|instruction| crate::core::provenance::node_subject(&instruction.node)),
+            )
+            .collect::<Vec<_>>();
+            let module_source = crate::core::provenance::with_rust_header(
+                module_source,
+                part_subjects.iter().map(String::as_str),
             );
             if module_source.len() > MAX_ARTIFACT_BYTES {
                 return Err(schedule::ScheduleRefusal::SourceArtifactTooLarge {
@@ -2577,7 +2613,21 @@ pub fn generate_exact_function_oracles(
         blocked: Vec::new(),
         items: claims,
     };
-    let lib = source.finish(&classified);
+    let subjects = classified
+        .iter()
+        .map(|function| crate::core::provenance::node_subject(&function.declaration.node_id))
+        .chain(
+            claim_map
+                .items
+                .iter()
+                .filter(|claim| matches!(&claim.result, ClaimDisposition::Generated(_)))
+                .map(|claim| crate::core::provenance::node_subject(&claim.node_id)),
+        )
+        .collect::<Vec<_>>();
+    let lib = crate::core::provenance::with_rust_header(
+        source.finish(&classified),
+        subjects.iter().map(String::as_str),
+    );
     if lib.len() > MAX_GENERATED_SOURCE_BYTES {
         return Err(OracleGenerationError::SourceTooLarge {
             bytes: lib.len(),

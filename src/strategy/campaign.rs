@@ -210,7 +210,6 @@ pub fn generate_i64_strategy(
     let source = format!(
         "#![deny(missing_docs)]\n\
 //! Generated integer strategy artifact.\n\
-// SPDX-License-Identifier: MIT OR Apache-2.0\n\
 // Requirement: {requirement}@{revision}; Strategy: {}\n\
 \n\
 /// Expected contract-domain classification for one generated case.\n\
@@ -270,6 +269,15 @@ pub fn {function}() -> proptest::strategy::BoxedStrategy<{case_type}> {{\n\
 }}\n",
         request.strategy_id,
         request.strategy_id,
+    );
+    let source = crate::core::provenance::with_rust_header(
+        source,
+        [
+            format!("{requirement}@{revision}"),
+            request.strategy_id.to_owned(),
+        ]
+        .iter()
+        .map(String::as_str),
     );
     enforce_source_limit(&source)?;
     syn::parse_file(&source).map_err(|error| {
@@ -365,7 +373,6 @@ pub fn generate_enum_strategy(
     let source = format!(
         "#![deny(missing_docs)]\n\
 //! Generated customer-enum strategy artifact.\n\
-// SPDX-License-Identifier: MIT OR Apache-2.0\n\
 // Requirement: {requirement}@{revision}; Enum strategy: {}\n\
 \n\
 /// Admission expectation for an enum case drawn from the declared membership.\n\
@@ -425,6 +432,15 @@ pub fn {function}() -> proptest::strategy::BoxedStrategy<{case_type}> {{\n\
         request.enum_type,
         request.enum_type,
         request.strategy_id,
+    );
+    let source = crate::core::provenance::with_rust_header(
+        source,
+        [
+            format!("{requirement}@{revision}"),
+            request.strategy_id.to_owned(),
+        ]
+        .iter()
+        .map(String::as_str),
     );
     enforce_source_limit(&source)?;
     syn::parse_file(&source).map_err(|error| {

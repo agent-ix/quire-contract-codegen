@@ -678,7 +678,15 @@ fn scalar_records(
 /// Each precondition, postcondition and invariant clause is its own obligation, harness and
 /// proof, with its clause, source span and assumed preconditions recorded.
 /// Upstream: agent-ix/quire-contract-ir FR-036-AC-3, TC-045
-#[trace("FR-015-AC-1", "FR-015-AC-7", "FR-015-AC-8", "TC-025")]
+#[trace(
+    "FR-015-AC-1",
+    "FR-015-AC-7",
+    "FR-015-AC-8",
+    "TC-025",
+    "TC-001",
+    "NFR-002-AC-1",
+    "NFR-002-AC-2"
+)]
 #[test]
 fn tc_025_each_clause_lowers_to_a_separate_harness_with_exact_correspondence() {
     let package = bound_package(1000);
@@ -696,6 +704,15 @@ fn tc_025_each_clause_lowers_to_a_separate_harness_with_exact_correspondence() {
         assert_eq!(identity.source_span.start().line(), line);
         assert_eq!(identity.oracles[0].clause, clause(id));
         let source = &harness.rust.contents;
+        let clause_header = format!("FR-200@1/{id}");
+        crate::generated_headers::assert_header(&harness.rust.path, source, &[&clause_header]);
+        for oracle in &identity.oracles {
+            crate::generated_headers::assert_header(
+                &harness.rust.path,
+                source,
+                &[&format!("FR-200@1/{}", oracle.clause.clause().as_str())],
+            );
+        }
         assert_eq!(source.matches("#[kani::requires(").count(), requires);
         let is_precondition = kind == ObligationKind::Precondition;
         assert_eq!(
@@ -955,7 +972,14 @@ fn tc_025_symbolic_bounds_equal_ir_domains_and_every_option_is_identity() {
 /// returning `Completed`, so the proof held whatever the arithmetic did. `outcome.is_ok()` is still
 /// not matched: it is true for `Ok(Refused(_))` too. This is a source-inspection check of the
 /// rendered text; the real-Kani tests below discharge it and falsify a mutated oracle.
-#[trace("FR-015-AC-37", "FR-015-AC-7", "TC-025")]
+#[trace(
+    "FR-015-AC-37",
+    "FR-015-AC-7",
+    "TC-025",
+    "TC-001",
+    "NFR-002-AC-1",
+    "NFR-002-AC-2"
+)]
 #[test]
 fn tc_025_scalar_harness_asserts_the_native_arithmetic_relation() {
     let (scalar, claim_map, ids) = scalar_package();
@@ -971,6 +995,14 @@ fn tc_025_scalar_harness_asserts_the_native_arithmetic_relation() {
     let (_, scalar_harnesses) =
         emitted_scalar(negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap());
     let source = &scalar_harnesses[0].rust.contents;
+    crate::generated_headers::assert_header(
+        &scalar_harnesses[0].rust.path,
+        source,
+        &[&format!(
+            "// Obligation: exact-scalar {}/{} `quire.op.integer.add`",
+            node_1001.domain, node_1001.digest
+        )],
+    );
     assert!(
         source.contains("let exact: i128 = i128::from(left_native) + i128::from(right_native);"),
         "the expected result must be the native i128 evaluation of the clause's operation over \

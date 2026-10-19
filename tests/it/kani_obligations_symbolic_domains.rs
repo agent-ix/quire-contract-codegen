@@ -971,7 +971,14 @@ fn qsl_emits_and_ir_admits_the_authored_collection_and_reference_shapes() {
     );
 }
 
-#[trace("FR-015-AC-96", "FR-015-AC-100", "TC-025")]
+#[trace(
+    "FR-015-AC-96",
+    "FR-015-AC-100",
+    "TC-025",
+    "TC-001",
+    "NFR-002-AC-1",
+    "NFR-002-AC-2"
+)]
 #[test]
 fn negotiation_renders_the_selected_sequence_claims_deterministically() {
     let fixture = emitted();
@@ -1040,6 +1047,26 @@ fn negotiation_renders_the_selected_sequence_claims_deterministically() {
             records[0]
         );
         let harness = &harnesses[0];
+        crate::generated_headers::assert_header(
+            &harness.rust.path,
+            &harness.rust.contents,
+            &[
+                &format!("{}/{}", function_id.domain, function_id.digest),
+                &format!("{}/{}", quantifier.domain, quantifier.digest),
+            ],
+        );
+        for node in [
+            &harness.identity.projection_id,
+            &harness.identity.declaration_id,
+            &harness.identity.element_type_id,
+            &harness.identity.predicate_id,
+        ] {
+            crate::generated_headers::assert_header(
+                &harness.rust.path,
+                &harness.rust.contents,
+                &[&format!("{}/{}", node.domain, node.digest)],
+            );
+        }
         assert_eq!(harness.identity.function_id, function_id);
         assert_eq!(harness.identity.quantifier_id, quantifier);
         assert_eq!(

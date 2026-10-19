@@ -462,7 +462,7 @@ fn tc_006_generated_oracle_probes_qualify_against_native_llvm_export() {
     }
 }
 
-#[trace("TC-001")]
+#[trace("TC-001", "NFR-002-AC-1", "NFR-002-AC-2")]
 #[test]
 fn tc_001_boolean_oracle_bundle_is_deterministic_traceable_and_schema_valid() {
     let environment = boolean_environment(&["enabled"]);
@@ -486,6 +486,11 @@ fn tc_001_boolean_oracle_bundle_is_deterministic_traceable_and_schema_valid() {
     let second = generate_boolean_oracle(&request).unwrap();
 
     assert_eq!(first, second);
+    crate::generated_headers::assert_header(
+        &first.rust.path,
+        &first.rust.contents,
+        &["// Requirement: FR-001@7; Clause: clause-main"],
+    );
     assert!(first
         .rust
         .contents
@@ -565,7 +570,7 @@ fn tc_001_boolean_oracle_bundle_is_deterministic_traceable_and_schema_valid() {
         .iter()
         .find(|region| region.role == "implication_consequent")
         .unwrap();
-    assert_eq!((consequent.start_line, consequent.end_line), (20, 20));
+    assert_eq!((consequent.start_line, consequent.end_line), (21, 21));
     assert_eq!(
         first
             .rust
