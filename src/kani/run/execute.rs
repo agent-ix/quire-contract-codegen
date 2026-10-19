@@ -2852,7 +2852,9 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
             member("b", "check", 4),
             member("c", "check", 4),
         ];
-        let body = format!("case \"$ids\" in *a::check*)\n{CANCELLATION_BARRIER};;\nesac\n{VERIFY_EVERY_HARNESS}");
+        let body = format!(
+            "case \"$ids\" in *a::check*)\n{CANCELLATION_BARRIER};;\nesac\n{VERIFY_EVERY_HARNESS}"
+        );
         let mut stand_in = StandIn::running("controlled-caller-order", &body);
         stand_in.containing(&harnesses.iter().collect::<Vec<_>>());
         let independent = Cancel::new();
@@ -2904,7 +2906,9 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
             let scheduled = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 releases.memory.entered();
                 assert_eq!(stand_in.cancel.cause(), None);
-                eprintln!("controlled withhold={withhold}: real memory acknowledged after readiness");
+                eprintln!(
+                    "controlled withhold={withhold}: real memory acknowledged after readiness"
+                );
                 if !withhold {
                     stand_in.cancel.cancel(Requested);
                     stand_in.cancel.cancel(Deadline);
