@@ -1145,6 +1145,210 @@ fn tc_030_three_candidates_settle_ambiguous_in_candidate_order() {
     }
 }
 
+/// Differing descriptors of one identity refuse the whole envelope in either order.
+#[trace("TC-030", "FR-019-AC-45")]
+#[test]
+fn tc_030_repeated_backend_identity_refuses_in_both_orders() {
+    let kind = CapabilityKind::ValueValidity;
+    let bounded_only = kani(vec![(kind, Mode::Bounded)]);
+    let unbounded_advertisement = kani(vec![(kind, Mode::Unbounded)]);
+    let mut request = item(
+        RequestedKind::Known(kind),
+        Candidates::Set(vec![candidate(BackendKind::Kani.identity())]),
+    );
+    request.extent = unbounded(false);
+
+    assert!(matches!(
+        settle_one(vec![unbounded_advertisement.clone()], request.clone()).disposition,
+        Disposition::Supported { .. }
+    ));
+    assert!(matches!(
+        settle_one(vec![bounded_only.clone()], request.clone()).disposition,
+        Disposition::Unsupported {
+            cause: Cause::UnboundedExtent { .. }
+        }
+    ));
+
+    for manifest in [
+        vec![bounded_only.clone(), unbounded_advertisement.clone()],
+        vec![unbounded_advertisement.clone(), bounded_only.clone()],
+    ] {
+        assert_eq!(
+            negotiate_backend_provider(&envelope(manifest, vec![request.clone()])),
+            Err(EnvelopeRefusal::ManifestRepeatsBackendIdentity {
+                identity: BackendKind::Kani.identity().to_owned(),
+            }),
+            "a repeated identity cannot route in either registration order"
+        );
+    }
+}
+
+/// Every placement of a second descriptor refuses before any item settles.
+#[trace("TC-030", "FR-019-AC-45")]
+#[test]
+fn tc_030_repeated_descriptors_refuse_the_whole_envelope() {
+    let first = kani(vec![(CapabilityKind::ValueValidity, Mode::Unbounded)]);
+    let other = BackendDescriptor {
+        identity: "other".to_owned(),
+        ..first.clone()
+    };
+    let differing = kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)]);
+    let different_origin = BackendDescriptor {
+        origin: ProviderOrigin::Process,
+        ..first.clone()
+    };
+    let different_field = BackendDescriptor {
+        bounds: Some(BTreeMap::new()),
+        ..first.clone()
+    };
+    let request = item(
+        RequestedKind::Known(CapabilityKind::ValueValidity),
+        Candidates::Set(vec![candidate(BackendKind::Kani.identity())]),
+    );
+    let manifests = [
+        vec![first.clone(), first.clone()],
+        vec![first.clone(), other.clone(), first.clone()],
+        vec![first.clone(), differing.clone()],
+        vec![differing.clone(), first.clone()],
+        vec![first.clone(), other.clone(), differing.clone()],
+        vec![first.clone(), differing.clone(), other.clone()],
+        vec![other.clone(), first.clone(), differing.clone()],
+        vec![other.clone(), differing.clone(), first.clone()],
+        vec![differing.clone(), first.clone(), other.clone()],
+        vec![differing.clone(), other, first.clone()],
+        vec![first.clone(), different_origin.clone()],
+        vec![different_origin, first.clone()],
+        vec![first.clone(), different_field.clone()],
+        vec![different_field, first],
+    ];
+    for manifest in manifests {
+        assert_eq!(
+            negotiate_backend_provider(&envelope(manifest, vec![request.clone()])),
+            Err(EnvelopeRefusal::ManifestRepeatsBackendIdentity {
+                identity: BackendKind::Kani.identity().to_owned(),
+            }),
+            "a repeated descriptor must return Err with no settlements"
+        );
+    }
+}
+
+/// A domains-only descriptor change still repeats the same backend identity.
+#[trace("TC-030", "FR-019-AC-45")]
+#[test]
+fn tc_030_domains_only_change_refuses_without_settlements() {
+    let first = kani(vec![(CapabilityKind::ValueValidity, Mode::Unbounded)]);
+    let different_domains = BackendDescriptor {
+        domains: Some(BTreeSet::new()),
+        ..first.clone()
+    };
+    let request = item(
+        RequestedKind::Known(CapabilityKind::ValueValidity),
+        Candidates::Set(vec![candidate(BackendKind::Kani.identity())]),
+    );
+
+    for manifest in [
+        vec![first.clone(), different_domains.clone()],
+        vec![different_domains.clone(), first.clone()],
+    ] {
+        assert_eq!(
+            negotiate_backend_provider(&envelope(manifest, vec![request.clone()])),
+            Err(EnvelopeRefusal::ManifestRepeatsBackendIdentity {
+                identity: BackendKind::Kani.identity().to_owned(),
+            }),
+            "a domains-only change must refuse the whole envelope"
+        );
+    }
+}
+
+/// Identity comparison is bytewise, including case.
+#[trace("TC-030", "FR-019-AC-46")]
+#[test]
+fn tc_030_backend_identities_that_differ_only_in_case_are_distinct() {
+    let kind = CapabilityKind::ValueValidity;
+    let manifest = vec![
+        BackendDescriptor {
+            identity: "Kani".to_owned(),
+            ..kani(vec![(kind, Mode::Unbounded)])
+        },
+        kani(vec![(kind, Mode::Unbounded)]),
+    ];
+    let mut request = item(
+        RequestedKind::Known(kind),
+        Candidates::Set(vec![candidate(BackendKind::Kani.identity())]),
+    );
+    request.extent = unbounded(false);
+    assert!(matches!(
+        negotiate_backend_provider(&envelope(manifest, vec![request])),
+        Ok(settlements) if matches!(settlements.as_slice(), [ItemSettlement {
+            disposition: Disposition::Supported { backend }, ..
+        }] if backend == BackendKind::Kani.identity())
+    ));
+}
+
+/// Refusal selection is stable across manifest order and precedes carrier reads.
+#[trace("TC-030", "FR-019-AC-46")]
+#[test]
+fn tc_030_repeated_identity_precedence_and_bytewise_selection() {
+    let a = BackendDescriptor {
+        identity: "A".to_owned(),
+        ..kani(vec![])
+    };
+    let b = BackendDescriptor {
+        identity: "B".to_owned(),
+        ..kani(vec![])
+    };
+    let request = item(
+        RequestedKind::Unknown("unread-kind".to_owned()),
+        Candidates::Set(Vec::new()),
+    );
+    for manifest in [
+        vec![b.clone(), a.clone(), b.clone(), a.clone()],
+        vec![a.clone(), b.clone(), a.clone(), b.clone()],
+        vec![b.clone(), b.clone(), a.clone(), a.clone()],
+        vec![a.clone(), a.clone(), b.clone(), b.clone()],
+    ] {
+        let valid = envelope(manifest.clone(), vec![request.clone()]);
+        assert_eq!(
+            negotiate_backend_provider(&valid),
+            Err(EnvelopeRefusal::ManifestRepeatsBackendIdentity {
+                identity: "A".to_owned()
+            })
+        );
+        for invalid in [
+            BackendProviderEnvelope {
+                contract_version: "bad-version".to_owned(),
+                ..valid.clone()
+            },
+            BackendProviderEnvelope {
+                capability_vocabulary: "foreign".to_owned(),
+                ..valid.clone()
+            },
+            BackendProviderEnvelope {
+                capability_vocabulary: String::new(),
+                ..valid
+            },
+        ] {
+            let (member, received) = if invalid.contract_version != BACKEND_PROVIDER_CONTRACT {
+                ("contract_version", invalid.contract_version.clone())
+            } else {
+                (
+                    "capability_vocabulary",
+                    invalid.capability_vocabulary.clone(),
+                )
+            };
+            assert_eq!(
+                negotiate_backend_provider(&invalid),
+                Err(EnvelopeRefusal::InvalidCapability {
+                    cause: "unsupported-version",
+                    member,
+                    received,
+                }),
+                "carrier refusal must precede repeat detection and item settlement"
+            );
+        }
+    }
+}
+
 /// Each row of the advertised-mode table settles its own disposition, and an
 /// unbounded extent never settles `supported` on a bounded-only advertisement.
 ///

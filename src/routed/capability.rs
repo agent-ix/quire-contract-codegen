@@ -950,18 +950,15 @@ pub struct BackendProviderEnvelope {
     pub items: Vec<RequestItem>,
 }
 
-/// A refusal of the whole carrier, before any kind is read.
+/// A refusal of the whole carrier, before any item is settled.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case", tag = "code", content = "cause")]
 pub enum EnvelopeRefusal {
-    /// The contract version or the capability vocabulary is absent or another identity.
+    /// The contract version or capability vocabulary is invalid.
     ///
-    /// FR-290 refuses the carrier rather than the item, and none of its labels
-    /// are read: a vocabulary that is not the one selected does not merely
-    /// rename members, it makes every label in the carrier unreadable.
+    /// A foreign vocabulary makes every label in the carrier unreadable.
     InvalidCapability {
-        /// Always `unsupported-version`; the field keeps the cause printable
-        /// beside the item-level causes rather than implied by the variant.
+        /// Both carrier members refuse with `unsupported-version`.
         cause: &'static str,
         /// Which member of the carrier was wrong.
         ///
@@ -969,8 +966,13 @@ pub enum EnvelopeRefusal {
         /// got both wrong is told only about the first and cannot tell which
         /// field to fix from the refusal it was handed.
         member: &'static str,
-        /// The identity the carrier supplied, or the empty string when absent.
+        /// The supplied carrier identity.
         received: String,
+    },
+    /// The manifest repeats a backend identity, so no item settles.
+    ManifestRepeatsBackendIdentity {
+        /// The bytewise-first identity repeated in the manifest.
+        identity: String,
     },
 }
 
@@ -1300,6 +1302,18 @@ pub fn negotiate_backend_provider(
             received: envelope.capability_vocabulary.clone(),
         });
     }
+    let mut identities = BTreeSet::new();
+    if let Some(identity) = envelope
+        .manifest
+        .iter()
+        .map(|backend| backend.identity.as_str())
+        .filter(|identity| !identities.insert(*identity))
+        .min()
+    {
+        return Err(EnvelopeRefusal::ManifestRepeatsBackendIdentity {
+            identity: identity.to_owned(),
+        });
+    }
     Ok(envelope
         .items
         .iter()
@@ -1449,10 +1463,9 @@ fn negotiate_item(manifest: &[BackendDescriptor], item: &RequestItem) -> Disposi
             },
         },
         // FR-290's candidate table has no row for "more than one candidate and
-        // the request names one": reaching it needs a manifest that repeats a
-        // backend identity, which the registry refuses as `duplicate-backend`
-        // before a request is built. A set that disagrees with the named backend
-        // is the nearest stated row, and is what such a set is.
+        // the request names one": a repeated candidate entry reaches this arm
+        // even with a unique manifest. This fallback classifies the unmatched
+        // many-candidate case as inconsistent candidates.
         many => Disposition::InvalidRequest {
             cause: Cause::InconsistentCandidates {
                 candidates: many.to_vec(),
