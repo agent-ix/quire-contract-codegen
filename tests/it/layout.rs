@@ -117,9 +117,10 @@ fn resolve_path(
 
 fn banned_name(path: &[String]) -> Option<&str> {
     if path.first().is_some_and(|part| part == "quire_contract_ir") {
-        path.last()
+        path.iter()
+            .skip(1)
             .map(String::as_str)
-            .filter(|name| QSL_OWNED_TYPES.contains(name))
+            .find(|name| QSL_OWNED_TYPES.contains(name))
     } else {
         None
     }
@@ -150,12 +151,11 @@ fn macro_definitions(
     }
 }
 
-/// Trace: FR-024-AC-10
 /// Scans every parsed Rust file under `src/` for the five QSL-owned declarations,
 /// Contract IR imports and qualified paths, including alias chains across files.
 /// Macro tokens are checked for literal declaration keywords followed by a banned name;
-/// imports and qualified paths inside opaque macro tokens, macro expansion, generated
-/// files, and identifier construction are outside this scan.
+/// imports and qualified paths inside opaque macro tokens, macro expansion,
+/// generated files outside `src/`, and constructed identifiers are outside this scan.
 #[trace("TC-035", "FR-024-AC-10")]
 #[test]
 fn qsl_replay_types_are_neither_defined_nor_imported_from_contract_ir() {

@@ -473,17 +473,17 @@ FR-024-AC-10 has a source-scan test over `src/`; FR-024-AC-11 to FR-024-AC-30 ar
   overridden model. The Boolean same-source refusal and an in-`i64` source range are narrower
   executable cases; neither closes the wide-range acceptance criterion.
 - `FR-024-AC-1` to `FR-024-AC-9` are planned and have no test of their own.
-  `FR-024-AC-10` has a source-scan test for literal declarations, macro token declarations,
-  Contract IR imports and paths, including alias chains across source files. Macro expansion
-  and constructed identifiers, plus imports and qualified paths inside opaque macro tokens,
-  remain outside that test. `quire coverage
-  --strict` does not count them as unbacked (66 unbacked rows on `main` before IR-460; 44 on
+  `quire coverage --strict` does not count them as unbacked (66 unbacked rows on `main` before IR-460; 44 on
   `main` before IR-459 and 44, none contradicted, at the head that implemented the frame path, the
   same rows) only because TC-035 has tagged tests; that is a property of the tool's AC to TC to
   code walk, accepted here, and the criteria stay planned. The tool lists each FR-024
   criterion as an obligation row and does not judge it, so the head's unchanged count says
   nothing about FR-024-AC-20 to FR-024-AC-30; each of those has a tagged test of its own, which
   is the evidence they are backed.
+- `FR-024-AC-10` has a source-scan test for literal declarations, macro token declarations,
+  Contract IR imports and paths, including alias chains across source files. Imports and qualified
+  paths inside opaque macro tokens, macro expansion, generated files outside `src/`, and constructed
+  identifiers remain outside that test.
 - `FR-024-AC-36` to `FR-024-AC-40` are planned (IR-335). The common typed intake,
   cross-adapter test, typed evidence failures and immutable CG minimization lineage have no
   production implementation or tagged test yet.
