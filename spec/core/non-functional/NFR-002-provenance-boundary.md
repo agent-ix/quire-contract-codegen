@@ -13,10 +13,10 @@ relationships:
 
 ## Statement
 
-- Every generated Rust file shall name `quire-contract-codegen` and its input-carried generation
-  subject identity: the obligation or source node when present, otherwise the strategy or
-  population identity. Its header shall also name the requirement, revision and clause when those
-  identifiers are present in that input.
+- Every generated Rust file shall have a header naming `quire-contract-codegen` and every
+  input-carried generation subject identity it renders, as defined in Scope.
+- Where the generation input carries a requirement, revision or clause identifier, the generated
+  Rust file header shall name it.
 - Generated Rust shall carry `MIT OR Apache-2.0` SPDX identity.
 - No automated output shall claim project-specific validation, accreditation, certification, or human release approval.
 
@@ -24,13 +24,24 @@ relationships:
 
 Generated source, diagnostics, source maps, proof graphs, and reports. Generated Rust families are
 strategy harnesses; integer, enum and bound strategies and bound populations; Boolean, exact
-scalar, composite equality and function-application oracles; and V1 and V2 contract, exact-scalar,
-collection and state-frame Kani harnesses.
+scalar, composite equality and function-application oracles; V1 and V2 contract, exact-scalar,
+collection and state-frame Kani harnesses; and the public bounded Kani corpus (`corpus/*.oracle.rs`,
+`*.strategy.rs` and `*.kani.rs`) until FR-015-AC-111 deletes it.
+
+The subject of a clause-keyed Boolean or bound oracle, strategy harness, bound strategy or V1
+contract harness is its input-carried requirement, revision and clause identity. Other generated
+files name their input-carried strategy, population, corpus case, source node, obligation, claim or
+operation identity as applicable. A file rendering multiple subjects names every source node or
+obligation it renders; this includes oracle-package `src/lib.rs` files, equality extra modules and
+function schedule part files (`src/schedule_*.rs`). Each emitted `.rs` file is covered separately.
 
 ## Rationale
 
 Opaque licensing prevents independent audit, while automated qualification claims
 would exceed the tool's authority and hide consuming-project responsibilities.
+Some generation inputs, including V2 and corpus inputs, carry no requirement, revision or clause
+identifier; headers name these identifiers only when supplied by the input and never infer or
+invent them.
 
 ## Measurement and Evaluation
 
@@ -44,7 +55,7 @@ would exceed the tool's authority and hide consuming-project responsibilities.
 
 | ID | Criteria | Verification |
 |----|----------|--------------|
-| NFR-002-AC-1 | Every generated Rust file in a family named in Scope has a header naming `quire-contract-codegen`, its input-carried subject identity (obligation or source node when present, otherwise strategy or population), and every requirement, revision or clause identifier present in the generation input. | Test (TC-001) |
+| NFR-002-AC-1 | Every generated Rust file in a family named in Scope has a header naming `quire-contract-codegen`, every input-carried subject identity it renders as defined in Scope, and every requirement, revision or clause identifier present in the generation input. | Test (TC-001) |
 | NFR-002-AC-2 | Every generated Rust file carries the `MIT OR Apache-2.0` SPDX identity. | Test (TC-001) |
 | NFR-002-AC-3 | Unsupported and inconclusive states remain explicit rather than silently succeeding. | Test (TC-003) |
 | NFR-002-AC-4 | Generated output makes no project-specific validation, accreditation, certification, or release-approval claim. | Inspection |

@@ -21,14 +21,17 @@ input-carried identity, generator name and licensing.
 
 Generate each corpus package repeatedly while permuting irrelevant input ordering and supported
 platform execution; compare artifact names, bytes, and source maps.
-For each generated Rust family in NFR-002 Scope, inspect the header against its generation input:
-check the generator name and subject identity (obligation or source node when present, otherwise
-strategy or population), and check every requirement, revision and clause identifier that the input
-carries. Include inputs without those optional identifiers; do not infer them from output names.
+For every generated `.rs` artifact of each family in NFR-002 Scope, inspect its header against its
+generation input: check the generator name, every subject identity the file renders under the Scope
+rules, and every requirement, revision and clause identifier that the input carries. Include
+oracle-package `src/lib.rs` files, equality extra modules, and function `src/schedule_*.rs` part
+files; do not accept a single passing file as coverage for a family. Include inputs without the
+optional identifiers; do not infer them from output names. Check the SPDX line on every artifact.
 
 ## Expected Results
 
-Bundles are byte-identical; every generated Rust header names `quire-contract-codegen` and its
-input-carried subject identity, names each requirement, revision and clause identifier present in
-its input, and carries the SPDX identity. No environmental path or nondeterministic order enters
-the output.
+Bundles are byte-identical; every generated `.rs` artifact, including package `src/lib.rs` and
+module part files, has a header naming `quire-contract-codegen`, every input-carried subject it
+renders and each requirement, revision and clause identifier present in its input. Every such
+artifact has the `MIT OR Apache-2.0` SPDX line (NFR-002-AC-2). No environmental path or
+nondeterministic order enters the output.

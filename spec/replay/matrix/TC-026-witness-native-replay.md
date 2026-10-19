@@ -22,9 +22,12 @@ one non-argument binding, and compare the schema's order with the harness's
 emitted symbolic arguments. Decode a real falsifying transcript
 against the persisted schema, then against that schema with a binding dropped
 and with a binding retyped. Then replay a reproducing witness, a malformed
-witness, a witness bound to another harness identity, witnesses at and one over
-each caller-supplied byte and value-count bound, and replay inputs missing either
-bound. Observe bytes and values read by the decoder at each bound. Also replay
+witness, a witness bound to another harness identity, and witnesses at and one over
+each caller-supplied byte and value-count bound. Supply both required bounds through
+the replay inputs and directly to every public witness-decoding entry point. For each
+over-bound control, place a poisoned byte or value just past the bound that would cause
+a distinct decode error if read. Verify by inspection that neither bound can be omitted
+or defaulted at any decoding entry point. Also replay
 an out-of-domain witness, a witness whose native value or charges disagree with the harness, a
 witness whose native replay is unavailable, and a witness whose replay agrees in a category other
 than `violation`.
@@ -50,9 +53,9 @@ reports no failure and is none of the five replay results.
 The real transcript decodes to values named by their bindings, and the dropped
 and retyped schemas refuse by arity and width. Only the reproducing witness is
 reported as a failure; the other malformed and wrong-identity witnesses and the
-one-over-bound witnesses yield malformed results. The at-bound witnesses decode,
-neither over-bound witness is read beyond its bound, and a missing bound refuses
-before witness data is read. The remaining witnesses yield out-of-domain,
+one-over-bound witnesses yield the over-bound malformed cause, not the poisoned-suffix
+decode error. The at-bound witnesses decode, and both required bounds are present at
+every decoding entry point without a default. The remaining witnesses yield out-of-domain,
 mismatch and unavailable results respectively. The disagreeing witnesses are
 never reported unavailable, and the unavailable replay is never reported as a
 mismatch. The witness that agrees in a category other than `violation` is a
