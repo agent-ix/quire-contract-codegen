@@ -1086,6 +1086,65 @@ fn tc_030_two_candidates_with_no_named_backend_settle_ambiguous() {
     }
 }
 
+/// Three candidates settle ambiguous in request order under every descriptor
+/// registration order, even when request order differs from bytewise order.
+#[trace("FR-019-AC-4", "TC-030")]
+#[test]
+fn tc_030_three_candidates_settle_ambiguous_in_candidate_order() {
+    let descriptors = [
+        kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)]),
+        BackendDescriptor {
+            identity: "kani-nightly".to_owned(),
+            advertised: vec![(CapabilityKind::ValueValidity, Mode::Unbounded)],
+            origin: ProviderOrigin::Process,
+            domains: None,
+            bounds: None,
+        },
+        BackendDescriptor {
+            identity: "alpha-backend".to_owned(),
+            advertised: vec![(CapabilityKind::ValueValidity, Mode::Bounded)],
+            origin: ProviderOrigin::Process,
+            domains: None,
+            bounds: None,
+        },
+    ];
+    let candidates = vec![
+        candidate("kani-nightly"),
+        candidate(BackendKind::Kani.identity()),
+        candidate("alpha-backend"),
+    ];
+    for order in [
+        [0, 1, 2],
+        [0, 2, 1],
+        [1, 0, 2],
+        [1, 2, 0],
+        [2, 0, 1],
+        [2, 1, 0],
+    ] {
+        let manifest = order.map(|index| descriptors[index].clone()).to_vec();
+        let settlement = settle_one(
+            manifest,
+            item(
+                RequestedKind::Known(CapabilityKind::ValueValidity),
+                Candidates::Set(candidates.clone()),
+            ),
+        );
+        assert_eq!(
+            settlement.disposition,
+            Disposition::InvalidRequest {
+                cause: Cause::AmbiguousBackend {
+                    candidates: candidates.clone()
+                }
+            },
+            "candidate list or cause changed for registration order {order:?}"
+        );
+        let Disposition::InvalidRequest { cause } = &settlement.disposition else {
+            panic!("ambiguous candidates must be an invalid request");
+        };
+        assert_eq!(cause.code(), "invalid_capability");
+    }
+}
+
 /// Each row of the advertised-mode table settles its own disposition, and an
 /// unbounded extent never settles `supported` on a bounded-only advertisement.
 ///
@@ -2325,7 +2384,15 @@ fn kani_form_identity_does_not_depend_on_display_or_debug_text() {
 #[trace("FR-019-AC-7", "TC-030")]
 #[test]
 fn tc_030_a_foreign_capability_vocabulary_refuses_the_carrier() {
-    for supplied in ["", "quire.capability-kind/v2"] {
+    for supplied in [
+        "",
+        "quire.capability-kind/v2",
+        "quire.capability-kind/v1 ",
+        "QUIRE.CAPABILITY-KIND/V1",
+        "quire.capability-kind/v10",
+        "quire.capability-kind/v1.0",
+        "quire.capability-kind/",
+    ] {
         let refusal = negotiate_backend_provider(&BackendProviderEnvelope {
             capability_vocabulary: supplied.to_owned(),
             ..envelope(
