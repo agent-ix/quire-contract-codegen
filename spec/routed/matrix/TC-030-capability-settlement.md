@@ -124,8 +124,15 @@ Enumerate the closed backend kind's variants and assert that settlement
 dispatches an arm for each.
 
 Ask each settlement that is not `supported`
-whether it routes a backend at all, and ask a manifest that repeats one backend
-identity the same question.
+whether it routes a backend at all. For FR-019-AC-45, submit byte-equal
+repeats of one identity and assert that they yield one descriptor and no
+refusal. Submit differing descriptors of that identity with a separately
+registered, eligible identity; assert a typed
+`RegistrationRefusal::DuplicateBackend { identity }`, no retained descriptor
+or refused manifest for the conflicting identity, no routing through it, and
+settlement and routing through the other identity. Repeat in reverse order,
+with non-adjacent repeats, and with two conflicting identities to verify the
+same refused identities and independence of the eligible identity.
 
 For planned IR-516 arms, use admitted typed items with one registered candidate
 at a time. Derive the form, subject class, selected reduction and resolved
@@ -225,8 +232,11 @@ Both malformed-vocabulary envelopes refuse as
 
 Every variant of the closed backend kind has a dispatched arm.
 
-No settlement other than `supported` routes a backend, and a manifest repeating an
-identity routes none.
+No settlement other than `supported` routes a backend. Byte-equal descriptor
+repeats hold one identity without refusal. Differing repeats refuse and route
+nothing for that identity, while an eligible other identity still settles and
+routes; the typed `duplicate-backend` refusal names the conflicting identity
+and no refused manifest is retained (FR-019-AC-45).
 
 For AC-34 through AC-41, every positive case uses a validated candidate and
 only a form, subject class and modifier its arm discharges. After candidate
