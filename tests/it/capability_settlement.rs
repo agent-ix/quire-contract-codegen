@@ -1232,6 +1232,34 @@ fn tc_030_repeated_descriptors_refuse_the_whole_envelope() {
     }
 }
 
+/// A domains-only descriptor change still repeats the same backend identity.
+#[trace("TC-030", "FR-019-AC-45")]
+#[test]
+fn tc_030_domains_only_change_refuses_without_settlements() {
+    let first = kani(vec![(CapabilityKind::ValueValidity, Mode::Unbounded)]);
+    let different_domains = BackendDescriptor {
+        domains: Some(BTreeSet::new()),
+        ..first.clone()
+    };
+    let request = item(
+        RequestedKind::Known(CapabilityKind::ValueValidity),
+        Candidates::Set(vec![candidate(BackendKind::Kani.identity())]),
+    );
+
+    for manifest in [
+        vec![first.clone(), different_domains.clone()],
+        vec![different_domains.clone(), first.clone()],
+    ] {
+        assert_eq!(
+            negotiate_backend_provider(&envelope(manifest, vec![request.clone()])),
+            Err(EnvelopeRefusal::ManifestRepeatsBackendIdentity {
+                identity: BackendKind::Kani.identity().to_owned(),
+            }),
+            "a domains-only change must refuse the whole envelope"
+        );
+    }
+}
+
 /// Identity comparison is bytewise, including case.
 #[trace("TC-030", "FR-019-AC-46")]
 #[test]

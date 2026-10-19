@@ -1463,11 +1463,9 @@ fn negotiate_item(manifest: &[BackendDescriptor], item: &RequestItem) -> Disposi
             },
         },
         // FR-290's candidate table has no row for "more than one candidate and
-        // the request names one": reaching it needs a manifest that repeats a
-        // backend identity. Registration establishes unique identities before
-        // building the request; CG also refuses a caller-supplied repeated
-        // manifest before settling any item. A set that disagrees with the named backend
-        // is the nearest stated row, and is what such a set is.
+        // the request names one": a repeated candidate entry reaches this arm
+        // even with a unique manifest. This fallback classifies the unmatched
+        // many-candidate case as inconsistent candidates.
         many => Disposition::InvalidRequest {
             cause: Cause::InconsistentCandidates {
                 candidates: many.to_vec(),
