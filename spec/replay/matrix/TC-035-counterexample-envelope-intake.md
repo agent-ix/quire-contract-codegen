@@ -32,7 +32,7 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
 5. Retired (FR-024-AC-5, IR-890): no corpus `Input`-arm submission is tested.
 6. Submit a frame counterexample through `replay_frame`, and read back the clause, frame, anchor and
    occurrence identities QSL reports.
-7. Reduce one `Witness`-arm and one `Input`-arm counterexample with a candidate set that holds a
+7. Reduce one `Witness`-arm counterexample with a candidate set that holds a
    failure-preserving candidate, an out-of-domain candidate and a verdict-changing candidate.
    Begin with an admitted original failure. Retain the valid equivalent reduction, then propose
    the two invalid reductions from that retained parent, and finally retain another valid
@@ -115,15 +115,14 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
    its member, and no replay runs. The packet with trace position none is admitted (FR-024-AC-4).
 5. Retired (FR-024-AC-5, IR-890): this step asserts no result.
 6. Each identity QSL reports equals the one submitted (FR-024-AC-6).
-7. Only valid failure-preserving candidates are retained (FR-024-AC-7, FR-024-AC-9). The root
+7. Only valid failure-preserving candidates are retained (FR-024-AC-7). The root
    and both retained revisions refer to their exact QSL envelopes and unchanged obligation;
    each child names the actual retained parent. The invalid-domain and verdict-changing proposals
    create no revision. Each prior envelope compares equal to its clone captured before the
    proposal using QSL's `WitnessEnvelope<P>: Eq`; prior CG record identity, parent, obligation and
    typed evidence fields read back equal to their captured values (FR-024-AC-38,
    FR-024-AC-39). Each retained `Witness` envelope carries its own re-run transcript bound to its
-   reduced assignments, and each retained `Input` envelope remains `Input` without backend
-   evidence (FR-024-AC-8, FR-024-AC-40).
+   reduced assignments (FR-024-AC-8, FR-024-AC-40).
 8. Every value is QSL's own `qsl_replay` type and is accepted by `qsl_replay` unchanged
    (FR-024-AC-10).
 9. `replay` returns the direct `replay_state_clause` result for each run, the two runs' results
@@ -229,7 +228,8 @@ Partly implemented. Steps 1 to 8 and 28 are planned: the skeleton spine renders 
 values (`src/replay/function.rs`, TC-026, now through `render_witness`), which is the shape step 2
 checks, but it builds no envelope. Step 8 holds for the decode path: `src/replay/witness.rs` uses
 no Contract IR witness type. The bounded-Kani corpus retains no counterexample packet, so step 5
-(FR-024-AC-5) is retired. Steps 9 to 17 (FR-024-AC-11 to FR-024-AC-19, IR-460) are
+(FR-024-AC-5) is retired, as is the `Input`-arm reduction (FR-024-AC-9) in step 7.
+Steps 9 to 17 (FR-024-AC-11 to FR-024-AC-19, IR-460) are
 implemented by `src/replay/state_clause.rs` and the tests of
 `tests/it/kani_obligations_state_clause_replay.rs`, plus the `src` unit tests of step 12. Step 16
 is a real-Kani test in the module `kani_obligations_state_clause_replay`, run through the

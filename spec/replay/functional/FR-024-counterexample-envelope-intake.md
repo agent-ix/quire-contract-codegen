@@ -324,8 +324,6 @@ members against the operation's declaration in the domain package.
   domain validity and the failure.
 - Where the generator retains a reduced `Witness`-arm envelope, the envelope shall carry the
   `Witness` arm of its own backend re-run and not the original counterexample's transcript.
-- Where the generator derives reduced candidates from an `Input`-arm counterexample, it shall
-  retain only `Input`-arm envelopes that preserve domain validity and the native verdict.
 - The generator shall retain the original failing envelope as the root revision. For each
   retained reduction it shall create a new immutable CG lineage record identifying that exact
   admitted QSL envelope, the same opaque obligation identity, and the exact parent revision from
@@ -353,7 +351,6 @@ members against the operation's declaration in the domain package.
 | FR-024-AC-6 | A frame counterexample is submitted as a `WitnessEnvelope<FrameCounterexample>` through `qsl_replay::replay_frame`, and its clause, frame, anchor and occurrence identities reach QSL unchanged. | Test (TC-035) |
 | FR-024-AC-7 | A reduced `Witness`-arm candidate is retained only when a backend re-run and native replay both preserve domain validity and the failure; a candidate that changes domain validity or the verdict is discarded. | Test (TC-035) |
 | FR-024-AC-8 | A retained reduced `Witness`-arm envelope carries its own backend re-run's transcript, never the original counterexample's. | Test (TC-035) |
-| FR-024-AC-9 | A reduced `Input`-arm candidate is retained only when native replay preserves domain validity and the verdict, and it is itself an `Input`-arm envelope. | Test (TC-035) |
 | FR-024-AC-10 | No type named `Witness`, `ReplaySource`, `WitnessEnvelope`, `TerminalRecord` or `ObligationIdentity` is defined under `src/`, and no source file under `src/` imports any of them from `quire_contract_ir`. | Test (TC-035) |
 | FR-024-AC-11 | `StateClauseReplay::replay` returns exactly the `StateClauseReplayResult` that `qsl_replay::replay_state_clause` returns when a test calls it directly with the same request and envelope, for a violating run and for a respecting run, and the two results differ from each other. `StateClauseReplay::replay_through` hands the executor the request and envelope it built and returns the executor's value as it is: an executor returning a sentinel result changes the returned result to that sentinel. | Test (TC-035) |
 | FR-024-AC-12 | The state-clause envelope's `clause_node` equals the `ClauseSite` node, and its `occurrence_key` the `ClauseSite` occurrence, that `qsl_replay::call_site` returns for the clause name, and the payload's `clause` is that name and its `observation` is the `Invocation` arm. For a unit with two postcondition clauses, each clause's envelope carries its own node and occurrence. A clause name the unit does not declare returns `StateClauseReplayError::CallSite` holding the call site's refusal when the request is built, and the executor is not called. | Test (TC-035) |
@@ -384,7 +381,7 @@ members against the operation's declaration in the domain package.
 | FR-024-AC-37 | The common intake maps an adapter's decode-refusal arm to a typed decode evidence failure retaining its cause, with no envelope or replay. Before native replay, an out-of-domain assignment yields a distinct typed domain evidence failure; an incomplete or QSL-refused witness/packet yields a distinct typed QSL admission evidence failure retaining its cause. A replay verdict disagreement remains a distinct typed evidence failure. None settles as contract success or contract failure, and none of the pre-replay failures invokes replay. Kani's exact decode and refusal partition remain governed by FR-016. | Test (TC-035) |
 | FR-024-AC-38 | Starting from one admitted original failure, one valid reduced candidate that preserves the failure becomes a new CG lineage revision referring to its exact admitted QSL envelope, its exact parent revision and the unchanged opaque obligation identity. After retention, the original QSL envelope compares equal to its pre-reduction clone by `WitnessEnvelope<P>: Eq`, and the original CG record's revision identity, parent, obligation and typed evidence fields read back equal to their captured values. No lineage member is added to QSL's envelope or packet. | Test (TC-035) |
 | FR-024-AC-39 | From a retained failure revision, an out-of-domain reduction and a domain-valid reduction that changes the native verdict each create no revision. After each rejection, every prior QSL envelope compares equal to its pre-proposal clone and every prior CG record's revision identity, parent, obligation and typed evidence fields equal their captured values; a later valid reduction names the actual retained parent, with no skipped or substituted parent. | Test (TC-035) |
-| FR-024-AC-40 | A retained reduced `Witness` envelope holds a transcript from its own backend re-run, bound to its own reduced assignments; it cannot reuse any ancestor's transcript. A retained reduced `Input` envelope remains `Input`, contains its own canonical assignments and gains no backend witness or backend-evidence settlement. | Test (TC-035) |
+| FR-024-AC-40 | A retained reduced `Witness` envelope holds a transcript from its own backend re-run, bound to its own reduced assignments; it cannot reuse any ancestor's transcript. | Test (TC-035) |
 
 ### Mutations FR-024-AC-31 to FR-024-AC-35 detect
 
@@ -405,8 +402,9 @@ FR-024-AC-2, FR-024-AC-3, FR-024-AC-4 and FR-024-AC-6 are backed by focused
 TC-035 tests: the `Witness::parse` source scan in `tests/it/layout.rs`, the function and
 frame domain-endpoint tests, the missing-packet-member test in
 `tests/it/kani_obligations_state_clause_replay.rs`, and the frame packet identity test in
-`tests/it/kani_obligations_state_frame.rs`. FR-024-AC-1 and FR-024-AC-7 to
-FR-024-AC-9 remain planned. FR-024-AC-5 is retired (IR-890); its ID is not reused.
+`tests/it/kani_obligations_state_frame.rs`. FR-024-AC-1, FR-024-AC-7 and
+FR-024-AC-8 remain planned. FR-024-AC-5 and FR-024-AC-9 are retired (IR-890);
+their IDs are not reused.
 FR-024-AC-10 has a source-scan test over `src/`;
 FR-024-AC-11 to FR-024-AC-30 are met:
 
@@ -415,7 +413,7 @@ FR-024-AC-11 to FR-024-AC-30 are met:
 - The bounded-Kani corpus retains no counterexample packet, so no corpus counterexample reaches
   QSL as the `Input` arm. Its replay uses Kani playback on the witness path. The corpus path is
   planned for removal under FR-015-AC-109 to FR-015-AC-111, so the former `Input`-arm obligation
-  FR-024-AC-5 is retired without replacement.
+  FR-024-AC-5 and FR-024-AC-9 are retired without replacement.
 - A postcondition state-clause counterexample is replayed (IR-460): `src/replay/state_clause.rs`
   builds the invocation and snapshot documents through `core::canonical` and replays through
   `qsl_replay::replay_state_clause`, so FR-024-AC-11 to FR-024-AC-19 are backed by tagged tests

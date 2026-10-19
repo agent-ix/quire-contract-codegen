@@ -23,10 +23,10 @@ use qsl_replay::WitnessValue;
 use qsl_replay::{
     call_site, ByteDigest, CallSiteRefusal, CanonicalAssignment, Category, Code, DeclaredDomain,
     DependencyInput, DependencyInputRefusal, DependencySelectionsCause, DigestDomain, DigestRecord,
-    DisagreementCause, DomainKey, DomainKind, FiniteBound, Identifier, Integer, ObligationIdentity,
-    ProofBound, QualifiedName, ReplayLimits, ReplayRefusal, ReplayRequestRefusal, ReplaySource,
-    ScalarLimits, SourceIdentity, Verdict, WireNodeId, WitnessSettlement,
-    DEFAULT_REPLAY_INPUT_BYTES,
+    DisagreementCause, DomainKey, DomainKind, FiniteBound, Identifier, Integer, InternalFault,
+    ObligationIdentity, ProofBound, QualifiedName, ReplayLimits, ReplayRefusal,
+    ReplayRequestRefusal, ReplaySource, ScalarLimits, SourceIdentity, Verdict, WireNodeId,
+    WitnessSettlement, DEFAULT_REPLAY_INPUT_BYTES,
 };
 use quire_contract_codegen::{
     decode_falsification, execute_kani_obligation, replay_counterexample,
@@ -1052,6 +1052,31 @@ fn tc_026_an_in_domain_counterexample_the_twin_falsifies_is_reproduced() {
     let verdict = replay_counterexample(&harness.identity, &playback(&harness, 1, 5), &package)
         .expect("the replay settles");
     assert_eq!(verdict, ReplayVerdict::Reproduced);
+}
+
+/// An executor fault crosses the public counterexample replay path as the same typed refusal.
+#[trace("FR-016-AC-12", "TC-026")]
+#[test]
+fn tc_026_an_executor_fault_remains_a_typed_replay_refusal() {
+    let harness = spine_harness();
+    let package = compile_native_twin(&native_source(VIOLATING_TWIN), FUNCTION);
+    let fault = InternalFault::new("replay", "injected-executor-fault");
+    let mut calls = 0;
+    let result = replay_counterexample_through(
+        &harness.identity,
+        &playback(&harness, 1, 5),
+        &package,
+        |_| {
+            calls += 1;
+            Err(ReplayRefusal::Fault(fault.clone()))
+        },
+    );
+    assert_eq!(calls, 1, "the decoded counterexample reached the executor");
+    assert!(
+        matches!(result, Err(SpineReplayError::Refused(refusal))
+            if matches!(refusal.as_ref(), ReplayRefusal::Fault(returned) if *returned == fault)),
+        "the fault must remain a typed replay refusal"
+    );
 }
 
 /// A decoded value outside its argument's domain is evidence failure, and the replay never
