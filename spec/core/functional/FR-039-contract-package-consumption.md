@@ -170,12 +170,12 @@ for package meaning or a source of native bounds.
   typed refusal with the requested identity and source occurrences and emit
   no artifact. FR-322's reader owns absent, wrong-tag and type-mismatched
   target refusals before CG consumes the package.
-- CG SHALL pass malformed, noncanonical, wrong-version, mismatched-identity,
-  incomplete-source-map and stale-selected-dependency inputs through Contract
-  IR's single FR-330 reader. A `Refused` or `Incomplete` reader outcome SHALL
-  terminate the request before negotiation or generation; CG SHALL preserve
-  its typed code/cause, pointer or locus and measured limit details rather
-  than parsing the wire, repairing it or falling back to the original graph.
+- When Contract IR's FR-330 reader refuses a malformed, noncanonical,
+  wrong-version, invalid-accounting/source-map or stale-identity wire, or
+  returns `Incomplete`, CG SHALL admit no package to negotiation or generation
+  and emit no artifact. CG SHALL preserve the reader's typed refusal or limit
+  result at the request boundary, without parsing the wire, repairing it or
+  falling back to the original graph.
 
 ## Acceptance Criteria
 
@@ -185,10 +185,39 @@ for package meaning or a source of native bounds.
 | FR-039-AC-2 | A mixed request with a representable clause or function and an independent `unsupported`, `requires_bound` or `invalid_input` sibling retains one typed decision per driver position, including duplicate requested IDs, and emits only the representable sibling's artifact. An interleaved context-only root retains its own exact accounting position and key without creating a driver decision. For two QSL scalar items sharing one expression key but selecting different checked application/conversion pairs, CG retains each pair's own admitted FR-049 result bound; a conversion outside its driver's contiguous context span yields typed `IncompleteContext`, while repeating one pair retains `DuplicateRequest`. An IR accounting refusal retains its exact record payload and available source occurrences; a backend refusal after a `lowered` record retains that requested identity, the admitted `lowered` accounting disposition and available source occurrences, with its own distinguishable typed cause. A CG scalar `RequiresBound` refusal after `lowered` is not relabelled as an IR `requires_bound` record. An absent ID has no fabricated region. | Test |
 | FR-039-AC-3 | A selected dependency function reference resolves only through the reader-validated selected package identity and target key. A missing, wrong-identity or stale selected dependency refuses before CG; an identically keyed local node or extra unselected dependency cannot redirect generation. | Test |
 | FR-039-AC-4 | For a genuinely admitted FR-330 package, CG binds a `protocol`/`protocol_reference` carrier's exact `body.target` to the local `protocol` node, retaining its typed key, requested identity and source occurrences; changing that local target and recomputing the admitted carrier and package identities changes the selected target and package identity. A matching key only in a selected dependency does not bind locally. An absent local target, a present non-`protocol` target and a target with unequal `semantic_type` are refused by the FR-322 reader before CG with the respective `missing_declaration`/`missing-name` or `ill_typed`/`operator-ineligible` cause at `/body/target`; no artifact is emitted. An ordinary local reference or display text does not supply protocol-target binding. A backend that cannot encode an admitted protocol form returns its typed refusal and no artifact. | Test |
-| FR-039-AC-5 | A malformed or noncanonical FR-330 wire, wrong version, invalid accounting/source map, stale semantic identity or incomplete reader result reaches no CG consumer and emits no artifact. CG preserves the reader's typed refusal or limit result and performs no second parse or checked-graph fallback. | Test |
+| FR-039-AC-5 | When the FR-330 reader refuses a malformed or noncanonical wire, wrong version, invalid accounting/source map or stale semantic identity, or returns `Incomplete`, CG SHALL terminate the request with the reader's typed refusal or limit result before any package consumer, artifact emission, second parse or checked-graph fallback. | Analysis |
 | FR-039-AC-6 | An item whose admitted package accounting is `failed`, `invalid_body` or `body_incomplete`, or whose `lowered` form is unrepresentable by the selected backend, emits no artifact and retains a distinct typed cause; the package byte-ceiling case emits no artifact for any sibling. | Test |
 | FR-039-AC-7 | Generated scalar, composite equality and exact function claims each serialize `contract_package_identity` equal to the admitted FR-330 `identity` and `node_id` equal to the requested `CheckedNodeId`, with no generated-claim `ir_id` key. Each retains exact `semantic_type`, admitted `source_map`, family-specific provenance, and `package_id` denoting the originating checked package; each serializes typed `claims`, `bounds` and `dependencies`. For the same requested node in two genuinely admitted packages with different identities, the claim identity differs; for two different requested nodes in one admitted package, it also differs. A downstream consumer can join a claim to its admitted meaning by this pair and can use request index only to distinguish repeated request positions. | Test |
 | FR-039-AC-8 | For each admitted `lowered` item, Contract IR's authoritative traversal is total over the required root, bounds and selected dependencies, and the generated claim's reached claim, bound and dependency keys and dependent declaration closure equal its output. An unresolved required reference cannot reach CG as an admitted `lowered` item: Contract IR records a typed item refusal or its strict reader refuses the package; a refused or incomplete reader result yields no item claim or artifact. Inspection finds no per-node ID from a second lowering or wire-fragment hash. | Test |
+
+### FR-039-AC-5
+
+Analysis checks the CG type boundary in `src/routed/capability.rs`
+(`negotiate_contract_package`), `src/routed/generate.rs` (`generate_routed`),
+`src/oracle/equality/mod.rs` (`generate_composite_equality_oracles`) and
+`src/oracle/function/mod.rs` (`generate_exact_function_oracles`): each package
+parameter is `&ContractPackageV1`. `src/core/contract_package.rs` constructs
+`PackageItems` from `&ContractPackageV1`. A source search of CG production APIs
+checks that none constructs `ContractPackageV1` from raw wire bytes or admits
+`Refused` or `Incomplete` as a package. The local
+`ContractPackageWireV1::read` call in `src/oracle/function/mod.rs` matches only
+`Admitted` to the package passed onward; its other outcomes return before
+generation. These facts establish that rejected input reaches no CG package
+consumer and yields no artifact. Analysis of the production request boundary
+must also confirm that it returns the reader's typed refusal or limit result
+without a second parse or checked-graph fallback; this portion remains planned.
+
+OWNER EVIDENCE is Contract IR [FR-035-AC-5](ix://agent-ix/quire-contract-ir/FR-035-AC-5)
+and its tagged TC-047 tests for malformed and noncanonical wires, invalid
+accounting/source maps and stale own or selected-dependency identity;
+[FR-035-AC-2](ix://agent-ix/quire-contract-ir/FR-035-AC-2) also covers stale
+selected-dependency identity. Contract IR
+[FR-035-AC-10](ix://agent-ix/quire-contract-ir/FR-035-AC-10) and its tagged
+TC-047 test cover a wrong string version. Contract IR
+[FR-035-AC-11](ix://agent-ix/quire-contract-ir/FR-035-AC-11) and its tagged
+TC-047 test cover an incomplete reader result. The tests are in Contract IR's
+`tests/it/complete_v1_contract_package.rs`; they are evidence of the reader's
+obligations, not CG test coverage.
 
 ## Dependencies
 

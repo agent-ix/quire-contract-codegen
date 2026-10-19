@@ -22,7 +22,7 @@ type: TestMatrix
 | FR-037 | FR-037-AC-4 | TC-052 | 🚧 Planned |
 | FR-037 | FR-037-AC-5 | TC-052 | 🚧 Planned |
 | FR-039 | FR-039-AC-1 through FR-039-AC-3, FR-039-AC-6 through FR-039-AC-8 | TC-053 | 🚧 Planned; production FR-330 consumer and criterion-tagged integration tests are not implemented |
-| FR-039 | FR-039-AC-5 | TC-053 | 🚧 Planned; no test is tagged with this criterion |
+| FR-039 | FR-039-AC-5 | Analysis | 🚧 Planned; CG's admitted-package type boundary is checkable in source, while the production request boundary and result preservation remain unimplemented; Contract IR FR-035-AC-2, AC-5, AC-10 and AC-11 have tagged TC-047 reader evidence |
 | FR-039 | FR-039-AC-4 | TC-054 | 🚧 Planned; FR-322 worked-carrier positive and recomputed adverse strict-reader controls are feasible now, while genuine QSL/IR source-to-CG positive and changed-binding controls depend on QSL-764; no CG implementation credit |
 
 ## Non-Functional Requirement Coverage
@@ -60,5 +60,5 @@ column is marked `⚠️` or `🚧` in the table that owns it, that table govern
 | TC-007 | Verify cross-backend semantic parity | Integration | P0 | FR-005-AC-3, FR-005-AC-4 | 🚧 Planned |
 | TC-042 | Verify no panic on a generation or analysis path | Unit | P0 | NFR-005-AC-1, NFR-005-AC-2, NFR-005-AC-3, NFR-005-AC-4, NFR-005-AC-5, NFR-005-AC-6, NFR-005-AC-7, NFR-005-AC-8 | ✅ Covered; NFR-005-AC-1 scans the canonical `CaseIdentity::digest` with no exception |
 | TC-052 | Verify checked-package fixture identity ownership | Integration | P0 | FR-037-AC-1, FR-037-AC-2, FR-037-AC-3, FR-037-AC-4, FR-037-AC-5 | 🚧 Planned |
-| TC-053 | Verify production decisions from one admitted ContractPackage | Integration | P0 | FR-039-AC-1, FR-039-AC-2, FR-039-AC-3, FR-039-AC-5, FR-039-AC-6, FR-039-AC-7, FR-039-AC-8 | 🚧 Planned |
+| TC-053 | Verify production decisions from one admitted ContractPackage | Integration | P0 | FR-039-AC-1, FR-039-AC-2, FR-039-AC-3, FR-039-AC-6, FR-039-AC-7, FR-039-AC-8 | 🚧 Planned |
 | TC-054 | Verify exact local protocol-target consumption | Integration | P0 | FR-039-AC-4 | 🚧 Planned; reader controls feasible now, QSL-764 prerequisite for source-to-CG controls |
