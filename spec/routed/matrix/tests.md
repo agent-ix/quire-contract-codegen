@@ -12,7 +12,8 @@ type: TestMatrix
 |---|---|---|---|
 | FR-019 | FR-019-AC-4, FR-019-AC-7 | TC-030 | ✅ Covered; tagged settlement tests assert both registration orders and whole-envelope vocabulary refusal before kind settlement |
 | FR-019 | FR-019-AC-1 (Kani arm), FR-019-AC-2, FR-019-AC-3, FR-019-AC-8, FR-019-AC-45 through FR-019-AC-46 | TC-030 | 🚧 Planned; generic TC-030 tests exist, but these criteria have no complete criterion-level test; AC-1 process arm remains planned in TC-046 |
-| FR-019 | FR-019-AC-9, FR-019-AC-10, FR-019-AC-47 | Analysis | ✅ Covered |
+| FR-019 | FR-019-AC-9, FR-019-AC-47 | Analysis | ✅ Covered |
+| FR-019 | FR-019-AC-10 | Analysis | Analysis (CG); owner evidence in quire-driver FR-001-AC-3 (TC-003) and QSL FR-057-AC-6 (TC-155) |
 | FR-022 | FR-022-AC-2, FR-022-AC-3, FR-022-AC-5, FR-022-AC-7 through FR-022-AC-15 | TC-033 | ✅ Existing Kani behavior covered; test literals need constructor migration in IR-629 code |
 | FR-022 | FR-022-AC-4 | TC-033, TC-046 | ⚠️ Existing direct-item mismatch test is tagged; a crate-internal test is planned when `backend` and `kind` become private |
 | FR-022 | FR-022-AC-16 | TC-033 | ⚠️ Partially covered; asserted on the harness-pairing function (`index_harnesses`), not through `generate_routed`, because unique name assignment makes the duplicate unreachable from the public entry |
