@@ -85,6 +85,10 @@ nothing says so.
   pairs; QSL's route descriptor carries
   advertised pairs but no `domains` or `bounds`. QSL-654 owns the matching
   PV-4 wording update.
+  The FR-331 registry snapshot supplies unique backend identities; FR-290's
+  registration stage establishes that invariant. At CG's public API, a
+  caller-supplied manifest that repeats an identity violates this input
+  precondition, even when the two descriptors are identical.
 - Per request item: its one required FR-290 capability kind, its extent and
   that extent's `bounded` or `unbounded` classification, the backend the caller
   names when it names one, its typed IR tag/form, and its `candidates`. The
@@ -104,9 +108,9 @@ nothing says so.
 - A typed cause for every disposition that is not `supported`, drawn from the
   FR-290 vocabulary and naming the offending backend or candidates where that
   vocabulary requires it.
-- For conflicting registrations of one backend identity, an
-  `invalid_capability`/`duplicate-backend` registration refusal with that
-  identity; settlement of items using other identities remains available.
+- For a manifest that repeats a backend identity, a whole-envelope
+  `EnvelopeRefusal::ManifestRepeatsBackendIdentity { identity: String }`.
+  No item settlement or generated artifact results from that manifest.
 - A Kani arm that does not discharge an admitted IR form uses
   `unsupported_projection`/`unsupported-requested-capability` and names the
   typed form and Kani candidate.
@@ -118,29 +122,36 @@ For an unsupported IR profile entry, IR FR-029 owns the absence of an artifact,
 
 ## Behavior
 
-- FR-019-AC-10's former statement that any repeated identity makes the whole
-  registry route nothing conflicts with QSpec FR-290's per-identity registry
-  rule: equal repeats are one registration, and a conflicting identity does
-  not withdraw another identity. This is a specification conflict, not a
-  change in the number of accepted repeats.
-- At CG's negotiation boundary, the generator shall compare FR-331 manifest
-  descriptors for each backend identity by their RFC 8785 canonical bytes,
-  as QSpec FR-290 defines descriptor equality. It shall keep byte-equal
-  repeats once. If an identity has differing descriptors, it shall refuse
-  every registration of that identity, hold no descriptor for it, and route
-  no item through it; registrations of other identities shall remain eligible
-  for settlement and routing. The choice and reported identity shall not
-  depend on manifest order. QSpec FR-331's manifest has unique registered
-  identities after this rule is applied.
-- The conflicting identity shall produce a dedicated typed registration
-  refusal `RegistrationRefusal::DuplicateBackend { identity: String }`, under
-  FR-272's `invalid_capability` code and FR-290's `duplicate-backend` cause.
-  CG shall not encode this cause as a string in
-  `EnvelopeRefusal::InvalidCapability`, since that whole-carrier result would
-  suppress settlement for other identities. QSpec FR-272 requires the
-  repeated identity **and the refused registration's manifest** for the
-  registry's `duplicate-backend` diagnostic; at CG negotiation this refusal
-  carries the identity only, and no manifest of a refused repeat is retained.
+**Note:** FR-290 withdraws repeats at registration, while CG refuses a
+manifest that arrives with one. Under the former FR-019-AC-10 wording,
+byte-equal repeats routed nothing; at CG's public API they now cause a typed
+precondition refusal. FR-290 and FR-272 still govern registration and its
+per-distinct-manifest refusal, including its manifest payload. FR-331:57
+requires unique identities in the snapshot that CG receives; CG's check
+defends that precondition rather than establishing it.
+
+- If the manifest contains a second descriptor of any backend identity, then
+  the generator shall refuse the whole envelope with CG-owned
+  `EnvelopeRefusal::ManifestRepeatsBackendIdentity { identity: String }`.
+  The generator shall compare identities as exact case-sensitive strings.
+  The generator shall treat the entire CG `BackendDescriptor`, including `ProviderOrigin`,
+  as the descriptor; both identical and differing descriptors repeat an
+  identity. The generator shall return only the repeated identity in this
+  refusal, with no string cause and no manifest or digest payload, and shall
+  preserve `negotiate_backend_provider`'s
+  `Result<Vec<ItemSettlement>, EnvelopeRefusal>`.
+- If several identities repeat, then the generator shall report the
+  bytewise-first repeated identity, independent of manifest order or
+  adjacency. The generator shall check contract version and capability
+  vocabulary before detecting repeats, so a bad vocabulary retains
+  `EnvelopeRefusal::InvalidCapability` and no kind is read.
+- If a manifest repeats a backend identity, then the generator shall return
+  no item settlements and shall produce no generation input or artifact for
+  that envelope. QSL owns the routing precondition that a registry repeating
+  a backend identity routes nothing; CG verifies that claim by Analysis
+  because it takes no `qsl-route` dependency (FR-019:388) and
+  `generate_routed` accepts routed items, positions, a package and contexts,
+  not a manifest or settlement.
 - The generator shall dispatch settlement through one `negotiate_*` arm per
   variant of a closed backend kind, with no catch-all arm. A backend kind with
   no arm shall fail to compile.
@@ -423,7 +434,9 @@ requires its exhaustive arms to compile. FR-019-AC-14 is a property of the retur
 | FR-019-AC-3 | On the Kani arm, an unbounded extent against a `bounded`-only advertisement settles `requires-bound` when a finite bound is available, rather than `unsupported`; with no finite bound available it settles `unsupported`, warned, with `unsupported_projection`/`unbounded-extent`; and it never settles `supported`. | Test (TC-030) |
 | FR-019-AC-4 | An item with more than one candidate and no named backend settles `invalid-request` with `invalid_capability`/`ambiguous-backend`, naming every candidate in candidate order, identically under every registration order. | Test (TC-030) |
 | FR-019-AC-10 | Only an item settled `supported` routes. | Test (TC-030) |
-| FR-019-AC-45 | Given repeated FR-331 manifest descriptors of one backend identity, byte-equal RFC 8785 encodings leave one registered descriptor and no refusal; differing encodings refuse every registration of that identity with typed `RegistrationRefusal::DuplicateBackend { identity: String }` under `invalid_capability`/`duplicate-backend`, retain no descriptor or refused manifest for it, and route no item through it. An otherwise eligible item for another identity still settles and routes under both manifest orders, and non-adjacent repeats and multiple conflicting identities yield the same refused identities regardless of order (QSpec FR-290; FR-272). | Test (TC-030) |
+| FR-019-AC-45 | A manifest with a second descriptor of one backend identity causes a whole-envelope `EnvelopeRefusal::ManifestRepeatsBackendIdentity { identity: String }`, whether the descriptors are identical, differ in `ProviderOrigin` alone, or differ in any other CG descriptor field, and whether adjacent or non-adjacent. The variant has no string cause, manifest or digest payload; `negotiate_backend_provider` keeps its return signature. | Test (TC-030) |
+| FR-019-AC-46 | With several repeated identities, the refusal names the bytewise-first repeated identity independent of manifest order; identities differing only in case are distinct. An invalid contract version or capability vocabulary is refused as `EnvelopeRefusal::InvalidCapability` before repeat detection or any kind read. | Test (TC-030) |
+| FR-019-AC-47 | On a repeated-identity manifest, CG returns no item settlements and produces no generation input or artifact. QSL's separate registration and routing rule withdraws repeats before the FR-331 snapshot and routes nothing for a registry that repeats an identity (FR-290; FR-331:57; FR-019:388; `generate_routed` signature). | Test (TC-030) for CG; Analysis for QSL routing precondition |
 | FR-019-AC-7 | An envelope whose `capability_vocabulary` is not exactly `quire.capability-kind/v1`, or is absent, is refused as `invalid_capability`/`unsupported-version` with none of its kinds read. | Test (TC-030) |
 | FR-019-AC-8 | An item with an absent extent classification settles `invalid-request` with `invalid_capability`/`absent-extent`, and an absent or unknown kind settles before the candidate table is consulted. | Test (TC-030) |
 | FR-019-AC-9 | A backend kind added without a negotiation arm does not compile: the dispatch is an exhaustive `match` over the closed kind with no catch-all arm. | Analysis |

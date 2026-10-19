@@ -942,7 +942,9 @@ pub struct BackendProviderEnvelope {
     pub contract_version: String,
     /// Exactly [`CAPABILITY_VOCABULARY`].
     pub capability_vocabulary: String,
-    /// One descriptor per registered backend in the registry snapshot.
+    /// One descriptor per backend identity in a valid FR-331 registry snapshot.
+    /// A caller-supplied repeat violates the CG input precondition; FR-019-AC-45
+    /// requires whole-envelope refusal even when both descriptors are identical.
     pub manifest: Vec<BackendDescriptor>,
     /// The request's items, in request order.
     pub items: Vec<RequestItem>,
