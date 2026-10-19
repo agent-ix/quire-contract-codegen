@@ -948,26 +948,27 @@ pub struct BackendProviderEnvelope {
     pub items: Vec<RequestItem>,
 }
 
-/// A refusal of the whole carrier, before any kind is read.
+/// A refusal of the whole carrier, before any item is settled.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case", tag = "code", content = "cause")]
 pub enum EnvelopeRefusal {
-    /// The contract version or the capability vocabulary is absent or another identity.
+    /// The contract version or capability vocabulary is invalid, or the manifest
+    /// repeats a backend identity.
     ///
-    /// FR-290 refuses the carrier rather than the item, and none of its labels
-    /// are read: a vocabulary that is not the one selected does not merely
-    /// rename members, it makes every label in the carrier unreadable.
+    /// A foreign vocabulary makes every label in the carrier unreadable.
+    /// A repeated identity makes its descriptor selection depend on manifest
+    /// order, so it is refused before any item is settled.
     InvalidCapability {
-        /// Always `unsupported-version`; the field keeps the cause printable
-        /// beside the item-level causes rather than implied by the variant.
+        /// `unsupported-version` for a carrier identity, or `duplicate-backend`
+        /// for a repeated manifest identity, both under `invalid_capability`.
         cause: &'static str,
-        /// Which member of the carrier was wrong.
+        /// Which member of the carrier was wrong (`manifest` for a duplicate).
         ///
         /// Both members refuse with one cause, so without this a consumer that
         /// got both wrong is told only about the first and cannot tell which
         /// field to fix from the refusal it was handed.
         member: &'static str,
-        /// The identity the carrier supplied, or the empty string when absent.
+        /// The supplied carrier identity, or the repeated backend identity.
         received: String,
     },
 }
@@ -1296,6 +1297,20 @@ pub fn negotiate_backend_provider(
             cause: "unsupported-version",
             member: "capability_vocabulary",
             received: envelope.capability_vocabulary.clone(),
+        });
+    }
+    let mut identities = BTreeSet::new();
+    if let Some(identity) = envelope
+        .manifest
+        .iter()
+        .map(|backend| backend.identity.as_str())
+        .filter(|identity| !identities.insert(*identity))
+        .min()
+    {
+        return Err(EnvelopeRefusal::InvalidCapability {
+            cause: "duplicate-backend",
+            member: "manifest",
+            received: identity.to_owned(),
         });
     }
     Ok(envelope

@@ -1145,6 +1145,94 @@ fn tc_030_three_candidates_settle_ambiguous_in_candidate_order() {
     }
 }
 
+/// A repeated identity refuses the envelope before either descriptor can route;
+/// ordinary single-descriptor settlement still routes only supported items.
+#[trace("TC-030", "FR-019-AC-10")]
+#[test]
+fn tc_030_repeated_backend_identity_refuses_in_both_orders() {
+    let kind = CapabilityKind::ValueValidity;
+    let bounded_only = kani(vec![(kind, Mode::Bounded)]);
+    let unbounded_advertisement = kani(vec![(kind, Mode::Unbounded)]);
+    let mut request = item(
+        RequestedKind::Known(kind),
+        Candidates::Set(vec![candidate(BackendKind::Kani.identity())]),
+    );
+    request.extent = unbounded(false);
+
+    assert!(matches!(
+        settle_one(vec![unbounded_advertisement.clone()], request.clone()).disposition,
+        Disposition::Supported { .. }
+    ));
+    assert!(matches!(
+        settle_one(vec![bounded_only.clone()], request.clone()).disposition,
+        Disposition::Unsupported {
+            cause: Cause::UnboundedExtent { .. }
+        }
+    ));
+
+    for manifest in [
+        vec![bounded_only.clone(), unbounded_advertisement.clone()],
+        vec![unbounded_advertisement.clone(), bounded_only.clone()],
+    ] {
+        assert_eq!(
+            negotiate_backend_provider(&envelope(manifest, vec![request.clone()])),
+            Err(EnvelopeRefusal::InvalidCapability {
+                cause: "duplicate-backend",
+                member: "manifest",
+                received: BackendKind::Kani.identity().to_owned(),
+            }),
+            "a repeated identity cannot route in either registration order"
+        );
+    }
+}
+
+/// Even byte-equal descriptors cannot appear twice in a CG manifest.
+#[trace("TC-030")]
+#[test]
+fn tc_030_identical_repeated_descriptors_refuse_the_envelope() {
+    let descriptor = kani(vec![(CapabilityKind::ValueValidity, Mode::Unbounded)]);
+    let request = item(
+        RequestedKind::Known(CapabilityKind::ValueValidity),
+        Candidates::Set(vec![candidate(BackendKind::Kani.identity())]),
+    );
+    assert_eq!(
+        negotiate_backend_provider(&envelope(
+            vec![descriptor.clone(), descriptor],
+            vec![request]
+        )),
+        Err(EnvelopeRefusal::InvalidCapability {
+            cause: "duplicate-backend",
+            member: "manifest",
+            received: BackendKind::Kani.identity().to_owned(),
+        })
+    );
+}
+
+/// Identity comparison is bytewise, including case.
+#[trace("TC-030")]
+#[test]
+fn tc_030_backend_identities_that_differ_only_in_case_are_distinct() {
+    let kind = CapabilityKind::ValueValidity;
+    let manifest = vec![
+        BackendDescriptor {
+            identity: "Kani".to_owned(),
+            ..kani(vec![(kind, Mode::Unbounded)])
+        },
+        kani(vec![(kind, Mode::Unbounded)]),
+    ];
+    let mut request = item(
+        RequestedKind::Known(kind),
+        Candidates::Set(vec![candidate(BackendKind::Kani.identity())]),
+    );
+    request.extent = unbounded(false);
+    assert!(matches!(
+        negotiate_backend_provider(&envelope(manifest, vec![request])),
+        Ok(settlements) if matches!(settlements.as_slice(), [ItemSettlement {
+            disposition: Disposition::Supported { backend }, ..
+        }] if backend == BackendKind::Kani.identity())
+    ));
+}
+
 /// Each row of the advertised-mode table settles its own disposition, and an
 /// unbounded extent never settles `supported` on a bounded-only advertisement.
 ///
