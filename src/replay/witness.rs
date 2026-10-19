@@ -42,6 +42,15 @@ use crate::kani::{
     output::playback::{read_block, select_assertion_block, DecodeFailure, Playback},
 };
 
+/// Caller supplied bounds for decoding a retained Kani witness.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct WitnessDecodeLimits {
+    /// Maximum transcript bytes accepted before parsing.
+    pub bytes: usize,
+    /// Maximum concrete values read from the selected playback.
+    pub values: usize,
+}
+
 /// Why the generator's persisted argument schema could not be used to type a transcript.
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum WitnessSchemaError {
@@ -100,8 +109,11 @@ const fn byte_width(primitive: KaniPrimitiveType) -> usize {
 /// directly so a caller holding only the persisted `identity.{harnessSymbol,moduleSymbol,
 /// arguments}` JSON fields can call it.
 ///
-/// `transcript` is expected verbatim from the backend. Every failure is a named
-/// [`DecodeFailure`]: `cg_witness_schema_non_argument_binding`;
+/// `transcript` is expected verbatim from the backend. `limits` is required; byte length is
+/// checked before selecting a playback block, and the reader refuses before parsing a concrete
+/// value beyond `limits.values`. Every failure is a named [`DecodeFailure`]:
+/// `cg_witness_decode_bytes_limit`, `cg_witness_decode_values_limit`,
+/// `cg_witness_schema_non_argument_binding`;
 /// `cg_witness_schema_duplicate_binding` (a name bound twice); a transcript that is not a
 /// single selected assertion playback block (`kani_witness_harness_missing`,
 /// `kani_witness_check_missing`, `kani_witness_check_text_missing`,
@@ -121,8 +133,9 @@ pub fn decode_falsification(
     module_symbol: &str,
     arguments: &[ObligationBinding],
     transcript: &str,
+    limits: WitnessDecodeLimits,
 ) -> Result<Vec<(String, WitnessValue)>, DecodeFailure> {
-    decode_playback(harness_symbol, module_symbol, arguments, transcript)
+    decode_playback(harness_symbol, module_symbol, arguments, transcript, limits)
         .map(|decoded| decoded.values)
 }
 
@@ -147,7 +160,15 @@ pub(crate) fn decode_playback<'a>(
     module_symbol: &str,
     arguments: &[ObligationBinding],
     transcript: &'a str,
+    limits: WitnessDecodeLimits,
 ) -> Result<DecodedPlayback<'a>, DecodeFailure> {
+    if transcript.len() > limits.bytes {
+        return Err(DecodeFailure::new(
+            "cg_witness_decode_bytes_limit",
+            harness_symbol,
+            &limits.bytes.to_string(),
+        ));
+    }
     let schema = argument_types(arguments).map_err(|error| match error {
         WitnessSchemaError::NonArgumentBinding { identifier } => DecodeFailure::new(
             "cg_witness_schema_non_argument_binding",
@@ -168,7 +189,7 @@ pub(crate) fn decode_playback<'a>(
         ));
     }
     let block = select_assertion_block(transcript, harness_symbol, module_symbol)?;
-    let playback = read_block(block, harness_symbol, module_symbol)?;
+    let playback = read_block(block, harness_symbol, module_symbol, limits.values)?;
     let declared = if module_symbol.is_empty() {
         harness_symbol.to_owned()
     } else {
@@ -326,8 +347,17 @@ mod tests {
             argument("a", KaniPrimitiveType::I64),
             argument("a", KaniPrimitiveType::Boolean),
         ];
-        let error = decode_falsification("h", "mod", &twice, &transcript)
-            .expect_err("a repeated name is refused");
+        let error = decode_falsification(
+            "h",
+            "mod",
+            &twice,
+            &transcript,
+            WitnessDecodeLimits {
+                bytes: usize::MAX,
+                values: usize::MAX,
+            },
+        )
+        .expect_err("a repeated name is refused");
         assert_eq!(error.code, "cg_witness_schema_duplicate_binding");
         assert_eq!(error.context, "a");
     }
@@ -410,22 +440,56 @@ fn kani_concrete_playback_synthetic() {{\n\
         };
         assert_eq!(
             decode_falsification("h", "mod", &argument, &transcript, exact)
-                .expect("at both bounds")[0].1,
+                .expect("at both bounds")[0]
+                .1,
             WitnessValue::Integer(42)
         );
-        let poisoned_bytes = format!("{transcript}not a playback");
+        let poisoned_bytes = format!("{transcript}{transcript}");
         let error = decode_falsification("h", "mod", &argument, &poisoned_bytes, exact)
             .expect_err("suffix beyond byte bound");
         assert_eq!(error.code, "cg_witness_decode_bytes_limit");
+        let unbounded_error = decode_falsification(
+            "h",
+            "mod",
+            &argument,
+            &poisoned_bytes,
+            WitnessDecodeLimits {
+                bytes: poisoned_bytes.len(),
+                values: 1,
+            },
+        )
+        .expect_err("reading the suffix reaches the duplicate assertion");
+        assert_eq!(
+            unbounded_error.code,
+            "kani_witness_multiple_assertions_refused"
+        );
 
-        let poisoned_value = two_value_transcript("mod::h", 42, false)
-            .replace("vec![0],", "vec![not_a_byte],");
+        let poisoned_value =
+            two_value_transcript("mod::h", 42, false).replace("vec![0],", "vec![not_a_byte],");
         let error = decode_falsification(
-            "h", "mod", &argument, &poisoned_value,
-            WitnessDecodeLimits { bytes: poisoned_value.len(), values: 1 },
+            "h",
+            "mod",
+            &argument,
+            &poisoned_value,
+            WitnessDecodeLimits {
+                bytes: poisoned_value.len(),
+                values: 1,
+            },
         )
         .expect_err("poisoned second value beyond count bound");
         assert_eq!(error.code, "cg_witness_decode_values_limit");
+        let unbounded_error = decode_falsification(
+            "h",
+            "mod",
+            &argument,
+            &poisoned_value,
+            WitnessDecodeLimits {
+                bytes: poisoned_value.len(),
+                values: 2,
+            },
+        )
+        .expect_err("reading the extra value reaches the invalid byte");
+        assert_eq!(unbounded_error.code, "kani_witness_byte_invalid");
     }
 
     /// A transcript whose value count or byte width disagrees with the
@@ -444,6 +508,10 @@ fn kani_concrete_playback_synthetic() {{\n\
                 argument("second", KaniPrimitiveType::I64),
             ],
             &transcript,
+            WitnessDecodeLimits {
+                bytes: usize::MAX,
+                values: usize::MAX,
+            },
         )
         .expect_err("one value cannot decode against two arguments");
         assert_eq!(arity.code, "kani_witness_arity_mismatch", "{arity:?}");
@@ -452,6 +520,10 @@ fn kani_concrete_playback_synthetic() {{\n\
             "mod",
             &[argument("flag", KaniPrimitiveType::Boolean)],
             &transcript,
+            WitnessDecodeLimits {
+                bytes: usize::MAX,
+                values: usize::MAX,
+            },
         )
         .expect_err("eight bytes cannot decode as a Boolean");
         assert_eq!(width.code, "kani_witness_width_mismatch", "{width:?}");
@@ -465,8 +537,17 @@ fn kani_concrete_playback_synthetic() {{\n\
     fn decode_falsification_decodes_a_matching_transcript() {
         let arguments = vec![argument("value", KaniPrimitiveType::I64)];
         let transcript = synthetic_transcript("mod::harness_ok", 42);
-        let decoded = decode_falsification("harness_ok", "mod", &arguments, &transcript)
-            .expect("a transcript whose qualified harness symbol matches the identity decodes");
+        let decoded = decode_falsification(
+            "harness_ok",
+            "mod",
+            &arguments,
+            &transcript,
+            WitnessDecodeLimits {
+                bytes: usize::MAX,
+                values: usize::MAX,
+            },
+        )
+        .expect("a transcript whose qualified harness symbol matches the identity decodes");
         assert_eq!(
             decoded,
             vec![("value".to_owned(), WitnessValue::Integer(42))]
@@ -485,14 +566,32 @@ fn kani_concrete_playback_synthetic() {{\n\
         let transcript = synthetic_transcript("mod::harness_ok", 42);
 
         // direction 1: the declared identity names the transcript's real harness -> decodes.
-        decode_falsification("harness_ok", "mod", &arguments, &transcript)
-            .expect("the matching direction must still decode");
+        decode_falsification(
+            "harness_ok",
+            "mod",
+            &arguments,
+            &transcript,
+            WitnessDecodeLimits {
+                bytes: usize::MAX,
+                values: usize::MAX,
+            },
+        )
+        .expect("the matching direction must still decode");
 
         // direction 2: the declared identity names a sibling harness in the same module, over
         // the same union ABI (same arity and widths) -> must refuse by name, not decode under
         // the wrong label.
-        let error = decode_falsification("sibling_harness", "mod", &arguments, &transcript)
-            .expect_err("a wrong-harness transcript must refuse, not decode silently");
+        let error = decode_falsification(
+            "sibling_harness",
+            "mod",
+            &arguments,
+            &transcript,
+            WitnessDecodeLimits {
+                bytes: usize::MAX,
+                values: usize::MAX,
+            },
+        )
+        .expect_err("a wrong-harness transcript must refuse, not decode silently");
         assert_eq!(
             error.code, "cg_witness_harness_identity_mismatch",
             "{error:?}"
@@ -513,8 +612,17 @@ fn kani_concrete_playback_synthetic() {{\n\
             argument("flag", KaniPrimitiveType::Boolean),
         ];
         let transcript = two_value_transcript("mod::harness_ok", 42, true);
-        let decoded = decode_falsification("harness_ok", "mod", &arguments, &transcript)
-            .expect("a two-value transcript decodes against a two-binding schema");
+        let decoded = decode_falsification(
+            "harness_ok",
+            "mod",
+            &arguments,
+            &transcript,
+            WitnessDecodeLimits {
+                bytes: usize::MAX,
+                values: usize::MAX,
+            },
+        )
+        .expect("a two-value transcript decodes against a two-binding schema");
         assert_eq!(
             decoded,
             vec![
@@ -581,7 +689,16 @@ fn kani_concrete_playback_synthetic() {{\n\
         };
         let flag = [argument("flag", KaniPrimitiveType::Boolean)];
         let decode = |comment: &str, byte: u8| {
-            decode_falsification("h", "mod", &flag, &block(comment, byte))
+            decode_falsification(
+                "h",
+                "mod",
+                &flag,
+                &block(comment, byte),
+                WitnessDecodeLimits {
+                    bytes: usize::MAX,
+                    values: usize::MAX,
+                },
+            )
         };
         assert_eq!(
             decode("true", 1).expect("agreeing comment"),
@@ -607,7 +724,18 @@ fn kani_concrete_playback_synthetic() {{\n\
             synthetic_transcript("mod::h", value).replace("`assertion`", &format!("`{kind}`"))
         };
         let argument = [argument("value", KaniPrimitiveType::I64)];
-        let decode = |transcript: String| decode_falsification("h", "mod", &argument, &transcript);
+        let decode = |transcript: String| {
+            decode_falsification(
+                "h",
+                "mod",
+                &argument,
+                &transcript,
+                WitnessDecodeLimits {
+                    bytes: usize::MAX,
+                    values: usize::MAX,
+                },
+            )
+        };
         assert_eq!(
             decode(block("cover", 1)).unwrap_err().code,
             "kani_witness_cover_refused"
@@ -633,7 +761,8 @@ fn kani_concrete_playback_synthetic() {{\n\
             "\"synthetic assertion\"",
             "\"first line\n///   second line\n///   third line\"",
         );
-        let block = read_block(&transcript, "h", "mod").expect("a multi-line check text reads");
+        let block =
+            read_block(&transcript, "h", "mod", usize::MAX).expect("a multi-line check text reads");
         assert_eq!(
             block.check_text,
             "first line\n///   second line\n///   third line"
@@ -643,7 +772,11 @@ fn kani_concrete_playback_synthetic() {{\n\
                 "h",
                 "mod",
                 &[argument("v", KaniPrimitiveType::I64)],
-                &transcript
+                &transcript,
+                WitnessDecodeLimits {
+                    bytes: usize::MAX,
+                    values: usize::MAX
+                }
             )
             .expect("decodes"),
             vec![("v".to_owned(), WitnessValue::Integer(42))]
@@ -661,7 +794,11 @@ fn kani_concrete_playback_synthetic() {{\n\
                     "h",
                     "mod",
                     &[argument("v", KaniPrimitiveType::I64)],
-                    &transcript
+                    &transcript,
+                    WitnessDecodeLimits {
+                        bytes: usize::MAX,
+                        values: usize::MAX
+                    }
                 )
                 .expect("decodes"),
                 vec![("v".to_owned(), WitnessValue::Integer(i128::from(value)))]
@@ -677,9 +814,18 @@ fn kani_concrete_playback_synthetic() {{\n\
         let good = synthetic_transcript("mod::h", 42);
         let one = [argument("v", KaniPrimitiveType::I64)];
         let code = |transcript: &str, arguments: &[ObligationBinding]| {
-            decode_falsification("h", "mod", arguments, transcript)
-                .expect_err(&format!("must refuse: {transcript}"))
-                .code
+            decode_falsification(
+                "h",
+                "mod",
+                arguments,
+                transcript,
+                WitnessDecodeLimits {
+                    bytes: usize::MAX,
+                    values: usize::MAX,
+                },
+            )
+            .expect_err(&format!("must refuse: {transcript}"))
+            .code
         };
         let cases: Vec<(String, &str)> = vec![
             ("no playback".to_owned(), "kani_witness_harness_missing"),

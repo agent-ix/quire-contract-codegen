@@ -11,7 +11,8 @@ type: TestMatrix
 | Functional Req | Acceptance Criteria | Test Cases | Status |
 |---|---|---|---|
 | FR-016 | FR-016-AC-1 through FR-016-AC-5, FR-016-AC-8 through FR-016-AC-23 | TC-026 | ✅ Covered |
-| FR-016 | FR-016-AC-6, FR-016-AC-7 | TC-026 | 🚧 Planned; AC-6 requires non-optional caller-supplied byte and value-count bounds at every decode entry point and at/over-bound controls |
+| FR-016 | FR-016-AC-6 | TC-026 | ✅ Covered (IR-891): required byte and value-count bounds, at-bound controls and poisoned over-bound suffixes across the decode entry points |
+| FR-016 | FR-016-AC-7 | TC-026 | 🚧 Planned |
 | FR-016 | FR-016-AC-24 | TC-026 | ✅ Covered (IR-611); `tc_026_a_lock_repeating_a_dependency_is_refused` asserts QSL's `DuplicateIdentity` refusal (`invalid_package`) arriving as `DependencyLockError::Input`, with no duplicate check of this crate's own |
 | FR-024 | FR-024-AC-1, FR-024-AC-7, FR-024-AC-8 | TC-035 | 🚧 Planned; these criteria still lack tests of their own |
 | FR-024 | FR-024-AC-2 through FR-024-AC-4, FR-024-AC-6 | TC-035 | ✅ Covered; the source scan and decoded frame transcript cover the sole witness renderer, function domain endpoints and adjacent values use a counting executor, each absent state-clause packet member is refused before execution, and the non-Kani frame replay retains QSL call-site identities |

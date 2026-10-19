@@ -201,6 +201,7 @@ pub(crate) fn read_block<'a>(
     block: &'a str,
     source_id: &str,
     context: &str,
+    max_values: usize,
 ) -> Result<Playback<'a>, DecodeFailure> {
     let harness = block[HARNESS_MARKER.len()..]
         .split_once('`')
@@ -211,7 +212,7 @@ pub(crate) fn read_block<'a>(
     // Kani always prints `: "` directly after the check kind; anything else is not a check text.
     let after_quote = after_kind.strip_prefix(": \"").ok_or_else(no_text)?;
     let check_text = &after_quote[..unescaped_quote(after_quote).ok_or_else(no_text)?];
-    let entries = concrete_entries(block, source_id, context)?;
+    let entries = concrete_entries(block, source_id, context, max_values)?;
     Ok(Playback {
         harness,
         check_text,
@@ -257,6 +258,7 @@ fn concrete_entries<'a>(
     block: &'a str,
     source_id: &str,
     context: &str,
+    max_values: usize,
 ) -> Result<Vec<(&'a str, Vec<u8>)>, DecodeFailure> {
     const VEC: &str = "vec![";
     let failure = |code| DecodeFailure::new(code, source_id, context);
@@ -271,6 +273,9 @@ fn concrete_entries<'a>(
         .ok_or_else(|| failure("kani_witness_concrete_vals_malformed"))?;
     let mut entries = Vec::new();
     while let Some(entry) = body.find(VEC) {
+        if entries.len() >= max_values {
+            return Err(failure("cg_witness_decode_values_limit"));
+        }
         let comment = body[..entry]
             .rfind("//")
             .map(|at| {

@@ -443,6 +443,8 @@ impl StateClauseReplayInputs<'_> {
     /// Decodes the falsified operation-contract harness's playback into this input's symbolic pre
     /// state. `playback` must be empty; the caller obtains the
     /// native post state independently and then passes this input to [`StateClauseReplay::new`].
+    /// The effective decode bound is the smaller of `limits` and `run.decode_limits` for each
+    /// dimension, so neither supplied bound can widen the other.
     ///
     /// # Errors
     ///
@@ -452,7 +454,12 @@ impl StateClauseReplayInputs<'_> {
         &mut self,
         harness: &StateFrameIdentity,
         outcome: &KaniRunOutcome,
+        limits: crate::replay::witness::WitnessDecodeLimits,
     ) -> Result<(), StateClauseReplayError> {
+        let limits = crate::replay::witness::WitnessDecodeLimits {
+            bytes: limits.bytes.min(self.run.decode_limits.bytes),
+            values: limits.values.min(self.run.decode_limits.values),
+        };
         let KaniRunOutcome::Falsified { counterexample } = outcome else {
             return Err(StateClauseReplayError::NotFalsified);
         };
@@ -527,6 +534,7 @@ impl StateClauseReplayInputs<'_> {
             harness.module_symbol.as_str(),
             &bindings,
             counterexample,
+            limits,
         )
         .map_err(StateClauseReplayError::Decode)?;
         let expected =
