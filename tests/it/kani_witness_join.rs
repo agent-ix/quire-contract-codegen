@@ -27,6 +27,7 @@ use quire_contract_codegen::{
     ArtifactBundle, KaniBindingRole, KaniExecutionRequest, KaniInstallation, KaniObligationHarness,
     KaniObligationOutcome, KaniObligationRequest, KaniPrimitiveType, KaniRunOutcome,
     ObligationBinding, ObligationDisposition, ObligationItem, ObligationKind, ObligationRecord,
+    WitnessDecodeLimits,
 };
 use quire_contract_model::{
     BoundPackage, ClauseId, ClauseRef, RequirementRef, EXECUTABLE_PROJECTION_FORMAT,
@@ -389,6 +390,10 @@ fn tc_026_real_falsification_decodes_against_the_persisted_schema_and_mutation_r
         &module_symbol,
         &persisted_arguments(&record),
         &transcript,
+        WitnessDecodeLimits {
+            bytes: usize::MAX,
+            values: usize::MAX,
+        },
     )
     .expect("the generator's own persisted schema must decode its own real transcript");
     assert_eq!(decoded.len(), 2);
@@ -429,6 +434,10 @@ fn tc_026_real_falsification_decodes_against_the_persisted_schema_and_mutation_r
         &module_symbol,
         &persisted_arguments(&dropped),
         &transcript,
+        WitnessDecodeLimits {
+            bytes: usize::MAX,
+            values: usize::MAX,
+        },
     )
     .expect_err("a dropped binding must refuse, not silently decode fewer values");
     assert_eq!(
@@ -447,6 +456,10 @@ fn tc_026_real_falsification_decodes_against_the_persisted_schema_and_mutation_r
         &module_symbol,
         &persisted_arguments(&retyped),
         &transcript,
+        WitnessDecodeLimits {
+            bytes: usize::MAX,
+            values: usize::MAX,
+        },
     )
     .expect_err("an 8-byte i64 value against a declared 1-byte boolean must refuse");
     assert_eq!(

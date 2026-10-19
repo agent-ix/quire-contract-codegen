@@ -472,7 +472,14 @@ fn tc_023_real_corpus_playback_replays_through_its_qsl_source() {
     ] {
         let playback = falsification_playback(classify_corpus(&case, harness_filter));
         assert_eq!(
-            case.replay_counterexample(&playback).unwrap(),
+            case.replay_counterexample(
+                &playback,
+                quire_contract_codegen::WitnessDecodeLimits {
+                    bytes: playback.len(),
+                    values: 0
+                }
+            )
+            .unwrap(),
             ReplayVerdict::Reproduced,
             "{harness_filter} counterexample should replay through its source"
         );

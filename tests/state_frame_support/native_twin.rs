@@ -808,8 +808,33 @@ impl Twin {
         field: &str,
         run: &Run,
     ) -> Result<FrameReplay, FrameReplayError> {
+        self.try_frame_replay_with_limits(
+            operation,
+            invocation,
+            account,
+            field,
+            run,
+            quire_contract_codegen::WitnessDecodeLimits {
+                bytes: usize::MAX,
+                values: usize::MAX,
+            },
+        )
+    }
+
+    /// Build a frame replay with the caller's witness decode bounds.
+    pub fn try_frame_replay_with_limits(
+        &self,
+        operation: &str,
+        invocation: &Invocation,
+        account: &str,
+        field: &str,
+        run: &Run,
+        limits: quire_contract_codegen::WitnessDecodeLimits,
+    ) -> Result<FrameReplay, FrameReplayError> {
+        let mut inputs = self.run();
+        inputs.decode_limits = limits;
         FrameReplay::new(FrameReplayInputs {
-            run: self.run(),
+            run: inputs,
             packages: self.packages(),
             state_documents: invocation
                 .documents
@@ -833,6 +858,10 @@ impl Twin {
     /// The proving run's lock: the unit, no dependency, and the limits the twin replays under.
     fn run(&self) -> ReplayInputs {
         ReplayInputs {
+            decode_limits: quire_contract_codegen::WitnessDecodeLimits {
+                bytes: usize::MAX,
+                values: usize::MAX,
+            },
             source: LockedSource {
                 authority: AUTHORITY.to_owned(),
                 identity: IDENTITY.to_owned(),

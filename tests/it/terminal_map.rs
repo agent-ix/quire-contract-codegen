@@ -716,6 +716,10 @@ fn repeated_identity_refusal() -> ReplayPackageError {
         source: locked(source),
     };
     let inputs = ReplayInputs {
+        decode_limits: quire_contract_codegen::WitnessDecodeLimits {
+            bytes: usize::MAX,
+            values: usize::MAX,
+        },
         source: locked("unit"),
         dependencies: vec![dependency("lib-one"), dependency("lib-two")],
         accounting_limits: unlimited,

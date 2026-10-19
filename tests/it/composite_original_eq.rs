@@ -49,6 +49,10 @@ fn limits() -> ScalarLimits {
 
 fn inputs(source: &str) -> ReplayInputs {
     ReplayInputs {
+        decode_limits: quire_contract_codegen::WitnessDecodeLimits {
+            bytes: usize::MAX,
+            values: usize::MAX,
+        },
         source: LockedSource {
             authority: "test".to_owned(),
             identity: "original-eq.native".to_owned(),

@@ -39,6 +39,78 @@ const BALANCE: &str = "BalanceNeverDrops";
 /// The second postcondition clause on `deposit`: `audit` never drops.
 const AUDIT: &str = "AuditNeverDrops";
 
+#[trace("TC-026", "FR-016-AC-6")]
+#[test]
+fn tc_026_state_clause_decode_refuses_poisoned_suffixes_at_both_bounds() {
+    let twin = Twin::new();
+    let fixture = emitted_fixture(&twin, BALANCE);
+    let generated = quire_contract_codegen::generate_state_frame_obligations(
+        &quire_contract_codegen::StateFrameRequest {
+            ceilings: crate::common::proof_ceilings::proof_ceilings(),
+            package: &fixture.package,
+            clause: &fixture.clause,
+            state_path: "crate::subject::Account",
+            state_fields: &["balance", "audit"],
+            subject_path: "crate::subject::deposit_debiting_within_range",
+            unwind: 4,
+        },
+    )
+    .expect("postcondition harness generates");
+    let harness = &generated.postcondition.identity;
+    let check = "operation `deposit`: postcondition `post.balance >= pre.balance` failed";
+    let kani_check = format!("\"{{}}\",\n{check:?}");
+    let transcript = playback_text(harness, &kani_check, &[5, 7]);
+    let mut inputs =
+        twin.state_clause_inputs(&fixture.package, &fixture.clause, BALANCE, (0, 0), (4, 7));
+    inputs.playback.clear();
+    let limits = quire_contract_codegen::WitnessDecodeLimits {
+        bytes: transcript.len(),
+        values: 2,
+    };
+    inputs.run.decode_limits = limits;
+    inputs
+        .decode_falsification(
+            harness,
+            &KaniRunOutcome::Falsified {
+                counterexample: transcript.clone(),
+            },
+            limits,
+        )
+        .expect("at both bounds");
+    assert_eq!(inputs.playback.len(), 2);
+
+    for (poisoned, limits, code) in [
+        (
+            format!("{transcript}invalid suffix"),
+            limits,
+            "cg_witness_decode_bytes_limit",
+        ),
+        (
+            transcript.replace("    ];", "        // 0\n        vec![not_a_byte],\n    ];"),
+            quire_contract_codegen::WitnessDecodeLimits {
+                bytes: usize::MAX,
+                values: 2,
+            },
+            "cg_witness_decode_values_limit",
+        ),
+    ] {
+        let mut inputs =
+            twin.state_clause_inputs(&fixture.package, &fixture.clause, BALANCE, (0, 0), (4, 7));
+        inputs.playback.clear();
+        inputs.run.decode_limits = limits;
+        let error = inputs
+            .decode_falsification(
+                harness,
+                &KaniRunOutcome::Falsified {
+                    counterexample: poisoned,
+                },
+                limits,
+            )
+            .expect_err("over-bound playback refuses");
+        assert!(matches!(error, StateClauseReplayError::Decode(cause) if cause.code == code));
+    }
+}
+
 /// The production adapter types the persisted draw order, accepts only the matching failed
 /// assertion, and leaves model-domain admission to the existing replay builder.
 #[trace(
@@ -87,6 +159,10 @@ fn state_clause_kani_playback_adapter_refuses_wrong_evidence() {
                 &KaniRunOutcome::Falsified {
                     counterexample: spoof,
                 },
+                quire_contract_codegen::WitnessDecodeLimits {
+                    bytes: usize::MAX,
+                    values: usize::MAX
+                }
             ),
             Err(StateClauseReplayError::AssertionMismatch)
         ));
@@ -98,6 +174,10 @@ fn state_clause_kani_playback_adapter_refuses_wrong_evidence() {
             harness,
             &KaniRunOutcome::Falsified {
                 counterexample: good.clone(),
+            },
+            quire_contract_codegen::WitnessDecodeLimits {
+                bytes: usize::MAX,
+                values: usize::MAX,
             },
         )
         .expect("matching playback decodes");
@@ -142,12 +222,23 @@ fn state_clause_kani_playback_adapter_refuses_wrong_evidence() {
                 &KaniRunOutcome::Falsified {
                     counterexample: text,
                 },
+                quire_contract_codegen::WitnessDecodeLimits {
+                    bytes: usize::MAX,
+                    values: usize::MAX,
+                },
             )
             .expect_err("invalid playback refuses");
         assert!(matches!(error, StateClauseReplayError::Decode(cause) if cause.code == code));
     }
     assert!(matches!(
-        empty().decode_falsification(harness, &KaniRunOutcome::Verified),
+        empty().decode_falsification(
+            harness,
+            &KaniRunOutcome::Verified,
+            quire_contract_codegen::WitnessDecodeLimits {
+                bytes: usize::MAX,
+                values: usize::MAX
+            }
+        ),
         Err(StateClauseReplayError::NotFalsified)
     ));
     assert!(matches!(
@@ -155,6 +246,10 @@ fn state_clause_kani_playback_adapter_refuses_wrong_evidence() {
             &generated.frame.identity,
             &KaniRunOutcome::Falsified {
                 counterexample: good.clone(),
+            },
+            quire_contract_codegen::WitnessDecodeLimits {
+                bytes: usize::MAX,
+                values: usize::MAX
             }
         ),
         Err(StateClauseReplayError::NotPostconditionHarness)
@@ -195,6 +290,10 @@ fn state_clause_kani_playback_adapter_refuses_wrong_evidence() {
                         &[5, 7]
                     ),
                 },
+                quire_contract_codegen::WitnessDecodeLimits {
+                    bytes: usize::MAX,
+                    values: usize::MAX
+                }
             ),
             Err(StateClauseReplayError::HarnessMismatch {
                 member: StateClauseHarnessMember::Property
@@ -209,6 +308,10 @@ fn state_clause_kani_playback_adapter_refuses_wrong_evidence() {
             &KaniRunOutcome::Falsified {
                 counterexample: good.clone(),
             },
+            quire_contract_codegen::WitnessDecodeLimits {
+                bytes: usize::MAX,
+                values: usize::MAX
+            }
         ),
         Err(StateClauseReplayError::HarnessMismatch {
             member: StateClauseHarnessMember::Operation
@@ -219,6 +322,10 @@ fn state_clause_kani_playback_adapter_refuses_wrong_evidence() {
             harness,
             &KaniRunOutcome::Falsified {
                 counterexample: playback_text(harness, "unrelated assertion", &[5, 7]),
+            },
+            quire_contract_codegen::WitnessDecodeLimits {
+                bytes: usize::MAX,
+                values: usize::MAX
             }
         ),
         Err(StateClauseReplayError::AssertionMismatch)
@@ -230,7 +337,7 @@ fn state_clause_kani_playback_adapter_refuses_wrong_evidence() {
     assert!(matches!(
         repeated_inputs.decode_falsification(&repeated, &KaniRunOutcome::Falsified {
             counterexample: playback_text(&repeated, &kani_check, &[5, 7]),
-        }),
+        }, quire_contract_codegen::WitnessDecodeLimits { bytes: usize::MAX, values: usize::MAX }),
         Err(StateClauseReplayError::Decode(cause))
             if cause.code == "cg_witness_schema_duplicate_binding"
     ));
@@ -240,6 +347,10 @@ fn state_clause_kani_playback_adapter_refuses_wrong_evidence() {
             harness,
             &KaniRunOutcome::Falsified {
                 counterexample: playback_text(harness, &kani_check, &[-1, 7]),
+            },
+            quire_contract_codegen::WitnessDecodeLimits {
+                bytes: usize::MAX,
+                values: usize::MAX,
             },
         )
         .expect("i64 decodes before domain admission");
@@ -1082,7 +1193,14 @@ fn tc_035_real_kani_state_clause_counterexample_replays_through_qsl() {
     let mut inputs = twin.state_clause_inputs(&package, &clause, BALANCE, (0, 0), (0, 0));
     inputs.playback.clear();
     inputs
-        .decode_falsification(&generated.postcondition.identity, &outcome)
+        .decode_falsification(
+            &generated.postcondition.identity,
+            &outcome,
+            quire_contract_codegen::WitnessDecodeLimits {
+                bytes: usize::MAX,
+                values: usize::MAX,
+            },
+        )
         .unwrap_or_else(|error| panic!("real playback decodes: {error:?}\n{counterexample}"));
     let [(balance_name, balance), (audit_name, audit)] = inputs.playback.as_slice() else {
         panic!("the two declared state fields decode");
@@ -1140,7 +1258,14 @@ fn tc_035_real_kani_state_clause_counterexample_replays_through_qsl() {
         ),
     };
     assert!(matches!(
-        wrong_harness.decode_falsification(&generated.postcondition.identity, &wrong),
+        wrong_harness.decode_falsification(
+            &generated.postcondition.identity,
+            &wrong,
+            quire_contract_codegen::WitnessDecodeLimits {
+                bytes: usize::MAX,
+                values: usize::MAX
+            }
+        ),
         Err(StateClauseReplayError::Decode(_))
     ));
     let mut malformed = twin.state_clause_inputs(&package, &clause, BALANCE, (0, 0), (0, 0));
@@ -1149,7 +1274,14 @@ fn tc_035_real_kani_state_clause_counterexample_replays_through_qsl() {
         counterexample: counterexample.replacen("vec![", "vec![not-a-byte, ", 2),
     };
     assert!(matches!(
-        malformed.decode_falsification(&generated.postcondition.identity, &malformed_run),
+        malformed.decode_falsification(
+            &generated.postcondition.identity,
+            &malformed_run,
+            quire_contract_codegen::WitnessDecodeLimits {
+                bytes: usize::MAX,
+                values: usize::MAX
+            }
+        ),
         Err(StateClauseReplayError::Decode(_))
     ));
 }
@@ -1183,7 +1315,14 @@ fn tc_040_real_kani_out_of_range_debit_replays_as_refuted() {
     let mut inputs = twin.state_clause_inputs(&package, &clause, BALANCE, (0, 0), (0, 0));
     inputs.playback.clear();
     inputs
-        .decode_falsification(&generated.postcondition.identity, outcome)
+        .decode_falsification(
+            &generated.postcondition.identity,
+            outcome,
+            quire_contract_codegen::WitnessDecodeLimits {
+                bytes: usize::MAX,
+                values: usize::MAX,
+            },
+        )
         .expect("real Kani playback decodes");
     assert_eq!(
         inputs.playback,
