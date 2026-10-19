@@ -86,6 +86,8 @@ snapshots the already-moved value; and `Meter::check_injected` reports `limit_ki
 every denial regardless of the charge's real kind, so only one of ten `LimitKind` counters is ever in
 play.
 
+| FR-042 | FR-042-AC-1 | — | 🚧 PLANNED: generated-oracle producer test; no TC or trace tag is credited by this spec allocation |
+
 ## Test Case Summary
 
 The coverage tables above -- Functional, Interface, Non-Functional and
