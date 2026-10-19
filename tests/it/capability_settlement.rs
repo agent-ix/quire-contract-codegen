@@ -1040,7 +1040,7 @@ fn tc_030_an_empty_candidate_set_settles_unsupported_with_a_warning() {
 /// candidate in candidate order, identically under either registration order.
 ///
 /// Provenance: codegen#86
-#[trace("TC-030")]
+#[trace("FR-019-AC-4", "TC-030")]
 #[test]
 fn tc_030_two_candidates_with_no_named_backend_settle_ambiguous() {
     let second = BackendDescriptor {
@@ -1079,6 +1079,10 @@ fn tc_030_two_candidates_with_no_named_backend_settle_ambiguous() {
             },
             "registration order changed the disposition or the candidate order"
         );
+        let Disposition::InvalidRequest { cause } = &settlement.disposition else {
+            panic!("ambiguous candidates must be an invalid request");
+        };
+        assert_eq!(cause.code(), "invalid_capability");
     }
 }
 
@@ -2318,7 +2322,7 @@ fn kani_form_identity_does_not_depend_on_display_or_debug_text() {
 /// refused whole, and no kind of it is read.
 ///
 /// Provenance: codegen#86
-#[trace("TC-030")]
+#[trace("FR-019-AC-7", "TC-030")]
 #[test]
 fn tc_030_a_foreign_capability_vocabulary_refuses_the_carrier() {
     for supplied in ["", "quire.capability-kind/v2"] {
@@ -2327,7 +2331,7 @@ fn tc_030_a_foreign_capability_vocabulary_refuses_the_carrier() {
             ..envelope(
                 vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)])],
                 vec![item(
-                    RequestedKind::Known(CapabilityKind::ValueValidity),
+                    RequestedKind::Unknown("foreign-kind".to_owned()),
                     Candidates::Set(vec![candidate(BackendKind::Kani.identity())]),
                 )],
             )

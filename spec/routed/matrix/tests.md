@@ -10,7 +10,8 @@ type: TestMatrix
 
 | Functional Req | Acceptance Criteria | Test Cases | Status |
 |---|---|---|---|
-| FR-019 | FR-019-AC-1 (Kani arm), FR-019-AC-2 through FR-019-AC-4, FR-019-AC-7, FR-019-AC-8, FR-019-AC-10 | TC-030 | 🚧 Planned; generic TC-030 tests exist, but Quire finds no criterion-level trace tags for these ACs, including AC-3; AC-1 process arm remains planned in TC-046 |
+| FR-019 | FR-019-AC-4, FR-019-AC-7 | TC-030 | ✅ Covered; tagged settlement tests assert both registration orders and whole-envelope vocabulary refusal before kind settlement |
+| FR-019 | FR-019-AC-1 (Kani arm), FR-019-AC-2, FR-019-AC-3, FR-019-AC-8, FR-019-AC-10 | TC-030 | 🚧 Planned; generic TC-030 tests exist, but these criteria have no complete criterion-level test; AC-1 process arm remains planned in TC-046 |
 | FR-019 | FR-019-AC-9 | Analysis | ✅ Covered |
 | FR-022 | FR-022-AC-2, FR-022-AC-3, FR-022-AC-5, FR-022-AC-7 through FR-022-AC-15 | TC-033 | ✅ Existing Kani behavior covered; test literals need constructor migration in IR-629 code |
 | FR-022 | FR-022-AC-4 | TC-033, TC-046 | ⚠️ Existing direct-item mismatch test is tagged; a crate-internal test is planned when `backend` and `kind` become private |
