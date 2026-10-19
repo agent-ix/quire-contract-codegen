@@ -46,3 +46,12 @@ paths survive (SR-13300).
 AC-1 still has the five untested emitter subject paths above, which TC-001's "every artifact"
 procedure requires to be closed. FR-031-AC-12 needs a spec amendment so it is consistent with
 NFR-002.
+
+## Dispositions
+
+Disposition pass 1, at head 627790b83bae15eb440a920bbdee27214b8d21e5. Evidence is in SR-13300's dispositions.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | All five emitter subject paths now have tests that fail under the reviewer mutants M4a/M4b, M5, M6, M7 and M8 |
+| FND-002 | fixed | FR-031-AC-12 now reads "Apart from the generated Rust header lines required by NFR-002, the oracle generated for an expression with no arithmetic node is byte-identical..." |

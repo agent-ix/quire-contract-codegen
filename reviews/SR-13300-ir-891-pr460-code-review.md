@@ -78,3 +78,26 @@ emitter paths that five reviewer mutants show the tests cannot catch. TC-001 say
 accept a single passing file as coverage for a family", and these paths are not covered.
 FND-006 binds NFR-002 to a test that does not assert it. FND-007 and FND-008 are Scope
 conformance questions to settle in code or in NFR-002.
+
+## Dispositions
+
+Disposition pass 1, at head 627790b83bae15eb440a920bbdee27214b8d21e5 (fix commits 37ecccde and
+627790b8). Measured in a fresh worktree with its own target dir:
+
+- `make fmt-check`, `make lint`, `make spec` and `git diff --check` pass.
+- Focused TC-001 tests pass: lib 25 + 1 + 1, it 70.
+- Full suite: it 624 passed, 2 failed. Both failures (`kani_obligations::cbmc_failure_terminal_value_reads_the_retained_cause` and `tc_043_the_terminal_value_of_no_verdict_evidence_ignores_its_diagnostics`) and all 51 unit failures are Kani runner tests failing with `bwrap: setting up uid map: Permission denied`, which this host returns. IR-898's seven tests passed in this run.
+- Reviewer mutants re-run at the head, all killed: M4a (claim subject `""` in extra modules), M4b (composite subjects dropped from extra modules), M5 (population relation and domain), M6 (split-root claims), M7 (contract-scalar header removed), M8 (function lib declarations), M9 (`escape_debug` removed), M10 (inline composite subjects dropped from equality `src/lib.rs`), M11 (flat-schedule instruction subjects).
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | `with_rust_header` writes `subject.escape_debug()`. `newline_in_subject_stays_inside_header_comment` parses the output with syn, and mutant M9 fails it |
+| FND-002 | fixed | The deep-closure test asserts the claim subject on every real `src/composites_*.rs` and the root composite node on the first module. Mutants M4a and M4b fail it |
+| FND-003 | fixed | `scalar_own_result_without_conversion_differs_from_not_applicable` asserts SPDX, generator and the claim subject on the contract-path `src/lib.rs`, and carries the NFR-002 tags. Mutant M7 fails it |
+| FND-004 | fixed | tc_031_ac7 now requests one claim and asserts each claim call node on the split root (M6 fails it). tc_031_ac13 asserts each generated function's declaration node (M8 fails it) |
+| FND-005 | fixed | tc_018 asserts the full `Relation: ...; Domain: min..=max; Population: ...` subject line. Mutant M5 fails it |
+| FND-006 | fixed | The NFR-002 and TC-001 tags moved from `tc_029_ac10_bytes_are_deterministic_across_request_permutations` to `tc_029_ac10_generation_is_repeatable_from_a_fresh_package` |
+| FND-007 | fixed | The flat schedule header now names every instruction source node as well as function and claim nodes, the same rule the parts use. tc_031_ac34 asserts them, and mutant M11 fails it |
+| FND-008 | fixed | Extra modules name the claim node plus each composite-type node in the chunk, and equality `src/lib.rs` names its inline composite nodes. Mutants M4b and M10 fail the tests |
+| FND-009 | still-open | The campaign, population and harness-shell SPDX lines were removed. `src/strategy/bound/generation.rs:502` still emits `// SPDX-License-Identifier: MIT OR Apache-2.0` after `#![deny(missing_docs)]`, so every bound strategy file carries the SPDX line twice. Remove that line |
+| FND-010 | fixed | Node subjects use `core::provenance::node_subject` (`{domain}/{digest}`). `assert_header` matches whole `// Subject:` lines and mutation-checks every subject |

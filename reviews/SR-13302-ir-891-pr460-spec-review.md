@@ -32,3 +32,11 @@ PR. The three rows agree with each other.
 
 **FAIL as written.** The row structure and the TC-001 Partial split are right. The NFR-002
 Covered status must wait until the coverage gaps reported in SR-13300 and SR-13301 are closed.
+
+## Dispositions
+
+Disposition pass 1, at head 627790b83bae15eb440a920bbdee27214b8d21e5.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The coverage gaps were closed in this PR (SR-13301 FND-001 fixed), so the unchanged `✅ Covered` NFR-002 row is now backed by tests |
