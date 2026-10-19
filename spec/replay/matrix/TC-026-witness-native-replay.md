@@ -1,6 +1,6 @@
 ---
 id: TC-026
-title: "Verify witness decoding and native replay"
+title: "Verify bounded witness decoding and native replay"
 type: TC
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-016
@@ -8,7 +8,7 @@ relationships:
   - target: ix://agent-ix/quire-specification/TC-219
     type: references
 ---
-# TC-026: Verify witness decoding and native replay
+# TC-026: Verify bounded witness decoding and native replay
 
 ## Description
 
@@ -22,10 +22,12 @@ one non-argument binding, and compare the schema's order with the harness's
 emitted symbolic arguments. Decode a real falsifying transcript
 against the persisted schema, then against that schema with a binding dropped
 and with a binding retyped. Then replay a reproducing witness, a malformed
-witness, a witness bound to another harness identity, a witness over the decode
-size limit, an out-of-domain witness, a witness whose native value or charges
-disagree with the harness, a witness whose native replay is unavailable, and
-a witness whose replay agrees in a category other than `violation`.
+witness, a witness bound to another harness identity, witnesses at and one over
+each caller-supplied byte and value-count bound, and replay inputs missing either
+bound. Observe bytes and values read by the decoder at each bound. Also replay
+an out-of-domain witness, a witness whose native value or charges disagree with the harness, a
+witness whose native replay is unavailable, and a witness whose replay agrees in a category other
+than `violation`.
 
 For FR-016-AC-21 to AC-23, build the replay request for a function with two parameters declared
 in an order that differs from their ascending identifier order. Recompute the O-09 digest from
@@ -47,7 +49,10 @@ schema refusal (code `cg_witness_schema_non_argument_binding`) that
 reports no failure and is none of the five replay results.
 The real transcript decodes to values named by their bindings, and the dropped
 and retyped schemas refuse by arity and width. Only the reproducing witness is
-reported as a failure; the others yield malformed (three cases), out-of-domain,
+reported as a failure; the other malformed and wrong-identity witnesses and the
+one-over-bound witnesses yield malformed results. The at-bound witnesses decode,
+neither over-bound witness is read beyond its bound, and a missing bound refuses
+before witness data is read. The remaining witnesses yield out-of-domain,
 mismatch and unavailable results respectively. The disagreeing witnesses are
 never reported unavailable, and the unavailable replay is never reported as a
 mismatch. The witness that agrees in a category other than `violation` is a
@@ -127,8 +132,8 @@ counterexample the native twin falsifies is reproduced (AC-3); a twin that holds
 the clause, or any settlement other than a reproduced violation, is a verdict
 evidence failure (AC-4, AC-13, `src/replay/function.rs` unit tests). Decode, domain
 and verdict mismatches are one evidence-failure verdict with a typed cause. The
-decode size limit (AC-6), the charge, counter and limit comparison (AC-7) and the
-unavailable result for an executor fault (AC-12) are planned.
+caller-supplied byte and value-count decode limits (AC-6), the charge, counter and limit comparison
+(AC-7) and the unavailable result for an executor fault (AC-12) are planned.
 
 FR-016-AC-14 through AC-20 are implemented and tested in the default suite
 (`tests/it/skeleton_spine.rs`): `ReplayPackage::new` hands the lock's dependency

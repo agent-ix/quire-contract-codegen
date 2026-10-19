@@ -28,7 +28,8 @@ failure is reported.
 - A retained Kani counterexample and the harness identity that
   produced it.
 - The obligation's declared input domains.
-- A decode size limit bounding the witness bytes and value count read.
+- Caller-supplied witness decode limits, in bytes and value count, carried with the existing replay
+  inputs. Both bounds are required for decoding; no implicit default is assumed.
 
 ## Outputs
 
@@ -44,7 +45,8 @@ failure is reported.
 - When a counterexample is retained, the generator shall check that it is
   bound to the identity of the harness being replayed, and decode
   each witness value into its declared complete-V1 scalar type within the
-  decode size limit.
+  caller-supplied witness byte and value-count limits. Without both bounds, the decoder shall
+  refuse to decode before reading witness data.
 - The generator shall read the concrete values of a Kani playback only
   through the Kani adapter's output module, `src/kani/output/playback.rs`.
   At this revision `src/replay/witness.rs` selects and reads the block through
@@ -63,7 +65,7 @@ failure is reported.
   position, and typing it would mistype a position that does not exist in the
   witness bytes.
 - If a witness is bound to a different harness identity, fails to
-  decode, or exceeds the decode size limit, then the generator shall report a
+  decode, or exceeds either supplied decode bound, then the generator shall report a
   malformed witness and shall not report a failure.
 - If a decoded value is outside its declared domain, then the generator shall
   report an out-of-domain witness and shall not report a failure.
@@ -77,7 +79,7 @@ failure is reported.
 
   | Condition | Outcome |
   |---|---|
-  | The witness is bound to another harness identity, fails to decode, or exceeds the decode size limit | malformed witness |
+  | The witness is bound to another harness identity, fails to decode, or exceeds either supplied decode bound | malformed witness |
   | A decoded value lies outside its declared domain | out-of-domain witness |
   | The adapter cannot build an admitted request: a decoded value no replay parameter binds, a transcript field holding a delimiter, a transcript `Witness::parse` refuses, or an envelope QSL refuses to reconstruct | adapter refusal (FR-016-AC-11) |
   | `qsl_replay::replay` returns `Err(ReplayRefusal::Fault(_))`, an internal fault of the executor | replay unavailable |
@@ -123,7 +125,7 @@ failure is reported.
 | FR-016-AC-3 | An in-domain witness is reported as a failure only when native replay reproduces the same typed outcome. | Test (TC-026) |
 | FR-016-AC-4 | A native replay that runs and disagrees with the harness result yields a typed mismatch, and never an unavailable result or a failure. | Test (TC-026) |
 | FR-016-AC-5 | A witness bound to a different harness identity is reported as malformed and never replayed. | Test (TC-026) |
-| FR-016-AC-6 | A witness over the decode size limit is reported as malformed without decoding past the limit. | Test (TC-026) |
+| FR-016-AC-6 | Every witness decode is bounded by caller-supplied byte and value-count limits in the replay inputs, with an absent limit refused before witness data is read and an over-bound witness reported malformed without reading beyond either bound. | Test (TC-026) |
 | FR-016-AC-7 | A native replay that matches the harness value but differs in admitted charges, consumed counters or limits yields a typed mismatch. | Test (TC-026) |
 | FR-016-AC-8 | A witness schema binds the obligation's persisted argument bindings, in the order the obligation persists them, position for position to the harness's symbolic arguments, and each decoded value is named by the binding at its position; a binding that is not an argument is refused with a typed schema refusal that reports no failure and is none of the five replay results. | Test (TC-026) |
 | FR-016-AC-9 | A decoded falsification whose witness makes the native function evaluate the clause to false settles as `reproduced-with-evaluated-witness` with category `violation`; the verdict depends on the witness value, so a witness at which the function holds does not settle so. | Test (TC-026) |
