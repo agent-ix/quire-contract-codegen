@@ -28,6 +28,56 @@ const QSL_OWNED_TYPES: [&str; 5] = [
     "ObligationIdentity",
 ];
 
+/// Parses every source file and locates direct `Witness::parse` calls. The scan sees normal Rust
+/// syntax, including nested modules; calls assembled by macros or through aliases are outside it.
+#[trace("TC-035", "FR-024-AC-2")]
+#[test]
+fn witness_parse_calls_stay_in_the_one_adapter_renderer() {
+    struct ParseScan<'a> {
+        file: &'a str,
+        function: Option<String>,
+        calls: &'a mut Vec<(String, String)>,
+    }
+    impl Visit<'_> for ParseScan<'_> {
+        fn visit_item_fn(&mut self, item: &syn::ItemFn) {
+            let previous = self.function.replace(item.sig.ident.to_string());
+            syn::visit::visit_item_fn(self, item);
+            self.function = previous;
+        }
+        fn visit_expr_call(&mut self, call: &syn::ExprCall) {
+            if let syn::Expr::Path(path) = &*call.func {
+                let segments = path
+                    .path
+                    .segments
+                    .iter()
+                    .map(|part| part.ident.to_string())
+                    .collect::<Vec<_>>();
+                if segments.as_slice() == ["Witness", "parse"] {
+                    self.calls.push((
+                        self.file.to_owned(),
+                        self.function.clone().unwrap_or_default(),
+                    ));
+                }
+            }
+            syn::visit::visit_expr_call(self, call);
+        }
+    }
+    let mut calls = Vec::new();
+    for (file, source) in source_files() {
+        let parsed = syn::parse_file(&source).unwrap_or_else(|error| panic!("{file}: {error}"));
+        ParseScan {
+            file: &file,
+            function: None,
+            calls: &mut calls,
+        }
+        .visit_file(&parsed);
+    }
+    assert_eq!(
+        calls,
+        vec![("replay/function.rs".to_owned(), "render_witness".to_owned())]
+    );
+}
+
 type AliasMap = BTreeMap<Vec<String>, Vec<String>>;
 
 fn use_paths(

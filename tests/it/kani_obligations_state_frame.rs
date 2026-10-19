@@ -2291,6 +2291,32 @@ fn tc_025_the_frame_replay_envelope_names_the_payloads_frame_and_occurrence() {
     );
 }
 
+/// The non-Kani frame path carries QSL's call-site identities through the packet and succeeds
+/// through `FrameReplay::replay`, whose implementation calls `qsl_replay::replay_frame`.
+#[trace("TC-035", "FR-024-AC-6")]
+#[test]
+fn tc_035_frame_packet_reaches_qsl_with_call_site_identities() {
+    let twin = Twin::new();
+    let site = twin.operation_site("deposit").expect("operation site");
+    let invocation = twin.invocation("account", (5, 0), (6, 1));
+    let replay = twin.frame_replay(&invocation, "account", "audit", &forbidden_run(&twin));
+    let payload = replay
+        .packet
+        .family_payload
+        .as_ref()
+        .expect("frame payload");
+    assert_eq!(payload.frame, site.frame);
+    assert_eq!(payload.anchor, site.anchor);
+    assert_eq!(payload.occurrence, site.frame_occurrence);
+    assert_eq!(replay.packet.clause_node, Some(site.frame));
+    assert_eq!(
+        replay.packet.occurrence_key.as_ref(),
+        Some(&site.frame_occurrence)
+    );
+    let result = replay.replay().expect("QSL admits the frame envelope");
+    assert!(matches!(result.result(), ReplayResult::Witness(_)));
+}
+
 /// `FrameReplay::replay` returns QSL's result without Kani: a forbidden write settles a reproduced
 /// violation that names the written field, and a write the frame grants is a respected frame.
 #[trace("FR-015-AC-36", "TC-025")]
@@ -3123,7 +3149,7 @@ fn tc_025_wide_model_override_preserves_unranged_context_without_a_replay_claim(
 /// The transcript `Witness::parse` is given is the one rendering function's, over the decoded
 /// values, the harness path and the check text the decode names: it is not a fixed text, and a
 /// different playback gives a different transcript.
-#[trace("FR-024-AC-25", "TC-035")]
+#[trace("FR-024-AC-25", "FR-024-AC-2", "TC-035")]
 #[test]
 fn tc_035_the_frame_witness_is_rendered_from_the_decoded_playback() {
     let twin = Twin::new();
@@ -3203,7 +3229,7 @@ fn tc_035_a_playback_that_does_not_decode_is_refused_before_the_call_site() {
 /// A decoded value at either end of its field's declared range is admitted, and the values one
 /// below and one above are refused naming the field and the value, before the call site (the
 /// operation the unit does not name would otherwise be a `CallSite` refusal).
-#[trace("FR-024-AC-26", "TC-035")]
+#[trace("FR-024-AC-26", "FR-024-AC-3", "TC-035")]
 #[test]
 fn tc_035_a_decoded_value_outside_its_declared_range_is_refused_at_the_endpoints() {
     let twin = Twin::new();
@@ -3236,7 +3262,9 @@ fn tc_035_a_decoded_value_outside_its_declared_range_is_refused_at_the_endpoints
                 "audit",
                 &run_of(&harness, values),
             )
-            .unwrap_or_else(|error| panic!("{} = {admitted} is admitted: {error}", domain.field));
+            .unwrap_or_else(|error| panic!("{} = {admitted} is admitted: {error}", domain.field))
+            .replay()
+            .unwrap_or_else(|error| panic!("{} = {admitted} reaches QSL: {error}", domain.field));
         }
         for outside in [domain.minimum - 1, domain.maximum + 1] {
             let error = refused(replay_of(
