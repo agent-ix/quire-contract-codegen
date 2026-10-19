@@ -28,8 +28,9 @@ const QSL_OWNED_TYPES: [&str; 5] = [
     "ObligationIdentity",
 ];
 
-/// Parses every source file and locates direct `Witness::parse` calls. The scan sees normal Rust
-/// syntax, including nested modules; calls assembled by macros or through aliases are outside it.
+/// Parses every source file and locates `Witness::parse` paths, including qualified paths and
+/// function values. The scan sees normal Rust syntax, including nested modules; paths assembled
+/// by macros or through aliases are outside it.
 #[trace("TC-035", "FR-024-AC-2")]
 #[test]
 fn witness_parse_calls_stay_in_the_one_adapter_renderer() {
@@ -44,22 +45,17 @@ fn witness_parse_calls_stay_in_the_one_adapter_renderer() {
             syn::visit::visit_item_fn(self, item);
             self.function = previous;
         }
-        fn visit_expr_call(&mut self, call: &syn::ExprCall) {
-            if let syn::Expr::Path(path) = &*call.func {
-                let segments = path
-                    .path
-                    .segments
-                    .iter()
-                    .map(|part| part.ident.to_string())
-                    .collect::<Vec<_>>();
-                if segments.as_slice() == ["Witness", "parse"] {
-                    self.calls.push((
-                        self.file.to_owned(),
-                        self.function.clone().unwrap_or_default(),
-                    ));
-                }
+        fn visit_expr_path(&mut self, path: &syn::ExprPath) {
+            let mut segments = path.path.segments.iter().rev();
+            if segments.next().is_some_and(|part| part.ident == "parse")
+                && segments.next().is_some_and(|part| part.ident == "Witness")
+            {
+                self.calls.push((
+                    self.file.to_owned(),
+                    self.function.clone().unwrap_or_default(),
+                ));
             }
-            syn::visit::visit_expr_call(self, call);
+            syn::visit::visit_expr_path(self, path);
         }
     }
     let mut calls = Vec::new();

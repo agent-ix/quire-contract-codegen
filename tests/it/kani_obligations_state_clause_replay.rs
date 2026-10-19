@@ -16,7 +16,7 @@ use qsl_replay::{
     replay_state_clause, CallSiteRefusal, Category, ClauseName, ClauseSelectionInput,
     DisagreementCause, DomainKey, DomainKind, EvaluatedValue, FiniteBound, Identifier, Integer,
     ReplayRequestWire, ReplayResult, ReplaySource, StateClauseReplayResult, TerminalValue, Verdict,
-    WireNodeId, WitnessEnvelope, WitnessRefusal, WitnessSettlement,
+    WireNodeId, WitnessEnvelope, WitnessPacket, WitnessRefusal, WitnessSettlement,
 };
 use quire_contract_codegen::{
     run_terminal_value, DocumentLabel, KaniRunOutcome, OperationDeclaration,
@@ -458,6 +458,21 @@ fn tc_035_missing_packet_members_stop_before_replay() {
     missing_member!(family_payload);
 
     let replay = built(&twin, &fixture, BALANCE, VIOLATING.0, VIOLATING.1);
+    let WitnessPacket {
+        obligation_identity: _,
+        occurrence_key: _,
+        clause_node: _,
+        selected_function: _,
+        package_id: _,
+        source_digests: _,
+        profile_selections: _,
+        run_limits: _,
+        declared_domains: _,
+        backend: _,
+        trace_position: _,
+        source: _,
+        family_payload: _,
+    } = &replay.packet;
     assert!(matches!(replay.packet.trace_position, Some(None)));
     let limits = replay.replay_limits();
     let mut calls = 0;
