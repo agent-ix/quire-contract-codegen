@@ -2940,12 +2940,8 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
             let worker = scope.spawn(move || {
                 let _ = sender.send(execute_kani_obligations(requests));
             });
-            let mut releases = OwnerReleases::new(
-                observation,
-                confirmation,
-                &stand_in.cancel,
-                &independent,
-            );
+            let mut releases =
+                OwnerReleases::new(observation, confirmation, &stand_in.cancel, &independent);
             let scheduled = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 releases.memory.entered();
                 assert_eq!(stand_in.cancel.cause(), None);
