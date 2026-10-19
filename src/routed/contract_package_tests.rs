@@ -457,6 +457,75 @@ mod tests {
             .collect()
     }
 
+    fn excluded_fixture() -> (CheckedPackageV2, quire_contract_model::ContractPackageV1, Vec<ContractRequestPosition>, CheckedNodeId, CheckedNodeId) {
+        let source = admitted_source(SOURCE);
+        let function = source.graph().nodes.iter().find(|node| {
+            node.declaration.as_ref().is_some_and(|declaration| declaration.qualified_name.len() == 1 && declaration.qualified_name[0].as_ref() == "f")
+        }).expect("function").node_id.clone();
+        let excluded = source_function_body(&source, "f");
+        let positions = vec![
+            ContractRequestPosition::DriverItem { node_id: function.clone(), result_selection: ContractDriverResultSelection::NotApplicable },
+            ContractRequestPosition::Excluded { node_id: excluded.clone() },
+            ContractRequestPosition::DriverItem { node_id: function.clone(), result_selection: ContractDriverResultSelection::NotApplicable },
+        ];
+        let requested = positions.iter().map(|position| position.node_id().clone()).collect::<Vec<_>>();
+        let lowered = source.lower(&requested, &profile());
+        let admitted = match ContractPackageWireV1::read(
+            lowered.package.canonical_bytes().expect("FR-330 bytes"),
+            CheckedPackageReadLimits::bounded(), &ContractDependencies::new(),
+        ) {
+            ContractPackageReadResult::Admitted(package) => package,
+            other => panic!("FR-330 admission: {other:?}"),
+        };
+        (source, admitted, positions, function, excluded)
+    }
+
+    #[trace("TC-053", "FR-039-AC-9")]
+    #[test]
+    fn excluded_position_keeps_accounting_and_driver_index() {
+        let (_, admitted, positions, function, excluded) = excluded_fixture();
+        let items = PackageItems::new(&admitted, &positions).expect("all positions correspond");
+        assert_eq!(items.driver_count(), 3);
+        assert_eq!(items.bound_count(), 2);
+        assert_eq!(items.driver_node(1), Some(&excluded));
+        assert_eq!(items.driver_node(2), Some(&function));
+        for changed in [
+            positions[..1].iter().chain(&positions[2..]).cloned().collect::<Vec<_>>(),
+            { let mut extra = positions.clone(); extra.insert(1, positions[1].clone()); extra },
+            { let mut wrong = positions.clone(); wrong[1] = ContractRequestPosition::Excluded { node_id: function.clone() }; wrong },
+        ] {
+            assert!(PackageItems::new(&admitted, &changed).is_err());
+        }
+    }
+
+    #[trace("TC-030", "FR-019-AC-53")]
+    #[test]
+    fn excluded_position_consumes_no_envelope_item_and_preserves_both_indices() {
+        let (source, admitted, positions, function, _) = excluded_fixture();
+        let envelope = empty_backend_request(2, &source, &function);
+        let settled = negotiate_contract_package(&admitted, &positions, &envelope).expect("two bound items");
+        assert_eq!(settled.len(), 2);
+        assert_eq!(settled.iter().map(|item| item.request_index).collect::<Vec<_>>(), vec![0, 2]);
+        assert_eq!(settled.iter().map(|item| item.backend.as_ref().expect("lowered").request_index).collect::<Vec<_>>(), vec![0, 2]);
+        for count in [1, 3] {
+            let error = negotiate_contract_package(&admitted, &positions, &empty_backend_request(count, &source, &function)).expect_err("envelope count");
+            assert!(matches!(error, crate::routed::capability::ContractNegotiationError::EnvelopeItemCount { requested: 2, supplied } if supplied == count));
+        }
+    }
+
+    #[trace("TC-033", "FR-022-AC-29")]
+    #[test]
+    fn routed_excluded_driver_index_is_refused_before_generation() {
+        let (_, admitted, positions, function, excluded) = excluded_fixture();
+        let process = BackendDescriptor { identity: "process".to_owned(), advertised: Vec::new(), origin: ProviderOrigin::Process, domains: None, bounds: None };
+        let route = |request_index, node_id| RoutedGenerationItem::from_descriptor(request_index, node_id, Candidate { identity: process.identity.clone() }, &process).expect("process route");
+        let invalid = route(1, excluded.clone());
+        assert!(matches!(generate_routed(&admitted, &positions, &[invalid], &GenerationContexts::default()), Err(crate::routed::generate::RoutedGenerationError::ExcludedDriverIndex { request_index: 1, node_id }) if node_id == excluded));
+        let valid = [route(0, function.clone()), route(2, function)];
+        let generated = generate_routed(&admitted, &positions, &valid, &GenerationContexts::default()).expect("bound routes");
+        assert_eq!(generated.items.iter().map(|item| item.request_index).collect::<Vec<_>>(), vec![0, 2]);
+    }
+
     fn source_call_arguments(
         checked: &CheckedPackageV2,
         call_id: &CheckedNodeId,
