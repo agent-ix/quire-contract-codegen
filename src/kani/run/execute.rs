@@ -1248,7 +1248,9 @@ mod tests {
         core::test_support::discover_scratch,
         kani::{
             identity::StateFrameProperty,
-            test_support::{report, state_frame_harness, write_launcher, COVER_NO, COVER_OK, PASSED},
+            test_support::{
+                report, state_frame_harness, write_launcher, COVER_NO, COVER_OK, PASSED,
+            },
         },
     };
 
