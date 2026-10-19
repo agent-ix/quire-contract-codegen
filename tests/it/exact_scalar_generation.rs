@@ -526,6 +526,7 @@ fn tc_024_every_scalar_family_generates_one_oracle_calling_its_runtime_operator(
         .claim_map
         .items
         .iter()
+        .filter(|claim| matches!(&claim.result, ClaimDisposition::Generated(_)))
         .map(|claim| claim.node_id.digest.as_ref())
         .collect::<Vec<&str>>();
     crate::generated_headers::assert_header("src/lib.rs", lib, &subjects);

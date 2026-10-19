@@ -398,11 +398,17 @@ fn tc_031_ac34_public_strict_reader_chain_generates_compilable_flat_schedule() {
     let work_limit = required_call_work.max(required_scalar_work);
     let generated = generate_function_schedules(&checked, &declarations, &items, work_limit)
         .expect("caller-raised work limit admits the complete flat schedule");
-    let subjects = generated
+    let mut subjects = generated
         .functions
         .iter()
         .map(|function| function.function_node_id.digest.as_ref())
         .collect::<Vec<&str>>();
+    subjects.extend(
+        generated
+            .claims
+            .iter()
+            .map(|claim| claim.call_node_id.digest.as_ref()),
+    );
     crate::generated_headers::assert_header("src/lib.rs", &generated.source, &subjects);
     for artifact in &generated.modules {
         crate::generated_headers::assert_header(&artifact.path, &artifact.contents, &subjects);
@@ -1011,12 +1017,24 @@ fn tc_031_ac7_admitted_hundred_thousand_call_nodes_generate_on_a_512_kib_stack()
                 &[helper_function_node_id.digest.as_ref(), outer_function_node_id.digest.as_ref()],
             );
             for module in &raised.modules {
-                let ordinal = module.path.strip_prefix("src/schedule_").and_then(|tail| tail.get(..6)).and_then(|text| text.parse::<usize>().ok()).expect("schedule module names its function ordinal");
+                let parts = module.path.strip_prefix("src/schedule_").and_then(|tail| tail.strip_suffix(".rs")).expect("schedule part path").split('_').map(|part| part.parse::<usize>().expect("numeric schedule part")).collect::<Vec<_>>();
+                let [ordinal, start, end] = parts.as_slice() else { panic!("schedule module names ordinal and range") };
+                let function = &raised.functions[*ordinal];
                 crate::generated_headers::assert_header(
                     &module.path,
                     &module.contents,
-                    &[raised.functions[ordinal].function_node_id.digest.as_ref()],
+                    &[function.function_node_id.digest.as_ref()],
                 );
+                let header_lines = module.contents.lines().take_while(|line| !line.is_empty()).collect::<std::collections::BTreeSet<_>>();
+                for instruction in &function.schedule.instructions[*start..*end] {
+                    let expected = format!("// Subject: {:?}", instruction.node);
+                    assert!(header_lines.contains(expected.as_str()), "{} lacks instruction source node {}", module.path, instruction.node.digest);
+                }
+                let first_instruction = &function.schedule.instructions[*start];
+                let removed = format!("// Subject: {:?}", first_instruction.node);
+                let mutant = module.contents.replace(&format!("{removed}\n"), "");
+                let mutant_header = mutant.lines().take_while(|line| !line.is_empty()).collect::<std::collections::BTreeSet<_>>();
+                assert!(!mutant_header.contains(removed.as_str()), "{} accepts an omitted instruction", module.path);
             }
             let helper = raised
                 .functions
@@ -3399,6 +3417,7 @@ fn tc_031_ac13_generation_is_deterministic_across_runs_and_permutations() {
         .claim_map
         .items
         .iter()
+        .filter(|claim| matches!(&claim.result, ClaimDisposition::Generated(_)))
         .map(|claim| claim.node_id.digest.as_ref())
         .collect::<Vec<&str>>();
     for artifact in first

@@ -295,6 +295,16 @@ pub(super) fn render_collection(
          }}\n",
         field.field_name,
     );
+    let subjects = [
+        format!("{:?}", identity.function_id),
+        format!("{:?}", identity.quantifier_id),
+        format!("{:?}", identity.projection_id),
+        format!("{:?}", identity.declaration_id),
+        format!("{:?}", identity.element_type_id),
+        format!("{:?}", identity.predicate_id),
+    ];
+    let source =
+        crate::core::provenance::with_rust_header(source, subjects.iter().map(String::as_str));
     if source.len() > MAX_GENERATED_SOURCE_BYTES {
         return Err(UnsupportedObligation::ResourceLimitExceeded {
             bytes: source.len(),

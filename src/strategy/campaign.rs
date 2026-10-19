@@ -271,6 +271,15 @@ pub fn {function}() -> proptest::strategy::BoxedStrategy<{case_type}> {{\n\
         request.strategy_id,
         request.strategy_id,
     );
+    let source = crate::core::provenance::with_rust_header(
+        source,
+        [
+            format!("{requirement}@{revision}"),
+            request.strategy_id.to_owned(),
+        ]
+        .iter()
+        .map(String::as_str),
+    );
     enforce_source_limit(&source)?;
     syn::parse_file(&source).map_err(|error| {
         diagnostic_with_generation(
@@ -425,6 +434,15 @@ pub fn {function}() -> proptest::strategy::BoxedStrategy<{case_type}> {{\n\
         request.enum_type,
         request.enum_type,
         request.strategy_id,
+    );
+    let source = crate::core::provenance::with_rust_header(
+        source,
+        [
+            format!("{requirement}@{revision}"),
+            request.strategy_id.to_owned(),
+        ]
+        .iter()
+        .map(String::as_str),
     );
     enforce_source_limit(&source)?;
     syn::parse_file(&source).map_err(|error| {

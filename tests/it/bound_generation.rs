@@ -125,10 +125,11 @@ fn complete_public_binding_preserves_identity_population_and_derivation() {
     assert_eq!(result.bundle().artifacts().len(), 6);
     assert_eq!(result.informational(), bound.informational());
     for (output, clause) in result.clauses().iter().zip(bound.clauses()) {
+        let clause_header = format!("FR-001@7; Clause: {}", clause.identity().clause().as_str());
         crate::generated_headers::assert_header(
             &output.bundle().rust.path,
             &output.bundle().rust.contents,
-            &["FR-001", "7", clause.identity().clause().as_str()],
+            &[&clause_header],
         );
         assert_eq!(output.identity(), clause.identity());
         let bundle = output.bundle();

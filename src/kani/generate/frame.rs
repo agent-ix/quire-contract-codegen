@@ -1099,6 +1099,15 @@ fn render(
         },
         scope.operation,
     );
+    let subjects = [
+        format!("{:?}", identity.clause),
+        scope.operation.to_owned(),
+        format!("{:?}", scope.object),
+        format!("{:?}", scope.anchor),
+        format!("{:?}", scope.frame),
+    ];
+    let source =
+        crate::core::provenance::with_rust_header(source, subjects.iter().map(String::as_str));
     if source.len() > MAX_GENERATED_SOURCE_BYTES {
         return Err(StateFrameRefusal::ResourceLimitExceeded {
             bytes: source.len(),

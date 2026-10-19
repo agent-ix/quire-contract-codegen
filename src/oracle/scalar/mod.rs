@@ -894,7 +894,16 @@ pub fn render_exact_scalar_plan(
         blocked: Vec::new(),
         items: plan.claims,
     };
-    let lib = source.finish();
+    let subjects = claim_map
+        .items
+        .iter()
+        .filter(|claim| matches!(&claim.result, ClaimDisposition::Generated(_)))
+        .map(|claim| format!("{:?}", claim.node_id))
+        .collect::<Vec<_>>();
+    let lib = crate::core::provenance::with_rust_header(
+        source.finish(),
+        subjects.iter().map(String::as_str),
+    );
     if lib.len() > MAX_GENERATED_SOURCE_BYTES {
         return Err(OracleGenerationError::SourceTooLarge {
             bytes: lib.len(),
@@ -1201,7 +1210,16 @@ fn build_contract_scalar_oracles(
             claim_indexes,
         ));
     }
-    let lib = source.finish();
+    let subjects = claim_map
+        .items
+        .iter()
+        .filter(|claim| matches!(&claim.result, ClaimDisposition::Generated(_)))
+        .map(|claim| format!("{:?}", claim.node_id))
+        .collect::<Vec<_>>();
+    let lib = crate::core::provenance::with_rust_header(
+        source.finish(),
+        subjects.iter().map(String::as_str),
+    );
     if lib.len() > MAX_GENERATED_SOURCE_BYTES {
         return Err(ContractScalarError::Oracle(
             OracleGenerationError::SourceTooLarge {

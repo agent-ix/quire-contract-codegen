@@ -937,8 +937,19 @@ fn tc_025_a_postcondition_yields_a_contract_harness_and_a_scoped_frame_harness()
         crate::generated_headers::assert_header(
             &harness.rust.path,
             &harness.rust.contents,
-            &["deposit", "BalanceNeverDrops"],
+            &["deposit", fixture.clause.digest.as_ref()],
         );
+        for node in [
+            &harness.identity.scope.object,
+            &harness.identity.scope.anchor,
+            &harness.identity.scope.frame,
+        ] {
+            crate::generated_headers::assert_header(
+                &harness.rust.path,
+                &harness.rust.contents,
+                &[node.digest.as_ref()],
+            );
+        }
     }
     let scope = &generated.postcondition.identity.scope;
     assert_eq!(scope.operation, "deposit");

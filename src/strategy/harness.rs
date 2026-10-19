@@ -682,6 +682,17 @@ where\n\
         "#![deny(missing_docs)]\n//! Generated tri-state contract harness.\n{}\n{}\n{}\n{}",
         shell, precondition.rust.contents, postcondition.rust.contents, facade
     );
+    let subjects = [
+        format!(
+            "{}@{}",
+            request.requirement.requirement().as_str(),
+            request.requirement.revision().get()
+        ),
+        request.precondition_clause.as_str().to_owned(),
+        request.postcondition_clause.as_str().to_owned(),
+    ];
+    let source =
+        crate::core::provenance::with_rust_header(source, subjects.iter().map(String::as_str));
     if source.len() > MAX_GENERATED_SOURCE_BYTES {
         return Err(vec![generation_harness_diagnostic(
             HarnessErrorCode::ResourceLimitExceeded,

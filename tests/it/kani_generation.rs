@@ -519,7 +519,7 @@ fn kani_bundle_is_deterministic_schema_valid_and_stable_rust_compiles() {
     crate::generated_headers::assert_header(
         &first.rust.path,
         &first.rust.contents,
-        &["FR-003", "4"],
+        &["FR-003@4", "precondition", "postcondition"],
     );
     assert!(first.rust.contents.contains("// BEGIN framing"));
     assert!(first.rust.contents.contains("// BEGIN binding"));

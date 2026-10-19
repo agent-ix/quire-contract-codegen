@@ -247,6 +247,14 @@ pub fn generate_kani_bundle(
         dependency_assumptions: &dependency_assumptions,
         abi: &abi,
     });
+    let subjects = [
+        format!("{requirement}@{revision}"),
+        precondition_clause.to_owned(),
+        postcondition_clause.to_owned(),
+        request.proof_id.to_owned(),
+    ];
+    let source =
+        crate::core::provenance::with_rust_header(source, subjects.iter().map(String::as_str));
     if source.len() > MAX_GENERATED_SOURCE_BYTES {
         return Err(single_diagnostic(
             KaniErrorCode::ResourceLimitExceeded,

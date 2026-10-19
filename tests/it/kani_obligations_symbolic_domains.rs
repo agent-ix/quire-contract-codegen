@@ -1051,6 +1051,18 @@ fn negotiation_renders_the_selected_sequence_claims_deterministically() {
             &harness.rust.contents,
             &[function_id.digest.as_ref(), quantifier.digest.as_ref()],
         );
+        for node in [
+            &harness.identity.projection_id,
+            &harness.identity.declaration_id,
+            &harness.identity.element_type_id,
+            &harness.identity.predicate_id,
+        ] {
+            crate::generated_headers::assert_header(
+                &harness.rust.path,
+                &harness.rust.contents,
+                &[node.digest.as_ref()],
+            );
+        }
         assert_eq!(harness.identity.function_id, function_id);
         assert_eq!(harness.identity.quantifier_id, quantifier);
         assert_eq!(

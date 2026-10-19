@@ -648,6 +648,11 @@ pub fn {strategy_function}() -> proptest::strategy::BoxedStrategy<{case_type}> {
         minimum = rust_i64(request.domain.minimum),
         maximum = rust_i64(request.domain.maximum),
     );
+    let subject = format!(
+        "Relation: {relation}; Domain: {domain}; Population: {}",
+        request.population.name()
+    );
+    let source = crate::core::provenance::with_rust_header(source, [subject.as_str()]);
     if source.len() > MAX_GENERATED_SOURCE_BYTES {
         return Err(diagnostic_with_generation(
             StrategyErrorCode::ResourceLimitExceeded,

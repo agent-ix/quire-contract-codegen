@@ -150,7 +150,7 @@ fn bound_strategy_header_retains_its_clause_identity() {
     crate::generated_headers::assert_header(
         &artifact.path,
         &artifact.contents,
-        &["FR-034", "9", "VersionUnchanged"],
+        &["FR-034@9/VersionUnchanged"],
     );
 }
 

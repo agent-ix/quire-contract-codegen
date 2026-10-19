@@ -704,7 +704,15 @@ fn tc_025_each_clause_lowers_to_a_separate_harness_with_exact_correspondence() {
         assert_eq!(identity.source_span.start().line(), line);
         assert_eq!(identity.oracles[0].clause, clause(id));
         let source = &harness.rust.contents;
-        crate::generated_headers::assert_header(&harness.rust.path, source, &["FR-200", "1", id]);
+        let clause_header = format!("FR-200@1/{id}");
+        crate::generated_headers::assert_header(&harness.rust.path, source, &[&clause_header]);
+        for oracle in &identity.oracles {
+            crate::generated_headers::assert_header(
+                &harness.rust.path,
+                source,
+                &[oracle.clause.clause().as_str()],
+            );
+        }
         assert_eq!(source.matches("#[kani::requires(").count(), requires);
         let is_precondition = kind == ObligationKind::Precondition;
         assert_eq!(

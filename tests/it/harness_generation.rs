@@ -150,7 +150,7 @@ fn tc_004_generated_harness_binds_clauses_and_executes_all_three_terminal_paths(
     crate::generated_headers::assert_header(
         &first.rust.path,
         &first.rust.contents,
-        &["FR-002", "1", "precondition-main", "postcondition-main"],
+        &["FR-002@1", "precondition-main", "postcondition-main"],
     );
     let stricter = generate_tristate_harness(&HarnessRequest {
         requirement: environment.owner(),
@@ -178,7 +178,7 @@ fn tc_004_generated_harness_binds_clauses_and_executes_all_three_terminal_paths(
     })
     .unwrap();
     assert_ne!(first.rust, higher_rejected_floor.rust);
-    assert!(first.rust.contents.starts_with("#![deny(missing_docs)]\n"));
+    assert!(first.rust.contents.contains("\n#![deny(missing_docs)]\n"));
     assert!(first
         .rust
         .contents

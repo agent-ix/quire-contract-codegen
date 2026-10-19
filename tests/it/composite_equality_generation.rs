@@ -1567,6 +1567,7 @@ fn tc_029_ac10_generation_is_repeatable_from_a_fresh_package() {
         .claim_map
         .items
         .iter()
+        .filter(|claim| matches!(&claim.result, ClaimDisposition::Generated(_)))
         .map(|claim| claim.node_id.digest.as_ref())
         .collect::<Vec<&str>>();
     for artifact in first

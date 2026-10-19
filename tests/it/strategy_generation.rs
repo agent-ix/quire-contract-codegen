@@ -27,7 +27,9 @@ fn function_name(source: &str) -> &str {
 }
 
 fn embedded_source(source: &str) -> String {
-    let mut lines = source.lines();
+    let mut lines = source
+        .lines()
+        .skip_while(|line| *line != "#![deny(missing_docs)]");
     assert_eq!(lines.next(), Some("#![deny(missing_docs)]"));
     let crate_docs = lines.next().unwrap().trim_start_matches("//!");
     format!("//{crate_docs}\n{}\n", lines.collect::<Vec<_>>().join("\n"))
@@ -49,7 +51,7 @@ fn enum_strategy_header_retains_input_identity() {
     crate::generated_headers::assert_header(
         &artifact.path,
         &artifact.contents,
-        &["FR-002", "2", "enum-header"],
+        &["FR-002@2", "enum-header"],
     );
 }
 
@@ -104,7 +106,7 @@ fn tc_004_supported_populations_are_directly_shaped_and_shrink_inside_constraint
         crate::generated_headers::assert_header(
             &artifact.path,
             &artifact.contents,
-            &["FR-002", "2", strategy],
+            &["FR-002@2", strategy],
         );
     }
     assert!(!correlated.rust.contents.contains("prop_filter"));
