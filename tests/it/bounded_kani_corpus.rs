@@ -483,6 +483,68 @@ fn tc_023_real_corpus_playback_replays_through_its_qsl_source() {
             ReplayVerdict::Reproduced,
             "{harness_filter} counterexample should replay through its source"
         );
+        let poisoned = format!("{playback}{playback}");
+        let verdict = case
+            .replay_counterexample(
+                &poisoned,
+                quire_contract_codegen::WitnessDecodeLimits {
+                    bytes: playback.len(),
+                    values: 0,
+                },
+            )
+            .expect("over-bound evidence yields a verdict");
+        assert!(matches!(
+            verdict,
+            ReplayVerdict::EvidenceFailure(quire_contract_codegen::EvidenceFailureCause::Decode(ref cause))
+                if cause.code == "cg_witness_decode_bytes_limit"
+        ));
+        let control = case
+            .replay_counterexample(
+                &poisoned,
+                quire_contract_codegen::WitnessDecodeLimits {
+                    bytes: poisoned.len(),
+                    values: 0,
+                },
+            )
+            .expect("duplicate assertion yields a decode verdict");
+        assert!(matches!(
+            control,
+            ReplayVerdict::EvidenceFailure(quire_contract_codegen::EvidenceFailureCause::Decode(ref cause))
+                if cause.code == "kani_witness_multiple_assertions_refused"
+        ));
+        let poisoned_value = playback.replace(
+            "let concrete_vals: Vec<Vec<u8>> = vec![];",
+            "let concrete_vals: Vec<Vec<u8>> = vec![\n// 0\nvec![not_a_byte],\n];",
+        );
+        assert_ne!(poisoned_value, playback);
+        let verdict = case
+            .replay_counterexample(
+                &poisoned_value,
+                quire_contract_codegen::WitnessDecodeLimits {
+                    bytes: poisoned_value.len(),
+                    values: 0,
+                },
+            )
+            .expect("over-bound value yields a verdict");
+        assert!(matches!(
+            verdict,
+            ReplayVerdict::EvidenceFailure(quire_contract_codegen::EvidenceFailureCause::Decode(ref cause))
+                if cause.code == "cg_witness_decode_values_limit"
+        ));
+        let control = case
+            .replay_counterexample(
+                &poisoned_value,
+                quire_contract_codegen::WitnessDecodeLimits {
+                    bytes: poisoned_value.len(),
+                    values: 1,
+                },
+            )
+            .expect("invalid byte yields a decode verdict");
+        assert!(matches!(
+            control,
+            ReplayVerdict::EvidenceFailure(quire_contract_codegen::EvidenceFailureCause::Decode(ref cause))
+                if cause.code == "kani_witness_byte_invalid"
+        ));
     }
 }
 

@@ -1078,9 +1078,25 @@ fn tc_026_function_replay_refuses_poisoned_suffixes_at_both_decode_bounds() {
         replay_counterexample(&harness.identity, &transcript, &package).expect("at bounds"),
         ReplayVerdict::Reproduced
     );
+    let mut separate = inputs(&source, Vec::new());
+    separate.decode_limits = limits;
+    separate.replay_limits = ReplayLimits::default().with_input_bytes(1);
+    let separate = ReplayPackage::new(separate, FUNCTION).expect("native twin compiles");
+    let mut calls = 0;
+    let _ = replay_counterexample_through(&harness.identity, &transcript, &separate, |_| {
+        calls += 1;
+        Err(ReplayRefusal::Fault(InternalFault::new(
+            "replay",
+            "stop after decode",
+        )))
+    });
+    assert_eq!(
+        calls, 1,
+        "QSL's input_bytes bound must not limit CG decoding"
+    );
     for (poisoned, limits, code) in [
         (
-            format!("{transcript}invalid suffix"),
+            format!("{transcript}{transcript}"),
             limits,
             "cg_witness_decode_bytes_limit",
         ),
@@ -1103,6 +1119,37 @@ fn tc_026_function_replay_refuses_poisoned_suffixes_at_both_decode_bounds() {
                     if cause.code == code
             ),
             "{verdict:?}"
+        );
+        let through = replay_counterexample_through(&harness.identity, &poisoned, &package, |_| {
+            panic!("over-bound playback must not reach the executor")
+        })
+        .expect("over-bound evidence yields a verdict");
+        assert!(
+            matches!(
+                through,
+                ReplayVerdict::EvidenceFailure(EvidenceFailureCause::Decode(ref cause))
+                    if cause.code == code
+            ),
+            "{through:?}"
+        );
+        let unbounded = make_package(WitnessDecodeLimits {
+            bytes: poisoned.len(),
+            values: 3,
+        });
+        let control = replay_counterexample(&harness.identity, &poisoned, &unbounded)
+            .expect("poisoned suffix produces a decode verdict");
+        let poisoned_code = if code == "cg_witness_decode_bytes_limit" {
+            "kani_witness_multiple_assertions_refused"
+        } else {
+            "kani_witness_byte_invalid"
+        };
+        assert!(
+            matches!(
+                control,
+                ReplayVerdict::EvidenceFailure(EvidenceFailureCause::Decode(ref cause))
+                    if cause.code == poisoned_code
+            ),
+            "{control:?}"
         );
     }
 }

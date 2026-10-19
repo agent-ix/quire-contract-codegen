@@ -81,7 +81,7 @@ fn tc_026_state_clause_decode_refuses_poisoned_suffixes_at_both_bounds() {
 
     for (poisoned, limits, code) in [
         (
-            format!("{transcript}invalid suffix"),
+            format!("{transcript}{transcript}"),
             limits,
             "cg_witness_decode_bytes_limit",
         ),
@@ -94,20 +94,52 @@ fn tc_026_state_clause_decode_refuses_poisoned_suffixes_at_both_bounds() {
             "cg_witness_decode_values_limit",
         ),
     ] {
+        let wider = quire_contract_codegen::WitnessDecodeLimits {
+            bytes: usize::MAX,
+            values: usize::MAX,
+        };
+        for (field_limit, parameter_limit) in [(limits, wider), (wider, limits)] {
+            let mut inputs = twin.state_clause_inputs(
+                &fixture.package,
+                &fixture.clause,
+                BALANCE,
+                (0, 0),
+                (4, 7),
+            );
+            inputs.playback.clear();
+            inputs.run.decode_limits = field_limit;
+            let error = inputs
+                .decode_falsification(
+                    harness,
+                    &KaniRunOutcome::Falsified {
+                        counterexample: poisoned.clone(),
+                    },
+                    parameter_limit,
+                )
+                .expect_err("over-bound playback refuses");
+            assert!(matches!(error, StateClauseReplayError::Decode(cause) if cause.code == code));
+        }
         let mut inputs =
             twin.state_clause_inputs(&fixture.package, &fixture.clause, BALANCE, (0, 0), (4, 7));
         inputs.playback.clear();
-        inputs.run.decode_limits = limits;
+        inputs.run.decode_limits = wider;
         let error = inputs
             .decode_falsification(
                 harness,
                 &KaniRunOutcome::Falsified {
                     counterexample: poisoned,
                 },
-                limits,
+                wider,
             )
-            .expect_err("over-bound playback refuses");
-        assert!(matches!(error, StateClauseReplayError::Decode(cause) if cause.code == code));
+            .expect_err("the poisoned suffix has a distinct decode error when read");
+        let poisoned_code = if code == "cg_witness_decode_bytes_limit" {
+            "kani_witness_multiple_assertions_refused"
+        } else {
+            "kani_witness_byte_invalid"
+        };
+        assert!(
+            matches!(error, StateClauseReplayError::Decode(cause) if cause.code == poisoned_code)
+        );
     }
 }
 

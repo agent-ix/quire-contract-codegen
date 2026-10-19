@@ -803,7 +803,7 @@ fn tc_026_frame_replay_refuses_poisoned_suffixes_at_both_decode_bounds() {
         .expect("at both bounds");
     for (poisoned, limits, code) in [
         (
-            format!("{}invalid suffix", run.playback),
+            format!("{}{}", run.playback, run.playback),
             limits,
             "cg_witness_decode_bytes_limit",
         ),
@@ -818,7 +818,7 @@ fn tc_026_frame_replay_refuses_poisoned_suffixes_at_both_decode_bounds() {
         ),
     ] {
         let mut candidate = run.clone();
-        candidate.playback = poisoned;
+        candidate.playback = poisoned.clone();
         let error = match twin.try_frame_replay_with_limits(
             "deposit",
             &invocation,
@@ -831,6 +831,28 @@ fn tc_026_frame_replay_refuses_poisoned_suffixes_at_both_decode_bounds() {
             Err(error) => error,
         };
         assert!(matches!(error, FrameReplayError::Decode(cause) if cause.code == code));
+        candidate.playback = poisoned;
+        let control = twin.try_frame_replay_with_limits(
+            "deposit",
+            &invocation,
+            "account",
+            "audit",
+            &candidate,
+            quire_contract_codegen::WitnessDecodeLimits {
+                bytes: candidate.playback.len(),
+                values: 3,
+            },
+        );
+        let error = match control {
+            Ok(_) => panic!("poisoned suffix must refuse when read"),
+            Err(error) => error,
+        };
+        let poisoned_code = if code == "cg_witness_decode_bytes_limit" {
+            "kani_witness_multiple_assertions_refused"
+        } else {
+            "kani_witness_byte_invalid"
+        };
+        assert!(matches!(error, FrameReplayError::Decode(cause) if cause.code == poisoned_code));
     }
 }
 
