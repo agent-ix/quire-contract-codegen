@@ -63,3 +63,15 @@ compatibility layer is introduced. `make spec` and `quire validate` on the 7 fil
 **CHANGES REQUESTED.** The direction (input-carried identity, caller-supplied limits, no invented
 number, no pin) is sound and the recommendation is right. FND-001 (high) must be fixed before merge;
 FND-002 to FND-005 should be fixed in this PR. Merge sequencing with PR #457 is in SR-13292.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | df727475: the absent-limit refusal is gone; FR-016:31-36 and AC-6 make both bounds required non-optional fields and entry-point parameters with no `Default`, so AC-1 and the partition stand unchanged. |
+| FND-002 | fixed | df727475: FR-016 Inputs names `decode_falsification` and `StateClauseReplayInputs::decode_falsification` (exists at src/replay/state_clause.rs:442-451) and states QSL `ReplayLimits.input_bytes` does not bound CG decoding. |
+| FND-003 | fixed | df727475: NFR-002 Scope adds the bounded Kani corpus until FR-015-AC-111; Statement, AC-1 and the core matrix now agree. |
+| FND-004 | fixed | df727475: NFR-002 Scope defines the subject per family and requires every rendered node or obligation in multi-subject files, each `.rs` covered separately. |
+| FND-005 | fixed | df727475: NFR-002 Rationale states some inputs carry no requirement, revision or clause identifier and headers never infer or invent them. |
+| FND-006 | fixed | df727475: TC-026 uses a poisoned byte or value past each bound; expected result is the over-bound cause, not the poisoned decode error. |
+| FND-007 | fixed | PR body rewritten: TC-001 claim now matches, and the rationale grounds conditional identifiers on invented provenance, naming `RevisionId` as a spec revision rather than a pin. |

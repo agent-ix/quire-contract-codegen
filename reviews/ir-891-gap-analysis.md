@@ -33,3 +33,9 @@ The decoder (`src/replay/witness.rs:119-173`) has no byte or value-count bound.
 
 **CHANGES REQUESTED (minor).** Matrix state agrees with the code; tighten TC-001 so the planned
 test covers every emitted Rust file.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | df727475: TC-001 requires every generated `.rs` artifact, naming oracle-package `src/lib.rs`, equality extra modules and `src/schedule_*.rs`, and rejects one file as family coverage; SPDX on every artifact. |

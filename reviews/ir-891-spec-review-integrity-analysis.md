@@ -37,3 +37,9 @@ Overlap with PR #457 (IR-890, not reviewed here): `git merge-tree` of the two he
 
 **CHANGES REQUESTED (sequencing).** Matrix and id integrity are clean; reconcile with PR #457 when
 the second of the two merges.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | df727475 merges #457 (5aeaaa07); grep of FR-016, TC-026, spec/replay/matrix/tests.md and spec/tests.md finds no "unavailable" or "five replay results"; AC-8 and TC-026 say "none of the replay results"; matrices carry both #457's statuses and AC-6's. |

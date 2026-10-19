@@ -29,3 +29,10 @@ no EARS warning in the touched files; its warnings are in untouched FR-014 and F
 ## Verdict
 
 **MINOR.** Two low wording fixes; FR-016:67-69 is a conformant unwanted-behaviour statement.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | df727475: the "Without both bounds, the decoder shall" sentence is removed; FR-016:53 Behavior bullet uses "the generator". |
+| FND-002 | fixed | df727475: NFR-002 Statement split into a ubiquitous bullet and a "Where the generation input carries ..." optional-feature bullet. |
