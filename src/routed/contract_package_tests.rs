@@ -484,6 +484,16 @@ mod tests {
     #[trace("TC-030", "FR-019-AC-50", "FR-039-AC-5")]
     #[test]
     fn admitted_function_settlement_does_not_read_again() {
+        assert_admitted_function_settlement(false);
+    }
+
+    #[trace("TC-030", "FR-019-AC-50", "FR-039-AC-5")]
+    #[test]
+    fn admitted_function_settlement_with_context_root_is_supported() {
+        assert_admitted_function_settlement(true);
+    }
+
+    fn assert_admitted_function_settlement(context_first: bool) {
         use exact_function_fixture::{
             code_id, source_bound_call_package, SOURCE_BODY, SOURCE_CALL, SOURCE_FUNCTION,
             SOURCE_PARAM_A, SOURCE_PARAM_B,
@@ -492,7 +502,10 @@ mod tests {
         let function = ids.resolve(&code_id(SOURCE_FUNCTION));
         let body = ids.resolve(&code_id(SOURCE_BODY));
         let call = ids.resolve(&code_id(SOURCE_CALL));
-        let requested = [body, call.clone()];
+        let mut requested = vec![body.clone(), call.clone()];
+        if context_first {
+            requested.insert(0, function.clone());
+        }
         let lowered = checked.lower(&requested, &routed_contract_lowering_profile());
         let admitted = match ContractPackageWireV1::read(
             lowered.package.canonical_bytes().expect("lowered bytes"),
@@ -516,7 +529,7 @@ mod tests {
             }]),
             kani_form: KaniForm::V2FunctionApplication {
                 package: Box::new(checked),
-                function_node_id: function,
+                function_node_id: function.clone(),
                 call_node_id: call,
                 argument_node_ids: vec![
                     ids.resolve(&code_id(SOURCE_PARAM_A)),
@@ -530,7 +543,7 @@ mod tests {
                 KaniForm::V2FunctionApplication { package, .. } => package,
                 _ => unreachable!(),
             },
-            &requested[0],
+            &body,
         );
         envelope.manifest.push(BackendDescriptor {
             identity: "kani".to_owned(),
@@ -541,7 +554,13 @@ mod tests {
         });
         envelope.items[1] = request;
         assert_eq!(crate::oracle::function::take_function_preflight_reads(), 0);
-        let result = negotiate_contract_package(&admitted, &drivers(&requested), &envelope)
+        let mut positions = drivers(&requested);
+        if context_first {
+            positions[0] = ContractRequestPosition::ContextRoot {
+                node_id: function.clone(),
+            };
+        }
+        let result = negotiate_contract_package(&admitted, &positions, &envelope)
             .expect("admitted package settles");
         assert!(
             matches!(result[1].backend.as_ref().map(|item| &item.disposition), Some(crate::routed::capability::Disposition::Supported { backend }) if backend == "kani")
