@@ -1244,11 +1244,13 @@ mod tests {
     use std::path::PathBuf;
 
     use super::*;
-    use crate::kani::{
-        identity::StateFrameProperty,
-        test_support::{
-            discover_scratch, report, state_frame_harness, write_launcher, COVER_NO, COVER_OK,
-            PASSED,
+    use crate::{
+        core::test_support::discover_scratch,
+        kani::{
+            identity::StateFrameProperty,
+            test_support::{
+                report, state_frame_harness, write_launcher, COVER_NO, COVER_OK, PASSED,
+            },
         },
     };
 
@@ -1576,14 +1578,14 @@ pub(crate) mod batch_tests {
 
     use super::*;
     use crate::{
-        core::artifact::Artifact,
+        core::{artifact::Artifact, test_support::discover_scratch},
         kani::{
             abi::adapter_options,
             identity::{StateFrameHarness, StateFrameProperty},
             run::launch::CAPTURE_LIMIT,
             test_support::{
-                batch_report, discover_scratch, named_state_frame_harness, write_launcher,
-                BatchEntry, COVER_OK, PASSED,
+                batch_report, named_state_frame_harness, write_launcher, BatchEntry, COVER_OK,
+                PASSED,
             },
         },
     };

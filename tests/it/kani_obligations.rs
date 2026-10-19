@@ -22,12 +22,12 @@ use scalar_native_digest::independent_digest;
 use scalar_native_fixture::routed_scalar_with_artifacts;
 
 use std::{
-    env, fs,
+    fs,
     path::{Path, PathBuf},
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::Duration,
 };
 
-use crate::scratch_crate::{runtime_dependency, write_manifest};
+use crate::scratch_crate::{runtime_dependency, write_manifest, TemporaryDirectory};
 use ix_trace_rs::trace;
 use package::{
     application, bounded, code_id, corpus_package, golden_items, id, integer_add, key, op,
@@ -2036,13 +2036,14 @@ fn tc_027_a_missing_launcher_is_refused_before_anything_runs() {
     let cancel = quire_exact::Cancel::new();
     let package = bound_package(1000);
     let harness = supported_contract_harnesses(&package, "crate::withdraw").remove(1);
-    let directory = write_crate(&harness, HEALTHY_SUBJECT);
+    let scratch = write_crate(&harness, HEALTHY_SUBJECT);
+    let directory = &scratch.path;
     let installation = KaniInstallation::new(directory.join("cargo-kani"));
     let refusal = execute_kani_obligation(&KaniExecutionRequest {
         cancel: &cancel,
         installation: &installation,
         harness: (&harness).into(),
-        crate_directory: &directory,
+        crate_directory: directory,
         target_directory: &directory.join("target"),
         home_directory: None,
     })
@@ -2055,7 +2056,6 @@ fn tc_027_a_missing_launcher_is_refused_before_anything_runs() {
         })
     ));
     assert!(!directory.join("target").exists(), "nothing ran");
-    let _ = fs::remove_dir_all(directory);
 }
 
 /// Invalid launcher file kinds and execute permissions are typed faults before dispatch.
@@ -2069,7 +2069,8 @@ fn tc_027_non_executable_launchers_are_refused_before_anything_runs() {
     let package = bound_package(1000);
     let harness = supported_contract_harnesses(&package, "crate::withdraw").remove(1);
     for directory_launcher in [false, true] {
-        let directory = write_crate(&harness, HEALTHY_SUBJECT);
+        let scratch = write_crate(&harness, HEALTHY_SUBJECT);
+        let directory = &scratch.path;
         let launcher = directory.join("cargo-kani");
         if directory_launcher {
             fs::create_dir(&launcher).unwrap();
@@ -2082,7 +2083,7 @@ fn tc_027_non_executable_launchers_are_refused_before_anything_runs() {
             cancel: &cancel,
             installation: &installation,
             harness: (&harness).into(),
-            crate_directory: &directory,
+            crate_directory: directory,
             target_directory: &directory.join("target"),
             home_directory: None,
         })
@@ -2099,31 +2100,18 @@ fn tc_027_non_executable_launchers_are_refused_before_anything_runs() {
             other => panic!("expected a typed launcher permission fault, got {other:?}"),
         }
         assert!(!directory.join("target").exists(), "nothing ran");
-        fs::remove_dir_all(directory).unwrap();
     }
 }
 
 // ---- kani lane ---------------------------------------------------------------
 
-pub(crate) fn scratch(name: &str) -> PathBuf {
-    let nonce = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    let path = env::temp_dir().join(format!(
-        "quire-kani-obligations-{name}-{}-{nonce}",
-        std::process::id()
-    ));
-    fs::create_dir_all(path.join("src")).unwrap();
-    path
-}
-
 const HEALTHY_SUBJECT: &str = "/// Withdraws `amount` from `balance`.\n#[must_use]\npub fn withdraw(amount_current: i64, balance_pre: i64) -> i64 {\n    balance_pre - amount_current\n}\n";
 const SEEDED_FAILING_SUBJECT: &str = "/// Seeded defect: credits instead of debiting.\n#[must_use]\npub fn withdraw(amount_current: i64, balance_pre: i64) -> i64 {\n    balance_pre + amount_current\n}\n";
 const VACUOUS_SUBJECT: &str = "/// Returns a balance no postcondition result satisfies.\n#[must_use]\npub fn transfer(amount_current: i64) -> i64 {\n    amount_current\n}\n";
 
-pub(crate) fn write_crate(harness: &KaniObligationHarness, subject: &str) -> PathBuf {
-    let directory = scratch("crate");
+pub(crate) fn write_crate(harness: &KaniObligationHarness, subject: &str) -> TemporaryDirectory {
+    let scratch = TemporaryDirectory::new("quire-kani-obligations-crate");
+    let directory = &scratch.path;
     fs::write(
         directory.join("src/lib.rs"),
         format!(
@@ -2133,7 +2121,7 @@ pub(crate) fn write_crate(harness: &KaniObligationHarness, subject: &str) -> Pat
     )
     .unwrap();
     write_manifest(
-        &directory,
+        directory,
         &format!(
             "[package]\nname = \"generated-kani-obligation\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
             runtime_dependency(&["exact"])
@@ -2144,7 +2132,7 @@ pub(crate) fn write_crate(harness: &KaniObligationHarness, subject: &str) -> Pat
         "fn main() { println!(\"cargo:rustc-check-cfg=cfg(kani)\"); }\n",
     )
     .unwrap();
-    directory
+    scratch
 }
 
 fn run(
@@ -2155,12 +2143,13 @@ fn run(
     label: &str,
 ) -> quire_contract_codegen::KaniExecutionEvidence {
     let cancel = quire_exact::Cancel::new();
-    let crate_directory = write_crate(harness, subject);
+    let scratch = write_crate(harness, subject);
+    let crate_directory = &scratch.path;
     let evidence = execute_kani_obligation(&KaniExecutionRequest {
         cancel: &cancel,
         installation,
         harness: harness.into(),
-        crate_directory: &crate_directory,
+        crate_directory,
         target_directory: &PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kani-obligations"),
         home_directory: None,
     })
@@ -2175,7 +2164,6 @@ fn run(
         &harness.rust.contents,
     )
     .unwrap();
-    let _ = fs::remove_dir_all(crate_directory);
     evidence
 }
 
@@ -2222,7 +2210,8 @@ fn tc_043_the_terminal_value_of_no_verdict_evidence_ignores_its_diagnostics() {
     let cancel = quire_exact::Cancel::new();
     let package = bound_package(1000);
     let harness = supported_contract_harnesses(&package, "crate::withdraw").remove(1);
-    let directory = write_crate(&harness, HEALTHY_SUBJECT);
+    let scratch = write_crate(&harness, HEALTHY_SUBJECT);
+    let directory = &scratch.path;
     let launcher = directory.join("cargo-kani");
     write_failing_launcher(&launcher);
     let installation = KaniInstallation::new(launcher);
@@ -2230,12 +2219,12 @@ fn tc_043_the_terminal_value_of_no_verdict_evidence_ignores_its_diagnostics() {
         cancel: &cancel,
         installation: &installation,
         harness: (&harness).into(),
-        crate_directory: &directory,
+        crate_directory: directory,
         target_directory: &directory.join("target"),
         home_directory: None,
     })
     .unwrap();
-    let _ = fs::remove_dir_all(&directory);
+
     assert_eq!(
         evidence.outcome,
         KaniRunOutcome::Inconclusive {
@@ -2271,18 +2260,19 @@ fn tc_027_real_kani_non_compiling_crate_is_no_verdict_with_phase_compile() {
     let package = bound_package(1000);
     let harness = supported_contract_harnesses(&package, "crate::withdraw").remove(1);
     let subject = format!("{HEALTHY_SUBJECT}\n{BROKEN_ITEM}");
-    let crate_directory = write_crate(&harness, &subject);
+    let scratch = write_crate(&harness, &subject);
+    let crate_directory = &scratch.path;
     let target = crate_directory.join("target");
     let evidence = execute_kani_obligation(&KaniExecutionRequest {
         cancel: &cancel,
         installation: &installation,
         harness: (&harness).into(),
-        crate_directory: &crate_directory,
+        crate_directory,
         target_directory: &target,
         home_directory: None,
     })
     .unwrap_or_else(|refusal| panic!("a run that started is not refused: {refusal}"));
-    let _ = fs::remove_dir_all(&crate_directory);
+
     assert_eq!(
         evidence.outcome,
         KaniRunOutcome::Inconclusive {
@@ -2348,7 +2338,8 @@ fn cbmc_failure_terminal_value_reads_the_retained_cause() {
     let cancel = quire_exact::Cancel::new();
     let package = bound_package(1000);
     let harness = supported_contract_harnesses(&package, "crate::withdraw").remove(1);
-    let directory = write_crate(&harness, HEALTHY_SUBJECT);
+    let scratch = write_crate(&harness, HEALTHY_SUBJECT);
+    let directory = &scratch.path;
     fs::create_dir_all(directory.join("target")).unwrap();
     for (status, expected) in [
         ("exit_code_64", qsl_replay::TerminalValue::Failed),
@@ -2384,7 +2375,7 @@ fn cbmc_failure_terminal_value_reads_the_retained_cause() {
             cancel: &cancel,
             installation: &installation,
             harness: (&harness).into(),
-            crate_directory: &directory,
+            crate_directory: directory,
             target_directory: &directory.join("target"),
             home_directory: None,
         })
@@ -2402,7 +2393,6 @@ fn cbmc_failure_terminal_value_reads_the_retained_cause() {
         let terminal = run_terminal_value(&evidence, None).unwrap();
         assert_eq!(terminal, expected, "{status}");
     }
-    let _ = fs::remove_dir_all(&directory);
 }
 
 /// Real Kani on a crate whose manifest hands CBMC an option it does not know, with the harness's
@@ -2418,7 +2408,8 @@ fn tc_027_real_kani_unknown_cbmc_option_keeps_exit_code_64_as_the_failure_cause(
     let installation = KaniInstallation::discover().expect("cargo-kani is installed");
     let package = bound_package(1000);
     let harness = supported_contract_harnesses(&package, "crate::withdraw").remove(1);
-    let crate_directory = write_crate(&harness, HEALTHY_SUBJECT);
+    let scratch = write_crate(&harness, HEALTHY_SUBJECT);
+    let crate_directory = &scratch.path;
     let manifest = crate_directory.join("Cargo.toml");
     let mut text = fs::read_to_string(&manifest).unwrap();
     text.push_str(
@@ -2429,12 +2420,12 @@ fn tc_027_real_kani_unknown_cbmc_option_keeps_exit_code_64_as_the_failure_cause(
         cancel: &cancel,
         installation: &installation,
         harness: (&harness).into(),
-        crate_directory: &crate_directory,
+        crate_directory,
         target_directory: &crate_directory.join("target"),
         home_directory: None,
     })
     .unwrap_or_else(|refusal| panic!("a run that started is not refused: {refusal}"));
-    let _ = fs::remove_dir_all(&crate_directory);
+
     assert_eq!(
         evidence.outcome,
         KaniRunOutcome::Inconclusive {
@@ -2558,12 +2549,13 @@ fn tc_025_real_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defect
     let mut harness = harnesses[0].clone();
     harness.identity.ceilings.wall_clock = Duration::from_millis(1);
     let harness = &harness;
-    let crate_directory = write_crate(harness, HEALTHY_SUBJECT);
+    let scratch = write_crate(harness, HEALTHY_SUBJECT);
+    let crate_directory = &scratch.path;
     let evidence = execute_kani_obligation(&KaniExecutionRequest {
         cancel: &cancel,
         installation: &installation,
         harness: harness.into(),
-        crate_directory: &crate_directory,
+        crate_directory,
         target_directory: &crate_directory.join("target"),
         home_directory: None,
     })
@@ -2577,11 +2569,12 @@ fn tc_025_real_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defect
         }
     );
     assert_eq!(evidence.exit_code, None);
-    let _ = fs::remove_dir_all(crate_directory);
+    drop(scratch);
 
     // Evidence about a harness the crate does not contain is evidence about nothing.
     let harness = supported_contract_harnesses(&package, "crate::withdraw").remove(1);
-    let crate_directory = write_crate(&harness, HEALTHY_SUBJECT);
+    let scratch = write_crate(&harness, HEALTHY_SUBJECT);
+    let crate_directory = &scratch.path;
     fs::write(
         crate_directory.join("src/lib.rs"),
         format!("//! Generated obligation check crate.\n\n{HEALTHY_SUBJECT}"),
@@ -2591,7 +2584,7 @@ fn tc_025_real_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defect
         cancel: &cancel,
         installation: &installation,
         harness: (&harness).into(),
-        crate_directory: &crate_directory,
+        crate_directory,
         target_directory: &crate_directory.join("target"),
         home_directory: None,
     })
@@ -2601,7 +2594,6 @@ fn tc_025_real_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defect
         KaniExecutionRefusal::HarnessNotInCrate { .. }
     ));
     assert!(!crate_directory.join("target").exists(), "nothing ran");
-    let _ = fs::remove_dir_all(crate_directory);
 }
 
 /// The routed scalar harness for `x + 1` over `Int[0, 9]`, and the oracle crate's `Cargo.toml`, both
@@ -2650,16 +2642,17 @@ fn write_scalar_crate(
     name: &str,
     manifest: &quire_contract_codegen::Artifact,
     library: &str,
-) -> PathBuf {
-    let directory = scratch(name);
-    write_manifest(&directory, &manifest.contents);
+) -> TemporaryDirectory {
+    let scratch = TemporaryDirectory::new(&format!("quire-kani-obligations-scalar-{name}"));
+    let directory = &scratch.path;
+    write_manifest(directory, &manifest.contents);
     fs::write(directory.join("src/lib.rs"), library).unwrap();
     fs::write(
         directory.join("build.rs"),
         "fn main() { println!(\"cargo:rustc-check-cfg=cfg(kani)\"); }\n",
     )
     .unwrap();
-    directory
+    scratch
 }
 
 /// A routed scalar harness carries the same non-vacuity cover shape a contract harness does, so
@@ -2731,17 +2724,17 @@ fn run_scalar_under_real_kani(
 ) -> quire_contract_codegen::KaniExecutionEvidence {
     let cancel = quire_exact::Cancel::new();
     let installation = KaniInstallation::discover().expect("cargo-kani is installed");
-    let crate_directory = write_scalar_crate(name, manifest, &harness.rust.contents);
+    let scratch = write_scalar_crate(name, manifest, &harness.rust.contents);
+    let crate_directory = &scratch.path;
     let evidence = execute_kani_obligation(&KaniExecutionRequest {
         cancel: &cancel,
         installation: &installation,
         harness: harness.into(),
-        crate_directory: &crate_directory,
+        crate_directory,
         target_directory: &PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kani-scalar"),
         home_directory: None,
     })
     .unwrap_or_else(|refusal| panic!("{refusal}"));
-    let _ = fs::remove_dir_all(&crate_directory);
     evidence
 }
 
@@ -2766,12 +2759,13 @@ fn tc_027_a_routed_scalar_harness_verifies() {
     assert_eq!(evidence.unwind, harness.identity.unwind);
 
     let installation = KaniInstallation::discover().expect("cargo-kani is installed");
-    let crate_directory = write_scalar_crate("scalar-real-missing", &manifest, "//! empty\n");
+    let scratch = write_scalar_crate("scalar-real-missing", &manifest, "//! empty\n");
+    let crate_directory = &scratch.path;
     let refusal = execute_kani_obligation(&KaniExecutionRequest {
         cancel: &cancel,
         installation: &installation,
         harness: (&harness).into(),
-        crate_directory: &crate_directory,
+        crate_directory,
         target_directory: &crate_directory.join("target"),
         home_directory: None,
     })
@@ -2781,7 +2775,6 @@ fn tc_027_a_routed_scalar_harness_verifies() {
         KaniExecutionRefusal::HarnessNotInCrate { .. }
     ));
     assert!(!crate_directory.join("target").exists(), "nothing ran");
-    let _ = fs::remove_dir_all(crate_directory);
 }
 
 /// A retained routed scalar is proved and invoked with normal and constrained native limits.
@@ -3064,15 +3057,8 @@ fn tc_027_attested_scalar_rejects_preflight_mismatches_without_launch() {
 
     let (harness, valid_artifacts) = routed_scalar_increment_with_artifacts();
     let cancel = quire_exact::Cancel::new();
-    let control_directory = env::temp_dir().join(format!(
-        "ir791-preflight-{}-{}",
-        std::process::id(),
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("clock after epoch")
-            .as_nanos()
-    ));
-    fs::create_dir_all(&control_directory).unwrap();
+    let control_scratch = TemporaryDirectory::new("quire-kani-obligations-preflight");
+    let control_directory = &control_scratch.path;
     let launcher = control_directory.join("fake-cargo-kani");
     let marker = control_directory.join("launched");
     fs::write(
@@ -3225,7 +3211,6 @@ fn tc_027_attested_scalar_rejects_preflight_mismatches_without_launch() {
     ));
     assert_not_launched();
     assert!(!target.exists(), "preflight refusal created a build target");
-    fs::remove_dir_all(control_directory).unwrap();
 }
 
 /// The same harness with its checked domain narrowed to `[0, 5]` asserts a bound the oracle does

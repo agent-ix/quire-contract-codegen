@@ -24,3 +24,7 @@ pub(crate) mod naming;
 pub(crate) mod profile;
 // Source-map records tracing generated source to a clause.
 pub(crate) mod source_map;
+
+// Target-owned scratch allocation shared by subsystem unit tests.
+#[cfg(test)]
+pub(crate) mod test_support;

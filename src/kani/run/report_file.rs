@@ -77,7 +77,7 @@ pub(super) fn read_report(path: &Path) -> Result<Option<Vec<u8>>, KaniReportRefu
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::kani::test_support::discover_scratch;
+    use crate::core::test_support::discover_scratch;
     use ix_trace_rs::trace;
 
     /// The exported report is read bounded: a file over the limit is refused, and a report that

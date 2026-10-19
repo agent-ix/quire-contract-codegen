@@ -183,7 +183,7 @@ mod tests {
     use std::fs;
 
     use super::*;
-    use crate::kani::test_support::discover_scratch;
+    use crate::core::test_support::discover_scratch;
 
     /// `discover_from` is a pure function of its arguments, so every `HOME`/`CARGO_HOME`/`PATH`
     /// combination is exercised directly here with no process environment mutation.

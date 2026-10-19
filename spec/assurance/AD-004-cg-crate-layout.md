@@ -180,6 +180,8 @@ src/
     profile.rs                the version profile: every spelling this build emits or requires
     diagnostic.rs             GenerationErrorCode, GenerationDiagnostic, GenerationTerminalState
     naming.rs                 bounded readable components, unique names, symbol derivation
+    test_support.rs           `#[cfg(test)]` only: target-owned scratch directories shared across
+                              subsystem unit tests; imports only std
   oracle/                     FR-014, FR-018, FR-021, FR-031 (boolean_v1.rs)
     claim.rs                  ClaimMap, ClaimDisposition, OracleGenerationError (was generation)
     scalar/                   was exact_scalar; step 2d moves it whole, step 3 splits it
@@ -281,6 +283,7 @@ Migration order, not moved.
 
 | Module today | Subsystem | Target | Fate |
 | --- | --- | --- | --- |
+| Shared unit-test scratch allocator (`discover_scratch`) | core | `core/test_support.rs` | `#[cfg(test)]` only; one target/dead-PID allocator shared across subsystems |
 | `lib` | core | `lib.rs` | stays; re-exports by explicit list, no logic. The one `pub mod bound_strategy` path leaves (step 2e); callers use the re-exported names |
 | `oracle` (shared parts: `Artifact`, diagnostics, `RUNTIME_REVISION`) | core | `core/artifact.rs`, `core/diagnostic.rs`, `core/profile.rs` | split; `RUNTIME_REVISION` deleted |
 | `oracle` (naming helpers: `bounded_readable_component`, `readable_name_component`, `upper_camel`, `unique_names`, `unique_pair`, `oracle_symbol`, `reference_identifier`, `observation_name`, and the private `rust_component`; with their tests) | core | `core/naming.rs` | split (step 2d-0). `observation_name` becomes `pub(crate)`, because `reference_key` (V1 identity key, with `dependency_key`) stays in `oracle/boolean_v1.rs` and calls it; those two are expression bookkeeping, not naming. `dependency_parameters` and `typed_dependency_parameters` are not naming either: they run the V1 expression analysis and stay in `oracle/boolean_v1.rs` at step 2d. Because the V2 `kani_obligations` and `kani` import `typed_dependency_parameters` (and `generate_boolean_oracle`), that dependency predates this AD and step 6 must move or replace it before it deletes `boolean_v1.rs` |
@@ -1315,9 +1318,11 @@ tables; each table states the count it covers, and the per-destination rows add 
   other across what become five files and `classify.rs`. A helper used by the tests of one new file
   stays in that file's test module. A helper used by the tests of more than one goes to
   `kani/test_support.rs`, declared `#[cfg(test)]` in `kani/mod.rs`, with its visibility widened to
-  `pub(crate)`: `state_frame_harness`, `report`, `PASSED`, `COVER_OK`, `COVER_NO` and
-  `discover_scratch`. It imports `identity` and `abi` and no generator. `classify.rs` holds two test
-  modules, `real_capture` (D-6) and `synthetic` (the four `kani_execution` classification tests
+  `pub(crate)`: `state_frame_harness`, `report`, `PASSED`, `COVER_OK` and `COVER_NO`.
+  It imports `identity` and `abi` and no generator. The subsystem-independent
+  `discover_scratch` allocator lives in `core/test_support.rs`, declared `#[cfg(test)]` in
+  `core/mod.rs`; it imports only `std` and is called directly by tests across subsystems.
+  `classify.rs` holds two test modules, `real_capture` (D-6) and `synthetic` (the four `kani_execution` classification tests
   with `classify`, `COVER_PLAYBACK` and `ASSERTION_PLAYBACK`), because both define a helper named
   `report` or `classify`/`classified` with a different signature; neither is renamed.
   `a_precondition_harness_with_no_checks_is_decided_by_its_cover_not_the_zero_checks_rule`
@@ -1417,7 +1422,8 @@ Rows add to 13 (`outcome.rs`) + 23 (`negotiate.rs`: 1 + 8 + 5 + 7 + 2) + 3 (`rec
 | `launch_command`, `read_file` | 2 | `kani/run/execute.rs` | unchanged | private |
 | `KaniInconclusiveReason`, `KaniRunOutcome`, `ClassifiedRun`, `classify_kani_run` | 4 | `kani/classify.rs` | unchanged | `pub` |
 | `classify_report`, `classify_success`, `inconclusive` | 3 | `kani/classify.rs` | unchanged | private |
-| Tests: `state_frame_harness`, `report`, `PASSED`, `COVER_OK`, `COVER_NO`, `discover_scratch` | 6 | `kani/test_support.rs` | pub(crate) | shared by the tests of several files (D-7) |
+| Tests: `state_frame_harness`, `report`, `PASSED`, `COVER_OK`, `COVER_NO` | 5 | `kani/test_support.rs` | pub(crate) | shared by the tests of several Kani files (D-7) |
+| Tests: `discover_scratch` | 1 | `core/test_support.rs` | pub(crate), cfg(test) | target/dead-PID scratch allocator shared across subsystems (D-7) |
 | Tests: `COVER_PLAYBACK`, `ASSERTION_PLAYBACK`, `classify`, `tc_027_run_classification_never_defaults_to_verified`, `a_report_with_no_successful_check_is_inconclusive_not_verified_even_with_every_cover_satisfied`, `tc_027_an_exhausted_unwind_bound_is_inconclusive_not_falsified`, `tc_027_an_unreadable_or_missing_report_is_refused_never_inconclusive` | 7 | `classify.rs` tests, `synthetic` module | n/a | call `classify_kani_run` only |
 | Tests: `tc_027_a_state_frame_harness_reports_the_kind_of_what_it_proves` | 1 | `harness.rs` tests | n/a | calls `view` |
 | Tests: `tc_027_the_launcher_resolves_through_cargo_home_then_path` | 1 | `tool.rs` tests | n/a | calls `discover_from` |

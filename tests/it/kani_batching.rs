@@ -14,6 +14,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use crate::scratch_crate::TemporaryDirectory;
 use ix_trace_rs::trace;
 use quire_contract_codegen::{
     execute_kani_obligation, execute_kani_obligations, Artifact, HarnessSymbol,
@@ -101,7 +102,7 @@ fn harness(name: &str, body: &str, unwind: u32) -> StateFrameHarness {
 /// A scratch crate holding the source of every harness, and a launcher that counts its own
 /// invocations before running the real `cargo-kani`.
 struct Lane {
-    directory: PathBuf,
+    _scratch: TemporaryDirectory,
     crate_directory: PathBuf,
     installation: KaniInstallation,
     counts: PathBuf,
@@ -111,11 +112,8 @@ struct Lane {
 impl Lane {
     fn new(label: &str, harnesses: &[StateFrameHarness]) -> Self {
         let real = KaniInstallation::discover().expect("cargo-kani is installed");
-        let directory = std::env::temp_dir().join(format!(
-            "quire-kani-batching-{label}-{}",
-            std::process::id()
-        ));
-        let _ = fs::remove_dir_all(&directory);
+        let scratch = TemporaryDirectory::new(&format!("quire-kani-batching-{label}"));
+        let directory = &scratch.path;
         fs::create_dir_all(directory.join("crate/src")).unwrap();
         let library: String = harnesses
             .iter()
@@ -146,7 +144,7 @@ impl Lane {
         fs::set_permissions(&launcher, fs::Permissions::from_mode(0o755)).unwrap();
         Self {
             crate_directory: directory.join("crate"),
-            directory,
+            _scratch: scratch,
             installation: KaniInstallation::new(launcher),
             counts,
             cancel: quire_exact::Cancel::new(),
@@ -174,12 +172,6 @@ impl Lane {
             target_directory: target,
             home_directory: None,
         }
-    }
-}
-
-impl Drop for Lane {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.directory);
     }
 }
 

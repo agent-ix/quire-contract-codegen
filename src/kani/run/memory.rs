@@ -610,7 +610,7 @@ mod tests {
     #[trace("FR-028-AC-21")]
     #[test]
     fn released_sighand_signed_group_preserves_owned_rss_and_identity_checks() {
-        let root = crate::kani::test_support::discover_scratch("memory-signed-group");
+        let root = crate::core::test_support::discover_scratch("memory-signed-group");
         let directory = root.join("42");
         fs::create_dir_all(directory.join("task/42")).unwrap();
         fs::write(directory.join("task/42/children"), []).unwrap();
@@ -667,7 +667,7 @@ mod tests {
     #[test]
     fn unavailable_children_observation_refuses_and_only_disappeared_tasks_are_skipped() {
         use std::os::unix::fs::symlink;
-        let root = crate::kani::test_support::discover_scratch("memory-no-children");
+        let root = crate::core::test_support::discover_scratch("memory-no-children");
         let own = std::process::id();
         let directory = root.join(own.to_string());
         let task = directory.join(format!("task/{own}"));
@@ -694,7 +694,7 @@ mod tests {
     #[trace("FR-028-AC-21")]
     #[test]
     fn resident_memory_of_a_reused_pid_is_excluded_from_the_backend_sample() {
-        let root = crate::kani::test_support::discover_scratch("memory-pid-reuse");
+        let root = crate::core::test_support::discover_scratch("memory-pid-reuse");
         let directory = root.join("42");
         fs::create_dir(&directory).unwrap();
         let mut fields = ["0"; 22];
@@ -727,7 +727,7 @@ mod tests {
     #[trace("FR-028-AC-21")]
     #[test]
     fn released_address_space_is_observed_before_zombie_status_but_missing_rss_is_refused() {
-        let root = crate::kani::test_support::discover_scratch("memory-address-space-release");
+        let root = crate::core::test_support::discover_scratch("memory-address-space-release");
         let directory = root.join("42");
         fs::create_dir_all(directory.join("task/42")).unwrap();
         fs::write(directory.join("task/42/children"), []).unwrap();
@@ -778,7 +778,7 @@ mod tests {
     #[trace("FR-028-AC-21")]
     #[test]
     fn missing_task_ancestry_refuses_a_zombie_leader_with_live_workers() {
-        let root = crate::kani::test_support::discover_scratch("memory-task-exit");
+        let root = crate::core::test_support::discover_scratch("memory-task-exit");
         let directory = root.join("42");
         fs::create_dir(&directory).unwrap();
         let mut fields = ["0"; 22];
@@ -817,7 +817,7 @@ mod tests {
     #[trace("FR-028-AC-21")]
     #[test]
     fn released_leader_mm_uses_live_worker_rss_or_refuses_observation() {
-        let root = crate::kani::test_support::discover_scratch("memory-live-worker");
+        let root = crate::core::test_support::discover_scratch("memory-live-worker");
         let directory = root.join("42");
         fs::create_dir_all(directory.join("task/43")).unwrap();
         let mut fields = ["0"; 22];
@@ -882,7 +882,7 @@ mod tests {
     #[trace("FR-028-AC-21")]
     #[test]
     fn vanished_process_during_worker_listing_is_skipped_but_live_missing_task_is_refused() {
-        let root = crate::kani::test_support::discover_scratch("memory-worker-list-race");
+        let root = crate::core::test_support::discover_scratch("memory-worker-list-race");
         let directory = root.join("42");
         fs::create_dir(&directory).unwrap();
         let mut fields = ["0"; 22];
