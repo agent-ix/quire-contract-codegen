@@ -37,6 +37,15 @@ the FR-015 generator returns for the same items.
 
 ## Test Procedure
 
+For FR-022-AC-29, use an admitted package with bound driver items at indexes
+0 and 2 and an excluded accounting-only position at index 1. Construct a
+routed item through the public descriptor constructor with index 1 and the
+excluded position's exact node ID. Assert that `generate_routed` refuses the
+whole call as `ExcludedDriverIndex { request_index: 1, node_id }` before any
+generation arm, oracle or harness runs. Route the same descriptor at bound
+indexes 0 and 2 as valid controls, checking that index 2 keeps its own
+selection rather than the second FR-331 envelope position.
+
 For FR-022-AC-23 and AC-24, use the same admitted ContractPackage and two
 preflighted driver positions as TC-030: one `integer.add` node, two distinct
 application occurrences and direct `numeric.narrow` selections with different
@@ -238,3 +247,7 @@ diagnostic-string parsing.
     the request index and occurrence, with no generated artifact or identity
     for that request. No other record of the shared node is substituted
     (FR-022-AC-28).
+23. A routed item naming excluded driver index `1` yields the typed
+    `ExcludedDriverIndex` whole-call refusal before any oracle or harness;
+    routed items at bound indexes `0` and `2` retain their own selections
+    (FR-022-AC-29).
