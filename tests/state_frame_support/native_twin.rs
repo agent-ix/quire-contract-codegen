@@ -36,6 +36,13 @@ const PACKAGE: &str = "test/bank";
 const PLACEHOLDER_DIGEST: &str =
     "sha256:0000000000000000000000000000000000000000000000000000000000000000";
 
+const fn unbounded_decode_limits() -> quire_contract_codegen::WitnessDecodeLimits {
+    quire_contract_codegen::WitnessDecodeLimits {
+        bytes: usize::MAX,
+        values: usize::MAX,
+    }
+}
+
 fn account_type() -> String {
     format!("ix://{PACKAGE}/Account")
 }
@@ -808,8 +815,30 @@ impl Twin {
         field: &str,
         run: &Run,
     ) -> Result<FrameReplay, FrameReplayError> {
+        self.try_frame_replay_with_limits(
+            operation,
+            invocation,
+            account,
+            field,
+            run,
+            unbounded_decode_limits(),
+        )
+    }
+
+    /// Build a frame replay with the caller's witness decode bounds.
+    pub fn try_frame_replay_with_limits(
+        &self,
+        operation: &str,
+        invocation: &Invocation,
+        account: &str,
+        field: &str,
+        run: &Run,
+        limits: quire_contract_codegen::WitnessDecodeLimits,
+    ) -> Result<FrameReplay, FrameReplayError> {
+        let mut inputs = self.run();
+        inputs.decode_limits = limits;
         FrameReplay::new(FrameReplayInputs {
-            run: self.run(),
+            run: inputs,
             packages: self.packages(),
             state_documents: invocation
                 .documents
@@ -833,6 +862,7 @@ impl Twin {
     /// The proving run's lock: the unit, no dependency, and the limits the twin replays under.
     fn run(&self) -> ReplayInputs {
         ReplayInputs {
+            decode_limits: unbounded_decode_limits(),
             source: LockedSource {
                 authority: AUTHORITY.to_owned(),
                 identity: IDENTITY.to_owned(),

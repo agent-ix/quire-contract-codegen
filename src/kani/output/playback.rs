@@ -78,7 +78,8 @@ pub struct DecodeFailure {
     pub code: String,
     /// The source or input identity that first caused the refusal.
     pub source_id: String,
-    /// The profile and bound context of the refusal.
+    /// Refusal context. Decode-limit refusals use the module symbol with `;bytes=N` or
+    /// `;values=N` appended.
     pub context: String,
 }
 
@@ -201,6 +202,7 @@ pub(crate) fn read_block<'a>(
     block: &'a str,
     source_id: &str,
     context: &str,
+    max_values: usize,
 ) -> Result<Playback<'a>, DecodeFailure> {
     let harness = block[HARNESS_MARKER.len()..]
         .split_once('`')
@@ -211,7 +213,7 @@ pub(crate) fn read_block<'a>(
     // Kani always prints `: "` directly after the check kind; anything else is not a check text.
     let after_quote = after_kind.strip_prefix(": \"").ok_or_else(no_text)?;
     let check_text = &after_quote[..unescaped_quote(after_quote).ok_or_else(no_text)?];
-    let entries = concrete_entries(block, source_id, context)?;
+    let entries = concrete_entries(block, source_id, context, max_values)?;
     Ok(Playback {
         harness,
         check_text,
@@ -257,6 +259,7 @@ fn concrete_entries<'a>(
     block: &'a str,
     source_id: &str,
     context: &str,
+    max_values: usize,
 ) -> Result<Vec<(&'a str, Vec<u8>)>, DecodeFailure> {
     const VEC: &str = "vec![";
     let failure = |code| DecodeFailure::new(code, source_id, context);
@@ -271,6 +274,13 @@ fn concrete_entries<'a>(
         .ok_or_else(|| failure("kani_witness_concrete_vals_malformed"))?;
     let mut entries = Vec::new();
     while let Some(entry) = body.find(VEC) {
+        if entries.len() >= max_values {
+            return Err(DecodeFailure::new(
+                "cg_witness_decode_values_limit",
+                source_id,
+                &format!("{context};values={max_values}"),
+            ));
+        }
         let comment = body[..entry]
             .rfind("//")
             .map(|at| {

@@ -40,7 +40,7 @@ use crate::{
         function::{render_witness, DependencyLockError, ProvidedDocument, ReplayInputs},
         obligation::{frame_identity, frame_kind, ObligationIdentityError},
         state_clause::{IntegerValue, ObjectRef, SnapshotLink, SnapshotPopulation},
-        witness::decode_playback,
+        witness::{decode_playback, WitnessDecodeLimits},
     },
 };
 
@@ -340,6 +340,7 @@ fn field_set_matches(harness: &StateFrameIdentity) -> Result<(), FrameReplayErro
 fn decoded_state(
     harness: &StateFrameIdentity,
     playback: &str,
+    limits: WitnessDecodeLimits,
 ) -> Result<(String, Vec<(String, i64)>), FrameReplayError> {
     let bindings = harness
         .state_fields
@@ -357,6 +358,7 @@ fn decoded_state(
         harness.module_symbol.as_str(),
         &bindings,
         playback,
+        limits,
     )
     .map_err(FrameReplayError::Decode)?;
     let values = decoded
@@ -566,7 +568,7 @@ impl FrameReplay {
                 named: operation.operation.as_str().to_owned(),
             });
         }
-        let (check_text, values) = decoded_state(&harness, &playback)?;
+        let (check_text, values) = decoded_state(&harness, &playback, run.decode_limits)?;
         let (run, dependencies) = run.admit().map_err(FrameReplayError::Dependencies)?;
         let replay_limits = run.replay_limits;
         let located = call_site(

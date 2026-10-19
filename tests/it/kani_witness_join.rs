@@ -389,6 +389,7 @@ fn tc_026_real_falsification_decodes_against_the_persisted_schema_and_mutation_r
         &module_symbol,
         &persisted_arguments(&record),
         &transcript,
+        crate::unbounded_decode_limits(),
     )
     .expect("the generator's own persisted schema must decode its own real transcript");
     assert_eq!(decoded.len(), 2);
@@ -429,6 +430,7 @@ fn tc_026_real_falsification_decodes_against_the_persisted_schema_and_mutation_r
         &module_symbol,
         &persisted_arguments(&dropped),
         &transcript,
+        crate::unbounded_decode_limits(),
     )
     .expect_err("a dropped binding must refuse, not silently decode fewer values");
     assert_eq!(
@@ -447,6 +449,7 @@ fn tc_026_real_falsification_decodes_against_the_persisted_schema_and_mutation_r
         &module_symbol,
         &persisted_arguments(&retyped),
         &transcript,
+        crate::unbounded_decode_limits(),
     )
     .expect_err("an 8-byte i64 value against a declared 1-byte boolean must refuse");
     assert_eq!(

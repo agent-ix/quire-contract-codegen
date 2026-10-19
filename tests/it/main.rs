@@ -37,6 +37,13 @@
 #[path = "../common/mod.rs"]
 pub(crate) mod common;
 
+pub(crate) const fn unbounded_decode_limits() -> quire_contract_codegen::WitnessDecodeLimits {
+    quire_contract_codegen::WitnessDecodeLimits {
+        bytes: usize::MAX,
+        values: usize::MAX,
+    }
+}
+
 mod bound_census;
 mod bound_coverage;
 mod bound_generation;

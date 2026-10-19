@@ -33,7 +33,7 @@ use quire_contract_codegen::{
     replay_counterexample_through, replay_falsification, DependencyLock, DependencyLockError,
     EvidenceFailureCause, KaniExecutionRequest, KaniInstallation, KaniObligationHarness,
     KaniRunOutcome, LockedSource, ObligationKind, ReplayInputs, ReplayPackage, ReplayPackageError,
-    ReplayParameter, ReplayVerdict, SpineReplayError,
+    ReplayParameter, ReplayVerdict, SpineReplayError, WitnessDecodeLimits,
 };
 
 use super::kani_obligations::{bound_package, supported_contract_harnesses, write_crate};
@@ -97,6 +97,7 @@ fn locked(identity: &str, bytes: &[u8]) -> LockedSource {
 /// proving run carries limits.
 fn inputs(source: &str, dependencies: Vec<DependencyLock>) -> ReplayInputs {
     ReplayInputs {
+        decode_limits: crate::unbounded_decode_limits(),
         source: locked(IDENTITY, source.as_bytes()),
         dependencies,
         accounting_limits: UNLIMITED,
@@ -1054,6 +1055,102 @@ fn tc_026_an_in_domain_counterexample_the_twin_falsifies_is_reproduced() {
     assert_eq!(verdict, ReplayVerdict::Reproduced);
 }
 
+#[trace("TC-026", "FR-016-AC-6")]
+#[test]
+fn tc_026_function_replay_refuses_poisoned_suffixes_at_both_decode_bounds() {
+    let harness = spine_harness();
+    let transcript = playback(&harness, 1, 5);
+    let source = native_source(VIOLATING_TWIN);
+    let limits = WitnessDecodeLimits {
+        bytes: transcript.len(),
+        values: 2,
+    };
+    let make_package = |limits| {
+        let mut run = inputs(&source, Vec::new());
+        run.decode_limits = limits;
+        ReplayPackage::new(run, FUNCTION).expect("native twin compiles")
+    };
+    let package = make_package(limits);
+    assert_eq!(
+        replay_counterexample(&harness.identity, &transcript, &package).expect("at bounds"),
+        ReplayVerdict::Reproduced
+    );
+    let mut separate = inputs(&source, Vec::new());
+    separate.decode_limits = limits;
+    separate.replay_limits = ReplayLimits::default().with_input_bytes(1);
+    let separate = ReplayPackage::new(separate, FUNCTION).expect("native twin compiles");
+    let mut calls = 0;
+    let _ = replay_counterexample_through(&harness.identity, &transcript, &separate, |_| {
+        calls += 1;
+        Err(ReplayRefusal::Fault(InternalFault::new(
+            "replay",
+            "stop after decode",
+        )))
+    });
+    assert_eq!(
+        calls, 1,
+        "QSL's input_bytes bound must not limit CG decoding"
+    );
+    for (poisoned, limits, code) in [
+        (
+            format!("{transcript}{transcript}"),
+            limits,
+            "cg_witness_decode_bytes_limit",
+        ),
+        (
+            transcript.replace("    ];", "        // 0\n        vec![not_a_byte],\n    ];"),
+            WitnessDecodeLimits {
+                bytes: usize::MAX,
+                values: 2,
+            },
+            "cg_witness_decode_values_limit",
+        ),
+    ] {
+        let package = make_package(limits);
+        let verdict = replay_counterexample(&harness.identity, &poisoned, &package)
+            .expect("over-bound evidence yields a verdict");
+        assert!(
+            matches!(
+                verdict,
+                ReplayVerdict::EvidenceFailure(EvidenceFailureCause::Decode(ref cause))
+                    if cause.code == code
+            ),
+            "{verdict:?}"
+        );
+        let through = replay_counterexample_through(&harness.identity, &poisoned, &package, |_| {
+            panic!("over-bound playback must not reach the executor")
+        })
+        .expect("over-bound evidence yields a verdict");
+        assert!(
+            matches!(
+                through,
+                ReplayVerdict::EvidenceFailure(EvidenceFailureCause::Decode(ref cause))
+                    if cause.code == code
+            ),
+            "{through:?}"
+        );
+        let unbounded = make_package(WitnessDecodeLimits {
+            bytes: poisoned.len(),
+            values: 3,
+        });
+        let control = replay_counterexample(&harness.identity, &poisoned, &unbounded)
+            .expect("poisoned suffix produces a decode verdict");
+        let poisoned_code = if code == "cg_witness_decode_bytes_limit" {
+            "kani_witness_multiple_assertions_refused"
+        } else {
+            "kani_witness_byte_invalid"
+        };
+        assert!(
+            matches!(
+                control,
+                ReplayVerdict::EvidenceFailure(EvidenceFailureCause::Decode(ref cause))
+                    if cause.code == poisoned_code
+            ),
+            "{control:?}"
+        );
+    }
+}
+
 /// An executor fault crosses the public counterexample replay path as the same typed refusal.
 #[trace("FR-016-AC-12", "TC-026")]
 #[test]
@@ -1330,6 +1427,7 @@ fn tc_026_one_boolean_clause_goes_from_a_bound_package_through_kani_to_native_re
         harness.identity.module_symbol.as_str(),
         &harness.identity.arguments,
         counterexample,
+        crate::unbounded_decode_limits(),
     )
     .expect("the counterexample decodes");
     let get = |name: &str| match decoded.iter().find(|(n, _)| n == name) {
