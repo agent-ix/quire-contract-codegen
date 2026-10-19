@@ -407,8 +407,13 @@ refusal under FR-016-AC-11.
 
 ## Current state
 
-At this revision the generator meets none of FR-024-AC-1 to FR-024-AC-9 in full.
-FR-024-AC-10 has a source-scan test over `src/`; FR-024-AC-11 to FR-024-AC-30 are met:
+FR-024-AC-2, FR-024-AC-3, FR-024-AC-4 and FR-024-AC-6 are backed by focused
+TC-035 tests: the `Witness::parse` source scan in `tests/it/layout.rs`, the function and
+frame domain-endpoint tests, the missing-packet-member test in
+`tests/it/kani_obligations_state_clause_replay.rs`, and the frame packet identity test in
+`tests/it/kani_obligations_state_frame.rs`. FR-024-AC-1, FR-024-AC-5 and FR-024-AC-7 to
+FR-024-AC-9 remain planned. FR-024-AC-10 has a source-scan test over `src/`;
+FR-024-AC-11 to FR-024-AC-30 are met:
 
 - `src/replay/witness.rs` decodes the playback into `qsl_replay::WitnessValue` and imports no
   Contract IR witness type.
@@ -416,7 +421,6 @@ FR-024-AC-10 has a source-scan test over `src/`; FR-024-AC-11 to FR-024-AC-30 ar
   QSL as the `Input` arm and FR-024-AC-5 is unbacked. The corpus path is to be removed, not
   built on: FR-015-AC-109 to FR-015-AC-111 plan its deletion per family, and FR-015-AC-111 drops
   its replay, so FR-024-AC-5 stays unbacked.
-- No domain check runs before replay, and no `WitnessEnvelope` is built.
 - A postcondition state-clause counterexample is replayed (IR-460): `src/replay/state_clause.rs`
   builds the invocation and snapshot documents through `core::canonical` and replays through
   `qsl_replay::replay_state_clause`, so FR-024-AC-11 to FR-024-AC-19 are backed by tagged tests
@@ -472,14 +476,13 @@ FR-024-AC-10 has a source-scan test over `src/`; FR-024-AC-11 to FR-024-AC-30 ar
   An IR-admitted model override checks CG's unranged handling but does not prove QSL replay of that
   overridden model. The Boolean same-source refusal and an in-`i64` source range are narrower
   executable cases; neither closes the wide-range acceptance criterion.
-- `FR-024-AC-1` to `FR-024-AC-9` are planned and have no test of their own.
-  `quire coverage --strict` does not count them as unbacked (66 unbacked rows on `main` before IR-460; 44 on
-  `main` before IR-459 and 44, none contradicted, at the head that implemented the frame path, the
-  same rows) only because TC-035 has tagged tests; that is a property of the tool's AC to TC to
-  code walk, accepted here, and the criteria stay planned. The tool lists each FR-024
-  criterion as an obligation row and does not judge it, so the head's unchanged count says
-  nothing about FR-024-AC-20 to FR-024-AC-30; each of those has a tagged test of its own, which
-  is the evidence they are backed.
+- `quire coverage --strict` reports 555/909 backed criteria and 232 unbacked rows at this
+  revision, compared with 551/909 backed and the same 232 unbacked rows on `main` before this
+  intake test change. The four additional backed criteria are FR-024-AC-2, AC-3, AC-4 and AC-6.
+  The unbacked-row count is a separate diagnostic keyed by verification reference: every FR-024
+  row points to TC-035, which already had tagged tests, so even the planned FR-024 criteria are
+  absent from those 232 rows. Their absence does not establish backing. FR-024-AC-20 to
+  FR-024-AC-30 each have tagged tests of their own.
 - `FR-024-AC-10` has a source-scan test for literal declarations, macro token declarations,
   Contract IR imports and paths, including alias chains across source files. Imports and qualified
   paths inside opaque macro tokens, macro expansion, generated files outside `src/`, and constructed

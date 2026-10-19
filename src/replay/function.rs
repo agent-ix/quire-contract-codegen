@@ -1223,6 +1223,75 @@ mod tests {
         }
     }
 
+    /// Both integer-domain endpoints enter the function executor. Values immediately outside
+    /// either endpoint retain the named argument and never call it.
+    #[trace("TC-035", "FR-024-AC-3")]
+    #[test]
+    fn tc_035_function_domain_boundaries_stop_before_replay() {
+        let package = package();
+        let harness = crate::core::identity::HarnessSymbol::try_from("domain_check")
+            .expect("valid harness symbol");
+        let identity = package
+            .harness_identity(None, harness, vec![binding("a"), binding("b")])
+            .expect("the function binds both arguments");
+        let playback = |a: i64, b: i64| {
+            let entries = [a, b]
+                .iter()
+                .map(|value| {
+                    let bytes = value
+                        .to_le_bytes()
+                        .iter()
+                        .map(u8::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    format!("        // {value}\n        vec![{bytes}],\n")
+                })
+                .collect::<String>();
+            format!(
+                "/// Test generated for harness `domain_check`\n\
+                 /// Check for `assertion`: \"domain check\"\n\
+                 #[test]\n\
+                 fn kani_concrete_playback_check_1() {{\n\
+                 \x20   let concrete_vals: Vec<Vec<u8>> = vec![\n{entries}    ];\n\
+                 \x20   kani::concrete_playback_run(concrete_vals, check);\n\
+                 }}\n"
+            )
+        };
+        for (argument, a, b, expected_domain_failure) in [
+            ("a", 0, 9, false),
+            ("a", 9, 9, false),
+            ("a", -1, 9, true),
+            ("a", 10, 9, true),
+            ("b", 0, 0, false),
+            ("b", 0, 9, false),
+            ("b", 0, -1, true),
+            ("b", 0, 10, true),
+        ] {
+            let mut calls = 0;
+            let result = replay_harness_counterexample_through(
+                &identity,
+                &playback(a, b),
+                &package,
+                |wire| {
+                    calls += 1;
+                    replay(wire, package.inputs.replay_limits)
+                },
+            );
+            if expected_domain_failure {
+                assert_eq!(calls, 0, "{argument}={a},{b} must stop before replay");
+                assert_eq!(
+                    result.expect("domain failure is an evidence verdict"),
+                    ReplayVerdict::EvidenceFailure(EvidenceFailureCause::Domain {
+                        argument: argument.to_owned(),
+                    })
+                );
+            } else {
+                assert_eq!(calls, 1, "{argument}={a},{b} must reach replay: {result:?}");
+                assert!(result.is_ok(), "{argument}={a},{b}: {result:?}");
+            }
+        }
+    }
+
     /// With the function, declaration, kind and arguments fixed, reordering `FunctionSite.parameters`
     /// leaves the identity unchanged, and a perturbed `function` or `declaration` changes it.
     #[trace("FR-016-AC-23", "TC-026")]

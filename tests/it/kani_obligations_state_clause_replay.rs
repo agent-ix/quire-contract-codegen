@@ -16,7 +16,7 @@ use qsl_replay::{
     replay_state_clause, CallSiteRefusal, Category, ClauseName, ClauseSelectionInput,
     DisagreementCause, DomainKey, DomainKind, EvaluatedValue, FiniteBound, Identifier, Integer,
     ReplayRequestWire, ReplayResult, ReplaySource, StateClauseReplayResult, TerminalValue, Verdict,
-    WireNodeId, WitnessEnvelope, WitnessSettlement,
+    WireNodeId, WitnessEnvelope, WitnessPacket, WitnessRefusal, WitnessSettlement,
 };
 use quire_contract_codegen::{
     run_terminal_value, DocumentLabel, KaniRunOutcome, OperationDeclaration,
@@ -418,6 +418,71 @@ fn tc_035_replay_returns_the_direct_result_and_replay_through_returns_the_execut
             .expect("the clause is declared")
             .node
     );
+}
+
+/// Every missing packet member is reported by QSL admission before the executor runs. A present
+/// trace position whose value is none still reaches the executor.
+#[trace("TC-035", "FR-024-AC-4")]
+#[test]
+fn tc_035_missing_packet_members_stop_before_replay() {
+    let (twin, fixture) = (Twin::new(), healthy());
+    macro_rules! missing_member {
+        ($member:ident) => {{
+            let mut replay = built(&twin, &fixture, BALANCE, VIOLATING.0, VIOLATING.1);
+            replay.packet.$member = None;
+            let mut calls = 0;
+            let result = replay.replay_through(|_, _| {
+                calls += 1;
+                panic!("a missing packet member reached the executor")
+            });
+            assert!(matches!(
+                result,
+                Err(StateClauseReplayError::Envelope(WitnessRefusal::MissingMember(name)))
+                    if name == stringify!($member)
+            ));
+            assert_eq!(calls, 0, "{} reached replay", stringify!($member));
+        }};
+    }
+    missing_member!(obligation_identity);
+    missing_member!(occurrence_key);
+    missing_member!(clause_node);
+    missing_member!(selected_function);
+    missing_member!(package_id);
+    missing_member!(source_digests);
+    missing_member!(profile_selections);
+    missing_member!(run_limits);
+    missing_member!(declared_domains);
+    missing_member!(backend);
+    missing_member!(trace_position);
+    missing_member!(source);
+    missing_member!(family_payload);
+
+    let replay = built(&twin, &fixture, BALANCE, VIOLATING.0, VIOLATING.1);
+    let WitnessPacket {
+        obligation_identity: _,
+        occurrence_key: _,
+        clause_node: _,
+        selected_function: _,
+        package_id: _,
+        source_digests: _,
+        profile_selections: _,
+        run_limits: _,
+        declared_domains: _,
+        backend: _,
+        trace_position: _,
+        source: _,
+        family_payload: _,
+    } = &replay.packet;
+    assert!(matches!(replay.packet.trace_position, Some(None)));
+    let limits = replay.replay_limits();
+    let mut calls = 0;
+    replay
+        .replay_through(|wire, envelope| {
+            calls += 1;
+            replay_state_clause(wire, envelope, limits)
+        })
+        .expect("present trace position with no value is admitted");
+    assert_eq!(calls, 1);
 }
 
 /// The payload names its clause and the `Invocation` arm, the envelope's identities are the

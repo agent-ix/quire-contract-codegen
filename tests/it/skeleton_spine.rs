@@ -1071,6 +1071,48 @@ fn tc_026_an_out_of_domain_counterexample_is_evidence_failure() {
     );
 }
 
+/// The public replay entry point admits both endpoints of each argument's declared domain and
+/// refuses the adjacent values before invoking its executor.
+#[trace("TC-035", "FR-024-AC-3")]
+#[test]
+fn tc_035_public_function_domain_boundaries_stop_before_replay() {
+    let harness = spine_harness();
+    let package = compile_native_twin(&native_source(VIOLATING_TWIN), FUNCTION);
+    for (argument, amount, balance, expected_domain_failure) in [
+        ("amount_current", 0, 5, false),
+        ("amount_current", 1000, 5, false),
+        ("amount_current", -1, 5, true),
+        ("amount_current", 1001, 5, true),
+        ("balance_pre", 5, 0, false),
+        ("balance_pre", 5, 1000, false),
+        ("balance_pre", 5, -1, true),
+        ("balance_pre", 5, 1001, true),
+    ] {
+        let mut calls = 0;
+        let result = replay_counterexample_through(
+            &harness.identity,
+            &playback(&harness, amount, balance),
+            &package,
+            |wire| {
+                calls += 1;
+                qsl_replay::replay(wire, ReplayLimits::default())
+            },
+        );
+        if expected_domain_failure {
+            assert_eq!(calls, 0, "{argument}={amount},{balance} reached replay");
+            assert_eq!(
+                result.expect("domain failure is an evidence verdict"),
+                ReplayVerdict::EvidenceFailure(EvidenceFailureCause::Domain {
+                    argument: argument.to_owned(),
+                })
+            );
+        } else {
+            assert_eq!(calls, 1, "{argument}={amount},{balance}: {result:?}");
+            assert!(result.is_ok(), "{argument}={amount},{balance}: {result:?}");
+        }
+    }
+}
+
 /// Each class of malformed transcript is a decode evidence failure carrying the decoder's own
 /// cause code: no playback block, a playback block with too few values for the schema, and one
 /// whose value has the wrong byte width.
