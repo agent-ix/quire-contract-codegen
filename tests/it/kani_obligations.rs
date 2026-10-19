@@ -710,7 +710,7 @@ fn tc_025_each_clause_lowers_to_a_separate_harness_with_exact_correspondence() {
             crate::generated_headers::assert_header(
                 &harness.rust.path,
                 source,
-                &[oracle.clause.clause().as_str()],
+                &[&format!("FR-200@1/{}", oracle.clause.clause().as_str())],
             );
         }
         assert_eq!(source.matches("#[kani::requires(").count(), requires);
@@ -998,7 +998,10 @@ fn tc_025_scalar_harness_asserts_the_native_arithmetic_relation() {
     crate::generated_headers::assert_header(
         &scalar_harnesses[0].rust.path,
         source,
-        &[node_1001.digest.as_ref(), "quire.op.integer.add"],
+        &[&format!(
+            "// Obligation: exact-scalar {}/{} `quire.op.integer.add`",
+            node_1001.domain, node_1001.digest
+        )],
     );
     assert!(
         source.contains("let exact: i128 = i128::from(left_native) + i128::from(right_native);"),

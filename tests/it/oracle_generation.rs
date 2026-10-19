@@ -489,7 +489,7 @@ fn tc_001_boolean_oracle_bundle_is_deterministic_traceable_and_schema_valid() {
     crate::generated_headers::assert_header(
         &first.rust.path,
         &first.rust.contents,
-        &["FR-001@7; Clause: clause-main"],
+        &["// Requirement: FR-001@7; Clause: clause-main"],
     );
     assert!(first
         .rust

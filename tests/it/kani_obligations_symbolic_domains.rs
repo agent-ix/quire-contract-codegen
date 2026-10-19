@@ -1049,7 +1049,10 @@ fn negotiation_renders_the_selected_sequence_claims_deterministically() {
         crate::generated_headers::assert_header(
             &harness.rust.path,
             &harness.rust.contents,
-            &[function_id.digest.as_ref(), quantifier.digest.as_ref()],
+            &[
+                &format!("{}/{}", function_id.domain, function_id.digest),
+                &format!("{}/{}", quantifier.domain, quantifier.digest),
+            ],
         );
         for node in [
             &harness.identity.projection_id,
@@ -1060,7 +1063,7 @@ fn negotiation_renders_the_selected_sequence_claims_deterministically() {
             crate::generated_headers::assert_header(
                 &harness.rust.path,
                 &harness.rust.contents,
-                &[node.digest.as_ref()],
+                &[&format!("{}/{}", node.domain, node.digest)],
             );
         }
         assert_eq!(harness.identity.function_id, function_id);

@@ -673,15 +673,25 @@ fn render_schedule_source(
     );
     let subjects = functions
         .iter()
-        .map(|function| format!("{:?}", function.function_node_id))
+        .map(|function| crate::core::provenance::node_subject(&function.function_node_id))
         .chain(
             claims
                 .iter()
-                .map(|claim| format!("{:?}", claim.call_node_id)),
+                .map(|claim| crate::core::provenance::node_subject(&claim.call_node_id)),
         )
         .collect::<Vec<_>>();
-    let flat_source =
-        crate::core::provenance::with_rust_header(flat_source, subjects.iter().map(String::as_str));
+    let mut flat_subjects = subjects.clone();
+    flat_subjects.extend(functions.iter().flat_map(|function| {
+        function
+            .schedule
+            .instructions
+            .iter()
+            .map(|instruction| crate::core::provenance::node_subject(&instruction.node))
+    }));
+    let flat_source = crate::core::provenance::with_rust_header(
+        flat_source,
+        flat_subjects.iter().map(String::as_str),
+    );
     if flat_source.len() <= MAX_ARTIFACT_BYTES {
         let source_bytes = flat_source.len();
         if source_bytes > source_limit {
@@ -758,13 +768,15 @@ fn render_schedule_source(
             let module_source = format!(
                 "/// Ordinal range {start}..{end} for function schedule {function_ordinal}.\npub const FUNCTION_SCHEDULE_PART_JSON: &str = {part_json:?};\n"
             );
-            let part_subjects = std::iter::once(format!("{:?}", function.function_node_id))
-                .chain(
-                    part.instructions
-                        .iter()
-                        .map(|instruction| format!("{:?}", instruction.node)),
-                )
-                .collect::<Vec<_>>();
+            let part_subjects = std::iter::once(crate::core::provenance::node_subject(
+                &function.function_node_id,
+            ))
+            .chain(
+                part.instructions
+                    .iter()
+                    .map(|instruction| crate::core::provenance::node_subject(&instruction.node)),
+            )
+            .collect::<Vec<_>>();
             let module_source = crate::core::provenance::with_rust_header(
                 module_source,
                 part_subjects.iter().map(String::as_str),
@@ -2562,13 +2574,13 @@ pub fn generate_exact_function_oracles(
     };
     let subjects = classified
         .iter()
-        .map(|function| format!("{:?}", function.declaration.node_id))
+        .map(|function| crate::core::provenance::node_subject(&function.declaration.node_id))
         .chain(
             claim_map
                 .items
                 .iter()
                 .filter(|claim| matches!(&claim.result, ClaimDisposition::Generated(_)))
-                .map(|claim| format!("{:?}", claim.node_id)),
+                .map(|claim| crate::core::provenance::node_subject(&claim.node_id)),
         )
         .collect::<Vec<_>>();
     let lib = crate::core::provenance::with_rust_header(

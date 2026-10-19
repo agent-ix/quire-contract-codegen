@@ -296,12 +296,12 @@ pub(super) fn render_collection(
         field.field_name,
     );
     let subjects = [
-        format!("{:?}", identity.function_id),
-        format!("{:?}", identity.quantifier_id),
-        format!("{:?}", identity.projection_id),
-        format!("{:?}", identity.declaration_id),
-        format!("{:?}", identity.element_type_id),
-        format!("{:?}", identity.predicate_id),
+        crate::core::provenance::node_subject(&identity.function_id),
+        crate::core::provenance::node_subject(&identity.quantifier_id),
+        crate::core::provenance::node_subject(&identity.projection_id),
+        crate::core::provenance::node_subject(&identity.declaration_id),
+        crate::core::provenance::node_subject(&identity.element_type_id),
+        crate::core::provenance::node_subject(&identity.predicate_id),
     ];
     let source =
         crate::core::provenance::with_rust_header(source, subjects.iter().map(String::as_str));

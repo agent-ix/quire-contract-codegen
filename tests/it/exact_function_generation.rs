@@ -401,17 +401,30 @@ fn tc_031_ac34_public_strict_reader_chain_generates_compilable_flat_schedule() {
     let mut subjects = generated
         .functions
         .iter()
-        .map(|function| function.function_node_id.digest.as_ref())
-        .collect::<Vec<&str>>();
-    subjects.extend(
-        generated
-            .claims
+        .map(|function| {
+            format!(
+                "{}/{}",
+                function.function_node_id.domain, function.function_node_id.digest
+            )
+        })
+        .collect::<Vec<String>>();
+    subjects.extend(generated.claims.iter().map(|claim| {
+        format!(
+            "{}/{}",
+            claim.call_node_id.domain, claim.call_node_id.digest
+        )
+    }));
+    subjects.extend(generated.functions.iter().flat_map(|function| {
+        function
+            .schedule
+            .instructions
             .iter()
-            .map(|claim| claim.call_node_id.digest.as_ref()),
-    );
-    crate::generated_headers::assert_header("src/lib.rs", &generated.source, &subjects);
+            .map(|instruction| format!("{}/{}", instruction.node.domain, instruction.node.digest))
+    }));
+    let subject_refs = subjects.iter().map(String::as_str).collect::<Vec<_>>();
+    crate::generated_headers::assert_header("src/lib.rs", &generated.source, &subject_refs);
     for artifact in &generated.modules {
-        crate::generated_headers::assert_header(&artifact.path, &artifact.contents, &subjects);
+        crate::generated_headers::assert_header(&artifact.path, &artifact.contents, &subject_refs);
     }
     let generated_with_limits = generate_function_schedules_with_limits(
         &checked,
@@ -966,6 +979,10 @@ fn tc_031_ac7_admitted_hundred_thousand_call_nodes_generate_on_a_512_kib_stack()
     ];
     let helper_function_node_id = resolved_code_id(HELPER);
     let outer_function_node_id = resolved_code_id(OUTER);
+    let requested = [FunctionScheduleItem {
+        call_node_id: resolved_code_id(CALL_BASE),
+        function: "helper".to_owned(),
+    }];
     let worker = std::thread::Builder::new()
         .name("ir496-ac7-public-small-stack".to_owned())
         .stack_size(512 * 1024)
@@ -975,7 +992,7 @@ fn tc_031_ac7_admitted_hundred_thousand_call_nodes_generate_on_a_512_kib_stack()
             let default_result = generate_function_schedules_with_limits(
                 &package,
                 &declarations,
-                &[],
+                &requested,
                 FunctionScheduleLimits {
                     generation_work_units: REQUIRED_WORK,
                     source_bytes: 1_048_576,
@@ -993,7 +1010,7 @@ fn tc_031_ac7_admitted_hundred_thousand_call_nodes_generate_on_a_512_kib_stack()
                     let raised = generate_function_schedules_with_limits(
                         &package,
                         &declarations,
-                        &[],
+                        &requested,
                         FunctionScheduleLimits {
                             generation_work_units: REQUIRED_WORK,
                             source_bytes: bytes,
@@ -1010,16 +1027,17 @@ fn tc_031_ac7_admitted_hundred_thousand_call_nodes_generate_on_a_512_kib_stack()
                 other => panic!("default source behavior was unexpected: {other:?}"),
             };
             assert_eq!(raised.functions.len(), 2);
+            assert_eq!(raised.claims.len(), 1, "split fixture retains a claim call node");
             assert!(!raised.modules.is_empty(), "large schedule must exercise part files");
             crate::generated_headers::assert_header(
                 "src/lib.rs",
                 &raised.source,
-                &[helper_function_node_id.digest.as_ref(), outer_function_node_id.digest.as_ref()],
+                &[&format!("{}/{}", helper_function_node_id.domain, helper_function_node_id.digest), &format!("{}/{}", outer_function_node_id.domain, outer_function_node_id.digest)],
             );
             let root_header = raised.source.lines().take_while(|line| !line.is_empty())
                 .collect::<std::collections::BTreeSet<_>>();
             for claim in &raised.claims {
-                let subject = format!("// Subject: {:?}", claim.call_node_id);
+                let subject = format!("// Subject: {}/{}", claim.call_node_id.domain, claim.call_node_id.digest);
                 assert!(root_header.contains(subject.as_str()), "split root lacks claim {subject}");
             }
             for module in &raised.modules {
@@ -1029,15 +1047,15 @@ fn tc_031_ac7_admitted_hundred_thousand_call_nodes_generate_on_a_512_kib_stack()
                 crate::generated_headers::assert_header(
                     &module.path,
                     &module.contents,
-                    &[function.function_node_id.digest.as_ref()],
+                    &[&format!("{}/{}", function.function_node_id.domain, function.function_node_id.digest)],
                 );
                 let header_lines = module.contents.lines().take_while(|line| !line.is_empty()).collect::<std::collections::BTreeSet<_>>();
                 for instruction in &function.schedule.instructions[*start..*end] {
-                    let expected = format!("// Subject: {:?}", instruction.node);
+                    let expected = format!("// Subject: {}/{}", instruction.node.domain, instruction.node.digest);
                     assert!(header_lines.contains(expected.as_str()), "{} lacks instruction source node {}", module.path, instruction.node.digest);
                 }
                 let first_instruction = &function.schedule.instructions[*start];
-                let removed = format!("// Subject: {:?}", first_instruction.node);
+                let removed = format!("// Subject: {}/{}", first_instruction.node.domain, first_instruction.node.digest);
                 let mutant = module.contents.replace(&format!("{removed}\n"), "");
                 let mutant_header = mutant.lines().take_while(|line| !line.is_empty()).collect::<std::collections::BTreeSet<_>>();
                 assert!(!mutant_header.contains(removed.as_str()), "{} accepts an omitted instruction", module.path);
@@ -3420,25 +3438,48 @@ fn tc_031_ac13_generation_is_deterministic_across_runs_and_permutations() {
 
     let first = generate(&package, &functions, &items);
     let lib = contents(&first, "src/lib.rs");
-    let header = lib.lines().take_while(|line| !line.is_empty())
+    let header = lib
+        .lines()
+        .take_while(|line| !line.is_empty())
         .collect::<std::collections::BTreeSet<_>>();
-    for function in &functions {
-        let subject = format!("// Subject: {:?}", function.node_id);
-        assert!(header.contains(subject.as_str()), "function library lacks declaration {subject}");
+    let generated_names = first
+        .claim_map
+        .items
+        .iter()
+        .filter_map(|claim| match &claim.result {
+            ClaimDisposition::Generated(generated) => Some(generated.function.as_str()),
+            ClaimDisposition::Refused { .. } => None,
+        })
+        .collect::<std::collections::BTreeSet<_>>();
+    assert!(
+        !generated_names.is_empty(),
+        "fixture must generate function claims"
+    );
+    for function in functions
+        .iter()
+        .filter(|function| generated_names.contains(function.name.as_str()))
+    {
+        let node_id = package.ids.resolve(&function.node_id);
+        let subject = format!("// Subject: {}/{}", node_id.domain, node_id.digest);
+        assert!(
+            header.contains(subject.as_str()),
+            "function library lacks declaration {subject}"
+        );
     }
     let subjects = first
         .claim_map
         .items
         .iter()
         .filter(|claim| matches!(&claim.result, ClaimDisposition::Generated(_)))
-        .map(|claim| claim.node_id.digest.as_ref())
-        .collect::<Vec<&str>>();
+        .map(|claim| format!("{}/{}", claim.node_id.domain, claim.node_id.digest))
+        .collect::<Vec<String>>();
+    let subject_refs = subjects.iter().map(String::as_str).collect::<Vec<_>>();
     for artifact in first
         .artifacts
         .iter()
         .filter(|artifact| artifact.path.ends_with(".rs"))
     {
-        crate::generated_headers::assert_header(&artifact.path, &artifact.contents, &subjects);
+        crate::generated_headers::assert_header(&artifact.path, &artifact.contents, &subject_refs);
     }
     let second = generate(&package, &functions, &items);
     let from_a_fresh_package = main_oracles();

@@ -1100,11 +1100,11 @@ fn render(
         scope.operation,
     );
     let subjects = [
-        format!("{:?}", identity.clause),
+        crate::core::provenance::node_subject(&identity.clause),
         scope.operation.to_owned(),
-        format!("{:?}", scope.object),
-        format!("{:?}", scope.anchor),
-        format!("{:?}", scope.frame),
+        crate::core::provenance::node_subject(&scope.object),
+        crate::core::provenance::node_subject(&scope.anchor),
+        crate::core::provenance::node_subject(&scope.frame),
     ];
     let source =
         crate::core::provenance::with_rust_header(source, subjects.iter().map(String::as_str));

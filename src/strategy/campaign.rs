@@ -210,7 +210,6 @@ pub fn generate_i64_strategy(
     let source = format!(
         "#![deny(missing_docs)]\n\
 //! Generated integer strategy artifact.\n\
-// SPDX-License-Identifier: MIT OR Apache-2.0\n\
 // Requirement: {requirement}@{revision}; Strategy: {}\n\
 \n\
 /// Expected contract-domain classification for one generated case.\n\
@@ -374,7 +373,6 @@ pub fn generate_enum_strategy(
     let source = format!(
         "#![deny(missing_docs)]\n\
 //! Generated customer-enum strategy artifact.\n\
-// SPDX-License-Identifier: MIT OR Apache-2.0\n\
 // Requirement: {requirement}@{revision}; Enum strategy: {}\n\
 \n\
 /// Admission expectation for an enum case drawn from the declared membership.\n\

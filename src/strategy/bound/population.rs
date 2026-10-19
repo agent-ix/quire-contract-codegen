@@ -610,7 +610,6 @@ pub fn render_population(
     let source = format!(
         "#![deny(missing_docs)]\n\
 //! Generated bound numeric population artifact.\n\
-// SPDX-License-Identifier: MIT OR Apache-2.0\n\
 // Relation: {relation}; Domain: {domain}; Population: {population}\n\
 \n\
 /// Value the relation's generated oracle returns for one case.\n\

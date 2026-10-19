@@ -527,9 +527,10 @@ fn tc_024_every_scalar_family_generates_one_oracle_calling_its_runtime_operator(
         .items
         .iter()
         .filter(|claim| matches!(&claim.result, ClaimDisposition::Generated(_)))
-        .map(|claim| claim.node_id.digest.as_ref())
-        .collect::<Vec<&str>>();
-    crate::generated_headers::assert_header("src/lib.rs", lib, &subjects);
+        .map(|claim| format!("{}/{}", claim.node_id.domain, claim.node_id.digest))
+        .collect::<Vec<String>>();
+    let subject_refs = subjects.iter().map(String::as_str).collect::<Vec<_>>();
+    crate::generated_headers::assert_header("src/lib.rs", lib, &subject_refs);
     let mut calls = vec![
         (
             1001,

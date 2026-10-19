@@ -898,7 +898,7 @@ pub fn render_exact_scalar_plan(
         .items
         .iter()
         .filter(|claim| matches!(&claim.result, ClaimDisposition::Generated(_)))
-        .map(|claim| format!("{:?}", claim.node_id))
+        .map(|claim| crate::core::provenance::node_subject(&claim.node_id))
         .collect::<Vec<_>>();
     let lib = crate::core::provenance::with_rust_header(
         source.finish(),
@@ -1214,7 +1214,7 @@ fn build_contract_scalar_oracles(
         .items
         .iter()
         .filter(|claim| matches!(&claim.result, ClaimDisposition::Generated(_)))
-        .map(|claim| format!("{:?}", claim.node_id))
+        .map(|claim| crate::core::provenance::node_subject(&claim.node_id))
         .collect::<Vec<_>>();
     let lib = crate::core::provenance::with_rust_header(
         source.finish(),

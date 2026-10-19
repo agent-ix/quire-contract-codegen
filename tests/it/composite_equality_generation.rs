@@ -1464,7 +1464,7 @@ fn tc_029_ac10_bytes_are_deterministic_across_request_permutations() {
     }
 }
 
-#[trace("FR-018-AC-10", "TC-029", "TC-001", "NFR-002-AC-1", "NFR-002-AC-2")]
+#[trace("FR-018-AC-10", "TC-029")]
 #[test]
 fn tc_029_ac10_claim_map_entries_ascend_by_the_descriptor_key() {
     let package = admit(corpus_package());
@@ -1557,7 +1557,7 @@ pub(super) fn corpus_oracles() -> FixtureOracles {
 
 /// Generating the corpus twice, each time from a freshly built and admitted
 /// package, yields equal output: every artifact's bytes and the claim map.
-#[trace("FR-018-AC-10", "TC-029")]
+#[trace("FR-018-AC-10", "TC-029", "TC-001", "NFR-002-AC-1", "NFR-002-AC-2")]
 #[test]
 fn tc_029_ac10_generation_is_repeatable_from_a_fresh_package() {
     let first = corpus_oracles();
@@ -1568,14 +1568,32 @@ fn tc_029_ac10_generation_is_repeatable_from_a_fresh_package() {
         .items
         .iter()
         .filter(|claim| matches!(&claim.result, ClaimDisposition::Generated(_)))
-        .map(|claim| claim.node_id.digest.as_ref())
-        .collect::<Vec<&str>>();
+        .map(|claim| format!("{}/{}", claim.node_id.domain, claim.node_id.digest))
+        .collect::<Vec<String>>();
+    let subject_refs = subjects.iter().map(String::as_str).collect::<Vec<_>>();
+    let declaration_subjects = first
+        .claim_map
+        .items
+        .iter()
+        .filter_map(|claim| match &claim.result {
+            ClaimDisposition::Generated(generated) => Some(&generated.declaration_keys),
+            ClaimDisposition::Refused { .. } => None,
+        })
+        .flatten()
+        .map(|id| format!("{}/{}", id.domain, id.digest))
+        .collect::<Vec<_>>();
+    let declaration_refs = declaration_subjects
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    let lib = contents(&first, "src/lib.rs");
+    crate::generated_headers::assert_header("src/lib.rs", lib, &declaration_refs);
     for artifact in first
         .artifacts
         .iter()
         .filter(|artifact| artifact.path.ends_with(".rs"))
     {
-        crate::generated_headers::assert_header(&artifact.path, &artifact.contents, &subjects);
+        crate::generated_headers::assert_header(&artifact.path, &artifact.contents, &subject_refs);
     }
     for path in ["Cargo.toml", "src/lib.rs", "claim-map.json"] {
         assert_eq!(contents(&first, path), contents(&second, path), "{path}");

@@ -448,12 +448,23 @@ fn tc_018_generated_sources_are_constructive_and_byte_identical() {
                 };
                 let second = render_population(&request(relation, domain, population)).unwrap();
                 assert_eq!(first, second);
+                let primary = identifiers(relation)[0].to_owned();
+                let partner = match relation.partner() {
+                    Partner::Literal(value) => value.to_string(),
+                    Partner::Read => identifiers(relation)[1].to_owned(),
+                };
+                let (left, right) = match relation.primary() {
+                    OperandPosition::Left => (primary, partner),
+                    OperandPosition::Right => (partner, primary),
+                };
                 crate::generated_headers::assert_header(
                     "population.rs",
                     &first.source,
                     &[&format!(
-                        "Relation: {relation}; Domain: {domain}; Population: {}",
-                        population.name()
+                        "Relation: {left} {} {right}; Domain: {}..={}; Population: {population:?}",
+                        source_symbol(relation.operator()),
+                        domain.minimum,
+                        domain.maximum
                     )],
                 );
                 for forbidden in [

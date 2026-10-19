@@ -909,8 +909,7 @@ fn generate_harness_shell(request: &HarnessShellRequest<'_>) -> Result<String, H
     let adapter_symbol = format!("{symbol}_proptest");
 
     let source = format!(
-        "// SPDX-License-Identifier: MIT OR Apache-2.0\n\
-// Requirement: {requirement}@{revision}; Preconditions: {precondition}; Postconditions: {postcondition}\n\
+        "// Requirement: {requirement}@{revision}; Preconditions: {precondition}; Postconditions: {postcondition}\n\
 \n\
 /// Generated contract identity for `{requirement}@{revision}`.\n\
 pub const {identity_symbol}: quire_contract_runtime::ContractIdentity<'static> =\n\
