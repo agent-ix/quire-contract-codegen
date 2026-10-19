@@ -34,13 +34,18 @@ own row, including whole-envelope refusal for a repeated backend identity.
 
 ## Test Procedure
 
-For FR-019-AC-53, use one admitted package with bound driver items on either
-side of an excluded accounting-only position and a context-only root between
-the first bound item and the excluded position. Supply exactly two FR-331 items
-and assert two settlements at the bound
-items' original driver indexes, with no settlement, negotiation call or claim
-for the excluded position. Repeat with one and three envelope items to assert
-the typed `EnvelopeItemCount` refusal in each case.
+For FR-019-AC-53, use one admitted package with bound driver items at driver
+indexes 0 and 2 around an excluded accounting-only position at index 1. Give
+the excluded position `lowered` accounting for a Kani-supported form, and put
+a context-only root between the first bound item and excluded position. Supply
+exactly two FR-331 items and assert two settlements whose outer
+`ContractItemSettlement.request_index` and nested
+`ItemSettlement.request_index` both equal the driver indexes 0 and 2, not
+envelope positions 0 and 1. Assert no settlement or claim for the excluded
+position, zero classifier calls and zero Kani preflight reads attributable to
+it, using the existing `take_function_preflight_reads` counter for the latter.
+Repeat with one and three envelope items to assert the typed
+`EnvelopeItemCount` refusal in each case.
 
 For FR-019-AC-48 through AC-52, drive the public negotiation entry with a
 source-backed Kani `V2FunctionApplication`. Use an admitted checked source
