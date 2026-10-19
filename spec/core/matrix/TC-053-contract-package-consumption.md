@@ -88,8 +88,7 @@ decisions the original checked graph or detached lowering records would make.
    before the excluded position and confirm that the preceding bound item
    retains its selected result context. In a separate otherwise valid request,
    put that conversion root after the next bound driver item; the preceding
-   item must receive typed `IncompleteContext`, proving that the excluded
-   position ended its span. Finally place a context-only root directly after
+   item must receive typed `IncompleteContext`. Finally place a context-only root directly after
    the excluded position and before the next bound item, with matching admitted
    accounting and node ID. Confirm a typed whole-request correspondence
    refusal before any artifact because the root has no owning bound item.

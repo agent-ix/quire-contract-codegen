@@ -76,3 +76,19 @@ Before this lands as the contract the implementation will be tested against:
 - FND-002: add a refusal criterion for a routed item that names an excluded index.
 - FND-003: add a span-end control.
 - FND-004: require a `lowered` excluded record.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-006 | low | The `IncompleteContext` clause of FR-039-AC-10, as TC-053 step 8 implements it, does not test the excluded-position boundary. Step 8 places the conversion root "after the next bound driver item" and says the resulting `IncompleteContext` proves "that the excluded position ended its span". The next bound driver item ends the span under the pre-existing rule (FR-039:166-167), so this control passes even if an implementation ignores excluded positions. Only the orphan-refusal clause (a root directly after the excluded position) distinguishes the new rule. Fix: drop "proving that the excluded position ended its span" from TC-053 step 8 and describe that case as a regression control. Alternatively, drop the `IncompleteContext` clause from AC-10 and let the orphan refusal carry the span rule. | spec/core/matrix/TC-053-contract-package-consumption.md:87-91; spec/core/functional/FR-039-contract-package-consumption.md:219 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | f9bf1929: the FR-019 statement puts the original driver index in both the outer `ContractItemSettlement.request_index` and the nested `ItemSettlement.request_index`, independently of envelope position. AC-53 asserts 0 and 2, not 0 and 1, on both fields. FR-022 repoints `RoutedGenerationItem.request_index` to the driver index and says it is not the FR-331 envelope index. |
+| FND-002 | fixed | f9bf1929: "routed item" is removed from FR-039-AC-9 and TC-053 step 7. FR-022 adds a SHALL that refuses a routed item at an excluded driver index as `RoutedGenerationError::ExcludedDriverIndex { request_index, node_id }` before any arm. FR-022-AC-29, a TC-033 procedure and step 23, and a Planned tests.md row back it. |
+| FND-003 | fixed | f9bf1929: FR-039 adds SHALL clauses for the span end at an excluded position and for an orphan context root after it, which is a whole-request correspondence refusal. FR-039-AC-10, TC-053 step 8 and a Planned row back them. The weak `IncompleteContext` sub-control is FND-006. |
+| FND-004 | fixed | f9bf1929: FR-019-AC-53 and TC-030 require the excluded record to be `lowered` with a Kani-supported form. They assert zero classifier calls and zero Kani preflight reads via `take_function_preflight_reads`. The statement adds "SHALL NOT classify, run Kani preflight, negotiate". |
+| FND-005 | fixed | f9bf1929: FR-039 Inputs defines **bound driver item** (a `DriverItem` position) and **excluded accounting-only position** (not a `DriverItem`). FR-039:83-91 and :166-167 and FR-022 Inputs use "bound driver item" consistently. |

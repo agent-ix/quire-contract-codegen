@@ -34,3 +34,10 @@ Inputs description and is not a statement.
 
 **PASS with findings.** Both new criteria are well formed. Two low wording issues remain: the
 FR-019 trigger keyword, and the FR-039 non-normative sentences.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | f9bf1929: the FR-019 bullet now reads "While settling an admitted FR-330 package, CG SHALL check the envelope item count ...". `make spec` no longer reports a warning in FR-019. |
+| FND-002 | fixed | f9bf1929: each sentence is now normative: "CG SHALL retain the original driver indexes of later bound driver items; CG SHALL advance neither driver nor envelope item indexes for context-only roots. CG SHALL end the preceding bound driver item's contiguous context span at an excluded position ...". |

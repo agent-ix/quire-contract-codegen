@@ -38,3 +38,10 @@ that existing text is consistent with the change.
 
 **PASS with findings.** The structure is sound: fresh ids, matrix rows truthfully Planned, and
 TC traces and procedures added. Two low consistency fixes remain.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | f9bf1929: FR-039 frontmatter adds `references` edges to `ix://agent-ix/quire-driver/FR-001` and `FR-010`. Its Dependencies section adds that quire-driver FR-001 and FR-010 produce the typed lowering-position sequence and preserve excluded positions. |
+| FND-002 | fixed | f9bf1929: FR-039:166-167 now reads "in that bound driver item's contiguous context span, before the next bound driver item or excluded position", which agrees with the new span rule. |
