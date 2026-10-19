@@ -70,3 +70,12 @@ caller limits with no default. The at-bound and poisoned-suffix controls are rea
 mutant above makes a test fail, and each poisoned suffix produces a distinct error when it is read.
 The low findings are consistency and tidiness only. Whether the PR can merge depends on the medium
 findings in SR-13304.
+
+## Dispositions
+
+Round 1, against fix commit 61a15bc2 (PR head 61a15bc22a1394afc04dfc936971bf2855a3f74d). The reviewer checked it in a fresh worktree: the focused tests pass, and `make fmt-check`, `make lint` and `make spec` pass.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Both limit refusals now carry the module symbol with `;bytes=N` or `;values=N` appended (witness.rs:174-178, playback.rs:278-282). The `DecodeFailure.context` doc says so, and the unit test asserts both contexts. |
+| FND-002 | fixed | Test-only `unbounded_decode_limits()` helpers are added in witness.rs (`#[cfg(test)]`), tests/it/main.rs and native_twin.rs, and they replace the repeated literals. frame.rs and state_clause.rs now import `WitnessDecodeLimits`. |

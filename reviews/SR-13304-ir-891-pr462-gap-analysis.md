@@ -51,3 +51,19 @@ fully mutation-tested across all five decode paths. The downstream consumer list
 complete, and no compatibility layer or hidden constant is added. FND-001 means the matrix
 contradicts itself about AC-6. FND-002 means one clause of an AC marked Covered has no test.
 Both are small fixes: two spec edits and one doctest. FND-003 is wording and can be deferred.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | low | The new no-Default test `witness_decode_bounds_have_no_default` scans only the nearest `#[derive(...)]` and an `impl Default for <name>` written inside witness.rs and function.rs. Reviewer mutant: an `impl Default for WitnessDecodeLimits` added in src/lib.rs (or any other module) passes every test. The mutant that adds `Default` to the `WitnessDecodeLimits` derive is killed, and the one on `ReplayInputs` fails to compile. Fix: assert at the type level with a `compile_fail` doctest (`let _ = quire_contract_codegen::WitnessDecodeLimits::default();`, and the same for `ReplayInputs`), which catches an impl in any module. | src/replay/witness.rs:310-345 |
+
+## Dispositions
+
+Round 1, against fix commit 61a15bc2 (PR head 61a15bc22a1394afc04dfc936971bf2855a3f74d).
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The TC-026 row in spec/replay/matrix/tests.md:40 now reads "✅ Covered for AC-6 ... AC-7 remains planned". Both paragraphs of TC-026-witness-native-replay.md now name the five AC-6 test files and keep AC-7 planned. |
+| FND-002 | fixed | The new tagged test `witness_decode_bounds_have_no_default` (TC-026, FR-016-AC-6) fails when `Default` is derived on `WitnessDecodeLimits`, and deriving it on `ReplayInputs` does not compile. The residual bypass through an impl in another module is recorded as FND-004. |
+| FND-003 | fixed | FR-016 Inputs is reworded: the bounds arrive "as a required parameter or through a required field of its inputs", the two `decode_falsification` methods also take a direct parameter, and the limit type and replay inputs have no `Default`. This matches the code. |

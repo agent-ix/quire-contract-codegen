@@ -43,6 +43,12 @@ use crate::kani::{
 };
 
 /// Caller supplied bounds for decoding a retained Kani witness.
+///
+/// These bounds must be supplied explicitly (FR-016-AC-6, TC-026):
+///
+/// ```compile_fail
+/// let _ = quire_contract_codegen::WitnessDecodeLimits::default();
+/// ```
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct WitnessDecodeLimits {
     /// Maximum transcript bytes accepted before parsing.

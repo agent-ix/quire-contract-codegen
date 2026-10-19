@@ -344,6 +344,12 @@ pub struct DependencyLock {
 }
 
 /// Everything about the proving run a replay request repeats.
+///
+/// Replay inputs cannot silently acquire decode bounds (FR-016-AC-6, TC-026):
+///
+/// ```compile_fail
+/// let _ = quire_contract_codegen::ReplayInputs::default();
+/// ```
 #[derive(Clone, Debug)]
 pub struct ReplayInputs {
     /// Required limits for decoding the retained Kani witness.
