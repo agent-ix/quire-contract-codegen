@@ -1,5 +1,6 @@
 //! Private libtest orchestration of a generated unsatisfiable-assumption control.
 
+use crate::core::test_support::discover_scratch;
 use crate::kani::{
     classify::KaniRunOutcome,
     generate::unsatisfiable_harness_for_test,
@@ -7,7 +8,6 @@ use crate::kani::{
         execute::{execute_kani_obligation, KaniExecutionRequest},
         tool::KaniInstallation,
     },
-    test_support::discover_scratch,
 };
 use ix_trace_rs::trace;
 

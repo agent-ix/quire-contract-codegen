@@ -126,7 +126,7 @@ fn bounded_single_run_standins_preserve_cancelled_and_timed_out_evidence() {
     use std::os::unix::fs::PermissionsExt;
     for cancelled in [true, false] {
         let (harness, artifacts) = fixture(Duration::from_secs(3));
-        let control = crate::kani::test_support::discover_scratch(if cancelled {
+        let control = crate::core::test_support::discover_scratch(if cancelled {
             "scalar-cancel"
         } else {
             "scalar-timeout"
@@ -250,7 +250,7 @@ fn bounded_paired_runner_propagates_the_native_helpers_oracle_stop() {
     };
     use std::os::unix::fs::PermissionsExt;
     let (harness, artifacts) = fixture(Duration::from_secs(600));
-    let control = crate::kani::test_support::discover_scratch("paired-oracle-stop");
+    let control = crate::core::test_support::discover_scratch("paired-oracle-stop");
     fs::create_dir_all(&control).unwrap();
     let helper = control.join("native-helper");
     let observed_arguments = control.join("native-arguments");
