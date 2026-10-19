@@ -168,7 +168,6 @@ pub(crate) fn write_launcher(path: &std::path::Path, body: &str) {
     }
 }
 
-
 use crate::kani::identity::ProofCeilings;
 #[path = "../../tests/common/proof_ceilings.rs"]
 pub(crate) mod proof_ceilings;

@@ -1321,8 +1321,8 @@ tables; each table states the count it covers, and the per-destination rows add 
   `pub(crate)`: `state_frame_harness`, `report`, `PASSED`, `COVER_OK` and `COVER_NO`.
   It imports `identity` and `abi` and no generator. The subsystem-independent
   `discover_scratch` allocator lives in `core/test_support.rs`, declared `#[cfg(test)]` in
-  `core/mod.rs`; it imports only `std` and is called directly by tests across subsystems. `classify.rs` holds two test
-  modules, `real_capture` (D-6) and `synthetic` (the four `kani_execution` classification tests
+  `core/mod.rs`; it imports only `std` and is called directly by tests across subsystems.
+  `classify.rs` holds two test modules, `real_capture` (D-6) and `synthetic` (the four `kani_execution` classification tests
   with `classify`, `COVER_PLAYBACK` and `ASSERTION_PLAYBACK`), because both define a helper named
   `report` or `classify`/`classified` with a different signature; neither is renamed.
   `a_precondition_harness_with_no_checks_is_decided_by_its_cover_not_the_zero_checks_rule`
