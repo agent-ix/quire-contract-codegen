@@ -2870,7 +2870,7 @@ mod tests {
             .join()
             .expect("deep generation fits 512 KiB stack");
 
-        let scratch = crate::kani::test_support::discover_scratch("oracle-equality-deep");
+        let scratch = crate::core::test_support::discover_scratch("oracle-equality-deep");
         std::fs::create_dir_all(scratch.join("src")).expect("scratch source directory");
         std::fs::create_dir_all(scratch.join("tests")).expect("scratch test directory");
         std::fs::write(

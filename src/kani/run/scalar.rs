@@ -1410,7 +1410,7 @@ mod tests {
     #[trace("FR-017-AC-28")]
     #[test]
     fn tc_027_changed_staged_bytes_and_unexpected_files_refuse_identity() {
-        let root = crate::kani::test_support::discover_scratch("scalar-snapshot-control");
+        let root = crate::core::test_support::discover_scratch("scalar-snapshot-control");
         fs::write(root.join("source.rs"), b"original").unwrap();
         let expected = vec![("source.rs".to_owned(), b"original".to_vec())];
         assert!(ensure_snapshot_matches(&root, &expected).is_ok());

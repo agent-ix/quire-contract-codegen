@@ -270,7 +270,7 @@ mod tests {
     };
 
     fn temporary(name: &str) -> PathBuf {
-        crate::kani::test_support::discover_scratch(&format!("publication-{name}"))
+        crate::core::test_support::discover_scratch(&format!("publication-{name}"))
     }
 
     fn generated(path: &str, contents: &str) -> Artifact {

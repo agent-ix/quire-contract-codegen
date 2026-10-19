@@ -251,7 +251,7 @@ pub(super) mod tests {
             std::fs::write(path, render(&fixture()).unwrap().contents).unwrap();
             return;
         }
-        let directory = crate::kani::test_support::discover_scratch("render-determinism");
+        let directory = crate::core::test_support::discover_scratch("render-determinism");
         let path = directory.join("output.rs");
         let status = std::process::Command::new(std::env::current_exe().unwrap())
             .args([

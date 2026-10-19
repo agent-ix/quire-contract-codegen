@@ -479,7 +479,7 @@ fn valid_pid(pid: u32) -> io::Result<Pid> {
 #[cfg(target_os = "linux")]
 mod tests {
     use super::*;
-    use crate::kani::test_support::discover_scratch;
+    use crate::core::test_support::discover_scratch;
     use crate::kani::{
         identity::ProofCeilings,
         run::{launch::run_bounded_launcher, owners::LaunchOwners},

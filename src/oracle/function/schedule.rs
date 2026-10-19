@@ -1276,7 +1276,7 @@ mod tests {
                 );
 
                 let directory =
-                    crate::kani::test_support::discover_scratch("oracle-function-schedule");
+                    crate::core::test_support::discover_scratch("oracle-function-schedule");
                 let source_directory = directory.join("src");
                 std::fs::create_dir_all(&source_directory).expect("create source directory");
                 std::fs::write(source_directory.join("lib.rs"), source)

@@ -39,6 +39,7 @@ const MODULE_FILES: &[&str] = &[
     "core/naming.rs",
     "core/profile.rs",
     "core/source_map.rs",
+    "core/test_support.rs",
     "oracle/boolean_v1.rs",
     "oracle/bound_v1.rs",
     "oracle/claim.rs",
