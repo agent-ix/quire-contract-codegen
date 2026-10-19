@@ -106,25 +106,41 @@ fn named_refusal_adapter_preserves_unknown_version() {
 #[trace("TC-030", "FR-019-AC-48")]
 #[test]
 fn refusal_adapter_preserves_selected_document_pointer() {
+    use exact_function_fixture::{source_bound_call_package, PackageBuilder};
     use quire_contract_model::{CheckedPackageRefusalCause, CheckedPackageRefusalCode};
-    let reader = ContractPackageWireV1::read(
-        b"{}",
-        CheckedPackageReadLimits::bounded(),
-        &ContractDependencies::new(),
-    );
-    let ContractPackageReadResult::Refused(mut refusal) = reader else {
-        panic!("malformed package must refuse: {reader:?}");
+    let digest = "ab".repeat(32);
+    let selection = serde_json::json!([{
+        "identity": "acme/orders",
+        "digest_domain": "sha256-jcs",
+        "digest": digest,
+    }]);
+    let mut wire = source_bound_call_package().wire();
+    wire["lock"]["model_selections"] = selection.clone();
+    wire["identity_preimage"]["model_selections"] = selection;
+    let (_, resolved, _) = PackageBuilder::from_wire(wire).read_resolved();
+    let mut evidence = CheckedPackageEvidence::new();
+    evidence.support_feature("quire.value.complete/v1");
+    evidence
+        .insert_domain_package_document(
+            digest,
+            br#"{"package":{"count":9007199254740993}}"#.to_vec(),
+        )
+        .expect("selected document evidence");
+    let bytes = serde_json::to_vec(&resolved).expect("canonical fixture wire");
+    let reader = CheckedPackageV2::read(&bytes, CheckedPackageReadLimits::bounded(), &evidence);
+    let CheckedPackageV2ReadResult::Refused(refusal) = reader else {
+        panic!("selected document number past 2^53 must refuse: {reader:?}");
     };
-    // Construct the reader's selected-document number outcome at the adapter seam.
-    refusal.code = CheckedPackageRefusalCode::NoncanonicalWire;
-    refusal.cause = Some(CheckedPackageRefusalCause::InexactInteger);
-    refusal.document_pointer = Some(JsonPointer::parse("/package/count").unwrap());
-    let projected = quire_contract_codegen::project_contract_package_refusal(&refusal);
-    assert_eq!(projected.code, CheckedPackageRefusalCode::NoncanonicalWire);
+    assert_eq!(refusal.code, CheckedPackageRefusalCode::NoncanonicalWire);
     assert_eq!(
-        projected.cause,
+        refusal.cause,
         Some(CheckedPackageRefusalCause::InexactInteger)
     );
+    assert_eq!(
+        refusal.document_pointer.as_ref().map(JsonPointer::as_str),
+        Some("/package/count")
+    );
+    let projected = quire_contract_codegen::project_contract_package_refusal(&refusal);
     assert_eq!(
         projected.document_pointer.as_deref(),
         Some("/package/count")
