@@ -24,8 +24,10 @@ against the persisted schema, then against that schema with a binding dropped
 and with a binding retyped. Then replay a reproducing witness, a malformed
 witness, a witness bound to another harness identity, a witness over the decode
 size limit, an out-of-domain witness, a witness whose native value or charges
-disagree with the harness, a witness whose native replay is unavailable, and
-a witness whose replay agrees in a category other than `violation`.
+disagree with the harness, a witness whose native replay returns
+`ReplayRefusal::Fault`, and a witness whose replay agrees in a category other than
+`violation`. Inspect the replay error for the fault
+(FR-016-AC-12).
 
 For FR-016-AC-21 to AC-23, build the replay request for a function with two parameters declared
 in an order that differs from their ascending identifier order. Recompute the O-09 digest from
@@ -44,14 +46,15 @@ package from a lock that selects one library identity twice and has no other def
 The schema follows the persisted argument order, which is the emission
 order the harness uses, and refuses the non-argument binding with a typed
 schema refusal (code `cg_witness_schema_non_argument_binding`) that
-reports no failure and is none of the five replay results.
+reports no failure and is none of the replay results.
 The real transcript decodes to values named by their bindings, and the dropped
 and retyped schemas refuse by arity and width. Only the reproducing witness is
 reported as a failure; the others yield malformed (three cases), out-of-domain,
-mismatch and unavailable results respectively. The disagreeing witnesses are
-never reported unavailable, and the unavailable replay is never reported as a
-mismatch. The witness that agrees in a category other than `violation` is a
-mismatch and never a failure.
+and mismatch results respectively. The executor fault remains a typed
+`SpineReplayError::Refused(ReplayRefusal::Fault)`. FR-029-AC-10 owns its terminal
+`Failed` reading.
+The witness that agrees in a category other than `violation` is a mismatch and
+never a reproduced failure.
 The slot equals the recomputed digest (AC-21). The two functions' identities differ, comments and
 blank lines and the span change leave one unchanged, the kind change and the domain change each
 alter it, and the two-conjunct function has one identity (AC-22). The identity is unchanged by the
@@ -110,7 +113,9 @@ What stays unbacked: the native twin is hand-mirrored QSL source, not derived fr
 the Rust subject, and the input package is hand-built, so the contract-to-Contract-IR step does not
 run. The Kani lane is `#[ignore]` and outside `make ci`, so the real-prover mutations above are
 not gated in CI; the default suite pins the replay end and the decoder against a synthetic
-transcript only. FR-016-AC-6, AC-7 and AC-12 are planned.
+transcript only. FR-016-AC-6 and AC-7 are planned. FR-016-AC-12 is covered by
+`tc_026_an_executor_fault_remains_a_typed_replay_refusal`. FR-029-AC-10 already
+tests the terminal mapping for a fault wrapped in `SpineReplayError::Refused`.
 
 FR-016-AC-8 is implemented and tested in the default suite: schema
 order and naming by position (`src/replay/witness.rs` unit tests) and the
@@ -127,8 +132,10 @@ counterexample the native twin falsifies is reproduced (AC-3); a twin that holds
 the clause, or any settlement other than a reproduced violation, is a verdict
 evidence failure (AC-4, AC-13, `src/replay/function.rs` unit tests). Decode, domain
 and verdict mismatches are one evidence-failure verdict with a typed cause. The
-decode size limit (AC-6), the charge, counter and limit comparison (AC-7) and the
-unavailable result for an executor fault (AC-12) are planned.
+decode size limit (AC-6) and the charge, counter and limit comparison (AC-7)
+are planned. Replay-layer propagation of an executor fault (AC-12) is covered by
+`tc_026_an_executor_fault_remains_a_typed_replay_refusal`; the terminal mapping is
+covered by FR-029-AC-10.
 
 FR-016-AC-14 through AC-20 are implemented and tested in the default suite
 (`tests/it/skeleton_spine.rs`): `ReplayPackage::new` hands the lock's dependency

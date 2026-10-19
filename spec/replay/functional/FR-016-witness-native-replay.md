@@ -32,8 +32,9 @@ failure is reported.
 
 ## Outputs
 
-- A typed replay result: reproduced failure, evidence failure, or replay
-  unavailable, carried as a FR-333 method result. Evidence failure is one verdict
+- A typed replay result (reproduced failure or evidence failure), or a typed
+  replay error. A `ReplayRefusal::Fault` remains in the replay error and maps to
+  terminal `Failed` under FR-029-AC-10. Evidence failure is one verdict
   with a typed cause: a malformed witness (decode cause), an out-of-domain witness
   (domain cause) or a mismatch (verdict cause). This document's "malformed
   witness", "out-of-domain witness" and "mismatch" name those three causes, and
@@ -58,8 +59,8 @@ failure is reported.
   same persisted order (FR-015).
 - If an obligation binding is not an argument, then the generator shall refuse
   the witness schema with a typed schema refusal that reports no failure. The
-  refusal is a fault in the schema, not in the witness, so it is not one of
-  the five replay results. A binding that is not an argument has no symbolic
+  refusal is a fault in the schema, not in the witness, so it is not a
+  replay result. A binding that is not an argument has no symbolic
   position, and typing it would mistype a position that does not exist in the
   witness bytes.
 - If a witness is bound to a different harness identity, fails to
@@ -80,7 +81,7 @@ failure is reported.
   | The witness is bound to another harness identity, fails to decode, or exceeds the decode size limit | malformed witness |
   | A decoded value lies outside its declared domain | out-of-domain witness |
   | The adapter cannot build an admitted request: a decoded value no replay parameter binds, a transcript field holding a delimiter, a transcript `Witness::parse` refuses, or an envelope QSL refuses to reconstruct | adapter refusal (FR-016-AC-11) |
-  | `qsl_replay::replay` returns `Err(ReplayRefusal::Fault(_))`, an internal fault of the executor | replay unavailable |
+  | `qsl_replay::replay` returns `Err(ReplayRefusal::Fault(_))`, an internal fault of the executor | typed replay refusal retaining the fault; the terminal value is `Failed` (FR-029-AC-10) |
   | `qsl_replay::replay` returns any other `Err(ReplayRefusal)` | QSL request refusal, returned with its cause (FR-016-AC-11) |
   | `qsl_replay::replay` returns the `Input` arm for a witness-sourced request | adapter refusal (FR-016-AC-11) |
   | The `Witness` arm settles `inconclusive`, or matches the harness value but differs in admitted charges, consumed counters or limits | mismatch |
@@ -88,10 +89,10 @@ failure is reported.
   | The `Witness` arm settles `reproduced-with-evaluated-witness` with any category other than `violation` | mismatch |
 
 - If native replay runs and disagrees with the harness result, then the
-  generator shall report a typed mismatch rather than a failure or an
-  unavailable result.
-- If the executor reports an internal fault, then the generator shall report
-  a typed unavailable result rather than a failure, a refusal or a mismatch.
+  generator shall report a typed mismatch rather than a failure.
+- If the executor reports an internal fault, then the generator shall retain
+  it as `SpineReplayError::Refused(ReplayRefusal::Fault)`.
+  FR-029-AC-10 reads that fault as terminal `Failed`.
 - If the `Witness` arm settles `reproduced-with-evaluated-witness` with a
   category other than `violation`, then the generator shall report a typed
   mismatch. QSL's `WitnessArmResult::settle` takes the category independently
@@ -121,15 +122,15 @@ failure is reported.
 | FR-016-AC-1 | Every retained witness decodes into typed values or is refused as malformed. | Test (TC-026) |
 | FR-016-AC-2 | An out-of-domain witness is reported as such and never as a contract failure. | Test (TC-026) |
 | FR-016-AC-3 | An in-domain witness is reported as a failure only when native replay reproduces the same typed outcome. | Test (TC-026) |
-| FR-016-AC-4 | A native replay that runs and disagrees with the harness result yields a typed mismatch, and never an unavailable result or a failure. | Test (TC-026) |
+| FR-016-AC-4 | A native replay that runs and disagrees with the harness result yields a typed mismatch, and never a failure or a replay error. | Test (TC-026) |
 | FR-016-AC-5 | A witness bound to a different harness identity is reported as malformed and never replayed. | Test (TC-026) |
 | FR-016-AC-6 | A witness over the decode size limit is reported as malformed without decoding past the limit. | Test (TC-026) |
 | FR-016-AC-7 | A native replay that matches the harness value but differs in admitted charges, consumed counters or limits yields a typed mismatch. | Test (TC-026) |
-| FR-016-AC-8 | A witness schema binds the obligation's persisted argument bindings, in the order the obligation persists them, position for position to the harness's symbolic arguments, and each decoded value is named by the binding at its position; a binding that is not an argument is refused with a typed schema refusal that reports no failure and is none of the five replay results. | Test (TC-026) |
+| FR-016-AC-8 | A witness schema binds the obligation's persisted argument bindings, in the order the obligation persists them, position for position to the harness's symbolic arguments, and each decoded value is named by the binding at its position; a binding that is not an argument is refused with a typed schema refusal that reports no failure and is none of the replay results. | Test (TC-026) |
 | FR-016-AC-9 | A decoded falsification whose witness makes the native function evaluate the clause to false settles as `reproduced-with-evaluated-witness` with category `violation`; the verdict depends on the witness value, so a witness at which the function holds does not settle so. | Test (TC-026) |
 | FR-016-AC-10 | A decoded falsification at which the native function evaluates the clause to true settles `inconclusive` with the proved violation and the replayed success both named. | Test (TC-026) |
 | FR-016-AC-11 | The adapter refuses, with a distinct typed error each, a decoded value no replay parameter binds, a transcript field holding a delimiter, a transcript QSL does not admit, a request QSL refuses with any `ReplayRefusal` other than `Fault` (returned with its cause), and a witness-sourced request that settles on the input arm. | Test (TC-026) |
-| FR-016-AC-12 | A `replay` call that returns `ReplayRefusal::Fault` yields a typed unavailable result, and never a mismatch, a refusal or a failure; no other condition yields unavailable. | Test (TC-026) |
+| FR-016-AC-12 | A `replay` call that returns `ReplayRefusal::Fault` is returned as `SpineReplayError::Refused` carrying that fault. | Test (TC-026) |
 | FR-016-AC-13 | A `Witness` arm that settles `reproduced-with-evaluated-witness` with a category other than `violation` yields a typed mismatch, and never a reproduced failure. | Test (TC-026) |
 | FR-016-AC-14 | A proved unit that imports a locked dependency is compiled by `qsl_replay::call_site` together with that dependency's lock source, and `qsl_replay::replay` settles the unit's falsification through the imported function. | Test (TC-026) |
 | FR-016-AC-15 | The replay request's `package.dependencies` carries one entry per lock dependency selection, in ascending identity order, with the lock's recorded `package_id`. | Test (TC-026) |
