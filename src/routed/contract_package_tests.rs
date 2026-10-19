@@ -568,7 +568,11 @@ mod tests {
     #[test]
     fn excluded_position_refuses_function_oracle_before_claim_or_artifact() {
         use crate::oracle::claim::OracleGenerationError;
-        use crate::oracle::function::{generate_exact_function_oracles, ExactFunctionItem};
+        use crate::oracle::function::{
+            generate_exact_function_oracles, ExactFunctionBody, ExactFunctionDeclaration,
+            ExactFunctionItem,
+        };
+        use crate::oracle::operator_catalog::IntegerOperator;
         let (_, admitted, positions, _, excluded) = excluded_fixture();
         let result = generate_exact_function_oracles(
             &admitted,
@@ -584,6 +588,21 @@ mod tests {
         );
         assert!(
             matches!(result, Err(OracleGenerationError::PackageRequest(PackageRequestError::ExcludedDriverIndex { request_index: 1, node_id })) if node_id == excluded)
+        );
+        let declaration = ExactFunctionDeclaration {
+            node_id: excluded.clone(),
+            name: "f".to_owned(),
+            parameters: Vec::new(),
+            result_type: excluded.clone(),
+            body: ExactFunctionBody::Scalar {
+                operator: IntegerOperator::Add,
+            },
+            capability_requirements: Vec::new(),
+        };
+        let declaration_result =
+            generate_exact_function_oracles(&admitted, &positions, &[1], &[declaration], &[], &[]);
+        assert!(
+            matches!(declaration_result, Err(OracleGenerationError::PackageRequest(PackageRequestError::ExcludedDriverIndex { request_index: 1, node_id })) if node_id == excluded)
         );
     }
 
@@ -610,6 +629,17 @@ mod tests {
         );
         assert!(
             matches!(result, Err(OracleGenerationError::PackageRequest(PackageRequestError::ExcludedDriverIndex { request_index: 1, node_id })) if node_id == excluded)
+        );
+    }
+
+    #[trace("TC-053", "FR-039-AC-9")]
+    #[test]
+    fn excluded_position_refuses_scalar_oracle_before_claim_or_artifact() {
+        use crate::oracle::scalar::{generate_contract_scalar_oracles, ContractScalarError};
+        let (_, admitted, positions, _, excluded) = excluded_fixture();
+        let result = generate_contract_scalar_oracles(&admitted, &positions, &[1]);
+        assert!(
+            matches!(result, Err(ContractScalarError::Request(PackageRequestError::ExcludedDriverIndex { request_index: 1, node_id })) if node_id == excluded)
         );
     }
 
@@ -875,11 +905,14 @@ mod tests {
             crate::routed::capability::take_package_classifier_indices(),
             vec![2]
         );
-        assert!(crate::oracle::function::take_function_preflight_indices().is_empty());
+        assert_eq!(
+            crate::oracle::function::take_function_preflight_indices(),
+            vec![2]
+        );
         assert_eq!(crate::oracle::function::take_function_preflight_reads(), 0);
     }
 
-    #[trace("TC-033", "FR-022-AC-29")]
+    #[trace("TC-033", "FR-022-AC-29", "FR-039-AC-9")]
     #[test]
     fn routed_excluded_driver_index_is_refused_before_generation() {
         let (_, admitted, positions, function, excluded) = excluded_fixture();
