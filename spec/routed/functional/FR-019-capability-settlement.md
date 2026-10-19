@@ -447,9 +447,8 @@ repositories are outside this spec PR.
 
 On the current oracle-function path,
 `checked_integer_function_application_is_supported` re-lowers a
-`CheckedPackageV2`, calls `ContractPackageWireV1::read`, and collapses either
-non-admitted outcome to `false`. FR-019-AC-48 and AC-49 describe the observable
-result of that current read once the code PR preserves its outcome. On the
+`CheckedPackageV2`, calls `ContractPackageWireV1::read`, and preserves `Refused` and `Incomplete`
+as typed whole-envelope outcomes under FR-019-AC-48 and AC-49. On the
 FR-330 production path, only an `Admitted` package reaches CG after the
 caller's single authoritative read; `Refused` and `Incomplete` stop before
 negotiation. The code PR SHALL use that admitted result without a re-read,
