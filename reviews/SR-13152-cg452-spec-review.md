@@ -49,3 +49,21 @@ matters: FR-016-AC-12 cannot be backed honestly by any test while it contradicts
 | FND-002 | medium | Spec defect. FR-016-AC-12 (and the Behavior row at line 83) says a `ReplayRefusal::Fault` yields "a typed unavailable result, and never a mismatch, a refusal or a failure". FR-029-AC-10 says a replay fault, bare or as the cause of `SpineReplayError::Refused`, maps to `Failed`. That follows QSL's `TerminalValue::from_replay_refusal`, which CG reads (src/kani/terminal.rs:34-37, 234, 238), and FR-029-AC-10 is backed by tests/it/terminal_map.rs:535. At the replay layer the code returns `SpineReplayError::Refused(Box<ReplayRefusal>)` for every refusal, a fault included (src/replay/function.rs:100, 270). No "unavailable" type exists. The code follows the newer, QSL-owned FR-029, so this is neither a test nor a code defect. Restate or retire FR-016-AC-12 and the line-83 row to defer to FR-029. Pre-existing | spec/replay/functional/FR-016-witness-native-replay.md:83, spec/replay/functional/FR-016-witness-native-replay.md:132, spec/kani/functional/FR-029-run-outcome-terminal-record.md:284, spec/kani/functional/FR-029-run-outcome-terminal-record.md:370 |
 | FND-003 | low | The FR-024 "Current state" says "No domain check runs before replay, and no `WitnessEnvelope` is built". This was already false on `main`. The function path checks domains before replay (src/replay/function.rs:1063, 1114), and the frame and state-clause paths build envelopes with `WitnessEnvelope::reconstruct` (src/replay/frame.rs:679, src/replay/state_clause.rs:743). Pre-existing | spec/replay/functional/FR-024-counterexample-envelope-intake.md:419 |
 | FND-004 | low | FR-024-AC-5 carries `Test (TC-035)`, but the same document says the corpus path "is to be removed, not built on" and that AC-5 "stays unbacked". A criterion the spec plans never to meet should be retired or superseded by the FR-015-AC-109..111 removal, not kept Planned. Pre-existing | spec/replay/functional/FR-024-counterexample-envelope-intake.md:358, spec/replay/functional/FR-024-counterexample-envelope-intake.md:415-418 |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | low | The AC-10 sentences were inserted into the bullet that goes on to say "`quire coverage --strict` does not count them as unbacked … and the criteria stay planned". "Them" and "the criteria" now read as including FR-024-AC-10, which the matrix marks Covered. Move the AC-10 sentences into their own bullet, or say "AC-1 to AC-9" in the continuation | spec/replay/functional/FR-024-counterexample-envelope-intake.md:475-483 |
+
+## Dispositions
+
+Round 1, reviewed at 2acbf09a9e1ecd76cbef094e44214bd53317ca08. The "Current state" lead-in and the AC-1..AC-10 bullet were rewritten. Both are now true at this head, apart from the continuation wording in FND-005. Line 419 is unchanged and is owned by IR-890.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | The lead-in now says none of AC-1 to AC-9 is met in full and that AC-10 has a source-scan test over `src/`; the bullet states the scan's scope and limits as the matrix row does |
+| FND-002 | deferred | IR-890 (Backlog) owns the FR-016-AC-12 versus FR-029-AC-10 conflict; pre-existing |
+| FND-003 | deferred | IR-890 (Backlog) owns the stale FR-024:419 prose; pre-existing |
+| FND-004 | deferred | IR-890 (Backlog) owns retiring FR-024-AC-5; pre-existing |
+| FND-005 | still-open | the continuation sentence still reads as covering AC-10 |

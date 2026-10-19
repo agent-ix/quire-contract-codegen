@@ -104,3 +104,16 @@ block this PR:
 | FND-004 | medium | FR-024-AC-4 has no test, although it is directly testable. Needed: for each `WitnessPacket` member, set it to `None` on a built `StateClauseReplay.packet`. `replay_through` should then return `StateClauseReplayError::Envelope(WitnessRefusal::MissingMember(<member>))`, and the executor should not be called. Also check that `trace_position: Some(None)` is admitted. Pre-existing | src/replay/state_clause.rs:433-438, src/replay/state_clause.rs:736-747 |
 | FND-005 | medium | FR-024-AC-6 is testable without Kani, contrary to the PR's reason. Needed: in the frame twin, assert that the packet's `family_payload` frame, anchor and occurrence, plus its `clause_node` and `occurrence_key`, equal what `call_site` returns. Then show `.replay()` through `replay_frame` succeeds. QSL refuses a disagreeing envelope (tc_025 at line 2253), so success shows the identities reached it unchanged. Pre-existing | tests/it/kani_obligations_state_frame.rs:2392-2408, src/replay/frame.rs:643-657 |
 | FND-006 | low | NFR-002-AC-2 has no test, although every renderer found emits the SPDX line. Needed: one test that renders one artifact of each generated Rust family and asserts each carries `SPDX-License-Identifier: MIT OR Apache-2.0`. Pre-existing | src/kani/generate/render.rs:45, src/strategy/bound/generation.rs:500 |
+
+## Dispositions
+
+Round 1, reviewed at 2acbf09a9e1ecd76cbef094e44214bd53317ca08. Strict coverage was re-measured with `quire coverage --strict`: backed 548/906 on `origin/main` 87db2f7 and 549/906 at the head, 229 unbacked rows before and after, and 0 contradicted statuses; FR-024 is 25/40. The matrix row now lists the scan's limits: imports and qualified paths inside opaque macro tokens, macro expansion and constructed identifiers. That matches the test doc comment except for "generated files", which the doc names and the row omits. That omission is harmless, because the criterion is scoped to `src/`. The one residue the row does not state is the associated-item path (SR-13150 FND-006). The pre-existing code gaps behind NFR-002-AC-1 (header names no generator) and FR-016-AC-6 (no decode size limit), which this review's summary judged, are owned by IR-891 (Backlog).
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | The scan now kills every mutant that escaped in round 0, and the matrix row states its remaining limits; the narrow associated-path residue is tracked as SR-13150 FND-006 |
+| FND-002 | deferred | pre-existing testable gap (FR-024-AC-2); assigned to the lead's next batch, no ticket id yet |
+| FND-003 | deferred | pre-existing testable gap (FR-024-AC-3, function path); assigned to the lead's next batch, no ticket id yet |
+| FND-004 | deferred | pre-existing testable gap (FR-024-AC-4); assigned to the lead's next batch, no ticket id yet |
+| FND-005 | deferred | pre-existing testable gap (FR-024-AC-6, without Kani); assigned to the lead's next batch, no ticket id yet |
+| FND-006 | deferred | pre-existing testable gap (NFR-002-AC-2 SPDX per family); assigned to the lead's next batch, no ticket id yet |

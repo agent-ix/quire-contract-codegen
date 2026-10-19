@@ -85,3 +85,23 @@ into the test's doc comment and the matrix row.
 | FND-002 | medium | The definition half sees only items syn parses. A type defined in a `macro_rules!` body or a macro invocation (`def!()` expanding to `pub struct Witness;`, `some_macro! { struct WitnessEnvelope; }`) passes, yet FR-024-AC-10 says no such type "is defined under `src/`". Either scan `Item::Macro` / `ItemMacro` token streams for `struct`/`enum`/`union`/`trait`/`type` followed by a listed ident, or state this limit where the test and the matrix row claim coverage | tests/it/layout.rs:96-124, spec/replay/matrix/tests.md:17 |
 | FND-003 | low | Path-qualified use without a `use` item (`fn f(_: quire_contract_ir::kani::Witness)`, `type W = quire_contract_ir::kani::Witness;`) passes. Read literally, the criterion speaks of imports only, so this is a judgement call. It is the same provenance leak, though, and a `syn::visit::visit_path` check costs little | tests/it/layout.rs:96-124 |
 | FND-004 | low | The test has no doc comment saying what it asserts and what escapes it, unlike the module header's Risks note for L-2. The module header still describes the file as AD-004 L-1/L-2 only. The import violation names the file but not the type or the line, so a failure must be re-diagnosed by hand | tests/it/layout.rs:1-13, tests/it/layout.rs:81-83, tests/it/layout.rs:116-121 |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | low | The fix adds a `/// Trace: FR-024-AC-10` doc line above the `#[trace("TC-035", "FR-024-AC-10")]` attribute. The `Trace:` doc-line form is deprecated in this ecosystem; Rust tests bind criteria through ix-trace-rs `#[trace]` only, and the attribute already carries the binding. Remove the line (the rest of the doc comment stays) | tests/it/layout.rs:153 |
+| FND-006 | low | The qualified-path check reads only the last segment of the resolved path (`banned_name` uses `path.last()`). An associated-item path through a listed type therefore passes: `quire_contract_ir::kani::Witness::default()` and, after `use quire_contract_ir::kani as k;`, `k::Witness::default()` both survive. The doc comment, the matrix row and the FR-024 prose all say Contract IR qualified paths are checked, with no such exception. Match any segment after the IR root that is a listed name (or every prefix of the resolved path), or state the exception | tests/it/layout.rs:118-126, tests/it/layout.rs:271-282 |
+
+## Dispositions
+
+Round 1, reviewed at 2acbf09a9e1ecd76cbef094e44214bd53317ca08 (fix commit 63f6dea8 over 88af6e6). Mutants were re-run against the rebuilt `it` binary, each written as a new file under `src/replay/` and removed after its run. Every mutant that survived round 0 now dies with a `file:line: <action> <type>` violation: submodule alias, `extern crate` alias, `self::`/`super::` after a root alias, `Witness::{self}`, path-qualified use with no `use` item, a type alias to the IR path, a crate alias in one file used from another (the new test now kills it as well as L-2), a definition inside a `macro_rules!` body and one inside a macro invocation. Every mutant that died in round 0 still dies. New probes: a generic argument (`Vec<quire_contract_ir::kani::ReplaySource>`), a hiding rename (`as Fine`), a nested-module alias and a trait bound in `impl` position all die. An opaque macro path (`my_macro!(quire_contract_ir::kani::Witness)`) survives, which is a stated limit. Associated-item paths survive (FND-006). Gates at this head: `cargo fmt --check` passed, `make lint` passed, and `cargo test --locked --test it layout::` ran 7 tests, all passing.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | `use_paths` and `resolve_path` now build a cross-file alias map keyed by module path, including submodule renames, `extern crate` renames, `self`/`super`/`crate` prefixes and `self` leaves; all four reported escapes die |
+| FND-002 | fixed | `visit_macro` scans every macro's tokens with `macro_definitions` for `struct`/`enum`/`union`/`trait`/`type` followed by a listed name; both macro mutants die. Macro expansion is stated as outside the scan |
+| FND-003 | fixed | `visit_path` resolves every path through the alias map; the fn-argument and type-alias mutants die. The associated-item residue is recorded as FND-006 |
+| FND-004 | fixed | The test has a doc comment stating its scope and limits; the module header names FR-024-AC-10; violations read `file:line: <action> <type>` |
+| FND-005 | still-open | the `/// Trace: FR-024-AC-10` line was added in this fix round and must be removed |
+| FND-006 | still-open | associated-item paths through a listed IR type pass although the doc, the matrix row and the prose claim qualified paths are checked |
