@@ -517,10 +517,18 @@ fn tc_024_generation_is_byte_deterministic_across_runs_and_request_orders() {
 }
 
 #[trace("FR-014-AC-1", "FR-014-AC-2", "TC-024")]
+#[trace("TC-001", "NFR-002-AC-1", "NFR-002-AC-2")]
 #[test]
 fn tc_024_every_scalar_family_generates_one_oracle_calling_its_runtime_operator() {
     let oracles = generate(&corpus_package().admit(), &golden_items());
     let lib = contents(&oracles, "src/lib.rs");
+    let subjects = oracles
+        .claim_map
+        .items
+        .iter()
+        .map(|claim| claim.node_id.digest.as_ref())
+        .collect::<Vec<&str>>();
+    crate::generated_headers::assert_header("src/lib.rs", lib, &subjects);
     let mut calls = vec![
         (
             1001,

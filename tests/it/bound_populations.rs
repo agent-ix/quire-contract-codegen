@@ -412,7 +412,14 @@ fn tc_018_full_i64_domain_value_sets_use_checked_edges_without_overflow() {
     }
 }
 
-#[trace("TC-018", "FR-009-AC-3", "FR-009-AC-6")]
+#[trace(
+    "TC-018",
+    "FR-009-AC-3",
+    "FR-009-AC-6",
+    "TC-001",
+    "NFR-002-AC-1",
+    "NFR-002-AC-2"
+)]
 #[test]
 fn tc_018_generated_sources_are_constructive_and_byte_identical() {
     let mut scanned = 0;
@@ -441,6 +448,11 @@ fn tc_018_generated_sources_are_constructive_and_byte_identical() {
                 };
                 let second = render_population(&request(relation, domain, population)).unwrap();
                 assert_eq!(first, second);
+                crate::generated_headers::assert_header(
+                    "population.rs",
+                    &first.source,
+                    &[&format!("{population:?}")],
+                );
                 for forbidden in [
                     "prop_filter",
                     "prop_filter_map",

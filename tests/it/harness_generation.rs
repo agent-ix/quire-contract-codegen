@@ -127,6 +127,7 @@ fn typed_clauses() -> (DeclarationEnvironment, TypedExpression, TypedExpression)
 }
 
 #[trace("FR-002-AC-1", "FR-002-AC-5", "FR-002-AC-6", "TC-004")]
+#[trace("TC-001", "NFR-002-AC-1", "NFR-002-AC-2")]
 #[test]
 fn tc_004_generated_harness_binds_clauses_and_executes_all_three_terminal_paths() {
     let (environment, precondition_expression, postcondition_expression) = typed_clauses();
@@ -146,6 +147,11 @@ fn tc_004_generated_harness_binds_clauses_and_executes_all_three_terminal_paths(
     let first = generate_tristate_harness(&request).unwrap();
     let second = generate_tristate_harness(&request).unwrap();
     assert_eq!(first, second);
+    crate::generated_headers::assert_header(
+        &first.rust.path,
+        &first.rust.contents,
+        &["FR-002", "1", "precondition-main", "postcondition-main"],
+    );
     let stricter = generate_tristate_harness(&HarnessRequest {
         requirement: environment.owner(),
         precondition_clause: &precondition,

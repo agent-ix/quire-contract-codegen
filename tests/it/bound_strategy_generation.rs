@@ -143,6 +143,17 @@ fn generate(
     .unwrap()
 }
 
+#[trace("TC-001", "NFR-002-AC-1", "NFR-002-AC-2")]
+#[test]
+fn bound_strategy_header_retains_its_clause_identity() {
+    let artifact = generate(BoundStrategyPopulation::Broad).rust;
+    crate::generated_headers::assert_header(
+        &artifact.path,
+        &artifact.contents,
+        &["FR-034", "9", "VersionUnchanged"],
+    );
+}
+
 #[trace("TC-017", "FR-008-AC-3", "FR-008-AC-6", "TC-003", "NFR-002-AC-3")]
 #[test]
 fn wide_ir_domain_refuses_the_i64_strategy() {

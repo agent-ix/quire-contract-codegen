@@ -1437,7 +1437,7 @@ fn tc_029_ac8_a_duplicate_field_is_refused_with_its_declaration_cause() {
     }
 }
 
-#[trace("FR-018-AC-10", "TC-029")]
+#[trace("FR-018-AC-10", "TC-029", "TC-001", "NFR-002-AC-1", "NFR-002-AC-2")]
 #[test]
 fn tc_029_ac10_bytes_are_deterministic_across_request_permutations() {
     let package = admit(corpus_package());
@@ -1563,6 +1563,19 @@ fn tc_029_ac10_generation_is_repeatable_from_a_fresh_package() {
     let first = corpus_oracles();
     let second = corpus_oracles();
     assert_eq!(first, second);
+    let subjects = first
+        .claim_map
+        .items
+        .iter()
+        .map(|claim| claim.node_id.digest.as_ref())
+        .collect::<Vec<&str>>();
+    for artifact in first
+        .artifacts
+        .iter()
+        .filter(|artifact| artifact.path.ends_with(".rs"))
+    {
+        crate::generated_headers::assert_header(&artifact.path, &artifact.contents, &subjects);
+    }
     for path in ["Cargo.toml", "src/lib.rs", "claim-map.json"] {
         assert_eq!(contents(&first, path), contents(&second, path), "{path}");
     }

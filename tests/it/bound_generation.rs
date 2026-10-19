@@ -1,6 +1,7 @@
 //! Explicitly synthetic public executable projections, not a source-language frontend.
 
 use crate::scratch_crate::{runtime_dependency, write_manifest};
+use ix_trace_rs::trace;
 use quire_contract_codegen::{
     generate_bound_oracles, BoundGenerationError, BoundOracleGeneration, GenerationErrorCode,
     SourceRegion,
@@ -113,7 +114,7 @@ fn state_integer_projection() -> Value {
     value
 }
 
-/// TC-001
+#[trace("TC-001", "NFR-002-AC-1", "NFR-002-AC-2")]
 #[test]
 fn complete_public_binding_preserves_identity_population_and_derivation() {
     let value = projection("test/bound", 3, true);
@@ -124,6 +125,11 @@ fn complete_public_binding_preserves_identity_population_and_derivation() {
     assert_eq!(result.bundle().artifacts().len(), 6);
     assert_eq!(result.informational(), bound.informational());
     for (output, clause) in result.clauses().iter().zip(bound.clauses()) {
+        crate::generated_headers::assert_header(
+            &output.bundle().rust.path,
+            &output.bundle().rust.contents,
+            &["FR-001", "7", clause.identity().clause().as_str()],
+        );
         assert_eq!(output.identity(), clause.identity());
         let bundle = output.bundle();
         let map: Vec<SourceRegion> = serde_json::from_str(&bundle.source_map.contents).unwrap();

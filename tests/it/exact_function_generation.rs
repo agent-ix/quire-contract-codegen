@@ -21,7 +21,14 @@ use quire_contract_codegen::{
 use quire_contract_model::{derive_structural_candidates, CheckedPackageV2, CheckedSemanticNodeV2};
 use std::ops::Deref;
 
-#[trace("FR-021-AC-28", "FR-021-AC-34", "TC-031")]
+#[trace(
+    "FR-021-AC-28",
+    "FR-021-AC-34",
+    "TC-031",
+    "TC-001",
+    "NFR-002-AC-1",
+    "NFR-002-AC-2"
+)]
 #[test]
 fn tc_031_ac34_public_strict_reader_chain_generates_compilable_flat_schedule() {
     use serde_json::{json, Value};
@@ -391,6 +398,15 @@ fn tc_031_ac34_public_strict_reader_chain_generates_compilable_flat_schedule() {
     let work_limit = required_call_work.max(required_scalar_work);
     let generated = generate_function_schedules(&checked, &declarations, &items, work_limit)
         .expect("caller-raised work limit admits the complete flat schedule");
+    let subjects = generated
+        .functions
+        .iter()
+        .map(|function| function.function_node_id.digest.as_ref())
+        .collect::<Vec<&str>>();
+    crate::generated_headers::assert_header("src/lib.rs", &generated.source, &subjects);
+    for artifact in &generated.modules {
+        crate::generated_headers::assert_header(&artifact.path, &artifact.contents, &subjects);
+    }
     let generated_with_limits = generate_function_schedules_with_limits(
         &checked,
         &declarations,
@@ -698,7 +714,10 @@ fn tc_031_ac34_public_strict_reader_chain_generates_compilable_flat_schedule() {
     "FR-021-AC-27",
     "FR-021-AC-28",
     "FR-021-AC-29",
-    "TC-031"
+    "TC-031",
+    "TC-001",
+    "NFR-002-AC-1",
+    "NFR-002-AC-2"
 )]
 #[test]
 fn tc_031_ac7_admitted_hundred_thousand_call_nodes_generate_on_a_512_kib_stack() {
@@ -985,6 +1004,20 @@ fn tc_031_ac7_admitted_hundred_thousand_call_nodes_generate_on_a_512_kib_stack()
                 other => panic!("default source behavior was unexpected: {other:?}"),
             };
             assert_eq!(raised.functions.len(), 2);
+            assert!(!raised.modules.is_empty(), "large schedule must exercise part files");
+            crate::generated_headers::assert_header(
+                "src/lib.rs",
+                &raised.source,
+                &[helper_function_node_id.digest.as_ref(), outer_function_node_id.digest.as_ref()],
+            );
+            for module in &raised.modules {
+                let ordinal = module.path.strip_prefix("src/schedule_").and_then(|tail| tail.get(..6)).and_then(|text| text.parse::<usize>().ok()).expect("schedule module names its function ordinal");
+                crate::generated_headers::assert_header(
+                    &module.path,
+                    &module.contents,
+                    &[raised.functions[ordinal].function_node_id.digest.as_ref()],
+                );
+            }
             let helper = raised
                 .functions
                 .iter()
@@ -3354,7 +3387,7 @@ pub fn contents(oracles: &quire_contract_codegen::ExactFunctionOracles, path: &s
 /// entries are ordered by the item key (call node id, then the applied
 /// function's declaring node id, then each argument operand's source node
 /// id).
-#[trace("FR-021-AC-13", "TC-031")]
+#[trace("FR-021-AC-13", "TC-031", "TC-001", "NFR-002-AC-1", "NFR-002-AC-2")]
 #[test]
 fn tc_031_ac13_generation_is_deterministic_across_runs_and_permutations() {
     let package = admit(ext_corpus_package());
@@ -3362,6 +3395,19 @@ fn tc_031_ac13_generation_is_deterministic_across_runs_and_permutations() {
     let items = main_items();
 
     let first = generate(&package, &functions, &items);
+    let subjects = first
+        .claim_map
+        .items
+        .iter()
+        .map(|claim| claim.node_id.digest.as_ref())
+        .collect::<Vec<&str>>();
+    for artifact in first
+        .artifacts
+        .iter()
+        .filter(|artifact| artifact.path.ends_with(".rs"))
+    {
+        crate::generated_headers::assert_header(&artifact.path, &artifact.contents, &subjects);
+    }
     let second = generate(&package, &functions, &items);
     let from_a_fresh_package = main_oracles();
 

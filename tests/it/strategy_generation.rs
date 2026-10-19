@@ -33,7 +33,34 @@ fn embedded_source(source: &str) -> String {
     format!("//{crate_docs}\n{}\n", lines.collect::<Vec<_>>().join("\n"))
 }
 
-#[trace("FR-002-AC-4", "FR-002-AC-6", "TC-004")]
+#[trace("TC-001", "NFR-002-AC-1", "NFR-002-AC-2")]
+#[test]
+fn enum_strategy_header_retains_input_identity() {
+    let requirement = requirement();
+    let artifact = generate_enum_strategy(&EnumStrategyRequest {
+        requirement: &requirement,
+        strategy_id: "enum-header",
+        enum_type: "Mode",
+        variants: &["Idle", "Active"],
+        campaign: EnumStrategyCampaign::Broad,
+    })
+    .unwrap()
+    .rust;
+    crate::generated_headers::assert_header(
+        &artifact.path,
+        &artifact.contents,
+        &["FR-002", "2", "enum-header"],
+    );
+}
+
+#[trace(
+    "FR-002-AC-4",
+    "FR-002-AC-6",
+    "TC-004",
+    "TC-001",
+    "NFR-002-AC-1",
+    "NFR-002-AC-2"
+)]
 #[test]
 fn tc_004_supported_populations_are_directly_shaped_and_shrink_inside_constraints() {
     let requirement = requirement();
@@ -70,6 +97,16 @@ fn tc_004_supported_populations_are_directly_shaped_and_shrink_inside_constraint
         campaign: StrategyCampaign::Broad,
     })
     .unwrap();
+    for (artifact, strategy) in [
+        (&range.rust, "range-broad"),
+        (&correlated.rust, "correlated-broad"),
+    ] {
+        crate::generated_headers::assert_header(
+            &artifact.path,
+            &artifact.contents,
+            &["FR-002", "2", strategy],
+        );
+    }
     assert!(!correlated.rust.contents.contains("prop_filter"));
 
     let residual = generate_i64_strategy(&StrategyRequest {

@@ -496,7 +496,14 @@ fn tc_025_real_kani_classifies_the_v1_bundle_verified_vacuous_and_falsified() {
     );
 }
 
-#[trace("FR-015-AC-25", "NFR-001-AC-1", "TC-005")]
+#[trace(
+    "FR-015-AC-25",
+    "NFR-001-AC-1",
+    "TC-005",
+    "TC-001",
+    "NFR-002-AC-1",
+    "NFR-002-AC-2"
+)]
 #[test]
 fn kani_bundle_is_deterministic_schema_valid_and_stable_rust_compiles() {
     let dependencies = [ProofDependencyRequest {
@@ -509,6 +516,11 @@ fn kani_bundle_is_deterministic_schema_valid_and_stable_rust_compiles() {
     let first = fixture_bundle(&dependencies);
     let second = fixture_bundle(&dependencies);
     assert_eq!(first, second);
+    crate::generated_headers::assert_header(
+        &first.rust.path,
+        &first.rust.contents,
+        &["FR-003", "4"],
+    );
     assert!(first.rust.contents.contains("// BEGIN framing"));
     assert!(first.rust.contents.contains("// BEGIN binding"));
     assert!(first.rust.contents.contains("// BEGIN contract"));
