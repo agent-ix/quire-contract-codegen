@@ -31,3 +31,11 @@ These 19 sites match one-to-one the 19 site citations in quire-exact FR-369's CG
 ## Verdict
 
 **PASS with a low finding**: CG owns all 19 producer sites the criterion names, and the PLANNED status with no credited test is honest.
+
+## Dispositions
+
+Disposition pass 1, against head 5d0c8f3c2f5731a7044e9ed4d30fef294683616f.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Status now reads "PLANNED: IR-709 owns generated producer and consumer changes and tests. The former unit-variant removal is gated on the IR-497 coordinated cutover and the dependency bump that supplies the typed payload." |

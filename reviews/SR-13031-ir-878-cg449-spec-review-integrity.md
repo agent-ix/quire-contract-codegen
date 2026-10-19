@@ -31,3 +31,19 @@ The new tests.md row at line 89 sits after a prose paragraph, outside the Functi
 ## Verdict
 
 **FAIL (changes requested)**: move the FR-042 row into the Functional Requirement Coverage table, after the FR-035 row at line 60 with no blank line in between. Add FR-042 to the spec/tests.md Oracle row. Then re-run `quire coverage --strict` to confirm the oracle matrix emits the FR-042 functional-coverage row.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | low | The new matrix row reads "generated-oracle producer and QSL consumer tests follow the IR-497 typed-payload cutover" under IR-709, a CG-scoped ticket. That credits QSL consumer tests to the CG row, contradicting FR-042 Behavior ("its preservation and matching work is tracked at that owner") and TC-057 step 3 ("The QSL replay consumer is verified at its owner") | spec/oracle/matrix/tests.md:61 |
+| FND-004 | low | The new TC-057 has no row in the oracle Test Case Summary table, while every other oracle TC (TC-024, TC-029, TC-031, TC-044, TC-050) has one with its Traces To criteria. So `quire coverage` emits no traces-to record for TC-057 | spec/oracle/matrix/tests.md:90-103 |
+
+## Dispositions
+
+Disposition pass 1, against head 5d0c8f3c2f5731a7044e9ed4d30fef294683616f. `quire coverage --scope . --strict` goes from 226 unbacked and 0 contradicted on origin/main to 228 unbacked and 0 contradicted. The additions are the FR-042 functional-coverage row (tests.md:61, targets FR-042 and TC-057), the FR-042-AC-1 verification row and its obligation. There is no new undeclared-status, and nothing is credited as backed. `make spec` is clean.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The FR-042 row is now inside the Functional Requirement Coverage table at line 61, right after FR-035, and coverage reads it as `unbacked-row FR-042 functional-coverage` |
+| FND-002 | fixed | The spec/tests.md Oracle row now lists FR-014, FR-018, FR-021, FR-031, FR-035, FR-042, and the spec.md Complete-V1 oracles row names FR-042 |

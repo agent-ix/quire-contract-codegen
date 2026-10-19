@@ -31,3 +31,13 @@ CG owns the producer half of the criterion. Its generated Boolean, equality and 
 ## Verdict
 
 **PASS with findings.** The text is preserved, CG owns the producer code path, the id and status are correct, and `quire validate` is clean. FND-001 needs a clarification of the ownership boundary in the Behavior prose, without changing the AC text, before this allocation closes the IR-878 owner-allocation item cleanly.
+
+## Dispositions
+
+Disposition pass 1, against head 5d0c8f3c2f5731a7044e9ed4d30fef294683616f (fix commit 386aa47f). The FR-042-AC-1 text is still byte-identical to the FR-369-AC-7 row that quire-exact PR #56 head c58ab92 removes.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Behavior now states that CG owns the generated Boolean, equality, function and pre-check placeholder constructors and the payload they emit, and that QSL `qsl-replay/src/scalar.rs` owns the downstream consumer, tracked at that owner; the AC text is unchanged |
+| FND-002 | fixed | Behavior now names "the second cause table of quire-exact FR-369", with an ix link; that table is present at quire-exact PR #56 head c58ab92 |
+| FND-003 | fixed | Dependencies now link FR-018 and say that its AC-8 and AC-17 still name the former unit constructor and must align with FR-042-AC-1; FR-021's criteria name no unit CheckedInvariant |
