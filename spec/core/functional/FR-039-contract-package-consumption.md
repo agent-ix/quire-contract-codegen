@@ -222,9 +222,10 @@ admitted read keeps its existing supported or genuine backend-refusal decision.
 These criteria are planned; this deviation remains until the code PR lands.
 The current oracle-function helper re-lowers `CheckedPackageV2` and reads the
 resulting wire. AC-48 and AC-49 describe that current helper's observable
-outcome; the FR-330 production caller has already performed the authoritative
-read, and the code PR must carry its result rather than re-read or fall back to
-the checked graph. AC-5's preservation clause remains unmet; this Analysis is
+outcome; on the FR-330 production path, only an `Admitted` package reaches CG
+after the caller's authoritative read. The code PR must use that admitted
+result without re-reading or falling back to the checked graph. AC-5's
+preservation clause remains unmet; this Analysis is
 planned and does not claim full conformity.
 
 Contract IR owner evidence on origin/main at 4213b98 separates criterion text

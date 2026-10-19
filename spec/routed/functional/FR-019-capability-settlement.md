@@ -436,25 +436,25 @@ listed public fields without deriving a backend cause. The two variants SHALL
 carry these projections so the existing `EnvelopeRefusal: Serialize` derive
 remains satisfiable.
 
-The paired quire-driver change tracked by IR-894 covers three variants at its
-CG dependency bump: `ManifestRepeatsBackendIdentity`,
-`ContractPackageReadRefused` and `ContractPackageReadIncomplete`. Its owner
-SHALL choose the FR-272 code for the two reader variants and extend the
+The quire-driver handling of `ContractPackageReadRefused` and
+`ContractPackageReadIncomplete` is tracked by IR-896. Its owner
+SHALL choose the FR-272 code for these reader variants and extend the
 exhaustive `DriverRefusal::code` and `envelope_message` matches in
 `src/refusal.rs`; `src/upstream.rs` already returns `EnvelopeRefusal`.
-The driver pin predates all three variants. A search of `quire-spec-language`
-Rust sources found no direct `EnvelopeRefusal` match; QSL consumes the result
-through the driver. Those repositories are outside this spec PR.
+A search of `quire-spec-language` Rust sources found no direct
+`EnvelopeRefusal` match; QSL consumes the result through the driver. Those
+repositories are outside this spec PR.
 
 On the current oracle-function path,
 `checked_integer_function_application_is_supported` re-lowers a
 `CheckedPackageV2`, calls `ContractPackageWireV1::read`, and collapses either
 non-admitted outcome to `false`. FR-019-AC-48 and AC-49 describe the observable
 result of that current read once the code PR preserves its outcome. On the
-FR-330 production path, the caller has already made the single authoritative
-read. The code PR SHALL carry that caller's outcome to the negotiation result
-where it exists and SHALL NOT add a re-read, re-lowering or checked-graph
-fallback on that path. FR-039-AC-5 remains the governing single-read rule.
+FR-330 production path, only an `Admitted` package reaches CG after the
+caller's single authoritative read; `Refused` and `Incomplete` stop before
+negotiation. The code PR SHALL use that admitted result without a re-read,
+re-lowering or checked-graph fallback. FR-039-AC-5 remains the governing
+single-read rule.
 
 When several request items can fail preflight, the generator SHALL select the
 first item in manifest/item request order whose reader outcome is not
@@ -510,8 +510,8 @@ requires its exhaustive arms to compile. FR-019-AC-14 is a property of the retur
 | FR-019-AC-45 | A manifest with a second descriptor of one backend identity causes a whole-envelope `EnvelopeRefusal::ManifestRepeatsBackendIdentity { identity: String }`, whether the descriptors are identical, differ in `ProviderOrigin` alone, or differ in any other CG descriptor field, and whether adjacent or non-adjacent. The call returns no item settlements. The variant has no string cause, manifest or digest payload; `negotiate_backend_provider` keeps its return signature. | Test (TC-030) |
 | FR-019-AC-46 | With several repeated identities, the refusal names the bytewise-first repeated identity independent of manifest order; identities differing only in case are distinct. An invalid contract version or capability vocabulary is refused as `EnvelopeRefusal::InvalidCapability` before repeat detection or any kind read. | Test (TC-030) |
 | FR-019-AC-47 | QSL's registry snapshot holds each backend identity at most once (FR-290:258-265; FR-331:57), so no driver-built FR-331 manifest repeats an identity. | Analysis (FR-290:258-265; FR-331:57; CG takes no `qsl-route` dependency under FR-019's Rust input boundary paragraph, which cites FR-022 "Where the input type lives", and `generate_routed` accepts routed items rather than settlements) |
-| FR-019-AC-48 | A `Refused(refusal)` outcome from the current Kani oracle-function preflight read, or the caller's single FR-330 read where available, produces `Err(EnvelopeRefusal::ContractPackageReadRefused { refusal: ContractPackageRefusalProjection })` for the whole request, with the reader's `code`, `path`, `cause`, `locus`, `contract_version`, `document_pointer`, `expected` and `actual` copied into the named CG projection; the private `expected_node_id` is absent. No item settlement or artifact is returned. | Test (TC-030) |
-| FR-019-AC-49 | An `Incomplete(incomplete)` outcome from the current Kani oracle-function preflight read, or the caller's single FR-330 read where available, produces `Err(EnvelopeRefusal::ContractPackageReadIncomplete { incomplete: ContractPackageIncompleteProjection })` for the whole request, with the reader's `limit_kind`, `limit`, `consumed` and `path` copied into the named CG projection. No item settlement or artifact is returned. | Test (TC-030) |
+| FR-019-AC-48 | A `Refused(refusal)` outcome from the current Kani oracle-function preflight read produces `Err(EnvelopeRefusal::ContractPackageReadRefused { refusal: ContractPackageRefusalProjection })` for the whole request, with the reader's `code`, `path`, `cause`, `locus`, `contract_version`, `document_pointer`, `expected` and `actual` copied into the named CG projection; the private `expected_node_id` is absent. No item settlement or artifact is returned. | Test (TC-030) |
+| FR-019-AC-49 | An `Incomplete(incomplete)` outcome from the current Kani oracle-function preflight read produces `Err(EnvelopeRefusal::ContractPackageReadIncomplete { incomplete: ContractPackageIncompleteProjection })` for the whole request, with the reader's `limit_kind`, `limit`, `consumed` and `path` copied into the named CG projection. No item settlement or artifact is returned. | Test (TC-030) |
 | FR-019-AC-50 | An `Admitted` Kani function-application preflight read whose exact generator produces a claim for an otherwise supported item retains the existing `supported` settlement. | Test (TC-030) |
 | FR-019-AC-51 | Among several request items with non-`Admitted` preflight outcomes, the first failing item in manifest/item request order determines the whole-request `ContractPackageReadRefused` or `ContractPackageReadIncomplete` variant and projection, irrespective of outcome kind. Earlier successful items contribute no returned settlement or artifact. | Test (TC-030) |
 | FR-019-AC-52 | An `Admitted` Kani function-application read whose exact generator emits no claim, and a structural preflight rejection before any read, each retain item-level `KaniFormRefused { OperationNotRendered }` without a reader envelope refusal. | Test (TC-030) |

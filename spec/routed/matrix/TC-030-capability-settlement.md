@@ -59,7 +59,8 @@ items with mixed `Refused` and `Incomplete` outcomes in both orders and a
 preceding valid item to assert that the first failing item in item request
 order alone selects the whole-envelope result and no partial settlement or
 artifact leaks. On the FR-330 path, instrument the caller read and assert that
-negotiation carries its result without a second read or checked-graph fallback.
+only its `Admitted` package reaches CG negotiation, without a second read or
+checked-graph fallback; `Refused` and `Incomplete` stop before CG.
 
 Settle envelopes whose items exercise each rule in FR-290's stated order: an
 absent kind; an unknown kind; an absent extent classification; an unknown
@@ -290,8 +291,9 @@ determines the whole-envelope variant and projection for either Refused then
 Incomplete or Incomplete then Refused; earlier valid items yield no partial
 result. For FR-019-AC-52, an admitted function with no generated claim and a
 structural rejection before the reader each retain item-level
-`KaniFormRefused { OperationNotRendered }`. The FR-330 production path uses
-the caller's single read and performs no re-read or checked-graph fallback.
+`KaniFormRefused { OperationNotRendered }`. On the FR-330 production path,
+only the caller's `Admitted` package reaches CG; negotiation performs no
+re-read or checked-graph fallback.
 
 For AC-34 through AC-41, every positive case uses a validated candidate and
 only a form, subject class and modifier its arm discharges. After candidate

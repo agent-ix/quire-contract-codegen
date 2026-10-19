@@ -36,3 +36,11 @@ criteria.
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | low | The TC-030 Test Procedure gains an AC-48 to AC-50 paragraph, but `## Expected Results` has no entry for those criteria. The expected outcomes exist only as inline "Assert ..." clauses in the procedure. Every other criterion group, for example AC-45 and AC-46, has an Expected Results entry | spec/routed/matrix/TC-030-capability-settlement.md:37-53; spec/routed/matrix/TC-030-capability-settlement.md:235-263 |
+
+## Dispositions
+
+Round 1, reviewed at b1712d769910cc57dfed050e7b9886508e44b0e7 (fix commit d365b00b over cfa6dcf6). The renumbered range AC-48 to AC-52 is consistent across FR-019, TC-030's Traces To, the routed matrix row, the FR-039-AC-5 core row and the `spec/tests.md` Routed row. `quire matrix` lists AC-48 to AC-52 as `untagged`, which matches their Planned status. No other open CG PR uses FR-019-AC-51 or AC-52.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | TC-030 `## Expected Results` now has entries for FR-019-AC-48, AC-49 and AC-50 to AC-52 |
