@@ -1040,7 +1040,7 @@ fn tc_030_an_empty_candidate_set_settles_unsupported_with_a_warning() {
 /// candidate in candidate order, identically under either registration order.
 ///
 /// Provenance: codegen#86
-#[trace("TC-030")]
+#[trace("FR-019-AC-4", "TC-030")]
 #[test]
 fn tc_030_two_candidates_with_no_named_backend_settle_ambiguous() {
     let second = BackendDescriptor {
@@ -1079,6 +1079,69 @@ fn tc_030_two_candidates_with_no_named_backend_settle_ambiguous() {
             },
             "registration order changed the disposition or the candidate order"
         );
+        let Disposition::InvalidRequest { cause } = &settlement.disposition else {
+            panic!("ambiguous candidates must be an invalid request");
+        };
+        assert_eq!(cause.code(), "invalid_capability");
+    }
+}
+
+/// Three candidates settle ambiguous in request order under every descriptor
+/// registration order, even when request order differs from bytewise order.
+#[trace("FR-019-AC-4", "TC-030")]
+#[test]
+fn tc_030_three_candidates_settle_ambiguous_in_candidate_order() {
+    let descriptors = [
+        kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)]),
+        BackendDescriptor {
+            identity: "kani-nightly".to_owned(),
+            advertised: vec![(CapabilityKind::ValueValidity, Mode::Unbounded)],
+            origin: ProviderOrigin::Process,
+            domains: None,
+            bounds: None,
+        },
+        BackendDescriptor {
+            identity: "alpha-backend".to_owned(),
+            advertised: vec![(CapabilityKind::ValueValidity, Mode::Bounded)],
+            origin: ProviderOrigin::Process,
+            domains: None,
+            bounds: None,
+        },
+    ];
+    let candidates = vec![
+        candidate("kani-nightly"),
+        candidate(BackendKind::Kani.identity()),
+        candidate("alpha-backend"),
+    ];
+    for order in [
+        [0, 1, 2],
+        [0, 2, 1],
+        [1, 0, 2],
+        [1, 2, 0],
+        [2, 0, 1],
+        [2, 1, 0],
+    ] {
+        let manifest = order.map(|index| descriptors[index].clone()).to_vec();
+        let settlement = settle_one(
+            manifest,
+            item(
+                RequestedKind::Known(CapabilityKind::ValueValidity),
+                Candidates::Set(candidates.clone()),
+            ),
+        );
+        assert_eq!(
+            settlement.disposition,
+            Disposition::InvalidRequest {
+                cause: Cause::AmbiguousBackend {
+                    candidates: candidates.clone()
+                }
+            },
+            "candidate list or cause changed for registration order {order:?}"
+        );
+        let Disposition::InvalidRequest { cause } = &settlement.disposition else {
+            panic!("ambiguous candidates must be an invalid request");
+        };
+        assert_eq!(cause.code(), "invalid_capability");
     }
 }
 
@@ -2318,16 +2381,24 @@ fn kani_form_identity_does_not_depend_on_display_or_debug_text() {
 /// refused whole, and no kind of it is read.
 ///
 /// Provenance: codegen#86
-#[trace("TC-030")]
+#[trace("FR-019-AC-7", "TC-030")]
 #[test]
 fn tc_030_a_foreign_capability_vocabulary_refuses_the_carrier() {
-    for supplied in ["", "quire.capability-kind/v2"] {
+    for supplied in [
+        "",
+        "quire.capability-kind/v2",
+        "quire.capability-kind/v1 ",
+        "QUIRE.CAPABILITY-KIND/V1",
+        "quire.capability-kind/v10",
+        "quire.capability-kind/v1.0",
+        "quire.capability-kind/",
+    ] {
         let refusal = negotiate_backend_provider(&BackendProviderEnvelope {
             capability_vocabulary: supplied.to_owned(),
             ..envelope(
                 vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)])],
                 vec![item(
-                    RequestedKind::Known(CapabilityKind::ValueValidity),
+                    RequestedKind::Unknown("foreign-kind".to_owned()),
                     Candidates::Set(vec![candidate(BackendKind::Kani.identity())]),
                 )],
             )
@@ -2341,6 +2412,10 @@ fn tc_030_a_foreign_capability_vocabulary_refuses_the_carrier() {
                 received: supplied.to_owned()
             },
             "no settlement is returned, so no label of the carrier was read"
+        );
+        assert_eq!(
+            serde_json::to_value(&refusal).expect("typed refusal serializes")["code"],
+            "invalid_capability"
         );
     }
 }
