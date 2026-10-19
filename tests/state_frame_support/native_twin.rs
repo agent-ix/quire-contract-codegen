@@ -36,6 +36,13 @@ const PACKAGE: &str = "test/bank";
 const PLACEHOLDER_DIGEST: &str =
     "sha256:0000000000000000000000000000000000000000000000000000000000000000";
 
+const fn unbounded_decode_limits() -> quire_contract_codegen::WitnessDecodeLimits {
+    quire_contract_codegen::WitnessDecodeLimits {
+        bytes: usize::MAX,
+        values: usize::MAX,
+    }
+}
+
 fn account_type() -> String {
     format!("ix://{PACKAGE}/Account")
 }
@@ -814,10 +821,7 @@ impl Twin {
             account,
             field,
             run,
-            quire_contract_codegen::WitnessDecodeLimits {
-                bytes: usize::MAX,
-                values: usize::MAX,
-            },
+            unbounded_decode_limits(),
         )
     }
 
@@ -858,10 +862,7 @@ impl Twin {
     /// The proving run's lock: the unit, no dependency, and the limits the twin replays under.
     fn run(&self) -> ReplayInputs {
         ReplayInputs {
-            decode_limits: quire_contract_codegen::WitnessDecodeLimits {
-                bytes: usize::MAX,
-                values: usize::MAX,
-            },
+            decode_limits: unbounded_decode_limits(),
             source: LockedSource {
                 authority: AUTHORITY.to_owned(),
                 identity: IDENTITY.to_owned(),

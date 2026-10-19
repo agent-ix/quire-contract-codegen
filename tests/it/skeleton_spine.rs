@@ -97,10 +97,7 @@ fn locked(identity: &str, bytes: &[u8]) -> LockedSource {
 /// proving run carries limits.
 fn inputs(source: &str, dependencies: Vec<DependencyLock>) -> ReplayInputs {
     ReplayInputs {
-        decode_limits: quire_contract_codegen::WitnessDecodeLimits {
-            bytes: usize::MAX,
-            values: usize::MAX,
-        },
+        decode_limits: crate::unbounded_decode_limits(),
         source: locked(IDENTITY, source.as_bytes()),
         dependencies,
         accounting_limits: UNLIMITED,
@@ -1430,10 +1427,7 @@ fn tc_026_one_boolean_clause_goes_from_a_bound_package_through_kani_to_native_re
         harness.identity.module_symbol.as_str(),
         &harness.identity.arguments,
         counterexample,
-        WitnessDecodeLimits {
-            bytes: usize::MAX,
-            values: usize::MAX,
-        },
+        crate::unbounded_decode_limits(),
     )
     .expect("the counterexample decodes");
     let get = |name: &str| match decoded.iter().find(|(n, _)| n == name) {

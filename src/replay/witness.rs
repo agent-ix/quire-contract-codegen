@@ -51,6 +51,14 @@ pub struct WitnessDecodeLimits {
     pub values: usize,
 }
 
+#[cfg(test)]
+pub(crate) const fn unbounded_decode_limits() -> WitnessDecodeLimits {
+    WitnessDecodeLimits {
+        bytes: usize::MAX,
+        values: usize::MAX,
+    }
+}
+
 /// Why the generator's persisted argument schema could not be used to type a transcript.
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum WitnessSchemaError {
@@ -166,7 +174,7 @@ pub(crate) fn decode_playback<'a>(
         return Err(DecodeFailure::new(
             "cg_witness_decode_bytes_limit",
             harness_symbol,
-            &limits.bytes.to_string(),
+            &format!("{module_symbol};bytes={}", limits.bytes),
         ));
     }
     let schema = argument_types(arguments).map_err(|error| match error {
@@ -299,6 +307,43 @@ mod tests {
     use super::*;
     use crate::kani::abi::KaniIntegerBounds;
 
+    #[trace("TC-026", "FR-016-AC-6")]
+    #[test]
+    fn witness_decode_bounds_have_no_default() {
+        for (source, declaration, name) in [
+            (
+                include_str!("witness.rs"),
+                "pub struct WitnessDecodeLimits {",
+                "WitnessDecodeLimits",
+            ),
+            (
+                include_str!("function.rs"),
+                "pub struct ReplayInputs {",
+                "ReplayInputs",
+            ),
+        ] {
+            let (before, _) = source
+                .split_once(declaration)
+                .expect("public input type exists");
+            let derive = before
+                .rsplit_once("#[derive(")
+                .and_then(|(_, attributes)| attributes.split_once(")]"))
+                .map(|(traits, _)| traits)
+                .expect("input type has a derive attribute");
+            assert!(
+                !derive
+                    .split(',')
+                    .any(|trait_name| trait_name.trim() == "Default"),
+                "{name} must not derive Default"
+            );
+            assert!(
+                !source.contains(&format!("impl Default for {name}"))
+                    && !source.contains(&format!("impl std::default::Default for {name}")),
+                "{name} must not implement Default"
+            );
+        }
+    }
+
     fn argument(identifier: &str, primitive_type: KaniPrimitiveType) -> ObligationBinding {
         ObligationBinding {
             identifier: identifier.to_owned(),
@@ -347,17 +392,9 @@ mod tests {
             argument("a", KaniPrimitiveType::I64),
             argument("a", KaniPrimitiveType::Boolean),
         ];
-        let error = decode_falsification(
-            "h",
-            "mod",
-            &twice,
-            &transcript,
-            WitnessDecodeLimits {
-                bytes: usize::MAX,
-                values: usize::MAX,
-            },
-        )
-        .expect_err("a repeated name is refused");
+        let error =
+            decode_falsification("h", "mod", &twice, &transcript, unbounded_decode_limits())
+                .expect_err("a repeated name is refused");
         assert_eq!(error.code, "cg_witness_schema_duplicate_binding");
         assert_eq!(error.context, "a");
     }
@@ -448,6 +485,7 @@ fn kani_concrete_playback_synthetic() {{\n\
         let error = decode_falsification("h", "mod", &argument, &poisoned_bytes, exact)
             .expect_err("suffix beyond byte bound");
         assert_eq!(error.code, "cg_witness_decode_bytes_limit");
+        assert_eq!(error.context, format!("mod;bytes={}", exact.bytes));
         let unbounded_error = decode_falsification(
             "h",
             "mod",
@@ -478,6 +516,7 @@ fn kani_concrete_playback_synthetic() {{\n\
         )
         .expect_err("poisoned second value beyond count bound");
         assert_eq!(error.code, "cg_witness_decode_values_limit");
+        assert_eq!(error.context, "mod;values=1");
         let unbounded_error = decode_falsification(
             "h",
             "mod",
@@ -508,10 +547,7 @@ fn kani_concrete_playback_synthetic() {{\n\
                 argument("second", KaniPrimitiveType::I64),
             ],
             &transcript,
-            WitnessDecodeLimits {
-                bytes: usize::MAX,
-                values: usize::MAX,
-            },
+            unbounded_decode_limits(),
         )
         .expect_err("one value cannot decode against two arguments");
         assert_eq!(arity.code, "kani_witness_arity_mismatch", "{arity:?}");
@@ -520,10 +556,7 @@ fn kani_concrete_playback_synthetic() {{\n\
             "mod",
             &[argument("flag", KaniPrimitiveType::Boolean)],
             &transcript,
-            WitnessDecodeLimits {
-                bytes: usize::MAX,
-                values: usize::MAX,
-            },
+            unbounded_decode_limits(),
         )
         .expect_err("eight bytes cannot decode as a Boolean");
         assert_eq!(width.code, "kani_witness_width_mismatch", "{width:?}");
@@ -542,10 +575,7 @@ fn kani_concrete_playback_synthetic() {{\n\
             "mod",
             &arguments,
             &transcript,
-            WitnessDecodeLimits {
-                bytes: usize::MAX,
-                values: usize::MAX,
-            },
+            unbounded_decode_limits(),
         )
         .expect("a transcript whose qualified harness symbol matches the identity decodes");
         assert_eq!(
@@ -571,10 +601,7 @@ fn kani_concrete_playback_synthetic() {{\n\
             "mod",
             &arguments,
             &transcript,
-            WitnessDecodeLimits {
-                bytes: usize::MAX,
-                values: usize::MAX,
-            },
+            unbounded_decode_limits(),
         )
         .expect("the matching direction must still decode");
 
@@ -586,10 +613,7 @@ fn kani_concrete_playback_synthetic() {{\n\
             "mod",
             &arguments,
             &transcript,
-            WitnessDecodeLimits {
-                bytes: usize::MAX,
-                values: usize::MAX,
-            },
+            unbounded_decode_limits(),
         )
         .expect_err("a wrong-harness transcript must refuse, not decode silently");
         assert_eq!(
@@ -617,10 +641,7 @@ fn kani_concrete_playback_synthetic() {{\n\
             "mod",
             &arguments,
             &transcript,
-            WitnessDecodeLimits {
-                bytes: usize::MAX,
-                values: usize::MAX,
-            },
+            unbounded_decode_limits(),
         )
         .expect("a two-value transcript decodes against a two-binding schema");
         assert_eq!(
@@ -694,10 +715,7 @@ fn kani_concrete_playback_synthetic() {{\n\
                 "mod",
                 &flag,
                 &block(comment, byte),
-                WitnessDecodeLimits {
-                    bytes: usize::MAX,
-                    values: usize::MAX,
-                },
+                unbounded_decode_limits(),
             )
         };
         assert_eq!(
@@ -730,10 +748,7 @@ fn kani_concrete_playback_synthetic() {{\n\
                 "mod",
                 &argument,
                 &transcript,
-                WitnessDecodeLimits {
-                    bytes: usize::MAX,
-                    values: usize::MAX,
-                },
+                unbounded_decode_limits(),
             )
         };
         assert_eq!(
@@ -773,10 +788,7 @@ fn kani_concrete_playback_synthetic() {{\n\
                 "mod",
                 &[argument("v", KaniPrimitiveType::I64)],
                 &transcript,
-                WitnessDecodeLimits {
-                    bytes: usize::MAX,
-                    values: usize::MAX
-                }
+                unbounded_decode_limits()
             )
             .expect("decodes"),
             vec![("v".to_owned(), WitnessValue::Integer(42))]
@@ -795,10 +807,7 @@ fn kani_concrete_playback_synthetic() {{\n\
                     "mod",
                     &[argument("v", KaniPrimitiveType::I64)],
                     &transcript,
-                    WitnessDecodeLimits {
-                        bytes: usize::MAX,
-                        values: usize::MAX
-                    }
+                    unbounded_decode_limits()
                 )
                 .expect("decodes"),
                 vec![("v".to_owned(), WitnessValue::Integer(i128::from(value)))]
@@ -814,18 +823,9 @@ fn kani_concrete_playback_synthetic() {{\n\
         let good = synthetic_transcript("mod::h", 42);
         let one = [argument("v", KaniPrimitiveType::I64)];
         let code = |transcript: &str, arguments: &[ObligationBinding]| {
-            decode_falsification(
-                "h",
-                "mod",
-                arguments,
-                transcript,
-                WitnessDecodeLimits {
-                    bytes: usize::MAX,
-                    values: usize::MAX,
-                },
-            )
-            .expect_err(&format!("must refuse: {transcript}"))
-            .code
+            decode_falsification("h", "mod", arguments, transcript, unbounded_decode_limits())
+                .expect_err(&format!("must refuse: {transcript}"))
+                .code
         };
         let cases: Vec<(String, &str)> = vec![
             ("no playback".to_owned(), "kani_witness_harness_missing"),

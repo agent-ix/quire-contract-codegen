@@ -78,7 +78,8 @@ pub struct DecodeFailure {
     pub code: String,
     /// The source or input identity that first caused the refusal.
     pub source_id: String,
-    /// The profile and bound context of the refusal.
+    /// Refusal context. Decode-limit refusals use the module symbol with `;bytes=N` or
+    /// `;values=N` appended.
     pub context: String,
 }
 
@@ -274,7 +275,11 @@ fn concrete_entries<'a>(
     let mut entries = Vec::new();
     while let Some(entry) = body.find(VEC) {
         if entries.len() >= max_values {
-            return Err(failure("cg_witness_decode_values_limit"));
+            return Err(DecodeFailure::new(
+                "cg_witness_decode_values_limit",
+                source_id,
+                &format!("{context};values={max_values}"),
+            ));
         }
         let comment = body[..entry]
             .rfind("//")

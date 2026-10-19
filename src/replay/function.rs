@@ -32,6 +32,9 @@ use crate::{
     },
 };
 
+#[cfg(test)]
+use crate::replay::witness::unbounded_decode_limits;
+
 /// The Kani identity of a harness whose claim is a selected QSL function's Boolean result.
 ///
 /// Unlike [`KaniObligationIdentity`], this carries no clause or source-span fields: QSL's
@@ -733,14 +736,8 @@ impl BoundedCorpusCase {
 
     #[cfg(test)]
     pub(crate) fn qsl_source_matches_case_claim(&self) -> Result<bool, BoundedCorpusReplayError> {
-        let package = compile_corpus_qsl_package(
-            self,
-            WitnessDecodeLimits {
-                bytes: usize::MAX,
-                values: usize::MAX,
-            },
-        )
-        .map_err(BoundedCorpusReplayError::Package)?;
+        let package = compile_corpus_qsl_package(self, unbounded_decode_limits())
+            .map_err(BoundedCorpusReplayError::Package)?;
         if !package.source_matches(self.artifacts.qsl_source.contents.as_bytes()) {
             return Err(BoundedCorpusReplayError::SourceMismatch);
         }
@@ -760,25 +757,13 @@ impl BoundedCorpusCase {
         &self,
         other: &Self,
     ) -> Result<bool, BoundedCorpusReplayError> {
-        let package = compile_corpus_qsl_package(
-            self,
-            WitnessDecodeLimits {
-                bytes: usize::MAX,
-                values: usize::MAX,
-            },
-        )
-        .map_err(BoundedCorpusReplayError::Package)?;
+        let package = compile_corpus_qsl_package(self, unbounded_decode_limits())
+            .map_err(BoundedCorpusReplayError::Package)?;
         let identity = package
             .harness_identity(None, self.harness_symbol.clone(), Vec::new())
             .map_err(|error| BoundedCorpusReplayError::Replay(SpineReplayError::Identity(error)))?;
-        let other = compile_corpus_qsl_package(
-            other,
-            WitnessDecodeLimits {
-                bytes: usize::MAX,
-                values: usize::MAX,
-            },
-        )
-        .map_err(BoundedCorpusReplayError::Package)?;
+        let other = compile_corpus_qsl_package(other, unbounded_decode_limits())
+            .map_err(BoundedCorpusReplayError::Package)?;
         Ok(!identity.matches_package(&other))
     }
 
@@ -788,25 +773,13 @@ impl BoundedCorpusCase {
         transcript: &str,
         other: &Self,
     ) -> Result<bool, BoundedCorpusReplayError> {
-        let package = compile_corpus_qsl_package(
-            self,
-            WitnessDecodeLimits {
-                bytes: usize::MAX,
-                values: usize::MAX,
-            },
-        )
-        .map_err(BoundedCorpusReplayError::Package)?;
+        let package = compile_corpus_qsl_package(self, unbounded_decode_limits())
+            .map_err(BoundedCorpusReplayError::Package)?;
         let identity = package
             .harness_identity(None, self.harness_symbol.clone(), Vec::new())
             .map_err(|error| BoundedCorpusReplayError::Replay(SpineReplayError::Identity(error)))?;
-        let other = compile_corpus_qsl_package(
-            other,
-            WitnessDecodeLimits {
-                bytes: usize::MAX,
-                values: usize::MAX,
-            },
-        )
-        .map_err(BoundedCorpusReplayError::Package)?;
+        let other = compile_corpus_qsl_package(other, unbounded_decode_limits())
+            .map_err(BoundedCorpusReplayError::Package)?;
         replay_harness_counterexample(&identity, transcript, &other)
             .map(|verdict| {
                 verdict == ReplayVerdict::EvidenceFailure(EvidenceFailureCause::PackageIdentity)
@@ -819,14 +792,8 @@ impl BoundedCorpusCase {
         &self,
         transcript: &str,
     ) -> Result<bool, BoundedCorpusReplayError> {
-        let package = compile_corpus_qsl_package(
-            self,
-            WitnessDecodeLimits {
-                bytes: usize::MAX,
-                values: usize::MAX,
-            },
-        )
-        .map_err(BoundedCorpusReplayError::Package)?;
+        let package = compile_corpus_qsl_package(self, unbounded_decode_limits())
+            .map_err(BoundedCorpusReplayError::Package)?;
         let Ok(harness) = crate::core::identity::HarnessSymbol::try_from("another_harness") else {
             return Ok(false);
         };

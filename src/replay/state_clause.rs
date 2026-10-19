@@ -50,7 +50,7 @@ use crate::{
     },
     replay::{
         function::{render_witness, DependencyLockError, ProvidedDocument, ReplayInputs},
-        witness::decode_playback,
+        witness::{decode_playback, WitnessDecodeLimits},
     },
 };
 
@@ -454,9 +454,9 @@ impl StateClauseReplayInputs<'_> {
         &mut self,
         harness: &StateFrameIdentity,
         outcome: &KaniRunOutcome,
-        limits: crate::replay::witness::WitnessDecodeLimits,
+        limits: WitnessDecodeLimits,
     ) -> Result<(), StateClauseReplayError> {
-        let limits = crate::replay::witness::WitnessDecodeLimits {
+        let limits = WitnessDecodeLimits {
             bytes: limits.bytes.min(self.run.decode_limits.bytes),
             values: limits.values.min(self.run.decode_limits.values),
         };
