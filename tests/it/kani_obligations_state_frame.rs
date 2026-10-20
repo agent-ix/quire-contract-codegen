@@ -96,6 +96,23 @@ fn qsl_emits_parameter_only_implication_as_an_admitted_clause() {
     assert_eq!((descriptor.inputs[0].lower, descriptor.inputs[0].upper), (0, 1000));
 }
 
+#[trace("FR-015-AC-38", "FR-015-AC-39", "FR-015-AC-40", "FR-015-AC-41", "FR-015-AC-119", "TC-025")]
+#[test]
+fn qsl_parameter_only_clause_negotiates_one_postcondition_harness() {
+    let (package, clause) =
+        Twin::with_bounded_amount_implication().emitted_package("BalanceNeverDrops");
+    let result = negotiate(&[ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+    }]);
+    assert_eq!(result.records().len(), 1);
+    assert_eq!(result.records()[0].kind, Some(ObligationKind::Postcondition));
+    assert!(matches!(
+        result.records()[0].disposition,
+        ObligationDisposition::Supported { .. }
+    ));
+}
+
 #[trace("FR-014-AC-38")]
 #[test]
 fn qsl_emitted_state_clause_derives_a_confirmed_field_backed_oracle() {

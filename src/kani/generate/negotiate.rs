@@ -331,6 +331,17 @@ fn classify<'a>(
     ceilings: crate::kani::identity::ProofCeilings,
 ) -> ItemState<'a> {
     match *item {
+        ObligationItem::V2Clause { package, clause } => ItemState {
+            kind: None,
+            subject: ObligationSubject::CheckedNode {
+                node_id: clause.clone(),
+                source_map: package.source_map().iter().filter(|entry| &entry.node_id == clause).cloned().collect(),
+            },
+            identity: None,
+            outcome: Outcome::Unsupported(UnsupportedObligation::V2ClauseConditionNotRendered {
+                node_id: clause.clone(),
+            }),
+        },
         ObligationItem::BoundClause { package, clause } => classify_clause(package, clause),
         ObligationItem::ScalarClaim {
             package,

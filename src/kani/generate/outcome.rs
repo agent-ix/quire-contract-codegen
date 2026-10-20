@@ -51,6 +51,13 @@ impl StateFrameRole {
 /// One item to negotiate.
 #[derive(Clone, Copy, Debug)]
 pub enum ObligationItem<'a> {
+    /// One checked V2 state clause, identified by its admitted package and clause node.
+    V2Clause {
+        /// The admitted package.
+        package: &'a CheckedPackageV2,
+        /// The state-clause node.
+        clause: &'a CheckedNodeId,
+    },
     /// One role of one `postcondition` `state_clause` of an admitted package. The inputs are
     /// those of [`StateFrameRequest`](crate::kani::generate::frame::StateFrameRequest), and the
     /// request's unwind bound applies. The harness calls the item's own `subject_path`; the
@@ -179,6 +186,11 @@ pub enum DerivedDomain {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(tag = "code", rename_all = "snake_case")]
 pub enum UnsupportedObligation {
+    /// The selected V2 clause condition cannot be rendered by this obligation arm.
+    V2ClauseConditionNotRendered {
+        /// The selected clause node.
+        node_id: CheckedNodeId,
+    },
     /// Assertion and case clauses are not contract obligations.
     ClauseKindNotObligation {
         /// The clause kind.
