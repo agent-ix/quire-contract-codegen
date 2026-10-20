@@ -22,7 +22,9 @@ use crate::kani::{
         render,
         spec::{Argument, Cover, ExprText, HarnessSpec, Init, LetBinding, ProofKind, Statement},
     },
-    identity::{GraphEdgeIdentity, GraphObligationIdentity, KaniGraphObligationHarness},
+    identity::{
+        GraphEdgeIdentity, GraphObligationIdentity, KaniGraphObligationHarness, ObligationKind,
+    },
 };
 
 pub(super) enum GraphRefusal {
@@ -38,6 +40,7 @@ impl From<Reason> for GraphRefusal {
 pub(super) struct LoweredGraph {
     package_digest: String,
     clause: CheckedNodeId,
+    kind: ObligationKind,
     path: Vec<usize>,
     application: CheckedNodeId,
     population: CheckedSelectedPopulation,
@@ -74,6 +77,23 @@ fn reaches(body: &Value) -> bool {
         operation(body),
         Some("quire.op.model.reaches" | "quire.op.model.reaches_field")
     )
+}
+
+/// The owning clause form, independently of whether its selected path can be lowered.
+pub(super) fn graph_kind(
+    package: &CheckedPackageV2,
+    clause: &CheckedNodeId,
+) -> Option<ObligationKind> {
+    match node(package, clause)?
+        .body
+        .pointer("/operation/member/clause")?
+        .as_str()?
+    {
+        "invariant" => Some(ObligationKind::Invariant),
+        "precondition" => Some(ObligationKind::Precondition),
+        "postcondition" => Some(ObligationKind::Postcondition),
+        _ => None,
+    }
 }
 
 /// Locate first: even a malformed population must not hide a missing occurrence.
@@ -158,6 +178,7 @@ pub(super) fn lower_graph(
     Ok(LoweredGraph {
         package_digest: package.package_id().digest.to_string(),
         clause: clause.clone(),
+        kind: graph_kind(package, clause).ok_or(Reason::UnsupportedClaimShape)?,
         path: path.to_vec(),
         application,
         population,
@@ -401,10 +422,13 @@ pub(super) fn render_graph(
     let refuse = |reason| refusal(&lowered.clause, &lowered.path, reason);
     let n = lowered.population.maximum;
     let upper = lowered.edge.upper;
-    let required = n
-        .max(upper)
-        .checked_add(1)
-        .ok_or_else(|| refuse(Reason::DomainNotRepresentable))?;
+    let not_representable = || {
+        refuse(Reason::DomainNotRepresentable {
+            population_maximum: n,
+            edge_upper: upper,
+        })
+    };
+    let required = n.max(upper).checked_add(1).ok_or_else(not_representable)?;
     if u64::from(request.unwind) < required {
         return Err(refuse(Reason::UnwindBelowDomain {
             required,
@@ -416,7 +440,8 @@ pub(super) fn render_graph(
         .and_then(|slots| slots.checked_add(n))
         .and_then(|slots| slots.checked_mul(8))
         .and_then(|bytes| bytes.checked_add(n.checked_mul(n)?))
-        .ok_or_else(|| refuse(Reason::DomainNotRepresentable))?;
+        .and_then(|bytes| bytes.checked_add(24))
+        .ok_or_else(not_representable)?;
     if bytes > request.ceilings.memory_bytes.get() {
         return Err(refuse(Reason::DomainExceedsMemoryCeiling {
             required: bytes,
@@ -427,7 +452,7 @@ pub(super) fn render_graph(
     let slots = n
         .checked_mul(upper)
         .and_then(|slots| slots.checked_add(n))
-        .ok_or_else(|| refuse(Reason::DomainNotRepresentable))?;
+        .ok_or_else(not_representable)?;
     let uniqueness_checks = if lowered.edge.unique {
         n.checked_mul(upper)
             .and_then(|pairs| pairs.checked_mul(upper.saturating_sub(1)))
@@ -442,11 +467,12 @@ pub(super) fn render_graph(
             units > (crate::core::artifact::MAX_GENERATED_SOURCE_BYTES / 256) as u64
         })
     {
-        return Err(refuse(Reason::DomainNotRepresentable));
+        return Err(not_representable());
     }
     let material = crate::core::canonical::preimage_value(&(
         &lowered.package_digest,
         &lowered.clause,
+        lowered.kind,
         &lowered.path,
         &lowered.application,
         &lowered.population.binding,
@@ -474,6 +500,7 @@ pub(super) fn render_graph(
         ceilings: request.ceilings,
         package_digest: lowered.package_digest.clone(),
         clause_id: lowered.clause.clone(),
+        kind: lowered.kind,
         argument_path: lowered.path.clone(),
         application_id: lowered.application.clone(),
         population_id: lowered.population.binding.clone(),
@@ -556,9 +583,10 @@ pub(super) fn render_graph(
         condition: expression("object_count == 0 || claim")?,
         message: "the symbolic graph satisfies the admitted clause condition".into(),
     });
+    // Storage extents bound solver unrolling; live guards preserve the full count/degree draws.
     // Transitive closure starts at the selected edges, not at an identity relation. Thus an
     // isolated vertex does not reach itself, while a selected self edge does.
-    let oracle = format!("fn {helper}(count: i64, degrees: &[i64; {n}], edges: &[[i64; {upper}]; {n}], start: i64, target: i64) -> bool {{\nlet mut paths = [[false; {n}]; {n}];\nfor row in 0..count as usize {{ for edge in 0..degrees[row] as usize {{ paths[row][edges[row][edge] as usize] = true; }} }}\nfor via in 0..count as usize {{ for from in 0..count as usize {{ for to in 0..count as usize {{ paths[from][to] = paths[from][to] || (paths[from][via] && paths[via][to]); }} }} }}\nlet reachable = if count == 0 {{ false }} else {{ paths[start as usize][target as usize] }};\nlet selected_reachable = reachable;\n{}\n}}",lowered.condition);
+    let oracle = format!("fn {helper}(count: i64, degrees: &[i64; {n}], edges: &[[i64; {upper}]; {n}], start: i64, target: i64) -> bool {{\nlet mut paths = [[false; {n}]; {n}];\nfor row in 0..{n} {{ for edge in 0..{upper} {{ if row < count as usize && edge < degrees[row] as usize {{ paths[row][edges[row][edge] as usize] = true; }} }} }}\nfor via in 0..{n} {{ for from in 0..{n} {{ for to in 0..{n} {{ paths[from][to] = paths[from][to] || (paths[from][via] && paths[via][to]); }} }} }}\nlet reachable = if count == 0 {{ false }} else {{ paths[start as usize][target as usize] }};\nlet selected_reachable = reachable;\n{}\n}}",lowered.condition);
     let spec = HarnessSpec::new(
         "admitted graph clause".into(),
         path.clone(),

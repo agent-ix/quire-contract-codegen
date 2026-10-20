@@ -285,6 +285,8 @@ pub struct GraphObligationIdentity {
     pub package_digest: String,
     /// Containing state clause.
     pub clause_id: CheckedNodeId,
+    /// The admitted invariant, precondition or postcondition form.
+    pub kind: ObligationKind,
     /// Argument path from its condition root.
     pub argument_path: Vec<usize>,
     /// Located reachability application.

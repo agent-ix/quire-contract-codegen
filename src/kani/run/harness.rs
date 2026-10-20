@@ -269,7 +269,7 @@ impl<'a> KaniExecutableHarness<'a> {
                     ceilings: identity.ceilings,
                     rust: &harness.rust,
                     selection: format!("{}::{}", identity.module_symbol, identity.harness_symbol),
-                    kind: None,
+                    kind: Some(identity.kind),
                     unwind: identity.unwind,
                     solver: identity.solver,
                     options: &identity.options,

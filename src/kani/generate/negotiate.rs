@@ -49,7 +49,9 @@
 //! grounds are checked in that order and are never conflated with the internal-invariant
 //! [`UnsupportedObligation::RenderFailed`] fallback.
 
-use crate::kani::generate::graph::{lower_graph, render_graph, GraphRefusal, LoweredGraph};
+use crate::kani::generate::graph::{
+    graph_kind, lower_graph, render_graph, GraphRefusal, LoweredGraph,
+};
 use std::collections::{BTreeMap, BTreeSet};
 
 use quire_contract_model::{
@@ -144,9 +146,21 @@ pub fn negotiate_kani_obligations(
                 },
                 Outcome::LoweredGraph(lowered) => match render_graph(request, &lowered) {
                     Ok(harness) => {
-                        let harness_symbol = harness.identity.harness_symbol.clone();
-                        graph_harnesses.push(harness);
-                        ObligationDisposition::Supported { harness_symbol }
+                        let collides = graph_harnesses.iter().any(
+                            |existing: &crate::kani::identity::KaniGraphObligationHarness| {
+                                existing.identity.module_symbol == harness.identity.module_symbol
+                                    && existing.identity.harness_symbol
+                                        == harness.identity.harness_symbol
+                                    && existing.identity != harness.identity
+                            },
+                        );
+                        if collides {
+                            ObligationDisposition::Unsupported { reason: crate::kani::generate::graph::refusal(&harness.identity.clause_id, &harness.identity.argument_path, crate::kani::generate::outcome::GraphUnsupportedReason::HarnessSymbolCollision) }
+                        } else {
+                            let harness_symbol = harness.identity.harness_symbol.clone();
+                            graph_harnesses.push(harness);
+                            ObligationDisposition::Supported { harness_symbol }
+                        }
                     }
                     Err(reason) => ObligationDisposition::Unsupported { reason },
                 },
@@ -406,7 +420,7 @@ fn classify_graph<'a>(
         }
     };
     ItemState {
-        kind: None,
+        kind: graph_kind(package, clause),
         subject: ObligationSubject::CheckedNode {
             node_id: clause.clone(),
             source_map: package

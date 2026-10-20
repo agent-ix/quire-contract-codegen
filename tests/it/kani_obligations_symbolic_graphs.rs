@@ -15,6 +15,7 @@ fn fixture_condition(edge: &str, condition: &str, maximum: u64, bounded: bool) -
 }
 struct AuthoredGraph {
     package: CheckedPackageV2,
+    emitted_bytes: Vec<u8>,
     source: String,
     model_bytes: Vec<u8>,
     model_digest: [u8; 32],
@@ -22,6 +23,26 @@ struct AuthoredGraph {
     package_id: qsl_replay::DigestRecord,
 }
 fn fixture_data(edge: &str, condition: &str, maximum: u64, bounded: bool) -> AuthoredGraph {
+    fixture_source(edge, condition, maximum, bounded, "invariant", "")
+}
+fn fixture_source(
+    edge: &str,
+    condition: &str,
+    maximum: u64,
+    bounded: bool,
+    form: &str,
+    extra: &str,
+) -> AuthoredGraph {
+    try_fixture_source(edge, condition, maximum, bounded, form, extra).unwrap()
+}
+fn try_fixture_source(
+    edge: &str,
+    condition: &str,
+    maximum: u64,
+    bounded: bool,
+    form: &str,
+    extra: &str,
+) -> Result<AuthoredGraph, qsl_replay::CallSiteRefusal> {
     let mut document = super::kani_obligations_symbolic_domains::model_document();
     document["populations"][0]["displayName"] = json!("CollectionNodes");
     let relation = |name: &str, lower: u64, upper: u64, unique: bool| {
@@ -33,12 +54,45 @@ fn fixture_data(edge: &str, condition: &str, maximum: u64, bounded: bool) -> Aut
             "targetEnd": {"type": "ix://ir268.test/domain/Node", "multiplicity": {"lower":lower,"upper":upper,"ordered":false,"unique":unique}}
         })
     };
+    let mut wild = relation("wild", 0, 3, false);
+    wild["targetEnd"]["multiplicity"]
+        .as_object_mut()
+        .unwrap()
+        .remove("upper");
+    document["types"][1]["operations"] = json!([{ "identity":"ix://ir268.test/domain/Node/visit","name":"visit","params":[],"pre":[],"post":[],"origin":{"source":{"sourceIdentity":"ix://ir268.test/spec","path":"spec.qspec","startLine":1,"startColumn":1}},"frame":{"modifies":[],"creates":[],"deletes":[]} }]);
+    if condition.contains("target") {
+        let mut target = document["types"][1]["fields"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|field| field["name"] == "next")
+            .unwrap()
+            .clone();
+        target["identity"] = json!("ix://ir268.test/domain/Node/visit/target");
+        target["name"] = json!("target");
+        target["origin"]["generated"]["inputIdentities"] =
+            json!(["ix://ir268.test/domain/Node/visit/target"]);
+        document["types"][1]["operations"][0]["params"] = json!([target]);
+    }
     document["types"][1]["relationships"] = json!([
         relation("step", 0, 1, true),
         relation("kids", 0, 3, true),
         relation("litter", 0, 3, false),
-        relation("two", 2, 3, false)
+        relation("two", 2, 3, false),
+        relation("empty", 0, 0, true),
+        relation("loop", 1, 1, true),
+        wild
     ]);
+    if form == "subtype" {
+        let mut child = document["types"][1].clone();
+        child["identity"] = json!("ix://ir268.test/domain/SpecialNode");
+        child["displayName"] = json!("SpecialNode");
+        child["supertypes"] = json!(["ix://ir268.test/domain/Node"]);
+        child["fields"] = json!([]);
+        child["relationships"] = json!([]);
+        child["operations"] = json!([]);
+        document["types"].as_array_mut().unwrap().push(child);
+    }
     let limits = quire_canonical::Limits::new(1 << 20);
     let bytes = quire_canonical::to_vec(&document, limits).unwrap();
     let digest = quire_canonical::sha256(&document, limits)
@@ -50,7 +104,14 @@ fn fixture_data(edge: &str, condition: &str, maximum: u64, bounded: bool) -> Aut
         String::new()
     };
     let condition = condition.replace("EDGE", edge);
-    let source = format!("language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.model.complete/v1\";\nmodel M = \"ir268.test/domain\" version \"1.0.0\" digest \"sha256-jcs:{digest}\";\n{bound}predicate inspect using v (input: M::Node): Boolean {{ true }}\ninvariant Graph using v on M::Node at current {{ {condition} }}\n");
+    let declaration = if form == "subtype" {
+        format!("invariant Graph using v on M::SpecialNode at current {{ {condition} }}")
+    } else if form == "invariant" {
+        format!("invariant Graph using v on M::Node at current {{ {condition} }}")
+    } else {
+        format!("{form} Graph using v on M::Node::visit {{ {condition} }}")
+    };
+    let source = format!("language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.model.complete/v1\";\nmodel M = \"ir268.test/domain\" version \"1.0.0\" digest \"sha256-jcs:{digest}\";\n{bound}predicate inspect using v (input: M::Node): Boolean {{ true }}\n{declaration}\n{extra}\n");
     let selected = qsl_replay::ClauseName(Identifier::new("Graph").unwrap());
     let site = call_site(
         SourceIdentity::new("agent-ix", "graph.native", "git", "fixture"),
@@ -60,7 +121,7 @@ fn fixture_data(edge: &str, condition: &str, maximum: u64, bounded: bool) -> Aut
         &DependencyInput::default(),
         &selected,
     )
-    .unwrap();
+    .map_err(|refusal| *refusal)?;
     let mut evidence = CheckedPackageEvidence::new();
     evidence.support_feature("quire.value.complete/v1");
     evidence
@@ -77,14 +138,15 @@ fn fixture_data(edge: &str, condition: &str, maximum: u64, bounded: bool) -> Aut
     let model_digest = *quire_canonical::sha256(&document, limits)
         .unwrap()
         .as_bytes();
-    AuthoredGraph {
+    Ok(AuthoredGraph {
         package,
+        emitted_bytes: site.package,
         source,
         model_bytes: bytes,
         model_digest,
         site: site.site,
         package_id: site.package_id,
-    }
+    })
 }
 use quire_contract_codegen::{
     negotiate_kani_obligations, GraphUnsupportedReason, KaniGraphObligationHarness,
@@ -104,14 +166,20 @@ fn clause(package: &CheckedPackageV2) -> CheckedNodeId {
         .clone()
 }
 fn outcome(package: &CheckedPackageV2, path: &[usize]) -> KaniObligationOutcome {
-    let clause = clause(package);
+    outcome_at(package, &clause(package), path)
+}
+fn outcome_at(
+    package: &CheckedPackageV2,
+    clause: &CheckedNodeId,
+    path: &[usize],
+) -> KaniObligationOutcome {
     negotiate_kani_obligations(&KaniObligationRequest {
         ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(
             Duration::from_secs(600),
         ),
         items: &[ObligationItem::GraphClaim {
             package,
-            clause_id: &clause,
+            clause_id: clause,
             argument_path: path,
         }],
         subject_path: "crate::graph_subject",
@@ -120,11 +188,18 @@ fn outcome(package: &CheckedPackageV2, path: &[usize]) -> KaniObligationOutcome 
     .unwrap()
 }
 fn harness(package: &CheckedPackageV2, path: &[usize]) -> KaniGraphObligationHarness {
+    harness_at(package, &clause(package), path)
+}
+fn harness_at(
+    package: &CheckedPackageV2,
+    clause: &CheckedNodeId,
+    path: &[usize],
+) -> KaniGraphObligationHarness {
     let KaniObligationOutcome::Emitted {
         records,
         mut graph_harnesses,
         ..
-    } = outcome(package, path)
+    } = outcome_at(package, clause, path)
     else {
         panic!("graph request is valid")
     };
@@ -147,6 +222,8 @@ fn authored_relationship_domains_use_population_and_typed_destination_multiplici
         ("kids", 0, 3, true),
         ("litter", 0, 3, false),
         ("two", 2, 3, false),
+        ("empty", 0, 0, true),
+        ("loop", 1, 1, true),
     ] {
         let package = fixture(edge);
         let harness = harness(&package, &[0]);
@@ -296,6 +373,9 @@ fn authored_unbound_relationship_refuses_unavailable_without_inventing_a_binding
 }
 
 fn native_clause(fixture: &AuthoredGraph, edge: &str, targets: &[Vec<usize>]) -> bool {
+    native_roles(fixture, &[(edge, targets)])
+}
+fn native_roles(fixture: &AuthoredGraph, roles: &[(&str, &[Vec<usize>])]) -> bool {
     use qsl_replay::{
         AnchorKind, ByteDigest, ClauseSelectionInput, DigestDomain, DigestRecord, DocumentRef,
         EvaluatedValue, ReplayLimits, ReplayRequestWire, ReplayResult, ReplaySource,
@@ -303,20 +383,17 @@ fn native_clause(fixture: &AuthoredGraph, edge: &str, targets: &[Vec<usize>]) ->
         WitnessEnvelope, WitnessPacket,
     };
     use std::collections::BTreeMap;
+    let targets = roles[0].1;
+    assert!(roles.iter().all(|(_, graph)| graph.len() == targets.len()));
     let selected = |index: usize| json!({"population":"ix://ir268.test/domain/CollectionNodes","key":format!("node{index}")});
     let objects: Vec<_> = targets.iter().enumerate().map(|(index,_)| json!({"key":format!("node{index}"),"type":"ix://ir268.test/domain/Node","fields":{
         "items":{"sequence":[]},"flags":{"sequence":[]},"next":{"reference":selected(index)},"maybe":{"absent":{}},"many":{"sequence":[]}
     }})).collect();
-    let instances: Vec<_> = targets
-        .iter()
-        .enumerate()
-        .flat_map(|(from, targets)| {
-            targets
-                .iter()
-                .map(move |to| json!({"source":selected(from),"target":selected(*to)}))
-        })
-        .collect();
-    let snapshot = json!({"format":"quire.state.snapshot/v1","identity":{"authority":"agent-ix","identity":"graph-current","revision_namespace":"git","revision":"fixture"},"observation":"current","anchor":{"kind":"initialization","name":"init"},"model":{"identity":"ir268.test/domain","version":"1.0.0","digest":format!("sha256-jcs:{}",fixture.model_digest.iter().map(|byte|format!("{byte:02x}")).collect::<String>())},"populations":[{"population":"ix://ir268.test/domain/CollectionNodes","complete":true,"objects":objects}],"relationships":[{"relationship":format!("ix://ir268.test/domain/relationship/Node-{edge}"),"complete":true,"instances":instances}]});
+    let relationships: Vec<_> = roles.iter().map(|(edge, graph)| {
+        let instances:Vec<_> = graph.iter().enumerate().flat_map(|(from, targets)| targets.iter().map(move |to| json!({"source":selected(from),"target":selected(*to)}))).collect();
+        json!({"relationship":format!("ix://ir268.test/domain/relationship/Node-{edge}"),"complete":true,"instances":instances})
+    }).collect();
+    let snapshot = json!({"format":"quire.state.snapshot/v1","identity":{"authority":"agent-ix","identity":"graph-current","revision_namespace":"git","revision":"fixture"},"observation":"current","anchor":{"kind":"initialization","name":"init"},"model":{"identity":"ir268.test/domain","version":"1.0.0","digest":format!("sha256-jcs:{}",fixture.model_digest.iter().map(|byte|format!("{byte:02x}")).collect::<String>())},"populations":[{"population":"ix://ir268.test/domain/CollectionNodes","complete":true,"objects":objects}],"relationships":relationships});
     let limits = quire_canonical::Limits::new(1 << 20);
     let snapshot_bytes = quire_canonical::to_vec(&snapshot, limits).unwrap();
     let snapshot_digest = *quire_canonical::sha256(&snapshot, limits)
@@ -416,6 +493,30 @@ fn native_clause(fixture: &AuthoredGraph, edge: &str, targets: &[Vec<usize>]) ->
     let Some(EvaluatedValue::Boolean(value)) = input.value() else {
         panic!("native authored graph clause value: {:?}", replay.result())
     };
+    #[derive(serde::Serialize)]
+    struct NativeObservation<'a> {
+        clause: &'a str,
+        value: bool,
+        snapshot: &'a Value,
+    }
+    let directory =
+        std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kani-graph-evidence");
+    std::fs::create_dir_all(&directory).unwrap();
+    let label = format!(
+        "native-{}-{}",
+        fixture.package_id.hex(),
+        snapshot_record.hex()
+    );
+    std::fs::write(
+        directory.join(format!("{label}.json")),
+        serde_json::to_vec_pretty(&NativeObservation {
+            clause: fixture.site.name.as_str(),
+            value,
+            snapshot: &snapshot,
+        })
+        .unwrap(),
+    )
+    .unwrap();
     value
 }
 #[trace("FR-015-AC-98", "FR-015-AC-106", "TC-025")]
@@ -487,6 +588,7 @@ fn tc_025_real_kani_graph_relationship_claim_verifies_and_negated_claim_falsifie
             3,
             true,
         );
+        retain_authored(&healthy, &format!("{edge}-healthy"));
         let healthy_harness = harness(&healthy.package, &[0]);
         let verified = run_graph_kani(&healthy_harness, &format!("{edge}-healthy"));
         assert_eq!(verified.outcome, KaniRunOutcome::Verified);
@@ -498,6 +600,7 @@ fn tc_025_real_kani_graph_relationship_claim_verifies_and_negated_claim_falsifie
             3,
             true,
         );
+        retain_authored(&mutant, &format!("{edge}-negated"));
         let falsified = run_graph_kani(
             &harness(&mutant.package, &[0, 0]),
             &format!("{edge}-negated"),
@@ -505,6 +608,9 @@ fn tc_025_real_kani_graph_relationship_claim_verifies_and_negated_claim_falsifie
         let KaniRunOutcome::Falsified { counterexample } = falsified.outcome else {
             panic!("negated admitted claim falsifies: {:?}", falsified.outcome)
         };
+        assert!(
+            counterexample.contains("the symbolic graph satisfies the admitted clause condition")
+        );
         let values = playback_values(&counterexample);
         assert!(
             values[0] > 0 && values[0] <= 3,
@@ -548,6 +654,16 @@ fn tc_025_real_kani_graph_relationship_claim_verifies_and_negated_claim_falsifie
         }
         assert!(!native_clause(&mutant, edge, &targets));
     }
+    let zero = fixture_data("kids", "not reaches(self,self,EDGE)", 0, true);
+    retain_authored(&zero, "zero-population-healthy");
+    assert_eq!(
+        run_graph_kani(
+            &harness_at(&zero.package, &main_clause(&zero), &[0]),
+            "zero-population-healthy"
+        )
+        .outcome,
+        KaniRunOutcome::Verified
+    );
 }
 fn playback_values(counterexample: &str) -> Vec<i64> {
     let (_, rest) = counterexample
@@ -608,7 +724,7 @@ fn zero_population_is_retained_and_inadequate_resources_refuse_without_domain_re
             },
             8,
             GraphUnsupportedReason::DomainExceedsMemoryCeiling {
-                required: 105,
+                required: 129,
                 supplied: 1,
             },
         ),
@@ -687,74 +803,436 @@ fn run_seeded_graph(
     fs::write(directory.join(format!("{label}.rs")), source).unwrap();
     classified.outcome
 }
+
+fn retain_authored(fixture: &AuthoredGraph, label: &str) {
+    let directory =
+        std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kani-graph-evidence");
+    std::fs::create_dir_all(&directory).unwrap();
+    std::fs::write(directory.join(format!("{label}.native")), &fixture.source).unwrap();
+    std::fs::write(
+        directory.join(format!("{label}.model.json")),
+        &fixture.model_bytes,
+    )
+    .unwrap();
+    std::fs::write(
+        directory.join(format!("{label}.package.json")),
+        &fixture.emitted_bytes,
+    )
+    .unwrap();
+}
+
+fn main_clause(fixture: &AuthoredGraph) -> CheckedNodeId {
+    fixture
+        .package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| node.node_id.digest.as_ref() == fixture.site.node.to_string())
+        .unwrap()
+        .node_id
+        .clone()
+}
+fn playback_graph(harness: &KaniGraphObligationHarness, counterexample: &str) -> Vec<Vec<usize>> {
+    assert!(counterexample.contains("the symbolic graph satisfies the admitted clause condition"));
+    let values = playback_values(counterexample);
+    let maximum = usize::try_from(harness.identity.maximum_population).unwrap();
+    let upper = usize::try_from(harness.identity.edge.upper).unwrap();
+    assert_eq!(values.len(), 3 + maximum * (upper + 1));
+    let count = usize::try_from(values[0]).unwrap();
+    assert!(count > 0 && count <= maximum);
+    let start = usize::try_from(values[1]).unwrap();
+    assert!(start < count);
+    assert_eq!(values[1], values[2]);
+    let mut graph = Vec::new();
+    for row in 0..count {
+        let degree = usize::try_from(values[3 + row * (upper + 1)]).unwrap();
+        assert!(degree >= usize::try_from(harness.identity.edge.lower).unwrap() && degree <= upper);
+        let edges = values[4 + row * (upper + 1)..4 + row * (upper + 1) + degree]
+            .iter()
+            .map(|target| {
+                let target = usize::try_from(*target).unwrap();
+                assert!(target < count);
+                target
+            })
+            .collect::<Vec<_>>();
+        if harness.identity.edge.unique {
+            assert_eq!(
+                edges
+                    .iter()
+                    .collect::<std::collections::BTreeSet<_>>()
+                    .len(),
+                edges.len()
+            );
+        }
+        graph.push(edges);
+    }
+    if start != 0 {
+        graph.swap(0, start);
+        for row in &mut graph {
+            for target in row {
+                if *target == 0 {
+                    *target = start;
+                } else if *target == start {
+                    *target = 0;
+                }
+            }
+        }
+    }
+    graph
+}
+
+#[trace("FR-015-AC-98", "FR-015-AC-107", "TC-025")]
+#[test]
+fn authored_pre_post_and_invariant_forms_keep_the_clause_kind() {
+    use quire_contract_codegen::ObligationKind;
+    for (form, kind) in [
+        ("invariant", ObligationKind::Invariant),
+        ("pre", ObligationKind::Precondition),
+        ("post", ObligationKind::Postcondition),
+    ] {
+        let fixture = fixture_source("kids", "not reaches(self, self, EDGE)", 3, true, form, "");
+        let generated = harness_at(&fixture.package, &main_clause(&fixture), &[0]);
+        assert_eq!(generated.identity.kind, kind);
+    }
+}
+#[trace("FR-015-AC-107", "TC-025")]
+#[test]
+fn the_same_reachability_under_two_actual_clauses_has_distinct_identities() {
+    let fixture = fixture_source(
+        "kids",
+        "reaches(self, self, EDGE)",
+        3,
+        true,
+        "invariant",
+        "invariant Other using v on M::Node at current { not reaches(self,self,kids) }",
+    );
+    let main = main_clause(&fixture);
+    let other = fixture
+        .package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| node.semantic_form.as_ref() == "state_clause" && node.node_id != main)
+        .unwrap();
+    let left = harness_at(&fixture.package, &main, &[]);
+    let right = harness_at(&fixture.package, &other.node_id, &[0]);
+    assert_eq!(left.identity.application_id, right.identity.application_id);
+    assert_ne!(left.identity.clause_id, right.identity.clause_id);
+    assert_ne!(left.identity.module_symbol, right.identity.module_symbol);
+}
+#[trace("FR-015-AC-108", "TC-025")]
+#[test]
+fn the_locked_producer_refuses_an_unbounded_relationship_before_ir_admission() {
+    let refusal = try_fixture_source(
+        "wild",
+        "not reaches(self,self,EDGE)",
+        3,
+        true,
+        "invariant",
+        "",
+    )
+    .err()
+    .expect("the locked producer does not emit an unbounded relationship claim");
+    assert!(matches!(
+        refusal,
+        qsl_replay::CallSiteRefusal::Compile {
+            code: qsl_replay::Code::UnsupportedConstruct,
+            ..
+        }
+    ));
+    assert!(refusal.to_string().contains("expression-form"));
+}
+
 #[trace("FR-015-AC-106", "TC-025")]
 #[test]
 #[ignore = "kani lane: run serially through make kani-gate"]
-fn tc_025_real_kani_selected_occurrence_rejects_zero_length_and_self_loop_mutants() {
+fn tc_025_real_kani_positive_length_evaluator_rejects_zero_length_and_self_loop_mutants() {
     use quire_contract_codegen::KaniRunOutcome;
-    let fixture = fixture_data(
-        "kids",
-        "reaches(self, self, EDGE) = reaches(self, self, EDGE)",
-        3,
-        true,
-    );
-    let generated = harness(&fixture.package, &[0]);
-    assert_eq!(
-        run_graph_kani(&generated, "equality-healthy").outcome,
-        KaniRunOutcome::Verified
-    );
-    for (label, expression) in [
-        ("zero-length", "start == target || reachable"),
-        ("self-loop-rejected", "start != target && reachable"),
+    for (edge, condition, label, mutated_reachable) in [
+        (
+            "empty",
+            "not reaches(self,self,EDGE)",
+            "zero-length",
+            "start == target || reachable",
+        ),
+        (
+            "loop",
+            "reaches(self,self,EDGE)",
+            "self-loop-rejected",
+            "start != target && reachable",
+        ),
     ] {
+        let fixture = fixture_data(edge, condition, 1, true);
+        retain_authored(&fixture, &format!("{label}-authored"));
+        let generated = harness_at(
+            &fixture.package,
+            &main_clause(&fixture),
+            if edge == "empty" { &[0] } else { &[] },
+        );
+        assert_eq!(
+            run_graph_kani(&generated, &format!("{label}-healthy")).outcome,
+            KaniRunOutcome::Verified
+        );
+        // Change the evaluator for every occurrence, leaving the authored condition intact.
+        let needle = "let selected_reachable = reachable;";
         let source = generated.rust.contents.replacen(
-            "let selected_reachable = reachable;",
-            &format!("let selected_reachable = {expression};"),
+            needle,
+            &format!("let reachable = {mutated_reachable};\nlet selected_reachable = reachable;"),
             1,
         );
         assert_ne!(source, generated.rust.contents);
         let KaniRunOutcome::Falsified { counterexample } =
             run_seeded_graph(&generated, &source, label)
         else {
-            panic!("{label}: seeded semantic error must falsify")
+            panic!("{label}: the evaluator fault must falsify the authored clause")
         };
-        let values = playback_values(&counterexample);
-        assert!(values[0] > 0 && values[0] <= 3);
-        assert!(values[1] >= 0 && values[1] < values[0]);
-        assert_eq!(values[1], values[2]);
-        let mut targets = Vec::new();
-        for row in 0..usize::try_from(values[0]).unwrap() {
-            let degree = usize::try_from(values[3 + row * 4]).unwrap();
-            assert!(degree <= 3);
-            let entries = values[4 + row * 4..4 + row * 4 + degree]
-                .iter()
-                .map(|value| {
-                    assert!(*value >= 0 && *value < values[0]);
-                    usize::try_from(*value).unwrap()
-                })
-                .collect::<Vec<_>>();
-            assert_eq!(
-                entries
-                    .iter()
-                    .collect::<std::collections::BTreeSet<_>>()
-                    .len(),
-                entries.len()
-            );
-            targets.push(entries);
-        }
-        let start = usize::try_from(values[1]).unwrap();
-        if start != 0 {
-            targets.swap(0, start);
-            for row in &mut targets {
-                for target in row {
-                    if *target == 0 {
-                        *target = start;
-                    } else if *target == start {
-                        *target = 0;
-                    }
+        let graph = playback_graph(&generated, &counterexample);
+        assert!(native_clause(&fixture, edge, &graph));
+        assert_eq!(
+            graph,
+            if edge == "empty" {
+                vec![vec![]]
+            } else {
+                vec![vec![0]]
+            }
+        );
+    }
+}
+
+const OTHER_ROLE: &str = "invariant OtherRole using v on M::Node at current { reaches(self,self,litter) = reaches(self,self,litter) }";
+fn role_fixture() -> AuthoredGraph {
+    fixture_source(
+        "kids",
+        "reaches(self,self,EDGE) = reaches(self,self,EDGE)",
+        3,
+        true,
+        "invariant",
+        OTHER_ROLE,
+    )
+}
+fn role_control(fixture: &AuthoredGraph, generated: &KaniGraphObligationHarness) -> String {
+    let other = fixture
+        .package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| {
+            node.body
+                .pointer("/operation/member/name")
+                .and_then(Value::as_str)
+                == Some("litter")
+                && node
+                    .body
+                    .pointer("/operation/identity")
+                    .and_then(Value::as_str)
+                    == Some("quire.op.model.reaches")
+        })
+        .unwrap();
+    let end = fixture.package.relationship_end(&other.node_id).unwrap();
+    assert_eq!((end.lower, end.upper, end.unique), (0, Some(3), false));
+    let own = fixture
+        .package
+        .reaches_population(&generated.identity.application_id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        fixture
+            .package
+            .reaches_population(&other.node_id)
+            .unwrap()
+            .unwrap(),
+        own
+    );
+    let n = generated.identity.maximum_population;
+    let upper = end.upper.unwrap();
+    // A real second role carrier: its admitted lower bound permits a complete empty extent.
+    // The same carrier, traversal, original package and baseline occurrence serve both runs.
+    let carrier=format!("let litter_degrees = [0_i64; {n}];\nlet litter_edges = [[0_i64; {upper}]; {n}];\nlet mut litter_paths = [[false; {n}]; {n}];\nfor row in 0..{n} {{ for edge in 0..{upper} {{ if row < count as usize && edge < litter_degrees[row] as usize {{ litter_paths[row][litter_edges[row][edge] as usize] = true; }} }} }}\nfor via in 0..{n} {{ for from in 0..{n} {{ for to in 0..{n} {{ litter_paths[from][to] = litter_paths[from][to] || (litter_paths[from][via] && litter_paths[via][to]); }} }} }}\nlet litter_reachable = if count == 0 {{ false }} else {{ litter_paths[start as usize][target as usize] }};\nlet selected_role = GraphControlRole::Kids;\nlet selected_reachable = match selected_role {{ GraphControlRole::Kids => reachable, GraphControlRole::Litter => litter_reachable }};");
+    let source =
+        generated
+            .rust
+            .contents
+            .replacen("let selected_reachable = reachable;", &carrier, 1);
+    assert_ne!(source, generated.rust.contents);
+    format!("{source}\nenum GraphControlRole {{ Kids, Litter }}\n")
+}
+#[trace("FR-015-AC-98", "FR-015-AC-106", "TC-025")]
+#[test]
+fn actual_second_role_carrier_and_native_snapshot_preserve_both_relationships() {
+    let fixture = role_fixture();
+    let generated = harness_at(&fixture.package, &main_clause(&fixture), &[0]);
+    let source = role_control(&fixture, &generated);
+    assert!(source.contains("litter_paths[row][litter_edges[row][edge] as usize]"));
+    assert!(native_roles(
+        &fixture,
+        &[("kids", &[vec![0]]), ("litter", &[vec![]])]
+    ));
+}
+#[trace("FR-015-AC-106", "TC-025")]
+#[test]
+#[ignore = "kani lane: run serially through make kani-gate"]
+fn tc_025_real_kani_wrong_role_dispatch_falsifies_the_same_authored_clause() {
+    use quire_contract_codegen::KaniRunOutcome;
+    let fixture = role_fixture();
+    retain_authored(&fixture, "wrong-role-authored");
+    let generated = harness_at(&fixture.package, &main_clause(&fixture), &[0]);
+    assert_eq!(
+        run_graph_kani(&generated, "role-base-healthy").outcome,
+        KaniRunOutcome::Verified
+    );
+    let healthy = role_control(&fixture, &generated);
+    assert_eq!(
+        run_seeded_graph(&generated, &healthy, "role-carrier-healthy"),
+        KaniRunOutcome::Verified
+    );
+    let mutant = healthy.replacen(
+        "let selected_role = GraphControlRole::Kids;",
+        "let selected_role = GraphControlRole::Litter;",
+        1,
+    );
+    assert_ne!(healthy, mutant);
+    let KaniRunOutcome::Falsified { counterexample } =
+        run_seeded_graph(&generated, &mutant, "wrong-role")
+    else {
+        panic!("dispatch to the admitted litter role must falsify")
+    };
+    let kids = playback_graph(&generated, &counterexample);
+    let litter = vec![Vec::new(); kids.len()];
+    assert!(native_roles(
+        &fixture,
+        &[("kids", &kids), ("litter", &litter)]
+    ));
+    // Both extents are original-domain inputs: kids uses decoded checked degrees and targets;
+    // litter is the complete empty extent carried and traversed by both control sources.
+    assert!(litter.iter().all(Vec::is_empty));
+    let evidence = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join("kani-graph-evidence/wrong-role.graphs.json");
+    std::fs::write(
+        evidence,
+        serde_json::to_vec_pretty(
+            &json!({"kids":kids,"litter":litter,"originalClause":fixture.site.name.as_str()}),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+}
+
+#[trace("FR-015-AC-98", "FR-015-AC-105", "TC-025")]
+#[test]
+fn a_subtype_operand_uses_the_near_ends_covering_population_without_a_subtype_cap() {
+    let fixture = fixture_source(
+        "kids",
+        "not reaches(self,self,EDGE)",
+        3,
+        true,
+        "subtype",
+        "",
+    );
+    let generated = harness_at(&fixture.package, &main_clause(&fixture), &[0]);
+    let end = fixture
+        .package
+        .relationship_end(&generated.identity.application_id)
+        .unwrap();
+    assert_eq!(generated.identity.object_type, end.destination_type);
+    assert_eq!(generated.identity.maximum_population, 3);
+    assert!(generated
+        .rust
+        .contents
+        .contains("start < object_count && target < object_count"));
+}
+
+#[trace("FR-015-AC-100", "TC-025")]
+#[test]
+fn graph_identity_binds_subject_unwind_solver_and_complete_ordered_options() {
+    let fixture = fixture_data("kids", "not reaches(self,self,EDGE)", 3, true);
+    let clause = main_clause(&fixture);
+    let item = ObligationItem::GraphClaim {
+        package: &fixture.package,
+        clause_id: &clause,
+        argument_path: &[0],
+    };
+    let mut identities = Vec::new();
+    for (subject, unwind) in [
+        ("crate::first", 8),
+        ("crate::second", 8),
+        ("crate::first", 9),
+    ] {
+        let KaniObligationOutcome::Emitted {
+            mut graph_harnesses,
+            ..
+        } = negotiate_kani_obligations(&KaniObligationRequest {
+            ceilings: crate::common::proof_ceilings::proof_ceilings(),
+            items: &[item],
+            subject_path: subject,
+            unwind,
+        })
+        .unwrap()
+        else {
+            panic!("supported graph identity")
+        };
+        let identity = graph_harnesses.remove(0).identity;
+        assert_eq!(identity.subject_path, subject);
+        assert_eq!(identity.unwind, unwind);
+        let options = &identity.options;
+        assert!(options
+            .windows(2)
+            .any(|pair| pair == ["--solver", "cadical"]));
+        assert!(options
+            .windows(2)
+            .any(|pair| pair == ["--unwind", &unwind.to_string()]));
+        assert!(options.windows(2).any(|pair| pair
+            == [
+                "--harness",
+                &format!("{}::{}", identity.module_symbol, identity.harness_symbol)
+            ]));
+        assert_eq!(options.last().unwrap(), "print");
+        identities.push(identity);
+    }
+    assert_ne!(identities[0], identities[1]);
+    assert_ne!(identities[0], identities[2]);
+    assert_ne!(identities[0].harness_symbol, identities[1].harness_symbol);
+    assert_ne!(identities[0].harness_symbol, identities[2].harness_symbol);
+}
+
+#[trace("FR-015-AC-98", "FR-015-AC-105", "TC-025")]
+#[test]
+fn distinct_operation_operands_are_drawn_independently_from_the_same_population() {
+    for form in ["pre", "post"] {
+        let fixture = fixture_source("kids", "reaches(self,target,EDGE)", 3, true, form, "");
+        let generated = harness_at(&fixture.package, &main_clause(&fixture), &[]);
+        assert!(generated
+            .rust
+            .contents
+            .contains("start < object_count && target < object_count"));
+        assert!(!generated
+            .rust
+            .contents
+            .contains("kani::assume(start == target)"));
+        assert_eq!(generated.identity.maximum_population, 3);
+    }
+}
+#[trace("FR-015-AC-107", "TC-025")]
+#[test]
+fn a_collection_condition_and_a_clause_without_reachability_refuse_missing_claim() {
+    for condition in ["true", "forall(item in self.items: item >= 0)"] {
+        let fixture = fixture_data("kids", condition, 3, true);
+        let KaniObligationOutcome::Emitted {
+            records,
+            graph_harnesses,
+            ..
+        } = outcome_at(&fixture.package, &main_clause(&fixture), &[])
+        else {
+            panic!("per-item graph location refusal")
+        };
+        assert!(graph_harnesses.is_empty());
+        assert!(matches!(
+            &records[0].disposition,
+            ObligationDisposition::Unsupported {
+                reason: UnsupportedObligation::GraphClaimNotRendered {
+                    reason: GraphUnsupportedReason::MissingClaim,
+                    ..
                 }
             }
-        }
-        assert!(native_clause(&fixture, "kids", &targets));
+        ));
     }
 }

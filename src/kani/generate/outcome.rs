@@ -506,7 +506,14 @@ pub enum GraphUnsupportedReason {
     /// The population and selected edge refer to different object types.
     PopulationTypeMismatch,
     /// Symbolic domain does not fit the harness representation or source ceiling.
-    DomainNotRepresentable,
+    DomainNotRepresentable {
+        /// Authored population maximum whose complete storage failed.
+        population_maximum: u64,
+        /// Authored edge upper bound whose complete storage failed.
+        edge_upper: u64,
+    },
+    /// Distinct full graph identities collided on the bounded Rust symbols.
+    HarnessSymbolCollision,
     /// The request's memory ceiling cannot hold the complete symbolic domain.
     DomainExceedsMemoryCeiling {
         /// Required storage bytes.
