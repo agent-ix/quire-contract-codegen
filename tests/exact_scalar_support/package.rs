@@ -22,7 +22,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Mutex, OnceLock};
 
 use quire_contract_codegen::oracle::operator_catalog::IntegerOperator;
-use quire_contract_codegen::{
+use super::scalar_fixture_types::{
     BooleanOperator, DecimalOperator, EqualityOperandKind, ExactScalarItem, ExactScalarOperation,
     IeeeArithmeticOperator, OrderingOperandKind, QuantityOperator, RationalOperator,
 };

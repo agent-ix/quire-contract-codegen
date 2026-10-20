@@ -14,6 +14,7 @@
 //! each seeded defect is falsified for the intended property, and regenerating the frame from a
 //! mutated package turns a green proof red.
 
+use quire_contract_codegen as scalar_fixture_types;
 #[path = "../state_frame_support/model.rs"]
 pub(crate) mod model;
 #[path = "../state_frame_support/native_twin.rs"]

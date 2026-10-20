@@ -1,6 +1,7 @@
 //! FR-014: exact complete-V1 scalar oracle generation over admitted
 //! CheckedPackage V2 input.
 
+use quire_contract_codegen as scalar_fixture_types;
 use ix_trace_rs::trace;
 use std::{
     collections::{BTreeMap, BTreeSet},
