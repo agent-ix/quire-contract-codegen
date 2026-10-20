@@ -825,6 +825,29 @@ families it names, each of which is owed a shadow or a production harness of its
 | FR-015-AC-117 | Implemented (IR-858). With the installed backend, after the scalar port, the unmutated scalar harness classifies `Verified` with its cover satisfied and the existing scalar mutation control (the oracle's `Add` swapped for `Subtract`, FR-015-AC-37) classifies `Falsified`; and a hand-built `HarnessSpec` with an unsatisfiable `Assume`, rendered by `render`, does not classify `Verified` (L-4). This run is a smoke over the ported source and not the evidence of equivalence, which FR-015-AC-115 is (AD-004 "The HarnessSpec and render contract (step 4b)", P-3). | Test (TC-025) |
 | FR-015-AC-118 | For an admitted V2 scalar `implies` claim over two Boolean operands, the generated harness embeds its FR-014 oracle as FR-015-AC-20 requires and draws both operands symbolically. It calls `quire_contract_runtime::operators::implies_short_circuit` with `left` and a closure returning `right` as the subject expression, asserts that subject result equals an independent native `!left \|\| right` expectation over the same operands, and separately asserts that the oracle's `Outcome<bool>` is `Completed` with that expectation; neither subject nor oracle computes the native expectation. With installed Kani, the healthy harness classifies `Verified` with its final cover satisfied. In a separate run of the same claim, replacing only the parsed generated subject call expression with `false` classifies `Falsified` with a concrete in-domain playback whose `left` is `false` (the correct implication is `true`). The control fails if the compiled subject call is absent, if mutation changes the oracle or native expectation, or if the result is merely a generation-time Boolean. A V2 clause body containing the same implication remains governed by planned FR-015-AC-40 and its inline-oracle prerequisite FR-014-AC-38; this scalar control does not claim that clause path implemented. | Test (TC-025) |
 
+### Mutations FR-015-AC-69 to FR-015-AC-76 detect
+
+| ID | Mutation that breaks it |
+|----|-------------------------|
+| FR-015-AC-69 | Emit only the `Equal` harness for a `NotEqual` item, emit a `production` harness for the family, or read a bound from the descriptor. |
+| FR-015-AC-70 | Draw a payload for an absent option, collapse `absent` and `null` into one draw, take a bound from the whole `i64`, or leave a literal operand's leaf unpinned. |
+| FR-015-AC-71 | Compute the expectation by calling the shadow, so the assertion is `x == x`; stop counting after the first unequal field; or place the cover before the assertions. |
+| FR-015-AC-72 | Emit a loop or a `Vec` in the shadow, or raise `SHADOW_PAIR_NODE_BUDGET` to fit a closure instead of refusing it. |
+| FR-015-AC-73 | Refuse every shape as one reason, treat an unbounded integer as the whole `i64`, a recursive declaration as depth one, or a `convert<T>` operand as its source type, or let a refused item drop a supported sibling. |
+| FR-015-AC-74 | Pass a corpus case whose cover is unsatisfiable, whose refinement ran over a narrower domain than the shadow drew, or whose refinement was `sampled` where its domain fits the cap. |
+| FR-015-AC-75 | Mutate only the production oracle or only the shadow; or accept an equivalent mutant as the test of a check (a permutation of member order, or swapping two descriptors of one type). |
+| FR-015-AC-76 | Record `backed` for a covering criterion the matrix lists planned, omit `declaration_reconstruction`, or leave the identity unchanged when a bound changes. |
+
+### Mutations FR-015-AC-77 to FR-015-AC-81 detect
+
+| ID | Mutation that breaks it |
+|----|-------------------------|
+| FR-015-AC-77 | Read a model field from an empty object body or a read's `result_type`, omit unread `audit`, narrow an `i128` endpoint, or let generation and replay use different domains. |
+| FR-015-AC-78 | Fall back after an accessor error; treat an absent accessor field as an unranged present field; use an `Integer`, `Option` or out-of-`i64` range as a range; or trust a grouped derived-shape body bound. |
+| FR-015-AC-79 | Reorder request fields to the accessor's name order, insert an unrequested inherited field, or emit the hand-built fixture's scope ids. |
+| FR-015-AC-80 | Generate the harness from the hand-built fixture rather than the emitted package. |
+| FR-015-AC-81 | Mark an unread `IntRange` as `NoRead`, give an untyped member a range, omit its reason, or accept a duplicate unranged name. |
+
 ### FR-015-AC-106
 
 The graph verification controls distinguish clause semantics from domain
@@ -928,29 +951,6 @@ semantic controls above still require original-domain playback and same-clause
 `qsl_replay` agreement. Missing real-package population links or typed field
 accessors retain AC-108's refusal; a test-only carrier or a relationship-end
 success does not supply the missing field-edge producer/API evidence.
-
-### Mutations FR-015-AC-69 to FR-015-AC-76 detect
-
-| ID | Mutation that breaks it |
-|----|-------------------------|
-| FR-015-AC-69 | Emit only the `Equal` harness for a `NotEqual` item, emit a `production` harness for the family, or read a bound from the descriptor. |
-| FR-015-AC-70 | Draw a payload for an absent option, collapse `absent` and `null` into one draw, take a bound from the whole `i64`, or leave a literal operand's leaf unpinned. |
-| FR-015-AC-71 | Compute the expectation by calling the shadow, so the assertion is `x == x`; stop counting after the first unequal field; or place the cover before the assertions. |
-| FR-015-AC-72 | Emit a loop or a `Vec` in the shadow, or raise `SHADOW_PAIR_NODE_BUDGET` to fit a closure instead of refusing it. |
-| FR-015-AC-73 | Refuse every shape as one reason, treat an unbounded integer as the whole `i64`, a recursive declaration as depth one, or a `convert<T>` operand as its source type, or let a refused item drop a supported sibling. |
-| FR-015-AC-74 | Pass a corpus case whose cover is unsatisfiable, whose refinement ran over a narrower domain than the shadow drew, or whose refinement was `sampled` where its domain fits the cap. |
-| FR-015-AC-75 | Mutate only the production oracle or only the shadow; or accept an equivalent mutant as the test of a check (a permutation of member order, or swapping two descriptors of one type). |
-| FR-015-AC-76 | Record `backed` for a covering criterion the matrix lists planned, omit `declaration_reconstruction`, or leave the identity unchanged when a bound changes. |
-
-### Mutations FR-015-AC-77 to FR-015-AC-81 detect
-
-| ID | Mutation that breaks it |
-|----|-------------------------|
-| FR-015-AC-77 | Read a model field from an empty object body or a read's `result_type`, omit unread `audit`, narrow an `i128` endpoint, or let generation and replay use different domains. |
-| FR-015-AC-78 | Fall back after an accessor error; treat an absent accessor field as an unranged present field; use an `Integer`, `Option` or out-of-`i64` range as a range; or trust a grouped derived-shape body bound. |
-| FR-015-AC-79 | Reorder request fields to the accessor's name order, insert an unrequested inherited field, or emit the hand-built fixture's scope ids. |
-| FR-015-AC-80 | Generate the harness from the hand-built fixture rather than the emitted package. |
-| FR-015-AC-81 | Mark an unread `IntRange` as `NoRead`, give an untyped member a range, omit its reason, or accept a duplicate unranged name. |
 
 ## Dependencies
 
