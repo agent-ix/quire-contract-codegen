@@ -124,8 +124,14 @@ fn bounded_single_run_standins_preserve_cancelled_and_timed_out_evidence() {
         run::scalar::{KaniScalarNativeError, KaniScalarNativeErrorClass},
     };
     use std::os::unix::fs::PermissionsExt;
+    use std::sync::atomic::{AtomicBool, Ordering};
     for cancelled in [true, false] {
-        let (harness, artifacts) = fixture(Duration::from_secs(3));
+        let ceiling = if cancelled {
+            Duration::from_secs(30)
+        } else {
+            Duration::from_secs(3)
+        };
+        let (harness, artifacts) = fixture(ceiling);
         let control = crate::core::test_support::discover_scratch(if cancelled {
             "scalar-cancel"
         } else {
@@ -149,18 +155,19 @@ fn bounded_single_run_standins_preserve_cancelled_and_timed_out_evidence() {
         let installation = KaniInstallation::new(launcher);
         let cancel = quire_exact::Cancel::new();
         let target = control.join("target");
+        let completed = AtomicBool::new(false);
         let error = std::thread::scope(|scope| {
             let watcher = cancelled.then(|| {
                 scope.spawn(|| {
-                    let deadline = std::time::Instant::now() + Duration::from_secs(15);
-                    while !started.exists() {
-                        assert!(
-                            std::time::Instant::now() < deadline,
-                            "stand-in did not signal startup"
-                        );
+                    while !started.exists() && !completed.load(Ordering::Acquire) {
                         std::thread::sleep(Duration::from_millis(5));
                     }
-                    cancel.cancel(quire_exact::CancelCause::Requested);
+                    if started.exists() {
+                        cancel.cancel(quire_exact::CancelCause::Requested);
+                        true
+                    } else {
+                        false
+                    }
                 })
             });
             let result =
@@ -173,8 +180,12 @@ fn bounded_single_run_standins_preserve_cancelled_and_timed_out_evidence() {
                     scalar_limits: limits(),
                     target_directory: &target,
                 });
+            completed.store(true, Ordering::Release);
             if let Some(watcher) = watcher {
-                watcher.join().unwrap();
+                assert!(
+                    watcher.join().unwrap(),
+                    "proof returned before stand-in startup: {result:?}"
+                );
             }
             result.unwrap_err()
         });
