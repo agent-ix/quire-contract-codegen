@@ -246,6 +246,7 @@ pub use replay::function::{
     ReplayPackage, ReplayPackageError, ReplayParameter, ReplayVerdict, SpineReplayError,
 };
 pub use replay::obligation::ObligationIdentityError;
+pub use replay::scalar::decode_scalar_falsification;
 pub use replay::state_clause::{
     DocumentError, DocumentLabel, ModelError, OperationDeclaration, StateClauseHarnessMember,
     StateClauseModelFieldsCause, StateClauseReplay, StateClauseReplayError,
