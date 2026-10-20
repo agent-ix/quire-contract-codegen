@@ -190,6 +190,15 @@ fn changed_map_census_and_missing_probe_refuse_all_classifications() {
     let row = report(&package, &inputs);
     assert_eq!(row["state"], "invalid_input");
     assert_eq!(row["clauses"], json!([]));
+
+    let (package, mut inputs) = fixture("self.balance >= 0 implies self.balance <= 1000");
+    let mut map: Value = serde_json::from_slice(inputs[0].source_map).unwrap();
+    map.as_array_mut().unwrap().remove(0);
+    inputs[0].source_map = Box::leak(serde_json::to_vec(&map).unwrap().into_boxed_slice());
+    let row = report(&package, &inputs);
+    assert_eq!(row["state"], "invalid_input");
+    assert_eq!(row["clauses"], json!([]));
+    assert_eq!(row["diagnostics"][0]["code"], "map_mismatch");
 }
 
 #[trace("FR-004-AC-23")]
@@ -240,6 +249,79 @@ fn malformed_export_and_wrong_source_root_never_invent_a_classification() {
         row["clauses"][0]["diagnostics"][0]["code"],
         "unavailable_observation"
     );
+}
+
+#[trace("FR-004-AC-24")]
+#[test]
+fn each_llvm_input_class_refuses_without_invented_probe_counts() {
+    let (package, mut inputs) = fixture("self.balance >= 0 implies self.balance <= 1000");
+    let baseline: Value = serde_json::from_slice(inputs[0].llvm_export.unwrap()).unwrap();
+    let mut cases = Vec::new();
+
+    let mut unsupported = baseline.clone();
+    unsupported["type"] = json!("other");
+    cases.push((unsupported, "unsupported", "unsupported_profile"));
+
+    let mut summary_only = baseline.clone();
+    summary_only["data"][0]["files"][0]["segments"] = json!([]);
+    cases.push((summary_only, "incomplete", "unavailable_observation"));
+
+    let mut missing_file = baseline.clone();
+    missing_file["data"][0]["files"] = json!([]);
+    cases.push((missing_file, "incomplete", "unavailable_observation"));
+
+    let mut duplicate = baseline.clone();
+    let same = duplicate["data"][0]["files"][0].clone();
+    duplicate["data"][0]["files"]
+        .as_array_mut()
+        .unwrap()
+        .push(same);
+    cases.push((duplicate, "invalid_input", "duplicate_file"));
+
+    let mut ambiguous_path = baseline.clone();
+    ambiguous_path["data"][0]["files"][0]["filename"] = json!("src/../src/lib.rs");
+    cases.push((ambiguous_path, "invalid_input", "invalid_path"));
+
+    let mut malformed_tuple = baseline.clone();
+    malformed_tuple["data"][0]["files"][0]["segments"][0] = json!([1, 1]);
+    cases.push((malformed_tuple, "invalid_input", "malformed_export"));
+
+    for (export, state, code) in cases {
+        inputs[0].llvm_export = Some(Box::leak(
+            serde_json::to_vec(&export).unwrap().into_boxed_slice(),
+        ));
+        let row = report(&package, &inputs);
+        assert_eq!(row["state"], state, "{row}");
+        match state {
+            "incomplete" => {
+                assert_eq!(row["clauses"][0]["classification"], Value::Null);
+                assert_eq!(row["clauses"][0]["diagnostics"][0]["code"], code);
+            }
+            _ => {
+                assert_eq!(row["clauses"], json!([]));
+                assert_eq!(row["diagnostics"][0]["code"], code);
+            }
+        }
+    }
+}
+
+#[trace("FR-004-AC-24")]
+#[test]
+fn foreign_checked_node_in_source_map_refuses_before_observation() {
+    let (package, mut inputs) = fixture("self.balance >= 0 implies self.balance <= 1000");
+    let other = package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| &node.node_id != inputs[0].node_id)
+        .unwrap();
+    let mut map: Value = serde_json::from_slice(inputs[0].source_map).unwrap();
+    map[0]["nodeId"] = serde_json::to_value(&other.node_id).unwrap();
+    inputs[0].source_map = Box::leak(serde_json::to_vec(&map).unwrap().into_boxed_slice());
+    let row = report(&package, &inputs);
+    assert_eq!(row["state"], "invalid_input");
+    assert_eq!(row["clauses"], json!([]));
+    assert_eq!(row["diagnostics"][0]["code"], "map_mismatch");
 }
 
 #[trace("FR-004-AC-16", "FR-004-AC-19", "FR-004-AC-24")]

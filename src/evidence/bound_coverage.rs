@@ -514,7 +514,10 @@ impl Write for CountWriter {
         Ok(())
     }
 }
-fn check_output_size(body: &ObservationBody, limit: usize) -> Result<(), CoverageDiagnostic> {
+pub(crate) fn check_output_size<T: Serialize>(
+    body: &T,
+    limit: usize,
+) -> Result<(), CoverageDiagnostic> {
     serde_json::to_writer(CountWriter { bytes: 0, limit }, body).map_err(|_| {
         diag(
             CoverageErrorCode::ResourceLimitExceeded,

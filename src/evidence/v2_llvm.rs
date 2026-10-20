@@ -11,7 +11,7 @@ use serde::Serialize;
 use crate::{
     core::artifact::{MAX_ARTIFACTS, MAX_ARTIFACT_BYTES, MAX_BUNDLE_BYTES},
     evidence::{
-        bound_coverage::{BoundAnalysisState, MAX_ANALYSIS_BYTES},
+        bound_coverage::{check_output_size, BoundAnalysisState, MAX_ANALYSIS_BYTES},
         vacuity::{
             classify_clause, normalize_path, parse_llvm_coverage, ClauseCoverage,
             CoverageDiagnostic, CoverageErrorCode, LlvmCoverage, ProbeObservation,
@@ -79,6 +79,7 @@ impl V2CoverageAnalysis {
 
     /// Deterministic bounded JSON report of the observations and refusals.
     pub fn to_json_bytes(&self) -> Result<Vec<u8>, CoverageDiagnostic> {
+        check_output_size(&self.0, MAX_ANALYSIS_BYTES)?;
         let bytes = serde_json::to_vec(&self.0).map_err(|_| {
             diagnostic(
                 CoverageErrorCode::MalformedExport,
@@ -124,6 +125,16 @@ pub fn analyze_v2_llvm_coverage(
         body.population = "not_emitted";
         body.clauses.clear();
         body.diagnostics.push(error);
+    }
+    if check_output_size(&body, MAX_ANALYSIS_BYTES).is_err() {
+        body.state = BoundAnalysisState::Unsupported;
+        body.population = "not_emitted";
+        body.clauses.clear();
+        body.diagnostics.clear();
+        body.diagnostics.push(diagnostic(
+            CoverageErrorCode::ResourceLimitExceeded,
+            "analysis output exceeds 16 MiB; no observations classified",
+        ));
     }
     V2CoverageAnalysis(body)
 }
@@ -242,6 +253,18 @@ fn analyze_inner(
             &map,
             &generated.source_map,
         )?;
+        let generated_map = serde_json::to_vec(&generated.source_map).map_err(|_| {
+            diagnostic(
+                CoverageErrorCode::MapMismatch,
+                format!("checked clause {node_id:?} generated map serialization failed"),
+            )
+        })?;
+        if input.source_map != generated_map {
+            return Err(diagnostic(
+                CoverageErrorCode::MapMismatch,
+                format!("checked clause {node_id:?} source map bytes differ from generation"),
+            ));
+        }
         let coverage = input
             .llvm_export
             .map(|bytes| parse_llvm_coverage(bytes, &root))
