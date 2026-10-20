@@ -3,7 +3,7 @@
 use ix_trace_rs::trace;
 
 use std::{
-    env, fs,
+    fs,
     num::NonZeroU64,
     os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
@@ -34,13 +34,11 @@ fn request(profile: TextProfile, min: u64, max: u64) -> CallerTextKaniRequest {
     }
 }
 
-fn scratch_root(label: &str) -> PathBuf {
-    let root = Path::new(env!("CARGO_TARGET_TMPDIR"))
-        .join("caller-text-admission")
-        .join(format!("{label}-{}", std::process::id()));
-    let _ = fs::remove_dir_all(&root);
-    fs::create_dir_all(root.join("crate/src")).expect("create scratch crate");
-    root
+fn scratch_root(label: &str) -> crate::scratch_crate::TemporaryDirectory {
+    let scratch =
+        crate::scratch_crate::TemporaryDirectory::new(&format!("caller-text-admission-{label}"));
+    fs::create_dir_all(scratch.path.join("crate/src")).expect("create scratch crate");
+    scratch
 }
 
 fn manifest() -> String {
@@ -61,6 +59,7 @@ fn write_crate(root: &Path, harnesses: &[KaniCallerTextObligationHarness]) {
 
 struct CallerExecutorLane {
     root: PathBuf,
+    _scratch: crate::scratch_crate::TemporaryDirectory,
     harness: KaniCallerTextObligationHarness,
     cancel: Cancel,
     installation: KaniInstallation,
@@ -70,10 +69,9 @@ struct CallerExecutorLane {
 
 impl CallerExecutorLane {
     fn new(label: &str, report: Option<&str>, exit: i32) -> Self {
-        let root = Path::new(env!("CARGO_TARGET_TMPDIR"))
-            .join("caller-text-executor")
-            .join(format!("{label}-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&root);
+        let scratch =
+            crate::scratch_crate::TemporaryDirectory::new(&format!("caller-text-executor-{label}"));
+        let root = scratch.path.clone();
         let crate_directory = root.join("crate");
         let target_directory = root.join("target");
         fs::create_dir_all(crate_directory.join("src")).expect("create scratch crate");
@@ -103,6 +101,7 @@ impl CallerExecutorLane {
             .expect("make launcher executable");
         Self {
             root,
+            _scratch: scratch,
             harness,
             cancel: Cancel::new(),
             installation: KaniInstallation::new(launcher),
@@ -119,12 +118,6 @@ impl CallerExecutorLane {
             crate_directory: &self.crate_directory,
             target_directory: &self.target_directory,
         }
-    }
-}
-
-impl Drop for CallerExecutorLane {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.root);
     }
 }
 
@@ -184,7 +177,8 @@ fn tc_050_real_kani_proves_all_caller_text_profiles_and_falsifies_mutation() {
     }
     assert_eq!(harnesses.len(), 12);
 
-    let root = scratch_root("all-profiles");
+    let scratch = scratch_root("all-profiles");
+    let root = &scratch.path;
     let installation = KaniInstallation::discover().expect("cargo-kani is installed");
     let cancel = Cancel::new();
     let crate_directory = root.join("crate");

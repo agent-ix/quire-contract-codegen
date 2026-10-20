@@ -228,12 +228,12 @@ pub use kani::generate::outcome::{
     UnsupportedObligation, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
 };
 pub use kani::identity::{
-    CollectionElementIdentity, CollectionKindIdentity, CollectionObligationIdentity,
-    CollectionPredicateIdentity, EmbeddedOracle, KaniCollectionObligationHarness,
-    CallerTextObligationIdentity, KaniCallerTextObligationHarness,
-    KaniObligationHarness, KaniObligationIdentity, KaniScalarObligationHarness, ObligationBinding,
-    ObligationKind, ScalarObligationArgument, ScalarObligationIdentity, ScalarOriginalLimitsError,
-    StateComparison, StateFieldDomain, StateFrameHarness, StateFrameIdentity, StateFrameProperty,
+    CallerTextObligationIdentity, CollectionElementIdentity, CollectionKindIdentity,
+    CollectionObligationIdentity, CollectionPredicateIdentity, EmbeddedOracle,
+    KaniCallerTextObligationHarness, KaniCollectionObligationHarness, KaniObligationHarness,
+    KaniObligationIdentity, KaniScalarObligationHarness, ObligationBinding, ObligationKind,
+    ScalarObligationArgument, ScalarObligationIdentity, ScalarOriginalLimitsError, StateComparison,
+    StateFieldDomain, StateFrameHarness, StateFrameIdentity, StateFrameProperty,
     StateFrameRecordError, StateFrameScope, StateUnrangedField, StateUnrangedReason,
 };
 pub use kani::output::playback::DecodeFailure;

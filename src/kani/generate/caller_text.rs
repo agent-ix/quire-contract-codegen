@@ -146,8 +146,8 @@ fn caller_text_record(
 
 #[cfg(test)]
 mod tests {
-    use ix_trace_rs::trace;
     use super::*;
+    use ix_trace_rs::trace;
     use quire_contract_runtime::exact::TextProfile;
     use std::{num::NonZeroU64, time::Duration};
 

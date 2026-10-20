@@ -5,9 +5,10 @@ use crate::{
     core::artifact::Artifact,
     kani::abi::KaniSolver,
     kani::identity::{
-        CollectionElementIdentity, KaniCallerTextObligationHarness, KaniCollectionObligationHarness, KaniObligationHarness,
-        KaniScalarObligationHarness, ObligationKind, StateFrameHarness, StateFrameProperty,
-        SymbolicArgumentBounds, SymbolicBounds,
+        CollectionElementIdentity, KaniCallerTextObligationHarness,
+        KaniCollectionObligationHarness, KaniObligationHarness, KaniScalarObligationHarness,
+        ObligationKind, StateFrameHarness, StateFrameProperty, SymbolicArgumentBounds,
+        SymbolicBounds,
     },
     oracle::caller_text::CallerTextProofIdentity,
 };
