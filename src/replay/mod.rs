@@ -18,6 +18,8 @@ pub(crate) mod function;
 // The function-contract obligation identity of the function path.
 // Implements: FR-016-AC-21
 pub(crate) mod obligation;
+// Bounded integer scalar playback and operand-domain validation.
+pub(crate) mod scalar;
 // Native replay of a postcondition state-clause counterexample.
 // Implements: FR-024-AC-11
 pub(crate) mod state_clause;
