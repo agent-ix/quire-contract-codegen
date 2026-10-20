@@ -829,8 +829,9 @@ families it names, each of which is owed a shadow or a production harness of its
 
 The graph verification controls distinguish clause semantics from domain
 conformance and completeness. This clarification defines a test oracle, not an
-additional production generator, public input model or proof of delivery. All
-graph criteria remain planned until their required evidence exists.
+additional production generator, public input model or proof of delivery. The
+IR-805 symbolic-graph criteria remain planned until their required evidence
+exists.
 
 For a selected claim, let `D(g)` mean that the concrete active graph `g`
 belongs to the original authored domain: its population count is in `[0,N]`,
