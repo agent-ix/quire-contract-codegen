@@ -3299,3 +3299,30 @@ fn tc_025_scalar_harness_falsifies_a_mutated_oracle_arithmetic() {
         "the failing check must be the generated `sound` assertion, got {counterexample}"
     );
 }
+
+#[test]
+#[trace("TC-027", "FR-017-AC-51")]
+fn tc_027_scalar_limits_is_available_at_codegen_root_with_request_type_identity() {
+    use quire_contract_codegen::{KaniScalarNativeRequest, ScalarLimits};
+
+    // This function's return type proves that the public root export is the
+    // exact type of the existing request field, without naming Runtime.
+    fn request_limits<'a>(request: &'a KaniScalarNativeRequest<'a>) -> &'a ScalarLimits {
+        &request.scalar_limits
+    }
+
+    let limits = ScalarLimits {
+        integer_bits: 64,
+        decimal_digits: 20,
+        scale_expansion: 20,
+        text_input_bytes: 1024,
+        text_scalars: 1024,
+        normalized_scalars: 1024,
+        unit_edges: 100,
+        value_occurrences: 100,
+        work_units: 1000,
+        result_units: 1000,
+    };
+    let _typed_accessor = request_limits;
+    let _runtime_limits: quire_contract_runtime::exact::ScalarLimits = limits;
+}
