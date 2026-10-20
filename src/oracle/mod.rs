@@ -5,6 +5,8 @@
 
 // V1 Boolean oracle; retired with V1.
 pub(crate) mod boolean_v1;
+// V2 state-clause condition oracles.
+pub(crate) mod clause;
 // V1 bound oracle generation; retired with V1.
 pub(crate) mod bound_v1;
 // Shared generation-result and claim vocabulary (FR-014, FR-018, FR-021).

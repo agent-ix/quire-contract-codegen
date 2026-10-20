@@ -57,6 +57,7 @@ use quire_contract_codegen::{
     StateFrameRole, UnsupportedFrameEffect, UnsupportedObligation, MAX_OBLIGATION_ITEMS,
     MAX_OBLIGATION_UNWIND,
 };
+use quire_contract_codegen::generate_v2_clause_oracle;
 use quire_contract_codegen::{HarnessSymbol, StateFrameRecordError};
 use quire_contract_model::{
     CheckedMemberType, CheckedNodeId, CheckedPackageReadLimits, CheckedPackageV2,
@@ -78,6 +79,22 @@ const STATE_FIELDS: [&str; 2] = [model::FIELDS[0].0, model::FIELDS[1].0];
 const STATE_PATH: &str = "crate::subject::Account";
 const SUBJECT_PATH: &str = "crate::subject::deposit";
 const SUBJECT_SOURCE: &str = include_str!("../state_frame_support/subject.rs");
+
+#[trace("FR-014-AC-38")]
+#[test]
+fn qsl_emitted_state_clause_derives_a_confirmed_field_backed_oracle() {
+    let (package, clause) = Twin::new().emitted_package("BalanceNeverDrops");
+    let generated = generate_v2_clause_oracle(&package, &clause)
+        .expect("the admitted state clause condition is supported");
+    assert_eq!(generated.node_id, clause);
+    assert_eq!(generated.provenance, quire_contract_codegen::OperationProvenance::IrConfirmed);
+    assert!(generated.source.contains("pub fn oracle_"));
+    assert!(generated.source.contains("evaluate_ordering"));
+    assert!(generated.source.contains("pre_balance"));
+    assert!(generated.source.contains("current_balance"));
+    assert_eq!(generated.inputs.len(), 2);
+    assert!(generated.inputs.iter().all(|input| input.lower == 0 && input.upper == 1000));
+}
 
 /// One variant of the fixture. Each variant owns its node codes, because the test binary's
 /// fixture registry refuses one code bound to two different bodies.
