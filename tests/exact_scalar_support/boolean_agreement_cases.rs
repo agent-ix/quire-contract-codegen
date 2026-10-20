@@ -55,7 +55,9 @@ fn boolean_connectives_agree_in_outcome_charges_counters_and_denials() {
         for right in [
             Outcome::Completed(false),
             Outcome::Completed(true),
-            Outcome::Refused(Refusal::CheckedInvariant),
+            Outcome::Refused(Refusal::CheckedInvariant {
+                cause: quire_exact::CheckedInvariantCause::GeneratedDescriptorReconstructionFailed,
+            }),
         ] {
             agree2! {
                 limits: support::rt_side::UNLIMITED,

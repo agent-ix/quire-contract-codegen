@@ -2185,7 +2185,7 @@ fn tc_033_quantity_conversion_has_an_oracle_and_no_harness() {
             .find(|artifact| artifact.path == "src/lib.rs")
             .expect("oracle lib.rs");
         assert!(
-            oracle_source.contents.contains("rt::convert_quantity"),
+            oracle_source.contents.contains("residue::convert_quantity"),
             "the exact conversion oracle is emitted"
         );
         assert!(

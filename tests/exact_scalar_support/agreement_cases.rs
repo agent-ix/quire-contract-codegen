@@ -1727,7 +1727,7 @@ fn conversion_with_incomplete_meter_mutation(
                 Some(&zero),
                 meter,
             ),
-            Outcome::Refused(rt::Refusal::IntegerOutOfDomain)
+            Outcome::Refused(rt::Refusal::IntegerOutOfDomain { target: Box::new(zero.clone()) })
         );
     }
     outcome

@@ -1074,7 +1074,7 @@ fn scalar_coverage_regions<'a>(
                     if *right_may_stop {
                         line.trim() == "right()"
                     } else {
-                        line.contains("residue::evaluate_boolean")
+                        line.contains("rt::evaluate_boolean")
                             && line.contains("Implies")
                             && line.contains("right")
                     }
@@ -3829,7 +3829,7 @@ impl SourceBuilder {
                         format!("Ok(residue::evaluate_boolean_short_circuit(residue::ShortCircuitConnective::{kind}, left, || {{\n        right()\n    }}, meter))"),
                     )
                 } else {
-                    (parameters, format!("Ok(residue::evaluate_boolean(residue::BooleanConnective::{connective}, meter))"))
+                    (parameters, format!("Ok(rt::evaluate_boolean(rt::BooleanConnective::{connective}, meter))"))
                 };
                 Body {
                     parameters,
@@ -4099,7 +4099,6 @@ impl SourceBuilder {
         rt::Outcome::Undefined(reason) => Ok(rt::Outcome::Undefined(reason)),
         rt::Outcome::Refused(reason) => Ok(rt::Outcome::Refused(reason)),
         rt::Outcome::Incomplete(reason) => Ok(rt::Outcome::Incomplete(reason)),
-        _ => Err(OracleStop::InvalidConstant),
     }".to_owned(),
             },
             ExactScalarOperation::QuantityComparison { operator } => {

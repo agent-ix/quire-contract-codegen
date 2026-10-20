@@ -222,7 +222,7 @@ macro_rules! shared_helpers {
                         point,
                         occurrence,
                         outcome,
-                        admitted_charges: denied.admitted_charges().to_vec(),
+                        admitted_charges: denied.admitted_charges().iter().map(|charge| charge.point).collect(),
                         consumed: LimitKind::ALL.iter().map(|kind| denied.consumed(*kind)).collect(),
                     }
                 })
@@ -485,7 +485,7 @@ pub mod rt_side {
     pub use quire_exact::*;
     pub use quire_contract_runtime::exact::{
         compare_enum, compare_quantity, convert_quantity, evaluate_quantity, CompoundUnit,
-        evaluate_boolean, evaluate_boolean_short_circuit, BooleanConnective, ShortCircuitConnective,
+        evaluate_boolean_short_circuit, ShortCircuitConnective, ConvertedValue,
         Conversion, EnumDeclaration, EnumValue, InvalidSemanticGraph, NodeKey, Quantity,
         QuantityOperation, QuantityTarget, QuantityUnit, SemanticGraphCause, Unit, UnitDeclaration,
         UnitGraph,
