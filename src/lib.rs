@@ -175,6 +175,7 @@ pub use kani::run::tool::{KaniInstallation, KaniTool, KaniToolError};
 pub use kani::terminal::{
     ir_outcome_terminal_value, run_terminal_value, ReplaySettlement, TerminalPairError,
 };
+pub use quire_contract_runtime::exact::ScalarLimits;
 pub use routed::capability::{
     negotiate_backend_provider, negotiate_contract_package, project_contract_package_incomplete,
     project_contract_package_refusal, BackendDescriptor, BackendId, BackendKind,
