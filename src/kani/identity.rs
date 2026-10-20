@@ -344,15 +344,26 @@ impl KaniCollectionObligationHarness {
 }
 
 /// Why the original scalar renderer limits cannot be read from a retained harness.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ScalarOriginalLimitsError {
     /// This harness was not produced with a retained scalar meter context.
-    #[error("original scalar renderer limits were not retained")]
     Unavailable,
     /// The retained identity, source or record differs from the generator-origin seal.
-    #[error("retained scalar artifact differs from its generation seal")]
     GeneratedArtifactChanged,
 }
+
+impl std::fmt::Display for ScalarOriginalLimitsError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::Unavailable => "original scalar renderer limits were not retained",
+            Self::GeneratedArtifactChanged => {
+                "retained scalar artifact differs from its generation seal"
+            }
+        })
+    }
+}
+
+impl std::error::Error for ScalarOriginalLimitsError {}
 
 /// One generated V2 exact-scalar obligation harness.
 #[derive(Clone, Debug)]

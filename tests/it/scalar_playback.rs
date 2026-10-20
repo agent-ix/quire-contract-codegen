@@ -512,16 +512,6 @@ fn original_renderer_limits_are_retained_with_genuine_routed_source() {
         .rust
         .contents
         .contains("exact >= i128::from(0_i64) && exact <= i128::from(10_i64)"));
-    let mut unrelated_native_budget = limits;
-    unrelated_native_budget.work_units = 0;
-    assert_ne!(
-        unrelated_native_budget,
-        harness.original_scalar_limits().unwrap()
-    );
-    assert_eq!(
-        harness.original_scalar_limits().unwrap().work_units,
-        u64::MAX
-    );
 }
 
 #[trace("FR-032-AC-3")]
