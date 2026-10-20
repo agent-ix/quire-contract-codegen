@@ -258,6 +258,15 @@ by quire-integration IR-842.
    count, one evaluation-entry probe on the function-entry line outside every consequent region and
    one entry-token probe inside each consequent's region; dropping or duplicating a region leaves the
    declared count unchanged (FR-014-AC-36).
+3. From a QSL-emitted, strict-reader-admitted V2 state-clause package, select a clause whose
+   `quire.op.state.clause` body's third argument references a separate Boolean expression node.
+   Request the clause node id and assert that its descriptor and generated `ir_confirmed`
+   `Outcome<bool>` oracle evaluate the referenced expression, while the claim and oracle retain
+   the clause node id rather than the expression node id. Exercise current and `pre(...)` field
+   reads at both declared range endpoints. In a separate admitted inline-condition fixture,
+   assert the same clause identity rule. A request for the state node as an independent scalar
+   claim remains refused, and a condition containing an operand outside FR-014-AC-10's
+   supported forms is refused without an oracle (FR-014-AC-38, FR-014-AC-7 and AC-10).
 
 ## Lowering byte-ceiling failure (IR-547)
 
