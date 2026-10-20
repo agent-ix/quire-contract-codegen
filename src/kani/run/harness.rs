@@ -289,7 +289,7 @@ mod tests {
         );
     }
 
-    /// Trace: FR-017-AC-26, TC-050.
+    #[trace("FR-017-AC-26", "TC-050")]
     #[test]
     fn caller_text_execution_view_carries_claim_identity_without_contract_kind() {
         let harness = KaniCallerTextObligationHarness {

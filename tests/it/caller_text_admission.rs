@@ -1,5 +1,7 @@
 //! Caller-ingress Text admission proof and real Kani mutation control (FR-035, TC-050).
 
+use ix_trace_rs::trace;
+
 use std::{
     env, fs,
     num::NonZeroU64,
@@ -167,7 +169,7 @@ fn caller_batch_report(entries: &[CallerReportEntry<'_>]) -> String {
     .to_string()
 }
 
-/// Trace: FR-035-AC-4, FR-035-AC-5, FR-017-AC-26, TC-050.
+#[trace("FR-035-AC-4", "FR-035-AC-5", "FR-017-AC-26", "TC-050")]
 #[test]
 #[ignore = "kani lane: 12 independent caller proofs plus a real falsifying mutation"]
 fn tc_050_real_kani_proves_all_caller_text_profiles_and_falsifies_mutation() {
@@ -289,7 +291,7 @@ fn tc_050_real_kani_proves_all_caller_text_profiles_and_falsifies_mutation() {
 /// production execution path refuses a source mismatch, unavailable launcher, or malformed Kani
 /// report without producing evidence.
 ///
-/// Trace: FR-017-AC-26, TC-050.
+#[trace("FR-017-AC-26", "TC-050")]
 #[test]
 fn tc_050_caller_executor_preserves_outcomes_and_refuses_untrusted_execution() {
     let report = caller_report(
@@ -367,7 +369,7 @@ fn tc_050_caller_executor_preserves_outcomes_and_refuses_untrusted_execution() {
 /// Missing cover evidence stays inconclusive, and a compatible batch binds each caller's report
 /// outcome and playback to that member's own typed identity and selected harness path.
 ///
-/// Trace: FR-017-AC-26, TC-050.
+#[trace("FR-017-AC-26", "TC-050")]
 #[test]
 fn tc_050_caller_executor_preserves_no_cover_and_mixed_batch_member_identity() {
     let no_cover_report = caller_report("Success", &[("Success", "assertion")]);

@@ -146,6 +146,7 @@ fn caller_text_record(
 
 #[cfg(test)]
 mod tests {
+    use ix_trace_rs::trace;
     use super::*;
     use quire_contract_runtime::exact::TextProfile;
     use std::{num::NonZeroU64, time::Duration};
@@ -165,7 +166,7 @@ mod tests {
         }
     }
 
-    /// Trace: FR-035-AC-4, FR-017-AC-26.
+    #[trace("FR-035-AC-4", "FR-017-AC-26")]
     #[test]
     fn caller_harness_identity_is_profile_bound_and_executor_ready() {
         let harness = generate_caller_text_kani_harness(request(TextProfile::Nfc, 1, 1))
@@ -204,7 +205,7 @@ mod tests {
             .contains("caller_text_nfc_1_1::caller_text_admission_agrees"));
     }
 
-    /// Trace: FR-035-AC-1, FR-035-AC-4, FR-035-AC-5, TC-050.
+    #[trace("FR-035-AC-1", "FR-035-AC-4", "FR-035-AC-5", "TC-050")]
     #[test]
     fn proof_harness_embeds_the_public_generated_oracle_artifact() {
         let text_type = TextType::new(1, 1, TextProfile::Nfc).expect("valid type");
@@ -224,7 +225,7 @@ mod tests {
         );
     }
 
-    /// Trace: FR-035-AC-4, FR-017-AC-26.
+    #[trace("FR-035-AC-4", "FR-017-AC-26")]
     #[test]
     fn twelve_profiles_and_bounds_have_distinct_harnesses_and_caller_claims() {
         let mut names = std::collections::BTreeSet::new();
@@ -253,7 +254,7 @@ mod tests {
         assert_eq!(names.len(), 12);
     }
 
-    /// Trace: FR-035-AC-6.
+    #[trace("FR-035-AC-6")]
     #[test]
     fn unsupported_payload_class_returns_typed_refusal_without_harness() {
         let mut request = request(TextProfile::Nfc, 1, 1);

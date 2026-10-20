@@ -4236,7 +4236,7 @@ fn quantity_conversion_target_is_unit(graph: &Graph<'_>, node: &CheckedSemanticN
 /// Why a node has no derivable [`ExactScalarItem`], beyond the refusals
 /// [`ExactScalarRefusal`] already names for its lowering and bounds.
 ///
-/// Trace: TC-024
+#[trace("TC-024")]
 // Implements: FR-014
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(tag = "code", rename_all = "snake_case")]
@@ -4431,7 +4431,7 @@ fn family_of_identity(identity: &str) -> Option<Family> {
 /// give its lowering or bound (so FR-015 classifies it as before), or `NoDerivableClaim` carrying a
 /// [`ClaimDerivationRefusal`].
 ///
-/// Trace: TC-024
+#[trace("TC-024")]
 // Implements: FR-014
 pub fn derive_exact_scalar_items(
     package: &CheckedPackageV2,
@@ -5779,7 +5779,7 @@ mod tests {
         }
     }
 
-    /// Trace: FR-035-AC-6, TC-024.
+    #[trace("FR-035-AC-6", "TC-024")]
     #[test]
     fn caller_text_admission_has_no_checked_numeric_convert_identity() {
         let operation = ExactScalarOperation::TextAdmission {

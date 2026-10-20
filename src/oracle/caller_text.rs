@@ -315,6 +315,7 @@ fn caller_text_input_arms() -> String {
 
 #[cfg(test)]
 mod tests {
+    use ix_trace_rs::trace;
     use super::*;
     use quire_contract_runtime::exact::{
         ChargePoint, InjectedDenial, Meter, ScalarLimits, TextPayload,
@@ -336,7 +337,7 @@ mod tests {
         })
     }
 
-    /// Trace: FR-035-AC-1, FR-035-AC-6.
+    #[trace("FR-035-AC-1", "FR-035-AC-6")]
     #[test]
     fn caller_oracle_calls_runtime_admission_without_checked_node_identity() {
         let generated = generate_caller_text_oracle(CallerTextAdmissionRequest {
@@ -375,7 +376,7 @@ mod tests {
         }
     }
 
-    /// Trace: FR-035-AC-2, FR-035-AC-3.
+    #[trace("FR-035-AC-2", "FR-035-AC-3")]
     #[test]
     fn constructor_refusal_precedes_admission_and_reached_charge_denials_match_runtime() {
         let constructor_meter = unlimited_meter();
@@ -471,7 +472,7 @@ mod tests {
         }
     }
 
-    /// Trace: FR-035-AC-6.
+    #[trace("FR-035-AC-6")]
     #[test]
     fn proof_request_refuses_unsupported_class_and_bounds() {
         let supported = TextType::new(1, 1, TextProfile::Nfc).expect("valid type");
@@ -486,7 +487,7 @@ mod tests {
         );
     }
 
-    /// Trace: FR-035-AC-4, FR-035-AC-6.
+    #[trace("FR-035-AC-4", "FR-035-AC-6")]
     #[test]
     fn proof_generator_emits_each_profile_and_both_supported_bound_pairs() {
         for profile in TextProfile::ALL {
@@ -534,7 +535,7 @@ mod tests {
         }
     }
 
-    /// Trace: FR-035-AC-4.
+    #[trace("FR-035-AC-4")]
     #[test]
     fn symbolic_selector_table_is_a_bijection_to_the_twenty_one_scalar_sequences() {
         let alphabet = ['e', '\u{301}', '\u{e9}', '\u{1f600}'];
