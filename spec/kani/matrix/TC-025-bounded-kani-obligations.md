@@ -150,12 +150,15 @@ QSL's `replay_frame`.
 
 ## Expected Results
 
-The QSL-authored V2 postcondition produces a clause-identified oracle and
-harness, a compiled runtime-helper call, a healthy installed-Kani `Verified`
-result with satisfied cover, and a helper-body-only installed-Kani `Falsified`
-result with in-domain playback. The two runs retain identical clause and
-generated proof source; the independent implication expectation rejects a
-helper and oracle that agree on a wrong result (FR-015-AC-119, planned).
+The QSL-authored V2 postcondition binds both `amount` reads to one drawn
+operation parameter, uses that same value in the compiled postcondition,
+clause oracle and independent native expectation, and produces a
+clause-identified oracle and harness, a compiled runtime-helper call, a healthy
+installed-Kani `Verified` result with satisfied cover, and a helper-body-only
+installed-Kani `Falsified` result with in-domain playback. The two runs retain
+identical clause and generated proof source; the independent implication
+expectation rejects a helper and oracle that agree on a wrong result
+(FR-015-AC-119, planned).
 
 Four distinct harnesses carry their bounds; no assumption
 excludes an undefined, refused or incomplete outcome; the unbounded, the
@@ -519,13 +522,21 @@ with the required author `make kani-gate`; independent review and final acceptan
 
 ## QSL-authored V2 clause runtime-helper mutation (IR-917, planned)
 
-49. Author the postcondition `amount < 1000 implies amount + 1 <= 1000` in
-    QSL source. Emit its exact `CheckedPackageV2` through QSL's public facade,
+49. Author a QSL operation with one finite-bounded integer parameter
+    `amount: Int[0, 1000]` and its postcondition
+    `amount < 1000 implies amount + 1 <= 1000`. Both bare `amount` reads
+    name that operation parameter; no read names a state field or
+    subject-produced post-state value. Emit its exact `CheckedPackageV2`
+    through QSL's public facade,
     admit it through Contract IR, and select the postcondition by its clause
     node identity. Check that the FR-014-AC-38 oracle and FR-015 harness name
     that same clause, that the oracle is embedded byte for byte, and that the
-    harness independently checks native `!left || right` over the clause's
-    drawn values. Inspect the compiled subject to require a call to
+    harness draws `amount` once under its declared domain, passes that exact
+    value to the compiled subject, and independently checks native
+    `!left || right` with `left = amount < 1000` and
+    `right = amount + 1 <= 1000` over that same value. Confirm the compiled
+    postcondition and clause oracle use that same parameter value. Inspect the
+    compiled subject to require a call to
     `quire_contract_runtime::operators::implies_short_circuit` and inspect
     the parsed authoritative helper body; fail before running either proof if
     the call or body is absent. Run the unmodified package, harness and subject
@@ -539,9 +550,9 @@ with the required author `make kani-gate`; independent review and final acceptan
     two runs; each must be unchanged. Keep the native expectation independent
     of both the oracle and helper, and reject generation-time truth values as
     proof evidence. Use no copied runtime file, binary or package fixture.
-    The admitted selected-model state-field range path is still planned under
-    IR-624 if the authored fixture requires it (FR-015-AC-119; distinct from
-    the scalar FR-015-AC-118 and arithmetic mutant of step 11).
+    This parameter fixture does not exercise the separate IR-624 selected-model
+    state-field range path (FR-015-AC-119; distinct from the scalar
+    FR-015-AC-118 and arithmetic mutant of step 11).
 
 ## Blocked
 
