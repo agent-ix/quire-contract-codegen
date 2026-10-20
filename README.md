@@ -2,21 +2,15 @@
 
 [![Discord](https://img.shields.io/badge/Discord-Join%20us-5865F2?logo=discord&logoColor=white)](https://discord.gg/k8DVhuYBR2)
 
-A contract says what an operation promises: *the result never exceeds the
-balance*, *two records are equal when every field is equal*. To trust that
-promise you want it checked in several independent ways: as plain code you can
-run, as property tests over many inputs, and as a proof over every input within
-stated bounds. This library is the part that writes all of those from the one
-contract.
+quire-contract-codegen is a Rust library that generates oracles, property tests,
+proofs and evidence records from one checked contract package.
 
-It takes a checked contract package (produced by
-[quire-contract-ir](https://github.com/agent-ix/quire-contract-ir)) and
-generates Rust oracles, proptest strategies and test harnesses, Kani proof
-harnesses, and the evidence records that tie each output back to the clause it
-came from. Generation is deterministic: the same package always gives the same
-bytes. So the layer above never hand-writes a test or a proof that could drift
-from the contract, and when a proof fails the counterexample is replayed through
-QSL to find out whether it is a real violation.
+Its input is a checked contract package from
+[quire-contract-ir](https://github.com/agent-ix/quire-contract-ir). The
+property tests are proptest strategies and harnesses, the proofs are Kani
+harnesses, and each evidence record links an output to its clause. The same
+package always generates the same bytes. A counterexample from a failed proof
+is replayed through QSL to confirm the violation.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/hero-dark.svg">
@@ -27,17 +21,15 @@ QSL to find out whether it is a real violation.
 > sets `publish = false`, and nothing here is a release approval. Expect
 > breaking changes.
 
-Codegen never guesses. A clause it cannot lower becomes a typed refusal in the
-claim map, not a silently skipped test, and a counterexample that QSL cannot
-reproduce is reported as an evidence failure, never as a pass or a fail.
+A clause that codegen cannot lower becomes a typed refusal in the claim map. A
+counterexample that QSL cannot reproduce is reported as an evidence failure.
 
-## What the replay step looks like
+## Replay example
 
-Codegen is a Rust library with no command line, and building its inputs takes a
-checked package, so there is no three-line quick start. The smallest
-self-contained piece is the replay step: take the values Kani found, run them
-through a QSL function that mirrors the clause, and see whether QSL agrees the
-clause is violated. These excerpts are from
+Codegen has no command line, and building its inputs takes a checked package.
+The smallest self-contained piece is the replay step. It takes the values Kani
+found, runs them through a QSL function that mirrors the clause, and checks
+whether QSL agrees the clause is violated. These excerpts are from
 [`tests/it/skeleton_spine.rs`](tests/it/skeleton_spine.rs), which runs in the
 default test lane:
 
@@ -68,9 +60,9 @@ fn tc_026_a_falsifying_input_replays_through_qsl_to_the_same_violation() {
 `replay_against` calls `replay_falsification` with the decoded witness values
 (`amount_current = 1`, `balance_pre = 5`). The same file shows the opposite
 case: a healthy twin does not reproduce the violation, so QSL settles
-`inconclusive` and names both verdicts instead of repairing the disagreement.
+`inconclusive` and names both verdicts.
 
-## What it generates
+## Outputs
 
 | Output | Entry points | What you get |
 | --- | --- | --- |
@@ -87,7 +79,7 @@ Generated Rust depends only on
 [quire-contract-runtime](https://github.com/agent-ix/quire-contract-runtime) and
 the customer's own types.
 
-### How a Kani run ends
+### Kani run outcomes
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/outcomes-dark.svg">
@@ -95,8 +87,8 @@ the customer's own types.
 </picture>
 
 A *cover unsatisfied* run is vacuous: nothing failed, but the contract's bounds
-or precondition left no case to check, so the proof says nothing. Codegen reports
-it separately instead of calling it verified.
+or precondition left no case to check. Codegen reports it separately from
+verified.
 
 ### Output schemas
 
@@ -112,8 +104,8 @@ Each generated artifact is a path and its contents. The documents under
 
 ## The Quire ecosystem
 
-Codegen is a backend: it sits between the language layer and the tools that run
-what it writes.
+Codegen is a backend between the language layer and the tools that run its
+output.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/ecosystem-dark.svg">
@@ -143,22 +135,21 @@ make ci QSPEC_DIR=/path/to/quire-specification
 ```
 
 `make ci` runs formatting, specification validation, Clippy, the tests under the
-minimum supported Rust version, licence and source checks (`cargo deny`), the
+minimum supported Rust version, license and source checks (`cargo deny`), the
 unsafe-code audit, and the API documentation build. `make kani` runs the slower
 real-Kani lane. CI workflows are manual-only, so run the gate locally before
 opening a pull request.
 
 The requirements, architecture and decisions are in [`spec/`](spec/) and
 [`plan/`](plan/). See [CONTRIBUTING.md](CONTRIBUTING.md) and
-[AGENTS.md](AGENTS.md). Contributions need the [CLA](CLA.md). Agent-assisted
-contributions are welcome and held to the same traceability and testing
-standard, with a human deciding every release.
+[AGENTS.md](AGENTS.md). Contributions need the [CLA](CLA.md). Agent-assisted contributions must meet the same traceability and testing requirements. A human approves every release.
 
-## Licence
+
+## License
 
 Licensed under the GNU Affero General Public License, version 3 or (at your
 option) any later version (`AGPL-3.0-or-later`). See [LICENSE](LICENSE).
 
 Rust source that the generator emits carries its own
 `SPDX-License-Identifier: MIT OR Apache-2.0` header, so generated code can be
-used under those terms; the header describes the output, not this crate.
+used under those terms; the header applies to the output only.
