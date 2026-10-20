@@ -67,9 +67,9 @@ use quire_contract_model::{
 };
 use quire_contract_runtime::exact::EqualityOperator;
 use quire_exact::{
-    ComparisonOperator, DecimalType, DivisionProfile, IeeeComparison, IeeeWidth,
-    Integer, IntegerDomain, IntegerInterval, OrderingOperator, RationalDomain, RoundingMode,
-    TextProfile, TextType,
+    ComparisonOperator, DecimalType, DivisionProfile, IeeeComparison, IeeeWidth, Integer,
+    IntegerDomain, IntegerInterval, OrderingOperator, RationalDomain, RoundingMode, TextProfile,
+    TextType,
 };
 use serde::Serialize;
 use serde_json::Value;

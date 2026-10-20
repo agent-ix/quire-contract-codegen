@@ -1196,58 +1196,63 @@ fn generate_lockfile(
         }
     };
     for (package, repository) in LOCKED_DEPENDENCIES {
-    let expected = if package == "quire-contract-runtime" {
-        codegen_runtime_revision(include_str!("../../../Cargo.lock"))?
-    } else {
-        lock_revision(include_str!("../../../Cargo.lock"), package, repository)
-            .ok_or(KaniScalarNativeError::CodegenLock)?
-    };
-    let mut update = BackendCommand::new("cargo");
-    update.args(&[
-        "update".into(),
-        "--offline".into(),
-        "-p".into(),
-        package.into(),
-        "--precise".into(),
-        expected.clone(),
-    ]);
-    update.current_dir(root);
-    let deadline = Instant::now().checked_add(request.harness.identity.ceilings.wall_clock);
-    let updated = run_bounded_launcher(
-        update,
-        request.harness.identity.ceilings,
-        std::num::NonZeroUsize::MIN,
-        deadline,
-        request.cancel,
-        request.installation.owners(),
-    )
-    .map_err(|error| {
-        KaniScalarNativeError::NativeLaunch(match error {
-            crate::kani::run::launch::BoundedLaunchError::Unavailable(cause) => {
-                format!("runtime lock memory enforcement unavailable: {cause}")
+        let expected = if package == "quire-contract-runtime" {
+            codegen_runtime_revision(include_str!("../../../Cargo.lock"))?
+        } else {
+            lock_revision(include_str!("../../../Cargo.lock"), package, repository)
+                .ok_or(KaniScalarNativeError::CodegenLock)?
+        };
+        let mut update = BackendCommand::new("cargo");
+        update.args(&[
+            "update".into(),
+            "--offline".into(),
+            "-p".into(),
+            package.into(),
+            "--precise".into(),
+            expected.clone(),
+        ]);
+        update.current_dir(root);
+        let deadline = Instant::now().checked_add(request.harness.identity.ceilings.wall_clock);
+        let updated = run_bounded_launcher(
+            update,
+            request.harness.identity.ceilings,
+            std::num::NonZeroUsize::MIN,
+            deadline,
+            request.cancel,
+            request.installation.owners(),
+        )
+        .map_err(|error| {
+            KaniScalarNativeError::NativeLaunch(match error {
+                crate::kani::run::launch::BoundedLaunchError::Unavailable(cause) => {
+                    format!("runtime lock memory enforcement unavailable: {cause}")
+                }
+                crate::kani::run::launch::BoundedLaunchError::Io(cause) => {
+                    format!("runtime lock launcher I/O failed: {cause}")
+                }
+            })
+        })?;
+        if !matches!(
+            updated.outcome,
+            LaunchOutcome::Completed {
+                exited_successfully: true,
+                ..
             }
-            crate::kani::run::launch::BoundedLaunchError::Io(cause) => {
-                format!("runtime lock launcher I/O failed: {cause}")
-            }
-        })
-    })?;
-    if !matches!(
-        updated.outcome,
-        LaunchOutcome::Completed {
-            exited_successfully: true,
-            ..
+        ) {
+            return Err(KaniScalarNativeError::NativeLaunch(format!(
+                "runtime lock update failed: {:?}",
+                updated.outcome
+            )));
         }
-    ) {
-        return Err(KaniScalarNativeError::NativeLaunch(format!(
-            "runtime lock update failed: {:?}",
-            updated.outcome
-        )));
-    }
-    if package == "quire-contract-runtime" {
-        verify_runtime_revision(&expected, fs::read_to_string(root.join("Cargo.lock")))?;
-    } else {
-        verify_dependency_revision(&expected, fs::read_to_string(root.join("Cargo.lock")), package, repository)?;
-    }
+        if package == "quire-contract-runtime" {
+            verify_runtime_revision(&expected, fs::read_to_string(root.join("Cargo.lock")))?;
+        } else {
+            verify_dependency_revision(
+                &expected,
+                fs::read_to_string(root.join("Cargo.lock")),
+                package,
+                repository,
+            )?;
+        }
     }
     Ok(())
 }
@@ -1265,7 +1270,12 @@ fn verify_runtime_revision(
     expected: &str,
     lock: std::io::Result<String>,
 ) -> Result<(), KaniScalarNativeError> {
-    verify_dependency_revision(expected, lock, "quire-contract-runtime", "https://github.com/agent-ix/quire-contract-runtime")
+    verify_dependency_revision(
+        expected,
+        lock,
+        "quire-contract-runtime",
+        "https://github.com/agent-ix/quire-contract-runtime",
+    )
 }
 
 fn verify_dependency_revision(
@@ -1280,13 +1290,7 @@ fn verify_dependency_revision(
         }
         other => other.ok(),
     };
-    let actual = lock.and_then(|lock| {
-        lock_revision(
-            &lock,
-            package,
-            repository,
-        )
-    });
+    let actual = lock.and_then(|lock| lock_revision(&lock, package, repository));
     if actual.as_deref() != Some(expected) {
         return Err(KaniScalarNativeError::DependencyLock {
             expected: expected.to_owned(),
