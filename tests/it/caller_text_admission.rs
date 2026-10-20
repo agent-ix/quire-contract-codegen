@@ -112,6 +112,7 @@ impl CallerExecutorLane {
 
     fn request(&self) -> KaniExecutionRequest<'_> {
         KaniExecutionRequest {
+            home_directory: None,
             cancel: &self.cancel,
             installation: &self.installation,
             harness: KaniExecutableHarness::from(&self.harness),
@@ -189,6 +190,7 @@ fn tc_050_real_kani_proves_all_caller_text_profiles_and_falsifies_mutation() {
     for harness in &harnesses {
         write_crate(&root, std::slice::from_ref(harness));
         let request = KaniExecutionRequest {
+            home_directory: None,
             cancel: &cancel,
             installation: &installation,
             harness: KaniExecutableHarness::from(harness),
@@ -238,6 +240,7 @@ fn tc_050_real_kani_proves_all_caller_text_profiles_and_falsifies_mutation() {
     mutated.rust.contents = mutated.rust.contents.replace(original_call, changed_call);
     write_crate(&root, std::slice::from_ref(&mutated));
     let mutation = execute_kani_obligation(&KaniExecutionRequest {
+        home_directory: None,
         cancel: &cancel,
         installation: &installation,
         harness: KaniExecutableHarness::from(&mutated),
@@ -263,6 +266,7 @@ fn tc_050_real_kani_proves_all_caller_text_profiles_and_falsifies_mutation() {
 
     write_crate(&root, std::slice::from_ref(selected));
     let restored = execute_kani_obligation(&KaniExecutionRequest {
+        home_directory: None,
         cancel: &cancel,
         installation: &installation,
         harness: KaniExecutableHarness::from(selected),
@@ -424,6 +428,7 @@ fn tc_050_caller_executor_preserves_no_cover_and_mixed_batch_member_identity() {
 
     let requests = [
         KaniExecutionRequest {
+            home_directory: None,
             cancel: &batch.cancel,
             installation: &batch.installation,
             harness: (&first).into(),
@@ -431,6 +436,7 @@ fn tc_050_caller_executor_preserves_no_cover_and_mixed_batch_member_identity() {
             target_directory: &batch.target_directory,
         },
         KaniExecutionRequest {
+            home_directory: None,
             cancel: &batch.cancel,
             installation: &batch.installation,
             harness: (&second).into(),

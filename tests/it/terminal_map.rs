@@ -47,6 +47,8 @@ pub(crate) fn synthetic_evidence(
         },
         symbolic_arguments: Vec::new(),
         kind: None,
+        caller_text_claim: None,
+        selected_harness_path: None,
         harness_path: "synthetic::mapping".into(),
         launcher_path: "synthetic".into(),
         arguments: Vec::new(),
