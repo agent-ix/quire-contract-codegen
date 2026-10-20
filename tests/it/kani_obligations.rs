@@ -3553,5 +3553,5 @@ fn tc_027_scalar_limits_is_available_at_codegen_root_with_request_type_identity(
         result_units: 1000,
     };
     let _typed_accessor = request_limits;
-    let _runtime_limits: quire_contract_runtime::exact::ScalarLimits = limits;
+    let _kernel_limits: quire_exact::ScalarLimits = limits;
 }
