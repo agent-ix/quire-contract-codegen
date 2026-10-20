@@ -2343,9 +2343,8 @@ mod tests {
     )]
     #[test]
     fn companion_staging_retains_every_original_artifact_and_one_canonical_adapter() {
-        let (harness, artifacts) = crate::kani::test_support::scalar_source_fixture(
-            std::time::Duration::from_secs(600),
-        );
+        let (harness, artifacts) =
+            crate::kani::test_support::scalar_source_fixture(std::time::Duration::from_secs(600));
         let snapshot = PrivateSnapshot::create().unwrap();
         let cancel = Cancel::new();
         let installation = crate::kani::run::tool::KaniInstallation::new("cargo-kani");
