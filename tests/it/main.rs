@@ -83,3 +83,4 @@ mod skeleton_spine;
 mod strategy_generation;
 mod terminal_map;
 mod vacuity_primitives;
+mod v2_llvm_coverage;
