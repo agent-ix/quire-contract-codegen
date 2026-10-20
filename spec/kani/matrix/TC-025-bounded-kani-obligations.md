@@ -495,16 +495,20 @@ with the required author `make kani-gate`; independent review and final acceptan
 ## V2 Boolean implication mutation (planned, IR-914)
 
 48. After FR-014-AC-35 supplies the V2 Boolean oracle, generate a scalar `implies`
-    claim over two symbolic Boolean operands. Inspect the embedded oracle bytes
-    against FR-014's function and the independent native `!left || right`
-    assertion. Run the healthy harness with installed Kani and require
-    `Verified` with its final cover satisfied. In a second run, change only the
-    compiled `implies_short_circuit` subject path to return `false` for every
-    input, confirming that the generated claim calls that path; leave the
-    embedded oracle and native assertion unchanged. Require `Falsified` with a
-    concrete playback in the Boolean domain and `left = false`, and fail the
-    control if the compiled call is absent or the mutation is not exercised.
-    Do not count a generation-time Boolean as a proof result (FR-015-AC-118).
+    claim over two symbolic Boolean operands. Inspect that the embedded oracle
+    matches FR-014's function byte for byte, and that the generated subject calls
+    `quire_contract_runtime::operators::implies_short_circuit` with `left` and a
+    closure returning `right`. Inspect separate assertions that the subject
+    result equals independent native `!left || right` over those operands and
+    the oracle's `Outcome<bool>` is `Completed` with that expectation. Run the
+    healthy harness with installed Kani and require `Verified` with its final
+    cover satisfied. Parse the generated source to find the subject call, then
+    replace only that call expression with `false`; fail the control if the
+    call is absent. Run the
+    mutated harness with the same claim and require `Falsified` with concrete
+    Boolean-domain playback where `left = false`, while the embedded oracle and
+    native expectation remain unchanged. Do not count a generation-time Boolean
+    as a proof result (FR-015-AC-118).
 
 ## Blocked
 
