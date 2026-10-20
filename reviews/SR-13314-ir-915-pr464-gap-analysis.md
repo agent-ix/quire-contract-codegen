@@ -59,3 +59,14 @@ criteria. FND-001 to FND-004 are clause-level gaps: a weak typed-refusal asserti
 no-claim clause, an unfailable zero-count clause plus an untested context-root clause, and an
 untested function-body index branch. FND-002 depends on the code fix in SR-13313 FND-001. These
 are fix-in-PR items before the ✅ Covered rows for FR-039-AC-9 and FR-019-AC-53 are accurate.
+
+## Dispositions
+
+Disposition pass 1, against head c167e8dc49021fc8674e8ad73d971cf32f28e663. The reviewer's full suite is green apart from the known bwrap failures (see SR-13313 Dispositions). Mutant M12 is now killed.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Each adverse case now asserts the exact variant through both `PackageItems::new` and `negotiate_contract_package`: `AccountingIdentity { accounting_index: 1, .. }` for a changed key, and `Count { requested, accounted: 3 }` for a removed or extra position |
+| FND-002 | fixed | Three new AC-9-tagged tests assert a typed `ExcludedDriverIndex { request_index: 1, node_id: excluded }` refusal from the function (item and declaration positions), equality and scalar generators. The routed refusal test is now also tagged FR-039-AC-9. The matrix row names the four generators |
+| FND-003 | fixed | Test-only per-index recorders (`take_package_classifier_indices`, `take_function_preflight_indices`) are now asserted to equal `vec![2]` after settlement, so they would fail if index 1 were classified or preflighted (N3 confirms the assertion is live). A context-root case settles two items with outer and nested indexes `[0, 2]` under the AC-53 tag |
+| FND-004 | fixed | `excluded_position_before_function_body_preserves_body_driver_index` places the excluded position before the body and asserts `Supported` at driver index 2 with body index 1. Mutant M12 is now killed by it |

@@ -100,3 +100,23 @@ path where an excluded position can still get a claim through public CG APIs. FN
 block this CG PR, but it blocks quire-driver#86 and quire-integration#16 as written, and the lead
 should route it to the driver lane before either is merged against this head. Real Kani was not
 run (lead).
+
+## Dispositions
+
+Disposition pass 1, against head c167e8dc49021fc8674e8ad73d971cf32f28e663. The fix commits are 0f004600, 4efc021a and c167e8dc; 5146506d merges origin/main. The reviewer measured the following in a fresh worktree with one target dir:
+
+- `make fmt-check lint spec` passes.
+- Full `cargo test --locked --no-fail-fast --tests`:
+  - Library: 325 passed, 50 failed, 4 ignored.
+  - Integration: 636 passed, 2 failed, 36 ignored, in 460 s.
+  - Every failure is a known bwrap or namespace-startup failure in `kani::run`, `kani_terminal_private`, `kani_scalar_native_private`, or the two `kani_obligations` terminal-value tests. No other failure occurred.
+- Mutants re-run on the `routed::` lib tests:
+  - Killed: M12 (body index skips excluded positions), M13 reversed (refusal reports the routed key), N1 (`bound_driver_node` accepts excluded), N3 (classifier index not recorded), and N5 (both the `at` guard and the equality guard removed).
+  - N2 (the `at` guard alone removed) and N4 (the equality guard alone removed) survive individually. They are equivalent, because each guard backs up the other on every current caller.
+- The `#[cfg(test)]` index recorders only observe and never change behaviour, matching the existing `FUNCTION_PREFLIGHT_READS` seam.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | `PackageItems::bound_driver_node` refuses an excluded index with `PackageRequestError::ExcludedDriverIndex { request_index, node_id }`. `at`, `check_position` (function), the equality accounting check and both scalar loops now use it. New tests `excluded_position_refuses_{function,equality,scalar}_oracle_before_claim_or_artifact` assert the typed refusal |
+| FND-002 | deferred | Downstream defect owned by quire-driver#86. At review time driver#86 (af64a541) still calls `negotiate_backend_provider` (src/upstream.rs:196) and has no `ExcludedDriverIndex` arm. The CG PR body now says: "quire-driver#86 must use `negotiate_contract_package` with its full positions so settlements retain `[0, 2]`, and handle `RoutedGenerationError::ExcludedDriverIndex` in its exhaustive refusal matches before quire-integration#16 can use this CG head." This still blocks driver#86 and integration#16 |
+| FND-003 | fixed | `generate_routed` now reports the excluded position's admitted key (`package_items.excluded_node(..)`), matching the doc. The test adds a mismatched routed key at index 1 and asserts `node_id == excluded`; the reversed mutant is killed |
