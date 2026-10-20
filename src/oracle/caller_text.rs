@@ -206,7 +206,8 @@ pub fn generate_caller_text_proof_harness(
     let oracle = generated_caller_text_oracle_source(text_type);
     let input_arms = caller_text_input_arms();
     let source = format!(
-        r#"pub mod caller_text {{
+        r#"#[cfg(test)]
+pub mod caller_text {{
 {oracle}
 
 fn unlimited_meter() -> rt::Meter {{
@@ -527,7 +528,8 @@ mod tests {
                 }
                 assert!(!source.contains("for kind in"));
                 assert!(source.find(meter_call).unwrap() < source.find("kani::cover!(").unwrap());
-                assert!(source.starts_with("pub mod caller_text {\nuse quire_exact as rt;\n"));
+                assert!(source
+                    .starts_with("#[cfg(test)]\npub mod caller_text {\nuse quire_exact as rt;\n"));
                 assert!(!source.contains("quire_contract_runtime"));
             }
         }

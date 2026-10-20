@@ -90,7 +90,9 @@ pub fn generate_caller_text_kani_harness(
     let harness_symbol = HarnessSymbol::try_from(stem)?;
     let module_symbol = ModuleSymbol::try_from(module.clone())?;
     let path = format!("{module_symbol}::{harness_symbol}");
-    let options = adapter_options(&path, request.unwind, request.solver, false);
+    // Ordered Meter charges are observable only in an exact-kernel test build.
+    let mut options = adapter_options(&path, request.unwind, request.solver, false);
+    options.push("--tests".to_owned());
     let mut proof = generate_caller_text_proof_harness(
         &request.text_type,
         &request.payload_class,
@@ -248,6 +250,7 @@ mod tests {
                 assert!(harness.rust.contents.ends_with("}\n}\n"));
                 assert_eq!(harness.identity.solver.as_str(), "cadical");
                 assert!(harness.identity.options.contains(&"--harness".to_owned()));
+                assert!(harness.identity.options.contains(&"--tests".to_owned()));
             }
         }
         assert_eq!(names.len(), 12);

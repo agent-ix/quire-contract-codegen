@@ -42,7 +42,7 @@ fn scratch_root(label: &str) -> crate::scratch_crate::TemporaryDirectory {
 
 fn manifest() -> String {
     format!(
-        "[package]\nname = \"caller-text-admission-proof\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\n{}\n\n[workspace]\n",
+        "[package]\nname = \"caller-text-admission-proof\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dev-dependencies]\n{}\n\n[workspace]\n",
         crate::scratch_crate::exact_dependency(&["test-support"])
     )
 }
