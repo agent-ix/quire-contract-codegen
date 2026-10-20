@@ -541,8 +541,11 @@ fn run_single(
 ) -> Result<KaniExecutionEvidence, KaniExecutionRefusal> {
     let report_path = fresh_report_path(request.target_directory);
     remove_stale_report(&report_path)?;
-    let (arguments, mut command) = launch_command(request, &report_path);
+    let (mut arguments, mut command) = launch_command(request, &report_path);
     if let Some(source) = read_only_source {
+        // The retained adapter is owned by the companion; the proof is in the library.
+        arguments.push("--lib".to_owned());
+        command.args(&["--lib".to_owned()]);
         command.read_only_bind(source);
     }
     let launch = start(
