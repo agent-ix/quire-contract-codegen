@@ -1931,7 +1931,7 @@ wait
         );
         for (group, expected) in groups.iter().zip(["a::check", "b::check"]) {
             let request = group[0].1;
-            let (arguments, _) = launch_command(request, &PathBuf::from("report.json"));
+            let (arguments, _) = launch_command(request, &PathBuf::from("report.json"), false);
             assert!(arguments
                 .windows(3)
                 .any(|selection| selection == ["--harness", expected, "--exact"]));
