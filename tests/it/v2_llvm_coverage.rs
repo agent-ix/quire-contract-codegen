@@ -6,14 +6,23 @@ use serde_json::{json, Value};
 
 use super::kani_obligations_state_frame::native_twin::Twin;
 
-fn fixture(condition: &str) -> (quire_contract_model::CheckedPackageV2, Vec<V2ClauseCoverageInput<'static>>) {
+fn fixture(
+    condition: &str,
+) -> (
+    quire_contract_model::CheckedPackageV2,
+    Vec<V2ClauseCoverageInput<'static>>,
+) {
     let (package, node_id) =
         Twin::with_balance_condition(condition).emitted_package("BalanceNeverDrops");
     let oracle = quire_contract_codegen::generate_v2_clause_oracle(&package, &node_id).unwrap();
     let source = Box::leak(oracle.source.into_bytes().into_boxed_slice());
-    let source_map = Box::leak(serde_json::to_vec(&oracle.source_map).unwrap().into_boxed_slice());
+    let source_map = Box::leak(
+        serde_json::to_vec(&oracle.source_map)
+            .unwrap()
+            .into_boxed_slice(),
+    );
     let node_id = Box::leak(Box::new(node_id));
-    let segments: Vec<_> = oracle
+    let mut segments: Vec<_> = oracle
         .source_map
         .iter()
         .flat_map(|region| {
@@ -24,6 +33,7 @@ fn fixture(condition: &str) -> (quire_contract_model::CheckedPackageV2, Vec<V2Cl
             ]
         })
         .collect();
+    segments.sort_by_key(|segment| (segment[0].as_u64().unwrap(), segment[1].as_u64().unwrap()));
     let llvm = json!({"type":"llvm.coverage.json.export",
         "cargo_llvm_cov":{"manifest_path":"/fixture/Cargo.toml"},
         "data":[{"files":[{"filename":"src/lib.rs","segments":segments}]}]});
@@ -44,11 +54,41 @@ fn report(
     package: &quire_contract_model::CheckedPackageV2,
     inputs: &[V2ClauseCoverageInput<'_>],
 ) -> Value {
-    serde_json::from_slice(&analyze_v2_llvm_coverage(package, inputs).to_json_bytes().unwrap())
-        .unwrap()
+    serde_json::from_slice(
+        &analyze_v2_llvm_coverage(package, inputs)
+            .to_json_bytes()
+            .unwrap(),
+    )
+    .unwrap()
 }
 
-#[trace("FR-004-AC-16", "FR-004-AC-19", "FR-004-AC-20", "FR-004-AC-21", "FR-004-AC-22")]
+fn set_counts(input: &mut V2ClauseCoverageInput<'_>, counts: &[u64]) {
+    let map: Value = serde_json::from_slice(input.source_map).unwrap();
+    assert_eq!(map.as_array().unwrap().len(), counts.len());
+    let mut llvm: Value = serde_json::from_slice(input.llvm_export.unwrap()).unwrap();
+    let segments = llvm["data"][0]["files"][0]["segments"]
+        .as_array_mut()
+        .unwrap();
+    for (region, count) in map.as_array().unwrap().iter().zip(counts) {
+        let probe = &region["probe"];
+        let segment = segments
+            .iter_mut()
+            .find(|segment| segment[0] == probe["line"] && segment[1] == probe["startColumn"])
+            .unwrap();
+        segment[2] = json!(count);
+    }
+    input.llvm_export = Some(Box::leak(
+        serde_json::to_vec(&llvm).unwrap().into_boxed_slice(),
+    ));
+}
+
+#[trace(
+    "FR-004-AC-16",
+    "FR-004-AC-19",
+    "FR-004-AC-20",
+    "FR-004-AC-21",
+    "FR-004-AC-22"
+)]
 #[test]
 fn admitted_clause_body_sets_the_population_and_implication_count() {
     let (package, mut inputs) = fixture("self.balance >= 0 implies (self.balance <= 1000 implies self.balance >= pre(self.balance))");
@@ -57,13 +97,37 @@ fn admitted_clause_body_sets_the_population_and_implication_count() {
     assert_eq!(row["clauses"][0]["expected_consequents"], 2);
     assert_eq!(row["clauses"][0]["classification"], "unexecuted");
 
-    let mut llvm: Value = serde_json::from_slice(inputs[0].llvm_export.unwrap()).unwrap();
-    for entry in llvm["data"][0]["files"][0]["segments"].as_array_mut().unwrap() {
-        entry[2] = json!(1);
-    }
-    inputs[0].llvm_export = Some(Box::leak(serde_json::to_vec(&llvm).unwrap().into_boxed_slice()));
+    set_counts(&mut inputs[0], &[1, 1, 1]);
     let row = report(&package, &inputs);
     assert_eq!(row["clauses"][0]["classification"], "exercised");
+}
+
+#[trace("FR-004-AC-19", "FR-004-AC-21", "FR-004-AC-22")]
+#[test]
+fn entered_clause_classifies_zero_some_and_all_consequent_probes() {
+    let (package, mut inputs) = fixture("self.balance >= 0 implies (self.balance <= 1000 implies self.balance >= pre(self.balance))");
+    set_counts(&mut inputs[0], &[1, 0, 0]);
+    assert_eq!(
+        report(&package, &inputs)["clauses"][0]["classification"],
+        "vacuous"
+    );
+    set_counts(&mut inputs[0], &[1, 1, 0]);
+    assert_eq!(
+        report(&package, &inputs)["clauses"][0]["classification"],
+        "partially_exercised"
+    );
+    set_counts(&mut inputs[0], &[1, 1, 1]);
+    assert_eq!(
+        report(&package, &inputs)["clauses"][0]["classification"],
+        "exercised"
+    );
+
+    let (package, mut inputs) = fixture("self.balance >= pre(self.balance)");
+    set_counts(&mut inputs[0], &[1]);
+    assert_eq!(
+        report(&package, &inputs)["clauses"][0]["classification"],
+        "exercised"
+    );
 }
 
 #[trace("FR-004-AC-18", "FR-004-AC-23")]
@@ -77,7 +141,10 @@ fn changed_map_census_and_missing_probe_refuse_all_classifications() {
     assert_eq!(row["state"], "invalid_input");
     assert_eq!(row["clauses"], json!([]));
     assert_eq!(row["diagnostics"][0]["code"], "map_mismatch");
-    assert!(row["diagnostics"][0]["message"].as_str().unwrap().contains("BalanceNeverDrops"));
+    assert!(row["diagnostics"][0]["message"]
+        .as_str()
+        .unwrap()
+        .contains("BalanceNeverDrops"));
 
     let (package, mut inputs) = fixture("self.balance >= 0 implies self.balance <= 1000");
     let mut map: Value = serde_json::from_slice(inputs[0].source_map).unwrap();
@@ -86,4 +153,54 @@ fn changed_map_census_and_missing_probe_refuse_all_classifications() {
     let row = report(&package, &inputs);
     assert_eq!(row["state"], "invalid_input");
     assert_eq!(row["clauses"], json!([]));
+}
+
+#[trace("FR-004-AC-23")]
+#[test]
+fn removing_source_map_or_complete_clause_inventory_prevents_success() {
+    let (package, inputs) = fixture("self.balance >= 0 implies self.balance <= 1000");
+    let row = report(&package, &[]);
+    assert_eq!(row["state"], "invalid_input");
+    assert_eq!(row["clauses"], json!([]));
+    assert_eq!(row["diagnostics"][0]["code"], "population_mismatch");
+
+    let (package, mut inputs) = fixture("self.balance >= 0 implies self.balance <= 1000");
+    inputs[0].source = b"";
+    let row = report(&package, &inputs);
+    assert_eq!(row["state"], "invalid_input");
+    assert_eq!(row["diagnostics"][0]["code"], "artifact_mismatch");
+
+    let (package, mut inputs) = fixture("self.balance >= 0 implies self.balance <= 1000");
+    inputs[0].source_map = b"[]";
+    let row = report(&package, &inputs);
+    assert_eq!(row["state"], "invalid_input");
+    assert_eq!(row["diagnostics"][0]["code"], "map_mismatch");
+}
+
+#[trace("FR-004-AC-24")]
+#[test]
+fn malformed_export_and_wrong_source_root_never_invent_a_classification() {
+    let (package, mut inputs) = fixture("self.balance >= 0 implies self.balance <= 1000");
+    inputs[0].llvm_export = Some(br#"{"type":"llvm.coverage.json.export"}"#);
+    let row = report(&package, &inputs);
+    assert_eq!(row["state"], "invalid_input");
+    assert_eq!(row["clauses"], json!([]));
+    assert_eq!(row["diagnostics"][0]["code"], "malformed_export");
+
+    let (package, mut inputs) = fixture("self.balance >= 0 implies self.balance <= 1000");
+    inputs[0].source_root = "/elsewhere";
+    let row = report(&package, &inputs);
+    assert_eq!(row["state"], "invalid_input");
+    assert_eq!(row["clauses"], json!([]));
+    assert_eq!(row["diagnostics"][0]["code"], "invalid_path");
+
+    let (package, mut inputs) = fixture("self.balance >= 0 implies self.balance <= 1000");
+    inputs[0].llvm_export = None;
+    let row = report(&package, &inputs);
+    assert_eq!(row["state"], "incomplete");
+    assert_eq!(row["clauses"][0]["classification"], Value::Null);
+    assert_eq!(
+        row["clauses"][0]["diagnostics"][0]["code"],
+        "unavailable_observation"
+    );
 }
