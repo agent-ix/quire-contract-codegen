@@ -35,16 +35,16 @@ use package::{
 };
 use quire_contract_codegen::oracle::operator_catalog::IntegerOperator;
 use quire_contract_codegen::{
-    classify_kani_run, execute_kani_obligation, execute_kani_scalar_native,
-    generate_exact_scalar_oracles, negotiate_kani_obligations, routed_contract_lowering_profile,
-    run_terminal_value, ClaimDisposition, ClaimMap, ExactScalarClaim, ExactScalarItem,
-    ExactScalarOperation, ExactScalarRefusal, InvalidObligationItem, KaniExecutionRefusal,
-    KaniExecutionRequest, KaniFailurePhase, KaniInconclusiveReason, KaniInstallation,
-    KaniObligationError, KaniObligationHarness, KaniObligationOutcome, KaniObligationRequest,
-    KaniRunOutcome, KaniScalarNativeRequest, KaniScalarObligationHarness, KaniSolver, KaniTool,
-    KaniToolError, ObligationDisposition, ObligationItem, ObligationKind, ObligationRecord,
-    ObligationSubject, OperationProvenance, UnsupportedObligation, UpstreamBlocker,
-    MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
+    classify_kani_run, derive_exact_scalar_items, execute_kani_obligation,
+    execute_kani_scalar_native, generate_exact_scalar_oracles, negotiate_kani_obligations,
+    routed_contract_lowering_profile, run_terminal_value, ClaimDisposition, ClaimMap,
+    ExactScalarClaim, ExactScalarItem, ExactScalarOperation, ExactScalarRefusal,
+    InvalidObligationItem, KaniExecutionRefusal, KaniExecutionRequest, KaniFailurePhase,
+    KaniInconclusiveReason, KaniInstallation, KaniObligationError, KaniObligationHarness,
+    KaniObligationOutcome, KaniObligationRequest, KaniRunOutcome, KaniScalarNativeRequest,
+    KaniScalarObligationHarness, KaniSolver, KaniTool, KaniToolError, ObligationDisposition,
+    ObligationItem, ObligationKind, ObligationRecord, ObligationSubject, OperationProvenance,
+    UnsupportedObligation, UpstreamBlocker, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
 };
 use quire_contract_model::{
     BoundPackage, CheckedNodeId, CheckedPackageReadLimits, CheckedPackageV2, ClauseId, ClauseKind,
@@ -624,6 +624,137 @@ fn claim_index(
         .iter()
         .position(|claim| &claim.node_id == node_id)
         .expect("test claim map contains selected node")
+}
+
+fn boolean_implies_scalar() -> (
+    KaniScalarObligationHarness,
+    quire_contract_codegen::Artifact,
+    String,
+) {
+    const IMPLIES: u32 = 7_702;
+    let mut builder = corpus_package();
+    builder.application_code_with(
+        IMPLIES,
+        "expression",
+        "binary",
+        &key(T_BOOLEAN),
+        application(
+            "binary",
+            op("quire.op.boolean.implies"),
+            &key(T_BOOLEAN),
+            vec![reference(&key(V_BOOLEAN)), reference(&key(V_BOOLEAN))],
+        ),
+        &[key(V_BOOLEAN)],
+    );
+    let (package, ids) = builder.admit_resolved();
+    let node = ids.resolve(&code_id(IMPLIES));
+    let [item] = derive_exact_scalar_items(&package, &[node.clone()])
+        .try_into()
+        .expect("one derived scalar item");
+    let oracles = generate_exact_scalar_oracles(&package, &[item.expect("implies derives")])
+        .expect("Boolean oracle generation");
+    let admitted = admitted_scalar_claims(&package, &oracles.claim_map);
+    let items = [ObligationItem::ScalarClaim {
+        package: &admitted,
+        claim_map: &oracles.claim_map,
+        node_id: &node,
+        claim_index: claim_index(&oracles.claim_map, &node),
+        result_selection: &quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
+    }];
+    let (_, mut harnesses) =
+        emitted_scalar(negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap());
+    let oracle = oracles
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.path == "src/lib.rs")
+        .expect("Boolean oracle source")
+        .contents
+        .clone();
+    let manifest = oracles
+        .artifacts
+        .into_iter()
+        .find(|artifact| artifact.path == "Cargo.toml")
+        .expect("Boolean oracle manifest");
+    (harnesses.remove(0), manifest, oracle)
+}
+
+#[trace("FR-015-AC-118", "TC-025")]
+#[test]
+fn tc_025_boolean_implication_harness_keeps_subject_oracle_and_native_independent() {
+    let (harness, _, oracle) = boolean_implies_scalar();
+    let source = &harness.rust.contents;
+    assert!(
+        source.contains(&oracle),
+        "the FR-014 oracle source is embedded byte-identical"
+    );
+    assert!(source.contains("let left: bool = kani::any();"));
+    assert!(source.contains("let right: bool = kani::any();"));
+    assert!(source.contains("let native = !left || right;"));
+    assert!(source.contains(
+        "let subject = quire_contract_runtime::operators::implies_short_circuit(left, || right);"
+    ));
+    assert!(source.contains("assert!(subject == native"));
+    assert!(source.contains("Ok(rt::Outcome::Completed(value)) => *value == native"));
+    assert!(source.contains("kani::cover!(completed"));
+}
+
+#[trace("FR-015-AC-118", "TC-025")]
+#[test]
+#[ignore = "kani lane: run serially through `make kani`"]
+fn tc_025_boolean_implication_subject_mutation_is_falsified_with_false_left() {
+    let (harness, manifest, oracle) = boolean_implies_scalar();
+    let healthy = run_scalar_under_real_kani("scalar-implies-healthy", &harness, &manifest);
+    assert_eq!(healthy.outcome, KaniRunOutcome::Verified, "{healthy:?}");
+
+    let subject_call = "quire_contract_runtime::operators::implies_short_circuit(left, || right)";
+    let parsed = syn::parse_file(&harness.rust.contents).expect("generated Rust parses");
+    let call_count = parsed
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            syn::Item::Mod(module) => module.content.as_ref(),
+            _ => None,
+        })
+        .flat_map(|(_, items)| items)
+        .filter_map(|item| match item {
+            syn::Item::Fn(function) => Some(function),
+            _ => None,
+        })
+        .flat_map(|function| &function.block.stmts)
+        .filter_map(|statement| match statement {
+            syn::Stmt::Local(local) => local.init.as_ref().map(|init| &*init.expr),
+            _ => None,
+        })
+        .filter(|expression| {
+            quote::quote!(#expression)
+                .to_string()
+                .contains("implies_short_circuit")
+        })
+        .count();
+    assert_eq!(call_count, 1, "exactly one parsed subject expression");
+    assert_eq!(harness.rust.contents.matches(subject_call).count(), 1);
+    let mut mutated = harness.clone();
+    mutated.rust.contents = mutated.rust.contents.replacen(subject_call, "false", 1);
+    assert!(
+        mutated.rust.contents.contains(&oracle),
+        "oracle source is unchanged"
+    );
+    assert!(mutated
+        .rust
+        .contents
+        .contains("let native = !left || right;"));
+    let evidence = run_scalar_under_real_kani("scalar-implies-mutated", &mutated, &manifest);
+    let KaniRunOutcome::Falsified { counterexample } = &evidence.outcome else {
+        panic!("subject-only mutation must falsify: {evidence:?}");
+    };
+    assert!(counterexample.contains("kani::concrete_playback_run"));
+    assert!(
+        counterexample.contains("the compiled implication subject must equal native implication")
+    );
+    assert!(
+        counterexample.contains("0u8") || counterexample.contains("false"),
+        "left is false in playback: {counterexample}"
+    );
 }
 
 pub(crate) fn boolean_operation_package() -> (CheckedPackageV2, CheckedNodeId) {
