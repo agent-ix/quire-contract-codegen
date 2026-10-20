@@ -1485,7 +1485,6 @@ fn seal_snapshot(root: &Path) -> Result<(), KaniScalarNativeError> {
     seal(root)
 }
 
-
 // This control never constructs proof evidence or a paired receipt.
 #[cfg(test)]
 pub(crate) fn qualify_staged_native_for_test(request: &KaniScalarNativeRequest<'_>) {
@@ -1494,48 +1493,110 @@ pub(crate) fn qualify_staged_native_for_test(request: &KaniScalarNativeRequest<'
     let snapshot = PrivateSnapshot::create().unwrap();
     let root = snapshot.path();
     let staged = stage_package(request, root).unwrap();
-    write_observer(&request.harness.identity.oracle_symbol, request.operands.len(), root).unwrap();
+    write_observer(
+        &request.harness.identity.oracle_symbol,
+        request.operands.len(),
+        root,
+    )
+    .unwrap();
     for directory in [root.to_owned(), root.join("observer")] {
         assert!(!directory.join("Cargo.lock").exists());
         generate_lockfile(request, &directory).unwrap();
         let lock = fs::read_to_string(directory.join("Cargo.lock")).unwrap();
         for (name, repository) in LOCKED_DEPENDENCIES {
-            assert_eq!(lock_revision(&lock, name, repository), lock_revision(include_str!("../../../Cargo.lock"), name, repository));
+            assert_eq!(
+                lock_revision(&lock, name, repository),
+                lock_revision(include_str!("../../../Cargo.lock"), name, repository)
+            );
         }
         eprintln!("fresh native qualification {}: {lock}", directory.display());
     }
     let entries = capture_entries(&staged, root).unwrap();
     assert_eq!(entries.len(), 10);
     let identity = identity_from_entries(&entries, Limits::new(256 * 1024 * 1024)).unwrap();
-    assert_eq!(*identity.as_bytes(), crate::kani::test_support::scalar_native_digest::independent_digest(&entries));
+    assert_eq!(
+        *identity.as_bytes(),
+        crate::kani::test_support::scalar_native_digest::independent_digest(&entries)
+    );
     for artifact in request.oracle_artifacts {
-        let retained = if artifact.path == "src/lib.rs" { "src/oracle-artifacts-lib.rs" } else { &artifact.path };
-        assert_eq!(fs::read(root.join(retained)).unwrap(), artifact.contents.as_bytes());
+        let retained = if artifact.path == "src/lib.rs" {
+            "src/oracle-artifacts-lib.rs"
+        } else {
+            &artifact.path
+        };
+        assert_eq!(
+            fs::read(root.join(retained)).unwrap(),
+            artifact.contents.as_bytes()
+        );
     }
     seal_snapshot(root).unwrap();
     let run = |directory: &Path, arguments: &[String]| {
-        eprintln!("native qualification cargo {arguments:?} in {}", directory.display());
-        let output = Command::new(env!("CARGO")).args(arguments).current_dir(directory)
-            .env("CARGO_TARGET_DIR", request.target_directory).output().unwrap();
-        eprintln!("status: {}\nstdout: {}\nstderr: {}", output.status, String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+        eprintln!(
+            "native qualification cargo {arguments:?} in {}",
+            directory.display()
+        );
+        let output = Command::new(env!("CARGO"))
+            .args(arguments)
+            .current_dir(directory)
+            .env("CARGO_TARGET_DIR", request.target_directory)
+            .output()
+            .unwrap();
+        eprintln!(
+            "status: {}\nstdout: {}\nstderr: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
         output
     };
-    let args = |arguments: &[&str]| arguments.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
-    assert!(run(root, &args(&["build", "--offline", "--locked", "--lib"])).status.success());
+    let args = |arguments: &[&str]| {
+        arguments
+            .iter()
+            .map(|s| (*s).to_owned())
+            .collect::<Vec<_>>()
+    };
+    assert!(
+        run(root, &args(&["build", "--offline", "--locked", "--lib"]))
+            .status
+            .success()
+    );
     ensure_snapshot_matches(root, &entries).unwrap();
-    assert!(run(root, &args(&["build", "--offline", "--locked", "--manifest-path", "observer/Cargo.toml", "--example", "ir791_native"])).status.success());
+    assert!(run(
+        root,
+        &args(&[
+            "build",
+            "--offline",
+            "--locked",
+            "--manifest-path",
+            "observer/Cargo.toml",
+            "--example",
+            "ir791_native"
+        ])
+    )
+    .status
+    .success());
     ensure_snapshot_matches(root, &entries).unwrap();
-    let output = run(root, &native_arguments(request.operands, request.scalar_limits));
+    let output = run(
+        root,
+        &native_arguments(request.operands, request.scalar_limits),
+    );
     assert!(output.status.success());
-    let (outcome, observation) = decode_native_output(std::str::from_utf8(&output.stdout).unwrap(), request.scalar_limits).unwrap();
+    let (outcome, observation) = decode_native_output(
+        std::str::from_utf8(&output.stdout).unwrap(),
+        request.scalar_limits,
+    )
+    .unwrap();
     assert_eq!(outcome, Outcome::Completed(Integer::from(5)));
     assert_eq!(observation.limits(), &request.scalar_limits);
     assert!(observation.consumed().iter().any(|value| *value > 0));
-    assert_eq!(observation.admitted_charges(), &[
-        ChargePoint::IntegerArithmeticOperands,
-        ChargePoint::IntegerArithmeticArithmetic,
-        ChargePoint::IntegerArithmeticResultRetain,
-    ]);
+    assert_eq!(
+        observation.admitted_charges(),
+        &[
+            ChargePoint::IntegerArithmeticOperands,
+            ChargePoint::IntegerArithmeticArithmetic,
+            ChargePoint::IntegerArithmeticResultRetain,
+        ]
+    );
     ensure_snapshot_matches(root, &entries).unwrap();
     let (bounded_outcome, bounded_observation) = execute_native(request, root).unwrap();
     assert_eq!(bounded_outcome, outcome);
@@ -1546,20 +1607,49 @@ pub(crate) fn qualify_staged_native_for_test(request: &KaniScalarNativeRequest<'
     // An independent negative package changes only the dev feature and resolves its own locks.
     let negative = PrivateSnapshot::create().unwrap();
     stage_package(request, negative.path()).unwrap();
-    write_observer(&request.harness.identity.oracle_symbol, request.operands.len(), negative.path()).unwrap();
+    write_observer(
+        &request.harness.identity.oracle_symbol,
+        request.operands.len(),
+        negative.path(),
+    )
+    .unwrap();
     let manifest = scalar_observer_manifest().replace(", features = [\"test-support\"]", "");
     assert!(!manifest.contains("test-support"));
-    write_private(&negative.path().join("observer/Cargo.toml"), manifest.as_bytes()).unwrap();
+    write_private(
+        &negative.path().join("observer/Cargo.toml"),
+        manifest.as_bytes(),
+    )
+    .unwrap();
     for directory in [negative.path().to_owned(), negative.path().join("observer")] {
         assert!(!directory.join("Cargo.lock").exists());
         generate_lockfile(request, &directory).unwrap();
     }
-    assert_eq!(fs::read(negative.path().join("src/bin/ir791_native.rs")).unwrap(), fs::read(root.join("src/bin/ir791_native.rs")).unwrap());
-    let output = run(negative.path(), &args(&["build", "--offline", "--locked", "--manifest-path", "observer/Cargo.toml", "--example", "ir791_native"]));
+    assert_eq!(
+        fs::read(negative.path().join("src/bin/ir791_native.rs")).unwrap(),
+        fs::read(root.join("src/bin/ir791_native.rs")).unwrap()
+    );
+    let output = run(
+        negative.path(),
+        &args(&[
+            "build",
+            "--offline",
+            "--locked",
+            "--manifest-path",
+            "observer/Cargo.toml",
+            "--example",
+            "ir791_native",
+        ]),
+    );
     let errors = String::from_utf8_lossy(&output.stderr);
     assert!(!output.status.success());
-    assert!(errors.contains("E0599") && errors.contains("admitted_charges"), "{errors}");
-    assert!(!errors.contains("E0080"), "negative control must fail for the missing dev-only API");
+    assert!(
+        errors.contains("E0599") && errors.contains("admitted_charges"),
+        "{errors}"
+    );
+    assert!(
+        !errors.contains("E0080"),
+        "negative control must fail for the missing dev-only API"
+    );
     ensure_snapshot_matches(root, &entries).unwrap();
 
     let mut proof_arguments = vec!["kani".to_owned()];
@@ -1567,7 +1657,10 @@ pub(crate) fn qualify_staged_native_for_test(request: &KaniScalarNativeRequest<'
     proof_arguments.extend(args(&["--lib", "--only-codegen"]));
     let proof = run(root, &proof_arguments);
     ensure_snapshot_matches(root, &entries).unwrap();
-    assert!(proof.status.success(), "production proof-target compilation failed; no verification was requested");
+    assert!(
+        proof.status.success(),
+        "production proof-target compilation failed; no verification was requested"
+    );
     eprintln!("production library and proof target compiled without observer test-support; no backend proof or paired receipt");
 }
 

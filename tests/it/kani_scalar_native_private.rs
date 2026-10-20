@@ -322,7 +322,14 @@ fn bounded_paired_runner_propagates_the_native_helpers_oracle_stop() {
     fs::remove_dir_all(control).unwrap();
 }
 
-#[trace("FR-017-AC-29", "FR-017-AC-46", "FR-017-AC-48", "FR-017-AC-52", "FR-017-AC-53", "TC-027")]
+#[trace(
+    "FR-017-AC-29",
+    "FR-017-AC-46",
+    "FR-017-AC-48",
+    "FR-017-AC-52",
+    "FR-017-AC-53",
+    "TC-027"
+)]
 #[test]
 #[ignore = "installed Kani codegen and native compiler control: run explicitly and serially; no verification"]
 fn staged_routed_native_companion_retains_custody_and_dev_only_feature_boundary() {
