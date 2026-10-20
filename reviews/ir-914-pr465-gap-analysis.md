@@ -34,3 +34,9 @@ TC-027 (context only): existing Kani execution suite.
 ## Coverage
 
 Plan completion: not assessed. Matrix: FR-017-AC-51 tagged to `tc_027_scalar_limits_is_available_at_codegen_root_with_request_type_identity`; reverse ownership: `src/lib.rs:178` implements the added FR statement. Optional repository-wide semantic review was not run.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | A local wrapper cannot be assigned to the RT type without an explicit conversion. |

@@ -29,3 +29,9 @@ TC-027 (context only): existing Kani execution suite.
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | medium | AC-51 omits an RT-type identity check, so a codegen-local wrapper used by both root and request can satisfy it while violating the FR. | spec/kani/functional/FR-017-kani-execution-evidence.md:831 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | AC-51 now directly requires the runtime identity check. |

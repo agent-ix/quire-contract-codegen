@@ -30,3 +30,9 @@ TC-027 (context only): existing Kani execution suite.
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | low | The new assertion checks the literal assigned by the same test; it cannot detect a code defect. | tests/it/kani_obligations.rs:3327 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Removed the assertion on a literal and replaced it with a compile-time type identity assignment. |
