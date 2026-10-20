@@ -113,11 +113,12 @@ Text-admission identity rather than claiming a checked node or contract role.
   `KaniScalarNativeRequest`, initialize the native meter from those values, and return those same
   values in the receipt.
 - The scalar runner shall stage one private snapshot containing the complete routed package, the
-  retained scalar harness, the native invocation adapter and the resolved dependency lock.
+  retained scalar harness, the canonical native invocation adapter, a private observer companion
+  manifest, and independently generated production and companion dependency locks.
 - The scalar runner shall measure one canonical proof-content identity over the exact paths and
   bytes of every staged execution input: the complete generated package, retained harness, native
-  invocation adapter and resolved dependency lock. This identity names the content actually
-  proved and executed; it does not track tool versions or add a separate file/version identity.
+  invocation adapter, observer manifest and both resolved dependency locks. This identity names
+  the content actually proved and executed; it does not track tool versions or add a separate file/version identity.
 - The scalar receipt shall retain the selected scalar identity, oracle symbol, ordered concrete
   operands and the exact request `ScalarLimits` used by the native meter.
 - While either child executes, the runner shall prevent that child from modifying the staged source
@@ -688,10 +689,13 @@ variant, code or nested classification is a spec change to this section, made wi
 ### Scalar proof-content identity as the FR-357 observation digest
 
 The measured proof-content identity of FR-017-AC-29 is the value QSL FR-357 carries as the
-**canonical generated-content identity of the observation** (QSL main `812939fb5`, FR-357
-Description and AC-14). This section fixes its digest domain, its exact preimage, who mints it and
-who authenticates it, so the IR-773 driver can recompute it. It extends FR-017-AC-29 and changes
-none of its text; FR-032 refers here for the representation.
+**canonical generated-content identity of the observation**
+([QSL FR-357](ix://agent-ix/quire-spec-language/FR-357), Description and AC-14). This section fixes its digest domain, its exact preimage, who mints it and
+who authenticates it, so the IR-773 driver can recompute it. It extends FR-017-AC-29; FR-032 refers here for the representation.
+
+The v3 companion execution/custody behavior and its new or extended verification obligations
+are **Planned / UNRUN** until implemented and qualified. This amendment claims no companion
+compile, sealed invocation, proof success, independent-resolution fix or IR-17 completion.
 
 - **Domain.** The scalar runner shall expose the identity as a `qsl_replay::DigestRecord`, which the crate re-exports at its root (`quire_contract_codegen::DigestRecord`) so a consumer names one type and CG defines no twin, whose domain is
   `sha256-jcs` and whose bytes are the 32-byte SHA-256 of the RFC 8785 (JCS) canonical encoding of
@@ -699,23 +703,64 @@ none of its text; FR-032 refers here for the representation.
   document of several artifacts, not one byte string; QSL's `GeneratedArtifactBytesV1` is
   raw-byte-addressed and would be correct only if CG hashed one artifact's raw bytes, which it does
   not. QSL accepts either domain as an opaque `DigestRecord`; the choice is CG's and is this one.
-- **Preimage.** The preimage is the JSON object `{"schema": "agent-ix/cg-kani-scalar-proof-content/v2",
-  "artifacts": [ {"path": P, "contents": C}, ... ]}`. `artifacts` is exactly one entry per staged
-  execution input, with these paths: `Cargo.toml`, `claim-map.json` and the emitted package's
-  library renamed to `src/oracle-artifacts-lib.rs` (the emitted package holds exactly its
-  `Cargo.toml`, `src/lib.rs` and `claim-map.json`); the retained scalar harness source under the
-  path `src/lib.rs`; the retained harness record under its own record path; the runner-generated
-  `Cargo.lock`; and the runner-generated native invocation adapter `src/bin/ir791_native.rs`.
+- **Preimage.** The preimage is the JSON object `{"schema": "agent-ix/cg-kani-scalar-proof-content/v3",
+  "artifacts": [ {"path": P, "contents": C}, ... ]}`. `artifacts` contains exactly ten entries:
+  the four original emitted artifacts (`Cargo.toml`, `claim-map.json`, `source-maps/lib.json`,
+  and the emitted `src/lib.rs` retained as `src/oracle-artifacts-lib.rs`); the retained scalar
+  harness at `src/lib.rs`; its record at `kani-obligations/<module>.json`; the production
+  `Cargo.lock`; the single runner-generated adapter at `src/bin/ir791_native.rs`; and
+  `observer/Cargo.toml` and its independently generated `observer/Cargo.lock`. The source map
+  is an original emitted artifact, not optional metadata. This explicitly corrects the previous
+  seven-entry description to include the eight original retained entries before adding the two
+  companion entries; none is dropped or replaced.
   `path` is the relative, `/`-separated path in the staged tree; `contents` is the file's bytes as
-  a UTF-8 string (a non-UTF-8 input is refused, never lossily converted: the fault is the variant `Snapshot`, code `snapshot_io`, class `EnvironmentFault`, because request artifacts are `String` and only the runner-read `Cargo.lock` or adapter can be non-UTF-8, which is a snapshot fault and not a caller refusal). The array is ordered by
-  `path`, ascending in UTF-8 byte order, with no duplicate path; JCS orders object members but not
-  array elements, so this sort is part of the preimage. The ceiling on the encoded preimage is
-  256 MiB; exceeding it is `IdentityEncode` (FR-017-AC-43).
+  a UTF-8 string. A non-UTF-8 runner-read input, including either lock, observer manifest or
+  adapter, is refused without lossy conversion as `Snapshot` / `snapshot_io` / `EnvironmentFault`,
+  not `InvalidRequest`; request artifacts are already `String`. The array is ordered by `path`,
+  ascending in UTF-8 byte order, without duplicates; JCS orders object members but not arrays.
+  Every actual staged source/build input shall be in this closed set; an additional file is a
+  snapshot change, not an unmeasured extension. The encoded preimage ceiling remains 256 MiB;
+  exceeding it is `IdentityEncode` (FR-017-AC-43).
+- **Private observer execution.** Existing `kani/run` staging owns the companion lifecycle and
+  `core/profile` owns its dependency source spellings. The production emitted manifest remains
+  byte-identical: its normal runtime dependency uses `exact`, its normal exact dependency enables
+  no `test-support`, and no normal/build dependency or CLI feature override may enable that feature.
+  The private `observer/Cargo.toml` shall define a non-published isolated package/workspace with resolver 2,
+  automatic binary/example discovery disabled, and one explicit example `ir791_native` whose
+  source path is `../src/bin/ir791_native.rs`. Its dev-dependencies expose both the owning runtime
+  with `exact` and the owning exact kernel with `test-support`, using the existing authoritative
+  source spellings. Only that dev edge enables ordered charge logging. It has no library, wrapper,
+  copied adapter, symlink, production-package dependency or normal/build dependency enabling
+  logging. The canonical adapter loads the retained harness at its actual bin-relative
+  `../lib.rs` path, invokes the real embedded oracle with one real meter, and reads that meter's
+  actual limits, counters and admitted-charge log through the owning API; no synthesized charge
+  oracle or new observation API is assumed. Owning API corrections change adapter bytes normally.
+  Native execution uses bounded `cargo run --quiet --locked --manifest-path observer/Cargo.toml
+  --example ir791_native -- <ordered operands> <exact limits>` from the sealed root, with its
+  target directory outside the snapshot. Kani still executes the unchanged retained proof harness
+  from the production root, with its retained ordered options, claims and covers and the existing
+  backend gates. Production validation selects the library/proof targets required by that runner;
+  compiling every auto-discovered target with `--all-targets` is not the feature-free production
+  observer contract. Target selection shall never skip a required proof, claim or cover.
+  The manifests, adapter, harness and record bind the build configuration and retained ordered
+  proof options; concrete operands and limits remain separately bound receipt inputs below.
+- **Independent locks and custody.** Before measurement, the runner freshly generates a lock in
+  each package root through the existing bounded offline resolution/update workflow and verifies
+  both owning runtime and exact package identities against this build's authoritative Cargo.lock.
+  Neither lock is copied from the parent or the other package, and equality of their bytes is not
+  assumed. Both locks shall resolve the same owning runtime/exact identities; no cache substitution,
+  dependency downgrade or extra version pin may stand in for fresh resolution. The independent
+  observer regression shall assert the runtime and exact identities with literal owning package
+  names independently of the renderer's dependency list. After both locks exist, the runner seals
+  the entire snapshot, captures and measures every entry, and checks the complete path/byte set
+  before proof, after proof and after native execution. Existing bounded launch, cancellation,
+  error classification, receipt opacity and explicit cleanup behavior apply to both package roots.
 - **Exclusions.** The preimage binds the generated artifact alone. Operands, `ScalarLimits`, operand
   and result ranges, the native outcome, the Kani evidence, the meter observation and the scalar
   identity are not in it (FR-017-AC-29, AC-31). They are separate claim fields that QSL FR-357 binds
   in the claim identity; the observation digest shall not bind them, because binding them twice
-  breaks FR-357-AC-14. No tool version is in it beyond the bytes of `Cargo.lock` and the adapter.
+  breaks FR-357-AC-14. No separate tool/version record is added; actual manifest, lock and adapter bytes
+  remain bound.
 - **Owners.** CG mints the identity at proof time, from the staged bytes, in
   `KaniScalarNativeReceipt`; the receipt exposes it read-only as the `DigestRecord` above, and its
   bytes equal `ScalarProofContentIdentity::as_bytes()`. The IR-773 driver authenticates it, by
@@ -723,26 +768,20 @@ none of its text; FR-032 refers here for the representation.
   binds it into the claim identity; QSL never mints, recomputes or authenticates it. A consumer
   shall not mint a wire value from operands, limits or outcome; the only legitimate recomputation
   is the driver's, over the exposed staged entries, below.
-- **Retention for recomputation.** The digest covers two inputs the caller never supplies: the
-  `Cargo.lock` that `cargo generate-lockfile --offline` and the runtime-revision pin produce in the
-  private snapshot, and the native adapter the runner generates from the harness identity. The
-  receipt shall therefore retain, and expose read-only, the complete ordered list of staged
-  `(path, bytes)` entries the preimage was built from, including those two. Without that list the
-  driver holds only the package and harness it passed in, cannot reproduce those two entries, and
-  cannot recompute the digest; that is a gap at spec time, and the receipt shall close it. The
-  receipt shall bind the exposed entries to the immutable snapshot CG actually executed, never to a
-  later filesystem read. The driver recomputes `sha256-jcs` over the full exposed set, requires it to
-  equal the receipt's `DigestRecord`, and compares the driver-owned bytes with the retained
-  originals under the rename map: the emitted package's `Cargo.toml` and `claim-map.json` by their
-  own paths, the emitted package's `src/lib.rs` against entry `src/oracle-artifacts-lib.rs`, the
-  retained harness source against entry `src/lib.rs`, and the harness record against its
-  `kani-obligations/<module>.json` entry. A path-by-path comparison of the emitted package would
-  falsely mismatch. Any mismatch is a driver-side typed refusal with no claim sent.
-  **Trust boundary.** The `Cargo.lock` and adapter bytes are CG-owned runner bytes: the driver
-  neither knows nor generates them. For those two entries it relies on CG's sealed receipt and
-  checks only that they are what the receipt retains and that the recomputed digest matches. "The
-  driver authenticates" therefore means it authenticates the driver-owned artifact bytes and the
-  digest's consistency over the full set, not that it independently reproduces CG-owned bytes.
+- **Retention for recomputation.** The receipt shall retain and expose read-only the complete
+  ordered `(path, bytes)` list measured above, including both manifests and locks and the canonical
+  adapter. It shall bind those entries to the immutable snapshot actually executed, captured at
+  measurement time and owned by the receipt, never a later filesystem read. The driver recomputes
+  `sha256-jcs` over the full set, requires equality with the receipt's `DigestRecord`, and compares
+  all driver-owned originals byte for byte under the rename map: emitted `Cargo.toml`,
+  `claim-map.json` and `source-maps/lib.json` at their own paths; emitted `src/lib.rs` at
+  `src/oracle-artifacts-lib.rs`; retained harness at `src/lib.rs`; and retained record at
+  `kani-obligations/<module>.json`. The runner shall preserve those original bytes, including the
+  emitted manifest, without rewriting them for observation. Any mismatch is a driver-side typed
+  refusal with no claim sent. **Trust boundary.** The companion manifest, both fresh locks and
+  adapter are CG-owned runner bytes. The driver relies on CG's sealed receipt for them and checks
+  their retained bytes and digest consistency; it does not independently reproduce them. Driver
+  authentication means comparison of its own originals plus consistency over the complete set.
 - **Driver follow-up.** quire-driver FR-009 (statement and AC-7) says the driver verifies "QSL's
   observation digest against that outcome". That conflicts with this section and must be amended:
   the observation digest is artifact-only and authenticated by recomputation over the receipt's
@@ -761,10 +800,10 @@ none of its text; FR-032 refers here for the representation.
   CG does not attest the provenance of the request limits (FR-017-AC-28).
 - **Stability.** The schema string is the version of the preimage. Any change to the artifact set,
   a path name or rename, the ordering, the content encoding, the field names, the canonicalization
-  or the hash shall change the schema string (`.../v2` to `.../v3`), and digests under different
+  or the hash shall change the schema string (the companion artifact set uses `.../v3`, replacing `.../v2`), and digests under different
   schema strings are never equal or comparable. The domain stays `sha256-jcs`. A change to the
-  bytes of a staged input (a different `Cargo.lock` or adapter) changes the digest without a schema
-  bump, because it names different proved content. The golden digest is computed over fixed literal entries (a literal `Cargo.lock` and adapter
+  bytes of a staged input (either manifest, either lock or the adapter) changes the digest without a schema
+  bump, because it names different proved content. The golden digest is computed over fixed literal entries (both manifests, both locks, source map and adapter
   included), never a real staged run, so dependency bumps do not move it, and is pinned together
   with the schema string in one assertion. A test cannot detect a golden edited beside an unchanged
   schema string, so that is a review rule: a change to the golden without a schema bump is
@@ -806,7 +845,7 @@ none of its text; FR-032 refers here for the representation.
 | FR-017-AC-26 | A generated FR-035 caller Text-admission harness enters the same production execution path in single and compatible batch runs; its evidence carries the exact typed caller identity (profile, bounds and finite payload class) supplied with that harness and `None` for contract obligation kind. A matching successful report with a satisfied cover and successful agreement assertion classifies `Verified`; an unsatisfied cover classifies `CoverUnsatisfied` with counts; a failed agreement assertion with its own concrete playback classifies `Falsified` with that playback. A source-mismatched harness, missing launcher or malformed report retains the existing typed refusal and yields no verified caller claim; a report with no cover or a failed assertion with no playback is inconclusive under the existing rules. The outcome and playback remain bound to the caller identity and selected harness path, never to a checked node or another batch member. PLANNED (IR-494). | Test (TC-027, TC-050) |
 | FR-017-AC-27 | A genuine routed `x + 1` scalar harness from `generate_routed`, its complete emitted oracle package and one in-range concrete operand are passed to the paired runner. One real Kani run reports `Verified`, and the runner invokes the public oracle from the same staged library source at that operand with the request's exact `ScalarLimits`; the receipt contains the Kani evidence and the actual typed runtime result of that invocation. A Kani verdict alone or a result reconstructed by the caller is insufficient. | Test (TC-027) |
 | FR-017-AC-28 | Before either child starts, a package or harness whose path or bytes differ from the retained routed output, a selected oracle symbol or argument order that differs from the retained scalar identity, or an operand count/value outside the retained ordered ranges is refused with a typed cause and no receipt. For an accepted request, the exact supplied `ScalarLimits` are passed unchanged to `KaniScalarNativeRequest`, used to initialize the native meter, and returned in the receipt; no hidden or substituted limit value is permitted. CG attests these supplied, used and returned values are equal, but does not attest their provenance. The IR-773 driver must compare its retained original limits against both the request and receipt before accepting the receipt; on mismatch it detects locally, refuses receipt acceptance and skips QSL evaluation. If IR-773 has no defined typed outcome for this mismatch, its owner must specify and plan one before implementing the consumer check; CG defines no typed outcome for this mismatch. A caller-provided content identity cannot make an inconsistent request acceptable. | Test (TC-027) |
-| FR-017-AC-29 | The runner measures one canonical proof-content identity over the exact paths and bytes of every staged execution input: the complete generated package, retained harness, native invocation adapter and resolved dependency lock. This identity binds the content actually proved and executed; it is not a tool-version or file-version tracking identity, and no separate identity is added for any staged item. The Kani and native invocations cannot write the staged source tree. A changed, replaced or additional staged file before or after either invocation yields a typed failure and no receipt. The receipt separately binds the scalar identity, oracle symbol, ordered concrete operands and exact supplied `ScalarLimits`; none of these request fields may be substituted after measurement or inferred from the proof-content identity. | Test (TC-027) |
+| FR-017-AC-29 | The runner measures one canonical proof-content identity over the exact paths and bytes of every staged execution input: the complete generated package, retained harness, canonical native invocation adapter, observer manifest and both independently generated dependency locks. This identity binds the content actually proved and executed; it is not a tool-version or file-version tracking identity, and no separate identity is added for any staged item. The Kani and native invocations cannot write the staged source tree. A changed, replaced or additional staged file before or after either invocation yields a typed failure and no receipt. The receipt separately binds the scalar identity, oracle symbol, ordered concrete operands and exact supplied `ScalarLimits`; none of these request fields may be substituted after measurement or inferred from the proof-content identity. | Test |
 | FR-017-AC-30 | The public receipt exposes the measured identity, scalar identity, ordered operands, exact supplied and meter-used `ScalarLimits`, verified Kani evidence and actual typed native outcome through read-only access. Callers cannot construct, deserialize or mutate a receipt, set its identity or outcome, or turn any non-verified, refused, inconclusive, faulted or malformed run into a receipt. | Test (TC-027) |
 | FR-017-AC-31 | The paired runner executes an order-sensitive routed scalar operation with two symbolic operands in two concrete operand orders. Each real Kani run is verified; the native invocation returns the result for that order; and each receipt binds its exact ordered operand vector and typed native result. Swapping the operands changes the observed result and receipt context while retaining the same generated proof-content identity. | Test (TC-027) |
 | FR-017-AC-32 | In the `make kani` lane, a crate whose library source holds the generated harness byte for byte and, beside it, an item that does not compile (a reference to an undefined name) is run through `execute_kani_obligation`: the run exits unsuccessfully, exports no report and is `Inconclusive` `NoVerdict` with its exit code, and its evidence carries a diagnostic record whose phase is `compile`, whose stdout excerpt holds the rustc error code and Kani's `error: Failed to execute cargo` line and whose stderr excerpt holds Cargo's `error: could not compile` line with the crate path as `<CRATE_DIR>`. A launcher stand-in that exits 1 with no report and prints nothing is `NoVerdict` with phase `launcher` and two empty excerpts with `omittedBytes` 0. Evidence of a verified, cover-unsatisfied, falsified, timed-out, memory-exhausted or other inconclusive run has no `diagnostics` member on the wire, apart from the `FailedWithoutCounterexample` evidence FR-017-AC-37 gives one, and every refusal returns no evidence and no record. | Test (TC-027) |
@@ -822,13 +861,15 @@ none of its text; FR-032 refers here for the representation.
 | FR-017-AC-42 | `class()` is `CompletionRefusal` for `invalid_request`, `artifact_package` and `oracle_stop`, and `EnvironmentFault` for `snapshot_io`, `native_launch`, `dependency_lock`, `native_result`, `snapshot_changed`, `identity_encode` and `codegen_lock`. For `proof_not_verified` it is `CompletionRefusal` for evidence outcome `Falsified`, `CoverUnsatisfied`, and `Inconclusive` `MissingCoverSummary`, `VacuousProof`, `UnwindBoundExhausted` or `FailedWithoutCounterexample` with no `failureCause` or `properties_failed`, and `EnvironmentFault` for `Cancelled`, `Inconclusive` `TimedOut`, `MemoryExhausted` or `NoVerdict`, and `FailedWithoutCounterexample` with a `failureCause` other than `properties_failed`, and for the internal inconsistency of outcome `Verified`. For `kani_execution` it is `CompletionRefusal` for nested `HarnessNotInCrate`, `HarnessProvenanceMismatch`, `OutputOverLimit` and `PlaybackForNonMember`, and `EnvironmentFault` for every other nested refusal. Real errors produced by the runner for the request-mismatch, oracle-stop and falsified-proof causes are refusals (`dependency_lock` is an `EnvironmentFault` unreachable from a canonical request and is tested only through an in-crate seam); a real single run cancelled by its source and one stopped by its wall-clock timeout are faults, as are the injected snapshot-change, native-launch, malformed-helper-output and missing-embedded-lock-revision causes. | Test (TC-027) |
 | FR-017-AC-43 | A canonical-identity encoding failure is `IdentityEncode` with code `identity_encode` and class `EnvironmentFault`; no path returns `NativeResult` for it. `NativeResult` is produced only for the helper's malformed, missing or unsupported structured result, and a forced identity-encode failure through an in-crate test seam returns `IdentityEncode`, not `NativeResult`. | Test (TC-027) |
 | FR-017-AC-44 | The code table and the mapping to class are frozen: a test lists every variant with its expected code and its mapping to class (one class for a fixed variant; for `proof_not_verified` the class of each `KaniRunOutcome`, `KaniInconclusiveReason` and `KaniFailureCause` value; for `kani_execution` the class of each nested refusal), fails if a variant, outcome, reason, cause or nested refusal exists that the list lacks or if a code value or a mapped class differs, and fails if two variants share a code. Adding a variant, code, class or mapping entry is a spec change to the "Scalar native error discriminant" section made together with that table. The nested `KaniExecutionRefusal::code()` of `OutputOverLimit` and `OutputUnread` is unchanged. | Test (TC-027) |
-| FR-017-AC-45 | The receipt exposes its proof-content identity as a `DigestRecord`, the `qsl_replay::DigestRecord` re-exported at the crate root (no CG-defined twin type; a compile test names it by the CG path and by the `qsl_replay` path as the same type), with domain `sha256-jcs` and 32 bytes equal to `ScalarProofContentIdentity::as_bytes()`. An independent computation in the test, SHA-256 of the RFC 8785 encoding of `{"schema": "agent-ix/cg-kani-scalar-proof-content/v2", "artifacts": [...]}` over the entries of AC-46, gives the same 32 bytes. The domain is not `GeneratedArtifactBytesV1`. | Test (TC-027) |
-| FR-017-AC-46 | For a genuine routed `x + 1` package the preimage artifacts are, in this order by UTF-8 byte order of `path`: `Cargo.lock`, `Cargo.toml`, `claim-map.json`, the harness record at `kani-obligations/<module>.json` (the only record path the runner admits), `src/bin/ir791_native.rs`, `src/lib.rs` holding the harness source, and `src/oracle-artifacts-lib.rs` holding the emitted library bytes. Removing, renaming, reordering or duplicating any entry, or changing one byte of any entry's contents, changes the digest. A non-UTF-8 runner-read `Cargo.lock` or adapter is refused, never lossily converted, as `Snapshot` / `snapshot_io` / `EnvironmentFault` (not `InvalidRequest`), and no receipt is returned. A golden digest over fixed literal entries (not a real staged run) is pinned in one assertion with the schema string, and fails on any silent preimage change. | Test (TC-027) |
+| FR-017-AC-45 | The receipt exposes its proof-content identity as a `DigestRecord`, the `qsl_replay::DigestRecord` re-exported at the crate root (no CG-defined twin type; a compile test names it by the CG path and by the `qsl_replay` path as the same type), with domain `sha256-jcs` and 32 bytes equal to `ScalarProofContentIdentity::as_bytes()`. An independent computation in the test, SHA-256 of the RFC 8785 encoding of `{"schema": "agent-ix/cg-kani-scalar-proof-content/v3", "artifacts": [...]}` over the entries of AC-46, gives the same 32 bytes. The domain is not `GeneratedArtifactBytesV1`. | Test |
+| FR-017-AC-46 | For a genuine routed `x + 1` package the v3 preimage has exactly ten artifacts, in UTF-8 byte order: `Cargo.lock`, `Cargo.toml`, `claim-map.json`, the only admitted record `kani-obligations/<module>.json`, `observer/Cargo.lock`, `observer/Cargo.toml`, `source-maps/lib.json`, `src/bin/ir791_native.rs`, `src/lib.rs` (harness), and `src/oracle-artifacts-lib.rs` (emitted library). All four original emitted artifacts, harness and record compare byte-identically under the rename map. Removing, renaming, reordering, duplicating or changing one byte of any entry changes the digest. Non-UTF-8 runner-read bytes in either lock, observer manifest or adapter yield `Snapshot` / `snapshot_io` / `EnvironmentFault` and no receipt. The independent fixed-literal golden covers all ten entries and is asserted with the v3 schema in one assertion; it is never computed from real staged lock contents. | Test |
 | FR-017-AC-47 | Two receipts for the same package and harness with different operands, different `ScalarLimits` and different native outcomes have equal `DigestRecord`s; operand order, limits, ranges, outcome and Kani evidence appear nowhere in the preimage. This holds for the swapped-operand runs of FR-017-AC-31. | Test (TC-027) |
-| FR-017-AC-48 | The receipt exposes read-only the ordered staged `(path, bytes)` entries the digest was built from, including the runner-generated `Cargo.lock` and `src/bin/ir791_native.rs`. Recomputing the digest from only those exposed entries equals the receipt's `DigestRecord`. A recomputation that substitutes one byte in the package, harness or harness record (which a driver holding different bytes would do) differs from the receipt's digest. The exposed entries are exactly the bytes measured for the identity, captured at measurement time and held in the receipt; no entry accessor reads the filesystem. The runner removes the private snapshot explicitly before it returns the receipt; when that removal succeeds the snapshot path no longer exists, and the exposed entries still read and the digest recomputes byte-identically from them (the receipt never reads the filesystem). `Drop` of the snapshot is a best-effort backstop only. A failure to remove the snapshot directory changes neither the receipt nor the verdict: the receipt exposes it read-only through `cleanup_diagnostic()`, which reports the removal failure (and is empty when removal succeeded). The cleanup diagnostic is excluded from the digest and from the staged entries, and never turns a verified run into a failure or alters an exposed entry or the digest. The receipt has no constructor, deserializer or setter for the entries or the digest, and nothing mints the digest from operands, limits or outcome. | Test (TC-027) |
-| FR-017-AC-49 | A change to the preimage schema (artifact set, path names, ordering, encoding, canonicalization or hash) is made only by changing the schema string, with the golden digest of AC-46 updated in the same change; the golden is computed over fixed literal entries, so dependency bumps do not move it, and is asserted together with the schema string in one assertion; a golden change without a schema bump is rejected in review (a test cannot enforce it). A change to the bytes of `Cargo.lock` or the adapter changes the digest with the schema string unchanged. The domain remains `sha256-jcs` across a schema bump. | Test (TC-027) |
+| FR-017-AC-48 | The receipt exposes read-only the ordered staged `(path, bytes)` entries the digest was built from, including both manifests, both independently generated locks, the source map and the canonical `src/bin/ir791_native.rs`. All ten entries remain measured, sealed and compared across both execution boundaries. Recomputing the digest from only those exposed entries equals the receipt's `DigestRecord`. A recomputation that substitutes one byte in the package, harness or harness record (which a driver holding different bytes would do) differs from the receipt's digest. The exposed entries are exactly the bytes measured for the identity, captured at measurement time and held in the receipt; no entry accessor reads the filesystem. The runner removes the private snapshot explicitly before it returns the receipt; when that removal succeeds the snapshot path no longer exists, and the exposed entries still read and the digest recomputes byte-identically from them (the receipt never reads the filesystem). `Drop` of the snapshot is a best-effort backstop only. A failure to remove the snapshot directory changes neither the receipt nor the verdict: the receipt exposes it read-only through `cleanup_diagnostic()`, which reports the removal failure (and is empty when removal succeeded). The cleanup diagnostic is excluded from the digest and from the staged entries, and never turns a verified run into a failure or alters an exposed entry or the digest. The receipt has no constructor, deserializer or setter for the entries or the digest, and nothing mints the digest from operands, limits or outcome. | Test |
+| FR-017-AC-49 | A change to the preimage schema (artifact set, path names, ordering, encoding, canonicalization or hash) is made only by changing the schema string, with the golden digest of AC-46 updated in the same change; the golden is computed over fixed literal entries, so dependency bumps do not move it, and is asserted together with the schema string in one assertion; a golden change without a schema bump is rejected in review (a test cannot enforce it). A change to either manifest, either lock or adapter bytes changes the digest with the schema string unchanged. The domain remains `sha256-jcs` across a schema bump. | Test |
 | FR-017-AC-50 | The `NativeMeterObservation` of a receipt exposes read-only the `ScalarLimits` the native meter was constructed with. They are read back from the native invocation's own output, not copied from the request: a test seam that makes the adapter report a well-formed but different limit value makes the helper's structured result unsupported in FR-017-AC-43's sense and yields `NativeResult` / `native_result` / `EnvironmentFault` and no receipt. For an accepted request the request limits, the meter-observed limits and `scalar_limits()` are equal, and the meter-observed limits are unchanged after the snapshot directory is gone. The receipt has no setter or constructor for them (IR-857). | Test (TC-027) |
 | FR-017-AC-51 | A consumer compile test names and constructs `quire_contract_codegen::ScalarLimits` using only codegen crate paths, a typed accessor to `KaniScalarNativeRequest::scalar_limits` compiles with that same return type, and assignment to `quire_contract_runtime::exact::ScalarLimits` compiles without conversion. | Test (TC-027) |
+| FR-017-AC-52 | Production emitted bytes and feature-free exact dependency remain unchanged. The isolated private observer uses resolver 2 and its sole example compiles the single canonical adapter in place through `../src/bin/ir791_native.rs`, with runtime `exact` and kernel `test-support` exposed only by dev-dependencies; no wrapper, copied source, symlink, normal/build logging edge or CLI feature override is allowed. Native invocation explicitly names `observer/Cargo.toml` and the example; the real production proof retains its harness, ordered options, claims, covers, bounds and backend gates. A control removing the dev feature fails observer compilation; production library/proof target validation succeeds without it. Actual meter output supplies limits, counters and ordered charges. | Test |
+| FR-017-AC-53 | Both package locks are independently freshly resolved with the existing bounded offline generation/update workflow, without copying a parent/other lock or substituting a cached resolution. Each resolves both owning runtime and exact identities to the build's authoritative lock identities; the independent observer regression asserts both literal package names and repository identities independently of the renderer's list. Both manifests, locks and all other AC-46 entries are sealed and compared as a complete path/byte set before proof, after proof and after native execution; mutation/replacement or an extra file anywhere in either package yields a typed failure and no receipt. Snapshot cleanup retains all ten measured entries for byte-identical recomputation, including when cleanup reports a diagnostic. | Test |
 
 ## Dependencies
 
