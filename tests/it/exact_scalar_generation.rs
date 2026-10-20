@@ -3368,6 +3368,9 @@ fn tc_024_boolean_oracle_source_map_probes_the_entry_and_implication_consequent(
         .iter()
         .filter(|region| region["role"] == "oracle_evaluation")
         .collect::<Vec<_>>();
+    let ids = fixture_ids_for_digest(all.claim_map.package_id.digest.as_ref());
+    let implication_nodes = [DERIVE_BOOLEAN_IMPLIES, DERIVE_BOOLEAN_SHORT_CIRCUIT]
+        .map(|code| ids.resolve(&code_id(code)));
     assert_eq!(
         entries.len(),
         generated.len(),
@@ -3401,24 +3404,28 @@ fn tc_024_boolean_oracle_source_map_probes_the_entry_and_implication_consequent(
             .iter()
             .filter(|region| region["nodeId"] == node && region["role"] == "implication_consequent")
             .collect::<Vec<_>>();
+        let expected_consequents = implication_nodes
+            .iter()
+            .filter(|id| &claim.node_id == *id)
+            .count();
+        assert_eq!(
+            entry["expectedConsequents"]
+                .as_u64()
+                .expect("declared consequent count") as usize,
+            expected_consequents,
+            "the admitted node fixes the consequent count for {}",
+            claim.node_id.digest
+        );
+        assert_eq!(
+            claim_regions.len(),
+            expected_consequents,
+            "no consequent region is dropped or duplicated for {}",
+            claim.node_id.digest
+        );
         for region in claim_regions {
             assert_eq!(probe_token(all_source, region), "right");
             assert_ne!(entry["startLine"], region["startLine"]);
         }
-    }
-
-    for changed_count in [0, 2] {
-        let mut changed = lazy_regions.clone();
-        if changed_count == 0 {
-            changed.remove(1);
-        } else {
-            changed.push(changed[1].clone());
-        }
-        assert_eq!(
-            changed[0]["expectedConsequents"], 1,
-            "declared node count is independent of {changed_count} emitted regions"
-        );
-        assert_eq!(changed.len() - 1, changed_count);
     }
 }
 
