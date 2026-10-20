@@ -874,7 +874,7 @@ fn ir_outcomes() -> Vec<KaniOutcome> {
             Kind::IncompleteInput,
             Std001Code::KANI_POPULATION_INCOMPLETE,
         ),
-        ir(Kind::Unavailable, Std001Code::KANI_SOLVER_ABSENT),
+        ir(Kind::Unavailable, Std001Code::KANI_CHECKER_ABSENT),
         ir(Kind::TimedOut, Std001Code::KANI_BOUND_EXHAUSTED),
         ir(Kind::ResourceExhausted, Std001Code::KANI_BOUND_EXHAUSTED),
         ir(
@@ -1205,14 +1205,14 @@ fn tc_041_the_map_is_one_match_over_the_pair_with_no_wildcard_arm() {
     assert_eq!(named, expected);
 }
 
-/// `Unavailable` with `kani_solver_absent` is `Unsupported(SolverAbsent)`; with
+/// `Unavailable` with `kani_checker_absent` is `Unsupported(SolverAbsent)`; with
 /// `kani_backend_absent` or any other code it is `Unsupported(BackendAbsent)`.
 #[trace("FR-030-AC-8", "TC-041")]
 #[test]
 fn tc_041_an_absent_solver_or_backend_is_unsupported_with_its_cause() {
     let outcome = |code| ir(KaniOutcomeKind::Unavailable, code);
     assert_eq!(
-        map_ir(&outcome(Std001Code::KANI_SOLVER_ABSENT)),
+        map_ir(&outcome(Std001Code::KANI_CHECKER_ABSENT)),
         TerminalValue::Unsupported(UnavailabilityCause::SolverAbsent)
     );
     for code in [
