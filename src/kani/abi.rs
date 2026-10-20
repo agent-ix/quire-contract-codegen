@@ -6,6 +6,21 @@ use serde::{Deserialize, Serialize};
 
 use crate::oracle::operator_catalog::{OperandOrder, Operator, ScalarKaniOperator};
 
+/// The accounting limits supplied to every generated scalar harness meter.
+pub(crate) const SCALAR_HARNESS_LIMITS: quire_contract_runtime::exact::ScalarLimits =
+    quire_contract_runtime::exact::ScalarLimits {
+        integer_bits: u64::MAX,
+        decimal_digits: u64::MAX,
+        scale_expansion: u64::MAX,
+        text_input_bytes: u64::MAX,
+        text_scalars: u64::MAX,
+        normalized_scalars: u64::MAX,
+        unit_edges: u64::MAX,
+        value_occurrences: u64::MAX,
+        work_units: u64::MAX,
+        result_units: u64::MAX,
+    };
+
 /// Operand count for the catalog's integer scalar Kani profile.
 ///
 /// The catalog owns both operation admission and operand order. The exhaustive typed profile

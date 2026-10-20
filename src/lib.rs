@@ -223,7 +223,7 @@ pub use kani::identity::{
     CollectionElementIdentity, CollectionKindIdentity, CollectionObligationIdentity,
     CollectionPredicateIdentity, EmbeddedOracle, KaniCollectionObligationHarness,
     KaniObligationHarness, KaniObligationIdentity, KaniScalarObligationHarness, ObligationBinding,
-    ObligationKind, ScalarObligationArgument, ScalarObligationIdentity, StateComparison,
+    ObligationKind, ScalarObligationArgument, ScalarObligationIdentity, ScalarOriginalLimitsError, StateComparison,
     StateFieldDomain, StateFrameHarness, StateFrameIdentity, StateFrameProperty,
     StateFrameRecordError, StateFrameScope, StateUnrangedField, StateUnrangedReason,
 };

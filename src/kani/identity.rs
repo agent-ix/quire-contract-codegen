@@ -343,6 +343,17 @@ impl KaniCollectionObligationHarness {
     }
 }
 
+/// Why the original scalar renderer limits cannot be read from a retained harness.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
+pub enum ScalarOriginalLimitsError {
+    /// This harness was not produced with a retained scalar meter context.
+    #[error("original scalar renderer limits were not retained")]
+    Unavailable,
+    /// The retained identity, source or record differs from the generator-origin seal.
+    #[error("retained scalar artifact differs from its generation seal")]
+    GeneratedArtifactChanged,
+}
+
 /// One generated V2 exact-scalar obligation harness.
 #[derive(Clone, Debug)]
 pub struct KaniScalarObligationHarness {
@@ -357,6 +368,7 @@ pub struct KaniScalarObligationHarness {
     generated_rust: Artifact,
     generated_record: Artifact,
     generated_artifacts: Option<Vec<Artifact>>,
+    original_scalar_limits: Option<quire_contract_runtime::exact::ScalarLimits>,
 }
 
 // This value compares the per-harness public output and its origin seal. The routed package seal
@@ -369,6 +381,7 @@ impl PartialEq for KaniScalarObligationHarness {
             && self.generated_identity == other.generated_identity
             && self.generated_rust == other.generated_rust
             && self.generated_record == other.generated_record
+            && self.original_scalar_limits == other.original_scalar_limits
     }
 }
 
@@ -389,7 +402,40 @@ impl KaniScalarObligationHarness {
             rust,
             record,
             generated_artifacts: None,
+            original_scalar_limits: None,
         }
+    }
+
+    /// Seal the actual meter limits supplied by the scalar renderer beside its generated source.
+    pub(crate) fn generated_with_scalar_limits(
+        identity: ScalarObligationIdentity,
+        rust: Artifact,
+        record: Artifact,
+        limits: quire_contract_runtime::exact::ScalarLimits,
+    ) -> Self {
+        let mut harness = Self::generated(identity, rust, record);
+        harness.original_scalar_limits = Some(limits);
+        harness
+    }
+
+    /// The original accounting limits supplied to the meter in this generated scalar source.
+    ///
+    /// These limits come from generation, independently of any later native or replay budget.
+    /// The private generator seal retains them beside the exact source and identity that the
+    /// existing proof-content authority stages. This accessor authenticates retained generation
+    /// fields; it does not authenticate a proving run, native observation or original call site.
+    ///
+    /// # Errors
+    /// Returns [`ScalarOriginalLimitsError::GeneratedArtifactChanged`] if any public retained
+    /// field changed, or [`ScalarOriginalLimitsError::Unavailable`] for a harness without a
+    /// retained scalar meter context.
+    pub fn original_scalar_limits(
+        &self,
+    ) -> Result<quire_contract_runtime::exact::ScalarLimits, ScalarOriginalLimitsError> {
+        if !self.has_valid_provenance() {
+            return Err(ScalarOriginalLimitsError::GeneratedArtifactChanged);
+        }
+        self.original_scalar_limits.ok_or(ScalarOriginalLimitsError::Unavailable)
     }
 
     /// Whether the public retained fields still match the generator-origin seal.
