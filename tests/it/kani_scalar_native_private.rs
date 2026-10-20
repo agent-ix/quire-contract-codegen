@@ -344,3 +344,22 @@ fn bounded_paired_runner_propagates_the_native_helpers_oracle_stop() {
     );
     fs::remove_dir_all(control).unwrap();
 }
+
+#[trace("FR-017-AC-29", "FR-017-AC-46", "FR-017-AC-48", "FR-017-AC-52", "FR-017-AC-53", "TC-027")]
+#[test]
+#[ignore = "installed Kani codegen and native compiler control: run explicitly and serially; no verification"]
+fn staged_routed_native_companion_retains_custody_and_dev_only_feature_boundary() {
+    let (harness, artifacts) = fixture(Duration::from_secs(600));
+    let cancel = quire_exact::Cancel::new();
+    let installation = KaniInstallation::discover().expect("installed Kani");
+    let target = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target");
+    crate::kani::run::scalar::qualify_staged_native_for_test(&KaniScalarNativeRequest {
+        cancel: &cancel,
+        installation: &installation,
+        harness: &harness,
+        oracle_artifacts: &artifacts,
+        operands: &[4, 1],
+        scalar_limits: limits(),
+        target_directory: &target,
+    });
+}
