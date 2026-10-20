@@ -188,7 +188,7 @@ fn tc_050_real_kani_proves_all_caller_text_profiles_and_falsifies_mutation() {
     // crate contains only the selected harness for each run, so compiler/backend work does not
     // scale with all twelve caller claims being present together.
     for harness in &harnesses {
-        write_crate(&root, std::slice::from_ref(harness));
+        write_crate(root, std::slice::from_ref(harness));
         let request = KaniExecutionRequest {
             home_directory: None,
             cancel: &cancel,
@@ -238,7 +238,7 @@ fn tc_050_real_kani_proves_all_caller_text_profiles_and_falsifies_mutation() {
     let changed_call = "let widened = rt::TextType::new(0, 8, text_type.profile()).expect(\"mutation\");\n    rt::admit_text(operand, &widened, meter)";
     assert_eq!(mutated.rust.contents.matches(original_call).count(), 1);
     mutated.rust.contents = mutated.rust.contents.replace(original_call, changed_call);
-    write_crate(&root, std::slice::from_ref(&mutated));
+    write_crate(root, std::slice::from_ref(&mutated));
     let mutation = execute_kani_obligation(&KaniExecutionRequest {
         home_directory: None,
         cancel: &cancel,
@@ -264,7 +264,7 @@ fn tc_050_real_kani_proves_all_caller_text_profiles_and_falsifies_mutation() {
         Some(selected.identity.harness_path().to_string().as_str())
     );
 
-    write_crate(&root, std::slice::from_ref(selected));
+    write_crate(root, std::slice::from_ref(selected));
     let restored = execute_kani_obligation(&KaniExecutionRequest {
         home_directory: None,
         cancel: &cancel,
