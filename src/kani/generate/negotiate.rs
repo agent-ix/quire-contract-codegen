@@ -49,6 +49,7 @@
 //! grounds are checked in that order and are never conflated with the internal-invariant
 //! [`UnsupportedObligation::RenderFailed`] fallback.
 
+use crate::kani::generate::graph::{lower_graph, render_graph, GraphRefusal, LoweredGraph};
 use std::collections::{BTreeMap, BTreeSet};
 
 use quire_contract_model::{
@@ -112,6 +113,7 @@ pub fn negotiate_kani_obligations(
     let mut records = Vec::with_capacity(states.len());
     let mut harnesses = Vec::new();
     let mut scalar_harnesses = Vec::new();
+    let mut graph_harnesses = Vec::new();
     let mut state_frame_harnesses = Vec::new();
     let mut collection_harnesses: Vec<crate::kani::identity::KaniCollectionObligationHarness> =
         Vec::new();
@@ -137,6 +139,14 @@ pub fn negotiate_kani_obligations(
                         ObligationDisposition::Supported {
                             harness_symbol: symbol,
                         }
+                    }
+                    Err(reason) => ObligationDisposition::Unsupported { reason },
+                },
+                Outcome::LoweredGraph(lowered) => match render_graph(request, &lowered) {
+                    Ok(harness) => {
+                        let harness_symbol = harness.identity.harness_symbol.clone();
+                        graph_harnesses.push(harness);
+                        ObligationDisposition::Supported { harness_symbol }
                     }
                     Err(reason) => ObligationDisposition::Unsupported { reason },
                 },
@@ -195,6 +205,7 @@ pub fn negotiate_kani_obligations(
             scalar_harnesses,
             state_frame_harnesses,
             collection_harnesses,
+            graph_harnesses,
         }
     })
 }
@@ -247,6 +258,11 @@ enum ItemIdentity {
         clause: CheckedNodeId,
         role: StateFrameRole,
     },
+    Graph {
+        package: String,
+        clause: CheckedNodeId,
+        path: Vec<usize>,
+    },
     Collection {
         package: String,
         function: CheckedNodeId,
@@ -258,6 +274,7 @@ enum Outcome<'a> {
     Lowered(Box<LoweredClause<'a>>),
     LoweredScalar(Box<LoweredScalarClaim>),
     LoweredCollection(Box<LoweredCollectionClaim>),
+    LoweredGraph(Box<LoweredGraph>),
     /// A `StateFrame` item that yielded its harness.
     StateFrame(Box<StateFrameHarness>),
     /// A `StateFrame` item the engine refused. The refusal is held, not its record, so the item
@@ -279,6 +296,7 @@ impl Outcome<'_> {
             ),
             Self::Lowered(_)
             | Self::LoweredScalar(_)
+            | Self::LoweredGraph(_)
             | Self::LoweredCollection(_)
             | Self::StateFrame(_)
             | Self::RequiresBound(_)
@@ -294,6 +312,10 @@ impl Outcome<'_> {
             // A lowered item in a rejected request is accounted but not emitted.
             Self::Lowered(lowered) => supported_without_harness(&lowered.symbols.harness),
             Self::LoweredScalar(lowered) => supported_without_harness(&lowered.harness_symbol),
+            Self::LoweredGraph(lowered) => match render_graph(request, &lowered) {
+                Ok(harness) => supported_without_harness(harness.identity.harness_symbol.as_str()),
+                Err(reason) => ObligationDisposition::Unsupported { reason },
+            },
             Self::LoweredCollection(lowered) => match render_collection(request, &lowered) {
                 Ok(harness) => supported_without_harness(harness.identity.harness_symbol.as_str()),
                 Err(reason) => ObligationDisposition::Unsupported { reason },
@@ -339,6 +361,11 @@ fn classify<'a>(
             claim_index,
             result_selection,
         } => classify_node(package, claim_map, node_id, claim_index, result_selection),
+        ObligationItem::GraphClaim {
+            package,
+            clause_id,
+            argument_path,
+        } => classify_graph(package, clause_id, argument_path),
         ObligationItem::CollectionClaim {
             package,
             function_id,
@@ -363,6 +390,38 @@ fn classify<'a>(
             },
             role,
         ),
+    }
+}
+
+fn classify_graph<'a>(
+    package: &'a CheckedPackageV2,
+    clause: &CheckedNodeId,
+    path: &[usize],
+) -> ItemState<'a> {
+    let outcome = match lower_graph(package, clause, path) {
+        Ok(lowered) => Outcome::LoweredGraph(Box::new(lowered)),
+        Err(GraphRefusal::RequiresBound(bound)) => Outcome::RequiresBound(bound),
+        Err(GraphRefusal::Unsupported(reason)) => {
+            Outcome::Unsupported(crate::kani::generate::graph::refusal(clause, path, reason))
+        }
+    };
+    ItemState {
+        kind: None,
+        subject: ObligationSubject::CheckedNode {
+            node_id: clause.clone(),
+            source_map: package
+                .source_map()
+                .iter()
+                .filter(|entry| &entry.node_id == clause)
+                .cloned()
+                .collect(),
+        },
+        identity: Some(ItemIdentity::Graph {
+            package: package.package_id().digest.to_string(),
+            clause: clause.clone(),
+            path: path.to_vec(),
+        }),
+        outcome,
     }
 }
 
@@ -754,6 +813,7 @@ pub(crate) fn classify_scalar_form(
         Outcome::RequiresBound(_) => ScalarFormAssessment::RequiresBound,
         Outcome::Invalid(refusal) => ScalarFormAssessment::Invalid(refusal),
         Outcome::Lowered(_)
+        | Outcome::LoweredGraph(_)
         | Outcome::LoweredCollection(_)
         | Outcome::StateFrame(_)
         | Outcome::StateFrameRefused(_) => {

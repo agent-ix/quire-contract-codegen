@@ -34,7 +34,7 @@ const POPULATION_ID: &str = "ix://ir268.test/domain/CollectionNodes";
 const SOURCE_ID: &str = "ix://ir268.test/spec";
 const ZERO_SHA256: &str = "sha256:0000000000000000000000000000000000000000000000000000000000000000";
 
-fn model_document() -> Value {
+pub(super) fn model_document() -> Value {
     let field = |name: &str,
                  type_ref: &str,
                  lower: u64,
@@ -2219,7 +2219,7 @@ fn collection_negotiation_accounts_for_each_supported_or_refused_item() {
 }
 
 /// The replay accounting ceilings: generous, so a bounded collection witness is never refused for budget.
-fn replay_scalar_limits() -> ScalarLimits {
+pub(super) fn replay_scalar_limits() -> ScalarLimits {
     ScalarLimits {
         integer_bits: 1_000,
         decimal_digits: 1_000,

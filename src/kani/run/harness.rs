@@ -5,9 +5,9 @@ use crate::{
     core::artifact::Artifact,
     kani::abi::KaniSolver,
     kani::identity::{
-        CollectionElementIdentity, KaniCollectionObligationHarness, KaniObligationHarness,
-        KaniScalarObligationHarness, ObligationKind, StateFrameHarness, StateFrameProperty,
-        SymbolicArgumentBounds, SymbolicBounds,
+        CollectionElementIdentity, KaniCollectionObligationHarness, KaniGraphObligationHarness,
+        KaniObligationHarness, KaniScalarObligationHarness, ObligationKind, StateFrameHarness,
+        StateFrameProperty, SymbolicArgumentBounds, SymbolicBounds,
     },
 };
 
@@ -25,6 +25,8 @@ pub enum KaniExecutableHarness<'a> {
     StateFrame(&'a StateFrameHarness),
     /// A V2 admitted symbolic collection claim.
     Collection(&'a KaniCollectionObligationHarness),
+    /// An admitted symbolic graph clause occurrence.
+    Graph(&'a KaniGraphObligationHarness),
 }
 
 impl<'a> From<&'a KaniObligationHarness> for KaniExecutableHarness<'a> {
@@ -51,6 +53,12 @@ impl<'a> From<&'a KaniCollectionObligationHarness> for KaniExecutableHarness<'a>
     }
 }
 
+impl<'a> From<&'a KaniGraphObligationHarness> for KaniExecutableHarness<'a> {
+    fn from(harness: &'a KaniGraphObligationHarness) -> Self {
+        Self::Graph(harness)
+    }
+}
+
 /// Exactly what execution reads from a harness, whichever kind it is.
 pub(super) struct HarnessView<'a> {
     pub(super) ceilings: crate::kani::identity::ProofCeilings,
@@ -68,6 +76,7 @@ impl<'a> KaniExecutableHarness<'a> {
     pub(super) fn has_valid_provenance(self) -> bool {
         match self {
             Self::Collection(harness) => harness.has_valid_provenance(),
+            Self::Graph(harness) => harness.has_valid_provenance(),
             Self::Contract(_) | Self::Scalar(_) | Self::StateFrame(_) => true,
         }
     }
@@ -146,6 +155,48 @@ impl<'a> KaniExecutableHarness<'a> {
                     })
                     .collect()
             }
+            Self::Graph(harness) => {
+                let identity = &harness.identity;
+                let mut slots = vec![SymbolicArgumentBounds {
+                    identifier: "object_count".into(),
+                    bounds: SymbolicBounds::Integer {
+                        minimum: 0,
+                        maximum: i64::try_from(identity.maximum_population).unwrap_or(i64::MAX),
+                    },
+                }];
+                for name in ["start", "target"] {
+                    slots.push(SymbolicArgumentBounds {
+                        identifier: name.into(),
+                        bounds: SymbolicBounds::Integer {
+                            minimum: 0,
+                            maximum: i64::try_from(identity.maximum_population.saturating_sub(1))
+                                .unwrap_or(i64::MAX),
+                        },
+                    });
+                }
+                for row in 0..identity.maximum_population {
+                    slots.push(SymbolicArgumentBounds {
+                        identifier: format!("degree_{row}"),
+                        bounds: SymbolicBounds::Integer {
+                            minimum: 0,
+                            maximum: i64::try_from(identity.edge.upper).unwrap_or(i64::MAX),
+                        },
+                    });
+                    for column in 0..identity.edge.upper {
+                        slots.push(SymbolicArgumentBounds {
+                            identifier: format!("edge_{row}_{column}"),
+                            bounds: SymbolicBounds::Integer {
+                                minimum: 0,
+                                maximum: i64::try_from(
+                                    identity.maximum_population.saturating_sub(1),
+                                )
+                                .unwrap_or(i64::MAX),
+                            },
+                        });
+                    }
+                }
+                slots
+            }
             Self::Collection(harness) => {
                 let identity = &harness.identity;
                 let element = match identity.element {
@@ -207,6 +258,18 @@ impl<'a> KaniExecutableHarness<'a> {
                         StateFrameProperty::Postcondition { .. } => ObligationKind::Postcondition,
                         StateFrameProperty::Frame { .. } => ObligationKind::Frame,
                     }),
+                    unwind: identity.unwind,
+                    solver: identity.solver,
+                    options: &identity.options,
+                }
+            }
+            Self::Graph(harness) => {
+                let identity = &harness.identity;
+                HarnessView {
+                    ceilings: identity.ceilings,
+                    rust: &harness.rust,
+                    selection: format!("{}::{}", identity.module_symbol, identity.harness_symbol),
+                    kind: None,
                     unwind: identity.unwind,
                     solver: identity.solver,
                     options: &identity.options,
