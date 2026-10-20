@@ -192,7 +192,7 @@ pub fn ir_outcome_terminal_value(
         (Kind::Refused, None) => declined(ProofRefusalCause::Refused),
         (Kind::InvalidInput, None) => declined(ProofRefusalCause::InvalidInput),
         (Kind::IncompleteInput, None) => declined(ProofRefusalCause::IncompleteInput),
-        (Kind::Unavailable, None) if outcome.code == Std001Code::KANI_SOLVER_ABSENT => {
+        (Kind::Unavailable, None) if outcome.code == Std001Code::KANI_CHECKER_ABSENT => {
             TerminalValue::Unsupported(UnavailabilityCause::SolverAbsent)
         }
         // `kani_backend_absent` and every other cause: FR-030's table sends both here.
