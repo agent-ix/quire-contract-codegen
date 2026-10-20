@@ -1741,6 +1741,8 @@ mod tests {
             },
             symbolic_arguments: Vec::new(),
             kind: None,
+            caller_text_claim: None,
+            selected_harness_path: None,
             harness_path: "table-only".into(),
             launcher_path: "not-invoked".into(),
             arguments: Vec::new(),
