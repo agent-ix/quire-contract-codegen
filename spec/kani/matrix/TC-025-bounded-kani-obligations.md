@@ -492,6 +492,20 @@ with the required author `make kani-gate`; independent review and final acceptan
     `Add` to `Subtract` mutation `Falsified`; then run a hand-built spec with an unsatisfiable `Assume`
     through `render` and read that it is not `Verified` (FR-015-AC-117).
 
+## V2 Boolean implication mutation (planned, IR-914)
+
+48. After FR-014-AC-35 supplies the V2 Boolean oracle, generate a scalar `implies`
+    claim over two symbolic Boolean operands. Inspect the embedded oracle bytes
+    against FR-014's function and the independent native `!left || right`
+    assertion. Run the healthy harness with installed Kani and require
+    `Verified` with its final cover satisfied. In a second run, change only the
+    compiled `implies_short_circuit` subject path to return `false` for every
+    input, confirming that the generated claim calls that path; leave the
+    embedded oracle and native assertion unchanged. Require `Falsified` with a
+    concrete playback in the Boolean domain and `left = false`, and fail the
+    control if the compiled call is absent or the mutation is not exercised.
+    Do not count a generation-time Boolean as a proof result (FR-015-AC-118).
+
 ## Blocked
 
 - Frame harnesses in the clause negotiation: FR-025 accounts every frame obligation
