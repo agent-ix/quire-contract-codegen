@@ -30,6 +30,8 @@ mod role_parity_tests;
 pub(crate) mod scalar;
 // The V1 bundle generator; interim, see the file header.
 pub(crate) mod v1_bundle;
+// Admitted V2 clause proof harnesses.
+pub(crate) mod v2_clause;
 
 // Validated private descriptions and their pure renderer.
 mod render;

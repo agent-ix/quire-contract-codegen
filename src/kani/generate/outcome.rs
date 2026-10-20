@@ -15,7 +15,7 @@ use crate::{
     core::identity::HarnessSymbol,
     kani::identity::{
         KaniCollectionObligationHarness, KaniObligationHarness, KaniScalarObligationHarness,
-        ObligationKind, StateFrameHarness,
+        KaniV2ClauseObligationHarness, ObligationKind, StateFrameHarness,
     },
     oracle::claim::{ClaimMap, UpstreamBlocker},
     oracle::scalar::{ClaimDerivationRefusal, ExactScalarClaim, ExactScalarRefusal},
@@ -530,6 +530,8 @@ pub enum KaniObligationOutcome {
         state_frame_harnesses: Vec<StateFrameHarness>,
         /// Admitted V2 collection claim harnesses, in request order.
         collection_harnesses: Vec<KaniCollectionObligationHarness>,
+        /// Admitted V2 clause harnesses, in request order.
+        v2_clause_harnesses: Vec<KaniV2ClauseObligationHarness>,
     },
     /// At least one item was invalid; no harness bytes are returned.
     Rejected {

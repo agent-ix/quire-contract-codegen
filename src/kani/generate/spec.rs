@@ -201,6 +201,11 @@ pub(super) enum Statement {
     },
     /// Fixed compiled runtime subject for the V2 Boolean implication control.
     SubjectImplicationCall,
+    /// Customer subject for one V2 clause parameter, returning its Boolean condition.
+    ClauseSubjectCall {
+        callee: String,
+        argument: String,
+    },
     Assert {
         condition: ExprText,
         message: String,
@@ -352,6 +357,15 @@ impl HarnessSpec {
                     return Err(HarnessSpecError::AssertBeforeCall);
                 }
                 Statement::SubjectImplicationCall => {}
+                Statement::ClauseSubjectCall { callee, argument } => {
+                    if !called {
+                        return Err(HarnessSpecError::AssertBeforeCall);
+                    }
+                    syn::parse_str::<syn::Path>(callee)
+                        .map_err(|_| HarnessSpecError::InvalidExpression)?;
+                    identifier(argument)?;
+                    bind(&mut names, "subject")?;
+                }
                 Statement::Assert { message: text, .. } => {
                     if !called {
                         return Err(HarnessSpecError::AssertBeforeCall);

@@ -123,6 +123,9 @@ pub(super) fn render(spec: &HarnessSpec) -> Result<Artifact, UnsupportedObligati
                 &mut source,
                 "let subject = quire_contract_runtime::operators::implies_short_circuit(left, || right);",
             ),
+            Statement::ClauseSubjectCall { callee, argument } => {
+                line(&mut source, &format!("let subject = {callee}({argument});"));
+            }
             Statement::Assert { condition, message } => line(
                 &mut source,
                 &format!("assert!({}, \"{message}\");", condition.as_str()),

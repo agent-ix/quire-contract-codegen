@@ -93,10 +93,20 @@ fn qsl_emits_parameter_only_implication_as_an_admitted_clause() {
     assert_eq!(descriptor.expected_consequents, 1);
     assert_eq!(descriptor.inputs.len(), 1);
     assert_eq!(descriptor.inputs[0].name, "parameter_amount");
-    assert_eq!((descriptor.inputs[0].lower, descriptor.inputs[0].upper), (0, 1000));
+    assert_eq!(
+        (descriptor.inputs[0].lower, descriptor.inputs[0].upper),
+        (0, 1000)
+    );
 }
 
-#[trace("FR-015-AC-38", "FR-015-AC-39", "FR-015-AC-40", "FR-015-AC-41", "FR-015-AC-119", "TC-025")]
+#[trace(
+    "FR-015-AC-38",
+    "FR-015-AC-39",
+    "FR-015-AC-40",
+    "FR-015-AC-41",
+    "FR-015-AC-119",
+    "TC-025"
+)]
 #[test]
 fn qsl_parameter_only_clause_negotiates_one_postcondition_harness() {
     let (package, clause) =
@@ -106,11 +116,292 @@ fn qsl_parameter_only_clause_negotiates_one_postcondition_harness() {
         clause: &clause,
     }]);
     assert_eq!(result.records().len(), 1);
-    assert_eq!(result.records()[0].kind, Some(ObligationKind::Postcondition));
+    assert_eq!(
+        result.records()[0].kind,
+        Some(ObligationKind::Postcondition)
+    );
+    assert!(
+        matches!(
+            result.records()[0].disposition,
+            ObligationDisposition::Supported { .. }
+        ),
+        "{:?}",
+        result.records()[0].disposition
+    );
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = result
+    else {
+        panic!("the admitted clause must emit a harness");
+    };
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("one admitted clause must have one harness");
+    };
+    let oracle = generate_v2_clause_oracle(&package, &clause).unwrap();
+    assert!(
+        harness.rust.contents.contains(&oracle.source),
+        "the embedded oracle is byte-identical"
+    );
+    assert_eq!(harness.identity.clause, clause);
+    assert_eq!(harness.identity.kind, ObligationKind::Postcondition);
+    assert_eq!(harness.identity.arguments.len(), 1);
+    assert_eq!(harness.identity.arguments[0].identifier, "amount_current");
+    assert_eq!(
+        (
+            harness.identity.arguments[0].minimum,
+            harness.identity.arguments[0].maximum
+        ),
+        (0, 1000)
+    );
+    let source = &harness.rust.contents;
+    assert_eq!(source.matches("kani::any()").count(), 1);
+    assert!(source.contains("kani::assume(amount_current >= 0_i64 && amount_current <= 1000_i64)"));
+    assert!(source.contains("let parameter_amount = rt::Integer::from(amount_current)"));
+    assert!(source.contains("let expected = (!"));
+    let native_line = source
+        .lines()
+        .find(|line| line.starts_with("let expected = "))
+        .unwrap();
+    assert!(
+        native_line.contains(" || "),
+        "native implication must use !left || right: {native_line}"
+    );
+    assert!(source.contains("i128::from(amount_current) + 1i128"));
+    assert!(source.contains("let subject = "));
+    assert!(source.contains("matches!(&outcome, Ok(rt::Outcome::Completed(true))) == expected"));
+    assert_eq!(source.matches("kani::cover!").count(), 1);
+    assert!(source.rfind("kani::cover!").unwrap() > source.rfind("assert!").unwrap());
+}
+
+#[trace("FR-015-AC-38", "TC-025")]
+#[test]
+fn v2_clause_item_refuses_a_non_clause_and_rejects_an_absent_node() {
+    let (package, clause) =
+        Twin::with_bounded_amount_implication().emitted_package("BalanceNeverDrops");
+    let non_clause = package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| node.node_tag.as_ref() == "expression")
+        .unwrap()
+        .node_id
+        .clone();
+    let refused = negotiate(&[ObligationItem::V2Clause {
+        package: &package,
+        clause: &non_clause,
+    }]);
     assert!(matches!(
-        result.records()[0].disposition,
+        refused.records()[0].disposition,
+        ObligationDisposition::Unsupported {
+            reason: UnsupportedObligation::UnknownNodeKind { .. }
+        }
+    ));
+    let (_, absent) = Twin::with_negated_balance_clause().emitted_package("BalanceNeverDrops");
+    assert_ne!(clause, absent);
+    let rejected = negotiate(&[
+        ObligationItem::V2Clause {
+            package: &package,
+            clause: &clause,
+        },
+        ObligationItem::V2Clause {
+            package: &package,
+            clause: &absent,
+        },
+    ]);
+    let KaniObligationOutcome::Rejected { records } = rejected else {
+        panic!("an absent clause invalidates the whole request");
+    };
+    assert_eq!(records.len(), 2);
+    assert!(matches!(
+        records[0].disposition,
         ObligationDisposition::Supported { .. }
     ));
+    assert_eq!(
+        records[1].disposition,
+        ObligationDisposition::InvalidRequest {
+            reason: InvalidObligationItem::UnknownNode,
+        }
+    );
+}
+
+#[trace("FR-015-AC-40", "FR-015-AC-41", "TC-025")]
+#[test]
+fn v2_clause_harness_native_expectation_tracks_the_admitted_condition() {
+    let (first, first_clause) =
+        Twin::with_bounded_amount_implication().emitted_package("BalanceNeverDrops");
+    let one = negotiate(&[ObligationItem::V2Clause {
+        package: &first,
+        clause: &first_clause,
+    }]);
+    let again = negotiate(&[ObligationItem::V2Clause {
+        package: &first,
+        clause: &first_clause,
+    }]);
+    assert_eq!(
+        one, again,
+        "equal admitted inputs produce byte-identical output"
+    );
+    let (changed, changed_clause) =
+        Twin::with_bounded_amount_condition("amount < 500 implies amount + 2 <= 501")
+            .emitted_package("BalanceNeverDrops");
+    let changed_output = negotiate(&[ObligationItem::V2Clause {
+        package: &changed,
+        clause: &changed_clause,
+    }]);
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = changed_output
+    else {
+        panic!("the changed clause still has a supported bounded condition");
+    };
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("one changed clause yields one harness");
+    };
+    assert!(harness
+        .rust
+        .contents
+        .contains("i128::from(amount_current) < 500i128"));
+    assert!(harness
+        .rust
+        .contents
+        .contains("i128::from(amount_current) + 2i128"));
+    assert!(harness.rust.contents.contains("<= 501i128"));
+}
+
+#[trace("FR-015-AC-119", "TC-025")]
+#[test]
+fn v2_clause_falsification_decoder_recovers_the_single_in_domain_amount() {
+    let (package, clause) =
+        Twin::with_bounded_amount_implication().emitted_package("BalanceNeverDrops");
+    let result = negotiate(&[ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+    }]);
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = result
+    else {
+        panic!("admitted clause must emit");
+    };
+    let harness = &v2_clause_harnesses[0];
+    let qualified = format!(
+        "{}::{}",
+        harness.identity.module_symbol, harness.identity.harness_symbol
+    );
+    let transcript = |amount: i64| {
+        let bytes = amount
+            .to_le_bytes()
+            .iter()
+            .map(u8::to_string)
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("/// Test generated for harness `{qualified}`\n/// Check for `assertion`: \"clause\"\n#[test]\nfn concrete() {{\n    let concrete_vals: Vec<Vec<u8>> = vec![\n        // {amount}\n        vec![{bytes}],\n    ];\n    kani::concrete_playback_run(concrete_vals, prove_clause);\n}}\n")
+    };
+    let decoded = quire_contract_codegen::decode_v2_clause_falsification(
+        harness,
+        &transcript(999),
+        crate::unbounded_decode_limits(),
+    )
+    .expect("the sealed clause schema decodes its one draw");
+    assert_eq!(
+        decoded,
+        [(
+            "amount_current".to_owned(),
+            qsl_replay::WitnessValue::Integer(999)
+        )]
+    );
+    let outside = quire_contract_codegen::decode_v2_clause_falsification(
+        harness,
+        &transcript(1001),
+        crate::unbounded_decode_limits(),
+    )
+    .unwrap_err();
+    assert_eq!(outside.code, "cg_witness_out_of_domain");
+    let wrong_harness = quire_contract_codegen::decode_v2_clause_falsification(
+        harness,
+        &transcript(999).replace(&qualified, "another::proof"),
+        crate::unbounded_decode_limits(),
+    )
+    .unwrap_err();
+    assert_eq!(wrong_harness.code, "cg_witness_harness_identity_mismatch");
+    let mut changed = harness.clone();
+    changed.identity.arguments[0].maximum = 1001;
+    let unsealed = quire_contract_codegen::decode_v2_clause_falsification(
+        &changed,
+        &transcript(999),
+        crate::unbounded_decode_limits(),
+    )
+    .unwrap_err();
+    assert_eq!(unsealed.code, "cg_witness_harness_provenance_mismatch");
+}
+
+#[trace("FR-015-AC-41", "FR-015-AC-119", "TC-025")]
+#[test]
+#[ignore = "kani lane: run serially through `make kani`"]
+fn qsl_parameter_only_implication_verifies_with_its_compiled_subject() {
+    let (package, clause) =
+        Twin::with_bounded_amount_implication().emitted_package("BalanceNeverDrops");
+    let items = [ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+    }];
+    let result = negotiate_kani_obligations(&KaniObligationRequest {
+        ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
+        items: &items,
+        subject_path: "crate::subject::amount_bounded",
+        unwind: 3,
+    })
+    .unwrap();
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = result
+    else {
+        panic!("the admitted clause must emit its proof");
+    };
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("one clause yields one proof");
+    };
+    let scratch = super::scratch_crate::TemporaryDirectory::new("ir917-v2-clause-healthy");
+    fs::write(scratch.path.join("src/lib.rs"), format!(
+        "{}\npub mod subject {{ pub fn amount_bounded(amount: i64) -> bool {{ let left = amount < 1000; quire_contract_runtime::operators::implies_short_circuit(left, || amount + 1 <= 1000) }} }}\n",
+        harness.rust.contents
+    )).unwrap();
+    super::scratch_crate::write_manifest(&scratch.path, &format!(
+        "[package]\nname = \"ir917-v2-clause-healthy\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
+        super::scratch_crate::runtime_dependency(&["exact"])
+    ));
+    fs::write(
+        scratch.path.join("build.rs"),
+        "fn main() { println!(\"cargo:rustc-check-cfg=cfg(kani)\"); }\n",
+    )
+    .unwrap();
+    let installation = KaniInstallation::discover().expect("cargo-kani is installed");
+    let cancel = quire_exact::Cancel::new();
+    let evidence = execute_kani_obligation(&KaniExecutionRequest {
+        cancel: &cancel,
+        installation: &installation,
+        harness: harness.into(),
+        crate_directory: &scratch.path,
+        target_directory: &PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kani-ir917-clause"),
+        home_directory: None,
+    })
+    .unwrap();
+    assert_eq!(evidence.outcome, KaniRunOutcome::Verified, "{evidence:?}");
+    assert_eq!(evidence.symbolic_arguments.len(), 1);
+    let covers: Vec<_> = evidence
+        .checks
+        .iter()
+        .filter(|check| check.class == quire_contract_codegen::KaniCheckClass::Cover)
+        .collect();
+    assert_eq!(covers.len(), 1);
+    assert_eq!(
+        covers[0].status,
+        quire_contract_codegen::KaniCheckStatus::Satisfied
+    );
 }
 
 #[trace("FR-014-AC-38")]

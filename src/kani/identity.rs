@@ -153,6 +153,73 @@ pub struct KaniObligationHarness {
     pub record: Artifact,
 }
 
+/// One admitted V2 clause and the execution facts of its generated proof.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct V2ClauseObligationIdentity {
+    /// Backend resource ceilings.
+    pub ceilings: ProofCeilings,
+    /// The admitted clause node.
+    pub clause: CheckedNodeId,
+    /// The clause's role read from the admitted node.
+    pub kind: ObligationKind,
+    /// The embedded clause oracle function.
+    pub oracle_symbol: String,
+    /// The customer subject called with the drawn parameter.
+    pub subject_path: String,
+    /// The symbolic parameter and its admitted bounds.
+    pub arguments: Vec<ScalarObligationArgument>,
+    /// Generated Rust module.
+    pub module_symbol: ModuleSymbol,
+    /// Generated proof function.
+    pub harness_symbol: HarnessSymbol,
+    /// Backend solver.
+    pub solver: KaniSolver,
+    /// Loop unwind.
+    pub unwind: u32,
+    /// Exact backend options.
+    pub options: Vec<String>,
+}
+
+/// Generated V2 clause harness, sealed against caller edits before execution.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct KaniV2ClauseObligationHarness {
+    /// Execution identity.
+    pub identity: V2ClauseObligationIdentity,
+    /// Self-contained Rust source.
+    pub rust: Artifact,
+    /// Persisted identity record.
+    pub record: Artifact,
+    generated_identity: V2ClauseObligationIdentity,
+    generated_rust: Artifact,
+    generated_record: Artifact,
+}
+
+impl KaniV2ClauseObligationHarness {
+    /// Construct the generator-owned sealed output.
+    pub(crate) fn generated(
+        identity: V2ClauseObligationIdentity,
+        rust: Artifact,
+        record: Artifact,
+    ) -> Self {
+        Self {
+            generated_identity: identity.clone(),
+            generated_rust: rust.clone(),
+            generated_record: record.clone(),
+            identity,
+            rust,
+            record,
+        }
+    }
+
+    /// Whether public fields retain the generated values.
+    pub(crate) fn has_valid_provenance(&self) -> bool {
+        self.identity == self.generated_identity
+            && self.rust == self.generated_rust
+            && self.record == self.generated_record
+    }
+}
+
 /// One symbolic scalar argument of a rendered harness. Integer claims use checked `i64`
 /// bounds; a Boolean claim records its two values as the inclusive `0..=1` domain.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
