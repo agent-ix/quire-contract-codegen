@@ -202,6 +202,11 @@ pub use crate::core::diagnostic::{
     GenerationDiagnostic, GenerationErrorCode, GenerationTerminalState,
 };
 pub use crate::core::source_map::{SourceProbe, SourceRegion};
+pub use crate::oracle::clause::{
+    derive_v2_clause_descriptor, generate_v2_clause_claim_map, generate_v2_clause_oracle,
+    ClauseOracleInput, V2ClauseClaim, V2ClauseCoverageRegion, V2ClauseDescriptor, V2ClauseOracle,
+    V2ClauseRefusal,
+};
 pub use core::canonical::DigestError;
 pub use kani::generate::frame::{
     generate_state_frame_obligations, StateFrameObligations, StateFrameRequest,

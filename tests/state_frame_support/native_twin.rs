@@ -399,6 +399,31 @@ impl Twin {
         Self::with_deposit_declaration(true, false)
     }
 
+    /// QSL clause over one `Int[0, 1000]` operation parameter named `other`.
+    pub fn with_bounded_other_condition() -> Self {
+        let mut twin = Self::with_deposit_parameter();
+        let mut domain: Value = serde_json::from_slice(&twin.domain).expect("domain document");
+        let account = domain["types"]
+            .as_array_mut()
+            .expect("types")
+            .iter_mut()
+            .find(|ty| ty["identity"] == account_type())
+            .expect("account type");
+        let deposit = account["operations"]
+            .as_array_mut()
+            .expect("operations")
+            .iter_mut()
+            .find(|operation| operation["name"] == "deposit")
+            .expect("deposit operation");
+        deposit["params"][0]["typeRef"] = json!(range_type("balance"));
+        twin.domain = domain.to_string().into_bytes();
+        let source = unit_source(&hex(&jcs_digest(&twin.domain)), &[CLAUSES[0]], 0);
+        twin.unit = source
+            .replace("self.balance >= pre(self.balance)", "self.balance >= other")
+            .into_bytes();
+        twin
+    }
+
     /// QSL-emitted postcondition package whose operation declares a Boolean result.
     pub fn with_deposit_result() -> Self {
         Self::with_deposit_declaration(false, true)
@@ -508,6 +533,16 @@ impl Twin {
                 "not (self.balance >= pre(self.balance))",
             )
             .into_bytes();
+        twin
+    }
+
+    /// A selected QSL postcondition with one alternate Boolean balance expression.
+    pub fn with_balance_condition(condition: &str) -> Self {
+        let mut twin = Self::build(&model::GRANTED, &[CLAUSES[0]], 0);
+        let source = String::from_utf8(twin.unit).expect("native unit");
+        let changed = source.replace("self.balance >= pre(self.balance)", condition);
+        assert_ne!(changed, source, "the balance condition changed");
+        twin.unit = changed.into_bytes();
         twin
     }
 

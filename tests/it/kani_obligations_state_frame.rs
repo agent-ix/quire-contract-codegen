@@ -47,6 +47,9 @@ use qsl_replay::{
     Verdict, WitnessSettlement,
 };
 use quire_contract_codegen::{
+    derive_v2_clause_descriptor, generate_v2_clause_claim_map, generate_v2_clause_oracle,
+};
+use quire_contract_codegen::{
     execute_kani_obligation, generate_state_frame_obligations, negotiate_kani_obligations,
     BoundNotResolvedCause, FrameReplay, FrameReplayError, InvalidObligationItem,
     KaniExecutionRequest, KaniInstallation, KaniObligationError, KaniObligationOutcome,
@@ -78,6 +81,432 @@ const STATE_FIELDS: [&str; 2] = [model::FIELDS[0].0, model::FIELDS[1].0];
 const STATE_PATH: &str = "crate::subject::Account";
 const SUBJECT_PATH: &str = "crate::subject::deposit";
 const SUBJECT_SOURCE: &str = include_str!("../state_frame_support/subject.rs");
+
+#[trace("FR-014-AC-38")]
+#[test]
+fn qsl_emitted_state_clause_derives_a_confirmed_field_backed_oracle() {
+    let (package, clause) = Twin::new().emitted_package("BalanceNeverDrops");
+    let generated = generate_v2_clause_oracle(&package, &clause)
+        .expect("the admitted state clause condition is supported");
+    assert_eq!(generated.descriptor.node_id, clause);
+    assert_eq!(
+        generated.provenance,
+        quire_contract_codegen::OperationProvenance::IrConfirmed
+    );
+    assert!(generated.source.contains("pub fn oracle_"));
+    assert!(generated.source.contains("order_numbers"));
+    assert!(generated.source.contains("pre_balance"));
+    assert!(generated.source.contains("current_balance"));
+    assert_eq!(generated.descriptor.inputs.len(), 2);
+    assert!(generated
+        .descriptor
+        .inputs
+        .iter()
+        .all(|input| input.lower == 0 && input.upper == 1000));
+    assert_eq!(generated.source_map.len(), 1);
+    let entry = &generated.source_map[0];
+    assert_eq!(entry.node_id, clause);
+    assert_eq!(entry.role, "oracle_evaluation");
+    assert_eq!(entry.expected_consequents, Some(0));
+    let line = generated
+        .source
+        .lines()
+        .nth((entry.probe.line - 1) as usize)
+        .unwrap();
+    let start = (entry.probe.start_column - 1) as usize;
+    let end = (entry.probe.end_column - 1) as usize;
+    assert_eq!(&line[start..end], "pub");
+
+    let scratch = super::scratch_crate::TemporaryDirectory::new("quire-v2-clause-oracle");
+    fs::write(scratch.path.join("src/lib.rs"), format!(
+        "{}\n#[test]\nfn clause_values() {{\n    use rt::{{Meter, ScalarLimits}};\n    let limits = ScalarLimits {{ integer_bits: 1000, decimal_digits: 1000, scale_expansion: 1000, text_input_bytes: 1000, text_scalars: 1000, normalized_scalars: 1000, unit_edges: 1000, value_occurrences: 1000, work_units: 1000, result_units: 1000 }};\n    let mut meter = Meter::new(limits);\n    let current = rt::Integer::from(5i64);\n    let pre = rt::Integer::from(4i64);\n    assert!(matches!(oracle_clause(&current, &pre, &mut meter), Ok(rt::Outcome::Completed(true))));\n    let mut meter = Meter::new(limits);\n    assert!(matches!(oracle_clause(&pre, &current, &mut meter), Ok(rt::Outcome::Completed(false))));\n    let lower = rt::Integer::from(0i64);\n    let upper = rt::Integer::from(1000i64);\n    let mut meter = Meter::new(limits);\n    assert!(matches!(oracle_clause(&lower, &upper, &mut meter), Ok(rt::Outcome::Completed(false))));\n    let mut meter = Meter::new(limits);\n    assert!(matches!(oracle_clause(&upper, &lower, &mut meter), Ok(rt::Outcome::Completed(true))));\n    let mut meter = Meter::new(ScalarLimits {{ work_units: 0, ..limits }});\n    assert!(matches!(oracle_clause(&current, &pre, &mut meter), Ok(rt::Outcome::Incomplete(_))));\n}}\n",
+        generated.source
+    )).unwrap();
+    super::scratch_crate::write_manifest(
+        &scratch.path,
+        &format!(
+            "[package]\nname = \"generated-v2-clause\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
+            super::scratch_crate::runtime_dependency(&["exact"])
+        ),
+    );
+    let output = std::process::Command::new(env!("CARGO"))
+        .args(["test", "--offline", "--quiet"])
+        .env("CARGO_TARGET_DIR", scratch.path.join("target"))
+        .env("RUSTFLAGS", "-Dwarnings")
+        .current_dir(&scratch.path)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "generated clause failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[trace("FR-014-AC-38")]
+#[test]
+fn clause_claim_map_carries_the_derived_descriptor_and_typed_disposition() {
+    let (package, clause) = Twin::new().emitted_package("BalanceNeverDrops");
+    let clause_body = &package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| node.node_id == clause)
+        .unwrap()
+        .body;
+    let condition_node: CheckedNodeId =
+        serde_json::from_value(clause_body["arguments"][2]["target"].clone()).unwrap();
+    let map = generate_v2_clause_claim_map(&package, &clause);
+    assert_eq!(&map.package_id, package.package_id());
+    assert_eq!(map.items.len(), 1);
+    assert_eq!(map.items[0].node_id, clause);
+    let quire_contract_codegen::ClaimDisposition::Generated(generated) = &map.items[0].result
+    else {
+        panic!("the clause claim was not generated");
+    };
+    assert_eq!(generated.descriptor.node_id, clause);
+    assert_eq!(generated.descriptor.condition_node_id, Some(condition_node));
+    assert_eq!(
+        generated.descriptor.operation_identities,
+        ["quire.op.integer.ge"]
+    );
+    assert_eq!(
+        derive_v2_clause_descriptor(&package, &clause),
+        Ok(generated.descriptor.clone())
+    );
+    assert_eq!(
+        generated.provenance,
+        quire_contract_codegen::OperationProvenance::IrConfirmed
+    );
+    let encoded = serde_json::to_value(&map).unwrap();
+    assert_eq!(
+        encoded["items"][0]["node_id"],
+        serde_json::to_value(&clause).unwrap()
+    );
+    assert!(!encoded.to_string().contains("pub fn oracle_clause"));
+    let non_clause = package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| node.node_tag.as_ref() == "expression")
+        .unwrap();
+    let refused = generate_v2_clause_claim_map(&package, &non_clause.node_id);
+    assert_eq!(refused.items.len(), 1);
+    assert_eq!(refused.items[0].node_id, non_clause.node_id);
+    assert!(matches!(
+        refused.items[0].result,
+        quire_contract_codegen::ClaimDisposition::Refused {
+            refusal: quire_contract_codegen::V2ClauseRefusal::NotClause
+        }
+    ));
+}
+
+#[trace("FR-014-AC-38")]
+#[test]
+fn admitted_clause_refuses_non_clause_node() {
+    let twin = Twin::new();
+    let (package, _) = twin.emitted_package("BalanceNeverDrops");
+    let non_clause = package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| node.node_tag.as_ref() == "expression")
+        .expect("an expression node");
+    assert_eq!(
+        generate_v2_clause_oracle(&package, &non_clause.node_id),
+        Err(quire_contract_codegen::V2ClauseRefusal::NotClause),
+    );
+}
+
+#[trace("FR-014-AC-38")]
+#[test]
+fn admitted_inline_clause_keeps_the_clause_identity() {
+    let admitted = fixture(&Shape {
+        variant: 146,
+        condition: Condition::InlineTrue,
+        ..Shape::HEALTHY
+    });
+    let generated = generate_v2_clause_oracle(&admitted.package, &admitted.clause)
+        .expect("the admitted inline Boolean condition");
+    assert_eq!(generated.descriptor.node_id, admitted.clause);
+    assert_eq!(
+        generated.provenance,
+        quire_contract_codegen::OperationProvenance::IrConfirmed
+    );
+    assert!(generated.descriptor.inputs.is_empty());
+    assert_eq!(generated.source_map[0].expected_consequents, Some(0));
+    assert!(generated.source.contains("Ok(true)"));
+    let scratch = super::scratch_crate::TemporaryDirectory::new("quire-v2-inline-clause");
+    fs::write(
+        scratch.path.join("src/lib.rs"),
+        format!(
+            "{}\n#[test]\nfn inline_condition() {{\n    let mut meter = rt::Meter::new(rt::ScalarLimits {{ integer_bits: 1, decimal_digits: 1, scale_expansion: 1, text_input_bytes: 1, text_scalars: 1, normalized_scalars: 1, unit_edges: 1, value_occurrences: 1, work_units: 1, result_units: 1 }});\n    assert!(matches!(oracle_clause(&mut meter), Ok(rt::Outcome::Completed(true))));\n}}\n",
+            generated.source
+        ),
+    )
+    .unwrap();
+    super::scratch_crate::write_manifest(
+        &scratch.path,
+        &format!(
+            "[package]\nname = \"generated-v2-inline-clause\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
+            super::scratch_crate::runtime_dependency(&["exact"])
+        ),
+    );
+    let output = std::process::Command::new(env!("CARGO"))
+        .args(["test", "--offline", "--quiet"])
+        .env("CARGO_TARGET_DIR", scratch.path.join("target"))
+        .env("RUSTFLAGS", "-Dwarnings")
+        .current_dir(&scratch.path)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "inline clause failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[trace("FR-014-AC-38")]
+#[test]
+fn qsl_emitted_pre_of_an_expression_is_refused() {
+    let (package, clause) = Twin::with_balance_condition("self.balance >= pre(self.balance + 1)")
+        .emitted_package("BalanceNeverDrops");
+    assert_eq!(
+        generate_v2_clause_oracle(&package, &clause),
+        Err(quire_contract_codegen::V2ClauseRefusal::UnsupportedCondition),
+    );
+}
+
+#[trace("FR-014-AC-38")]
+#[test]
+fn qsl_emitted_negated_clause_composes_the_boolean_oracle() {
+    let (package, clause) =
+        Twin::with_negated_balance_clause().emitted_package("BalanceNeverDrops");
+    let generated = generate_v2_clause_oracle(&package, &clause)
+        .expect("a QSL emitted negated clause condition");
+    assert_eq!(generated.descriptor.node_id, clause);
+    assert!(generated.source.contains("evaluate_boolean"));
+    assert!(generated.source.contains("order_numbers"));
+    assert_eq!(generated.source_map[0].expected_consequents, Some(0));
+}
+
+#[trace("FR-014-AC-38")]
+#[test]
+fn qsl_model_field_range_is_the_clause_input_range() {
+    let (package, clause) =
+        Twin::with_field_ranges((-5, 10), (50, 60)).emitted_package("BalanceNeverDrops");
+    let generated = generate_v2_clause_oracle(&package, &clause)
+        .expect("a clause over the selected balance field");
+    assert_eq!(generated.descriptor.inputs.len(), 2);
+    assert!(generated
+        .descriptor
+        .inputs
+        .iter()
+        .all(|input| (input.lower, input.upper) == (-5, 10)));
+}
+
+#[trace("FR-014-AC-38")]
+#[test]
+fn qsl_bounded_operation_parameter_becomes_a_clause_input() {
+    let (package, clause) =
+        Twin::with_bounded_other_condition().emitted_package("BalanceNeverDrops");
+    let generated = generate_v2_clause_oracle(&package, &clause)
+        .expect("a bounded operation parameter is supported");
+    assert_eq!(generated.descriptor.node_id, clause);
+    assert_eq!(generated.descriptor.inputs.len(), 2);
+    assert!(generated
+        .descriptor
+        .inputs
+        .iter()
+        .any(|input| input.name == "parameter_other" && (input.lower, input.upper) == (0, 1000)));
+    assert!(generated
+        .descriptor
+        .inputs
+        .iter()
+        .any(|input| input.name == "current_balance" && (input.lower, input.upper) == (0, 1000)));
+    let scratch = super::scratch_crate::TemporaryDirectory::new("quire-v2-param-clause");
+    fs::write(
+        scratch.path.join("src/lib.rs"),
+        format!(
+            "{}\n#[test]\nfn parameter_values() {{\n    let five = rt::Integer::from(5i64);\n    let four = rt::Integer::from(4i64);\n    let limits = rt::ScalarLimits {{ integer_bits: 1000, decimal_digits: 1000, scale_expansion: 1000, text_input_bytes: 1000, text_scalars: 1000, normalized_scalars: 1000, unit_edges: 1000, value_occurrences: 1000, work_units: 1000, result_units: 1000 }};\n    let mut meter = rt::Meter::new(limits);\n    assert!(matches!(oracle_clause(&five, &four, &mut meter), Ok(rt::Outcome::Completed(true))));\n    let mut meter = rt::Meter::new(limits);\n    assert!(matches!(oracle_clause(&four, &five, &mut meter), Ok(rt::Outcome::Completed(false))));\n}}\n",
+            generated.source
+        ),
+    )
+    .unwrap();
+    super::scratch_crate::write_manifest(
+        &scratch.path,
+        &format!(
+            "[package]\nname = \"generated-v2-param-clause\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
+            super::scratch_crate::runtime_dependency(&["exact"])
+        ),
+    );
+    let output = std::process::Command::new(env!("CARGO"))
+        .args(["test", "--offline", "--quiet"])
+        .env("CARGO_TARGET_DIR", scratch.path.join("target"))
+        .env("RUSTFLAGS", "-Dwarnings")
+        .current_dir(&scratch.path)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "parameter clause failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[trace("FR-014-AC-38")]
+#[test]
+fn qsl_emitted_clause_composes_boolean_and_integer_operations() {
+    let mut compiled = String::new();
+    for (index, (expression, expected)) in [
+        ("self.balance + 1 >= pre(self.balance)", true),
+        ("self.balance - 1 >= pre(self.balance)", false),
+        ("self.balance * 2 >= pre(self.balance)", true),
+        ("-self.balance <= pre(self.balance)", true),
+        ("self.balance >= pre(self.balance) and self.balance >= 0", true),
+        ("self.balance >= pre(self.balance) or self.balance >= 0", true),
+        ("self.balance >= pre(self.balance) implies self.balance >= 0", true),
+        (
+            "self.balance >= pre(self.balance) implies (self.balance >= 0 implies self.balance <= 1000)",
+            true,
+        ),
+        ("self.balance = pre(self.balance)", true),
+        ("self.balance != pre(self.balance)", false),
+        ("self.balance < pre(self.balance)", false),
+        ("self.balance <= pre(self.balance)", true),
+        ("self.balance > pre(self.balance)", false),
+        ("(self.balance >= 0) = (pre(self.balance) >= 0)", true),
+        ("(self.balance >= 0) != (pre(self.balance) >= 0)", false),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let (package, clause) =
+            Twin::with_balance_condition(expression).emitted_package("BalanceNeverDrops");
+        let generated = generate_v2_clause_oracle(&package, &clause)
+            .unwrap_or_else(|error| panic!("{expression}: {error:?}"));
+        assert_eq!(generated.descriptor.node_id, clause);
+        assert!(generated.source.contains("pub fn oracle_clause("));
+        let count = u32::try_from(expression.matches("implies").count()).unwrap();
+        assert_eq!(generated.source_map[0].expected_consequents, Some(count));
+        assert_eq!(generated.source_map.len(), 1 + count as usize);
+        for consequent in generated.source_map.iter().skip(1) {
+            assert_eq!(consequent.role, "implication_consequent");
+            assert_eq!(consequent.node_id, clause);
+            let line = generated
+                .source
+                .lines()
+                .nth((consequent.probe.line - 1) as usize)
+                .unwrap();
+            let start = (consequent.probe.start_column - 1) as usize;
+            let end = (consequent.probe.end_column - 1) as usize;
+            assert!(line[start..end].starts_with("value_"));
+        }
+        let arguments = "&value, ".repeat(generated.descriptor.inputs.len());
+        compiled.push_str(&format!(
+            "pub mod case_{index} {{\n{}\n#[test]\nfn runs() {{\n    let value = rt::Integer::from(0i64);\n    let mut meter = rt::Meter::new(rt::ScalarLimits {{ integer_bits: 1000, decimal_digits: 1000, scale_expansion: 1000, text_input_bytes: 1000, text_scalars: 1000, normalized_scalars: 1000, unit_edges: 1000, value_occurrences: 1000, work_units: 1000, result_units: 1000 }});\n    assert!(matches!(oracle_clause({arguments}&mut meter), Ok(rt::Outcome::Completed({expected}))));\n}}\n}}\n",
+            generated.source,
+        ));
+    }
+    let scratch = super::scratch_crate::TemporaryDirectory::new("quire-v2-clause-corpus");
+    fs::write(scratch.path.join("src/lib.rs"), compiled).unwrap();
+    super::scratch_crate::write_manifest(
+        &scratch.path,
+        &format!(
+            "[package]\nname = \"generated-v2-clause-corpus\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
+            super::scratch_crate::runtime_dependency(&["exact"])
+        ),
+    );
+    let output = std::process::Command::new(env!("CARGO"))
+        .args(["test", "--offline", "--quiet"])
+        .env("CARGO_TARGET_DIR", scratch.path.join("target"))
+        .env("RUSTFLAGS", "-Dwarnings")
+        .current_dir(&scratch.path)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "generated clause corpus failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[trace("FR-014-AC-38")]
+#[test]
+fn skipped_v2_clause_consequent_has_a_measured_zero_native_probe() {
+    let (package, clause) =
+        Twin::with_balance_condition("self.balance > pre(self.balance) implies self.balance >= 0")
+            .emitted_package("BalanceNeverDrops");
+    let generated = generate_v2_clause_oracle(&package, &clause).unwrap();
+    let consequents = generated
+        .source_map
+        .iter()
+        .filter(|region| region.role == "implication_consequent")
+        .collect::<Vec<_>>();
+    assert_eq!(consequents.len(), 1);
+    let scratch = super::scratch_crate::TemporaryDirectory::new("quire-v2-clause-native-probe");
+    fs::write(
+        scratch.path.join("src/lib.rs"),
+        format!(
+            "{}\n#[test]\nfn skipped_consequent() {{\n    let zero = rt::Integer::from(0i64);\n    let mut meter = rt::Meter::new(rt::ScalarLimits {{ integer_bits: 1000, decimal_digits: 1000, scale_expansion: 1000, text_input_bytes: 1000, text_scalars: 1000, normalized_scalars: 1000, unit_edges: 1000, value_occurrences: 1000, work_units: 1000, result_units: 1000 }});\n    assert!(matches!(oracle_clause(&zero, &zero, &mut meter), Ok(rt::Outcome::Completed(true))));\n}}\n",
+            generated.source
+        ),
+    )
+    .unwrap();
+    super::scratch_crate::write_manifest(
+        &scratch.path,
+        &format!(
+            "[package]\nname = \"generated-v2-clause-native-probe\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
+            super::scratch_crate::runtime_dependency(&["exact"])
+        ),
+    );
+    let toolchain = format!("+{}", env!("CARGO_PKG_RUST_VERSION"));
+    let sysroot = std::process::Command::new("rustc")
+        .args([&toolchain, "--print", "sysroot"])
+        .output()
+        .unwrap();
+    assert!(sysroot.status.success());
+    let tools = PathBuf::from(String::from_utf8(sysroot.stdout).unwrap().trim())
+        .join("lib/rustlib/x86_64-unknown-linux-gnu/bin");
+    for tool in ["llvm-cov", "llvm-profdata"] {
+        assert!(tools.join(tool).is_file(), "qualified tool missing");
+    }
+    let output = std::process::Command::new("cargo")
+        .args([
+            &toolchain,
+            "llvm-cov",
+            "--offline",
+            "--json",
+            "--output-path",
+        ])
+        .arg(scratch.path.join("coverage.json"))
+        .current_dir(&scratch.path)
+        .env("CARGO_TARGET_DIR", scratch.path.join("target"))
+        .env("LLVM_COV", tools.join("llvm-cov"))
+        .env("LLVM_PROFDATA", tools.join("llvm-profdata"))
+        .env("CARGO_PROFILE_TEST_OPT_LEVEL", "0")
+        .env_remove("RUSTFLAGS")
+        .env_remove("CARGO_ENCODED_RUSTFLAGS")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "native LLVM: {}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let coverage = fs::read(scratch.path.join("coverage.json")).unwrap();
+    let measured =
+        quire_contract_codegen::parse_llvm_coverage(&coverage, scratch.path.to_str().unwrap())
+            .unwrap();
+    assert_eq!(
+        measured
+            .observe(&consequents[0].artifact_path, consequents[0].probe)
+            .unwrap()
+            .count(),
+        0
+    );
+}
 
 /// One variant of the fixture. Each variant owns its node codes, because the test binary's
 /// fixture registry refuses one code bound to two different bodies.
@@ -148,6 +577,8 @@ enum FrameEffect {
 
 #[derive(Clone, Copy)]
 enum Condition {
+    /// A direct Boolean condition in the clause's third argument.
+    InlineTrue,
     /// `post(self.balance) >= pre(self.balance)`.
     PostGePre,
     /// `post(self.balance) >= post(self.balance)`.
@@ -494,9 +925,10 @@ fn add_shape(builder: &mut PackageBuilder, shape: &Shape) {
     let pre_other = pre_read(builder, shape.code(422), &post_other, &read_key);
     let zero = literal("integer", "0");
     let (left, right) = match shape.condition {
-        Condition::PostGePre | Condition::Negated | Condition::Conjunction => {
-            (reference(&post_balance), reference(&pre_balance))
-        }
+        Condition::InlineTrue
+        | Condition::PostGePre
+        | Condition::Negated
+        | Condition::Conjunction => (reference(&post_balance), reference(&pre_balance)),
         Condition::PostGePost => (reference(&post_balance), reference(&post_balance)),
         Condition::BalanceAgainstAudit => (reference(&post_balance), reference(&pre_audit)),
         Condition::BalanceAgainstOther => (reference(&post_balance), reference(&pre_other)),
@@ -573,7 +1005,11 @@ fn add_shape(builder: &mut PackageBuilder, shape: &Shape) {
             vec![
                 json!({"term": "aggregate", "members": parameters}),
                 reference(&anchor),
-                reference(&condition),
+                if matches!(shape.condition, Condition::InlineTrue) {
+                    literal("boolean", "true")
+                } else {
+                    reference(&condition)
+                },
             ],
         ),
         &[],
