@@ -25,8 +25,9 @@ per-requirement vacuity report without executing a coverage producer itself.
 - The IR-owned bound executable clause population, including clause identities, typed expressions,
   clause kinds, execution anchors, and dependency/declaration context.
 - Planned (IR-815): for the V2 analyzer, the executable clauses of an admitted `CheckedPackageV2`,
-  read through the `core/ir/` layer of AD-004, in place of the V1 bound population. The source of
-  each clause's execution anchor and of the requirement and revision identity is open (below).
+  read through the `core/ir/` layer of AD-004, in place of the V1 bound population. Each selected QSL
+  `RequirementItem` accepted by `export_bindings` supplies its requirement occurrence; the admitted package's
+  `package_id` supplies the revision. The execution-anchor source remains open (below).
 - Generated Rust/source-map bytes with entry probes and the independently derived implication census.
 - LLVM coverage JSON export bytes captured directly from the LLVM export child started by the
   CG campaign runner for this invocation, its tool and version, and native runtime campaign
@@ -187,7 +188,7 @@ per-requirement vacuity report without executing a coverage producer itself.
 | FR-004-AC-7 | Removing an expected clause, consequent, evaluation probe, or all clauses prevents successful analysis; the expected census comes from bound typed IR. | Test (TC-006) |
 | FR-004-AC-8 | Adverse coverage and non-success native execution cannot discharge the coverage obligation merely because a report serialized successfully. | Test |
 | FR-004-AC-9 | Complete bound observations without a native campaign run are reported as observations only and never as a passed coverage result. Valid informational-only populations retain their references as no executable work. | Test |
-| FR-004-AC-10 | PLANNED. CG binds coverage inside the same live campaign-runner invocation, using the original `/2` wire bytes and their QSL strict-reader typed result directly, the producer execution record, and the same generated source/map buffers used by that campaign. The runner starts the campaign with fresh private profile output, performs any required LLVM merge over only that output, starts LLVM export over only that profile, and captures exact export bytes and tool/version from that LLVM child's direct output stream while retaining the linked child handles. Binding verifies this live campaign/profile/export chain; it refuses a foreign profile location, child handle, stream or pre-existing output as `producer_run_mismatch` before classification, including when source/map and declared tool/version match. It accepts no detached export bytes, path or self-declared producer identity as authority. Every association borrows one private invocation lifetime, with no registry or serialized run key. No separate stored or wire receipt, tracking record or digest carries these associations. The context expires when the invocation returns; a forwarded report or copied input from another run cannot inherit qualification. Requirement and revision match the campaign once their V2 source is resolved; a missing or conflicting same-run association yields structured non-success with no campaign qualification, measured classification or discharge. | Test |
+| FR-004-AC-10 | PLANNED. CG binds coverage inside the same live campaign-runner invocation, using the original `/2` wire bytes and their QSL strict-reader typed result directly, the producer execution record, and the same generated source/map buffers used by that campaign. The runner starts the campaign with fresh private profile output, performs any required LLVM merge over only that output, starts LLVM export over only that profile, and captures exact export bytes and tool/version from that LLVM child's direct output stream while retaining the linked child handles. Binding verifies this live campaign/profile/export chain; it refuses a foreign profile location, child handle, stream or pre-existing output as `producer_run_mismatch` before classification, including when source/map and declared tool/version match. It accepts no detached export bytes, path or self-declared producer identity as authority. Every association borrows one private invocation lifetime, with no registry or serialized run key. No separate stored or wire receipt, tracking record or digest carries these associations. The context expires when the invocation returns; a forwarded report or copied input from another run cannot inherit qualification. The selected accepted QSL requirement occurrence and admitted `CheckedPackageV2::package_id()` revision must match the campaign; a missing or conflicting same-run association yields structured non-success with no campaign qualification, measured classification or discharge. | Test |
 | FR-004-AC-11 | PLANNED. The consuming report retains vacuity and native outcome as evidence for IR FR-045; an oracle-success run with an unobserved consequent denies the coverage obligation, and LLVM probe observations alone produce no completed-proof credit or separate eligible denominator. | Test |
 | FR-004-AC-12 | PLANNED. CG consumes QSL's typed strict-reader clause-run or command-error variant for exact `native-run-result/2`: a decisive basis retains its witness with assigned members, while `closed-scope` or `unavailable` retains none. Missing or other versions, missing/unknown basis, malformed witness, contradictory basis/witness and mixed/invalid variant shape are located wire refusals before binding; no `/1` fallback or CG copy of the wire reader exists. | Test |
 | FR-004-AC-13 | PLANNED. QSL `run_clause` success and a decisive witness remain source-clause facts and do not count as generated-campaign execution or LLVM coverage; QSL violation, refusal, undefined, incomplete, cancelled, unsupported and internal failure remain distinct typed adverse/non-success facts. A bound live run does not upgrade any QSL disposition or itself grant campaign success, measured classification, proof credit or coverage discharge. The same reader's command-error variant retains stage/code/optional cause/message/details and unavailable basis as non-success, with no campaign qualification or measured classification even when the generated run is bound. | Test |
@@ -227,20 +228,23 @@ Within CG's no-tracking-record rule, the planned association is performed inside
 campaign-runner invocation over its owned inputs; no separate persisted or wire receipt is
 specified. A forwarded report is observational output and cannot qualify a later run. If an
 externally verifiable cross-process receipt is required, its authority remains a separate design
-gate rather than a capability claimed here. The V2 requirement/revision source remains FR-011
-OQ-2. QSL's `/2` document gains no generated-source, map or coverage-producer member.
+gate rather than a capability claimed here. The V2 identity source is the resolved FR-011 OQ-2:
+the selected accepted QSL occurrence and admitted `CheckedPackageV2::package_id()`. QSL's `/2`
+document gains no generated-source, map or coverage-producer member.
 
 IR FR-045 owns source-derived proof eligibility, denominators, and completed-proof credit;
 this analyzer supplies execution observations and the coverage-obligation decision only.
 
 ## Open Questions
 
-- OQ-1 (anchor and identity): the V2 source of a clause's execution anchor and of the requirement
-  and revision identity is the open question recorded as FR-011 OQ-1 and OQ-2, and the V2 entry
-  shape follows the open interface-001 direction. FR-004-AC-16 to AC-24 do not depend on the
-  answer and none invents a source. The V2 analyzer must also meet FR-004-AC-10, AC-11 and AC-14,
-  which bind the run's requirement and revision, so deleting the V1 `analyze_bound_coverage` waits
-  on the FR-011 OQ-2 identity answer as well as on these criteria.
+- OQ-1 (anchor open; identity resolved): the V2 source of a clause's execution anchor remains
+  FR-011 OQ-1. For identity, FR-011 OQ-2 resolves the requirement to the selected QSL `RequirementItem` occurrence
+  accepted by `export_bindings` (node, role and ordinal), and the revision to the
+  admitted `CheckedPackageV2::package_id()`. No separate requirement-revision artifact exists.
+  FR-004-AC-16 to AC-24 do not depend on an execution-anchor answer. Deleting the V1
+  `analyze_bound_coverage` still requires FR-004-AC-10, AC-11 and AC-14 and a resolved anchor.
+  In particular, the package id alone never authenticates the same-run result, execution,
+  source, map and LLVM export association required by AC-10 and AC-14.
 
 ## Dependencies
 
