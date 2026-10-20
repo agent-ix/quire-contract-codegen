@@ -26,7 +26,10 @@ without `ir_confirmed` provenance, a checked node id or a QSL term identity.
 In this requirement, `rt::` denotes the exact API that the generated oracle
 and harness import, and the binding is `quire_exact`. The generated harness
 runs on the kernel and compares the two meters through their public accessors
-rather than by value equality, which CBMC cannot unwind at `--unwind 8`.
+rather than by value equality. Ordered charge observations use the kernel's
+`test-support` feature through a dev-dependency. The proof module is test-only,
+and its recorded Kani options select a test build with `--tests`; the oracle's
+production dependency does not enable the ordered charge log.
 
 [FR-014](./FR-014-exact-scalar-oracles.md) continues to own generated oracles
 for admitted, catalogued text comparison nodes. A comparison's existing

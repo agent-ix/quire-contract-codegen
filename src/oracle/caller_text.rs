@@ -192,7 +192,8 @@ pub fn validate_caller_text_proof(
 /// Generate a finite caller admission harness for one supported profile and bound.
 ///
 /// The returned harness is deliberately not an `ir_confirmed` scalar obligation. The production
-/// executor adapter is maintained in the shared FR-017 lane.
+/// executor adapter is maintained in the shared FR-017 lane. Compile the proof as a test
+/// (`cargo kani --tests`) with the kernel's `test-support` enabled by a dev-dependency.
 pub fn generate_caller_text_proof_harness(
     text_type: &TextType,
     payload_class: &str,
