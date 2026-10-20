@@ -1672,7 +1672,7 @@ mod tests {
             ("Cargo.toml", "manifest"),
             ("claim-map.json", "{}"),
             ("kani-obligations/m.json", "record"),
-            ("examples/ir791_native.rs", "adapter"),
+            ("src/bin/ir791_native.rs", "adapter"),
             ("src/lib.rs", "harness"),
             ("src/oracle-artifacts-lib.rs", "oracle"),
         ]
@@ -1691,7 +1691,7 @@ mod tests {
             "{\"contents\":\"manifest\",\"path\":\"Cargo.toml\"},",
             "{\"contents\":\"{}\",\"path\":\"claim-map.json\"},",
             "{\"contents\":\"record\",\"path\":\"kani-obligations/m.json\"},",
-            "{\"contents\":\"adapter\",\"path\":\"examples/ir791_native.rs\"},",
+            "{\"contents\":\"adapter\",\"path\":\"src/bin/ir791_native.rs\"},",
             "{\"contents\":\"harness\",\"path\":\"src/lib.rs\"},",
             "{\"contents\":\"oracle\",\"path\":\"src/oracle-artifacts-lib.rs\"}",
             "],\"schema\":\"agent-ix/cg-kani-scalar-proof-content/v2\"}"
@@ -1754,7 +1754,7 @@ mod tests {
         }
         let supplied = entries
             .iter()
-            .filter(|(path, _)| path != "Cargo.lock" && path != "examples/ir791_native.rs")
+            .filter(|(path, _)| path != "Cargo.lock" && path != "src/bin/ir791_native.rs")
             .cloned()
             .collect::<Vec<_>>();
         let captured = capture_entries(&supplied, snapshot.path()).unwrap();
@@ -1774,7 +1774,7 @@ mod tests {
             "cleanup finishes before data is observed"
         );
         assert_eq!(independent_digest(&captured), digest);
-        for path in ["Cargo.lock", "examples/ir791_native.rs"] {
+        for path in ["Cargo.lock", "src/bin/ir791_native.rs"] {
             let snapshot = PrivateSnapshot::create().unwrap();
             for (name, bytes) in &entries {
                 write_private(&snapshot.path().join(name), bytes).unwrap();
