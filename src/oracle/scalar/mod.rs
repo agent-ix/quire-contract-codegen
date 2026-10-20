@@ -5730,8 +5730,6 @@ mod tests {
     #[test]
     fn tc_024_the_refused_catalogue_identities_have_no_family() {
         for identity in [
-            "quire.op.integer.eq",
-            "quire.op.integer.ne",
             "quire.op.rational.eq",
             "quire.op.rational.ne",
             "quire.op.decimal.eq",
@@ -5746,12 +5744,6 @@ mod tests {
             "quire.op.numeric.narrow",
             "quire.op.rational.narrow",
             "quire.op.text.size",
-            "quire.op.boolean.and",
-            "quire.op.boolean.or",
-            "quire.op.boolean.not",
-            "quire.op.boolean.implies",
-            "quire.op.boolean.eq",
-            "quire.op.boolean.ne",
         ] {
             assert_eq!(family_of_identity(identity), None, "{identity}");
         }
@@ -5889,10 +5881,10 @@ mod tests {
         );
         assert_eq!(
             derive_hand_built(serde_json::json!({
-                "term": "application", "operation": {"identity": "quire.op.boolean.and"}
+                "term": "application", "operation": {"identity": "quire.op.rational.eq"}
             })),
             Err(no_claim(ClaimDerivationRefusal::OperationNotDerivable {
-                operation_identity: "quire.op.boolean.and".to_owned()
+                operation_identity: "quire.op.rational.eq".to_owned()
             }))
         );
     }
