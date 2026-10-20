@@ -62,27 +62,27 @@ through the consuming obligation gate: each must deny success even if its diagno
 serialized. Check accepted/rejected/discarded accounting independently and reject passed execution
 with failed postconditions. Use the native runtime CampaignReport, never a private counter type.
 
-For the native-run binding control, record the generated source and source map actually handed to
-the coverage producer and the exact LLVM export bytes produced by the authenticated run. Analyze
-those same artifacts and export with the resulting campaign run; then replace the map, source,
-revision, run or export bytes independently while preserving the other inputs. The export
-substitution includes a second run of the same source/map under the same LLVM tool/version but
-different probe counts, proving that tool/version and path agreement cannot authenticate probes.
+For the native-run binding control, give the coverage producer the generated source and source map
+owned by the same CG runner invocation and bind its exact LLVM export before that invocation ends.
+Use a controlled internal producer seam to present malformed same-run map, source, revision, run
+or export associations independently before binding while preserving the other inputs. A foreign
+run's export with the same source/map and LLVM tool/version but different probe counts must be
+unconstructible as a same-invocation input, proving those declarations cannot qualify probes.
 Also omit or change the LLVM producer tool/version identity. The successful case reports that
 identity and the run's requirement/revision; each mismatch or omission is a structured non-success
 result without measured classification or coverage discharge.
 
-For receipt authority, obtain a receipt issued once by CG's own campaign runner inside that run
-while it holds the decoded QSL result, execution record, generated source, source map, LLVM export
-and tool/version bytes. Assert that callers cannot construct its private fields and that decoding
-forwarded wire bytes alone grants no runner authority: substitute a caller-built wire receipt with
-identical self-declared associations but no matching runner-held issuance state and require refusal.
-Compare every retained association against the supplied bytes independently; change only the LLVM
-tool/version bytes as a separate control.
-Set the caller's maximum total retained receipt bytes immediately below the exact association
-size: issuance must return a structured refusal naming that limit and retain no partial receipt.
-Set it to the exact size: issuance and byte-for-byte binding must succeed. Do not use a receipt
-digest as a substitute for the retained bytes or for runner authority.
+For live-run authority, pass the original `/2` wire bytes through QSL's strict reader exactly once
+and consume that returned typed result directly. Inspect that the analyzer neither reserializes the
+typed value nor constructs a second provenance record. Assert callers cannot construct, clone,
+serialize or deserialize the private run context, or attach a foreign-run value to its private
+invocation lifetime. Try a context from a completed run and a copied report in a later invocation:
+neither may grant qualification. Feed raw inputs through the allowed
+wire boundary in a fresh CG run; qualification must be recomputed there rather than inherited.
+At the exact caller-supplied maximum encoded envelope size, admission succeeds; one byte above it
+refuses before allocation, naming that limit. Repeat at the maximum decoded working allocation
+with a compact encoded input that expands during parsing; the first over-limit allocation refuses
+before growth and names that limit. No partial run context or measured classification is emitted.
 
 ## Planned V2 population controls (IR-815)
 
@@ -115,32 +115,34 @@ input gives non-success with no invented classification (AC-24); and neither `Bo
    `unknown_edition`, `basis: unavailable`, no witness and the defined message/details as an
    error, never become a successful clause run. Remove its required member, add a clause-run-only
    member or witness, change its basis, violate code-specific cause/details, or change its format:
-   each must yield a located reader refusal before CG receipt binding.
+   each must yield a located reader refusal before CG in-run binding.
 3. Give CG a genuine QSL semantic-success document with a decisive witness but no execution of
-   its generated Rust campaign or no producer-authenticated source/map binding. Conversely,
+   its generated Rust campaign or no live CG-run source/map binding. Conversely,
    run a generated campaign and measure its probes while QSL's clause run reports violation,
    refusal, undefined, incomplete, unsupported or internal failure; exercise a QSpec cancellation
    form separately only when QSL provides such a producer case. Check that each
    fact stays typed and independent, none is inferred from the other, and no missing generated-run
    evidence or adverse result can discharge coverage or grant IR FR-045 proof credit.
-4. For each valid decoded clause-run or command-error variant, omit the CG receipt, omit each
-   required association independently, or supply only caller-declared matching paths, QSL
-   `package_id`, or self-declared producer metadata. Check a structured absent/unauthenticated
-   binding diagnostic retains the decoded QSL outcome and available input identities, with no
-   campaign qualification or measured classification. Supply an authenticated CG receipt
-   associating the exact result, producer execution, generated source, source map and exact LLVM
-   export bytes from the same run; check the binding succeeds without upgrading the QSL outcome.
-   Then independently replace each of those
-   five inputs while keeping the receipt, including replacements with matching path or QSL
-   `package_id`; for export substitution, use a different run of the same source and map with
-   the same LLVM tool/version but different probe counts. Each mismatch must be identified and
-   refuse binding before any measured classification. A matching receipt never upgrades a command
-   error or adverse clause-run result. The LLVM producer identity and actual probe observations
-   remain CG coverage inputs, not QSL result members.
+4. For each valid decoded clause-run or command-error variant, omit the live CG run context, omit
+   each required association independently through the controlled producer seam, or supply only
+   caller-declared matching paths, QSL `package_id`, or producer metadata. Check a structured
+   absent, foreign or mismatched binding diagnostic retains the typed QSL outcome and available
+   input identities, with no campaign qualification or measured classification. In one live CG
+   run, bind the original QSL wire/typed-result pair, producer execution, generated source, source
+   map and exact LLVM export before returning; the QSL outcome remains unchanged. Independently
+   present a malformed same-run association before binding, including one with matching path or
+   QSL `package_id`; each observable mismatch must be named and refuse measured classification.
+   Try to attach a foreign-run export with the same source/map and LLVM tool/version but different
+   probe counts: the private invocation lifetime must prevent constructing that binding request.
+   A completed run's context or forwarded report cannot be replayed to
+   qualify another run. A bound live run never upgrades a command error or adverse clause-run
+   result. The LLVM producer identity and actual probe observations remain CG coverage inputs,
+   not QSL result members.
 
 These controls are planned. QSL-520 must deliver the `/2` producer/reader; QSL-688 allocated the
-separate result/execution/source/map/export receipt to CG, whose runner issuance and byte-for-byte
-verifier still need implementation. FR-011 OQ-2 leaves the V2 requirement/revision source open.
+result/execution/source/map/export association to CG, whose live runner binding still needs
+implementation. No stored or wire receipt is specified. FR-011 OQ-2 leaves the V2
+requirement/revision source open.
 The existing `analyze_bound_coverage` primitive does not
 consume a QSL result and is not evidence for these steps.
 
