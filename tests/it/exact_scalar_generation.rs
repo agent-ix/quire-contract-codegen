@@ -3793,9 +3793,9 @@ fn quantity_conversion_derives_and_preserves_target_provenance() {
     );
     let source = contents(&generated, "src/lib.rs");
     assert!(source.contains("unit: &residue::QuantityUnit"));
-    assert!(
-        source.contains("residue::convert_quantity(operand, unit, &residue::QuantityTarget::Exact, meter)")
-    );
+    assert!(source.contains(
+        "residue::convert_quantity(operand, unit, &residue::QuantityTarget::Exact, meter)"
+    ));
 }
 
 /// The Contract IR package of a request for `nodes`, and its driver positions in the same order.
