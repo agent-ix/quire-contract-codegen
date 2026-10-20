@@ -199,3 +199,7 @@ impl<T> No for &Probe<T> {
 // Shared with the integration binary; this oracle never calls production canonicalization.
 #[path = "../../tests/it/kani_scalar_native_digest.rs"]
 pub(crate) mod scalar_native_digest;
+
+// Existing private native controls remain inside the Kani test boundary.
+#[path = "../../tests/it/kani_scalar_native_private.rs"]
+pub(crate) mod scalar_native_private;

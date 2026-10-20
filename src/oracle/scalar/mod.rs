@@ -3639,7 +3639,6 @@ const SOURCE_HEADER: &str = "\
 // unsafe code instead.
 
 use quire_exact as rt;
-use quire_contract_runtime::exact as residue;
 
 /// Why a generated oracle stopped before an operator outcome.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -3748,6 +3747,9 @@ impl SourceBuilder {
 
     fn finish(self) -> String {
         let mut source = SOURCE_HEADER.to_owned();
+        if self.functions.contains("residue::") {
+            source.push_str("use quire_contract_runtime::exact as residue;\n");
+        }
         if self.needs_integer {
             source.push_str(INTEGER_HELPER);
         }

@@ -12,10 +12,6 @@ extern crate self as quire_contract_codegen;
 #[path = "../tests/it/kani_render_private.rs"]
 mod kani_render_private;
 
-#[cfg(test)]
-#[path = "../tests/it/kani_scalar_native_private.rs"]
-mod kani_scalar_native_private;
-
 #[cfg(all(test, target_os = "linux"))]
 #[path = "../tests/it/kani_terminal_private.rs"]
 mod kani_terminal_private;

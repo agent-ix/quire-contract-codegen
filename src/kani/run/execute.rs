@@ -5420,7 +5420,8 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
     #[trace("FR-017-AC-52", "TC-027")]
     #[test]
     fn sealed_scalar_launch_selects_the_library_without_changing_proof_options() {
-        let (harness, _) = crate::kani_scalar_native_private::fixture(Duration::from_secs(600));
+        let (harness, _) =
+            crate::kani::test_support::scalar_native_private::fixture(Duration::from_secs(600));
         let cancel = quire_exact::Cancel::new();
         let installation = KaniInstallation::new("cargo-kani");
         let request = KaniExecutionRequest {
