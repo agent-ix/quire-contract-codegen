@@ -118,34 +118,178 @@ pub fn decode_scalar_falsification(
 }
 
 #[cfg(test)]
-#[path = "../../tests/exact_scalar_support/package.rs"]
-mod package;
-#[cfg(test)]
-use crate::kani::test_support::proof_ceilings::proof_ceilings_with_wall_clock;
-#[cfg(test)]
-#[path = "../../tests/it/kani_scalar_native_fixture.rs"]
-mod scalar_fixture;
-
-#[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{
+        core::contract_package::{
+            routed_contract_lowering_profile, ContractDriverResultSelection,
+            ContractRequestPosition,
+        },
+        kani::test_support::proof_ceilings::proof_ceilings,
+        routed::{
+            capability::{BackendDescriptor, Candidate, ProviderOrigin},
+            generate::{
+                generate_routed, GenerationContexts, KaniGenerationContext, KindOutput,
+                RoutedGenerationItem,
+            },
+        },
+    };
     use ix_trace_rs::trace;
-    use std::time::Duration;
+    use qsl_replay::{compile_package, DependencyInput, ReplayLimits, SourceIdentity, StageLimits};
+    use quire_contract_model::{
+        CheckedOccurrenceRole, CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2,
+        CheckedPackageV2ReadResult, ContractDependencies, ContractOccurrenceKeyV1,
+        ContractPackageReadResult, ContractPackageWireV1,
+    };
 
-    fn identity(code: u32, bound: package::Bound) -> ScalarObligationIdentity {
-        scalar_fixture::routed_scalar_with_artifacts(
-            package::two_parameter_package(),
-            code,
-            49_190,
-            bound,
-            Duration::from_secs(30),
+    fn identity(
+        operation: &str,
+        parameters: &str,
+        result: &str,
+        expression: &str,
+    ) -> ScalarObligationIdentity {
+        let source = format!(
+            "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\nfunction subject using v({parameters}): {result} pure {{ {expression} }}\n"
+        );
+        let compiled = compile_package(
+            SourceIdentity::new("test", "scalar-playback.native", "git", "fixture"),
+            "scalar-playback.native",
+            source.as_bytes(),
+            [],
+            &DependencyInput::default(),
+            StageLimits::default(),
+            ReplayLimits::default(),
         )
-        .0
-        .identity
+        .expect("QSL compiles the authored scalar source");
+        let mut evidence = CheckedPackageEvidence::new();
+        evidence.support_feature("quire.value.complete/v1");
+        let checked = match CheckedPackageV2::read(
+            compiled.bytes(),
+            CheckedPackageReadLimits::bounded(),
+            &evidence,
+        ) {
+            CheckedPackageV2ReadResult::Admitted(package) => package,
+            other => panic!("IR admits the emitted package: {other:?}"),
+        };
+        let applications = checked
+            .graph()
+            .nodes
+            .iter()
+            .filter(|node| {
+                node.body
+                    .pointer("/operation/identity")
+                    .and_then(serde_json::Value::as_str)
+                    == Some(operation)
+            })
+            .collect::<Vec<_>>();
+        let [application] = applications.as_slice() else {
+            panic!("one authored scalar application")
+        };
+        let node_id = application.node_id.clone();
+        let conversion = checked
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| {
+                node.body
+                    .pointer("/operation/identity")
+                    .and_then(serde_json::Value::as_str)
+                    == Some("quire.op.numeric.narrow")
+                    && node.body.pointer("/arguments/0/target")
+                        == Some(&serde_json::to_value(&node_id).unwrap())
+            })
+            .expect("authored result narrowing");
+        let occurrence = |node_id: &quire_contract_model::CheckedNodeId| {
+            let entries = checked
+                .source_map()
+                .iter()
+                .filter(|entry| {
+                    &entry.node_id == node_id && entry.role == CheckedOccurrenceRole::Expression
+                })
+                .collect::<Vec<_>>();
+            let [entry] = entries.as_slice() else {
+                panic!("one authored expression occurrence")
+            };
+            ContractOccurrenceKeyV1 {
+                node_id: node_id.clone(),
+                role: entry.role.clone(),
+                ordinal: entry.ordinal,
+            }
+        };
+        let selection = ContractDriverResultSelection::OwnResult {
+            application: occurrence(&node_id),
+            conversion: Some(occurrence(&conversion.node_id)),
+        };
+        let positions = [
+            ContractRequestPosition::DriverItem {
+                node_id: node_id.clone(),
+                result_selection: selection.clone(),
+            },
+            ContractRequestPosition::ContextRoot {
+                node_id: conversion.node_id.clone(),
+            },
+        ];
+        let lowered = checked.lower(
+            &[node_id.clone(), conversion.node_id.clone()],
+            &routed_contract_lowering_profile(),
+        );
+        let admitted = match ContractPackageWireV1::read(
+            lowered.package.canonical_bytes().unwrap(),
+            CheckedPackageReadLimits::bounded(),
+            &ContractDependencies::new(),
+        ) {
+            ContractPackageReadResult::Admitted(package) => package,
+            other => panic!("IR admits routed package: {other:?}"),
+        };
+        let route = RoutedGenerationItem::from_descriptor(
+            0,
+            node_id,
+            Candidate {
+                identity: "kani".to_owned(),
+            },
+            &BackendDescriptor {
+                identity: "kani".to_owned(),
+                advertised: Vec::new(),
+                origin: ProviderOrigin::Linked,
+                domains: None,
+                bounds: None,
+            },
+        )
+        .expect("linked Kani route")
+        .with_scalar_selection(&admitted, selection);
+        let generated = generate_routed(
+            &admitted,
+            &positions,
+            &[route],
+            &GenerationContexts {
+                kani: Some(KaniGenerationContext {
+                    ceilings: proof_ceilings(),
+                    subject_path: "crate::subject",
+                    unwind: 3,
+                }),
+            },
+        )
+        .expect("actual routed scalar generation");
+        let [item] = generated.items.as_slice() else {
+            panic!("one routed item")
+        };
+        let KindOutput::Kani {
+            harness: Some(harness),
+            ..
+        } = &item.output
+        else {
+            panic!("routed scalar harness: {:?}", item.output)
+        };
+        harness.identity.clone()
     }
 
     fn sum() -> ScalarObligationIdentity {
-        identity(package::TWO_PARAMETER_SUM, package::Bound::Integer(0, 29))
+        identity(
+            "quire.op.integer.add",
+            "x: Int[0, 9], y: Int[10, 20]",
+            "Int[0, 29]",
+            "x + y",
+        )
     }
 
     fn transcript(identity: &ScalarObligationIdentity, values: &[i64]) -> String {
@@ -196,20 +340,32 @@ mod tests {
     }
 
     fn identity_for_product() -> ScalarObligationIdentity {
-        identity(package::BOUNDED_PRODUCT, package::Bound::Integer(100, 1800))
+        identity(
+            "quire.op.integer.mul",
+            "x: Int[1, 9], y: Int[100, 200]",
+            "Int[100, 1800]",
+            "x * y",
+        )
     }
 
     #[trace("FR-032-AC-2", "FR-032-AC-3")]
     #[test]
     fn negate_and_literal_singleton_keep_every_draw() {
-        let negate = identity(package::BOUNDED_NEGATE, package::Bound::Integer(-9, -1));
+        let negate = identity(
+            "quire.op.integer.negate",
+            "x: Int[1, 9]",
+            "Int[-9, -1]",
+            "-x",
+        );
         assert_eq!(
             decode_scalar_falsification(&negate, &transcript(&negate, &[7])),
             Ok(vec![7])
         );
         let literal = identity(
-            package::TWO_PARAMETER_LITERAL,
-            package::Bound::Integer(0, 29),
+            "quire.op.integer.add",
+            "x: Int[0, 9]",
+            "Int[0, 10]",
+            "x + 1",
         );
         assert_eq!(
             (literal.arguments[1].minimum, literal.arguments[1].maximum),
@@ -231,6 +387,18 @@ mod tests {
                 "cg_scalar_witness_operand_out_of_domain",
             );
             assert_eq!(error.context, literal.arguments[1].identifier);
+        }
+    }
+
+    #[trace("FR-032-AC-2", "FR-032-AC-3")]
+    #[test]
+    fn subtraction_decodes_signed_extreme_operands_without_evaluating_them() {
+        let identity = identity("quire.op.integer.sub", "x: Int[-9223372036854775808, 9223372036854775807], y: Int[-9223372036854775808, 9223372036854775807]", "Int[-9223372036854775808, 9223372036854775807]", "x - y");
+        for values in [[i64::MIN, i64::MAX], [i64::MAX, i64::MIN], [-1, 0]] {
+            assert_eq!(
+                decode_scalar_falsification(&identity, &transcript(&identity, &values)),
+                Ok(values.to_vec())
+            );
         }
     }
 
