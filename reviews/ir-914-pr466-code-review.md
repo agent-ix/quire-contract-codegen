@@ -25,7 +25,7 @@ PASS within this method. See other method artifacts for cross-lens defects.
     compiled `implies_short_circuit` subject path to return `false` for every
     input, confirming that the generated claim calls that path; leave the
     embedded oracle and native assertion unchanged. Require `Falsified` with a
-    concrete playback in the Boolean domain 
+    concrete playback in the Boolean domain
 - FR-015-AC-118-matrix (examined): | FR-015 | FR-015-AC-118 | TC-025 | 🚧 Planned (IR-914): V2 Boolean implication renderer and installed-Kani healthy/mutated control, after FR-014-AC-35; V2 clause implication stays planned under FR-015-AC-40 |
 - FR-014-AC-35 (context_only): Boolean connective nodes, including implies, derive an ir_confirmed oracle that calls evaluate_boolean or evaluate_boolean_short_circuit and returns Outcome<bool>.
 - FR-015-AC-20 (context_only): A Boolean-connective scalar harness embeds its FR-014 oracle byte-identical to the oracle crate function.
@@ -36,3 +36,15 @@ PASS within this method. See other method artifacts for cross-lens defects.
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | low | No findings (placeholder) | - |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-002 | still-open | The committed reviews/ copies at 25c42184 still have trailing spaces and git diff --check fails; the reviewer-held copies are now clean for recopy. |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-002 | low | Eight copied reviewer artifacts contain trailing whitespace in their Examined excerpts; git diff --check fails on every copied file. Recopy the whitespace-clean reviewer-held artifacts. | reviews/ir-914-pr466-*.md:28-31 |

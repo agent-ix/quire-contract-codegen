@@ -28,7 +28,7 @@ PASS within this method. See other method artifacts for cross-lens defects.
     compiled `implies_short_circuit` subject path to return `false` for every
     input, confirming that the generated claim calls that path; leave the
     embedded oracle and native assertion unchanged. Require `Falsified` with a
-    concrete playback in the Boolean domain 
+    concrete playback in the Boolean domain
 - FR-015-AC-118-matrix (examined): | FR-015 | FR-015-AC-118 | TC-025 | 🚧 Planned (IR-914): V2 Boolean implication renderer and installed-Kani healthy/mutated control, after FR-014-AC-35; V2 clause implication stays planned under FR-015-AC-40 |
 - FR-014-AC-35 (context_only): Boolean connective nodes, including implies, derive an ir_confirmed oracle that calls evaluate_boolean or evaluate_boolean_short_circuit and returns Outcome<bool>.
 - FR-015-AC-20 (context_only): A Boolean-connective scalar harness embeds its FR-014 oracle byte-identical to the oracle crate function.
