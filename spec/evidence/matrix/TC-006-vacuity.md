@@ -62,12 +62,20 @@ through the consuming obligation gate: each must deny success even if its diagno
 serialized. Check accepted/rejected/discarded accounting independently and reject passed execution
 with failed postconditions. Use the native runtime CampaignReport, never a private counter type.
 
-For the native-run binding control, give the coverage producer the generated source and source map
-owned by the same CG runner invocation and bind its exact LLVM export before that invocation ends.
+For the native-run binding control, give the campaign the generated source and source map
+owned by the same CG runner invocation. Start it with fresh private profile output, then start
+the LLVM export child over only that output and bind bytes read directly from that child's
+output stream before the invocation ends. Retain the linked campaign and export child handles
+through binding; reject a pre-existing or foreign profile output location.
 Use a controlled internal producer seam to present malformed same-run map, source, revision, run
-or export associations independently before binding while preserving the other inputs. A foreign
-run's export with the same source/map and LLVM tool/version but different probe counts must be
-unconstructible as a same-invocation input, proving those declarations cannot qualify probes.
+or export associations independently before binding while preserving the other inputs. Inject
+a foreign run's export bytes with the same source/map and LLVM tool/version but different probe
+counts through a detached buffer, then through a stream from that foreign export child. Both
+must refuse as `producer_run_mismatch` before classification because neither came from the
+current runner-owned campaign/profile/export chain. Also replace just the profile output with a
+foreign run's profile while leaving the current invocation's export child in place; the fresh
+private profile binding must refuse it. These controls must inspect the actual child/profile
+association rather than assume that an owned channel authenticates whichever bytes it returns.
 Also omit or change the LLVM producer tool/version identity. The successful case reports that
 identity and the run's requirement/revision; each mismatch or omission is a structured non-success
 result without measured classification or coverage discharge.
