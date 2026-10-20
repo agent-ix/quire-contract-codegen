@@ -3219,7 +3219,7 @@ fn tc_024_boolean_and_integer_equality_nodes_generate_confirmed_runtime_oracles(
         assert!(matches!(claim.result, ClaimDisposition::Generated(_)));
     }
     let source = contents(&oracles, "src/lib.rs");
-    assert!(source.contains("residue::evaluate_boolean("));
+    assert!(source.contains("rt::evaluate_boolean("));
     assert!(source.contains("residue::evaluate_boolean_short_circuit("));
     assert!(source.contains(".check_equality("));
     assert!(source.contains("checked.evaluate("));
