@@ -278,6 +278,15 @@ fn each_llvm_input_class_refuses_without_invented_probe_counts() {
         .push(same);
     cases.push((duplicate, "invalid_input", "duplicate_file"));
 
+    let mut aliased_duplicate = baseline.clone();
+    let mut alias = aliased_duplicate["data"][0]["files"][0].clone();
+    alias["filename"] = json!("src/./lib.rs");
+    aliased_duplicate["data"][0]["files"]
+        .as_array_mut()
+        .unwrap()
+        .push(alias);
+    cases.push((aliased_duplicate, "invalid_input", "duplicate_file"));
+
     let mut ambiguous_path = baseline.clone();
     ambiguous_path["data"][0]["files"][0]["filename"] = json!("src/../src/lib.rs");
     cases.push((ambiguous_path, "invalid_input", "invalid_path"));
