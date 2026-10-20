@@ -42,6 +42,7 @@ PASS within this method. See other method artifacts for cross-lens defects.
 | FND | outcome | reason |
 | --- | --- | --- |
 | FND-002 | still-open | The committed reviews/ copies at 25c42184 still have trailing spaces and git diff --check fails; the reviewer-held copies are now clean for recopy. |
+| FND-002 | fixed | All eight committed reviewer artifacts have clean Examined excerpts and git diff --check origin/main...HEAD passes at c1510243. |
 
 ## New findings (disposition pass 1)
 
