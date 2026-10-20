@@ -137,7 +137,10 @@ fn bounded_single_run_standins_preserve_cancelled_and_timed_out_evidence() {
         fs::write(
             &launcher,
             format!(
-                "#!/bin/sh\nprintf started > '{}'\nexec /bin/sleep 30\n",
+                "#!/bin/sh\n{}printf started > '{}'\nexec /bin/sleep 30\n",
+                // A delayed backend startup must not consume the cancellation control's
+                // entire proof ceiling before the watcher can request cancellation.
+                if cancelled { "sleep 4\n" } else { "" },
                 started.display()
             ),
         )
