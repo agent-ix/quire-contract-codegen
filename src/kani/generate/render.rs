@@ -84,6 +84,10 @@ pub(super) fn render(spec: &HarnessSpec) -> Result<Artifact, UnsupportedObligati
                 let args = args
                     .iter()
                     .map(|arg| match arg {
+                        Argument::Value(name) => name.to_owned(),
+                        Argument::BooleanOutcomeClosure(name) => {
+                            format!("|| rt::Outcome::Completed({name})")
+                        }
                         Argument::Borrow(name) => format!("&{name}"),
                         Argument::BorrowMut(name) => format!("&mut {name}"),
                     })
@@ -91,6 +95,10 @@ pub(super) fn render(spec: &HarnessSpec) -> Result<Artifact, UnsupportedObligati
                     .join(", ");
                 line(&mut source, &format!("let {result} = {callee}({args});"));
             }
+            Statement::SubjectImplicationCall => line(
+                &mut source,
+                "let subject = quire_contract_runtime::operators::implies_short_circuit(left, || right);",
+            ),
             Statement::Assert { condition, message } => line(
                 &mut source,
                 &format!("assert!({}, \"{message}\");", condition.as_str()),

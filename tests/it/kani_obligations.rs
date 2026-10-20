@@ -626,6 +626,52 @@ fn claim_index(
         .expect("test claim map contains selected node")
 }
 
+fn boolean_implies_scalar_from(
+    package: CheckedPackageV2,
+    node: CheckedNodeId,
+) -> (
+    KaniScalarObligationHarness,
+    quire_contract_codegen::Artifact,
+    String,
+) {
+    let [item] = derive_exact_scalar_items(&package, std::slice::from_ref(&node))
+        .try_into()
+        .expect("one derived scalar item");
+    let oracles = generate_exact_scalar_oracles(&package, &[item.expect("implies derives")])
+        .expect("Boolean oracle generation");
+    let admitted = admitted_scalar_claims(&package, &oracles.claim_map);
+    let items = [ObligationItem::ScalarClaim {
+        package: &admitted,
+        claim_map: &oracles.claim_map,
+        node_id: &node,
+        claim_index: claim_index(&oracles.claim_map, &node),
+        result_selection: &quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
+    }];
+    let (_, mut harnesses) =
+        emitted_scalar(negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap());
+    let oracle_crate = oracles
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.path == "src/lib.rs")
+        .expect("Boolean oracle source")
+        .contents
+        .clone();
+    let manifest = oracles
+        .artifacts
+        .into_iter()
+        .find(|artifact| artifact.path == "Cargo.toml")
+        .expect("Boolean oracle manifest");
+    let harness = harnesses.remove(0);
+    let start = oracle_crate
+        .find(&format!("pub fn {}(", harness.identity.oracle_symbol))
+        .expect("the oracle crate has the selected function");
+    let end = oracle_crate[start..]
+        .find("\n}\n")
+        .map(|offset| start + offset + 3)
+        .expect("the selected function closes");
+    (harness, manifest, oracle_crate[start..end].to_owned())
+}
+
 fn boolean_implies_scalar() -> (
     KaniScalarObligationHarness,
     quire_contract_codegen::Artifact,
@@ -648,34 +694,7 @@ fn boolean_implies_scalar() -> (
     );
     let (package, ids) = builder.admit_resolved();
     let node = ids.resolve(&code_id(IMPLIES));
-    let [item] = derive_exact_scalar_items(&package, &[node.clone()])
-        .try_into()
-        .expect("one derived scalar item");
-    let oracles = generate_exact_scalar_oracles(&package, &[item.expect("implies derives")])
-        .expect("Boolean oracle generation");
-    let admitted = admitted_scalar_claims(&package, &oracles.claim_map);
-    let items = [ObligationItem::ScalarClaim {
-        package: &admitted,
-        claim_map: &oracles.claim_map,
-        node_id: &node,
-        claim_index: claim_index(&oracles.claim_map, &node),
-        result_selection: &quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
-    }];
-    let (_, mut harnesses) =
-        emitted_scalar(negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap());
-    let oracle = oracles
-        .artifacts
-        .iter()
-        .find(|artifact| artifact.path == "src/lib.rs")
-        .expect("Boolean oracle source")
-        .contents
-        .clone();
-    let manifest = oracles
-        .artifacts
-        .into_iter()
-        .find(|artifact| artifact.path == "Cargo.toml")
-        .expect("Boolean oracle manifest");
-    (harnesses.remove(0), manifest, oracle)
+    boolean_implies_scalar_from(package, node)
 }
 
 #[trace("FR-015-AC-118", "TC-025")]
@@ -685,7 +704,7 @@ fn tc_025_boolean_implication_harness_keeps_subject_oracle_and_native_independen
     let source = &harness.rust.contents;
     assert!(
         source.contains(&oracle),
-        "the FR-014 oracle source is embedded byte-identical"
+        "the FR-014 oracle function is embedded byte-identical"
     );
     assert!(source.contains("let left: bool = kani::any();"));
     assert!(source.contains("let right: bool = kani::any();"));
@@ -700,11 +719,39 @@ fn tc_025_boolean_implication_harness_keeps_subject_oracle_and_native_independen
 
 #[trace("FR-015-AC-118", "TC-025")]
 #[test]
+fn tc_025_boolean_implication_with_lazy_right_calls_its_oracle_with_an_outcome() {
+    let package = package::derivation_package().admit();
+    let node =
+        package::fixture_ids_for(&package).resolve(&code_id(package::DERIVE_BOOLEAN_SHORT_CIRCUIT));
+    let (harness, _, _) = boolean_implies_scalar_from(package, node);
+    assert!(harness.rust.contents.contains(&format!(
+        "{}(left, || rt::Outcome::Completed(right), &mut meter)",
+        harness.identity.oracle_symbol
+    )));
+}
+
+#[trace("FR-015-AC-118", "TC-025")]
+#[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_025_boolean_implication_subject_mutation_is_falsified_with_false_left() {
     let (harness, manifest, oracle) = boolean_implies_scalar();
     let healthy = run_scalar_under_real_kani("scalar-implies-healthy", &harness, &manifest);
     assert_eq!(healthy.outcome, KaniRunOutcome::Verified, "{healthy:?}");
+    assert_eq!(healthy.symbolic_arguments.len(), 2);
+    assert!(healthy
+        .symbolic_arguments
+        .iter()
+        .all(|argument| { argument.bounds == quire_contract_codegen::SymbolicBounds::Boolean }));
+    let covers = healthy
+        .checks
+        .iter()
+        .filter(|check| check.class == quire_contract_codegen::KaniCheckClass::Cover)
+        .collect::<Vec<_>>();
+    assert_eq!(covers.len(), 1, "one final cover in the generated source");
+    assert_eq!(
+        covers[0].status,
+        quire_contract_codegen::KaniCheckStatus::Satisfied
+    );
 
     let subject_call = "quire_contract_runtime::operators::implies_short_circuit(left, || right)";
     let parsed = syn::parse_file(&harness.rust.contents).expect("generated Rust parses");
@@ -722,13 +769,16 @@ fn tc_025_boolean_implication_subject_mutation_is_falsified_with_false_left() {
         })
         .flat_map(|function| &function.block.stmts)
         .filter_map(|statement| match statement {
-            syn::Stmt::Local(local) => local.init.as_ref().map(|init| &*init.expr),
+            syn::Stmt::Local(local) if matches!(&local.pat, syn::Pat::Ident(name) if name.ident == "subject") =>
+                local.init.as_ref().map(|init| &*init.expr),
             _ => None,
         })
         .filter(|expression| {
-            quote::quote!(#expression)
-                .to_string()
-                .contains("implies_short_circuit")
+            let syn::Expr::Call(call) = expression else { return false };
+            let syn::Expr::Path(path) = &*call.func else { return false };
+            path.path.segments.iter().map(|segment| segment.ident.to_string()).collect::<Vec<_>>()
+                == ["quire_contract_runtime", "operators", "implies_short_circuit"]
+                && call.args.len() == 2
         })
         .count();
     assert_eq!(call_count, 1, "exactly one parsed subject expression");
@@ -751,9 +801,56 @@ fn tc_025_boolean_implication_subject_mutation_is_falsified_with_false_left() {
     assert!(
         counterexample.contains("the compiled implication subject must equal native implication")
     );
-    assert!(
-        counterexample.contains("0u8") || counterexample.contains("false"),
-        "left is false in playback: {counterexample}"
+    use syn::parse::Parser;
+    let playback = syn::parse_file(counterexample).expect("Kani playback is Rust source");
+    let first_input = playback
+        .items
+        .iter()
+        .find_map(|item| {
+            let syn::Item::Fn(function) = item else {
+                return None;
+            };
+            function.block.stmts.iter().find_map(|statement| {
+                let syn::Stmt::Local(local) = statement else {
+                    return None;
+                };
+                let syn::Pat::Type(typed) = &local.pat else {
+                    return None;
+                };
+                let syn::Pat::Ident(name) = &*typed.pat else {
+                    return None;
+                };
+                if name.ident != "concrete_vals" {
+                    return None;
+                }
+                let syn::Expr::Macro(values) = &*local.init.as_ref()?.expr else {
+                    return None;
+                };
+                syn::punctuated::Punctuated::<syn::Expr, syn::Token![,]>::parse_terminated
+                    .parse2(values.mac.tokens.clone())
+                    .ok()?
+                    .first()
+                    .cloned()
+            })
+        })
+        .expect("playback contains symbolic inputs");
+    let syn::Expr::Macro(left_bytes) = first_input else {
+        panic!("first playback input is a byte vector: {counterexample}");
+    };
+    let left_bytes = syn::punctuated::Punctuated::<syn::Expr, syn::Token![,]>::parse_terminated
+        .parse2(left_bytes.mac.tokens)
+        .expect("first input bytes parse");
+    let [syn::Expr::Lit(syn::ExprLit {
+        lit: syn::Lit::Int(byte),
+        ..
+    })] = left_bytes.iter().collect::<Vec<_>>().as_slice()
+    else {
+        panic!("one Boolean byte for left: {counterexample}");
+    };
+    assert_eq!(
+        byte.base10_parse::<u8>().unwrap(),
+        0,
+        "left is false in playback"
     );
 }
 

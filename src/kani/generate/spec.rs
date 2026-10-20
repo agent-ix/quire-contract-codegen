@@ -174,6 +174,9 @@ pub(super) struct LetBinding {
 }
 #[derive(Clone, Debug)]
 pub(super) enum Argument {
+    Value(String),
+    /// A fixed lazy Boolean outcome passed to the generated oracle.
+    BooleanOutcomeClosure(String),
     Borrow(String),
     BorrowMut(String),
 }
@@ -196,6 +199,8 @@ pub(super) enum Statement {
         callee: String,
         args: Vec<Argument>,
     },
+    /// Fixed compiled runtime subject for the V2 Boolean implication control.
+    SubjectImplicationCall,
     Assert {
         condition: ExprText,
         message: String,
@@ -333,11 +338,20 @@ impl HarnessSpec {
                     bind(&mut names, result)?;
                     identifier(callee)?;
                     for argument in args {
-                        let (Argument::Borrow(name) | Argument::BorrowMut(name)) = argument;
+                        let name = match argument {
+                            Argument::Value(name)
+                            | Argument::BooleanOutcomeClosure(name)
+                            | Argument::Borrow(name)
+                            | Argument::BorrowMut(name) => name,
+                        };
                         identifier(name)?;
                     }
                     called = true;
                 }
+                Statement::SubjectImplicationCall if !called => {
+                    return Err(HarnessSpecError::AssertBeforeCall);
+                }
+                Statement::SubjectImplicationCall => {}
                 Statement::Assert { message: text, .. } => {
                     if !called {
                         return Err(HarnessSpecError::AssertBeforeCall);

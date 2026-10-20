@@ -492,9 +492,9 @@ with the required author `make kani-gate`; independent review and final acceptan
     `Add` to `Subtract` mutation `Falsified`; then run a hand-built spec with an unsatisfiable `Assume`
     through `render` and read that it is not `Verified` (FR-015-AC-117).
 
-## V2 Boolean implication mutation (planned, IR-914)
+## V2 Boolean implication mutation (IR-914)
 
-48. After FR-014-AC-35 supplies the V2 Boolean oracle, generate a scalar `implies`
+48. Using the FR-014-AC-35 V2 Boolean oracle, generate a scalar `implies`
     claim over two symbolic Boolean operands. Inspect that the embedded oracle
     matches FR-014's function byte for byte, and that the generated subject calls
     `quire_contract_runtime::operators::implies_short_circuit` with `left` and a
