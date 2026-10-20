@@ -1,6 +1,8 @@
 //! Authored QSL emission and strict IR admission shared by graph controls.
 use qsl_replay::{call_site, DependencyInput, Identifier, SourceIdentity};
-use quire_contract_model::{CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2, CheckedPackageV2ReadResult};
+use quire_contract_model::{
+    CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2, CheckedPackageV2ReadResult,
+};
 use serde_json::{json, Value};
 pub(crate) struct AuthoredGraph {
     pub(crate) package: CheckedPackageV2,

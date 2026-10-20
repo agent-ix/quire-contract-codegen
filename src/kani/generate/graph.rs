@@ -53,9 +53,9 @@ pub(super) struct LoweredGraph {
 #[cfg(test)]
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum BoundMutation {
-    PopulationPlusOne,
-    PopulationMinusOne,
-    EdgeUpperPlusOne,
+    PopulationPlus,
+    PopulationMinus,
+    EdgeUpperPlus,
 }
 
 #[cfg(test)]
@@ -71,13 +71,13 @@ pub(crate) fn bound_mutant_for_test(
         Err(_) => panic!("the original authored graph must lower before mutation"),
     };
     match mutation {
-        BoundMutation::PopulationPlusOne => {
+        BoundMutation::PopulationPlus => {
             lowered.population.maximum = lowered.population.maximum.checked_add(1).unwrap();
         }
-        BoundMutation::PopulationMinusOne => {
+        BoundMutation::PopulationMinus => {
             lowered.population.maximum = lowered.population.maximum.checked_sub(1).unwrap();
         }
-        BoundMutation::EdgeUpperPlusOne => {
+        BoundMutation::EdgeUpperPlus => {
             lowered.edge.upper = lowered.edge.upper.checked_add(1).unwrap();
         }
     }

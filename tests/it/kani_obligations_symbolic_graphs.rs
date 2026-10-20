@@ -27,8 +27,26 @@ fn fixture_source(
 ) -> AuthoredGraph {
     try_fixture_source(edge, condition, maximum, bounded, form, extra).unwrap()
 }
-fn try_fixture_source(edge: &str, condition: &str, maximum: u64, bounded: bool, form: &str, extra: &str) -> Result<AuthoredGraph, qsl_replay::CallSiteRefusal> {
-    graph_fixture::try_fixture_source(graph_fixture::ModelInput { document: super::kani_obligations_symbolic_domains::model_document(), incoming_upper: 9 }, edge, condition, maximum, bounded, form, extra)
+fn try_fixture_source(
+    edge: &str,
+    condition: &str,
+    maximum: u64,
+    bounded: bool,
+    form: &str,
+    extra: &str,
+) -> Result<AuthoredGraph, qsl_replay::CallSiteRefusal> {
+    graph_fixture::try_fixture_source(
+        graph_fixture::ModelInput {
+            document: super::kani_obligations_symbolic_domains::model_document(),
+            incoming_upper: 9,
+        },
+        edge,
+        condition,
+        maximum,
+        bounded,
+        form,
+        extra,
+    )
 }
 use quire_contract_codegen::{
     negotiate_kani_obligations, GraphUnsupportedReason, KaniGraphObligationHarness,

@@ -136,4 +136,3 @@ pub(crate) fn model_document() -> Value {
         }]
     })
 }
-
