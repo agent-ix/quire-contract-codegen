@@ -1243,7 +1243,11 @@ fn generate_lockfile(
             updated.outcome
         )));
     }
-    verify_dependency_revision(&expected, fs::read_to_string(root.join("Cargo.lock")), package, repository)?;
+    if package == "quire-contract-runtime" {
+        verify_runtime_revision(&expected, fs::read_to_string(root.join("Cargo.lock")))?;
+    } else {
+        verify_dependency_revision(&expected, fs::read_to_string(root.join("Cargo.lock")), package, repository)?;
+    }
     }
     Ok(())
 }

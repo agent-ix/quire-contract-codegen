@@ -1074,7 +1074,7 @@ fn scalar_coverage_regions<'a>(
                     if *right_may_stop {
                         line.trim() == "right()"
                     } else {
-                        line.contains("rt::evaluate_boolean")
+                        line.contains("residue::evaluate_boolean")
                             && line.contains("Implies")
                             && line.contains("right")
                     }
@@ -3826,10 +3826,10 @@ impl SourceBuilder {
                     };
                     (
                         vec![("left", "bool"), ("right", "impl FnOnce() -> rt::Outcome<bool>")],
-                        format!("Ok(rt::evaluate_boolean_short_circuit(rt::ShortCircuitConnective::{kind}, left, || {{\n        right()\n    }}, meter))"),
+                        format!("Ok(residue::evaluate_boolean_short_circuit(residue::ShortCircuitConnective::{kind}, left, || {{\n        right()\n    }}, meter))"),
                     )
                 } else {
-                    (parameters, format!("Ok(rt::evaluate_boolean(rt::BooleanConnective::{connective}, meter))"))
+                    (parameters, format!("Ok(residue::evaluate_boolean(residue::BooleanConnective::{connective}, meter))"))
                 };
                 Body {
                     parameters,
@@ -3856,9 +3856,9 @@ impl SourceBuilder {
                     parameters: binary(ty),
                     output: "bool",
                     prelude: vec![format!(
-                        "let checked = rt::TypeEnvironment::default().check_equality(rt::EqualityOperator::{operator}, rt::EqualityOperand::typed(rt::ValueType::{value_type}), rt::EqualityOperand::typed(rt::ValueType::{value_type})).map_err(OracleStop::IllTyped)?;"
+                        "let checked = residue::TypeEnvironment::default().check_equality(residue::EqualityOperator::{operator}, residue::EqualityOperand::typed(residue::ValueType::{value_type}), residue::EqualityOperand::typed(residue::ValueType::{value_type})).map_err(OracleStop::IllTyped)?;"
                     )],
-                    call: format!("Ok(checked.evaluate(&rt::Value::{value}({left}), &rt::Value::{value}({right}), meter))"),
+                    call: format!("Ok(checked.evaluate(&residue::Value::{value}({left}), &residue::Value::{value}({right}), meter))"),
                 }
             }
             ExactScalarOperation::IntegerArithmetic { operator, domain } => {
@@ -4088,12 +4088,12 @@ impl SourceBuilder {
                 comparison_body("&residue::EnumValue", "residue::compare_enum", *operator)?
             }
             ExactScalarOperation::QuantityConversion => Body {
-                parameters: vec![("operand", "&rt::Quantity"), ("unit", "&rt::QuantityUnit")],
-                output: "rt::Quantity",
+                parameters: vec![("operand", "&residue::Quantity"), ("unit", "&residue::QuantityUnit")],
+                output: "residue::Quantity",
                 prelude: Vec::new(),
-                call: "match rt::convert_quantity(operand, unit, &rt::QuantityTarget::Exact, meter).map_err(OracleStop::IllTyped)? {
+                call: "match residue::convert_quantity(operand, unit, &residue::QuantityTarget::Exact, meter).map_err(OracleStop::IllTyped)? {
         rt::Outcome::Completed(conversion) => match conversion.value() {
-            rt::ConvertedValue::Exact(value) => Ok(rt::Outcome::Completed(rt::Quantity::new(value.clone(), conversion.unit().clone()))),
+            residue::ConvertedValue::Exact(value) => Ok(rt::Outcome::Completed(residue::Quantity::new(value.clone(), conversion.unit().clone()))),
             _ => Err(OracleStop::InvalidConstant),
         },
         rt::Outcome::Undefined(reason) => Ok(rt::Outcome::Undefined(reason)),

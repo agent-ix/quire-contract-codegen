@@ -647,7 +647,7 @@ fn tc_024_every_scalar_family_generates_one_oracle_calling_its_runtime_operator(
             "rt::compare_ieee(rt::IeeeComparison::TotalOrder,".to_owned(),
         ),
         (1064, "rt::convert_ieee_width(".to_owned()),
-        (1140, "rt::convert_quantity(".to_owned()),
+        (1140, "residue::convert_quantity(".to_owned()),
         (
             1065,
             "rt::evaluate_ieee(rt::IeeeOperation::Subtract(".to_owned(),
@@ -3219,8 +3219,8 @@ fn tc_024_boolean_and_integer_equality_nodes_generate_confirmed_runtime_oracles(
         assert!(matches!(claim.result, ClaimDisposition::Generated(_)));
     }
     let source = contents(&oracles, "src/lib.rs");
-    assert!(source.contains("rt::evaluate_boolean("));
-    assert!(source.contains("rt::evaluate_boolean_short_circuit("));
+    assert!(source.contains("residue::evaluate_boolean("));
+    assert!(source.contains("residue::evaluate_boolean_short_circuit("));
     assert!(source.contains(".check_equality("));
     assert!(source.contains("checked.evaluate("));
 }
@@ -3792,9 +3792,9 @@ fn quantity_conversion_derives_and_preserves_target_provenance() {
         "distinct admitted target declarations remain distinct"
     );
     let source = contents(&generated, "src/lib.rs");
-    assert!(source.contains("unit: &rt::QuantityUnit"));
+    assert!(source.contains("unit: &residue::QuantityUnit"));
     assert!(
-        source.contains("rt::convert_quantity(operand, unit, &rt::QuantityTarget::Exact, meter)")
+        source.contains("residue::convert_quantity(operand, unit, &residue::QuantityTarget::Exact, meter)")
     );
 }
 
