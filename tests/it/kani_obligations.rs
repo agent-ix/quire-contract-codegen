@@ -20,6 +20,10 @@ mod scalar_native_fixture;
 use crate::common::proof_ceilings::proof_ceilings_with_wall_clock;
 use scalar_native_digest::independent_digest;
 use scalar_native_fixture::routed_scalar_with_artifacts;
+use quire_contract_codegen as scalar_fixture_types;
+use quire_contract_codegen::{Artifact, BackendDescriptor, Candidate, ContractDriverResultSelection,
+    ContractRequestPosition, generate_routed, GenerationContexts, KaniGenerationContext, KindOutput,
+    ProviderOrigin, RoutedGenerationItem};
 
 use std::{
     fs,

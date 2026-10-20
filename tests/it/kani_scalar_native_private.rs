@@ -17,6 +17,14 @@ use crate::{
 };
 use ix_trace_rs::trace;
 use package::Bound;
+use crate::{
+    core::contract_package::{routed_contract_lowering_profile, ContractDriverResultSelection, ContractRequestPosition},
+    oracle::scalar as scalar_fixture_types,
+    routed::{
+        capability::{BackendDescriptor, Candidate, ProviderOrigin},
+        generate::{generate_routed, GenerationContexts, KaniGenerationContext, KindOutput, RoutedGenerationItem},
+    },
+};
 #[path = "kani_scalar_native_fixture.rs"]
 mod scalar_native_fixture;
 use scalar_native_fixture::routed_scalar_with_artifacts;
@@ -287,7 +295,9 @@ fn bounded_paired_runner_propagates_the_native_helpers_oracle_stop() {
             "run",
             "--quiet",
             "--locked",
-            "--bin",
+            "--manifest-path",
+            "observer/Cargo.toml",
+            "--example",
             "ir791_native",
             "--",
             "4",
