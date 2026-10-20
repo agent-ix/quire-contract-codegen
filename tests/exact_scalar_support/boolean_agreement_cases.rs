@@ -15,8 +15,9 @@ use generated::{
     integer_ne, OracleStop,
 };
 use ix_trace_rs::trace;
+use quire_exact::{Outcome, Refusal};
 use quire_contract_runtime::exact::{
-    EqualityOperand, EqualityOperator, Outcome, Refusal, TypeEnvironment, ValueType,
+    EqualityOperand, EqualityOperator, TypeEnvironment, ValueType,
 };
 
 fn done(result: Result<Outcome<bool>, OracleStop>) -> Outcome<bool> {
