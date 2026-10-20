@@ -116,7 +116,7 @@ fn qsl_emitted_state_clause_derives_a_confirmed_field_backed_oracle() {
 
     let scratch = super::scratch_crate::TemporaryDirectory::new("quire-v2-clause-oracle");
     fs::write(scratch.path.join("src/lib.rs"), format!(
-        "{}\n#[test]\nfn clause_values() {{\n    use rt::{{Meter, ScalarLimits}};\n    let limits = ScalarLimits {{ integer_bits: 1000, decimal_digits: 1000, scale_expansion: 1000, text_input_bytes: 1000, text_scalars: 1000, normalized_scalars: 1000, unit_edges: 1000, value_occurrences: 1000, work_units: 1000, result_units: 1000 }};\n    let mut meter = Meter::new(limits);\n    let current = rt::Integer::from(5i64);\n    let pre = rt::Integer::from(4i64);\n    assert!(matches!(oracle_clause(&current, &pre, &mut meter), Ok(rt::Outcome::Completed(true))));\n    let mut meter = Meter::new(limits);\n    assert!(matches!(oracle_clause(&pre, &current, &mut meter), Ok(rt::Outcome::Completed(false))));\n    let mut meter = Meter::new(ScalarLimits {{ work_units: 0, ..limits }});\n    assert!(matches!(oracle_clause(&current, &pre, &mut meter), Ok(rt::Outcome::Incomplete(_))));\n}}\n",
+        "{}\n#[test]\nfn clause_values() {{\n    use rt::{{Meter, ScalarLimits}};\n    let limits = ScalarLimits {{ integer_bits: 1000, decimal_digits: 1000, scale_expansion: 1000, text_input_bytes: 1000, text_scalars: 1000, normalized_scalars: 1000, unit_edges: 1000, value_occurrences: 1000, work_units: 1000, result_units: 1000 }};\n    let mut meter = Meter::new(limits);\n    let current = rt::Integer::from(5i64);\n    let pre = rt::Integer::from(4i64);\n    assert!(matches!(oracle_clause(&current, &pre, &mut meter), Ok(rt::Outcome::Completed(true))));\n    let mut meter = Meter::new(limits);\n    assert!(matches!(oracle_clause(&pre, &current, &mut meter), Ok(rt::Outcome::Completed(false))));\n    let lower = rt::Integer::from(0i64);\n    let upper = rt::Integer::from(1000i64);\n    let mut meter = Meter::new(limits);\n    assert!(matches!(oracle_clause(&lower, &upper, &mut meter), Ok(rt::Outcome::Completed(false))));\n    let mut meter = Meter::new(limits);\n    assert!(matches!(oracle_clause(&upper, &lower, &mut meter), Ok(rt::Outcome::Completed(true))));\n    let mut meter = Meter::new(ScalarLimits {{ work_units: 0, ..limits }});\n    assert!(matches!(oracle_clause(&current, &pre, &mut meter), Ok(rt::Outcome::Incomplete(_))));\n}}\n",
         generated.source
     )).unwrap();
     super::scratch_crate::write_manifest(
@@ -154,6 +154,54 @@ fn admitted_clause_refuses_non_clause_node() {
     assert_eq!(
         generate_v2_clause_oracle(&package, &non_clause.node_id),
         Err(quire_contract_codegen::V2ClauseRefusal::NotClause),
+    );
+}
+
+#[trace("FR-014-AC-38")]
+#[test]
+fn admitted_inline_clause_keeps_the_clause_identity() {
+    let admitted = fixture(&Shape {
+        variant: 146,
+        condition: Condition::InlineTrue,
+        ..Shape::HEALTHY
+    });
+    let generated = generate_v2_clause_oracle(&admitted.package, &admitted.clause)
+        .expect("the admitted inline Boolean condition");
+    assert_eq!(generated.node_id, admitted.clause);
+    assert_eq!(
+        generated.provenance,
+        quire_contract_codegen::OperationProvenance::IrConfirmed
+    );
+    assert!(generated.inputs.is_empty());
+    assert_eq!(generated.source_map[0].expected_consequents, Some(0));
+    assert!(generated.source.contains("Ok(true)"));
+    let scratch = super::scratch_crate::TemporaryDirectory::new("quire-v2-inline-clause");
+    fs::write(
+        scratch.path.join("src/lib.rs"),
+        format!(
+            "{}\n#[test]\nfn inline_condition() {{\n    let mut meter = rt::Meter::new(rt::ScalarLimits {{ integer_bits: 1, decimal_digits: 1, scale_expansion: 1, text_input_bytes: 1, text_scalars: 1, normalized_scalars: 1, unit_edges: 1, value_occurrences: 1, work_units: 1, result_units: 1 }});\n    assert!(matches!(oracle_clause(&mut meter), Ok(rt::Outcome::Completed(true))));\n}}\n",
+            generated.source
+        ),
+    )
+    .unwrap();
+    super::scratch_crate::write_manifest(
+        &scratch.path,
+        &format!(
+            "[package]\nname = \"generated-v2-inline-clause\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
+            super::scratch_crate::runtime_dependency(&["exact"])
+        ),
+    );
+    let output = std::process::Command::new(env!("CARGO"))
+        .args(["test", "--offline", "--quiet"])
+        .env("CARGO_TARGET_DIR", scratch.path.join("target"))
+        .env("RUSTFLAGS", "-Dwarnings")
+        .current_dir(&scratch.path)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "inline clause failed: {}",
+        String::from_utf8_lossy(&output.stderr)
     );
 }
 
@@ -341,6 +389,8 @@ enum FrameEffect {
 
 #[derive(Clone, Copy)]
 enum Condition {
+    /// A direct Boolean condition in the clause's third argument.
+    InlineTrue,
     /// `post(self.balance) >= pre(self.balance)`.
     PostGePre,
     /// `post(self.balance) >= post(self.balance)`.
@@ -687,9 +737,10 @@ fn add_shape(builder: &mut PackageBuilder, shape: &Shape) {
     let pre_other = pre_read(builder, shape.code(422), &post_other, &read_key);
     let zero = literal("integer", "0");
     let (left, right) = match shape.condition {
-        Condition::PostGePre | Condition::Negated | Condition::Conjunction => {
-            (reference(&post_balance), reference(&pre_balance))
-        }
+        Condition::InlineTrue
+        | Condition::PostGePre
+        | Condition::Negated
+        | Condition::Conjunction => (reference(&post_balance), reference(&pre_balance)),
         Condition::PostGePost => (reference(&post_balance), reference(&post_balance)),
         Condition::BalanceAgainstAudit => (reference(&post_balance), reference(&pre_audit)),
         Condition::BalanceAgainstOther => (reference(&post_balance), reference(&pre_other)),
@@ -766,7 +817,11 @@ fn add_shape(builder: &mut PackageBuilder, shape: &Shape) {
             vec![
                 json!({"term": "aggregate", "members": parameters}),
                 reference(&anchor),
-                reference(&condition),
+                if matches!(shape.condition, Condition::InlineTrue) {
+                    literal("boolean", "true")
+                } else {
+                    reference(&condition)
+                },
             ],
         ),
         &[],

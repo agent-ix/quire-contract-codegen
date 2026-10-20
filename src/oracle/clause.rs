@@ -128,7 +128,10 @@ pub fn generate_v2_clause_oracle(
         .collect::<Vec<_>>();
     let mut source =
         render_clause_operation_helpers(&operations).map_err(|_| V2ClauseRefusal::Render)?;
-    source.push_str(STOP_HELPER);
+    source.push_str(STOP_TYPE);
+    if !operations.is_empty() {
+        source.push_str(MEASURED_HELPER);
+    }
     let parameters = names
         .values()
         .map(|name| format!("{name}: &rt::Integer, "))
@@ -376,7 +379,7 @@ fn lower(
     Ok(index)
 }
 
-const STOP_HELPER: &str = r#"
+const STOP_TYPE: &str = r#"
 /// A generated condition stopped or a runtime variant was not recognized.
 #[derive(Debug)]
 pub enum ClauseStop {
@@ -389,7 +392,9 @@ pub enum ClauseStop {
     /// A future runtime outcome variant was returned.
     UnknownOutcome,
 }
+"#;
 
+const MEASURED_HELPER: &str = r#"
 fn measured<T>(outcome: rt::Outcome<T>) -> Result<T, ClauseStop> {
     match outcome {
         rt::Outcome::Completed(value) => Ok(value),
