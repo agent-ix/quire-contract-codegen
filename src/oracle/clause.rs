@@ -8,13 +8,14 @@ use serde::{Deserialize, Serialize};
 use crate::core::ir::{read_clause, ClauseInput, ClauseInputSide, ClauseTerm};
 use crate::core::source_map::SourceProbe;
 
+use super::claim::{ClaimDisposition, ClaimMap};
 use super::scalar::{
     clause_scalar_operation, render_clause_operation_helpers, BooleanOperator, EqualityOperandKind,
     ExactScalarOperation, OperationProvenance, OrderingOperandKind,
 };
 
 /// A state field or bounded operation value supplied to one generated clause oracle.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct ClauseOracleInput {
     /// The generated parameter name.
     pub name: String,
@@ -24,19 +25,42 @@ pub struct ClauseOracleInput {
     pub upper: i128,
 }
 
-/// One generated oracle of a V2 clause's Boolean condition.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct V2ClauseOracle {
-    /// Exact checked clause node.
+/// Checked inputs and operations of one clause-identified Boolean condition.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct V2ClauseDescriptor {
+    /// The clause node that owns the oracle claim.
     pub node_id: CheckedNodeId,
+    /// Referenced condition expression, if the third argument is a reference.
+    pub condition_node_id: Option<CheckedNodeId>,
+    /// Ordered operand values and their admitted inclusive bounds.
+    pub inputs: Vec<ClauseOracleInput>,
+    /// Checked scalar operation identities in evaluation-plan order.
+    pub operation_identities: Vec<String>,
+    /// Number of implication consequents derived from the condition tree.
+    pub expected_consequents: u32,
+}
+
+/// One generated oracle of a V2 clause's Boolean condition.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct V2ClauseOracle {
     /// The operation's checked provenance.
     pub provenance: OperationProvenance,
-    /// Self-contained generated Rust source.
+    /// Self-contained generated Rust source. Retained in memory for harness embedding.
+    #[serde(skip)]
     pub source: String,
-    /// Ordered field and operation values expected by the generated function.
-    pub inputs: Vec<ClauseOracleInput>,
+    /// Descriptor derived from the admitted condition.
+    pub descriptor: V2ClauseDescriptor,
     /// Probe regions derived from the generated source and the checked condition.
     pub source_map: Vec<V2ClauseCoverageRegion>,
+}
+
+/// The one requested clause's generated-or-refused disposition.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct V2ClauseClaim {
+    /// Exact requested node.
+    pub node_id: CheckedNodeId,
+    /// Generated oracle or typed refusal.
+    pub result: ClaimDisposition<V2ClauseOracle, V2ClauseRefusal>,
 }
 
 /// One source span for a V2 clause condition oracle.
@@ -61,7 +85,8 @@ pub struct V2ClauseCoverageRegion {
 }
 
 /// Why a selected clause condition could not be generated.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum V2ClauseRefusal {
     /// The checked clause's body is outside this generator's supported shape.
     UnsupportedCondition,
@@ -71,11 +96,44 @@ pub enum V2ClauseRefusal {
     Render,
 }
 
-/// Generate a checked V2 clause's Boolean condition oracle.
-pub fn generate_v2_clause_oracle(
+/// Derive the typed descriptor of an admitted V2 clause condition without rendering source.
+pub fn derive_v2_clause_descriptor(
     package: &CheckedPackageV2,
     node_id: &CheckedNodeId,
-) -> Result<V2ClauseOracle, V2ClauseRefusal> {
+) -> Result<V2ClauseDescriptor, V2ClauseRefusal> {
+    Ok(plan_clause(package, node_id)?.descriptor)
+}
+
+/// Settle one selected clause as one typed claim-map entry.
+pub fn generate_v2_clause_claim_map(
+    package: &CheckedPackageV2,
+    node_id: &CheckedNodeId,
+) -> ClaimMap<V2ClauseClaim> {
+    let result = match generate_v2_clause_oracle(package, node_id) {
+        Ok(generated) => ClaimDisposition::Generated(Box::new(generated)),
+        Err(refusal) => ClaimDisposition::Refused { refusal },
+    };
+    ClaimMap {
+        package_id: package.package_id().clone(),
+        blocked: Vec::new(),
+        items: vec![V2ClauseClaim {
+            node_id: node_id.clone(),
+            result,
+        }],
+    }
+}
+
+struct PreparedClause {
+    descriptor: V2ClauseDescriptor,
+    names: BTreeMap<ClauseInput, String>,
+    plan: Vec<Step>,
+    root: usize,
+}
+
+fn plan_clause(
+    package: &CheckedPackageV2,
+    node_id: &CheckedNodeId,
+) -> Result<PreparedClause, V2ClauseRefusal> {
     let clause = package
         .graph()
         .nodes
@@ -110,6 +168,50 @@ pub fn generate_v2_clause_oracle(
     if plan.get(root).ok_or(V2ClauseRefusal::Render)?.kind != ValueKind::Boolean {
         return Err(V2ClauseRefusal::UnsupportedCondition);
     }
+    let operation_identities = plan
+        .iter()
+        .filter_map(|step| match &step.term {
+            StepTerm::Operation { identity, .. } => Some(identity.clone()),
+            _ => None,
+        })
+        .collect();
+    let inputs = condition
+        .inputs
+        .iter()
+        .map(|input| {
+            Ok(ClauseOracleInput {
+                name: names.get(input).ok_or(V2ClauseRefusal::Render)?.clone(),
+                lower: input.lower,
+                upper: input.upper,
+            })
+        })
+        .collect::<Result<Vec<_>, V2ClauseRefusal>>()?;
+    let descriptor = V2ClauseDescriptor {
+        node_id: node_id.clone(),
+        condition_node_id: condition.condition_node_id,
+        inputs,
+        operation_identities,
+        expected_consequents: consequent_count(&plan)?,
+    };
+    Ok(PreparedClause {
+        descriptor,
+        names,
+        plan,
+        root,
+    })
+}
+
+/// Generate a checked V2 clause's Boolean condition oracle.
+pub fn generate_v2_clause_oracle(
+    package: &CheckedPackageV2,
+    node_id: &CheckedNodeId,
+) -> Result<V2ClauseOracle, V2ClauseRefusal> {
+    let PreparedClause {
+        descriptor,
+        names,
+        plan,
+        root,
+    } = plan_clause(package, node_id)?;
     let operations = plan
         .iter()
         .enumerate()
@@ -149,20 +251,9 @@ pub fn generate_v2_clause_oracle(
     }
     let source_map = coverage_regions(&source, node_id, &plan)?;
     Ok(V2ClauseOracle {
-        node_id: node_id.clone(),
         provenance: OperationProvenance::IrConfirmed,
         source,
-        inputs: condition
-            .inputs
-            .iter()
-            .map(|input| {
-                Ok(ClauseOracleInput {
-                    name: names.get(input).ok_or(V2ClauseRefusal::Render)?.clone(),
-                    lower: input.lower,
-                    upper: input.upper,
-                })
-            })
-            .collect::<Result<Vec<_>, V2ClauseRefusal>>()?,
+        descriptor,
         source_map,
     })
 }
@@ -177,23 +268,7 @@ fn coverage_regions(
         .iter()
         .position(|line| line.starts_with("pub fn oracle_clause("))
         .ok_or(V2ClauseRefusal::Render)?;
-    let census = u32::try_from(
-        plan.iter()
-            .filter(|step| {
-                matches!(
-                    &step.term,
-                    StepTerm::Operation {
-                        operation: ExactScalarOperation::Boolean {
-                            operator: BooleanOperator::Implies,
-                            ..
-                        },
-                        ..
-                    }
-                )
-            })
-            .count(),
-    )
-    .map_err(|_| V2ClauseRefusal::Render)?;
+    let census = consequent_count(plan)?;
     let mut regions = vec![coverage_region(
         node_id,
         "oracle_evaluation",
@@ -239,6 +314,26 @@ fn coverage_regions(
         )?);
     }
     Ok(regions)
+}
+
+fn consequent_count(plan: &[Step]) -> Result<u32, V2ClauseRefusal> {
+    u32::try_from(
+        plan.iter()
+            .filter(|step| {
+                matches!(
+                    &step.term,
+                    StepTerm::Operation {
+                        operation: ExactScalarOperation::Boolean {
+                            operator: BooleanOperator::Implies,
+                            ..
+                        },
+                        ..
+                    }
+                )
+            })
+            .count(),
+    )
+    .map_err(|_| V2ClauseRefusal::Render)
 }
 
 fn coverage_region(

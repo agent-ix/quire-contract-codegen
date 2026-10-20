@@ -203,7 +203,8 @@ pub use crate::core::diagnostic::{
 };
 pub use crate::core::source_map::{SourceProbe, SourceRegion};
 pub use crate::oracle::clause::{
-    generate_v2_clause_oracle, ClauseOracleInput, V2ClauseCoverageRegion, V2ClauseOracle,
+    derive_v2_clause_descriptor, generate_v2_clause_claim_map, generate_v2_clause_oracle,
+    ClauseOracleInput, V2ClauseClaim, V2ClauseCoverageRegion, V2ClauseDescriptor, V2ClauseOracle,
     V2ClauseRefusal,
 };
 pub use core::canonical::DigestError;

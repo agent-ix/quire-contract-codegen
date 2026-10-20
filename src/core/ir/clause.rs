@@ -39,6 +39,7 @@ pub(crate) enum ClauseTerm {
 pub(crate) struct ClauseCondition {
     pub(crate) term: ClauseTerm,
     pub(crate) inputs: Vec<ClauseInput>,
+    pub(crate) condition_node_id: Option<CheckedNodeId>,
 }
 
 fn node_id(value: &Value) -> Option<CheckedNodeId> {
@@ -288,5 +289,6 @@ pub(crate) fn read_clause(
     Some(ClauseCondition {
         term,
         inputs: reader.inputs.into_iter().collect(),
+        condition_node_id: reference(condition),
     })
 }

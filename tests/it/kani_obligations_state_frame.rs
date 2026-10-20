@@ -46,7 +46,9 @@ use qsl_replay::{
     InconclusiveCause, OperationSite, ReplayRefusal, ReplayResult, ReplaySource, TerminalValue,
     Verdict, WitnessSettlement,
 };
-use quire_contract_codegen::generate_v2_clause_oracle;
+use quire_contract_codegen::{
+    derive_v2_clause_descriptor, generate_v2_clause_claim_map, generate_v2_clause_oracle,
+};
 use quire_contract_codegen::{
     execute_kani_obligation, generate_state_frame_obligations, negotiate_kani_obligations,
     BoundNotResolvedCause, FrameReplay, FrameReplayError, InvalidObligationItem,
@@ -86,7 +88,7 @@ fn qsl_emitted_state_clause_derives_a_confirmed_field_backed_oracle() {
     let (package, clause) = Twin::new().emitted_package("BalanceNeverDrops");
     let generated = generate_v2_clause_oracle(&package, &clause)
         .expect("the admitted state clause condition is supported");
-    assert_eq!(generated.node_id, clause);
+    assert_eq!(generated.descriptor.node_id, clause);
     assert_eq!(
         generated.provenance,
         quire_contract_codegen::OperationProvenance::IrConfirmed
@@ -95,8 +97,9 @@ fn qsl_emitted_state_clause_derives_a_confirmed_field_backed_oracle() {
     assert!(generated.source.contains("order_numbers"));
     assert!(generated.source.contains("pre_balance"));
     assert!(generated.source.contains("current_balance"));
-    assert_eq!(generated.inputs.len(), 2);
+    assert_eq!(generated.descriptor.inputs.len(), 2);
     assert!(generated
+        .descriptor
         .inputs
         .iter()
         .all(|input| input.lower == 0 && input.upper == 1000));
@@ -142,6 +145,64 @@ fn qsl_emitted_state_clause_derives_a_confirmed_field_backed_oracle() {
 
 #[trace("FR-014-AC-38")]
 #[test]
+fn clause_claim_map_carries_the_derived_descriptor_and_typed_disposition() {
+    let (package, clause) = Twin::new().emitted_package("BalanceNeverDrops");
+    let clause_body = &package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| node.node_id == clause)
+        .unwrap()
+        .body;
+    let condition_node: CheckedNodeId =
+        serde_json::from_value(clause_body["arguments"][2]["target"].clone()).unwrap();
+    let map = generate_v2_clause_claim_map(&package, &clause);
+    assert_eq!(&map.package_id, package.package_id());
+    assert_eq!(map.items.len(), 1);
+    assert_eq!(map.items[0].node_id, clause);
+    let quire_contract_codegen::ClaimDisposition::Generated(generated) = &map.items[0].result
+    else {
+        panic!("the clause claim was not generated");
+    };
+    assert_eq!(generated.descriptor.node_id, clause);
+    assert_eq!(generated.descriptor.condition_node_id, Some(condition_node));
+    assert_eq!(
+        generated.descriptor.operation_identities,
+        ["quire.op.integer.ge"]
+    );
+    assert_eq!(
+        derive_v2_clause_descriptor(&package, &clause),
+        Ok(generated.descriptor.clone())
+    );
+    assert_eq!(
+        generated.provenance,
+        quire_contract_codegen::OperationProvenance::IrConfirmed
+    );
+    let encoded = serde_json::to_value(&map).unwrap();
+    assert_eq!(
+        encoded["items"][0]["node_id"],
+        serde_json::to_value(&clause).unwrap()
+    );
+    assert!(!encoded.to_string().contains("pub fn oracle_clause"));
+    let non_clause = package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| node.node_tag.as_ref() == "expression")
+        .unwrap();
+    let refused = generate_v2_clause_claim_map(&package, &non_clause.node_id);
+    assert_eq!(refused.items.len(), 1);
+    assert_eq!(refused.items[0].node_id, non_clause.node_id);
+    assert!(matches!(
+        refused.items[0].result,
+        quire_contract_codegen::ClaimDisposition::Refused {
+            refusal: quire_contract_codegen::V2ClauseRefusal::NotClause
+        }
+    ));
+}
+
+#[trace("FR-014-AC-38")]
+#[test]
 fn admitted_clause_refuses_non_clause_node() {
     let twin = Twin::new();
     let (package, _) = twin.emitted_package("BalanceNeverDrops");
@@ -167,12 +228,12 @@ fn admitted_inline_clause_keeps_the_clause_identity() {
     });
     let generated = generate_v2_clause_oracle(&admitted.package, &admitted.clause)
         .expect("the admitted inline Boolean condition");
-    assert_eq!(generated.node_id, admitted.clause);
+    assert_eq!(generated.descriptor.node_id, admitted.clause);
     assert_eq!(
         generated.provenance,
         quire_contract_codegen::OperationProvenance::IrConfirmed
     );
-    assert!(generated.inputs.is_empty());
+    assert!(generated.descriptor.inputs.is_empty());
     assert_eq!(generated.source_map[0].expected_consequents, Some(0));
     assert!(generated.source.contains("Ok(true)"));
     let scratch = super::scratch_crate::TemporaryDirectory::new("quire-v2-inline-clause");
@@ -223,7 +284,7 @@ fn qsl_emitted_negated_clause_composes_the_boolean_oracle() {
         Twin::with_negated_balance_clause().emitted_package("BalanceNeverDrops");
     let generated = generate_v2_clause_oracle(&package, &clause)
         .expect("a QSL emitted negated clause condition");
-    assert_eq!(generated.node_id, clause);
+    assert_eq!(generated.descriptor.node_id, clause);
     assert!(generated.source.contains("evaluate_boolean"));
     assert!(generated.source.contains("order_numbers"));
     assert_eq!(generated.source_map[0].expected_consequents, Some(0));
@@ -236,11 +297,61 @@ fn qsl_model_field_range_is_the_clause_input_range() {
         Twin::with_field_ranges((-5, 10), (50, 60)).emitted_package("BalanceNeverDrops");
     let generated = generate_v2_clause_oracle(&package, &clause)
         .expect("a clause over the selected balance field");
-    assert_eq!(generated.inputs.len(), 2);
+    assert_eq!(generated.descriptor.inputs.len(), 2);
     assert!(generated
+        .descriptor
         .inputs
         .iter()
         .all(|input| (input.lower, input.upper) == (-5, 10)));
+}
+
+#[trace("FR-014-AC-38")]
+#[test]
+fn qsl_bounded_operation_parameter_becomes_a_clause_input() {
+    let (package, clause) =
+        Twin::with_bounded_other_condition().emitted_package("BalanceNeverDrops");
+    let generated = generate_v2_clause_oracle(&package, &clause)
+        .expect("a bounded operation parameter is supported");
+    assert_eq!(generated.descriptor.node_id, clause);
+    assert_eq!(generated.descriptor.inputs.len(), 2);
+    assert!(generated
+        .descriptor
+        .inputs
+        .iter()
+        .any(|input| input.name == "parameter_other" && (input.lower, input.upper) == (0, 1000)));
+    assert!(generated
+        .descriptor
+        .inputs
+        .iter()
+        .any(|input| input.name == "current_balance" && (input.lower, input.upper) == (0, 1000)));
+    let scratch = super::scratch_crate::TemporaryDirectory::new("quire-v2-param-clause");
+    fs::write(
+        scratch.path.join("src/lib.rs"),
+        format!(
+            "{}\n#[test]\nfn parameter_values() {{\n    let five = rt::Integer::from(5i64);\n    let four = rt::Integer::from(4i64);\n    let limits = rt::ScalarLimits {{ integer_bits: 1000, decimal_digits: 1000, scale_expansion: 1000, text_input_bytes: 1000, text_scalars: 1000, normalized_scalars: 1000, unit_edges: 1000, value_occurrences: 1000, work_units: 1000, result_units: 1000 }};\n    let mut meter = rt::Meter::new(limits);\n    assert!(matches!(oracle_clause(&five, &four, &mut meter), Ok(rt::Outcome::Completed(true))));\n    let mut meter = rt::Meter::new(limits);\n    assert!(matches!(oracle_clause(&four, &five, &mut meter), Ok(rt::Outcome::Completed(false))));\n}}\n",
+            generated.source
+        ),
+    )
+    .unwrap();
+    super::scratch_crate::write_manifest(
+        &scratch.path,
+        &format!(
+            "[package]\nname = \"generated-v2-param-clause\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
+            super::scratch_crate::runtime_dependency(&["exact"])
+        ),
+    );
+    let output = std::process::Command::new(env!("CARGO"))
+        .args(["test", "--offline", "--quiet"])
+        .env("CARGO_TARGET_DIR", scratch.path.join("target"))
+        .env("RUSTFLAGS", "-Dwarnings")
+        .current_dir(&scratch.path)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "parameter clause failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 }
 
 #[trace("FR-014-AC-38")]
@@ -274,7 +385,7 @@ fn qsl_emitted_clause_composes_boolean_and_integer_operations() {
             Twin::with_balance_condition(expression).emitted_package("BalanceNeverDrops");
         let generated = generate_v2_clause_oracle(&package, &clause)
             .unwrap_or_else(|error| panic!("{expression}: {error:?}"));
-        assert_eq!(generated.node_id, clause);
+        assert_eq!(generated.descriptor.node_id, clause);
         assert!(generated.source.contains("pub fn oracle_clause("));
         let count = u32::try_from(expression.matches("implies").count()).unwrap();
         assert_eq!(generated.source_map[0].expected_consequents, Some(count));
@@ -291,7 +402,7 @@ fn qsl_emitted_clause_composes_boolean_and_integer_operations() {
             let end = (consequent.probe.end_column - 1) as usize;
             assert!(line[start..end].starts_with("value_"));
         }
-        let arguments = "&value, ".repeat(generated.inputs.len());
+        let arguments = "&value, ".repeat(generated.descriptor.inputs.len());
         compiled.push_str(&format!(
             "pub mod case_{index} {{\n{}\n#[test]\nfn runs() {{\n    let value = rt::Integer::from(0i64);\n    let mut meter = rt::Meter::new(rt::ScalarLimits {{ integer_bits: 1000, decimal_digits: 1000, scale_expansion: 1000, text_input_bytes: 1000, text_scalars: 1000, normalized_scalars: 1000, unit_edges: 1000, value_occurrences: 1000, work_units: 1000, result_units: 1000 }});\n    assert!(matches!(oracle_clause({arguments}&mut meter), Ok(rt::Outcome::Completed({expected}))));\n}}\n}}\n",
             generated.source,
