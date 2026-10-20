@@ -297,6 +297,10 @@ fn tc_050_caller_executor_preserves_outcomes_and_refuses_untrusted_execution() {
     );
     let cover = CallerExecutorLane::new("cover-unsatisfied", Some(&report), 0);
     let evidence = execute_kani_obligation(&cover.request()).expect("classified caller report");
+    assert!(evidence
+        .arguments
+        .iter()
+        .any(|argument| argument == "--tests"));
     assert_eq!(
         evidence.outcome,
         KaniRunOutcome::CoverUnsatisfied {
