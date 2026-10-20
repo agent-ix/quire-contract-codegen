@@ -56,6 +56,40 @@ fn write_crate(root: &Path, harnesses: &[KaniCallerTextObligationHarness]) {
     crate::scratch_crate::write_manifest(&root.join("crate"), &manifest());
 }
 
+fn retain_caller_text_inputs(
+    root: &Path,
+    label: &str,
+    harness: &KaniCallerTextObligationHarness,
+) -> PathBuf {
+    let directory = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join("kani-caller-text-evidence")
+        .join(label);
+    fs::create_dir_all(&directory).expect("create caller evidence directory");
+    fs::write(directory.join("harness.rs"), &harness.rust.contents)
+        .expect("retain authored caller harness");
+    fs::write(directory.join("claim.json"), &harness.record.contents)
+        .expect("retain caller claim and options");
+    for file in ["Cargo.toml", "Cargo.lock"] {
+        fs::copy(root.join("crate").join(file), directory.join(file))
+            .expect("retain executed caller dependency inputs");
+    }
+    directory
+}
+
+fn retain_caller_text_execution(
+    root: &Path,
+    label: &str,
+    harness: &KaniCallerTextObligationHarness,
+    evidence: &quire_contract_codegen::KaniExecutionEvidence,
+) {
+    let directory = retain_caller_text_inputs(root, label, harness);
+    fs::write(
+        directory.join("evidence.json"),
+        serde_json::to_vec_pretty(evidence).expect("serialize caller evidence"),
+    )
+    .expect("retain caller outcome before asserting");
+}
+
 struct CallerExecutorLane {
     root: PathBuf,
     _scratch: crate::scratch_crate::TemporaryDirectory,
@@ -196,8 +230,19 @@ fn tc_050_real_kani_proves_all_caller_text_profiles_and_falsifies_mutation() {
             crate_directory: &crate_directory,
             target_directory: &target_directory,
         };
+        retain_caller_text_inputs(
+            root,
+            &format!("healthy-{}", harness.identity.module_symbol),
+            harness,
+        );
         let evidence = execute_kani_obligation(&request).expect("caller proof executes");
         let selected_path = harness.identity.harness_path().to_string();
+        retain_caller_text_execution(
+            root,
+            &format!("healthy-{}", harness.identity.module_symbol),
+            harness,
+            &evidence,
+        );
         assert_eq!(
             evidence.outcome,
             KaniRunOutcome::Verified,
@@ -238,6 +283,7 @@ fn tc_050_real_kani_proves_all_caller_text_profiles_and_falsifies_mutation() {
     assert_eq!(mutated.rust.contents.matches(original_call).count(), 1);
     mutated.rust.contents = mutated.rust.contents.replace(original_call, changed_call);
     write_crate(root, std::slice::from_ref(&mutated));
+    retain_caller_text_inputs(root, "mutation", &mutated);
     let mutation = execute_kani_obligation(&KaniExecutionRequest {
         home_directory: None,
         cancel: &cancel,
@@ -249,6 +295,7 @@ fn tc_050_real_kani_proves_all_caller_text_profiles_and_falsifies_mutation() {
     .unwrap_or_else(|refusal: KaniExecutionRefusal| {
         panic!("mutated caller proof refused: {refusal}")
     });
+    retain_caller_text_execution(root, "mutation", &mutated, &mutation);
     assert!(matches!(
         mutation.outcome,
         KaniRunOutcome::Falsified { ref counterexample } if !counterexample.is_empty()
@@ -264,6 +311,7 @@ fn tc_050_real_kani_proves_all_caller_text_profiles_and_falsifies_mutation() {
     );
 
     write_crate(root, std::slice::from_ref(selected));
+    retain_caller_text_inputs(root, "restored", selected);
     let restored = execute_kani_obligation(&KaniExecutionRequest {
         home_directory: None,
         cancel: &cancel,
@@ -273,6 +321,7 @@ fn tc_050_real_kani_proves_all_caller_text_profiles_and_falsifies_mutation() {
         target_directory: &root.join("restored-target"),
     })
     .expect("restored caller proof executes");
+    retain_caller_text_execution(root, "restored", selected, &restored);
     assert_eq!(restored.outcome, KaniRunOutcome::Verified);
     assert_eq!(
         restored.caller_text_claim,
