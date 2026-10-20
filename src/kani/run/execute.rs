@@ -2305,16 +2305,21 @@ exec sleep 45
             if scheduled.is_err() {
                 releases.abort();
             }
-            let received = receiver.recv_timeout(cancellation_settlement_budget(remaining_budget));
-            if received.is_err() {
-                releases.abort();
-            }
-            let joined = worker.join();
+            let CancellationSettlement {
+                received,
+                late,
+                joined,
+            } = settle_cancellation_worker(
+                &receiver,
+                cancellation_settlement_budget(remaining_budget),
+                worker,
+                || releases.abort(),
+            );
             releases.settled = scheduled.is_ok() && received.is_ok() && joined.is_ok();
             drop(releases);
             if scheduled.is_err() || received.is_err() || joined.is_err() {
                 eprintln!(
-                    "running cancellation: drained public result {received:#?}; worker state {joined:?}"
+                    "running cancellation: initial receive {received:#?}; late public result {late:#?}; worker state {joined:?}"
                 );
             }
             if stand_in.directory.join("calls.child").is_file() {
@@ -2326,6 +2331,108 @@ exec sleep 45
             joined.expect("running cancellation worker joined after owned teardown");
             received.expect("all sequential groups settled after owned teardown")
         })
+    }
+
+    /// Preserve the first receive failure while collecting a result sent during abort/join.
+    #[cfg(target_os = "linux")]
+    #[derive(Debug)]
+    struct CancellationSettlement<R> {
+        received: Result<R, std::sync::mpsc::RecvTimeoutError>,
+        late: Option<Result<R, std::sync::mpsc::TryRecvError>>,
+        joined: std::thread::Result<()>,
+    }
+
+    #[cfg(target_os = "linux")]
+    fn settle_cancellation_worker<R>(
+        receiver: &std::sync::mpsc::Receiver<R>,
+        budget: Duration,
+        worker: std::thread::ScopedJoinHandle<'_, ()>,
+        abort: impl FnOnce(),
+    ) -> CancellationSettlement<R> {
+        let received = receiver.recv_timeout(budget);
+        if received.is_err() {
+            abort();
+        }
+        let joined = worker.join();
+        let late = received.is_err().then(|| receiver.try_recv());
+        CancellationSettlement {
+            received,
+            late,
+            joined,
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn controller_timeout_retains_result_sent_during_abort_join() {
+        std::thread::scope(|scope| {
+            let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+            let (abort, aborted) = std::sync::mpsc::sync_channel(1);
+            let worker = scope.spawn(move || {
+                aborted
+                    .recv_timeout(T)
+                    .expect("controller abort precedes send");
+                sender
+                    .send(String::from("worker result after controller abort"))
+                    .unwrap();
+            });
+            let settlement = settle_cancellation_worker(&receiver, Duration::ZERO, worker, || {
+                abort.send(()).unwrap();
+            });
+            assert!(matches!(
+                settlement.received,
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+            ));
+            assert_eq!(
+                settlement.late.as_ref().unwrap().as_ref().unwrap(),
+                "worker result after controller abort"
+            );
+            assert!(settlement.joined.is_ok());
+            let diagnostic = format!("{settlement:#?}");
+            eprintln!("controller timeout diagnostic: {diagnostic}");
+            assert!(diagnostic.contains("worker result after controller abort"));
+            let failure = std::panic::catch_unwind(|| {
+                settlement
+                    .received
+                    .expect("initial timeout remains a failure");
+            })
+            .unwrap_err();
+            assert!(failure
+                .downcast_ref::<String>()
+                .unwrap()
+                .contains("initial timeout remains a failure: Timeout"));
+        });
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn controller_timeout_keeps_disconnected_result_and_worker_panic_distinct() {
+        std::thread::scope(|scope| {
+            let (sender, receiver) = std::sync::mpsc::sync_channel::<String>(1);
+            let (abort, aborted) = std::sync::mpsc::sync_channel(1);
+            let worker = scope.spawn(move || {
+                aborted
+                    .recv_timeout(T)
+                    .expect("controller abort precedes worker failure");
+                drop(sender);
+                panic!("execution worker failed after abort");
+            });
+            let settlement = settle_cancellation_worker(&receiver, Duration::ZERO, worker, || {
+                abort.send(()).unwrap();
+            });
+            assert!(matches!(
+                settlement.received,
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+            ));
+            assert!(matches!(
+                settlement.late,
+                Some(Err(std::sync::mpsc::TryRecvError::Disconnected))
+            ));
+            assert_eq!(
+                settlement.joined.unwrap_err().downcast_ref::<&str>(),
+                Some(&"execution worker failed after abort")
+            );
+        });
     }
 
     /// After the first cleanup poll returns: allow its reap, then an independent group's
@@ -2981,14 +3088,15 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
             if scheduled.is_err() {
                 releases.abort();
             }
-            let received = receiver.recv_timeout(cancellation_settlement_budget(T));
-            if received.is_err() {
-                releases.abort();
-            }
-            let joined = worker.join();
+            let CancellationSettlement { received, late, joined } = settle_cancellation_worker(
+                &receiver,
+                cancellation_settlement_budget(T),
+                worker,
+                || releases.abort(),
+            );
             releases.settled = scheduled.is_ok() && received.is_ok() && joined.is_ok();
             drop(releases);
-            eprintln!("controlled withhold={withhold}: settled public result {received:#?}; worker state {joined:?}");
+            eprintln!("controlled withhold={withhold}: initial receive {received:#?}; late public result {late:#?}; worker state {joined:?}");
             for name in ["calls", "calls.ready", "calls.namespace", "calls.child"] {
                 eprintln!(
                     "controlled withhold={withhold}: {name}={:?}",
