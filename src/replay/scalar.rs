@@ -41,7 +41,12 @@ pub fn decode_scalar_falsification(
     let arity = match identity.operation_identity.as_str() {
         "quire.op.integer.add" | "quire.op.integer.sub" | "quire.op.integer.mul" => 2,
         "quire.op.integer.negate" => 1,
-        operation => return Err(failure("cg_scalar_witness_operation_unsupported", operation)),
+        operation => {
+            return Err(failure(
+                "cg_scalar_witness_operation_unsupported",
+                operation,
+            ))
+        }
     };
     if identity.arguments.len() != arity {
         return Err(failure("cg_scalar_witness_schema_arity_mismatch", module));
@@ -87,12 +92,16 @@ pub fn decode_scalar_falsification(
         .iter()
         .zip(&playback.entries)
         .map(|(argument, (comment, bytes))| {
-            let bytes: [u8; 8] = bytes.as_slice().try_into().map_err(|_| {
-                failure("kani_witness_width_mismatch", &argument.identifier)
-            })?;
+            let bytes: [u8; 8] = bytes
+                .as_slice()
+                .try_into()
+                .map_err(|_| failure("kani_witness_width_mismatch", &argument.identifier))?;
             let value = i64::from_le_bytes(bytes);
             if comment.parse::<i64>() != Ok(value) {
-                return Err(failure("kani_witness_comment_mismatch", &argument.identifier));
+                return Err(failure(
+                    "kani_witness_comment_mismatch",
+                    &argument.identifier,
+                ));
             }
             Ok(value)
         })
@@ -162,14 +171,28 @@ mod tests {
         let identity = sum();
         assert_eq!(identity.operation_identity, "quire.op.integer.add");
         assert_eq!(
-            identity.arguments.iter().map(|arg| (arg.minimum, arg.maximum)).collect::<Vec<_>>(),
+            identity
+                .arguments
+                .iter()
+                .map(|arg| (arg.minimum, arg.maximum))
+                .collect::<Vec<_>>(),
             [(0, 9), (10, 20)],
         );
-        assert_eq!(decode_scalar_falsification(&identity, &transcript(&identity, &[3, 17])), Ok(vec![3, 17]));
-        let error = refusal(&identity, &transcript(&identity, &[17, 3]), "cg_scalar_witness_operand_out_of_domain");
+        assert_eq!(
+            decode_scalar_falsification(&identity, &transcript(&identity, &[3, 17])),
+            Ok(vec![3, 17])
+        );
+        let error = refusal(
+            &identity,
+            &transcript(&identity, &[17, 3]),
+            "cg_scalar_witness_operand_out_of_domain",
+        );
         assert_eq!(error.context, identity.arguments[0].identifier);
         let product = identity_for_product();
-        assert_eq!(decode_scalar_falsification(&product, &transcript(&product, &[4, 130])), Ok(vec![4, 130]));
+        assert_eq!(
+            decode_scalar_falsification(&product, &transcript(&product, &[4, 130])),
+            Ok(vec![4, 130])
+        );
     }
 
     fn identity_for_product() -> ScalarObligationIdentity {
@@ -180,13 +203,33 @@ mod tests {
     #[test]
     fn negate_and_literal_singleton_keep_every_draw() {
         let negate = identity(package::BOUNDED_NEGATE, package::Bound::Integer(-9, -1));
-        assert_eq!(decode_scalar_falsification(&negate, &transcript(&negate, &[7])), Ok(vec![7]));
-        let literal = identity(package::TWO_PARAMETER_LITERAL, package::Bound::Integer(0, 29));
-        assert_eq!((literal.arguments[1].minimum, literal.arguments[1].maximum), (1, 1));
-        assert_eq!(decode_scalar_falsification(&literal, &transcript(&literal, &[4, 1])), Ok(vec![4, 1]));
-        refusal(&literal, &transcript(&literal, &[4]), "kani_witness_arity_mismatch");
+        assert_eq!(
+            decode_scalar_falsification(&negate, &transcript(&negate, &[7])),
+            Ok(vec![7])
+        );
+        let literal = identity(
+            package::TWO_PARAMETER_LITERAL,
+            package::Bound::Integer(0, 29),
+        );
+        assert_eq!(
+            (literal.arguments[1].minimum, literal.arguments[1].maximum),
+            (1, 1)
+        );
+        assert_eq!(
+            decode_scalar_falsification(&literal, &transcript(&literal, &[4, 1])),
+            Ok(vec![4, 1])
+        );
+        refusal(
+            &literal,
+            &transcript(&literal, &[4]),
+            "kani_witness_arity_mismatch",
+        );
         for value in [0, 2] {
-            let error = refusal(&literal, &transcript(&literal, &[4, value]), "cg_scalar_witness_operand_out_of_domain");
+            let error = refusal(
+                &literal,
+                &transcript(&literal, &[4, value]),
+                "cg_scalar_witness_operand_out_of_domain",
+            );
             assert_eq!(error.context, literal.arguments[1].identifier);
         }
     }
@@ -196,10 +239,23 @@ mod tests {
     fn inclusive_endpoints_and_adjacent_values_use_each_operands_range() {
         let identity = sum();
         for values in [[0, 10], [9, 20], [0, 20], [9, 10]] {
-            assert_eq!(decode_scalar_falsification(&identity, &transcript(&identity, &values)), Ok(values.to_vec()));
+            assert_eq!(
+                decode_scalar_falsification(&identity, &transcript(&identity, &values)),
+                Ok(values.to_vec())
+            );
         }
-        for (values, index) in [([-1, 10], 0), ([10, 10], 0), ([0, 9], 1), ([0, 21], 1), ([-1, 21], 0)] {
-            let error = refusal(&identity, &transcript(&identity, &values), "cg_scalar_witness_operand_out_of_domain");
+        for (values, index) in [
+            ([-1, 10], 0),
+            ([10, 10], 0),
+            ([0, 9], 1),
+            ([0, 21], 1),
+            ([-1, 21], 0),
+        ] {
+            let error = refusal(
+                &identity,
+                &transcript(&identity, &values),
+                "cg_scalar_witness_operand_out_of_domain",
+            );
             assert_eq!(error.context, identity.arguments[index].identifier);
         }
     }
@@ -209,16 +265,43 @@ mod tests {
     fn harness_arity_width_and_comment_failures_are_distinct() {
         let identity = sum();
         let good = transcript(&identity, &[3, 17]);
-        let wrong_harness = good.replace(&format!("{}::{}", identity.module_symbol, identity.harness_symbol), "other::harness");
-        refusal(&identity, &wrong_harness, "cg_witness_harness_identity_mismatch");
+        let wrong_harness = good.replace(
+            &format!("{}::{}", identity.module_symbol, identity.harness_symbol),
+            "other::harness",
+        );
+        refusal(
+            &identity,
+            &wrong_harness,
+            "cg_witness_harness_identity_mismatch",
+        );
         for values in [vec![], vec![3], vec![3, 17, 19]] {
-            refusal(&identity, &transcript(&identity, &values), "kani_witness_arity_mismatch");
+            refusal(
+                &identity,
+                &transcript(&identity, &values),
+                "kani_witness_arity_mismatch",
+            );
         }
-        for bytes in ["[3]", "[3, 0, 0, 0, 0, 0, 0]", "[3, 0, 0, 0, 0, 0, 0, 0, 0]"] {
-            refusal(&identity, &good.replace("[3, 0, 0, 0, 0, 0, 0, 0]", bytes), "kani_witness_width_mismatch");
+        for bytes in [
+            "[3]",
+            "[3, 0, 0, 0, 0, 0, 0]",
+            "[3, 0, 0, 0, 0, 0, 0, 0, 0]",
+        ] {
+            refusal(
+                &identity,
+                &good.replace("[3, 0, 0, 0, 0, 0, 0, 0]", bytes),
+                "kani_witness_width_mismatch",
+            );
         }
-        refusal(&identity, &good.replace("// 3\n", "// 4\n"), "kani_witness_comment_mismatch");
-        refusal(&identity, &good.replace("// 3\n", "// invalid\n"), "kani_witness_comment_mismatch");
+        refusal(
+            &identity,
+            &good.replace("// 3\n", "// 4\n"),
+            "kani_witness_comment_mismatch",
+        );
+        refusal(
+            &identity,
+            &good.replace("// 3\n", "// invalid\n"),
+            "kani_witness_comment_mismatch",
+        );
     }
 
     #[trace("FR-032-AC-2")]
@@ -227,18 +310,42 @@ mod tests {
         let identity = sum();
         let good = transcript(&identity, &[3, 17]);
         let cover = good.replace("`assertion`", "`cover`");
-        assert_eq!(decode_scalar_falsification(&identity, &format!("{cover}\n{good}")), Ok(vec![3, 17]));
+        assert_eq!(
+            decode_scalar_falsification(&identity, &format!("{cover}\n{good}")),
+            Ok(vec![3, 17])
+        );
         for (text, code) in [
             ("no block".to_owned(), "kani_witness_harness_missing"),
             (cover, "kani_witness_cover_refused"),
-            (format!("{good}\n{good}"), "kani_witness_multiple_assertions_refused"),
-            (good.replace("`assertion`", "`other`"), "kani_witness_check_kind_refused"),
-            (good.replace("/// Check for", "/// Missing"), "kani_witness_check_missing"),
-            (good.replace("\"scalar parity\"", "missing quote"), "kani_witness_check_text_missing"),
-            (good.replace("let concrete_vals", "let missing"), "kani_witness_concrete_vals_missing"),
-            (good.replace("];\nkani", ";\nkani"), "kani_witness_concrete_vals_malformed"),
+            (
+                format!("{good}\n{good}"),
+                "kani_witness_multiple_assertions_refused",
+            ),
+            (
+                good.replace("`assertion`", "`other`"),
+                "kani_witness_check_kind_refused",
+            ),
+            (
+                good.replace("/// Check for", "/// Missing"),
+                "kani_witness_check_missing",
+            ),
+            (
+                good.replace("\"scalar parity\"", "missing quote"),
+                "kani_witness_check_text_missing",
+            ),
+            (
+                good.replace("let concrete_vals", "let missing"),
+                "kani_witness_concrete_vals_missing",
+            ),
+            (
+                good.replace("];\nkani", ";\nkani"),
+                "kani_witness_concrete_vals_malformed",
+            ),
             (good.replace("// 3\n", ""), "kani_witness_comment_missing"),
-            (good.replace("[3, 0, 0, 0, 0, 0, 0, 0]", "[999]"), "kani_witness_byte_invalid"),
+            (
+                good.replace("[3, 0, 0, 0, 0, 0, 0, 0]", "[999]"),
+                "kani_witness_byte_invalid",
+            ),
         ] {
             refusal(&identity, &text, code);
         }
@@ -252,12 +359,19 @@ mod tests {
         refusal(&identity, &oversized, "cg_witness_decode_bytes_limit");
         let mut at_limit = transcript(&identity, &[3, 17]);
         at_limit.push_str(&" ".repeat(PLAYBACK_BYTES - at_limit.len()));
-        assert_eq!(decode_scalar_falsification(&identity, &at_limit), Ok(vec![3, 17]));
+        assert_eq!(
+            decode_scalar_falsification(&identity, &at_limit),
+            Ok(vec![3, 17])
+        );
         let malformed = transcript(&identity, &[-1, 17]).replace("// 17\n", "// 18\n");
         refusal(&identity, &malformed, "kani_witness_comment_mismatch");
         let mut invalid = identity.clone();
         invalid.arguments[0].minimum = 10;
-        let error = refusal(&invalid, &oversized, "cg_scalar_witness_schema_range_invalid");
+        let error = refusal(
+            &invalid,
+            &oversized,
+            "cg_scalar_witness_schema_range_invalid",
+        );
         assert_eq!(error.context, invalid.arguments[0].identifier);
     }
 
@@ -265,16 +379,32 @@ mod tests {
     #[test]
     fn unsupported_operator_and_invalid_persisted_schema_refuse_before_parsing() {
         let identity = sum();
-        for operation in ["quire.op.boolean.implies", "quire.op.integer.div", "unknown"] {
+        for operation in [
+            "quire.op.boolean.implies",
+            "quire.op.integer.div",
+            "unknown",
+        ] {
             let mut unsupported = identity.clone();
             unsupported.operation_identity = operation.to_owned();
-            refusal(&unsupported, "no block", "cg_scalar_witness_operation_unsupported");
+            refusal(
+                &unsupported,
+                "no block",
+                "cg_scalar_witness_operation_unsupported",
+            );
         }
         let mut wrong_arity = identity.clone();
         wrong_arity.arguments.pop();
-        refusal(&wrong_arity, "no block", "cg_scalar_witness_schema_arity_mismatch");
+        refusal(
+            &wrong_arity,
+            "no block",
+            "cg_scalar_witness_schema_arity_mismatch",
+        );
         let mut duplicate = identity.clone();
         duplicate.arguments[1].identifier = duplicate.arguments[0].identifier.clone();
-        refusal(&duplicate, "no block", "cg_scalar_witness_schema_duplicate_binding");
+        refusal(
+            &duplicate,
+            "no block",
+            "cg_scalar_witness_schema_duplicate_binding",
+        );
     }
 }
