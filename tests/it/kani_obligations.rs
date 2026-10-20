@@ -3230,6 +3230,8 @@ fn assert_retained_scalar_content(
             "Cargo.toml",
             "claim-map.json",
             &harness.record.path,
+            "observer/Cargo.lock",
+            "observer/Cargo.toml",
             "source-maps/lib.json",
             "src/bin/ir791_native.rs",
             "src/lib.rs",

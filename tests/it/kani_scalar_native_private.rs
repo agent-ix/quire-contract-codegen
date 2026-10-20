@@ -22,7 +22,7 @@ mod scalar_native_fixture;
 use scalar_native_fixture::routed_scalar_with_artifacts;
 use std::{fs, path::PathBuf, time::Duration};
 
-fn fixture(wall_clock: Duration) -> (KaniScalarObligationHarness, Vec<Artifact>) {
+pub(crate) fn fixture(wall_clock: Duration) -> (KaniScalarObligationHarness, Vec<Artifact>) {
     routed_scalar_with_artifacts(
         package::bounded_increment_package(),
         package::BOUNDED_INCREMENT,
