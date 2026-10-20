@@ -14,7 +14,15 @@ fn fixture(
 ) {
     let (package, node_id) =
         Twin::with_balance_condition(condition).emitted_package("BalanceNeverDrops");
-    let oracle = quire_contract_codegen::generate_v2_clause_oracle(&package, &node_id).unwrap();
+    let input = input_for(&package, node_id);
+    (package, vec![input])
+}
+
+fn input_for(
+    package: &quire_contract_model::CheckedPackageV2,
+    node_id: quire_contract_model::CheckedNodeId,
+) -> V2ClauseCoverageInput<'static> {
+    let oracle = quire_contract_codegen::generate_v2_clause_oracle(package, &node_id).unwrap();
     let source = Box::leak(oracle.source.into_bytes().into_boxed_slice());
     let source_map = Box::leak(
         serde_json::to_vec(&oracle.source_map)
@@ -38,16 +46,13 @@ fn fixture(
         "cargo_llvm_cov":{"manifest_path":"/fixture/Cargo.toml"},
         "data":[{"files":[{"filename":"src/lib.rs","segments":segments}]}]});
     let llvm_export = Box::leak(serde_json::to_vec(&llvm).unwrap().into_boxed_slice());
-    (
-        package,
-        vec![V2ClauseCoverageInput {
-            node_id,
-            source_root: "/fixture",
-            source,
-            source_map,
-            llvm_export: Some(llvm_export),
-        }],
-    )
+    V2ClauseCoverageInput {
+        node_id,
+        source_root: "/fixture",
+        source,
+        source_map,
+        llvm_export: Some(llvm_export),
+    }
 }
 
 fn report(
@@ -100,6 +105,38 @@ fn admitted_clause_body_sets_the_population_and_implication_count() {
     set_counts(&mut inputs[0], &[1, 1, 1]);
     let row = report(&package, &inputs);
     assert_eq!(row["clauses"][0]["classification"], "exercised");
+}
+
+#[trace("FR-004-AC-16", "FR-004-AC-23")]
+#[test]
+fn every_admitted_clause_requires_its_own_generated_source_map_and_export() {
+    let (package, _) = Twin::with_distinct_balance_clauses().emitted_package("BalanceNeverDrops");
+    let clauses: Vec<_> = package
+        .graph()
+        .nodes
+        .iter()
+        .filter(|node| &*node.node_tag == "state" && &*node.semantic_form == "state_clause")
+        .map(|node| node.node_id.clone())
+        .collect();
+    assert_eq!(clauses.len(), 4);
+    let mut inputs: Vec<_> = clauses
+        .into_iter()
+        .map(|node_id| input_for(&package, node_id))
+        .collect();
+    let row = report(&package, &inputs);
+    assert_eq!(row["state"], "complete", "{row}");
+    assert_eq!(row["clauses"].as_array().unwrap().len(), 4);
+    assert!(row["clauses"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|clause| clause["expected_consequents"] == 0));
+
+    inputs.pop();
+    let row = report(&package, &inputs);
+    assert_eq!(row["state"], "invalid_input");
+    assert_eq!(row["clauses"], json!([]));
+    assert_eq!(row["diagnostics"][0]["code"], "population_mismatch");
 }
 
 #[trace("FR-004-AC-19", "FR-004-AC-21", "FR-004-AC-22")]
