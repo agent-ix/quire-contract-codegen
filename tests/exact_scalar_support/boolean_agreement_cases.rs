@@ -10,8 +10,8 @@ mod generated {
 }
 
 use generated::{
-    boolean_and, boolean_eq, boolean_implies, boolean_ne, boolean_not, boolean_or,
-    boolean_short_circuit, integer_eq, integer_ge, integer_gt, integer_le, integer_lt,
+    boolean_and, boolean_eq, boolean_implies, boolean_lazy_and, boolean_lazy_or, boolean_ne,
+    boolean_not, boolean_or, boolean_short_circuit, integer_eq, integer_ge, integer_gt, integer_le, integer_lt,
     integer_ne, OracleStop,
 };
 use ix_trace_rs::trace;
@@ -59,8 +59,16 @@ fn boolean_connectives_agree_in_outcome_charges_counters_and_denials() {
             agree2! {
                 limits: support::rt_side::UNLIMITED,
                 setup: {},
-                direct: |m| evaluate_boolean_short_circuit(ShortCircuitConnective::Implies, left, || right.clone(), m),
-                generated: |m| done(boolean_short_circuit(left, || right.clone(), m)),
+                direct: |m| (
+                    evaluate_boolean_short_circuit(ShortCircuitConnective::Implies, left, || right.clone(), m),
+                    evaluate_boolean_short_circuit(ShortCircuitConnective::And, left, || right.clone(), m),
+                    evaluate_boolean_short_circuit(ShortCircuitConnective::Or, left, || right.clone(), m),
+                ),
+                generated: |m| (
+                    done(boolean_short_circuit(left, || right.clone(), m)),
+                    done(boolean_lazy_and(left, || right.clone(), m)),
+                    done(boolean_lazy_or(left, || right.clone(), m)),
+                ),
             };
         }
     }

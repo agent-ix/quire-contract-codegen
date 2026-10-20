@@ -247,6 +247,14 @@ fn tc_024_v2_boolean_and_equality_oracles_agree_with_direct_runtime() {
             "boolean_short_circuit",
         ),
         (
+            super::exact_scalar_generation::package::DERIVE_BOOLEAN_LAZY_AND,
+            "boolean_lazy_and",
+        ),
+        (
+            super::exact_scalar_generation::package::DERIVE_BOOLEAN_LAZY_OR,
+            "boolean_lazy_or",
+        ),
+        (
             super::exact_scalar_generation::package::DERIVE_INTEGER_EQ,
             "integer_eq",
         ),

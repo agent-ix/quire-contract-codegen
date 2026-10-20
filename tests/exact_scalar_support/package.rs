@@ -4053,6 +4053,8 @@ pub const DERIVE_BOOLEAN_NE: u32 = 2305;
 pub const DERIVE_INTEGER_NE: u32 = 2306;
 pub const DERIVE_BOOLEAN_SHORT_CIRCUIT: u32 = 2307;
 pub const DERIVE_INTEGER_GT: u32 = 2308;
+pub const DERIVE_BOOLEAN_LAZY_AND: u32 = 2309;
+pub const DERIVE_BOOLEAN_LAZY_OR: u32 = 2310;
 /// `rational.div` over one integer and one rational operand: neither overload applies.
 pub const DERIVE_MIXED_DIV: u32 = 2042;
 /// `numeric.convert` to an integer result: only a text result is derivable.
@@ -4340,22 +4342,28 @@ pub fn derivation_package() -> PackageBuilder {
             &[],
         );
     }
-    builder.application_bounded(
-        DERIVE_BOOLEAN_SHORT_CIRCUIT,
-        "expression",
-        "binary",
-        &key(T_BOOLEAN),
-        application(
+    for (code, identity) in [
+        (DERIVE_BOOLEAN_SHORT_CIRCUIT, "quire.op.boolean.implies"),
+        (DERIVE_BOOLEAN_LAZY_AND, "quire.op.boolean.and"),
+        (DERIVE_BOOLEAN_LAZY_OR, "quire.op.boolean.or"),
+    ] {
+        builder.application_bounded(
+            code,
+            "expression",
             "binary",
-            op("quire.op.boolean.implies"),
             &key(T_BOOLEAN),
-            vec![
-                literal("boolean", "false"),
-                reference(code_id(DERIVE_BOOLEAN_NOT).digest.as_ref()),
-            ],
-        ),
-        &[],
-    );
+            application(
+                "binary",
+                op(identity),
+                &key(T_BOOLEAN),
+                vec![
+                    literal("boolean", "false"),
+                    reference(code_id(DERIVE_BOOLEAN_NOT).digest.as_ref()),
+                ],
+            ),
+            &[],
+        );
+    }
     let mixed_keys = [int.clone(), rat];
     let integer_operand = builder.dedicated_operand_tagged("integer", &mixed_keys, "derive-mixed");
     let rational_operand =

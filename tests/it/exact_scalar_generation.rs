@@ -3190,6 +3190,8 @@ fn tc_024_boolean_and_integer_equality_nodes_generate_confirmed_runtime_oracles(
         DERIVE_BOOLEAN_EQ,
         DERIVE_BOOLEAN_NE,
         DERIVE_BOOLEAN_SHORT_CIRCUIT,
+        DERIVE_BOOLEAN_LAZY_AND,
+        DERIVE_BOOLEAN_LAZY_OR,
         DERIVE_INTEGER_EQ,
         DERIVE_INTEGER_NE,
         1041,
@@ -3251,6 +3253,8 @@ pub(super) fn boolean_oracles() -> ExactScalarOracles {
         DERIVE_BOOLEAN_EQ,
         DERIVE_BOOLEAN_NE,
         DERIVE_BOOLEAN_SHORT_CIRCUIT,
+        DERIVE_BOOLEAN_LAZY_AND,
+        DERIVE_BOOLEAN_LAZY_OR,
         DERIVE_INTEGER_EQ,
         DERIVE_INTEGER_NE,
         1041,
@@ -3287,6 +3291,17 @@ fn tc_024_boolean_oracle_source_map_probes_the_entry_and_implication_consequent(
         .nth(entry_line - 1)
         .expect("line")
         .contains(&format!("pub fn {symbol}")));
+    let probe_token = |source: &str, region: &Value| {
+        let probe = &region["probe"];
+        let line = probe["line"].as_u64().expect("probe line") as usize;
+        let start = probe["startColumn"].as_u64().expect("probe start") as usize;
+        let end = probe["endColumn"].as_u64().expect("probe end") as usize;
+        let text = source.lines().nth(line - 1).expect("probe line exists");
+        text.get(start - 1..end - 1)
+            .expect("probe spans a token")
+            .to_owned()
+    };
+    assert_eq!(probe_token(source, entry), "pub");
     let consequent = &regions[1];
     assert_eq!(consequent["role"], "implication_consequent");
     let consequent_line = consequent["probe"]["line"]
@@ -3298,6 +3313,9 @@ fn tc_024_boolean_oracle_source_map_probes_the_entry_and_implication_consequent(
         .nth(consequent_line - 1)
         .expect("line")
         .contains("right"));
+    assert_eq!(probe_token(source, consequent), "right");
+    assert_eq!(consequent["startLine"], consequent["endLine"]);
+    assert_ne!(entry["startLine"], consequent["startLine"]);
 
     let lazy = derive_one(&package, DERIVE_BOOLEAN_SHORT_CIRCUIT).expect("lazy implies derives");
     let lazy_oracles = generate(&package, &[lazy]);
@@ -3309,6 +3327,8 @@ fn tc_024_boolean_oracle_source_map_probes_the_entry_and_implication_consequent(
         .as_u64()
         .expect("lazy consequent line") as usize;
     assert_eq!(lazy_regions[1]["role"], "implication_consequent");
+    assert_eq!(probe_token(lazy_source, &lazy_regions[0]), "pub");
+    assert_eq!(probe_token(lazy_source, &lazy_regions[1]), "right");
     assert_eq!(
         lazy_source.lines().nth(lazy_line - 1).expect("line").trim(),
         "right()",
@@ -3333,6 +3353,73 @@ fn tc_024_boolean_oracle_source_map_probes_the_entry_and_implication_consequent(
         regions[0]["expectedConsequents"], 0,
         "the node is an and node"
     );
+
+    let all = boolean_oracles();
+    let all_source = contents(&all, "src/lib.rs");
+    let all_regions: Vec<Value> =
+        serde_json::from_str(contents(&all, "source-maps/lib.json")).expect("all coverage");
+    let generated = all
+        .claim_map
+        .items
+        .iter()
+        .filter(|claim| matches!(claim.result, ClaimDisposition::Generated(_)))
+        .collect::<Vec<_>>();
+    let entries = all_regions
+        .iter()
+        .filter(|region| region["role"] == "oracle_evaluation")
+        .collect::<Vec<_>>();
+    assert_eq!(
+        entries.len(),
+        generated.len(),
+        "one entry per generated oracle"
+    );
+    for claim in generated {
+        let node = serde_json::to_value(&claim.node_id).expect("node identity");
+        let own_entries = entries
+            .iter()
+            .filter(|region| region["nodeId"] == node)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            own_entries.len(),
+            1,
+            "one entry for {}",
+            claim.node_id.digest
+        );
+        let entry = own_entries[0];
+        let ClaimDisposition::Generated(generated) = &claim.result else {
+            unreachable!("generated claims were selected above")
+        };
+        let entry_line = entry["startLine"].as_u64().expect("entry line") as usize;
+        assert!(all_source
+            .lines()
+            .nth(entry_line - 1)
+            .expect("entry line exists")
+            .contains(&format!("pub fn {}", generated.symbol)));
+        assert_eq!(probe_token(all_source, entry), "pub");
+        assert_eq!(entry["startLine"], entry["endLine"]);
+        let claim_regions = all_regions
+            .iter()
+            .filter(|region| region["nodeId"] == node && region["role"] == "implication_consequent")
+            .collect::<Vec<_>>();
+        for region in claim_regions {
+            assert_eq!(probe_token(all_source, region), "right");
+            assert_ne!(entry["startLine"], region["startLine"]);
+        }
+    }
+
+    for changed_count in [0, 2] {
+        let mut changed = lazy_regions.clone();
+        if changed_count == 0 {
+            changed.remove(1);
+        } else {
+            changed.push(changed[1].clone());
+        }
+        assert_eq!(
+            changed[0]["expectedConsequents"], 1,
+            "declared node count is independent of {changed_count} emitted regions"
+        );
+        assert_eq!(changed.len() - 1, changed_count);
+    }
 }
 
 /// The shared scan names every token the two
