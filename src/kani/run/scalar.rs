@@ -626,18 +626,23 @@ fn validate_request(request: &KaniScalarNativeRequest<'_>) -> Result<(), KaniSca
             "selected oracle argument order differs from retained scalar identity",
         ));
     }
-    if request.oracle_artifacts.len() != 3
-        || ["Cargo.toml", "src/lib.rs", "claim-map.json"]
-            .iter()
-            .any(|path| {
-                !request
-                    .oracle_artifacts
-                    .iter()
-                    .any(|item| item.path == *path)
-            })
+    if request.oracle_artifacts.len() != 4
+        || [
+            "Cargo.toml",
+            "src/lib.rs",
+            "source-maps/lib.json",
+            "claim-map.json",
+        ]
+        .iter()
+        .any(|path| {
+            !request
+                .oracle_artifacts
+                .iter()
+                .any(|item| item.path == *path)
+        })
     {
         return Err(KaniScalarNativeError::InvalidRequest(
-            "emitted scalar package must contain exactly its generated manifest, library and claim map",
+            "emitted scalar package must contain exactly its generated manifest, library, coverage map and claim map",
         ));
     }
     let Some(manifest) = request

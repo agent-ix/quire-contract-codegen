@@ -23,17 +23,17 @@ use std::sync::{Mutex, OnceLock};
 
 use quire_contract_codegen::oracle::operator_catalog::IntegerOperator;
 use quire_contract_codegen::{
-    DecimalOperator, ExactScalarItem, ExactScalarOperation, IeeeArithmeticOperator,
-    OrderingOperandKind, QuantityOperator, RationalOperator,
+    BooleanOperator, DecimalOperator, EqualityOperandKind, ExactScalarItem, ExactScalarOperation,
+    IeeeArithmeticOperator, OrderingOperandKind, QuantityOperator, RationalOperator,
 };
 use quire_contract_model::{
     derive_application_node_id, ApplicationNodeDraft, CheckedNodeId, CheckedPackageEvidence,
     CheckedPackageReadLimits, CheckedPackageV2, CheckedPackageV2ReadResult, CheckedSemanticNodeV2,
 };
 use quire_contract_runtime::exact::{
-    ComparisonOperator, DecimalType, DivisionProfile, IeeeComparison, IeeeWidth, Integer,
-    IntegerDomain, IntegerInterval, OrderingOperator, RationalDomain, RoundingMode, TextProfile,
-    TextType,
+    ComparisonOperator, DecimalType, DivisionProfile, EqualityOperator, IeeeComparison, IeeeWidth,
+    Integer, IntegerDomain, IntegerInterval, OrderingOperator, RationalDomain, RoundingMode,
+    TextProfile, TextType,
 };
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -2068,6 +2068,25 @@ fn integer_pair_for_operand(code: u32, operand_ref: &str) -> Value {
 fn corpus_operation(expr: &Expression) -> (&'static str, Value) {
     use ExactScalarOperation as Op;
     match &expr.operation {
+        Op::Boolean { operator, .. } => (
+            expr.operator,
+            op(match operator {
+                BooleanOperator::And => "quire.op.boolean.and",
+                BooleanOperator::Or => "quire.op.boolean.or",
+                BooleanOperator::Not => "quire.op.boolean.not",
+                BooleanOperator::Implies => "quire.op.boolean.implies",
+            }),
+        ),
+        Op::Equality { operator, operands } => (
+            expr.operator,
+            op(match (operands, operator) {
+                (EqualityOperandKind::Boolean, EqualityOperator::Equal) => "quire.op.boolean.eq",
+                (EqualityOperandKind::Boolean, EqualityOperator::NotEqual) => "quire.op.boolean.ne",
+                (EqualityOperandKind::Integer, EqualityOperator::Equal) => "quire.op.integer.eq",
+                (EqualityOperandKind::Integer, EqualityOperator::NotEqual) => "quire.op.integer.ne",
+                _ => panic!("unknown equality operator"),
+            }),
+        ),
         Op::IntegerArithmetic { operator, .. } => {
             let identity = match operator {
                 IntegerOperator::Add => "quire.op.integer.add",
@@ -4022,8 +4041,18 @@ impl PackageBuilder {
 
 /// `x rem 2` over `Int[-5, 5]`: `integer.rem` has no derivable descriptor.
 pub const DERIVE_REM: u32 = 2040;
-/// `x == 2` over integers: `integer.eq` has no derivable descriptor.
+/// `x == 2` over integers.
 pub const DERIVE_INTEGER_EQ: u32 = 2041;
+/// Checked Boolean connective and equality applications.
+pub const DERIVE_BOOLEAN_AND: u32 = 2300;
+pub const DERIVE_BOOLEAN_OR: u32 = 2301;
+pub const DERIVE_BOOLEAN_NOT: u32 = 2302;
+pub const DERIVE_BOOLEAN_IMPLIES: u32 = 2303;
+pub const DERIVE_BOOLEAN_EQ: u32 = 2304;
+pub const DERIVE_BOOLEAN_NE: u32 = 2305;
+pub const DERIVE_INTEGER_NE: u32 = 2306;
+pub const DERIVE_BOOLEAN_SHORT_CIRCUIT: u32 = 2307;
+pub const DERIVE_INTEGER_GT: u32 = 2308;
 /// `rational.div` over one integer and one rational operand: neither overload applies.
 pub const DERIVE_MIXED_DIV: u32 = 2042;
 /// `numeric.convert` to an integer result: only a text result is derivable.
@@ -4237,6 +4266,95 @@ pub fn derivation_package() -> PackageBuilder {
             vec![reference(&eq_operand), literal("integer", "2")],
         ),
         &[INT],
+    );
+    builder.application_bounded(
+        DERIVE_INTEGER_NE,
+        "expression",
+        "binary",
+        &key(T_BOOLEAN),
+        application(
+            "binary",
+            op("quire.op.integer.ne"),
+            &key(T_BOOLEAN),
+            vec![reference(&eq_operand), literal("integer", "2")],
+        ),
+        &[INT],
+    );
+    builder.application_bounded(
+        DERIVE_INTEGER_GT,
+        "expression",
+        "binary",
+        &key(T_BOOLEAN),
+        application(
+            "binary",
+            op("quire.op.integer.gt"),
+            &key(T_BOOLEAN),
+            vec![reference(&eq_operand), literal("integer", "2")],
+        ),
+        &[INT],
+    );
+    for (code, identity, operator, operands) in [
+        (
+            DERIVE_BOOLEAN_AND,
+            "quire.op.boolean.and",
+            "binary",
+            vec![literal("boolean", "true"), literal("boolean", "false")],
+        ),
+        (
+            DERIVE_BOOLEAN_OR,
+            "quire.op.boolean.or",
+            "binary",
+            vec![literal("boolean", "true"), literal("boolean", "false")],
+        ),
+        (
+            DERIVE_BOOLEAN_NOT,
+            "quire.op.boolean.not",
+            "unary",
+            vec![literal("boolean", "true")],
+        ),
+        (
+            DERIVE_BOOLEAN_IMPLIES,
+            "quire.op.boolean.implies",
+            "binary",
+            vec![literal("boolean", "true"), literal("boolean", "false")],
+        ),
+        (
+            DERIVE_BOOLEAN_EQ,
+            "quire.op.boolean.eq",
+            "binary",
+            vec![literal("boolean", "true"), literal("boolean", "false")],
+        ),
+        (
+            DERIVE_BOOLEAN_NE,
+            "quire.op.boolean.ne",
+            "binary",
+            vec![literal("boolean", "true"), literal("boolean", "false")],
+        ),
+    ] {
+        builder.application_bounded(
+            code,
+            "expression",
+            operator,
+            &key(T_BOOLEAN),
+            application(operator, op(identity), &key(T_BOOLEAN), operands),
+            &[],
+        );
+    }
+    builder.application_bounded(
+        DERIVE_BOOLEAN_SHORT_CIRCUIT,
+        "expression",
+        "binary",
+        &key(T_BOOLEAN),
+        application(
+            "binary",
+            op("quire.op.boolean.implies"),
+            &key(T_BOOLEAN),
+            vec![
+                literal("boolean", "false"),
+                reference(code_id(DERIVE_BOOLEAN_NOT).digest.as_ref()),
+            ],
+        ),
+        &[],
     );
     let mixed_keys = [int.clone(), rat];
     let integer_operand = builder.dedicated_operand_tagged("integer", &mixed_keys, "derive-mixed");

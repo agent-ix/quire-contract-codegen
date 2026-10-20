@@ -61,8 +61,8 @@ pub struct ClaimMap<C> {
 
 /// Whole-generation failure; per-item problems are refusals, not errors.
 /// Each generator documents which of these it can return:
-/// `LocationMapSerialization` comes only from the function generator, the one
-/// that emits a location map. `UnknownRuntimeVariant` comes from the
+/// `LocationMapSerialization` comes from generators that emit a location or
+/// coverage-probe source map. `UnknownRuntimeVariant` comes from the
 /// generators that match one of Contract Runtime's `#[non_exhaustive]` enums:
 /// the exact-scalar generator (`check_parameters` and its shape, identity and
 /// rendering sites, roughly two dozen in all) and the composite-equality
@@ -110,7 +110,7 @@ pub enum OracleGenerationError {
     },
     /// The claim map could not be serialized.
     ClaimMapSerialization,
-    /// The location map could not be serialized.
+    /// A location or coverage-probe source map could not be serialized.
     LocationMapSerialization,
     /// A previously validated lowering plan violated an internal render invariant.
     InvalidPlanState,

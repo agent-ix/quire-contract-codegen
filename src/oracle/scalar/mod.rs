@@ -53,6 +53,7 @@ use crate::core::contract_package::{
 };
 use crate::core::naming::{bounded_readable_component, unique_names};
 use crate::core::profile::oracle_crate_manifest;
+use crate::core::source_map::SourceProbe;
 use crate::oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
 use crate::oracle::{classify_lowering_failure, direct_unsupported_form, LoweringFailure};
 use num_bigint::BigInt;
@@ -64,9 +65,9 @@ use quire_contract_model::{
     ContractRootViewError,
 };
 use quire_contract_runtime::exact::{
-    ComparisonOperator, DecimalType, DivisionProfile, IeeeComparison, IeeeWidth, Integer,
-    IntegerDomain, IntegerInterval, OrderingOperator, RationalDomain, RoundingMode, TextProfile,
-    TextType,
+    ComparisonOperator, DecimalType, DivisionProfile, EqualityOperator, IeeeComparison, IeeeWidth,
+    Integer, IntegerDomain, IntegerInterval, OrderingOperator, RationalDomain, RoundingMode,
+    TextProfile, TextType,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -188,6 +189,20 @@ pub enum OrderingOperandKind {
 /// The closed set of exact scalar operations this generator emits.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ExactScalarOperation {
+    /// Runtime Boolean connective over decided operands or a stopping right oracle.
+    Boolean {
+        /// Checked connective.
+        operator: BooleanOperator,
+        /// The right operand is an oracle and must be evaluated lazily.
+        right_may_stop: bool,
+    },
+    /// The runtime's typed equality relation over scalar operands.
+    Equality {
+        /// Equality or inequality.
+        operator: EqualityOperator,
+        /// Static type of both operands.
+        operands: EqualityOperandKind,
+    },
     /// `evaluate_integer` in `domain`.
     IntegerArithmetic {
         /// Operator.
@@ -280,6 +295,28 @@ pub enum ExactScalarOperation {
         /// Operator.
         operator: ComparisonOperator,
     },
+}
+
+/// Boolean connective named by a checked operation identity.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BooleanOperator {
+    /// Conjunction.
+    And,
+    /// Disjunction.
+    Or,
+    /// Negation.
+    Not,
+    /// Implication.
+    Implies,
+}
+
+/// Operand type of a checked scalar equality.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum EqualityOperandKind {
+    /// Boolean operands.
+    Boolean,
+    /// Integer operands.
+    Integer,
 }
 
 /// A complete-V1 scalar type form as spelled on the V2 wire.
@@ -579,6 +616,13 @@ pub enum ExactScalarRefusal {
         /// Scalar form found, when the operand has one.
         found: Option<String>,
     },
+    /// The right operand's application status disagrees with the descriptor's evaluation mode.
+    BooleanRightOperandMismatch {
+        /// Whether the request described a stopping right operand.
+        declared_may_stop: bool,
+        /// Whether the checked node's right operand can stop.
+        actual_may_stop: bool,
+    },
     /// The node's `operation.identity` member is absent, violating the IR
     /// admission invariant `check_item`'s callers otherwise rely on.
     MissingOperationIdentity {
@@ -659,7 +703,7 @@ pub struct ExactScalarClaim {
 /// Generation output: the crate files and the claim map they are described by.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExactScalarOracles {
-    /// `Cargo.toml`, `src/lib.rs` and `claim-map.json`, in that order.
+    /// `Cargo.toml`, `src/lib.rs`, `source-maps/lib.json` and `claim-map.json`, in that order.
     pub artifacts: Vec<Artifact>,
     /// Typed claim map, identical to `claim-map.json`. Items ascend by node
     /// id: digest domain, then digest; selected occurrence breaks equal-node ties.
@@ -689,6 +733,11 @@ struct PendingOraclePlan {
     identity: String,
     confirmed: bool,
     operation: ExactScalarOperation,
+    expected_consequents: u32,
+}
+
+fn node_implication_count(node: &CheckedSemanticNodeV2) -> u32 {
+    u32::from(node.body["operation"]["identity"].as_str() == Some("quire.op.boolean.implies"))
 }
 
 impl ExactScalarPlan {
@@ -788,6 +837,7 @@ pub fn plan_exact_scalar_oracles(
                                 identity: identity.clone(),
                                 confirmed,
                                 operation: (*operation).clone(),
+                                expected_consequents: node_implication_count(&node.node),
                             });
                             (
                                 OperationClaim {
@@ -911,6 +961,18 @@ pub fn render_exact_scalar_plan(
             setting: "cg.scalar.source_bytes",
         });
     }
+    let coverage_regions = scalar_coverage_regions(
+        &lib,
+        &claim_map,
+        plan.pending
+            .iter()
+            .map(|oracle| (oracle.claim, &oracle.operation, oracle.expected_consequents)),
+    )?;
+    let mut coverage_bytes = serde_json::to_vec_pretty(&coverage_regions)
+        .map_err(|_| OracleGenerationError::LocationMapSerialization)?;
+    coverage_bytes.push(b'\n');
+    let coverage_text = String::from_utf8(coverage_bytes)
+        .map_err(|_| OracleGenerationError::LocationMapSerialization)?;
     let mut map_bytes = serde_json::to_vec_pretty(&claim_map)
         .map_err(|_| OracleGenerationError::ClaimMapSerialization)?;
     map_bytes.push(b'\n');
@@ -920,10 +982,117 @@ pub fn render_exact_scalar_plan(
         artifacts: vec![
             Artifact::new("Cargo.toml", oracle_crate_manifest(EXACT_SCALAR_CRATE_NAME)),
             Artifact::new("src/lib.rs", lib),
+            Artifact::new("source-maps/lib.json", coverage_text),
             Artifact::new("claim-map.json", map_text),
         ],
         claim_map,
     })
+}
+
+/// Executable source region for one V2 scalar claim. The node id identifies the checked
+/// expression directly: a V2 expression carries no V1 requirement-clause key.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ScalarCoverageRegion {
+    artifact_path: &'static str,
+    node_id: CheckedNodeId,
+    role: &'static str,
+    start_line: u32,
+    end_line: u32,
+    probe: SourceProbe,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    expected_consequents: Option<u32>,
+}
+
+fn scalar_coverage_regions<'a>(
+    source: &str,
+    claims: &ClaimMap<ExactScalarClaim>,
+    pending: impl IntoIterator<Item = (usize, &'a ExactScalarOperation, u32)>,
+) -> Result<Vec<ScalarCoverageRegion>, OracleGenerationError> {
+    let lines = source.lines().collect::<Vec<_>>();
+    let declarations = lines
+        .iter()
+        .enumerate()
+        .filter_map(|(line, text)| {
+            text.strip_prefix("pub fn ")
+                .and_then(|rest| rest.split_once('('))
+                .map(|(symbol, _)| (symbol, line))
+        })
+        .collect::<BTreeMap<_, _>>();
+    let mut regions = Vec::new();
+    for (claim_index, operation, expected_consequents) in pending {
+        let claim = &claims.items[claim_index];
+        let ClaimDisposition::Generated(generated) = &claim.result else {
+            return Err(OracleGenerationError::InvalidPlanState);
+        };
+        let at = *declarations
+            .get(generated.symbol.as_str())
+            .ok_or(OracleGenerationError::InvalidPlanState)?;
+        let entry_line =
+            u32::try_from(at + 1).map_err(|_| OracleGenerationError::InvalidPlanState)?;
+        let entry_column = lines[at]
+            .find("pub fn")
+            .ok_or(OracleGenerationError::InvalidPlanState)?;
+        let entry_column =
+            u32::try_from(entry_column + 1).map_err(|_| OracleGenerationError::InvalidPlanState)?;
+        let entry = ScalarCoverageRegion {
+            artifact_path: "src/lib.rs",
+            node_id: claim.node_id.clone(),
+            role: "oracle_evaluation",
+            start_line: entry_line,
+            end_line: entry_line,
+            probe: SourceProbe {
+                line: entry_line,
+                start_column: entry_column,
+                end_column: entry_column + 3,
+            },
+            expected_consequents: Some(expected_consequents),
+        };
+        regions.push(entry);
+        if let ExactScalarOperation::Boolean {
+            operator: BooleanOperator::Implies,
+            right_may_stop,
+        } = operation
+        {
+            let call_at = lines
+                .iter()
+                .enumerate()
+                .skip(at + 1)
+                .take_while(|(_, line)| !line.starts_with('}'))
+                .find(|(_, line)| {
+                    if *right_may_stop {
+                        line.trim() == "right()"
+                    } else {
+                        line.contains("rt::evaluate_boolean")
+                            && line.contains("Implies")
+                            && line.contains("right")
+                    }
+                })
+                .map(|(line, _)| line)
+                .ok_or(OracleGenerationError::InvalidPlanState)?;
+            let line =
+                u32::try_from(call_at + 1).map_err(|_| OracleGenerationError::InvalidPlanState)?;
+            let column = lines[call_at]
+                .rfind("right")
+                .ok_or(OracleGenerationError::InvalidPlanState)?;
+            let column =
+                u32::try_from(column + 1).map_err(|_| OracleGenerationError::InvalidPlanState)?;
+            regions.push(ScalarCoverageRegion {
+                artifact_path: "src/lib.rs",
+                node_id: claim.node_id.clone(),
+                role: "implication_consequent",
+                start_line: line,
+                end_line: line,
+                probe: SourceProbe {
+                    line,
+                    start_column: column,
+                    end_column: column + 5,
+                },
+                expected_consequents: None,
+            });
+        }
+    }
+    Ok(regions)
 }
 
 /// A whole-call failure before admitted scalar claims can be published.
@@ -1101,7 +1270,11 @@ fn build_contract_scalar_oracles(
                                 .filter(|entry| entry.node.node_id != *node_id)
                                 .map(|entry| entry.node.node_id.clone())
                                 .collect();
-                            pending.push((claims.len(), operation));
+                            pending.push((
+                                claims.len(),
+                                operation,
+                                node_implication_count(closure.root),
+                            ));
                             (
                                 identity,
                                 ClaimDisposition::Generated(Box::new(GeneratedScalarClaim {
@@ -1146,7 +1319,7 @@ fn build_contract_scalar_oracles(
     let names = unique_names(
         pending
             .iter()
-            .map(|(claim, operation)| {
+            .map(|(claim, operation, _)| {
                 Ok((
                     format!("oracle_{}", operation_name(operation)?),
                     selected_keys[*claim].clone(),
@@ -1155,7 +1328,7 @@ fn build_contract_scalar_oracles(
             .collect::<Result<Vec<_>, OracleGenerationError>>()
             .map_err(ContractScalarError::Oracle)?,
     );
-    for ((claim, operation), symbol) in pending.iter().zip(names) {
+    for ((claim, operation, _), symbol) in pending.iter().zip(names) {
         if matches!(mode, ScalarBuildMode::Preflight) {
             continue;
         }
@@ -1225,6 +1398,21 @@ fn build_contract_scalar_oracles(
             },
         ));
     }
+    let coverage_regions = scalar_coverage_regions(
+        &lib,
+        &claim_map,
+        pending
+            .iter()
+            .map(|(claim, operation, count)| (claim_indexes[*claim], operation, *count)),
+    )
+    .map_err(ContractScalarError::Oracle)?;
+    let mut coverage_bytes = serde_json::to_vec_pretty(&coverage_regions).map_err(|_| {
+        ContractScalarError::Oracle(OracleGenerationError::LocationMapSerialization)
+    })?;
+    coverage_bytes.push(b'\n');
+    let coverage_text = String::from_utf8(coverage_bytes).map_err(|_| {
+        ContractScalarError::Oracle(OracleGenerationError::LocationMapSerialization)
+    })?;
     let mut map_bytes = serde_json::to_vec_pretty(&claim_map)
         .map_err(|_| ContractScalarError::Oracle(OracleGenerationError::ClaimMapSerialization))?;
     map_bytes.push(b'\n');
@@ -1235,6 +1423,7 @@ fn build_contract_scalar_oracles(
             artifacts: vec![
                 Artifact::new("Cargo.toml", oracle_crate_manifest(EXACT_SCALAR_CRATE_NAME)),
                 Artifact::new("src/lib.rs", lib),
+                Artifact::new("source-maps/lib.json", coverage_text),
                 Artifact::new("claim-map.json", map_text),
             ],
             claim_map,
@@ -1491,6 +1680,22 @@ fn check_item<'r>(
         derivation.require_mode(RoundingMode::Exact)?;
         if !quantity_conversion_target_is_unit(graph, &node.node) {
             return Err(derivation.operand_forms_not_derivable().into());
+        }
+    }
+    if let ExactScalarOperation::Boolean { right_may_stop, .. } = operation {
+        let derivation = Derivation {
+            graph,
+            node: &node.node,
+            bounds: BoundView::complete(node),
+            identity: "",
+        };
+        let actual_may_stop = derivation.right_may_stop();
+        if *right_may_stop != actual_may_stop {
+            return Err(ExactScalarRefusal::BooleanRightOperandMismatch {
+                declared_may_stop: *right_may_stop,
+                actual_may_stop,
+            }
+            .into());
         }
     }
     let shape = Shape::of(operation).map_err(ItemCheckError::Generation)?;
@@ -2216,6 +2421,8 @@ fn check_parameters_from_view(
             bounds.equal(BoundForm::TextBounds, read_text_bounds, Some(text_type))?
         }
         ExactScalarOperation::Ordering { .. }
+        | ExactScalarOperation::Boolean { .. }
+        | ExactScalarOperation::Equality { .. }
         | ExactScalarOperation::IeeeComparison { .. }
         | ExactScalarOperation::TextComparison { .. }
         | ExactScalarOperation::EnumComparison { .. }
@@ -2784,6 +2991,16 @@ impl Shape {
     fn of(operation: &ExactScalarOperation) -> Result<Self, OracleGenerationError> {
         use ScalarForm as F;
         Ok(match operation {
+            ExactScalarOperation::Boolean { operator, .. } => match operator {
+                BooleanOperator::Not => Self::unary(&[F::Boolean], F::Boolean),
+                BooleanOperator::And | BooleanOperator::Or | BooleanOperator::Implies => {
+                    Self::binary(&[F::Boolean, F::Boolean], F::Boolean)
+                }
+            },
+            ExactScalarOperation::Equality { operands, .. } => match operands {
+                EqualityOperandKind::Boolean => Self::binary(&[F::Boolean, F::Boolean], F::Boolean),
+                EqualityOperandKind::Integer => Self::binary(&[F::Integer, F::Integer], F::Boolean),
+            },
             ExactScalarOperation::IntegerArithmetic { operator, .. } => match operator {
                 IntegerOperator::Negate => Self::unary(&[F::Integer], F::Integer),
                 IntegerOperator::Add | IntegerOperator::Subtract | IntegerOperator::Multiply => {
@@ -2965,6 +3182,19 @@ fn catalogued_operation(
 ) -> Result<Option<CataloguedOperation>, OracleGenerationError> {
     use ExactScalarOperation as Op;
     Ok(match operation {
+        Op::Boolean { operator, .. } => plain(match operator {
+            BooleanOperator::And => "quire.op.boolean.and",
+            BooleanOperator::Or => "quire.op.boolean.or",
+            BooleanOperator::Not => "quire.op.boolean.not",
+            BooleanOperator::Implies => "quire.op.boolean.implies",
+        }),
+        Op::Equality { operator, operands } => plain(match (operands, operator) {
+            (EqualityOperandKind::Boolean, EqualityOperator::Equal) => "quire.op.boolean.eq",
+            (EqualityOperandKind::Boolean, EqualityOperator::NotEqual) => "quire.op.boolean.ne",
+            (EqualityOperandKind::Integer, EqualityOperator::Equal) => "quire.op.integer.eq",
+            (EqualityOperandKind::Integer, EqualityOperator::NotEqual) => "quire.op.integer.ne",
+            _ => return Err(OracleGenerationError::unknown_variant("EqualityOperator")),
+        }),
         Op::IntegerArithmetic { operator, .. } => plain(match operator {
             IntegerOperator::Add => CatalogOperator::Add.entry().identity,
             IntegerOperator::Subtract => CatalogOperator::Subtract.entry().identity,
@@ -3209,6 +3439,27 @@ fn operation_name(operation: &ExactScalarOperation) -> Result<String, OracleGene
 
 fn operation_identity(operation: &ExactScalarOperation) -> Result<String, OracleGenerationError> {
     Ok(match operation {
+        ExactScalarOperation::Boolean { operator, .. } => {
+            let name = match operator {
+                BooleanOperator::And => "and",
+                BooleanOperator::Or => "or",
+                BooleanOperator::Not => "not",
+                BooleanOperator::Implies => "implies",
+            };
+            format!("boolean.{name}")
+        }
+        ExactScalarOperation::Equality { operator, operands } => {
+            let kind = match operands {
+                EqualityOperandKind::Boolean => "boolean",
+                EqualityOperandKind::Integer => "integer",
+            };
+            let name = match operator {
+                EqualityOperator::Equal => "eq",
+                EqualityOperator::NotEqual => "ne",
+                _ => return Err(OracleGenerationError::unknown_variant("EqualityOperator")),
+            };
+            format!("{kind}.{name}")
+        }
         ExactScalarOperation::IntegerArithmetic { operator, domain } => {
             let name = match operator {
                 IntegerOperator::Add => "add",
@@ -3512,6 +3763,57 @@ impl SourceBuilder {
 
     fn body(&mut self, operation: &ExactScalarOperation) -> Result<Body, OracleGenerationError> {
         Ok(match operation {
+            ExactScalarOperation::Boolean { operator, right_may_stop } => {
+                let (parameters, connective) = match operator {
+                    BooleanOperator::And => (binary("bool"), "And(left, right)"),
+                    BooleanOperator::Or => (binary("bool"), "Or(left, right)"),
+                    BooleanOperator::Not => (unary("bool"), "Not(operand)"),
+                    BooleanOperator::Implies => (binary("bool"), "Implies(left, right)"),
+                };
+                let (parameters, call) = if *right_may_stop {
+                    let kind = match operator {
+                        BooleanOperator::And => "And",
+                        BooleanOperator::Or => "Or",
+                        BooleanOperator::Implies => "Implies",
+                        BooleanOperator::Not => return Err(OracleGenerationError::unknown_variant("BooleanOperator")),
+                    };
+                    (
+                        vec![("left", "bool"), ("right", "impl FnOnce() -> rt::Outcome<bool>")],
+                        format!("Ok(rt::evaluate_boolean_short_circuit(rt::ShortCircuitConnective::{kind}, left, || {{\n        right()\n    }}, meter))"),
+                    )
+                } else {
+                    (parameters, format!("Ok(rt::evaluate_boolean(rt::BooleanConnective::{connective}, meter))"))
+                };
+                Body {
+                    parameters,
+                    output: "bool",
+                    prelude: Vec::new(),
+                    call,
+                }
+            }
+            ExactScalarOperation::Equality { operator, operands } => {
+                let operator = match operator {
+                    EqualityOperator::Equal => "Equal",
+                    EqualityOperator::NotEqual => "NotEqual",
+                    _ => return Err(OracleGenerationError::unknown_variant("EqualityOperator")),
+                };
+                let (ty, value_type, value) = match operands {
+                    EqualityOperandKind::Boolean => ("bool", "Boolean", "Boolean"),
+                    EqualityOperandKind::Integer => ("&rt::Integer", "Integer", "Integer"),
+                };
+                let (left, right) = match operands {
+                    EqualityOperandKind::Boolean => ("left".to_owned(), "right".to_owned()),
+                    EqualityOperandKind::Integer => ("left.clone()".to_owned(), "right.clone()".to_owned()),
+                };
+                Body {
+                    parameters: binary(ty),
+                    output: "bool",
+                    prelude: vec![format!(
+                        "let checked = rt::TypeEnvironment::default().check_equality(rt::EqualityOperator::{operator}, rt::EqualityOperand::typed(rt::ValueType::{value_type}), rt::EqualityOperand::typed(rt::ValueType::{value_type})).map_err(OracleStop::IllTyped)?;"
+                    )],
+                    call: format!("Ok(checked.evaluate(&rt::Value::{value}({left}), &rt::Value::{value}({right}), meter))"),
+                }
+            }
             ExactScalarOperation::IntegerArithmetic { operator, domain } => {
                 let (prelude, domain_argument) = self.integer_arithmetic_bound(domain)?;
                 let (parameters, operation) = match operator {
@@ -3930,6 +4232,8 @@ impl ClaimDerivationRefusal {
 /// every descriptor through both.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Family {
+    Boolean(BooleanOperator),
+    Equality(EqualityOperator, EqualityOperandKind),
     IntegerArithmetic(IntegerOperator),
     IntegerDivision,
     IntegerModulo,
@@ -3958,17 +4262,40 @@ fn family_of_identity(identity: &str) -> Option<Family> {
     use ComparisonOperator as C;
     use OrderingOperandKind as K;
     use OrderingOperator as O;
-    if let Some(entry) = CatalogOperator::from_identity(identity).map(CatalogOperator::entry) {
-        return Some(match entry.family {
-            super::operator_catalog::Family::IntegerArithmetic => {
-                Family::IntegerArithmetic(entry.scalar_operator?)
+    if let Some(catalog_operator) = CatalogOperator::from_identity(identity) {
+        return Some(match catalog_operator {
+            CatalogOperator::Add
+            | CatalogOperator::Subtract
+            | CatalogOperator::Multiply
+            | CatalogOperator::Negate => {
+                Family::IntegerArithmetic(catalog_operator.entry().scalar_operator?)
             }
-            super::operator_catalog::Family::IntegerOrdering => {
-                Family::Ordering(entry.ordering_operator?, OrderingOperandKind::Integer)
+            CatalogOperator::Less
+            | CatalogOperator::LessOrEqual
+            | CatalogOperator::Greater
+            | CatalogOperator::GreaterOrEqual => Family::Ordering(
+                catalog_operator.entry().ordering_operator?,
+                OrderingOperandKind::Integer,
+            ),
+            CatalogOperator::Equal => {
+                Family::Equality(EqualityOperator::Equal, EqualityOperandKind::Integer)
+            }
+            CatalogOperator::NotEqual => {
+                Family::Equality(EqualityOperator::NotEqual, EqualityOperandKind::Integer)
             }
         });
     }
     Some(match identity {
+        "quire.op.boolean.and" => Family::Boolean(BooleanOperator::And),
+        "quire.op.boolean.or" => Family::Boolean(BooleanOperator::Or),
+        "quire.op.boolean.not" => Family::Boolean(BooleanOperator::Not),
+        "quire.op.boolean.implies" => Family::Boolean(BooleanOperator::Implies),
+        "quire.op.boolean.eq" => {
+            Family::Equality(EqualityOperator::Equal, EqualityOperandKind::Boolean)
+        }
+        "quire.op.boolean.ne" => {
+            Family::Equality(EqualityOperator::NotEqual, EqualityOperandKind::Boolean)
+        }
         "quire.op.integer.div" => Family::IntegerDivision,
         "quire.op.integer.mod" => Family::IntegerModulo,
         "quire.op.rational.add" => Family::RationalArithmetic(RationalOperator::Add),
@@ -4091,6 +4418,30 @@ struct Derivation<'a, 'g, 'n> {
 }
 
 impl Derivation<'_, '_, '_> {
+    fn right_may_stop(&self) -> bool {
+        let Some(right) = self.node.body["arguments"]
+            .as_array()
+            .and_then(|args| args.get(1))
+        else {
+            return false;
+        };
+        match right["term"].as_str() {
+            Some("application") => true,
+            Some("reference") => {
+                let Some(target) = right.get("target").and_then(|target| {
+                    serde_json::from_value::<CheckedNodeId>(target.clone()).ok()
+                }) else {
+                    return false;
+                };
+                self.graph.get(&target).is_some_and(|node| {
+                    &*node.node_tag == CheckedNodeTag::Expression.as_wire()
+                        && node.body["term"].as_str() == Some("application")
+                })
+            }
+            _ => false,
+        }
+    }
+
     fn operand_forms_not_derivable(&self) -> ExactScalarRefusal {
         ClaimDerivationRefusal::OperandFormsNotDerivable {
             operation_identity: self.identity.to_owned(),
@@ -4262,6 +4613,14 @@ fn derive_operation_from_view<'g>(
         .refusal()
     })?;
     Ok(match family {
+        Family::Boolean(operator) => Op::Boolean {
+            operator,
+            right_may_stop: matches!(
+                operator,
+                BooleanOperator::And | BooleanOperator::Or | BooleanOperator::Implies
+            ) && derivation.right_may_stop(),
+        },
+        Family::Equality(operator, operands) => Op::Equality { operator, operands },
         Family::IntegerArithmetic(operator) => Op::IntegerArithmetic {
             operator,
             domain: derivation.integer_domain()?,
@@ -5157,6 +5516,22 @@ mod tests {
         let text = TextType::new(0, 4, TextProfile::Nfc).expect("text");
         let mut all = Vec::new();
         for operator in [
+            BooleanOperator::And,
+            BooleanOperator::Or,
+            BooleanOperator::Not,
+            BooleanOperator::Implies,
+        ] {
+            all.push(Op::Boolean {
+                operator,
+                right_may_stop: false,
+            });
+        }
+        for operands in [EqualityOperandKind::Boolean, EqualityOperandKind::Integer] {
+            for operator in [EqualityOperator::Equal, EqualityOperator::NotEqual] {
+                all.push(Op::Equality { operator, operands });
+            }
+        }
+        for operator in [
             IntegerOperator::Add,
             IntegerOperator::Subtract,
             IntegerOperator::Multiply,
@@ -5271,7 +5646,7 @@ mod tests {
     /// The number of `ExactScalarOperation` variants: [`expected_family`]'s match names each, and
     /// adding one fails to compile there until it has an arm. `every_operation` must then carry a
     /// descriptor of it, which the coverage assertion below checks.
-    const OPERATION_VARIANTS: usize = 15;
+    const OPERATION_VARIANTS: usize = 17;
 
     /// The family each descriptor belongs to, by an exhaustive match with no wildcard arm over
     /// `ExactScalarOperation` and, where the operator selects the identity, over the operator.
@@ -5279,6 +5654,8 @@ mod tests {
     fn expected_family(operation: &ExactScalarOperation) -> Option<Family> {
         use ExactScalarOperation as Op;
         Some(match operation {
+            Op::Boolean { operator, .. } => Family::Boolean(*operator),
+            Op::Equality { operator, operands } => Family::Equality(*operator, *operands),
             Op::IntegerArithmetic { operator, .. } => Family::IntegerArithmetic(*operator),
             Op::IntegerDivision { .. } => Family::IntegerDivision,
             Op::IntegerModulo { .. } => Family::IntegerModulo,

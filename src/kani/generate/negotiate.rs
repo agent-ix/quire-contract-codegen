@@ -963,6 +963,7 @@ fn classify_claim<'a>(package: &ContractPackageV1, claim: &ExactScalarClaim) -> 
             | ExactScalarRefusal::BodyMismatch { .. }
             | ExactScalarRefusal::ResultTypeMismatch { .. }
             | ExactScalarRefusal::OperandTypeMismatch { .. }
+            | ExactScalarRefusal::BooleanRightOperandMismatch { .. }
             | ExactScalarRefusal::MissingOperationIdentity { .. } => {
                 Outcome::Unsupported(UnsupportedObligation::OracleRefused {
                     refusal: refusal.clone(),

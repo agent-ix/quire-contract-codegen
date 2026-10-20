@@ -210,3 +210,76 @@ fn tc_024_generated_scalar_crate_agrees_with_direct_runtime() {
         "tests/exact_scalar_support/agreement_cases.rs",
     );
 }
+
+/// Each Boolean connective and scalar equality generated from admitted V2 nodes agrees with
+/// direct Contract Runtime calls in outcomes, charges, counters and each single-charge denial.
+#[trace("FR-014-AC-37", "TC-024")]
+#[test]
+fn tc_024_v2_boolean_and_equality_oracles_agree_with_direct_runtime() {
+    let oracles = super::exact_scalar_generation::boolean_oracles();
+    let aliases = [
+        (
+            super::exact_scalar_generation::package::DERIVE_BOOLEAN_AND,
+            "boolean_and",
+        ),
+        (
+            super::exact_scalar_generation::package::DERIVE_BOOLEAN_OR,
+            "boolean_or",
+        ),
+        (
+            super::exact_scalar_generation::package::DERIVE_BOOLEAN_NOT,
+            "boolean_not",
+        ),
+        (
+            super::exact_scalar_generation::package::DERIVE_BOOLEAN_IMPLIES,
+            "boolean_implies",
+        ),
+        (
+            super::exact_scalar_generation::package::DERIVE_BOOLEAN_EQ,
+            "boolean_eq",
+        ),
+        (
+            super::exact_scalar_generation::package::DERIVE_BOOLEAN_NE,
+            "boolean_ne",
+        ),
+        (
+            super::exact_scalar_generation::package::DERIVE_BOOLEAN_SHORT_CIRCUIT,
+            "boolean_short_circuit",
+        ),
+        (
+            super::exact_scalar_generation::package::DERIVE_INTEGER_EQ,
+            "integer_eq",
+        ),
+        (
+            super::exact_scalar_generation::package::DERIVE_INTEGER_NE,
+            "integer_ne",
+        ),
+        (1041, "integer_lt"),
+        (1044, "integer_le"),
+        (
+            super::exact_scalar_generation::package::DERIVE_INTEGER_GT,
+            "integer_gt",
+        ),
+        (1045, "integer_ge"),
+    ]
+    .map(|(code, alias)| {
+        (
+            super::exact_scalar_generation::symbol(&oracles, code),
+            alias.to_owned(),
+        )
+    });
+    let names = names_file(
+        quire_contract_codegen::EXACT_SCALAR_CRATE_NAME,
+        &aliases,
+        "",
+    );
+    run_agreement_cases(
+        "v2-boolean-scalar-agreement",
+        oracles
+            .artifacts
+            .iter()
+            .map(|artifact| (artifact.path.as_str(), artifact.contents.as_str())),
+        &[("names.rs", names.as_str())],
+        "tests/exact_scalar_support/boolean_agreement_cases.rs",
+    );
+}

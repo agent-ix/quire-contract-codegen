@@ -37,7 +37,7 @@ use serde_json::{json, Value};
 // cross-file code collisions and Mutex-poisoning cascades). Kept duplicated on purpose.
 #[allow(clippy::duplicate_mod)]
 #[path = "../exact_scalar_support/package.rs"]
-mod package;
+pub(super) mod package;
 
 use package::*;
 
@@ -443,7 +443,7 @@ fn tc_052_mismatched_decimal_mode_is_refused_by_reader() {
     assert_eq!(refusal.locus, Some(candidate));
 }
 
-/// The corpus crate is exactly `Cargo.toml`, `src/lib.rs` and `claim-map.json`;
+/// The corpus crate carries its manifest, source, coverage map and claim map;
 /// the claim map on disk is the serialized in-memory claim map; and every
 /// generated claim's oracle symbol is defined in `src/lib.rs`.
 #[trace("FR-014-AC-4", "TC-024")]
@@ -459,7 +459,12 @@ fn tc_024_corpus_crate_artifacts_are_complete_and_self_consistent() {
         .collect::<BTreeSet<_>>();
     assert_eq!(
         paths,
-        BTreeSet::from(["Cargo.toml", "claim-map.json", "src/lib.rs"])
+        BTreeSet::from([
+            "Cargo.toml",
+            "claim-map.json",
+            "source-maps/lib.json",
+            "src/lib.rs"
+        ])
     );
     let on_disk: Value = serde_json::from_str(contents(&oracles, "claim-map.json")).unwrap();
     assert_eq!(on_disk, serde_json::to_value(&oracles.claim_map).unwrap());
@@ -1740,6 +1745,7 @@ fn refusal_variant_name(refusal: &ExactScalarRefusal) -> &'static str {
         ExactScalarRefusal::BodyMismatch { .. } => "BodyMismatch",
         ExactScalarRefusal::ResultTypeMismatch { .. } => "ResultTypeMismatch",
         ExactScalarRefusal::OperandTypeMismatch { .. } => "OperandTypeMismatch",
+        ExactScalarRefusal::BooleanRightOperandMismatch { .. } => "BooleanRightOperandMismatch",
         ExactScalarRefusal::MissingOperationIdentity { .. } => "MissingOperationIdentity",
         ExactScalarRefusal::NoDerivableClaim { .. } => "NoDerivableClaim",
     }
@@ -2233,6 +2239,14 @@ fn tc_024_generated_crate_is_unpublished_charge_free_and_compiles() {
     let directory = TemporaryDirectory::new("quire-exact-scalar-oracles");
     fs::create_dir_all(directory.path.join("src")).unwrap();
     for artifact in &oracles.artifacts {
+        fs::create_dir_all(
+            directory
+                .path
+                .join(&artifact.path)
+                .parent()
+                .expect("artifact parent"),
+        )
+        .unwrap();
         fs::write(directory.path.join(&artifact.path), &artifact.contents).unwrap();
     }
     seed_lock(&directory.path);
@@ -3118,21 +3132,20 @@ fn tc_024_each_overloaded_identity_derives_by_its_own_selector() {
 
 /// The refused set: identities outside the derivable set, nodes that are not applications, and
 /// refused bounds each return their own typed refusal and no descriptor.
-#[trace("FR-014-AC-18", "FR-014-AC-22", "TC-024")]
+#[trace("FR-014-AC-18", "FR-014-AC-22", "FR-014-AC-35", "TC-024")]
 #[test]
 fn tc_024_derivation_refuses_what_it_cannot_derive_with_a_typed_reason() {
     let package = derivation_package().admit();
-    for (code, identity) in [
-        (DERIVE_REM, "quire.op.integer.rem"),
-        (DERIVE_INTEGER_EQ, "quire.op.integer.eq"),
-    ] {
-        assert_eq!(
-            derive_one(&package, code),
-            Err(no_claim(ClaimDerivationRefusal::OperationNotDerivable {
-                operation_identity: identity.to_owned()
-            }))
-        );
-    }
+    assert_eq!(
+        derive_one(&package, DERIVE_REM),
+        Err(no_claim(ClaimDerivationRefusal::OperationNotDerivable {
+            operation_identity: "quire.op.integer.rem".to_owned()
+        }))
+    );
+    assert!(
+        derive_one(&package, DERIVE_INTEGER_EQ).is_ok(),
+        "integer equality must derive a confirmed oracle"
+    );
     assert_eq!(
         derive_one(&package, V_BOOLEAN),
         Err(no_claim(ClaimDerivationRefusal::NotApplication {
@@ -3161,6 +3174,165 @@ fn tc_024_derivation_refuses_what_it_cannot_derive_with_a_typed_reason() {
         bound(AMBIGUOUS),
         ExactScalarRefusal::AmbiguousBound { .. }
     ));
+}
+
+/// Every checked Boolean and integer equality identity derives, confirms and emits the runtime
+/// operator rather than retaining the old operation-not-derivable disposition.
+#[trace("FR-014-AC-35", "TC-024")]
+#[test]
+fn tc_024_boolean_and_integer_equality_nodes_generate_confirmed_runtime_oracles() {
+    let package = derivation_package().admit();
+    let codes = [
+        DERIVE_BOOLEAN_AND,
+        DERIVE_BOOLEAN_OR,
+        DERIVE_BOOLEAN_NOT,
+        DERIVE_BOOLEAN_IMPLIES,
+        DERIVE_BOOLEAN_EQ,
+        DERIVE_BOOLEAN_NE,
+        DERIVE_BOOLEAN_SHORT_CIRCUIT,
+        DERIVE_INTEGER_EQ,
+        DERIVE_INTEGER_NE,
+        1041,
+        1044,
+        DERIVE_INTEGER_GT,
+        1045,
+    ];
+    let items = codes
+        .iter()
+        .map(|code| derive_one(&package, *code).expect("derives"))
+        .collect::<Vec<_>>();
+    let oracles = generate(&package, &items);
+    for code in codes {
+        let id = claim_id(&oracles, code);
+        let claim = oracles
+            .claim_map
+            .items
+            .iter()
+            .find(|claim| claim.node_id == id)
+            .expect("one claim");
+        assert_eq!(claim.operation.provenance, OperationProvenance::IrConfirmed);
+        assert!(matches!(claim.result, ClaimDisposition::Generated(_)));
+    }
+    let source = contents(&oracles, "src/lib.rs");
+    assert!(source.contains("rt::evaluate_boolean("));
+    assert!(source.contains("rt::evaluate_boolean_short_circuit("));
+    assert!(source.contains(".check_equality("));
+    assert!(source.contains("checked.evaluate("));
+}
+
+/// A caller cannot relabel a decided right operand as a stopping oracle.
+#[trace("FR-014-AC-35", "TC-024")]
+#[test]
+fn tc_024_boolean_descriptor_rejects_a_wrong_right_evaluation_mode() {
+    let package = derivation_package().admit();
+    let mut item = derive_one(&package, DERIVE_BOOLEAN_AND).expect("derives");
+    item.operation = ExactScalarOperation::Boolean {
+        operator: quire_contract_codegen::BooleanOperator::And,
+        right_may_stop: true,
+    };
+    let oracles = generate(&package, &[item]);
+    assert_eq!(
+        refusal_of(&oracles, DERIVE_BOOLEAN_AND),
+        ExactScalarRefusal::BooleanRightOperandMismatch {
+            declared_may_stop: true,
+            actual_may_stop: false
+        },
+    );
+}
+
+/// Generate the admitted Boolean/equality corpus for the direct-runtime scratch crate.
+pub(super) fn boolean_oracles() -> ExactScalarOracles {
+    let package = derivation_package().admit();
+    let codes = [
+        DERIVE_BOOLEAN_AND,
+        DERIVE_BOOLEAN_OR,
+        DERIVE_BOOLEAN_NOT,
+        DERIVE_BOOLEAN_IMPLIES,
+        DERIVE_BOOLEAN_EQ,
+        DERIVE_BOOLEAN_NE,
+        DERIVE_BOOLEAN_SHORT_CIRCUIT,
+        DERIVE_INTEGER_EQ,
+        DERIVE_INTEGER_NE,
+        1041,
+        1044,
+        DERIVE_INTEGER_GT,
+        1045,
+    ];
+    let items = codes
+        .iter()
+        .map(|code| derive_one(&package, *code).expect("derives"))
+        .collect::<Vec<_>>();
+    generate(&package, &items)
+}
+
+/// The coverage map names executable tokens in the emitted file and counts implication
+/// consequents from the admitted node, with the evaluation entry outside their regions.
+#[trace("FR-014-AC-36", "TC-024")]
+#[test]
+fn tc_024_boolean_oracle_source_map_probes_the_entry_and_implication_consequent() {
+    let package = derivation_package().admit();
+    let item = derive_one(&package, DERIVE_BOOLEAN_IMPLIES).expect("implies derives");
+    let oracles = generate(&package, &[item]);
+    let symbol = symbol(&oracles, DERIVE_BOOLEAN_IMPLIES);
+    let source = contents(&oracles, "src/lib.rs");
+    let regions: Vec<Value> =
+        serde_json::from_str(contents(&oracles, "source-maps/lib.json")).expect("coverage map");
+    assert_eq!(regions.len(), 2);
+    let entry = &regions[0];
+    assert_eq!(entry["role"], "oracle_evaluation");
+    assert_eq!(entry["expectedConsequents"], 1);
+    let entry_line = entry["probe"]["line"].as_u64().expect("entry line") as usize;
+    assert!(source
+        .lines()
+        .nth(entry_line - 1)
+        .expect("line")
+        .contains(&format!("pub fn {symbol}")));
+    let consequent = &regions[1];
+    assert_eq!(consequent["role"], "implication_consequent");
+    let consequent_line = consequent["probe"]["line"]
+        .as_u64()
+        .expect("consequent line") as usize;
+    assert_ne!(entry_line, consequent_line);
+    assert!(source
+        .lines()
+        .nth(consequent_line - 1)
+        .expect("line")
+        .contains("right"));
+
+    let lazy = derive_one(&package, DERIVE_BOOLEAN_SHORT_CIRCUIT).expect("lazy implies derives");
+    let lazy_oracles = generate(&package, &[lazy]);
+    let lazy_source = contents(&lazy_oracles, "src/lib.rs");
+    let lazy_regions: Vec<Value> =
+        serde_json::from_str(contents(&lazy_oracles, "source-maps/lib.json"))
+            .expect("lazy coverage map");
+    let lazy_line = lazy_regions[1]["probe"]["line"]
+        .as_u64()
+        .expect("lazy consequent line") as usize;
+    assert_eq!(lazy_regions[1]["role"], "implication_consequent");
+    assert_eq!(
+        lazy_source.lines().nth(lazy_line - 1).expect("line").trim(),
+        "right()",
+        "the probe must execute only when the lazy consequent is called"
+    );
+
+    let mut mismatched = derive_one(&package, DERIVE_BOOLEAN_AND).expect("and derives");
+    mismatched.operation = ExactScalarOperation::Boolean {
+        operator: quire_contract_codegen::BooleanOperator::Implies,
+        right_may_stop: false,
+    };
+    let caller_declared = generate(&package, &[mismatched]);
+    let regions: Vec<Value> =
+        serde_json::from_str(contents(&caller_declared, "source-maps/lib.json"))
+            .expect("coverage map");
+    assert_eq!(
+        regions.len(),
+        2,
+        "an implied oracle still renders a consequent region"
+    );
+    assert_eq!(
+        regions[0]["expectedConsequents"], 0,
+        "the node is an and node"
+    );
 }
 
 /// The shared scan names every token the two

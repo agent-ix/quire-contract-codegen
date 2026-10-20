@@ -458,13 +458,20 @@ fn scalar_operation_family(
     package: &quire_contract_model::CheckedPackageV2,
     node_id: &quire_contract_model::CheckedNodeId,
 ) -> Option<KaniFormFamily> {
-    use crate::oracle::scalar::{ExactScalarOperation as Op, OrderingOperandKind};
+    use crate::oracle::scalar::{
+        EqualityOperandKind, ExactScalarOperation as Op, OrderingOperandKind,
+    };
     let item =
         crate::oracle::scalar::derive_exact_scalar_items(package, std::slice::from_ref(node_id))
             .into_iter()
             .next()?
             .ok()?;
     Some(match item.operation {
+        Op::Boolean { .. } => KaniFormFamily::Boolean,
+        Op::Equality { operands, .. } => match operands {
+            EqualityOperandKind::Boolean => KaniFormFamily::Boolean,
+            EqualityOperandKind::Integer => KaniFormFamily::Integer,
+        },
         Op::IntegerArithmetic { .. } | Op::IntegerDivision { .. } | Op::IntegerModulo { .. } => {
             KaniFormFamily::Integer
         }

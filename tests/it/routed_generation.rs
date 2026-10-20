@@ -831,7 +831,12 @@ fn tc_033_an_invalid_kani_item_rejects_the_group_with_driver_indexes() {
                 .iter()
                 .map(|artifact| artifact.path.as_str())
                 .collect::<Vec<_>>()),
-        Some(vec!["Cargo.toml", "src/lib.rs", "claim-map.json"])
+        Some(vec![
+            "Cargo.toml",
+            "src/lib.rs",
+            "source-maps/lib.json",
+            "claim-map.json"
+        ])
     );
     assert_eq!(
         generation
@@ -2497,7 +2502,15 @@ fn tc_033_the_oracle_crate_is_returned_and_defines_the_symbol_the_harness_refere
         .iter()
         .map(|artifact| artifact.path.as_str())
         .collect::<Vec<_>>();
-    assert_eq!(paths, ["Cargo.toml", "src/lib.rs", "claim-map.json"]);
+    assert_eq!(
+        paths,
+        [
+            "Cargo.toml",
+            "src/lib.rs",
+            "source-maps/lib.json",
+            "claim-map.json"
+        ]
+    );
     let lib = &artifacts[1].contents;
 
     let claim_map = generation.claim_map.expect("a Kani group ran");
