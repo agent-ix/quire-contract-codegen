@@ -1,12 +1,12 @@
 //! Shared admitted scalar routing fixture for the integration and private library controls.
-use super::{package, proof_ceilings_with_wall_clock};
-use package::Bound;
 use super::{
     generate_routed, routed_contract_lowering_profile, Artifact, BackendDescriptor, Candidate,
     ContractDriverResultSelection, ContractRequestPosition, GenerationContexts,
     KaniGenerationContext, KaniScalarObligationHarness, KindOutput, ProviderOrigin,
     RoutedGenerationItem,
 };
+use super::{package, proof_ceilings_with_wall_clock};
+use package::Bound;
 use quire_contract_model::{
     CheckedPackageReadLimits, ContractDependencies, ContractPackageReadResult,
     ContractPackageWireV1,

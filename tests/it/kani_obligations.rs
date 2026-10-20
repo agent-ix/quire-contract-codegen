@@ -18,12 +18,14 @@ mod scalar_native_digest;
 #[path = "kani_scalar_native_fixture.rs"]
 mod scalar_native_fixture;
 use crate::common::proof_ceilings::proof_ceilings_with_wall_clock;
+use quire_contract_codegen as scalar_fixture_types;
+use quire_contract_codegen::{
+    generate_routed, Artifact, BackendDescriptor, Candidate, ContractDriverResultSelection,
+    ContractRequestPosition, GenerationContexts, KaniGenerationContext, KindOutput, ProviderOrigin,
+    RoutedGenerationItem,
+};
 use scalar_native_digest::independent_digest;
 use scalar_native_fixture::routed_scalar_with_artifacts;
-use quire_contract_codegen as scalar_fixture_types;
-use quire_contract_codegen::{Artifact, BackendDescriptor, Candidate, ContractDriverResultSelection,
-    ContractRequestPosition, generate_routed, GenerationContexts, KaniGenerationContext, KindOutput,
-    ProviderOrigin, RoutedGenerationItem};
 
 use std::{
     fs,
