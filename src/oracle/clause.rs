@@ -5,7 +5,8 @@ use std::collections::BTreeMap;
 use quire_contract_model::{CheckedNodeId, CheckedPackageV2};
 use serde::{Deserialize, Serialize};
 
-use crate::core::ir::{read_clause, ClauseInput, ClauseInputSide, ClauseTerm};
+use crate::core::artifact::MAX_GENERATED_SOURCE_BYTES;
+use crate::core::ir::clause::{read_clause, ClauseInput, ClauseInputSide, ClauseTerm};
 use crate::core::source_map::SourceProbe;
 
 use super::claim::{ClaimDisposition, ClaimMap};
@@ -246,7 +247,7 @@ pub fn generate_v2_clause_oracle(
         render_step(&mut source, index, step, &names, &parameters, &arguments)?;
     }
     source.push_str(&format!("\n/// The admitted V2 clause condition.\npub fn oracle_clause({parameters}meter: &mut rt::Meter) -> Result<rt::Outcome<bool>, ClauseStop> {{\n    match value_{root}({arguments}meter) {{\n        Ok(value) => Ok(rt::Outcome::Completed(value)),\n        Err(ClauseStop::Runtime(outcome)) => Ok(outcome),\n        Err(other) => Err(other),\n    }}\n}}\n"));
-    if source.len() > crate::MAX_GENERATED_SOURCE_BYTES {
+    if source.len() > MAX_GENERATED_SOURCE_BYTES {
         return Err(V2ClauseRefusal::Render);
     }
     let source_map = coverage_regions(&source, node_id, &plan)?;
