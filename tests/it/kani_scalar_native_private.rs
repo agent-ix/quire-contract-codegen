@@ -125,6 +125,14 @@ fn bounded_single_run_standins_preserve_cancelled_and_timed_out_evidence() {
     };
     use std::os::unix::fs::PermissionsExt;
     use std::sync::atomic::{AtomicBool, Ordering};
+    struct CompletionGuard<'a>(&'a AtomicBool);
+
+    impl Drop for CompletionGuard<'_> {
+        fn drop(&mut self) {
+            self.0.store(true, Ordering::Release);
+        }
+    }
+
     for cancelled in [true, false] {
         let ceiling = if cancelled {
             Duration::from_secs(30)
@@ -157,6 +165,7 @@ fn bounded_single_run_standins_preserve_cancelled_and_timed_out_evidence() {
         let target = control.join("target");
         let completed = AtomicBool::new(false);
         let error = std::thread::scope(|scope| {
+            let completion_guard = CompletionGuard(&completed);
             let watcher = cancelled.then(|| {
                 scope.spawn(|| {
                     while !started.exists() && !completed.load(Ordering::Acquire) {
@@ -180,7 +189,7 @@ fn bounded_single_run_standins_preserve_cancelled_and_timed_out_evidence() {
                     scalar_limits: limits(),
                     target_directory: &target,
                 });
-            completed.store(true, Ordering::Release);
+            drop(completion_guard);
             if let Some(watcher) = watcher {
                 assert!(
                     watcher.join().unwrap(),
