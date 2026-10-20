@@ -174,6 +174,13 @@ invariant harnesses of a healthy subject; run the postcondition harness against 
 run a contract harness whose requires are jointly unsatisfiable; and run a harness against a crate
 whose library source does not contain it.
 
+ScalarLimits owner identity (FR-017-AC-51), **Planned / UNRUN** with IR-17 kernel adoption:
+compile a consumer that constructs `quire_contract_codegen::ScalarLimits` using only CG paths
+and its unchanged fields, types the `KaniScalarNativeRequest::scalar_limits` accessor with that
+same CG type, and assigns the value directly to `quire_exact::ScalarLimits`. Require actual type
+identity without conversion, wrapper or compatibility shim; a source import alone is insufficient.
+Current-main delivery is not credited by the specification amendment.
+
 Private native observer custody (FR-017-AC-45/46/48/49/52/53), **Planned / UNRUN**:
 construct the isolated resolver-2 observer package inside the private snapshot, with the example
 root at `../src/bin/ir791_native.rs`. Verify that this is the single canonical adapter, loading
