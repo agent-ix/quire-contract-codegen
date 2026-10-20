@@ -4,6 +4,26 @@
 use quire_contract_model::{IntegerDomain, IntegerType, OverflowPolicy};
 use serde::{Deserialize, Serialize};
 
+use crate::oracle::operator_catalog::{OperandOrder, Operator, ScalarKaniOperator};
+
+/// Operand count for the catalog's integer scalar Kani profile.
+///
+/// The catalog owns both operation admission and operand order. The exhaustive typed profile
+/// match prevents adding a catalog projection from silently expanding scalar replay support.
+pub(crate) fn integer_scalar_operand_count(identity: &str) -> Option<usize> {
+    let entry = Operator::from_identity(identity)?.entry();
+    match entry.scalar_kani? {
+        ScalarKaniOperator::Add
+        | ScalarKaniOperator::Subtract
+        | ScalarKaniOperator::Multiply
+        | ScalarKaniOperator::Negate => {}
+    }
+    Some(match entry.operands {
+        OperandOrder::Unary => 1,
+        OperandOrder::LeftThenRight => 2,
+    })
+}
+
 /// Position of one primitive dependency in the generated subject ABI.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
