@@ -73,7 +73,8 @@ until specified.
   (quire-contract-runtime interface-001) with the selected accepted QSL item's occurrence key as
   requirement identity and the admitted `CheckedPackageV2::package_id()` as revision identity,
   together with the runtime execution point and clause observations. The occurrence key shall
-  retain its node, role and ordinal; the revision shall retain the complete package id. The
+  retain its node, role and ordinal; the revision shall retain the complete package id, using the
+  canonical V2 rendering below at each borrowed-string runtime boundary. The
   execution-point source remains open (below), so that part of verdict construction is not yet
   testable. CG shall not create a separate requirement-revision artifact.
 - For a false invariant, the runner shall use the failure detail the runtime
@@ -112,6 +113,31 @@ until specified.
   [FR-002](./FR-002-tristate-proptest.md) to the complete supplied report unchanged.
 - When proptest reports a failing case, the runner shall conclude `ConformanceMismatch` after the
   discard-ceiling check, so the runner never concludes the harness `Failed`.
+
+### Canonical V2 identity rendering
+
+For a selected QSL `RequirementItem` whose occurrence was accepted by `export_bindings`, CG shall
+render its `OccurrenceKey` as
+`qocc2_<node>_<role-byte-count>_<role-hex>_<ordinal>`. `<node>` is the `WireNodeId`'s exactly 64
+lowercase hexadecimal digits. `<role-hex>` is the lowercase hexadecimal encoding of every UTF-8
+byte of `occurrence.origin().role().as_str()`, with two digits per byte; `<role-byte-count>` is the
+UTF-8 byte length in base-10 with no leading zero except `0`. `<ordinal>` is the occurrence
+ordinal in base-10 with no leading zero except `0`.
+
+CG shall render the admitted `CheckedPackageV2::package_id()` as
+`qpkg2_<domain-byte-count>_<domain-hex>_<algorithm-byte-count>_<algorithm-hex>_<digest-byte-count>_<digest-hex>`.
+Each count and hex field follows the role rule above, using the exact UTF-8 bytes of the
+`CheckedSemanticId`'s `domain`, `algorithm` and `digest` fields in that order. These encodings
+are injective and reversible; CG shall not truncate, case-fold or substitute any field, compute
+a new identity digest, or treat the digest field alone as the revision. `qocc2_` and `qpkg2_`
+separate the two identity domains. The rendered strings are the values of runtime
+`RequirementId` and `RevisionId`, respectively. Generated headers and source maps shall carry
+these same strings; generated symbol identity suffixes shall be
+`cg_<qocc2-string>_<qpkg2-string>`, where both components follow the grammar above.
+Comparisons shall use the exact typed fields before rendering or the exact canonical strings
+after rendering, rejecting malformed or noncanonical text instead of normalizing it. This is
+an in-memory/text rendering of existing identities, not a separate revision artifact or a
+producer/authentication receipt.
 
 ## Acceptance Criteria
 
