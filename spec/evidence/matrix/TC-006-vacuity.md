@@ -72,6 +72,18 @@ Also omit or change the LLVM producer tool/version identity. The successful case
 identity and the run's requirement/revision; each mismatch or omission is a structured non-success
 result without measured classification or coverage discharge.
 
+For receipt authority, obtain a receipt issued once by CG's own campaign runner inside that run
+while it holds the decoded QSL result, execution record, generated source, source map, LLVM export
+and tool/version bytes. Assert that callers cannot construct its private fields and that decoding
+forwarded wire bytes alone grants no runner authority: substitute a caller-built wire receipt with
+identical self-declared associations but no matching runner-held issuance state and require refusal.
+Compare every retained association against the supplied bytes independently; change only the LLVM
+tool/version bytes as a separate control.
+Set the caller's maximum total retained receipt bytes immediately below the exact association
+size: issuance must return a structured refusal naming that limit and retain no partial receipt.
+Set it to the exact size: issuance and byte-for-byte binding must succeed. Do not use a receipt
+digest as a substitute for the retained bytes or for runner authority.
+
 ## Planned V2 population controls (IR-815)
 
 Admit a `CheckedPackageV2` holding a vacuous implication, a never-evaluated clause, a
@@ -127,8 +139,9 @@ input gives non-success with no invented classification (AC-24); and neither `Bo
    remain CG coverage inputs, not QSL result members.
 
 These controls are planned. QSL-520 must deliver the `/2` producer/reader; QSL-688 allocated the
-separate authenticated result/execution/source/map/export receipt to CG, whose trusted authority and
-verifier still need implementation. The existing `analyze_bound_coverage` primitive does not
+separate result/execution/source/map/export receipt to CG, whose runner issuance and byte-for-byte
+verifier still need implementation. FR-011 OQ-2 leaves the V2 requirement/revision source open.
+The existing `analyze_bound_coverage` primitive does not
 consume a QSL result and is not evidence for these steps.
 
 TC-006 and FR-004 matrix rows remain planned: primitive controls are partial implementation, not
