@@ -38,7 +38,11 @@ fn binding(source: &mut String, binding: &LetBinding) {
             ];
             let mut text = "rt::Meter::new(rt::ScalarLimits {\n".to_owned();
             for (name, value) in fields {
-                let literal = if value == u64::MAX { "u64::MAX".to_owned() } else { value.to_string() };
+                let literal = if value == u64::MAX {
+                    "u64::MAX".to_owned()
+                } else {
+                    value.to_string()
+                };
                 text.push_str(&format!("{name}: {literal},\n"));
             }
             text.push_str("})");

@@ -524,7 +524,10 @@ pub(super) fn render_scalar(
     };
     let record = record(&lowered.module_symbol, &identity, &rust)?;
     Ok(KaniScalarObligationHarness::generated_with_scalar_limits(
-        identity, rust, record, scalar_limits,
+        identity,
+        rust,
+        record,
+        scalar_limits,
     ))
 }
 
@@ -634,7 +637,10 @@ fn render_boolean_implies(
     };
     let record = record(&lowered.module_symbol, &identity, &rust)?;
     Ok(KaniScalarObligationHarness::generated_with_scalar_limits(
-        identity, rust, record, scalar_limits,
+        identity,
+        rust,
+        record,
+        scalar_limits,
     ))
 }
 
@@ -802,7 +808,10 @@ mod {module} {{\n\
     );
     let record = record(&lowered.module_symbol, &identity, &rust)?;
     Ok(KaniScalarObligationHarness::generated_with_scalar_limits(
-        identity, rust, record, crate::kani::abi::SCALAR_HARNESS_LIMITS,
+        identity,
+        rust,
+        record,
+        crate::kani::abi::SCALAR_HARNESS_LIMITS,
     ))
 }
 

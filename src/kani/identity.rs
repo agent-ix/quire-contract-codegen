@@ -435,7 +435,8 @@ impl KaniScalarObligationHarness {
         if !self.has_valid_provenance() {
             return Err(ScalarOriginalLimitsError::GeneratedArtifactChanged);
         }
-        self.original_scalar_limits.ok_or(ScalarOriginalLimitsError::Unavailable)
+        self.original_scalar_limits
+            .ok_or(ScalarOriginalLimitsError::Unavailable)
     }
 
     /// Whether the public retained fields still match the generator-origin seal.

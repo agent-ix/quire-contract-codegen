@@ -223,8 +223,8 @@ pub use kani::identity::{
     CollectionElementIdentity, CollectionKindIdentity, CollectionObligationIdentity,
     CollectionPredicateIdentity, EmbeddedOracle, KaniCollectionObligationHarness,
     KaniObligationHarness, KaniObligationIdentity, KaniScalarObligationHarness, ObligationBinding,
-    ObligationKind, ScalarObligationArgument, ScalarObligationIdentity, ScalarOriginalLimitsError, StateComparison,
-    StateFieldDomain, StateFrameHarness, StateFrameIdentity, StateFrameProperty,
+    ObligationKind, ScalarObligationArgument, ScalarObligationIdentity, ScalarOriginalLimitsError,
+    StateComparison, StateFieldDomain, StateFrameHarness, StateFrameIdentity, StateFrameProperty,
     StateFrameRecordError, StateFrameScope, StateUnrangedField, StateUnrangedReason,
 };
 pub use kani::output::playback::DecodeFailure;
