@@ -89,6 +89,15 @@ pub enum ObligationItem<'a> {
         /// The caller's selected result occurrence, or `NotApplicable` for a direct node claim.
         result_selection: &'a ContractDriverResultSelection,
     },
+    /// One reachability occurrence, selected from a state clause's condition by argument path.
+    GraphClaim {
+        /// The admitted package.
+        package: &'a CheckedPackageV2,
+        /// The state clause containing the occurrence.
+        clause_id: &'a CheckedNodeId,
+        /// Argument positions from the condition root (the root itself has an empty path).
+        argument_path: &'a [usize],
+    },
     /// One selected forall/exists occurrence in an admitted V2 function body.
     CollectionClaim {
         /// The admitted package.
@@ -285,6 +294,15 @@ pub enum UnsupportedObligation {
         /// The domains the IR does carry.
         derived_domains: Vec<DerivedDomain>,
     },
+    /// A graph occurrence has no faithful symbolic encoding.
+    GraphClaimNotRendered {
+        /// Clause identifying the selected occurrence.
+        clause_id: CheckedNodeId,
+        /// Argument path identifying the occurrence within the condition.
+        argument_path: Vec<usize>,
+        /// Exact refusal ground.
+        reason: GraphUnsupportedReason,
+    },
     /// A checked collection claim could not be lowered without changing its source semantics.
     CollectionClaimNotRendered {
         /// The selected quantifier.
@@ -456,6 +474,94 @@ pub enum ObligationDisposition {
     },
 }
 
+/// Typed reasons a graph occurrence cannot produce a harness.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(tag = "reason", rename_all = "snake_case")]
+pub enum GraphUnsupportedReason {
+    /// The clause or path does not locate a reachability application.
+    MissingClaim,
+    /// The emitted application names no population selection.
+    PopulationUnavailable,
+    /// The population accessor refused the selected application.
+    PopulationAccessorRefused {
+        /// Upstream refusal.
+        refusal: GraphAccessorRefusal,
+    },
+    /// The population selector no longer resolves to the admitted source.
+    PopulationSelectionRefused {
+        /// Exact selection outcome.
+        refusal: GraphPopulationRefusal,
+    },
+    /// The destination-end accessor refused the selected reaches application.
+    RelationshipEndRefused {
+        /// Upstream refusal.
+        refusal: GraphAccessorRefusal,
+    },
+    /// The selected field table or name does not resolve.
+    FieldNotAdmitted,
+    /// The selected field is not a reference, option of reference, or reference collection.
+    UnsupportedFieldType,
+    /// The clause condition or operand cannot be encoded faithfully.
+    UnsupportedClaimShape,
+    /// The population and selected edge refer to different object types.
+    PopulationTypeMismatch,
+    /// Symbolic domain does not fit the harness representation or source ceiling.
+    DomainNotRepresentable {
+        /// Authored population maximum whose complete storage failed.
+        population_maximum: u64,
+        /// Authored edge upper bound whose complete storage failed.
+        edge_upper: u64,
+    },
+    /// Distinct full graph identities collided on the bounded Rust symbols.
+    HarnessSymbolCollision,
+    /// The request's memory ceiling cannot hold the complete symbolic domain.
+    DomainExceedsMemoryCeiling {
+        /// Required storage bytes.
+        required: u64,
+        /// Supplied memory ceiling.
+        supplied: u64,
+    },
+    /// The loop bound cannot cover the complete declared population and edge domain.
+    UnwindBelowDomain {
+        /// Required bound.
+        required: u64,
+        /// Supplied bound.
+        supplied: u32,
+    },
+}
+
+/// Typed owner-accessor errors; messages never determine the refusal kind.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GraphAccessorRefusal {
+    /// Node is absent.
+    UnknownNode,
+    /// Node is not a relationship-end reaches application.
+    NotReachesApplication,
+    /// Named population cannot be resolved.
+    UnresolvedPopulation,
+    /// Named destination end cannot be resolved.
+    UnresolvedEnd,
+}
+
+/// Invalid or unavailable typed population selections.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GraphPopulationRefusal {
+    /// Selector names another package.
+    ForeignPackage,
+    /// Binding is absent.
+    StaleBinding,
+    /// Binding is not a population.
+    NotPopulation,
+    /// Type occurrence is absent.
+    MissingOccurrence,
+    /// Object type cannot be resolved.
+    UnknownClosureUnresolvedObjectType,
+    /// Subtype closure cannot be resolved.
+    UnknownClosureUnresolvedSubtypeClosure,
+}
+
 /// Typed reasons a collection claim has no exact symbolic layout or predicate renderer.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -516,6 +622,8 @@ pub enum KaniObligationOutcome {
         scalar_harnesses: Vec<KaniScalarObligationHarness>,
         /// State-clause harnesses, one per `supported` `StateFrame` record, in request order.
         state_frame_harnesses: Vec<StateFrameHarness>,
+        /// Admitted V2 graph claim harnesses, in request order.
+        graph_harnesses: Vec<crate::kani::identity::KaniGraphObligationHarness>,
         /// Admitted V2 collection claim harnesses, in request order.
         collection_harnesses: Vec<KaniCollectionObligationHarness>,
     },

@@ -7,6 +7,8 @@ pub(crate) mod census_validation;
 pub(crate) mod clause;
 // Bounded collection claims over admitted V2 model fields.
 pub(crate) mod collection;
+// Symbolic graph claims at exact state-clause argument paths.
+pub(crate) mod graph;
 // The contract family.
 pub(crate) mod contract;
 // The bounded-Kani corpus family.
