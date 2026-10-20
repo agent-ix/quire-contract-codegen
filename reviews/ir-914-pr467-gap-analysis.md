@@ -34,3 +34,11 @@ CONDITIONAL
 ## Coverage
 
 Computed matrix: AC-35 3 binders; AC-36 1 binder; AC-37 3 binders. Plan completion: not assessed.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Head 6ceeef69 adds admitted lazy And and Or nodes, generated aliases, and differential cases across both left values and completed/refused right outcomes. |
+| FND-002 | still-open | Token columns and per-oracle entry presence are now checked. The dropped/duplicated-region loop mutates an already generated array and rereads its unchanged count; deriving that original count from emitted regions would still pass this test. The all-oracle loop also does not assert each entry's declared count. |
+| FND-002 | fixed | Head 70ca9eb3 derives the two implication identities from admitted fixture IDs and compares each oracle's declared count and emitted consequent-region count to that independent expectation. A dropped or duplicated region now fails even if the renderer changes the declaration to match its region list. The focused tagged test passes. |
