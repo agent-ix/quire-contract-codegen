@@ -920,7 +920,7 @@ fn the_same_reachability_under_two_actual_clauses_has_distinct_identities() {
     assert_ne!(left.identity.clause_id, right.identity.clause_id);
     assert_ne!(left.identity.module_symbol, right.identity.module_symbol);
 }
-#[trace("FR-015-AC-108", "TC-025")]
+#[trace("TC-025")]
 #[test]
 fn the_locked_producer_refuses_an_unbounded_relationship_before_ir_admission() {
     let refusal = try_fixture_source(
