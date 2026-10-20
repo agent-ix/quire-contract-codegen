@@ -82,6 +82,20 @@ const STATE_PATH: &str = "crate::subject::Account";
 const SUBJECT_PATH: &str = "crate::subject::deposit";
 const SUBJECT_SOURCE: &str = include_str!("../state_frame_support/subject.rs");
 
+#[trace("FR-015-AC-119", "TC-025")]
+#[test]
+fn qsl_emits_parameter_only_implication_as_an_admitted_clause() {
+    let (package, clause) =
+        Twin::with_bounded_amount_implication().emitted_package("BalanceNeverDrops");
+    let descriptor = derive_v2_clause_descriptor(&package, &clause)
+        .expect("QSL's parameter-only implication has a clause descriptor");
+    assert_eq!(descriptor.node_id, clause);
+    assert_eq!(descriptor.expected_consequents, 1);
+    assert_eq!(descriptor.inputs.len(), 1);
+    assert_eq!(descriptor.inputs[0].name, "parameter_amount");
+    assert_eq!((descriptor.inputs[0].lower, descriptor.inputs[0].upper), (0, 1000));
+}
+
 #[trace("FR-014-AC-38")]
 #[test]
 fn qsl_emitted_state_clause_derives_a_confirmed_field_backed_oracle() {
