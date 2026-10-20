@@ -122,7 +122,7 @@ fn entered_clause_classifies_zero_some_and_all_consequent_probes() {
         "exercised"
     );
 
-    let (package, mut inputs) = fixture("self.balance >= pre(self.balance)");
+    let (package, mut inputs) = fixture("self.balance >= 0");
     set_counts(&mut inputs[0], &[1]);
     assert_eq!(
         report(&package, &inputs)["clauses"][0]["classification"],
@@ -144,7 +144,7 @@ fn changed_map_census_and_missing_probe_refuse_all_classifications() {
     assert!(row["diagnostics"][0]["message"]
         .as_str()
         .unwrap()
-        .contains("BalanceNeverDrops"));
+        .contains(&format!("{:?}", inputs[0].node_id)));
 
     let (package, mut inputs) = fixture("self.balance >= 0 implies self.balance <= 1000");
     let mut map: Value = serde_json::from_slice(inputs[0].source_map).unwrap();
@@ -158,7 +158,7 @@ fn changed_map_census_and_missing_probe_refuse_all_classifications() {
 #[trace("FR-004-AC-23")]
 #[test]
 fn removing_source_map_or_complete_clause_inventory_prevents_success() {
-    let (package, inputs) = fixture("self.balance >= 0 implies self.balance <= 1000");
+    let (package, _inputs) = fixture("self.balance >= 0 implies self.balance <= 1000");
     let row = report(&package, &[]);
     assert_eq!(row["state"], "invalid_input");
     assert_eq!(row["clauses"], json!([]));
@@ -203,4 +203,72 @@ fn malformed_export_and_wrong_source_root_never_invent_a_classification() {
         row["clauses"][0]["diagnostics"][0]["code"],
         "unavailable_observation"
     );
+}
+
+#[trace("FR-004-AC-16", "FR-004-AC-19", "FR-004-AC-24")]
+#[test]
+fn admitted_v2_oracle_is_vacuous_under_real_llvm_when_consequent_is_skipped() {
+    use std::{fs, path::PathBuf, process::Command};
+
+    let (package, mut inputs) = fixture("self.balance >= 500 implies self.balance <= 1000");
+    let scratch = super::scratch_crate::TemporaryDirectory::new("v2-llvm-coverage");
+    let root = scratch.path.join("package");
+    fs::create_dir_all(root.join("src")).unwrap();
+    fs::create_dir_all(root.join("tests")).unwrap();
+    fs::write(root.join("src/lib.rs"), inputs[0].source).unwrap();
+    fs::write(
+        root.join("tests/native.rs"),
+        "#[test] fn skips_consequent() {\n    let limits = rt::ScalarLimits { integer_bits: 1000, decimal_digits: 1000, scale_expansion: 1000, text_input_bytes: 1000, text_scalars: 1000, normalized_scalars: 1000, unit_edges: 1000, value_occurrences: 1000, work_units: 1000, result_units: 1000 };\n    let mut meter = rt::Meter::new(limits);\n    let value = rt::Integer::from(1i64);\n    assert!(matches!(v2_coverage_native::oracle_clause(&value, &mut meter), Ok(rt::Outcome::Completed(true))));\n}\n",
+    )
+    .unwrap();
+    super::scratch_crate::write_manifest(
+        &root,
+        &format!(
+            "[package]\nname=\"v2-coverage-native\"\nversion=\"0.0.0\"\nedition=\"2021\"\n[dependencies]\n{}\n[workspace]\n",
+            super::scratch_crate::runtime_dependency(&["exact"])
+        ),
+    );
+    let toolchain = format!("+{}", env!("CARGO_PKG_RUST_VERSION"));
+    let sysroot = Command::new("rustc")
+        .args([&toolchain, "--print", "sysroot"])
+        .output()
+        .unwrap();
+    assert!(sysroot.status.success());
+    let tools = PathBuf::from(String::from_utf8(sysroot.stdout).unwrap().trim())
+        .join("lib/rustlib/x86_64-unknown-linux-gnu/bin");
+    for tool in ["llvm-cov", "llvm-profdata"] {
+        assert!(tools.join(tool).is_file());
+    }
+    let run = Command::new("cargo")
+        .args([
+            &toolchain,
+            "llvm-cov",
+            "--offline",
+            "--json",
+            "--output-path",
+        ])
+        .arg(root.join("coverage.json"))
+        .current_dir(&root)
+        .env("CARGO_TARGET_DIR", scratch.path.join("target"))
+        .env("LLVM_COV", tools.join("llvm-cov"))
+        .env("LLVM_PROFDATA", tools.join("llvm-profdata"))
+        .env("CARGO_PROFILE_TEST_OPT_LEVEL", "0")
+        .env_remove("RUSTFLAGS")
+        .env_remove("CARGO_ENCODED_RUSTFLAGS")
+        .output()
+        .unwrap();
+    assert!(
+        run.status.success(),
+        "native LLVM: {}\n{}",
+        String::from_utf8_lossy(&run.stdout),
+        String::from_utf8_lossy(&run.stderr)
+    );
+    let coverage = fs::read(root.join("coverage.json")).unwrap();
+    inputs[0].source_root = Box::leak(root.to_str().unwrap().to_owned().into_boxed_str());
+    inputs[0].llvm_export = Some(Box::leak(coverage.into_boxed_slice()));
+    let row = report(&package, &inputs);
+    assert_eq!(row["state"], "complete", "{row}");
+    assert_eq!(row["clauses"][0]["evaluation_count"], 1);
+    assert_eq!(row["clauses"][0]["consequents"][0]["count"], 0);
+    assert_eq!(row["clauses"][0]["classification"], "vacuous");
 }
