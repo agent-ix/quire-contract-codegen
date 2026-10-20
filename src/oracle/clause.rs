@@ -478,7 +478,7 @@ fn lower(
 }
 
 const STOP_TYPE: &str = r#"
-/// A generated condition stopped or a runtime variant was not recognized.
+/// A generated condition stopped.
 #[derive(Debug)]
 pub enum ClauseStop {
     /// A typed runtime evaluation stop.
@@ -487,8 +487,6 @@ pub enum ClauseStop {
     Oracle(OracleStop),
     /// An admitted integer literal could not be represented.
     InvalidConstant,
-    /// A future runtime outcome variant was returned.
-    UnknownOutcome,
 }
 "#;
 
@@ -499,7 +497,6 @@ fn measured<T>(outcome: rt::Outcome<T>) -> Result<T, ClauseStop> {
         rt::Outcome::Undefined(reason) => Err(ClauseStop::Runtime(rt::Outcome::Undefined(reason))),
         rt::Outcome::Refused(reason) => Err(ClauseStop::Runtime(rt::Outcome::Refused(reason))),
         rt::Outcome::Incomplete(record) => Err(ClauseStop::Runtime(rt::Outcome::Incomplete(record))),
-        _ => Err(ClauseStop::UnknownOutcome),
     }
 }
 "#;
