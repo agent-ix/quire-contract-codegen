@@ -831,7 +831,12 @@ fn tc_033_an_invalid_kani_item_rejects_the_group_with_driver_indexes() {
                 .iter()
                 .map(|artifact| artifact.path.as_str())
                 .collect::<Vec<_>>()),
-        Some(vec!["Cargo.toml", "src/lib.rs", "claim-map.json"])
+        Some(vec![
+            "Cargo.toml",
+            "src/lib.rs",
+            "source-maps/lib.json",
+            "claim-map.json"
+        ])
     );
     assert_eq!(
         generation
@@ -2034,7 +2039,6 @@ struct Derived {
     /// The three rendered nodes and one unrendered node, resolved in this package.
     generated: Vec<CheckedNodeId>,
     rem: CheckedNodeId,
-    integer_eq: CheckedNodeId,
     /// The quantity conversion nodes, one per node code.
     quantity_conversions: Vec<CheckedNodeId>,
 }
@@ -2079,7 +2083,6 @@ fn derived() -> Derived {
         package,
         generated,
         rem: ids.resolve(&package::code_id(package::DERIVE_REM)),
-        integer_eq: ids.resolve(&package::code_id(package::DERIVE_INTEGER_EQ)),
         quantity_conversions: package::QUANTITY_CONVERSIONS
             .iter()
             .map(|code| ids.resolve(&package::code_id(*code)))
@@ -2101,59 +2104,55 @@ fn tc_033_an_underivable_item_keeps_its_refusal_and_its_siblings_are_unaffected(
         .enumerate()
         .map(|(index, node)| route(index, node))
         .collect::<Vec<_>>();
-    for (refused, identity) in [
-        (&derived.rem, "quire.op.integer.rem"),
-        (&derived.integer_eq, "quire.op.integer.eq"),
-    ] {
-        let mut routed = with_siblings.clone();
-        routed.push(route(9, refused));
-        let mixed_input = admitted_routing_input(&derived.package, &routed);
-        let alone = generate_routed(
-            &mixed_input.package,
-            &mixed_input.positions,
-            &with_siblings,
-            &contexts,
-        )
-        .expect("generates siblings from the same admitted package");
-        let mixed = generate_routed(
-            &mixed_input.package,
-            &mixed_input.positions,
-            &routed,
-            &contexts,
-        )
-        .expect("generates");
-        assert!(
-            mixed.rejected.is_empty(),
-            "an underivable item must not reject the group"
-        );
-        let (record, harness) = kani_parts(&mixed.items[4].output);
-        assert_eq!(mixed.items[4].request_index, 9);
-        assert!(harness.is_none());
-        assert_eq!(
-            record.disposition,
-            ObligationDisposition::Unsupported {
-                reason: UnsupportedObligation::NoDerivableClaim {
-                    node_id: refused.clone(),
-                    reason: ClaimDerivationRefusal::OperationNotDerivable {
-                        operation_identity: identity.to_owned()
-                    },
-                }
+    let (refused, identity) = (&derived.rem, "quire.op.integer.rem");
+    let mut routed = with_siblings.clone();
+    routed.push(route(9, refused));
+    let mixed_input = admitted_routing_input(&derived.package, &routed);
+    let alone = generate_routed(
+        &mixed_input.package,
+        &mixed_input.positions,
+        &with_siblings,
+        &contexts,
+    )
+    .expect("generates siblings from the same admitted package");
+    let mixed = generate_routed(
+        &mixed_input.package,
+        &mixed_input.positions,
+        &routed,
+        &contexts,
+    )
+    .expect("generates");
+    assert!(
+        mixed.rejected.is_empty(),
+        "an underivable item must not reject the group"
+    );
+    let (record, harness) = kani_parts(&mixed.items[4].output);
+    assert_eq!(mixed.items[4].request_index, 9);
+    assert!(harness.is_none());
+    assert_eq!(
+        record.disposition,
+        ObligationDisposition::Unsupported {
+            reason: UnsupportedObligation::NoDerivableClaim {
+                node_id: refused.clone(),
+                reason: ClaimDerivationRefusal::OperationNotDerivable {
+                    operation_identity: identity.to_owned()
+                },
             }
-        );
-        let wire = serde_json::to_value(&record.disposition).expect("serializes");
-        assert_eq!(wire["reason"]["code"], "no_derivable_claim");
-        assert_eq!(wire["reason"]["reason"]["code"], "operation_not_derivable");
-        assert_eq!(wire["reason"]["reason"]["operation_identity"], identity);
-        // The siblings are unaffected: record and harness equal the run without the refused item.
-        assert_eq!(mixed.items[..4], alone.items[..]);
-        assert_eq!(
-            mixed.items[..4]
-                .iter()
-                .filter(|item| kani_parts(&item.output).1.is_some())
-                .count(),
-            3
-        );
-    }
+        }
+    );
+    let wire = serde_json::to_value(&record.disposition).expect("serializes");
+    assert_eq!(wire["reason"]["code"], "no_derivable_claim");
+    assert_eq!(wire["reason"]["reason"]["code"], "operation_not_derivable");
+    assert_eq!(wire["reason"]["reason"]["operation_identity"], identity);
+    // The siblings are unaffected: record and harness equal the run without the refused item.
+    assert_eq!(mixed.items[..4], alone.items[..]);
+    assert_eq!(
+        mixed.items[..4]
+            .iter()
+            .filter(|item| kani_parts(&item.output).1.is_some())
+            .count(),
+        3
+    );
 }
 
 /// Exact quantity conversions generate an oracle and settle Kani as OperationNotRendered.
@@ -2200,8 +2199,8 @@ fn tc_033_quantity_conversion_has_an_oracle_and_no_harness() {
     }
 }
 
-/// `RoutedGeneration.claim_map` holds the four generated package claims and one
-/// `NoDerivableClaim` per underivable node, in node-id order; it is `None`
+/// `RoutedGeneration.claim_map` holds the four generated package claims and the
+/// `NoDerivableClaim` underivable node, in node-id order; it is `None`
 /// with nothing routed.
 #[trace("FR-022-AC-12", "TC-033")]
 #[test]
@@ -2211,7 +2210,7 @@ fn tc_033_the_returned_claim_map_orders_package_claims_and_refusals() {
     let nodes = derived
         .generated
         .iter()
-        .chain([&derived.rem, &derived.integer_eq])
+        .chain([&derived.rem])
         .cloned()
         .collect::<Vec<_>>();
     let routed = nodes
@@ -2226,7 +2225,7 @@ fn tc_033_the_returned_claim_map_orders_package_claims_and_refusals() {
 
     let mut sorted = nodes.clone();
     sorted.sort();
-    assert_eq!(claim_map.items.len(), 6);
+    assert_eq!(claim_map.items.len(), 5);
     let refused = claim_map
         .items
         .iter()
@@ -2240,7 +2239,7 @@ fn tc_033_the_returned_claim_map_orders_package_claims_and_refusals() {
         })
         .map(|claim| claim.node_id.clone())
         .collect::<Vec<_>>();
-    let mut underivable = vec![derived.rem.clone(), derived.integer_eq.clone()];
+    let mut underivable = vec![derived.rem.clone()];
     underivable.sort();
     assert_eq!(refused, underivable);
     let generated = claim_map
@@ -2497,7 +2496,15 @@ fn tc_033_the_oracle_crate_is_returned_and_defines_the_symbol_the_harness_refere
         .iter()
         .map(|artifact| artifact.path.as_str())
         .collect::<Vec<_>>();
-    assert_eq!(paths, ["Cargo.toml", "src/lib.rs", "claim-map.json"]);
+    assert_eq!(
+        paths,
+        [
+            "Cargo.toml",
+            "src/lib.rs",
+            "source-maps/lib.json",
+            "claim-map.json"
+        ]
+    );
     let lib = &artifacts[1].contents;
 
     let claim_map = generation.claim_map.expect("a Kani group ran");

@@ -3002,6 +3002,7 @@ fn assert_retained_scalar_content(
             "Cargo.toml",
             "claim-map.json",
             &harness.record.path,
+            "source-maps/lib.json",
             "src/bin/ir791_native.rs",
             "src/lib.rs",
             "src/oracle-artifacts-lib.rs"
