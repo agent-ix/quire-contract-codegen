@@ -26,3 +26,9 @@ Reviewed the sole changed Rust test in PR #478 against FR-017-AC-42. The cancell
 - `FR-017-AC-42` (examined): `class()` is `CompletionRefusal` for `invalid_request`, `artifact_package` and `oracle_stop`, and `EnvironmentFault` for `snapshot_io`, `native_launch`, `dependency_lock`, `native_result`, `snapshot_changed`, `identity_encode` and `codegen_lock`. For `proof_not_verified` it is `CompletionRefusal` for evidence outcome `Falsified`, `CoverUnsatisfied`, and `Inconclusive` `MissingCoverSummary`, `VacuousProof`, `UnwindBoundExhausted` or `FailedWithoutCounterexample` with no `failureCause` or `propert
 - Rust lane: inspected watcher lifecycle, `AtomicBool` publication, proof completion, cancellation outcome assertions, test isolation, panic behavior, and the sole changed file.
 - Gate evidence in PR metadata reports pre-PR CI and Kani 37/37; this review independently checked the diff and did not rerun full gates.
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | At df25778e, `CompletionGuard` publishes `completed` in `Drop` during normal return and panic unwinding. The watcher observes the flag and exits when startup was never signaled; `drop(completion_guard)` occurs before `watcher.join()` on the normal path. |
