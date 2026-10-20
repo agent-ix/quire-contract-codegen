@@ -309,7 +309,9 @@ fn coverage_regions(
             "implication_consequent",
             line,
             column,
-            token.len(),
+            // LLVM can split the call after its `value_` prefix when the right side is
+            // skipped. Keep the probe inside that first count-bearing span.
+            "value_".len(),
             None,
         )?);
     }

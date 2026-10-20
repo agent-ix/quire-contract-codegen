@@ -431,6 +431,83 @@ fn qsl_emitted_clause_composes_boolean_and_integer_operations() {
     );
 }
 
+#[trace("FR-014-AC-38")]
+#[test]
+fn skipped_v2_clause_consequent_has_a_measured_zero_native_probe() {
+    let (package, clause) =
+        Twin::with_balance_condition("self.balance > pre(self.balance) implies self.balance >= 0")
+            .emitted_package("BalanceNeverDrops");
+    let generated = generate_v2_clause_oracle(&package, &clause).unwrap();
+    let consequents = generated
+        .source_map
+        .iter()
+        .filter(|region| region.role == "implication_consequent")
+        .collect::<Vec<_>>();
+    assert_eq!(consequents.len(), 1);
+    let scratch = super::scratch_crate::TemporaryDirectory::new("quire-v2-clause-native-probe");
+    fs::write(
+        scratch.path.join("src/lib.rs"),
+        format!(
+            "{}\n#[test]\nfn skipped_consequent() {{\n    let zero = rt::Integer::from(0i64);\n    let mut meter = rt::Meter::new(rt::ScalarLimits {{ integer_bits: 1000, decimal_digits: 1000, scale_expansion: 1000, text_input_bytes: 1000, text_scalars: 1000, normalized_scalars: 1000, unit_edges: 1000, value_occurrences: 1000, work_units: 1000, result_units: 1000 }});\n    assert!(matches!(oracle_clause(&zero, &zero, &mut meter), Ok(rt::Outcome::Completed(true))));\n}}\n",
+            generated.source
+        ),
+    )
+    .unwrap();
+    super::scratch_crate::write_manifest(
+        &scratch.path,
+        &format!(
+            "[package]\nname = \"generated-v2-clause-native-probe\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
+            super::scratch_crate::runtime_dependency(&["exact"])
+        ),
+    );
+    let toolchain = format!("+{}", env!("CARGO_PKG_RUST_VERSION"));
+    let sysroot = std::process::Command::new("rustc")
+        .args([&toolchain, "--print", "sysroot"])
+        .output()
+        .unwrap();
+    assert!(sysroot.status.success());
+    let tools = PathBuf::from(String::from_utf8(sysroot.stdout).unwrap().trim())
+        .join("lib/rustlib/x86_64-unknown-linux-gnu/bin");
+    for tool in ["llvm-cov", "llvm-profdata"] {
+        assert!(tools.join(tool).is_file(), "qualified tool missing");
+    }
+    let output = std::process::Command::new("cargo")
+        .args([
+            &toolchain,
+            "llvm-cov",
+            "--offline",
+            "--json",
+            "--output-path",
+        ])
+        .arg(scratch.path.join("coverage.json"))
+        .current_dir(&scratch.path)
+        .env("CARGO_TARGET_DIR", scratch.path.join("target"))
+        .env("LLVM_COV", tools.join("llvm-cov"))
+        .env("LLVM_PROFDATA", tools.join("llvm-profdata"))
+        .env("CARGO_PROFILE_TEST_OPT_LEVEL", "0")
+        .env_remove("RUSTFLAGS")
+        .env_remove("CARGO_ENCODED_RUSTFLAGS")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "native LLVM: {}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let coverage = fs::read(scratch.path.join("coverage.json")).unwrap();
+    let measured =
+        quire_contract_codegen::parse_llvm_coverage(&coverage, scratch.path.to_str().unwrap())
+            .unwrap();
+    assert_eq!(
+        measured
+            .observe(&consequents[0].artifact_path, consequents[0].probe)
+            .unwrap()
+            .count(),
+        0
+    );
+}
+
 /// One variant of the fixture. Each variant owns its node codes, because the test binary's
 /// fixture registry refuses one code bound to two different bodies.
 struct Shape {
