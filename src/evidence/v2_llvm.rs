@@ -197,10 +197,11 @@ fn analyze_inner(
         }
         total_bytes = total_bytes.saturating_add(input.source.len());
         total_bytes = total_bytes.saturating_add(input.source_map.len());
+        total_bytes = total_bytes.saturating_add(input.llvm_export.map_or(0, |bytes| bytes.len()));
         if total_bytes > MAX_BUNDLE_BYTES {
             return Err(diagnostic(
                 CoverageErrorCode::ResourceLimitExceeded,
-                "V2 artifact bundle byte budget exceeded",
+                "V2 artifact and coverage byte budget exceeded",
             ));
         }
     }
