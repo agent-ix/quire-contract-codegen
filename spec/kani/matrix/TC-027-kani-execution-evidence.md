@@ -174,6 +174,46 @@ invariant harnesses of a healthy subject; run the postcondition harness against 
 run a contract harness whose requires are jointly unsatisfiable; and run a harness against a crate
 whose library source does not contain it.
 
+ScalarLimits owner identity (FR-017-AC-51), **Planned / UNRUN** with IR-17 kernel adoption:
+compile a consumer that constructs `quire_contract_codegen::ScalarLimits` using only CG paths
+and its unchanged fields, types the `KaniScalarNativeRequest::scalar_limits` accessor with that
+same CG type, and assigns the value directly to `quire_exact::ScalarLimits`. Require actual type
+identity without conversion, wrapper or compatibility shim; a source import alone is insufficient.
+Current-main delivery is not credited by the specification amendment.
+
+Private native observer custody (FR-017-AC-45/46/48/49/52/53), **Planned / UNRUN**:
+construct the isolated resolver-2 observer package inside the private snapshot, with the example
+root at `../src/bin/ir791_native.rs`. Verify that this is the single canonical adapter, loading
+`../lib.rs`, with no wrapper, copy or symlink. Compare all four original emitted artifacts
+byte for byte under FR-017's rename map, explicitly including `source-maps/lib.json` and the
+unmodified production manifest, plus the original harness and record. Inspect the production
+and companion dependency graphs: only the observer's exact dev edge enables `test-support`;
+both observer dev crates use their owning source spellings. Compile the required feature-free
+production library/proof targets, independently freshly resolve and compile the observer example,
+and remove its dev feature in a negative control that must fail to compile. Do not use a copied
+parent lock or cached resolution in place of the fresh resolver regression. Independently assert
+both literal `quire-contract-runtime` and `quire-exact` names and repository identities in each
+lock against the build's authoritative lock; do not derive both expectations from the renderer's
+list. Report a fresh dependency-resolution failure as a failure, without a downgrade or pin.
+
+Run the actual bounded native command with `--manifest-path observer/Cargo.toml --example
+ir791_native` from the sealed root and its target outside that root. Verify actual nonzero ordered
+charges, limits, counters and typed incomplete outcomes from the real meter. Run the real production
+proof with its retained harness/ordered options and all claims/covers, including the existing
+non-verified/no-native controls; no `--all-targets` compile assumption or skipped proof substitutes
+for those checks. Exercise cancellation and limits at the companion resolution/native boundaries
+through the existing bounded-launch controls. Extend complete path/byte measurement and comparison
+to all ten v3 entries before proof, after proof and after native execution. Mutate or replace
+each entry independently and inject an extra file in each package root at both execution
+boundaries; require a typed failure and no receipt. Retain the existing source-tree write controls.
+Check non-UTF-8 bytes separately in each lock, the observer manifest and canonical adapter, with
+`snapshot_io` / `EnvironmentFault` and no receipt. Extend the fixed independent literal golden,
+schema assertion, per-entry digest mutations, cleanup-survival and cleanup-failure controls below
+to the whole v3 set. Neither this procedure nor source inspection establishes Cargo acceptance of
+the nested isolated package/external example path, fresh resolution, or sealed execution; those
+checks remain UNRUN until the implementation executes them. The separate Unicode resolution
+failure and IR-705/IR-844 qualification are not resolved by this amendment.
+
 ## Expected Results
 
 Only the all-covers-satisfied success is verified. The unsatisfied and partial
@@ -354,7 +394,8 @@ claiming an actual runtime-produced stop for a supported admitted integer operat
 proof evidence is confined to the exhaustive classification table.
 
 Snapshot controls (FR-017-AC-29 and AC-30): measure the staged path/byte set for the complete
-generated package, retained harness, native invocation adapter and resolved dependency lock;
+generated package (including source map), retained harness, canonical adapter, observer manifest
+and both independently generated dependency locks;
 attempt a source-tree write from each child execution boundary, and require that neither child can
 change it. Inject a changed byte in each execution-relevant staged item, a replaced path and an
 unexpected file after staging and across the Kani/native boundary;
@@ -463,26 +504,30 @@ witness remains owed to IR-655 slice 2. Both slices remain PLANNED/UNRUN; actual
 compile/adaptation gaps are reported, not bypassed with named compatibility, helper identity
 override, skipped tests or invented coverage. All guarantees precede complete IR-639/MVP acceptance.
 
-Scalar proof-content digest (FR-017-AC-45 to AC-50): run the paired runner on a genuine routed
+Scalar proof-content digest (FR-017-AC-45 to AC-50): the v3 extensions below are
+**Planned / UNRUN**; existing v2 controls do not establish them. Run the paired runner on a genuine routed
 `x + 1` package. (1) Assert the receipt's `DigestRecord` has domain `sha256-jcs` and 32 bytes equal
-to `as_bytes()`, and recompute SHA-256 of the RFC 8785 encoding of the schema object and the sorted
+to `as_bytes()`, and recompute SHA-256 of the RFC 8785 encoding of the explicit `agent-ix/cg-kani-scalar-proof-content/v3` schema object and the sorted
 artifact list in the test, independently of the runner's encoder. (2) Assert the exposed entry
-paths are exactly the AC-46 set in UTF-8 byte order, with the library under
-`src/oracle-artifacts-lib.rs` and the harness under `src/lib.rs`; then drop, rename, reorder,
+paths are exactly the AC-46 set in UTF-8 byte order, with both manifests, both locks, original source map, canonical adapter, the library under
+`src/oracle-artifacts-lib.rs` and the harness under `src/lib.rs`; compare every original artifact
+under that rename map, plus harness and record, byte for byte; then drop, rename, reorder,
 duplicate and one-byte-change each entry in turn and require a different digest; through a test
-seam that writes non-UTF-8 bytes to the snapshot's `Cargo.lock` (and again to the adapter) after
+seam that writes non-UTF-8 bytes to the snapshot's two locks, observer manifest and adapter independently after
 it is generated, require `Snapshot`, `snapshot_io`, `EnvironmentFault`, and no receipt. (3) Run the two operand orders of AC-31 and a different `ScalarLimits`
 value and require equal `DigestRecord`s. (4) After the receipt is returned, assert the snapshot path no longer exists (the private snapshot is dropped before the receipt is returned), then require the exposed entries to still read and the digest to recompute byte-identically; this is a mutation-style check, not a source scan. (5) Recompute from only the exposed entries, including
-`Cargo.lock` and `src/bin/ir791_native.rs`, and require equality; substitute one byte of the
-package, harness or record and require inequality. (6) Compute a golden digest with the measurement function over fixed literal entries, including a
-literal `Cargo.lock` and adapter and not a real staged run, and pin `(schema string, golden)` in one
-assertion. Change the `Cargo.lock` bytes in a test seam to see the digest change with the schema
-unchanged. A golden edited without a schema bump is a review rule, not a test. (7) Meter limits (FR-017-AC-50): require the meter observation's `ScalarLimits` equal the request's and `scalar_limits()`, equal and unchanged after the snapshot is gone; through a seam that makes the adapter report a different limit, require `native_result`, `EnvironmentFault` and no receipt. (8) Name `quire_contract_codegen::DigestRecord` and `qsl_replay::DigestRecord` as the same type, and make the snapshot directory removal fail through a seam: require the same verdict, exposed entries and digest as an un-failed run, a non-empty `cleanup_diagnostic()` naming the removal failure, and an empty `cleanup_diagnostic()` when removal succeeds; the diagnostic is in neither the digest nor the entries No
+both manifests, both locks, source map and `src/bin/ir791_native.rs`, and require equality; substitute one byte of the
+package, harness or record and require inequality. (6) Compute a golden digest with the measurement function over fixed literal entries, including both
+literal manifests, both literal locks, the literal source map and adapter and not a real staged run, and pin `(schema string, golden)` in one
+assertion. Change each manifest, each lock and adapter bytes independently in a test seam to see the digest change with the schema
+unchanged. A golden edited without a schema bump is a review rule, not a test. (7) Meter limits (FR-017-AC-50): require the meter observation's `ScalarLimits` equal the request's and `scalar_limits()`, equal and unchanged after the snapshot is gone; through a seam that makes the adapter report a different limit, require `native_result`, `EnvironmentFault` and no receipt. (8) Name `quire_contract_codegen::DigestRecord` and `qsl_replay::DigestRecord` as the same type, and make the snapshot directory removal fail through a seam: require the same verdict, exposed entries and digest as an un-failed run, a non-empty `cleanup_diagnostic()` naming the removal failure, and an empty `cleanup_diagnostic()` when removal succeeds; the diagnostic is in neither the digest nor the entries. No
 driver-side authentication coverage is claimed here: the driver's recomputation and refusal are
-driver-owned (FR-032 boundary), as is the quire-driver FR-009 amendment named in FR-017. These controls are implemented by the scalar runner unit tests, the real paired receipt and
+driver-owned (FR-032 boundary), as is the quire-driver FR-009 amendment named in FR-017. Existing controls are located in the scalar runner unit tests, the real paired receipt and
 subtraction tests in `tests/it/kani_obligations.rs`, and the private cleanup control in
 `tests/it/kani_scalar_native_private.rs`. The private real controls run separately from the
 integration lane with `cargo test --locked --lib kani_scalar_native_private -- --ignored
 --test-threads=1`; the default private control covers cancellation and timeout stand-ins.
-The literal JCS/SHA-256 golden stays independent of real lock contents, and schema/golden
+Their v3 extensions and companion checks above remain Planned; existing test names and trace tags
+are not evidence that those extensions ran. The literal JCS/SHA-256 golden stays independent of
+real lock contents, and schema/golden
 changes remain subject to review. No driver authentication coverage is claimed.
