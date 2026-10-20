@@ -104,14 +104,20 @@ impl<'a> KaniExecutableHarness<'a> {
             }
             Self::Scalar(harness) => {
                 let identity = &harness.identity;
+                let boolean =
+                    identity.operation_identity == crate::kani::identity::BOOLEAN_IMPLIES_IDENTITY;
                 identity
                     .arguments
                     .iter()
                     .map(|argument| SymbolicArgumentBounds {
                         identifier: argument.identifier.clone(),
-                        bounds: SymbolicBounds::Integer {
-                            minimum: argument.minimum,
-                            maximum: argument.maximum,
+                        bounds: if boolean {
+                            SymbolicBounds::Boolean
+                        } else {
+                            SymbolicBounds::Integer {
+                                minimum: argument.minimum,
+                                maximum: argument.maximum,
+                            }
                         },
                     })
                     .collect()

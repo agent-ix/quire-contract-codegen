@@ -687,6 +687,9 @@ pub struct GeneratedScalarClaim {
     /// generation produced.
     #[serde(skip)]
     pub oracle_source: String,
+    /// Whether a generated Boolean oracle's right parameter is a lazy outcome closure.
+    #[serde(skip)]
+    pub boolean_right_may_stop: bool,
 }
 
 /// One claim-map entry per selected requested occurrence.
@@ -863,6 +866,13 @@ pub fn plan_exact_scalar_oracles(
                                     checked_bounds,
                                     dependencies: node.dependencies.clone(),
                                     oracle_source: String::new(),
+                                    boolean_right_may_stop: matches!(
+                                        operation,
+                                        ExactScalarOperation::Boolean {
+                                            right_may_stop: true,
+                                            ..
+                                        }
+                                    ),
                                 })),
                             )
                         }
@@ -1272,7 +1282,7 @@ fn build_contract_scalar_oracles(
                                 .collect();
                             pending.push((
                                 claims.len(),
-                                operation,
+                                operation.clone(),
                                 node_implication_count(closure.root),
                             ));
                             (
@@ -1291,6 +1301,13 @@ fn build_contract_scalar_oracles(
                                     checked_bounds,
                                     dependencies,
                                     oracle_source: String::new(),
+                                    boolean_right_may_stop: matches!(
+                                        operation,
+                                        ExactScalarOperation::Boolean {
+                                            right_may_stop: true,
+                                            ..
+                                        }
+                                    ),
                                 })),
                             )
                         }
@@ -5048,6 +5065,7 @@ mod tests {
             checked_bounds: Vec::new(),
             dependencies: Vec::new(),
             oracle_source: String::new(),
+            boolean_right_may_stop: false,
         };
         let value = serde_json::to_value(generated).expect("claim serializes");
         assert_eq!(value["node_id"], serde_json::json!(node_id('b')));

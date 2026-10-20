@@ -16,6 +16,9 @@ use crate::{
     kani::abi::{KaniBindingRole, KaniIntegerBounds, KaniPrimitiveType, KaniSolver},
 };
 
+/// Contract IR's admitted identity for Boolean implication.
+pub(crate) const BOOLEAN_IMPLIES_IDENTITY: &str = "quire.op.boolean.implies";
+
 /// Resource ceilings bound into a proof identity (FR-028).
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -150,8 +153,8 @@ pub struct KaniObligationHarness {
     pub record: Artifact,
 }
 
-/// One symbolic `i64` argument of a rendered scalar harness, bounded by the IR domain the
-/// lowered scalar claim carries.
+/// One symbolic scalar argument of a rendered harness. Integer claims use checked `i64`
+/// bounds; a Boolean claim records its two values as the inclusive `0..=1` domain.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ScalarObligationArgument {
@@ -178,8 +181,8 @@ pub struct InferredScalarOperand {
 }
 
 /// What a V2 scalar obligation harness proves and how it is run. Parallel to [`KaniObligationIdentity`] but for an IR-confirmed exact-scalar claim,
-/// which has no QSL clause, declaration or subject signature -- a node id and its confirmed
-/// operation identity stand in their place.
+/// which has no QSL clause or declaration -- a node id and its confirmed operation identity
+/// stand in their place. Boolean implication additionally calls the compiled runtime subject.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ScalarObligationIdentity {

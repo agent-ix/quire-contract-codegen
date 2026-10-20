@@ -1,9 +1,7 @@
 //! The scalar family: lowering an IR-confirmed V2 exact-scalar claim and rendering its Kani
 //! harness (FR-015).
 
-use crate::oracle::operator_catalog::{
-    Operator as CatalogOperator, ScalarKaniOperator as ScalarOperation,
-};
+use crate::oracle::operator_catalog::{Operator as CatalogOperator, ScalarKaniOperator};
 use quire_contract_model::{CheckedNodeId, CheckedSemanticNodeV2};
 
 #[cfg(test)]
@@ -26,12 +24,8 @@ use crate::{
     },
 };
 
-/// An IR-confirmed V2 exact-scalar claim this generator knows how to render a Kani harness for.
-/// Scoped today to `IntegerArithmetic` (`quire.op.integer.{add,sub,mul,negate}`): its operands and
-/// result are all `rt::Integer`, and `quire_contract_runtime::exact::Integer: From<i64>` gives a
-/// direct `kani::any()` bridge with no construction of a compound runtime type. Every other
-/// confirmed family (division's `QuotientRemainder`, rational, decimal, IEEE, text, enum, quantity)
-/// has no renderer yet -- see [`lower_scalar_claim`].
+/// An IR-confirmed V2 exact-scalar claim this generator can render: bounded integer arithmetic
+/// or Boolean implication. Other confirmed scalar families have no renderer yet.
 pub(super) struct LoweredScalarClaim {
     pub(super) node_id: CheckedNodeId,
     pub(super) operation_identity: String,
@@ -39,6 +33,7 @@ pub(super) struct LoweredScalarClaim {
     /// verbatim ahead of the harness module, exactly as a V1 harness embeds its `ClauseOracle`s.
     oracle_source: String,
     oracle_symbol: String,
+    boolean_right_may_stop: bool,
     operation: ScalarOperation,
     /// Each operand's inclusive range, in call order.
     operands: Vec<(i64, i64)>,
@@ -50,34 +45,51 @@ pub(super) struct LoweredScalarClaim {
     pub(super) harness_symbol: String,
 }
 
-/// One integer operation this generator renders a scalar harness for. Everything that differs
-/// between the four -- the catalogued identity, the operand names, the exact result, the range of
-/// reachable results -- is an exhaustive method here, so adding an operation is one new variant the
-/// compiler checks at every use.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ScalarOperation {
+    Add,
+    Subtract,
+    Multiply,
+    Negate,
+    Implies,
+}
+
+/// One scalar operation this generator renders. The four integer operations use the catalogued
+/// Kani projection; Boolean implication uses its admitted Contract IR identity. Each difference
+/// in operand names and independent expectation is checked by an exhaustive match.
 impl ScalarOperation {
     /// The renderable operation for an IR-confirmed operation identity, or `None` when this
-    /// generator has no scalar-harness renderer for it. Recognizing these four exact catalogued
-    /// identities is not a vocabulary bridge: it only recognizes, among identities IR already
-    /// confirmed, which ones this generator additionally knows how to turn into a harness.
+    /// generator has no scalar-harness renderer for it. This selects, among identities IR already
+    /// confirmed, which ones this generator can turn into a harness.
     fn of(operation_identity: &str) -> Option<Self> {
-        CatalogOperator::from_identity(operation_identity)?
+        if operation_identity == crate::kani::identity::BOOLEAN_IMPLIES_IDENTITY {
+            return Some(Self::Implies);
+        }
+        match CatalogOperator::from_identity(operation_identity)?
             .entry()
-            .scalar_kani
+            .scalar_kani?
+        {
+            ScalarKaniOperator::Add => Some(Self::Add),
+            ScalarKaniOperator::Subtract => Some(Self::Subtract),
+            ScalarKaniOperator::Multiply => Some(Self::Multiply),
+            ScalarKaniOperator::Negate => Some(Self::Negate),
+        }
     }
 
     /// The oracle's parameter names, in call order, which are also the harness's variable names.
     fn operand_names(self) -> &'static [&'static str] {
         match self {
             Self::Negate => &["operand"],
-            Self::Add | Self::Subtract | Self::Multiply => &["left", "right"],
+            Self::Add | Self::Subtract | Self::Multiply | Self::Implies => &["left", "right"],
         }
     }
 
-    /// The exact result as a Rust expression over the harness's native `i64` operands
+    /// The integer result as a Rust expression over the harness's native `i64` operands
     /// (`<name>_native`), evaluated in `i128` where a sum, difference, product or negation of `i64`
     /// values cannot overflow. It shares no code with the embedded oracle, which evaluates through
     /// `quire_contract_runtime`'s `rt::Integer`; it is the independent statement of the clause that
-    /// [`render_scalar`] compares the oracle's result with.
+    /// [`render_scalar`] compares the oracle's result with. The implication arm is used by
+    /// its separate Boolean renderer over symbolic `bool` operands.
     fn native_expression(self) -> String {
         let native = |index: usize| format!("i128::from({}_native)", self.operand_names()[index]);
         match self {
@@ -85,12 +97,12 @@ impl ScalarOperation {
             Self::Subtract => format!("{} - {}", native(0), native(1)),
             Self::Multiply => format!("{} * {}", native(0), native(1)),
             Self::Negate => format!("-{}", native(0)),
+            Self::Implies => "!left || right".to_owned(),
         }
     }
 
-    /// The operation's operands, one inclusive `i64` range per operand name, in call order, each
-    /// read by `range_at` from its position. The operand count is the operation's own, so the
-    /// result carries exactly the operands [`ScalarOperands::reachable`] needs.
+    /// The operation's operands in call order. Integer ranges come from `range_at`; Boolean
+    /// implication uses the two encoded Boolean values `0..=1` for each operand.
     fn operands<E>(
         self,
         mut range_at: impl FnMut(usize) -> Result<(i64, i64), E>,
@@ -104,6 +116,7 @@ impl ScalarOperation {
             Self::Multiply => {
                 ScalarOperands::Binary(BinaryOperation::Multiply, range_at(0)?, range_at(1)?)
             }
+            Self::Implies => ScalarOperands::Binary(BinaryOperation::Implies, (0, 1), (0, 1)),
         })
     }
 }
@@ -114,10 +127,12 @@ enum BinaryOperation {
     Add,
     Subtract,
     Multiply,
+    Implies,
 }
 
 /// The operand ranges of one [`ScalarOperation`], of the operation's own arity: one range for
 /// `Negate`, two for the others, so no combination of operation and operand count is left over.
+/// Boolean ranges encode `false` as zero and `true` as one.
 #[derive(Clone, Copy)]
 enum ScalarOperands {
     Negate((i64, i64)),
@@ -133,9 +148,8 @@ impl ScalarOperands {
         }
     }
 
-    /// The least and greatest exact results over the inclusive `i64` operand ranges. Each is exact
-    /// in `i128`. The extremes of `+`, `-` and unary `-` lie at the range endpoints, and so do
-    /// those of `*`, which is bilinear.
+    /// The least and greatest exact integer results over the inclusive `i64` operand ranges,
+    /// computed in `i128`; Boolean implication reaches both encoded truth values.
     fn reachable(self) -> (i128, i128) {
         let wide = |(low, high): (i64, i64)| (i128::from(low), i128::from(high));
         match self {
@@ -155,6 +169,7 @@ impl ScalarOperands {
                             corners.into_iter().max().unwrap_or_default(),
                         )
                     }
+                    BinaryOperation::Implies => (0, 1),
                 }
             }
         }
@@ -199,7 +214,8 @@ pub(super) enum ScalarLoweringRefusal {
     },
 }
 
-/// Lowers one IR-confirmed V2 claim to a renderable scalar harness. The result range is the
+/// Lowers one IR-confirmed V2 claim to a renderable scalar harness. Boolean implication takes
+/// two symbolic Boolean operands; for integer arithmetic, the result range is the
 /// claim's first checked bound; each operand ranges over its own bound where the node's argument
 /// is typed by one, exactly at its value where it is a literal (`operand_ranges`, by position),
 /// and over the result range otherwise. A claim whose operand ranges produce no result inside the
@@ -212,6 +228,22 @@ pub(super) fn lower_scalar_claim(
 ) -> Result<LoweredScalarClaim, ScalarLoweringRefusal> {
     let operation =
         ScalarOperation::of(&claim.operation.identity).ok_or(ScalarLoweringRefusal::NoRenderer)?;
+    if operation == ScalarOperation::Implies {
+        return Ok(LoweredScalarClaim {
+            node_id: claim.node_id.clone(),
+            operation_identity: claim.operation.identity.clone(),
+            oracle_source: generated.oracle_source.clone(),
+            oracle_symbol: generated.symbol.clone(),
+            boolean_right_may_stop: generated.boolean_right_may_stop,
+            operation,
+            operands: vec![(0, 1); 2],
+            inferred_operands: Vec::new(),
+            lower: 0,
+            upper: 1,
+            module_symbol: format!("{}_module", scalar_stem(&claim.operation.identity)),
+            harness_symbol: format!("{}_proof", scalar_stem(&claim.operation.identity)),
+        });
+    }
     // `check_parameters` records exactly one checked bound for every `IntegerArithmetic` claim,
     // so a claim without one is a claim map this generator did not produce, which has no renderer.
     let Some(bound_id) = generated.checked_bounds.first() else {
@@ -287,6 +319,7 @@ pub(super) fn lower_scalar_claim(
         operation_identity: claim.operation.identity.clone(),
         oracle_source: generated.oracle_source.clone(),
         oracle_symbol: generated.symbol.clone(),
+        boolean_right_may_stop: false,
         operation,
         operands: operands.ranges(),
         inferred_operands,
@@ -353,7 +386,8 @@ fn count_bounds(
     (minimum > maximum).then(|| (minimum.to_string(), maximum.to_string()))
 }
 
-/// Renders one IR-confirmed V2 exact-scalar claim to a `kani::proof` that the embedded oracle
+/// Renders one IR-confirmed V2 exact-scalar claim. Boolean implication is dispatched to its
+/// compiled-subject proof; for integer arithmetic, the harness proves that the embedded oracle
 /// computes the clause's own arithmetic. The harness evaluates the operation a second time, in
 /// native `i128` over the same symbolic `i64` operands ([`ScalarOperation::native_expression`]), and asserts the
 /// oracle agrees with it in both directions: the outcome is `Ok(Completed(value))` with `value`
@@ -376,6 +410,9 @@ pub(super) fn render_scalar(
     request: &KaniObligationRequest<'_>,
     lowered: &LoweredScalarClaim,
 ) -> Result<KaniScalarObligationHarness, UnsupportedObligation> {
+    if lowered.operation == ScalarOperation::Implies {
+        return render_boolean_implies(request, lowered);
+    }
     use super::spec::{
         Argument, Cover, ExprText, HarnessSpec, Init, LetBinding, LetType, ProofKind, Statement,
     };
@@ -490,6 +527,115 @@ pub(super) fn render_scalar(
     ))
 }
 
+fn render_boolean_implies(
+    request: &KaniObligationRequest<'_>,
+    lowered: &LoweredScalarClaim,
+) -> Result<KaniScalarObligationHarness, UnsupportedObligation> {
+    use super::spec::{
+        Argument, Cover, ExprText, HarnessSpec, Init, LetBinding, ProofKind, Statement,
+    };
+    use crate::kani::abi::KaniPrimitiveType;
+
+    let expr = |source: &str| ExprText::new(source.to_owned());
+    let body = vec![
+        Statement::Input {
+            name: "left".to_owned(),
+            ty: KaniPrimitiveType::Boolean,
+            domain: (0, 1),
+            then: Vec::new(),
+        },
+        Statement::Input {
+            name: "right".to_owned(),
+            ty: KaniPrimitiveType::Boolean,
+            domain: (0, 1),
+            then: Vec::new(),
+        },
+        Statement::Let(LetBinding {
+            name: "meter".to_owned(),
+            ty: None,
+            mutable: true,
+            init: Init::UnlimitedMeter,
+        }),
+        Statement::Call {
+            result: "outcome".to_owned(),
+            callee: lowered.oracle_symbol.clone(),
+            args: vec![
+                Argument::Value("left".to_owned()),
+                if lowered.boolean_right_may_stop {
+                    Argument::BooleanOutcomeClosure("right".to_owned())
+                } else {
+                    Argument::Value("right".to_owned())
+                },
+                Argument::BorrowMut("meter".to_owned()),
+            ],
+        },
+        Statement::Let(LetBinding {
+            name: "native".to_owned(),
+            ty: None,
+            mutable: false,
+            init: Init::Expression(expr(&lowered.operation.native_expression())?),
+        }),
+        Statement::SubjectImplicationCall,
+        Statement::Assert {
+            condition: expr("subject == native")?,
+            message: "the compiled implication subject must equal native implication".to_owned(),
+        },
+        Statement::Let(LetBinding {
+            name: "completed".to_owned(),
+            ty: None,
+            mutable: false,
+            init: Init::Expression(expr("match &outcome { Ok(rt::Outcome::Completed(value)) => *value == native, _ => false }")?),
+        }),
+        Statement::Assert {
+            condition: expr("completed")?,
+            message: "the Boolean oracle must complete with native implication".to_owned(),
+        },
+    ];
+    let spec = HarnessSpec::new(
+        format!(
+            "exact-scalar {}/{} `{}`",
+            lowered.node_id.domain, lowered.node_id.digest, lowered.operation_identity
+        ),
+        harness_path(&lowered.module_symbol, &lowered.harness_symbol)?,
+        lowered.oracle_source.clone(),
+        ProofKind::Proof,
+        body,
+        vec![Cover {
+            condition: expr("completed")?,
+            message: "the Boolean oracle Completed branch is reachable".to_owned(),
+        }],
+        request.unwind,
+        KaniSolver::Cadical,
+    )?;
+    let rust = super::render::render(&spec)?;
+    let identity = ScalarObligationIdentity {
+        ceilings: request.ceilings,
+        node_id: lowered.node_id.clone(),
+        operation_identity: lowered.operation_identity.clone(),
+        oracle_symbol: lowered.oracle_symbol.clone(),
+        module_symbol: spec.path().module.clone(),
+        harness_symbol: spec.path().harness.clone(),
+        arguments: lowered
+            .operation
+            .operand_names()
+            .iter()
+            .map(|name| ScalarObligationArgument {
+                identifier: (*name).to_owned(),
+                minimum: 0,
+                maximum: 1,
+            })
+            .collect(),
+        inferred_operands: Vec::new(),
+        solver: spec.solver(),
+        unwind: spec.unwind(),
+        options: spec.options().to_vec(),
+    };
+    let record = record(&lowered.module_symbol, &identity, &rust)?;
+    Ok(KaniScalarObligationHarness::generated(
+        identity, rust, record,
+    ))
+}
+
 // Deliberately false claim built before the normal renderer seals its output. The embedded
 // generated oracle and its package remain intact; only the independently asserted bound differs.
 #[cfg(test)]
@@ -508,6 +654,7 @@ pub(super) fn false_bound_harness_for_test(
             .contents
             .clone(),
         oracle_symbol: identity.oracle_symbol.clone(),
+        boolean_right_may_stop: false,
         operation: ScalarOperation::of(&identity.operation_identity).unwrap(),
         operands: identity
             .arguments
@@ -678,10 +825,16 @@ mod tests {
         scalar::{OperationClaim, OperationProvenance},
     };
 
-    /// The scalar Kani projection selects exactly the four integer arithmetic entries.
-    #[trace("FR-038-AC-3", "FR-038-AC-4", "FR-015-AC-37", "TC-025")]
+    /// The scalar Kani projection selects four catalogued integer entries and implication.
+    #[trace(
+        "FR-038-AC-3",
+        "FR-038-AC-4",
+        "FR-015-AC-37",
+        "FR-015-AC-118",
+        "TC-025"
+    )]
     #[test]
-    fn scalar_projection_uses_catalogued_arithmetic_identities_only() {
+    fn scalar_projection_selects_arithmetic_and_boolean_implication() {
         assert_eq!(
             ScalarOperation::of("quire.op.integer.add"),
             Some(ScalarOperation::Add)
@@ -697,6 +850,10 @@ mod tests {
         assert_eq!(
             ScalarOperation::of("quire.op.integer.negate"),
             Some(ScalarOperation::Negate)
+        );
+        assert_eq!(
+            ScalarOperation::of("quire.op.boolean.implies"),
+            Some(ScalarOperation::Implies)
         );
         assert_eq!(ScalarOperation::of("quire.op.integer.lt"), None);
         assert_eq!(ScalarOperation::of("quire.op.integer.eq"), None);
@@ -904,6 +1061,7 @@ mod tests {
                 checked_bounds: vec![bound.clone()],
                 dependencies: Vec::new(),
                 oracle_source: String::new(),
+                boolean_right_may_stop: false,
             })),
         };
         let ClaimDisposition::Generated(generated) = &claim.result else {
@@ -974,6 +1132,7 @@ mod tests {
                 checked_bounds,
                 dependencies: Vec::new(),
                 oracle_source: String::new(),
+                boolean_right_may_stop: false,
             })),
         }
     }
@@ -1085,6 +1244,7 @@ mod tests {
                             operation_identity: identity.into(),
                             oracle_source: "fn oracle_test() {}".into(),
                             oracle_symbol: "oracle_test".into(),
+                            boolean_right_may_stop: false,
                             operation,
                             operands: operands.clone(),
                             inferred_operands: if inferred {
@@ -1176,6 +1336,7 @@ mod tests {
                 operation_identity: "quire.op.integer.add".into(),
                 oracle_source,
                 oracle_symbol: "oracle_test".into(),
+                boolean_right_may_stop: false,
                 operation: ScalarOperation::Add,
                 operands: vec![(-1, 1); 2],
                 inferred_operands: vec![],

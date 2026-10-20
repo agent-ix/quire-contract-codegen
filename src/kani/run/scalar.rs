@@ -521,6 +521,11 @@ fn validate_request(request: &KaniScalarNativeRequest<'_>) -> Result<(), KaniSca
     ArtifactBundle::new(request.oracle_artifacts.to_vec())
         .map_err(KaniScalarNativeError::ArtifactPackage)?;
     let identity = &request.harness.identity;
+    if identity.operation_identity == crate::kani::identity::BOOLEAN_IMPLIES_IDENTITY {
+        return Err(KaniScalarNativeError::InvalidRequest(
+            "Boolean scalar proofs have no integer native observer",
+        ));
+    }
     let expected_rust_path = format!("src/generated/{}.rs", identity.module_symbol);
     let expected_record_path = format!("kani-obligations/{}.json", identity.module_symbol);
     let record: serde_json::Value = serde_json::from_str(&request.harness.record.contents)
