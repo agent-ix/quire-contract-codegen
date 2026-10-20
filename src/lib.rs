@@ -16,6 +16,10 @@ mod kani_render_private;
 #[path = "../tests/it/kani_scalar_native_private.rs"]
 mod kani_scalar_native_private;
 
+#[cfg(test)]
+#[path = "../tests/it/kani_graph_domain_private.rs"]
+mod kani_graph_domain_private;
+
 #[cfg(all(test, target_os = "linux"))]
 #[path = "../tests/it/kani_terminal_private.rs"]
 mod kani_terminal_private;

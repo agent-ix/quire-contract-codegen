@@ -49,6 +49,41 @@ pub(super) struct LoweredGraph {
     same_operand: bool,
 }
 
+/// The three domain-construction mutations; the admitted input and evaluator stay intact.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum BoundMutation {
+    PopulationPlusOne,
+    PopulationMinusOne,
+    EdgeUpperPlusOne,
+}
+
+#[cfg(test)]
+pub(crate) fn bound_mutant_for_test(
+    request: &KaniObligationRequest<'_>,
+    package: &CheckedPackageV2,
+    clause: &CheckedNodeId,
+    path: &[usize],
+    mutation: BoundMutation,
+) -> KaniGraphObligationHarness {
+    let mut lowered = match lower_graph(package, clause, path) {
+        Ok(lowered) => lowered,
+        Err(_) => panic!("the original authored graph must lower before mutation"),
+    };
+    match mutation {
+        BoundMutation::PopulationPlusOne => {
+            lowered.population.maximum = lowered.population.maximum.checked_add(1).unwrap();
+        }
+        BoundMutation::PopulationMinusOne => {
+            lowered.population.maximum = lowered.population.maximum.checked_sub(1).unwrap();
+        }
+        BoundMutation::EdgeUpperPlusOne => {
+            lowered.edge.upper = lowered.edge.upper.checked_add(1).unwrap();
+        }
+    }
+    render_graph(request, &lowered).expect("the entire mutated domain must remain representable")
+}
+
 fn node<'a>(
     package: &'a CheckedPackageV2,
     id: &CheckedNodeId,
