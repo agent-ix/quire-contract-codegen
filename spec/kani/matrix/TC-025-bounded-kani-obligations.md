@@ -109,10 +109,68 @@ positive-length semantics (an isolated `start = target` unreachable, a self-loop
 reachable) in the generated draw and the `qsl_replay` oracle; inclusive
 populations `N = 0` and the maximum, edge counts `lower`, `upper` and between,
 `kids` uniqueness, `litter` repeats and `{2,3}`; the healthy `Verified` case and
-each FR-015-AC-106 mutant `Falsified` with an in-domain playback; and identity
+each semantic FR-015-AC-106 mutant `Falsified` at the clause assertion with an
+original-domain playback and same-clause native replay; the separate
+domain-bound controls below; and identity
 changes for the clause path, form, field or role, population extent, edge
 multiplicity, subject and unwind, with byte identity on equal inputs. The
 finite-input `GraphRequest` corpus is not evidence.
+
+For FR-015-AC-106's separate domain controls (IR-939, planned), retain the
+original authored QSL source, admitted package, selected clause/path and typed
+population/edge projections. Independently check the expected domain against
+the authored declarations before seeding a mutation. Use an available real-
+package population profile with `N = 4`, lower degree `0` and upper degree `U
+= 3`, once with a unique selected end and once with a non-unique selected end;
+retain the existing field-edge, `{2,3}`, zero-population, identity and refusal
+cases above. The fixed verification carrier has capacity for five objects and
+four edges per row. Draw candidate counts, active degrees, targets and
+operands across that full carrier, independently of original and generated
+domain admission. Carrier padding/encoding constraints must preserve every
+active graph; do not assume the predicate being checked. Check the observer of
+the actual emitted sampler's ranges, arrays and guards, including inactive
+slots and insufficient capacity, against its generated source. The original
+production arrays need no fifth row or fourth edge; observation of their
+rejection must not index those absent slots.
+
+Run the unmutated domain oracle with installed Kani, asserting both
+conformance and completeness as FR-015-AC-106 defines. Require `Verified`, a
+satisfied final cover with `D = G = true` at count four, and separate
+boundary-probe runs with `D = G = true` for degree zero and three, each with exactly one final cover. Run three separate
+mutants against the unchanged original expected domain, candidate carrier and
+clause evaluation rules: generated population maximum five, maximum three, and
+selected edge maximum four. Change associated production storage when the
+selected bound determines it; do not change the traversal or count
+interpretation. Require `Falsified` at the named domain assertion and decode a
+typed active-graph witness, with original/generated bounds and capacities and
+independently evaluated membership results. Require a separate carrier
+boundary-probe run for each mutant, with exactly one final cover for its
+required mismatch and no membership assumptions; each installed-backend cover
+is satisfied. These concrete boundary witnesses must be reachable in the
+candidate carrier:
+
+- Population five: five objects, zero edges, operands at object zero;
+  `G = true`, `D = false`, violating conformance.
+- Population three: four objects, zero edges, operands at object zero;
+  `D = true`, `G = false`, violating completeness. A capacity rejection is an
+  observed omission, not a memory fault or a clause-result change.
+- Edge maximum four: four objects, one row containing four targets and every
+  other row empty, operands at object zero; `G = true`, `D = false`, violating
+  conformance. For the unique end use targets zero through three; for the
+  non-unique end include repeated target zero. Both are valid in their
+  respective mutant domains and violate only the original edge maximum.
+
+Retain source, actual installed-backend evidence, failed property identity,
+non-vacuity/boundary cover results and native domain-witness checks for each
+profile and run. This is a separately identified domain oracle, not a new
+reachability assertion or a claim that the original QSL clause changes truth.
+Do not replay mutant-only graphs as original-domain semantic counterexamples.
+The semantic mutants still require same-authored-clause `qsl_replay` on
+original-valid graphs. No sampler filtering, reduced authored range, metadata
+comparison, generation-time Boolean or substituted traversal mutant qualifies.
+If the actual owner inputs or verification carrier are unavailable, record
+that control unqualified; do not infer a field population, fabricate a package
+or mark IR-805 or downstream graph retirement FR-015-AC-111 complete.
 
 Generate harnesses for a contract with a precondition, postcondition,
 invariant and frame condition over bounded scalar domains, and for a contract

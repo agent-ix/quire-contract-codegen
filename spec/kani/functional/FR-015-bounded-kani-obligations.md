@@ -811,7 +811,7 @@ families it names, each of which is owed a shadow or a production harness of its
 | FR-015-AC-103 | Through `generate_routed`, `(x + 1) + 1` over `x: Int[0, 9]` into `Int[0, 20]`, `x * -1` over `x: Int[1, 9]` into `Int[-9, -1]`, and `-(x + 1)` over `x: Int[0, 9]` into `Int[-10, -1]` each settle `Supported` with an IR-confirmed outer oracle and a harness. Their respective argument ranges are `[1, 10]` and `[1, 1]`, `[1, 9]` and `[-1, -1]`, and `[1, 10]`; the result assertions use only the outer declared result bounds. Each inferred range carries its source application id in the harness identity. | Test (TC-033) |
 | FR-015-AC-104 | A plain-Integer parameter as any nested leaf keeps `requires_bound` with the Integer `unbounded_type` and no harness; a direct reference to a raw application never borrows a separate narrowing conversion's domain, and an inferred endpoint outside `i64` settles `unsupported` as `domain_not_representable_in_i64` naming both exact endpoints. `OperandRangeLimitExceeded`, `OperandUnsupported`, `OperandTypeMismatch` and `InvalidBody` settle `unsupported` with `oracle_refused` carrying the exact scalar refusal, including its node, position or limit fields, and no harness. Refused items leave a supported sibling's harness and claim unchanged. | Test (TC-033) |
 | FR-015-AC-105 | For a graph claim the harness draws an object count in `[0, N]` of the one covering population and symbolic objects within it; for every object, the selected edge as its shape states: a `Reference` field has exactly one target, an `Option` field an absent or one target, a `Collection` field or finite multi-valued relationship end a count in `[lower, upper]` (a unique end admits no repeated target, a non-unique end repeats, and `lower > 0`, such as `{2,3}`, forces at least `lower` targets) and every target is an object of the population. Start and target are drawn from that population and may be equal; a subtype operand is drawn from it too. The harness asserts the admitted clause condition with the reachability evaluated over only the selected edge by positive-length search, and ends with the FR-015-AC-7 cover after its assertions. `N = 0`, the maximum, and edge counts `lower` and `upper` are each drawn. PLANNED (IR-805; needs CG integration of the merged IR-851/IR-852 accessors and QSL-820 real-package population emission). | Test |
-| FR-015-AC-106 | The independent native oracle replays the same authored clause over each concrete graph through QSL's replay (`qsl_replay`), and does not substitute a separately authored reachability. With the installed backend, a QSL-emitted, IR-admitted healthy case yields `Verified` with its cover satisfied for one field-edge claim and one relationship-end claim over a `{0,3}` unique and a `{0,3}` non-unique end; each seeded mutant yields `Falsified` with an in-domain playback: reachability that allows a zero-length path (so an isolated `start = target` reads reachable), one that rejects a self-loop, one following another field or role, a population extent raised or lowered by one, an edge upper bound raised by one, and a negated claim. A generation-time Boolean or `KaniOutcome::Proved` is not proof evidence. PLANNED (IR-805; needs CG integration of the merged IR-851/IR-852 accessors and QSL-820 real-package population emission). | Test |
+| FR-015-AC-106 | The independent native oracle replays the same authored clause over each original-domain concrete graph through QSL's replay (`qsl_replay`), and does not substitute a separately authored reachability. With the installed backend, a QSL-emitted, IR-admitted healthy case yields `Verified` with its cover satisfied for one field-edge claim and one relationship-end claim over a `{0,3}` unique and a `{0,3}` non-unique end. Each semantic mutant yields `Falsified` at the clause assertion with an original-domain playback and native replay of that same authored clause: reachability that allows a zero-length path (so an isolated `start = target` reads reachable), one that rejects a self-loop, one following another field or role, and a negated claim. Separately, the domain-conformance/completeness oracle defined below verifies the healthy generated domain and falsifies each pure authored-bound mutant: population extent raised or lowered by one and edge upper bound raised by one. Those controls identify a domain mismatch, with a typed boundary witness, rather than requiring a change in clause truth. A generation-time Boolean or `KaniOutcome::Proved` is not proof evidence. PLANNED (IR-805; IR-939 clarifies the domain oracle; needs CG integration of the merged IR-851/IR-852 accessors and QSL-820 real-package population emission). | Test |
 | FR-015-AC-107 | Graph claims are located by `state_clause` node id and argument path: one reachability written twice in one condition yields two items at positions 0 and 1; one node under two clauses yields two items with different identities; a field-edge and a relationship-end reachability yield separate items; a collection claim, a clause with no reachability and a path that does not name a reachability application each settle `unsupported` naming the missing claim with no harness. A mixed request settles one disposition per item and a supported item's harness is unchanged by a refused sibling. PLANNED (IR-805). | Test |
 | FR-015-AC-108 | A graph claim settles by the disposition sequence in the Description (the paragraph "Disposition sequence for a graph claim"), with no harness, domain reduction or caller `max_expansions` substitute. While the population selection for the claim is `Unavailable` (no available population selection for this admitted claim), the claim settles `unsupported` naming it. Given a selection, `Unbounded` or `UnknownClosureOpenExtent`, that is a claim whose population has no finite authored bound (once a selection is available), settles `requires_bound` naming the population; an unbounded `Collection` edge settles `requires_bound` naming the edge. A selection of `StaleBinding`, `ForeignPackage`, `NotPopulation`, `MissingOccurrence`, `UnknownClosureUnresolvedObjectType` or `UnknownClosureUnresolvedSubtypeClosure`, a relationship-end claim whose typed end is unavailable to CG, and an accessor refusal, each `unsupported` naming the refusal and returning no partial end: `UnknownNode` (the id of the reaches application found at the claim's path, which is the id passed to `relationship_end` and is not the `state_clause` id, is absent from the graph), `NotReachesApplication` (that application id names a node that is not a `quire.op.model.reaches` application) or `UnresolvedEnd` (the member no longer resolves to one retained relationship end). AC-107's location refusal is checked first, so a path that is missing or names no reachability application gets AC-107's refusal and never `NotReachesApplication`. A field member of another shape, and a claim form the encoding cannot express, each settle `unsupported` naming the input. PLANNED (IR-805). | Test, Inspection |
 | FR-015-AC-109 | Implemented (IR-598 arithmetic slice only; merged IR-858 satisfies AD-004 step 4b). After this slice no source under `src/` contains the corpus `Arithmetic` request variant and arm, `BoundedCorpusFamily::DefinednessArithmetic`, `prepare_checked_arithmetic`, `checked_method`, `render_arithmetic_*` or `lower/definedness_arithmetic.rs` and their re-exports, and no test in `tests/` drives them. The slice deletes only what the arithmetic family owns: the corpus replay (`BoundedCorpusCase::replay_counterexample`, `compile_corpus_qsl_package`, `BoundedCorpusReplayError` and the replay-harness identity helpers) stays until FR-015-AC-111, because its only caller replays graph and collection cases (an arithmetic corpus case never falsifies, FR-015-AC-57), and the arithmetic slice adds no replay test. V2 add, subtract, multiply and negate serve the family (FR-015-AC-103, FR-015-AC-115, FR-015-AC-117). V2 does not serve divide or remainder, tested: a claim over `quire.op.integer.div` settles `Unsupported(OperationNotRendered)` with no harness (the internal `ScalarLoweringRefusal::NoRenderer`), and `quire.op.integer.rem` stays the refused catalogue identity with no family. IR-854 owns V2 `div` and `mod`. Recorded coverage loss: FR-015-AC-84 and FR-015-AC-85 covered divide and remainder only as a Rust `checked_div` and `checked_rem` literal check (exact result, zero-division and range refusals) with no mutation control, whose retained QSL text uses `/` and `%`; the original IR-598 review inferred from its then-resolved `qsl-forms` that `%` was not a QSL operator and that the remainder case's QSL probably did not compile (not executed then and not rechecked by this spec refresh), hence the loss is not QSL division coverage and IR-854 inherits none of it. Inspection of the no-wrapper rule: the slice adds no `interface-001` operation, and no `src/` item converts a finite-input request type (`CheckedArithmeticRequest`, `CollectionQuery`, `GraphRequest`, `BoundedCorpusRequest`) into a V2 generator call. | Test (TC-023) and Inspection |
@@ -847,6 +847,110 @@ families it names, each of which is owed a shadow or a production harness of its
 | FR-015-AC-79 | Reorder request fields to the accessor's name order, insert an unrequested inherited field, or emit the hand-built fixture's scope ids. |
 | FR-015-AC-80 | Generate the harness from the hand-built fixture rather than the emitted package. |
 | FR-015-AC-81 | Mark an unread `IntRange` as `NoRead`, give an untyped member a range, omit its reason, or accept a duplicate unranged name. |
+
+### FR-015-AC-106
+
+The graph verification controls distinguish clause semantics from domain
+conformance and completeness. This clarification defines a test oracle, not an
+additional production generator, public input model or proof of delivery. The
+IR-805 symbolic-graph criteria remain planned until their required evidence
+exists.
+
+For a selected claim, let `D(g)` mean that the concrete active graph `g`
+belongs to the original authored domain: its population count is in `[0,N]`,
+every active row has degree in the selected edge's inclusive `[lower,U]`,
+every active target belongs to that population, and its uniqueness and operand
+constraints hold. Required and optional fields retain their respective exact
+one and zero-or-one multiplicities. A zero population has no live operands;
+any representation sentinel is not an object or a path. Only active rows and
+active edge slots describe the graph; padding is not an extra object or edge.
+
+The expected predicate `D` is independently implemented from the retained
+original QSL model declarations and their admitted typed owner projections:
+`reaches_population` / `select_population`, and `relationship_end` or
+`model_object_fields` / `CheckedMemberType`, as applicable. The fixture checks
+these original projections against its authored population, selected
+role/field, multiplicity and uniqueness declarations before mutation. Neither
+`D` nor its expected endpoints may be obtained from the generated harness, the
+mutated bound, or the generator's mutated lowering result. Mutating a reader
+shared with the expected predicate does not qualify as an independent control.
+The original package and claim identity stay unchanged.
+
+Let `G(g)` mean that the actual generated sampler can represent and admit that
+same active graph, before evaluating the clause. Its observation includes its
+real storage extents, input ranges, active-count interpretation and all
+sampler assumptions, not just identity metadata or the intended bound. For the
+fixed-array encoding, population capacity, row capacity and degree capacity
+must cover every active row and slot of `g`; absent capacity means `G(g)` is
+false, without indexing outside an array. Dormant padding may be normalized
+only after checking that this preserves admission of every active graph.
+Observing the emitted sampler's typed statements or parsed source is allowed;
+reconstructing `G` solely from an expected or mutated endpoint is not. The
+observer is checked against the actual emitted ranges, array shapes and
+assumptions, including rejection, so that a domain error in emission is
+observable.
+
+With installed Kani, the separate domain oracle asserts both `G(g) implies
+D(g)` (conformance) and `D(g) implies G(g)` (completeness) over a common
+bounded candidate carrier. The healthy oracle classifies `Verified` with a
+satisfied final cover witnessing `D(g) and G(g) and count = N`.
+Separate boundary-probe runs each retain exactly one final cover and witness
+`D(g) and G(g)` with the selected edge's lower and upper degrees where
+feasible; no harness gains an additional cover. These candidates are drawn independently of `G` and `D`:
+neither predicate, their conjunction nor the original sampler's assumptions
+may filter out a candidate before those assertions. Carrier-only
+representation constraints may be assumed, with evidence that every graph in
+the compared domains has a representation. A native evaluation of `D` and `G`
+agrees with each recorded backend boundary witness.
+
+The candidate carrier is verification storage, distinct from the production
+sampler's arrays. It represents the union of the healthy domain and all three
+mutated domains, including `N+1` active objects and `U+1` active edges per
+row, without pretending the production `[N][U]` arrays can hold them. The
+observer reports unrepresentable candidates as rejected rather than truncating
+them. All original inclusive ranges remain quantified in full; ceiling or
+integer/array representability failures remain refusals, never a smaller
+replacement domain. A control whose union carrier cannot be represented or run
+within the declared ceilings remains unqualified. This test carrier does not
+relax the production representational ceilings of AC-101.
+
+Each pure-bound mutant changes only the generated domain construction for the
+selected population maximum or selected edge upper bound, including any
+storage extents derived from that bound, while keeping the original package,
+expected predicate, clause evaluation rules and candidate carrier unchanged.
+Storage and unrolling dimensions may follow the changed bound, but active-
+count interpretation and positive-length search semantics do not change. The
+population-minus-one control uses `N > 0`. Fixtures make the changed boundary
+satisfiable; in particular a unique `U+1` edge witness needs at least `U+1`
+active objects. Every run retains generated source, the observed domain
+definition, backend property identity and FR-017 execution evidence. The
+healthy run verifies both implications. Each mutant classifies `Falsified` at
+the appropriate domain assertion and yields a typed witness containing the
+original declaration/claim/edge identity, active population, per-row degrees
+and targets, operands, original and generated bounds/capacities, and
+independently checked `D` and `G` results. A separate carrier boundary-probe
+run for each mutant has one final cover witnessing its required mismatch
+below, without assuming either membership predicate; each of those covers is
+satisfied with the installed backend:
+
+- Population `N+1`: a graph with `N+1` active objects is admitted by `G` and
+  rejected by `D`; this is a mutant-only conformance witness.
+- Population `N-1`: an original-valid graph with `N` active objects satisfies
+  `D` and is rejected by `G`; this is an omitted original-domain completeness
+  witness, even when the smaller production array cannot encode it.
+- Edge upper `U+1`: an otherwise valid graph with one active row of degree
+  `U+1` is admitted by `G` and rejected by `D`; this is a mutant-only
+  conformance witness, preserving original lower bound and uniqueness.
+
+An array bounds fault, changed traversal limit, added dormant row/edge,
+constant-false predicate, changed claim or an expectation copied from the
+mutant does not qualify. Pure assumption narrowing need not change clause
+truth on any retained graph. Mutant-only witnesses are not original-domain
+clause counterexamples and earn no original-domain replay credit. The separate
+semantic controls above still require original-domain playback and same-clause
+`qsl_replay` agreement. Missing real-package population links or typed field
+accessors retain AC-108's refusal; a test-only carrier or a relationship-end
+success does not supply the missing field-edge producer/API evidence.
 
 ## Dependencies
 
