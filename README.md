@@ -5,15 +5,12 @@
 quire-contract-codegen is a Rust library that generates oracles, property tests,
 proofs and evidence records from one checked contract package.
 
-A contract states what an operation promises. The library takes a checked
-contract package (produced by
-[quire-contract-ir](https://github.com/agent-ix/quire-contract-ir)) and
-generates Rust oracles, proptest strategies and test harnesses, Kani proof
-harnesses, and the evidence records that tie each output back to the clause it
-came from. Generation is deterministic: the same package always gives the same
-bytes. Tests and proofs are generated, so they cannot drift from the contract.
-When a proof fails, the counterexample is replayed through QSL to check whether
-it is a real violation.
+From a checked contract package (produced by
+[quire-contract-ir](https://github.com/agent-ix/quire-contract-ir)) it generates
+Rust oracles, proptest strategies and test harnesses, Kani proof harnesses, and
+evidence records that link each output to its clause. The same package always
+generates the same bytes. A counterexample from a failed proof is replayed
+through QSL to confirm the violation.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/hero-dark.svg">
