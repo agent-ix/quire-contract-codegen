@@ -32,8 +32,8 @@ fn fixture(wall_clock: Duration) -> (KaniScalarObligationHarness, Vec<Artifact>)
     )
 }
 
-fn limits() -> quire_contract_runtime::exact::ScalarLimits {
-    quire_contract_runtime::exact::ScalarLimits {
+fn limits() -> quire_exact::ScalarLimits {
+    quire_exact::ScalarLimits {
         integer_bits: 101,
         decimal_digits: 102,
         scale_expansion: 103,
