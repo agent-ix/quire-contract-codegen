@@ -1586,7 +1586,7 @@ pub(crate) fn qualify_staged_native_for_test(request: &KaniScalarNativeRequest<'
         request.scalar_limits,
     )
     .unwrap();
-    assert_eq!(outcome, Outcome::Completed(Integer::from(5)));
+    assert_eq!(outcome, Outcome::Completed(Integer::from(5_i64)));
     assert_eq!(observation.limits(), &request.scalar_limits);
     assert!(observation.consumed().iter().any(|value| *value > 0));
     assert_eq!(
