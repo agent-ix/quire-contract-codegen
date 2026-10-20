@@ -46,6 +46,7 @@ use qsl_replay::{
     InconclusiveCause, OperationSite, ReplayRefusal, ReplayResult, ReplaySource, TerminalValue,
     Verdict, WitnessSettlement,
 };
+use quire_contract_codegen::generate_v2_clause_oracle;
 use quire_contract_codegen::{
     execute_kani_obligation, generate_state_frame_obligations, negotiate_kani_obligations,
     BoundNotResolvedCause, FrameReplay, FrameReplayError, InvalidObligationItem,
@@ -57,7 +58,6 @@ use quire_contract_codegen::{
     StateFrameRole, UnsupportedFrameEffect, UnsupportedObligation, MAX_OBLIGATION_ITEMS,
     MAX_OBLIGATION_UNWIND,
 };
-use quire_contract_codegen::generate_v2_clause_oracle;
 use quire_contract_codegen::{HarnessSymbol, StateFrameRecordError};
 use quire_contract_model::{
     CheckedMemberType, CheckedNodeId, CheckedPackageReadLimits, CheckedPackageV2,
@@ -87,13 +87,189 @@ fn qsl_emitted_state_clause_derives_a_confirmed_field_backed_oracle() {
     let generated = generate_v2_clause_oracle(&package, &clause)
         .expect("the admitted state clause condition is supported");
     assert_eq!(generated.node_id, clause);
-    assert_eq!(generated.provenance, quire_contract_codegen::OperationProvenance::IrConfirmed);
+    assert_eq!(
+        generated.provenance,
+        quire_contract_codegen::OperationProvenance::IrConfirmed
+    );
     assert!(generated.source.contains("pub fn oracle_"));
-    assert!(generated.source.contains("evaluate_ordering"));
+    assert!(generated.source.contains("order_numbers"));
     assert!(generated.source.contains("pre_balance"));
     assert!(generated.source.contains("current_balance"));
     assert_eq!(generated.inputs.len(), 2);
-    assert!(generated.inputs.iter().all(|input| input.lower == 0 && input.upper == 1000));
+    assert!(generated
+        .inputs
+        .iter()
+        .all(|input| input.lower == 0 && input.upper == 1000));
+    assert_eq!(generated.source_map.len(), 1);
+    let entry = &generated.source_map[0];
+    assert_eq!(entry.node_id, clause);
+    assert_eq!(entry.role, "oracle_evaluation");
+    assert_eq!(entry.expected_consequents, Some(0));
+    let line = generated
+        .source
+        .lines()
+        .nth((entry.probe.line - 1) as usize)
+        .unwrap();
+    let start = (entry.probe.start_column - 1) as usize;
+    let end = (entry.probe.end_column - 1) as usize;
+    assert_eq!(&line[start..end], "pub");
+
+    let scratch = super::scratch_crate::TemporaryDirectory::new("quire-v2-clause-oracle");
+    fs::write(scratch.path.join("src/lib.rs"), format!(
+        "{}\n#[test]\nfn clause_values() {{\n    use rt::{{Meter, ScalarLimits}};\n    let limits = ScalarLimits {{ integer_bits: 1000, decimal_digits: 1000, scale_expansion: 1000, text_input_bytes: 1000, text_scalars: 1000, normalized_scalars: 1000, unit_edges: 1000, value_occurrences: 1000, work_units: 1000, result_units: 1000 }};\n    let mut meter = Meter::new(limits);\n    let current = rt::Integer::from(5i64);\n    let pre = rt::Integer::from(4i64);\n    assert!(matches!(oracle_clause(&current, &pre, &mut meter), Ok(rt::Outcome::Completed(true))));\n    let mut meter = Meter::new(limits);\n    assert!(matches!(oracle_clause(&pre, &current, &mut meter), Ok(rt::Outcome::Completed(false))));\n    let mut meter = Meter::new(ScalarLimits {{ work_units: 0, ..limits }});\n    assert!(matches!(oracle_clause(&current, &pre, &mut meter), Ok(rt::Outcome::Incomplete(_))));\n}}\n",
+        generated.source
+    )).unwrap();
+    super::scratch_crate::write_manifest(
+        &scratch.path,
+        &format!(
+            "[package]\nname = \"generated-v2-clause\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
+            super::scratch_crate::runtime_dependency(&["exact"])
+        ),
+    );
+    let output = std::process::Command::new(env!("CARGO"))
+        .args(["test", "--offline", "--quiet"])
+        .env("CARGO_TARGET_DIR", scratch.path.join("target"))
+        .env("RUSTFLAGS", "-Dwarnings")
+        .current_dir(&scratch.path)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "generated clause failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[trace("FR-014-AC-38")]
+#[test]
+fn admitted_clause_refuses_non_clause_node() {
+    let twin = Twin::new();
+    let (package, _) = twin.emitted_package("BalanceNeverDrops");
+    let non_clause = package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| node.node_tag.as_ref() == "expression")
+        .expect("an expression node");
+    assert_eq!(
+        generate_v2_clause_oracle(&package, &non_clause.node_id),
+        Err(quire_contract_codegen::V2ClauseRefusal::NotClause),
+    );
+}
+
+#[trace("FR-014-AC-38")]
+#[test]
+fn qsl_emitted_pre_of_an_expression_is_refused() {
+    let (package, clause) = Twin::with_balance_condition("self.balance >= pre(self.balance + 1)")
+        .emitted_package("BalanceNeverDrops");
+    assert_eq!(
+        generate_v2_clause_oracle(&package, &clause),
+        Err(quire_contract_codegen::V2ClauseRefusal::UnsupportedCondition),
+    );
+}
+
+#[trace("FR-014-AC-38")]
+#[test]
+fn qsl_emitted_negated_clause_composes_the_boolean_oracle() {
+    let (package, clause) =
+        Twin::with_negated_balance_clause().emitted_package("BalanceNeverDrops");
+    let generated = generate_v2_clause_oracle(&package, &clause)
+        .expect("a QSL emitted negated clause condition");
+    assert_eq!(generated.node_id, clause);
+    assert!(generated.source.contains("evaluate_boolean"));
+    assert!(generated.source.contains("order_numbers"));
+    assert_eq!(generated.source_map[0].expected_consequents, Some(0));
+}
+
+#[trace("FR-014-AC-38")]
+#[test]
+fn qsl_model_field_range_is_the_clause_input_range() {
+    let (package, clause) =
+        Twin::with_field_ranges((-5, 10), (50, 60)).emitted_package("BalanceNeverDrops");
+    let generated = generate_v2_clause_oracle(&package, &clause)
+        .expect("a clause over the selected balance field");
+    assert_eq!(generated.inputs.len(), 2);
+    assert!(generated
+        .inputs
+        .iter()
+        .all(|input| (input.lower, input.upper) == (-5, 10)));
+}
+
+#[trace("FR-014-AC-38")]
+#[test]
+fn qsl_emitted_clause_composes_boolean_and_integer_operations() {
+    let mut compiled = String::new();
+    for (index, (expression, expected)) in [
+        ("self.balance + 1 >= pre(self.balance)", true),
+        ("self.balance - 1 >= pre(self.balance)", false),
+        ("self.balance * 2 >= pre(self.balance)", true),
+        ("-self.balance <= pre(self.balance)", true),
+        ("self.balance >= pre(self.balance) and self.balance >= 0", true),
+        ("self.balance >= pre(self.balance) or self.balance >= 0", true),
+        ("self.balance >= pre(self.balance) implies self.balance >= 0", true),
+        (
+            "self.balance >= pre(self.balance) implies (self.balance >= 0 implies self.balance <= 1000)",
+            true,
+        ),
+        ("self.balance = pre(self.balance)", true),
+        ("self.balance != pre(self.balance)", false),
+        ("self.balance < pre(self.balance)", false),
+        ("self.balance <= pre(self.balance)", true),
+        ("self.balance > pre(self.balance)", false),
+        ("(self.balance >= 0) = (pre(self.balance) >= 0)", true),
+        ("(self.balance >= 0) != (pre(self.balance) >= 0)", false),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let (package, clause) =
+            Twin::with_balance_condition(expression).emitted_package("BalanceNeverDrops");
+        let generated = generate_v2_clause_oracle(&package, &clause)
+            .unwrap_or_else(|error| panic!("{expression}: {error:?}"));
+        assert_eq!(generated.node_id, clause);
+        assert!(generated.source.contains("pub fn oracle_clause("));
+        let count = u32::try_from(expression.matches("implies").count()).unwrap();
+        assert_eq!(generated.source_map[0].expected_consequents, Some(count));
+        assert_eq!(generated.source_map.len(), 1 + count as usize);
+        for consequent in generated.source_map.iter().skip(1) {
+            assert_eq!(consequent.role, "implication_consequent");
+            assert_eq!(consequent.node_id, clause);
+            let line = generated
+                .source
+                .lines()
+                .nth((consequent.probe.line - 1) as usize)
+                .unwrap();
+            let start = (consequent.probe.start_column - 1) as usize;
+            let end = (consequent.probe.end_column - 1) as usize;
+            assert!(line[start..end].starts_with("value_"));
+        }
+        let arguments = "&value, ".repeat(generated.inputs.len());
+        compiled.push_str(&format!(
+            "pub mod case_{index} {{\n{}\n#[test]\nfn runs() {{\n    let value = rt::Integer::from(0i64);\n    let mut meter = rt::Meter::new(rt::ScalarLimits {{ integer_bits: 1000, decimal_digits: 1000, scale_expansion: 1000, text_input_bytes: 1000, text_scalars: 1000, normalized_scalars: 1000, unit_edges: 1000, value_occurrences: 1000, work_units: 1000, result_units: 1000 }});\n    assert!(matches!(oracle_clause({arguments}&mut meter), Ok(rt::Outcome::Completed({expected}))));\n}}\n}}\n",
+            generated.source,
+        ));
+    }
+    let scratch = super::scratch_crate::TemporaryDirectory::new("quire-v2-clause-corpus");
+    fs::write(scratch.path.join("src/lib.rs"), compiled).unwrap();
+    super::scratch_crate::write_manifest(
+        &scratch.path,
+        &format!(
+            "[package]\nname = \"generated-v2-clause-corpus\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
+            super::scratch_crate::runtime_dependency(&["exact"])
+        ),
+    );
+    let output = std::process::Command::new(env!("CARGO"))
+        .args(["test", "--offline", "--quiet"])
+        .env("CARGO_TARGET_DIR", scratch.path.join("target"))
+        .env("RUSTFLAGS", "-Dwarnings")
+        .current_dir(&scratch.path)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "generated clause corpus failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 }
 
 /// One variant of the fixture. Each variant owns its node codes, because the test binary's

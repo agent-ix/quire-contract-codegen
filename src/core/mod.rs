@@ -17,6 +17,8 @@ pub(crate) mod contract_package;
 pub(crate) mod diagnostic;
 // Identity newtypes of a generated harness.
 pub(crate) mod identity;
+// The one typed access layer for admitted V2 clause conditions.
+pub(crate) mod ir;
 // Bounded readable name components, unique names and symbol derivation.
 // Implements: FR-022
 pub(crate) mod naming;

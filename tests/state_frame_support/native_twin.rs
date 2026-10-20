@@ -511,6 +511,16 @@ impl Twin {
         twin
     }
 
+    /// A selected QSL postcondition with one alternate Boolean balance expression.
+    pub fn with_balance_condition(condition: &str) -> Self {
+        let mut twin = Self::build(&model::GRANTED, &[CLAUSES[0]], 0);
+        let source = String::from_utf8(twin.unit).expect("native unit");
+        let changed = source.replace("self.balance >= pre(self.balance)", condition);
+        assert_ne!(changed, source, "the balance condition changed");
+        twin.unit = changed.into_bytes();
+        twin
+    }
+
     /// Four clauses of one operation with distinct checked node identities for item validation.
     pub fn with_distinct_balance_clauses() -> Self {
         let mut twin = Self::build(

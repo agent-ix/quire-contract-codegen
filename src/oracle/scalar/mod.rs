@@ -3686,6 +3686,48 @@ struct SourceBuilder {
     needs_width: bool,
 }
 
+/// Render scalar operation helpers for a checked clause condition using the same
+/// runtime calls and source template as standalone scalar oracles.
+pub(crate) fn render_clause_operation_helpers(
+    operations: &[(String, String, ExactScalarOperation)],
+) -> Result<String, OracleGenerationError> {
+    let mut source = SourceBuilder::default();
+    for (symbol, identity, operation) in operations {
+        source.oracle(symbol, identity, operation)?;
+    }
+    Ok(source.finish())
+}
+
+/// Select an admitted clause subexpression's supported scalar renderer without
+/// duplicating the operation catalog in the clause generator.
+pub(crate) fn clause_scalar_operation(
+    identity: &str,
+    result_bound: Option<(i128, i128)>,
+) -> Option<ExactScalarOperation> {
+    match family_of_identity(identity)? {
+        Family::Boolean(operator) => Some(ExactScalarOperation::Boolean {
+            right_may_stop: !matches!(operator, BooleanOperator::Not),
+            operator,
+        }),
+        Family::Equality(operator, operands) => {
+            Some(ExactScalarOperation::Equality { operator, operands })
+        }
+        Family::Ordering(operator, operands) if operands == OrderingOperandKind::Integer => {
+            Some(ExactScalarOperation::Ordering { operator, operands })
+        }
+        Family::IntegerArithmetic(operator) => {
+            let domain = match result_bound {
+                Some((lower, upper)) => {
+                    IntegerDomain::Bounded(IntegerInterval::new(lower.into(), upper.into()).ok()?)
+                }
+                None => IntegerDomain::Mathematical,
+            };
+            Some(ExactScalarOperation::IntegerArithmetic { operator, domain })
+        }
+        _ => None,
+    }
+}
+
 impl SourceBuilder {
     fn oracle(
         &mut self,
