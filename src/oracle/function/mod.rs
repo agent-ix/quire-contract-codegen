@@ -1682,11 +1682,17 @@ pub(crate) fn reference_node_id<'a>(
 #[cfg(test)]
 thread_local! {
     static FUNCTION_PREFLIGHT_READS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static FUNCTION_PREFLIGHT_INDICES: std::cell::RefCell<Vec<usize>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
 #[cfg(test)]
 pub(crate) fn take_function_preflight_reads() -> usize {
     FUNCTION_PREFLIGHT_READS.with(|count| count.replace(0))
+}
+
+#[cfg(test)]
+pub(crate) fn take_function_preflight_indices() -> Vec<usize> {
+    FUNCTION_PREFLIGHT_INDICES.with(|indices| std::mem::take(&mut *indices.borrow_mut()))
 }
 
 /// Non-admitted result of the internal function-package reader.
@@ -1704,6 +1710,10 @@ pub(crate) fn checked_integer_function_application_is_supported(
     argument_node_ids: &[CheckedNodeId],
     admitted: Option<(&ContractPackageV1, &[ContractRequestPosition], usize)>,
 ) -> Result<bool, FunctionPackageReadFailure> {
+    #[cfg(test)]
+    if let Some((_, _, request_index)) = admitted {
+        FUNCTION_PREFLIGHT_INDICES.with(|indices| indices.borrow_mut().push(request_index));
+    }
     let graph: Graph<'_> = checked
         .graph()
         .nodes
@@ -1798,11 +1808,16 @@ pub(crate) fn checked_integer_function_application_is_supported(
         if let Some((package, positions, request_index)) = admitted {
             let Some(body_index) = positions
                 .iter()
-                .filter_map(|position| match position {
-                    ContractRequestPosition::DriverItem { node_id, .. } => Some(node_id),
-                    ContractRequestPosition::ContextRoot { .. } => None,
+                .filter(|position| !matches!(position, ContractRequestPosition::ContextRoot { .. }))
+                .enumerate()
+                .find_map(|(index, position)| match position {
+                    ContractRequestPosition::DriverItem { node_id, .. } if node_id == body_id => {
+                        Some(index)
+                    }
+                    ContractRequestPosition::DriverItem { .. }
+                    | ContractRequestPosition::Excluded { .. }
+                    | ContractRequestPosition::ContextRoot { .. } => None,
                 })
-                .position(|node_id| node_id == body_id)
             else {
                 return Ok(false);
             };
@@ -1940,11 +1955,9 @@ fn check_position(
     request_index: usize,
     node_id: &CheckedNodeId,
 ) -> Result<(), OracleGenerationError> {
-    let Some(accounted) = requested.driver_node(request_index) else {
-        return Err(OracleGenerationError::PackageRequest(
-            PackageRequestError::Position { request_index },
-        ));
-    };
+    let accounted = requested
+        .bound_driver_node(request_index)
+        .map_err(OracleGenerationError::PackageRequest)?;
     if accounted != node_id {
         return Err(OracleGenerationError::PackageRequest(
             PackageRequestError::Identity {

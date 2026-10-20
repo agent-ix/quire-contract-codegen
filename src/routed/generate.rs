@@ -194,6 +194,13 @@ pub struct RoutedGeneration {
 /// A whole-call refusal; nothing is generated.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum RoutedGenerationError {
+    /// A routed item names an accounting-only driver position.
+    ExcludedDriverIndex {
+        /// Original driver request index.
+        request_index: usize,
+        /// Exact key of the excluded position.
+        node_id: CheckedNodeId,
+    },
     /// The routed scalar selection is absent or differs from the admitted driver position.
     ScalarSelectionMismatch {
         /// The offending driver request index.
@@ -288,7 +295,7 @@ struct ArmItemOutput {
 /// Runs the generation arm of every routed item's backend kind.
 ///
 /// Refusals are checked in the order kind disagreement, duplicate request index, missing context,
-/// each naming the lowest offending request index, before anything is generated.
+/// then excluded driver index, before anything is generated.
 ///
 /// Trace: TC-033
 // Implements: FR-022
@@ -309,6 +316,15 @@ pub fn generate_routed(
     refuse_inconsistent_routing(&ordered, contexts)?;
     let package_items =
         PackageItems::new(package, positions).map_err(RoutedGenerationError::Package)?;
+
+    for item in &ordered {
+        if let Some(node_id) = package_items.excluded_node(item.request_index) {
+            return Err(RoutedGenerationError::ExcludedDriverIndex {
+                request_index: item.request_index,
+                node_id: node_id.clone(),
+            });
+        }
+    }
 
     for item in &ordered {
         if item.kind == BackendKind::Kani {
@@ -492,7 +508,8 @@ fn generate_kani(
         .filter_map(|position| match position {
             ContractRequestPosition::DriverItem {
                 result_selection, ..
-            } => Some(result_selection),
+            } => Some(Some(result_selection)),
+            ContractRequestPosition::Excluded { .. } => Some(None),
             ContractRequestPosition::ContextRoot { .. } => None,
         })
         .collect::<Vec<_>>();
@@ -500,13 +517,15 @@ fn generate_kani(
         .iter()
         .zip(claim_indexes)
         .map(|(item, claim_index)| {
-            let result_selection = driver_selections.get(item.request_index).copied().ok_or(
-                RoutedGenerationError::ContractScalar(ContractScalarError::Request(
-                    PackageRequestError::Position {
+            let result_selection = driver_selections
+                .get(item.request_index)
+                .copied()
+                .flatten()
+                .ok_or(RoutedGenerationError::ContractScalar(
+                    ContractScalarError::Request(PackageRequestError::Position {
                         request_index: item.request_index,
-                    },
-                )),
-            )?;
+                    }),
+                ))?;
             Ok(ObligationItem::ScalarClaim {
                 package,
                 claim_map: &claim_map,

@@ -44,9 +44,9 @@ pub fn routed_contract_lowering_profile() -> CompleteLoweringProfileV2 {
 
 /// The role of one root in the exact sequence passed to Contract IR lowering.
 ///
-/// Driver items retain their request order even when context-only roots are
-/// interleaved. A context root has FR-330 accounting but no backend settlement
-/// or generated claim of its own.
+/// Bound and excluded driver positions retain their original indexes even when
+/// context-only roots are interleaved. Excluded and context positions have
+/// FR-330 accounting but no backend settlement or generated claim of their own.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ContractRequestPosition {
     /// One original driver request, including repeated requested node IDs.
@@ -55,6 +55,11 @@ pub enum ContractRequestPosition {
         node_id: CheckedNodeId,
         /// Caller-authored result occurrence for scalar expressions.
         result_selection: ContractDriverResultSelection,
+    },
+    /// Accounting-only driver position with no envelope item or generated claim.
+    Excluded {
+        /// Exact root key retained in admitted accounting.
+        node_id: CheckedNodeId,
     },
     /// A root needed to represent the meaning of a driver item.
     ContextRoot {
@@ -82,7 +87,9 @@ impl ContractRequestPosition {
     #[must_use]
     pub fn node_id(&self) -> &CheckedNodeId {
         match self {
-            Self::DriverItem { node_id, .. } | Self::ContextRoot { node_id } => node_id,
+            Self::DriverItem { node_id, .. }
+            | Self::Excluded { node_id }
+            | Self::ContextRoot { node_id } => node_id,
         }
     }
 }
@@ -126,6 +133,20 @@ pub enum PackageRequestError {
     Position {
         /// Position outside the admitted accounting.
         request_index: usize,
+    },
+    /// A generator selected an accounting-only driver position.
+    ExcludedDriverIndex {
+        /// Original driver request index.
+        request_index: usize,
+        /// Exact key of the excluded position.
+        node_id: CheckedNodeId,
+    },
+    /// A context root follows an excluded position, so no bound item owns it.
+    OrphanContextRoot {
+        /// Position in the complete lowering sequence.
+        accounting_index: usize,
+        /// Exact unowned root key.
+        node_id: CheckedNodeId,
     },
     /// The admitted traversal could not reproduce a lowered item's closure.
     ReachedClosure {
@@ -187,6 +208,7 @@ pub(crate) struct PackageItems<'a> {
     package: &'a ContractPackageV1,
     positions: &'a [ContractRequestPosition],
     driver_to_accounting: Vec<usize>,
+    bound_driver_indices: Vec<usize>,
 }
 
 impl<'a> PackageItems<'a> {
@@ -203,6 +225,8 @@ impl<'a> PackageItems<'a> {
             });
         }
         let mut driver_to_accounting = Vec::new();
+        let mut bound_driver_indices = Vec::new();
+        let mut after_excluded = false;
         for (accounting_index, (position, record)) in positions.iter().zip(accounted).enumerate() {
             if position.node_id() != record.node_id() {
                 return Err(PackageRequestError::AccountingIdentity {
@@ -211,20 +235,56 @@ impl<'a> PackageItems<'a> {
                     accounted: record.node_id().clone(),
                 });
             }
-            if matches!(position, ContractRequestPosition::DriverItem { .. }) {
-                driver_to_accounting.push(accounting_index);
+            match position {
+                ContractRequestPosition::DriverItem { .. } => {
+                    bound_driver_indices.push(driver_to_accounting.len());
+                    driver_to_accounting.push(accounting_index);
+                    after_excluded = false;
+                }
+                ContractRequestPosition::Excluded { .. } => {
+                    driver_to_accounting.push(accounting_index);
+                    after_excluded = true;
+                }
+                ContractRequestPosition::ContextRoot { node_id } if after_excluded => {
+                    return Err(PackageRequestError::OrphanContextRoot {
+                        accounting_index,
+                        node_id: node_id.clone(),
+                    });
+                }
+                ContractRequestPosition::ContextRoot { .. } => {}
             }
         }
         Ok(Self {
             package,
             positions,
             driver_to_accounting,
+            bound_driver_indices,
         })
     }
 
-    /// Number of original driver requests, excluding context-only roots.
-    pub(crate) fn driver_count(&self) -> usize {
-        self.driver_to_accounting.len()
+    /// Number of positions with their own envelope item.
+    pub(crate) fn bound_count(&self) -> usize {
+        self.bound_driver_indices.len()
+    }
+
+    /// Driver index associated with one FR-331 envelope item.
+    pub(crate) fn bound_driver_index(&self, envelope_index: usize) -> Option<usize> {
+        self.bound_driver_indices.get(envelope_index).copied()
+    }
+
+    /// Original driver indexes for FR-331 items in envelope order.
+    pub(crate) fn bound_driver_indices(&self) -> &[usize] {
+        &self.bound_driver_indices
+    }
+
+    /// Exact key when this original driver position is accounting-only.
+    pub(crate) fn excluded_node(&self, request_index: usize) -> Option<&'a CheckedNodeId> {
+        let accounting_index = *self.driver_to_accounting.get(request_index)?;
+        match self.positions.get(accounting_index)? {
+            ContractRequestPosition::Excluded { node_id } => Some(node_id),
+            ContractRequestPosition::DriverItem { .. }
+            | ContractRequestPosition::ContextRoot { .. } => None,
+        }
     }
 
     /// Exact key of one driver request, independently of context-root order.
@@ -237,6 +297,21 @@ impl<'a> PackageItems<'a> {
             .map(ContractFeatureRecordV1::node_id)
     }
 
+    /// Exact key only for a bound driver position; refuse excluded indexes before generation.
+    pub(crate) fn bound_driver_node(
+        &self,
+        request_index: usize,
+    ) -> Result<&'a CheckedNodeId, PackageRequestError> {
+        if let Some(node_id) = self.excluded_node(request_index) {
+            return Err(PackageRequestError::ExcludedDriverIndex {
+                request_index,
+                node_id: node_id.clone(),
+            });
+        }
+        self.driver_node(request_index)
+            .ok_or(PackageRequestError::Position { request_index })
+    }
+
     /// Caller-authored result selection for one driver position.
     pub(crate) fn result_selection(
         &self,
@@ -247,7 +322,8 @@ impl<'a> PackageItems<'a> {
             ContractRequestPosition::DriverItem {
                 result_selection, ..
             } => Some(result_selection),
-            ContractRequestPosition::ContextRoot { .. } => None,
+            ContractRequestPosition::Excluded { .. }
+            | ContractRequestPosition::ContextRoot { .. } => None,
         }
     }
 
@@ -269,6 +345,7 @@ impl<'a> PackageItems<'a> {
         request_index: usize,
         node_id: &CheckedNodeId,
     ) -> Result<PackageItem<'a>, PackageRequestError> {
+        self.bound_driver_node(request_index)?;
         let accounting_index = *self
             .driver_to_accounting
             .get(request_index)

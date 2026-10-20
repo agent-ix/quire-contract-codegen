@@ -25,6 +25,16 @@ use crate::core::contract_package::{
     AdmittedItemAccounting, ContractRequestPosition, PackageItem, PackageItems, PackageRequestError,
 };
 
+#[cfg(test)]
+thread_local! {
+    static PACKAGE_CLASSIFIER_INDICES: std::cell::RefCell<Vec<usize>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+#[cfg(test)]
+pub(crate) fn take_package_classifier_indices() -> Vec<usize> {
+    PACKAGE_CLASSIFIER_INDICES.with(|indices| std::mem::take(&mut *indices.borrow_mut()))
+}
+
 fn serialize_domain_kind<S: serde::Serializer>(
     kind: &DomainKind,
     serializer: S,
@@ -738,6 +748,10 @@ impl KaniForm {
         backend: &BackendDescriptor,
         admitted: Option<(&ContractPackageV1, &[ContractRequestPosition], usize)>,
     ) -> Result<KaniFormPreflightOutcome, Box<Cause>> {
+        #[cfg(test)]
+        if let Some((_, _, request_index)) = admitted {
+            PACKAGE_CLASSIFIER_INDICES.with(|indices| indices.borrow_mut().push(request_index));
+        }
         let identity = self.identity();
         match self {
             Self::V1BoundClause { clause } => {
@@ -1412,8 +1426,39 @@ pub fn negotiate_backend_provider(
 #[allow(clippy::result_large_err)]
 fn negotiate_backend_provider_with_package(
     envelope: &BackendProviderEnvelope,
-    admitted: Option<(&ContractPackageV1, &[ContractRequestPosition])>,
+    admitted: Option<(&ContractPackageV1, &[ContractRequestPosition], &[usize])>,
 ) -> Result<Vec<ItemSettlement>, EnvelopeRefusal> {
+    validate_backend_provider_envelope(envelope)?;
+    let request_indices = match admitted {
+        Some((_, _, indices)) => indices.to_vec(),
+        None => (0..envelope.items.len()).collect(),
+    };
+    envelope
+        .items
+        .iter()
+        .zip(request_indices)
+        .map(|(item, request_index)| {
+            Ok(ItemSettlement {
+                request_index,
+                kind: match item.kind {
+                    RequestedKind::Known(kind) => Some(kind),
+                    RequestedKind::Absent | RequestedKind::Unknown(_) => None,
+                },
+                disposition: negotiate_item(
+                    &envelope.manifest,
+                    item,
+                    admitted.map(|(package, positions, _)| (package, positions, request_index)),
+                )?,
+            })
+        })
+        .collect()
+}
+
+// FR-019 fixes the typed projection payload by value in this refusal.
+#[allow(clippy::result_large_err)]
+fn validate_backend_provider_envelope(
+    envelope: &BackendProviderEnvelope,
+) -> Result<(), EnvelopeRefusal> {
     if envelope.contract_version != BACKEND_PROVIDER_CONTRACT {
         return Err(EnvelopeRefusal::InvalidCapability {
             cause: "unsupported-version",
@@ -1440,31 +1485,13 @@ fn negotiate_backend_provider_with_package(
             identity: identity.to_owned(),
         });
     }
-    envelope
-        .items
-        .iter()
-        .enumerate()
-        .map(|(request_index, item)| {
-            Ok(ItemSettlement {
-                request_index,
-                kind: match item.kind {
-                    RequestedKind::Known(kind) => Some(kind),
-                    RequestedKind::Absent | RequestedKind::Unknown(_) => None,
-                },
-                disposition: negotiate_item(
-                    &envelope.manifest,
-                    item,
-                    admitted.map(|(package, positions)| (package, positions, request_index)),
-                )?,
-            })
-        })
-        .collect()
+    Ok(())
 }
 
 /// The decision for one exact FR-330 request position.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ContractItemSettlement {
-    /// Position among the original driver items; context roots do not count.
+    /// Original driver index; excluded positions count and context roots do not.
     pub request_index: usize,
     /// Exact requested key, including repeated positions.
     pub node_id: CheckedNodeId,
@@ -1481,9 +1508,9 @@ pub enum ContractNegotiationError {
     Envelope(EnvelopeRefusal),
     /// Request positions and exact keys disagree with the admitted package.
     Package(PackageRequestError),
-    /// The FR-331 envelope and the original request have different position counts.
+    /// The FR-331 envelope and the bound request positions have different counts.
     EnvelopeItemCount {
-        /// Number of original request positions.
+        /// Number of bound driver positions.
         requested: usize,
         /// Number of FR-331 item records supplied.
         supplied: usize,
@@ -1502,18 +1529,27 @@ pub fn negotiate_contract_package(
     envelope: &BackendProviderEnvelope,
 ) -> Result<Vec<ContractItemSettlement>, ContractNegotiationError> {
     let items = PackageItems::new(package, positions).map_err(ContractNegotiationError::Package)?;
-    let backend = negotiate_backend_provider_with_package(envelope, Some((package, positions)))
-        .map_err(ContractNegotiationError::Envelope)?;
-    if backend.len() != items.driver_count() {
+    validate_backend_provider_envelope(envelope).map_err(ContractNegotiationError::Envelope)?;
+    if envelope.items.len() != items.bound_count() {
         return Err(ContractNegotiationError::EnvelopeItemCount {
-            requested: items.driver_count(),
-            supplied: backend.len(),
+            requested: items.bound_count(),
+            supplied: envelope.items.len(),
         });
     }
+    let backend = negotiate_backend_provider_with_package(
+        envelope,
+        Some((package, positions, items.bound_driver_indices())),
+    )
+    .map_err(ContractNegotiationError::Envelope)?;
     backend
         .into_iter()
         .enumerate()
-        .map(|(request_index, settlement)| {
+        .map(|(envelope_index, settlement)| {
+            let request_index = items.bound_driver_index(envelope_index).ok_or(
+                ContractNegotiationError::Package(PackageRequestError::Position {
+                    request_index: envelope_index,
+                }),
+            )?;
             let node_id =
                 items
                     .driver_node(request_index)

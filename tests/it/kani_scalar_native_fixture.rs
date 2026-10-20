@@ -91,7 +91,8 @@ pub(super) fn routed_scalar_with_artifacts(
                 ContractRequestPosition::DriverItem {
                     result_selection, ..
                 } => result_selection.clone(),
-                ContractRequestPosition::ContextRoot { .. } => unreachable!("driver position"),
+                ContractRequestPosition::Excluded { .. }
+                | ContractRequestPosition::ContextRoot { .. } => unreachable!("driver position"),
             },
         )],
         &GenerationContexts {
