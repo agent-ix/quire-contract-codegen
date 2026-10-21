@@ -28,7 +28,7 @@ the replay inputs and directly to every public witness-decoding entry point. For
 over-bound control, place a poisoned byte or value just past the bound that would cause
 a distinct decode error if read. Verify by inspection that neither bound can be omitted
 or defaulted at any decoding entry point. Also replay an out-of-domain witness,
-a witness whose native value or charges disagree with the harness, a witness whose
+a witness whose native value disagrees with the harness, a witness whose
 native replay returns `ReplayRefusal::Fault`, and a witness whose replay agrees
 in a category other than `violation`. Inspect the replay error for the fault
 (FR-016-AC-12).
@@ -117,10 +117,12 @@ to that transcript rests on the `Verified` then `Falsified` outcome assertions.
 
 What stays unbacked: the native twin is hand-mirrored QSL source, not derived from the contract or
 the Rust subject, and the input package is hand-built, so the contract-to-Contract-IR step does not
-run. The Kani lane is `#[ignore]` and outside `make ci`, so the real-prover mutations above are
-not gated in CI; the default suite pins the replay end and the decoder against a synthetic
-transcript only. FR-016-AC-6 is covered by tagged witness unit, spine, frame, state-clause and
-bounded-corpus tests; the bounded-corpus test runs in the Kani lane. FR-016-AC-7 remains planned.
+run. The Kani lane is `#[ignore]` and outside `make ci`; NFR-006 instead requires `make kani-gate`
+before opening and merging a Kani-touching PR. The default suite pins the replay end and the
+decoder against a synthetic transcript only. FR-016-AC-6 is covered by tagged witness unit,
+spine, frame, state-clause and bounded-corpus tests; the bounded-corpus test runs in the Kani lane.
+Former FR-016-AC-7 is retired under IR-604 because Kani supplies no scalar-charge,
+consumed-counter or replay-limit counterpart to QSL's accounting result.
 FR-016-AC-12 is covered by
 `tc_026_an_executor_fault_remains_a_typed_replay_refusal`. FR-029-AC-10 already
 tests the terminal mapping for a fault wrapped in `SpineReplayError::Refused`.
@@ -144,8 +146,7 @@ caller-supplied byte and value-count decode limits (AC-6) are covered by tagged 
 `src/replay/witness.rs`, `tests/it/skeleton_spine.rs`,
 `tests/it/kani_obligations_state_frame.rs`,
 `tests/it/kani_obligations_state_clause_replay.rs` and `tests/it/bounded_kani_corpus.rs`.
-The charge, counter and limit comparison (AC-7) remains planned. Replay-layer propagation of an executor
-fault (AC-12) is covered by
+Replay-layer propagation of an executor fault (AC-12) is covered by
 `tc_026_an_executor_fault_remains_a_typed_replay_refusal`; the terminal mapping is
 covered by FR-029-AC-10.
 
