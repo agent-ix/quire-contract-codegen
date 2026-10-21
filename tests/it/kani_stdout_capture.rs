@@ -58,9 +58,10 @@ pub(crate) fn assertion_playback<'a>(stdout: &'a str, harness: &str) -> &'a str 
         .filter_map(|after_heading| after_heading.split_once("```").map(|(_, rest)| rest))
         .filter_map(|after_open| after_open.split_once("```").map(|(block, _)| block.trim()))
         .find(|block| {
-            block
-                .lines()
-                .any(|line| line.trim_start().starts_with("/// Check for `assertion`"))
+            block.contains("kani::concrete_playback_run")
+                && !block
+                    .lines()
+                    .any(|line| line.starts_with("/// Check for `cover`"))
         })
         .expect("the observed stdout has this harness's assertion playback")
 }
@@ -92,16 +93,17 @@ mod tests {
         assert_eq!(capture.stdout().as_bytes(), output.stdout);
     }
 
-    /// Selection reads the assertion block in a multi-block stdout and preserves its test text.
+    /// Selection reads the first eligible block for this harness and preserves its test text.
     #[trace("FR-016-AC-25", "TC-026")]
     #[test]
     fn tc_026_observed_stdout_selects_only_the_named_assertion_block() {
-        let stdout = "Concrete playback unit test for `h`:\n```\n/// Check for `cover`\ncover\n```\n\
-                      Concrete playback unit test for `other`:\n```\n/// Check for `assertion`\nother\n```\n\
-                      Concrete playback unit test for `h`:\n```\n/// Check for `assertion`\nactual\n```\n";
+        let stdout = "Concrete playback unit test for `h`:\n```\n/// Check for `cover`\nkani::concrete_playback_run(cover);\n```\n\
+                      Concrete playback unit test for `other`:\n```\n/// Check for `assertion`\nkani::concrete_playback_run(other);\n```\n\
+                      Concrete playback unit test for `h`:\n```\n/// Check for `assertion`\nkani::concrete_playback_run(first);\n```\n\
+                      Concrete playback unit test for `h`:\n```\n/// Check for `assertion`\nkani::concrete_playback_run(second);\n```\n";
         assert_eq!(
             assertion_playback(stdout, "h"),
-            "/// Check for `assertion`\nactual"
+            "/// Check for `assertion`\nkani::concrete_playback_run(first);"
         );
     }
 }
