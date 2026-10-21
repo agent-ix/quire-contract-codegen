@@ -41,3 +41,15 @@ FAIL: AC-120 has no valid refinement-only identity comparison under the stated o
 | FND | Outcome | Reason |
 | --- | --- | --- |
 | FND-001 | fixed | At 7f7619ba AC-120 compares two independently valid selected owners with matching occurrences, states that a mismatched owner has no identity, and places identity minting after owner and occurrence validation. AD-003 states the same order. |
+| FND-002 | still-open | The merged QSL ADR now mandates ascending, duplicate-free hypotheses, so the admitted-domain permutation case needs an explicit test scope or replacement. |
+| FND-003 | still-open | The merged QSpec FR-322 restricts generated owner occurrences to proof-eligible refinements, while AC-122 does not state this precondition or the ineligible refusal. |
+
+| FND-002 | fixed | AC-120 now limits admitted hypotheses changes to valid sorted lists and identifies opposite-order permutation as a separate raw QSV encoder vector outside QSL emission. |
+| FND-003 | fixed | AC-122 now requires a proof-eligible owner, gives the FR-322-AC-91 ineligible declaration-only behavior, and names the IR reader refusal before CG setup. AD-003 repeats the boundary. |
+
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-002 | medium | AC-120 requires a two-hypothesis permutation within an admitted refinement, but merged QSL ADR-013 O-09 supplies hypotheses only in ascending node-key digest order without duplicates. State whether the permutation is a raw-record encoder test outside QSL admission, or use two valid ordered lists. | FR-015-AC-120; QSL ADR-013 O-09 |
+| FND-003 | medium | AC-122 does not limit generated refinement occurrences to proof-eligible owners; merged QSpec FR-322-AC-91 admits ineligible refinements with only declaration occurrence and refuses any generated occurrence. Define CG refusal or explicitly restrict the acceptance case to proof-eligible owners. | FR-015-AC-122; QSpec FR-322-AC-91 |
