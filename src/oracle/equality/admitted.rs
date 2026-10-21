@@ -37,6 +37,15 @@ pub(super) fn lookup_refusal(cause: AdmittedLookupRefusal) -> CompositeEqualityR
     }
 }
 
+pub(super) fn require_context<'ctx>(
+    admitted: Option<&'ctx AdmittedContext>,
+    declaration: &CheckedNodeId,
+) -> Result<&'ctx AdmittedContext, CompositeEqualityRefusal> {
+    admitted.ok_or_else(|| CompositeEqualityRefusal::MissingAdmittedContext {
+        type_node_id: declaration.clone(),
+    })
+}
+
 pub(super) fn resolve_enum(
     admitted: &AdmittedContext,
     closure: &mut TypeClosure,

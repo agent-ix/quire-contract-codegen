@@ -50,8 +50,8 @@ pub(crate) fn scalar_observer_manifest() -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        equality_oracle_crate_manifest, oracle_crate_manifest, scalar_observer_manifest, EXACT_DEPENDENCY_SOURCE,
-        RUNTIME_DEPENDENCY_SOURCE,
+        equality_oracle_crate_manifest, oracle_crate_manifest, scalar_observer_manifest,
+        EXACT_DEPENDENCY_SOURCE, RUNTIME_DEPENDENCY_SOURCE,
     };
     use ix_trace_rs::trace;
 

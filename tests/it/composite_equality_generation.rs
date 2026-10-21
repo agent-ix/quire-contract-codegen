@@ -279,8 +279,12 @@ fn generate_with_context(
             .into_iter()
             .map(|node_id| ContractRequestPosition::ContextRoot { node_id }),
     );
+    // Standalone primitive/early-refusal fixtures need no owner key. The legacy nominal
+    // corpus still requires genuine owner capabilities and remains QSL937 migration work;
+    // its original positive/precise assertions are intentionally not replaced by Missing.
     let output = generate_composite_equality_oracles(
         &admitted,
+        None,
         &roots,
         &positions,
         &items,
@@ -327,11 +331,10 @@ fn invalid_type_resolution_work_limit_refuses_before_lowering() {
         ContractPackageReadResult::Admitted(package) => package,
         other => panic!("IR must admit its package: {other:?}"),
     };
-    // A genuine unrelated context makes the required pre-context limit ordering observable.
-    let genuine = super::admitted_enum_fixture::compile(super::admitted_enum_fixture::SOURCE);
+    // The invalid setting precedes traversal and needs no identity capability.
     let result = generate_composite_equality_oracles(
         &admitted,
-        genuine.context(),
+        None,
         &[],
         &[],
         &[],
@@ -463,6 +466,7 @@ fn tc_029_ac32_direct_control_case_refusal_preserves_healthy_equality_sibling() 
         });
     let combined = generate_composite_equality_oracles(
         &contract,
+        None,
         &requests,
         &[0, 1],
         &[case_item, equality_item.clone()],
@@ -471,6 +475,7 @@ fn tc_029_ac32_direct_control_case_refusal_preserves_healthy_equality_sibling() 
     .unwrap();
     let equality_only = generate_composite_equality_oracles(
         &contract,
+        None,
         &requests,
         &[1],
         &[equality_item],
@@ -2049,11 +2054,12 @@ fn structural_violations(lib: &str) -> Vec<String> {
         } else {
             "EnvironmentError"
         };
-        if !returns.is_some_and(|ret| {
-            ret.starts_with("Result<") && ret.ends_with(&format!(", {error}>"))
-        }) {
+        if !returns
+            .is_some_and(|ret| ret.starts_with("Result<") && ret.ends_with(&format!(", {error}>")))
+        {
             violations.push(format!(
-                "`{}` does not return Result<_, {error}>", function.name
+                "`{}` does not return Result<_, {error}>",
+                function.name
             ));
         }
         let call = format!("{}(", function.name);
@@ -2225,31 +2231,64 @@ fn tc_029_ac17_emitted_reconstruction_is_typed_and_refused_never_unwrapped() {
     }
     assert_eq!(structural_violations(lib), Vec::<String>::new());
     // The context ABI publishes only a private prepared capability after typed preparation.
-    let environments: Vec<_> = fns.iter()
-        .filter(|function| function.name.starts_with("environment_")).collect();
+    let environments: Vec<_> = fns
+        .iter()
+        .filter(|function| function.name.starts_with("environment_"))
+        .collect();
     assert!(!environments.is_empty());
     for function in environments {
-        assert!(function.signature.contains("Result<PreparedEqualityEnvironment<'ctx>, EnvironmentError>"));
-        assert!(function.signature.contains("&'ctx qsl_replay::AdmittedContext"));
-        assert!(function.body.contains("EnvironmentError::ContextPackageMismatch"));
-        assert!(function.body.contains(".map_err(EnvironmentError::Declaration)?"));
+        assert!(function
+            .signature
+            .contains("Result<PreparedEqualityEnvironment<'ctx>, EnvironmentError>"));
+        assert!(function
+            .signature
+            .contains("Option<&'ctx qsl_replay::AdmittedContext>"));
+        assert!(function
+            .body
+            .contains("EnvironmentError::ContextPackageMismatch"));
+        assert!(function
+            .body
+            .contains(".map_err(EnvironmentError::Declaration)?"));
     }
-    for function in fns.iter().filter(|function| function.name.starts_with("oracle_")) {
+    for function in fns
+        .iter()
+        .filter(|function| function.name.starts_with("oracle_"))
+    {
         for required in [
-            "prepared.binding !=", "actual.domain().as_str() !=", "actual.hex() !=",
-            "GeneratedDescriptorReconstructionFailed", "environment.check_type(left_comparison)",
-            "environment.check_type(right_comparison)", "&prepared.enum_members",
-            "GeneratedTypeCheckRejected", "GeneratedEqualityCheckRejected",
+            "prepared.binding !=",
+            "actual.domain().as_str() !=",
+            "actual.hex() !=",
+            "GeneratedDescriptorReconstructionFailed",
+            "environment.check_type(left_comparison)",
+            "environment.check_type(right_comparison)",
+            "&prepared.enum_members",
+            "GeneratedTypeCheckRejected",
+            "GeneratedEqualityCheckRejected",
             "checked.evaluate(environment, left, right, meter)",
         ] {
-            assert!(function.body.contains(required), "{} missing {required}", function.name);
+            assert!(
+                function.body.contains(required),
+                "{} missing {required}",
+                function.name
+            );
         }
-        assert!(!function.body.contains("rebuild_"), "preparation must precede metered execution");
+        assert!(
+            !function.body.contains("rebuild_"),
+            "preparation must precede metered execution"
+        );
     }
     let environment_error = emitted_enum(lib, "EnvironmentError");
-    for variant in ["ContextPackageMismatch {", "Lookup(qsl_replay::AdmittedLookupRefusal),",
-        "Declaration(sv::EnvironmentFailure),", "Reconstruction(ReconstructionError),"] {
-        assert!(environment_error.contains(variant), "missing typed variant {variant}");
+    for variant in [
+        "MissingAdmittedContext {",
+        "ContextPackageMismatch {",
+        "Lookup(qsl_replay::AdmittedLookupRefusal),",
+        "Declaration(sv::EnvironmentFailure),",
+        "Reconstruction(ReconstructionError),",
+    ] {
+        assert!(
+            environment_error.contains(variant),
+            "missing typed variant {variant}"
+        );
     }
     let variants: Vec<&str> = emitted_enum(lib, "ReconstructionError")
         .lines()

@@ -410,10 +410,14 @@ mod admitted_failure_tests {
     fn boundary_mapping_retains_a_genuine_malformed_source_package_refusal() {
         let cause = compile_admitted(
             qsl_replay::SourceIdentity::new("test", "invalid.native", "git", "fixture"),
-            "invalid.native", b"language \"ix:native\" edition \"1-draft\"; record { ",
-            [], &DependencyInput::default(), qsl_replay::StageLimits::default(),
+            "invalid.native",
+            b"language \"ix:native\" edition \"1-draft\"; record { ",
+            [],
+            &DependencyInput::default(),
+            qsl_replay::StageLimits::default(),
             qsl_replay::ReplayLimits::default(),
-        ).expect_err("malformed source cannot produce an admitted context");
+        )
+        .expect_err("malformed source cannot produce an admitted context");
         assert!(matches!(cause, AdmittedRefusal::Package(_)));
         let CompositeBuildError::Recompile(cause) = recompile_failure(cause) else {
             panic!("mapping lost the real compiler refusal");

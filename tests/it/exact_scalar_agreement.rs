@@ -99,12 +99,28 @@ fn run_agreement_cases_with_expectation<'a>(
         .expect("spawn cargo");
     let stdout = String::from_utf8_lossy(&output.stdout);
     if let Some(failed_test) = failed_test {
-        assert_eq!(output.status.code(), Some(101), "{label}: expected Cargo native test failure");
-        assert!(stdout.lines().any(|line| line.starts_with("running ") && line.ends_with(" tests")),
-            "{label}: no native test dispatch: {stdout}\n{}", String::from_utf8_lossy(&output.stderr));
-        assert!(stdout.lines().any(|line| line == format!("test {failed_test} ... FAILED")),
-            "{label}: required assertion did not fail: {stdout}");
-        assert!(stdout.contains("test result: FAILED."), "{label}: missing native failure summary: {stdout}");
+        assert_eq!(
+            output.status.code(),
+            Some(101),
+            "{label}: expected Cargo native test failure"
+        );
+        assert!(
+            stdout
+                .lines()
+                .any(|line| line.starts_with("running ") && line.ends_with(" tests")),
+            "{label}: no native test dispatch: {stdout}\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(
+            stdout
+                .lines()
+                .any(|line| line == format!("test {failed_test} ... FAILED")),
+            "{label}: required assertion did not fail: {stdout}"
+        );
+        assert!(
+            stdout.contains("test result: FAILED."),
+            "{label}: missing native failure summary: {stdout}"
+        );
         return;
     }
     assert!(

@@ -865,10 +865,17 @@ fn original_request_preserves_the_owning_reader_limit() {
     let mut read_limits = CheckedPackageReadLimits::bounded();
     read_limits.bytes = 1;
     let original = OriginalCompositeEqContext::new(
-        package, inputs(SOURCE), "f", content_identity(), read_limits,
-    ).expect("retaining already-admitted inputs does not re-read them");
-    assert!(matches!(original.request(&node, &occurrence, EqualityOperator::Equal, &[], 100_000),
-        Err(CompositeBuildError::PackageReadLimit(_))));
+        package,
+        inputs(SOURCE),
+        "f",
+        content_identity(),
+        read_limits,
+    )
+    .expect("retaining already-admitted inputs does not re-read them");
+    assert!(matches!(
+        original.request(&node, &occurrence, EqualityOperator::Equal, &[], 100_000),
+        Err(CompositeBuildError::PackageReadLimit(_))
+    ));
 }
 
 /// An invalid reader-relative stage request is not relabeled as ill-typed input.
@@ -878,11 +885,20 @@ fn original_request_preserves_the_above_reader_resource_refusal() {
     let package = checked(SOURCE);
     let (node, occurrence) = application(&package, "f");
     let mut retained = inputs(SOURCE);
-    retained.stage_limits.insert("s1.input_bytes".to_owned(), u64::MAX);
+    retained
+        .stage_limits
+        .insert("s1.input_bytes".to_owned(), u64::MAX);
     let original = OriginalCompositeEqContext::new(
-        package, retained, "f", content_identity(), CheckedPackageReadLimits::bounded(),
-    ).expect("retain authentic source before request-stage validation");
-    assert!(matches!(original.request(&node, &occurrence, EqualityOperator::Equal, &[], 100_000),
+        package,
+        retained,
+        "f",
+        content_identity(),
+        CheckedPackageReadLimits::bounded(),
+    )
+    .expect("retain authentic source before request-stage validation");
+    assert!(
+        matches!(original.request(&node, &occurrence, EqualityOperator::Equal, &[], 100_000),
         Err(CompositeBuildError::Recompile(cause))
-            if matches!(*cause, qsl_replay::AdmittedRefusal::Resource(qsl_replay::AdmittedResource::AboveReader(_)))));
+            if matches!(*cause, qsl_replay::AdmittedRefusal::Resource(qsl_replay::AdmittedResource::AboveReader(_))))
+    );
 }

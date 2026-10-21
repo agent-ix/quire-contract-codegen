@@ -1,8 +1,8 @@
 //! Native agreement values from genuine owner declarations and retained source selection.
+use super::fixture::imported;
 use qsl_replay::{AdmittedCompilation, AdmittedContext};
 use quire_exact::{EnumMember, EnumShape, Value, ValueType};
 use quire_semantic_value::enumeration::{EnumDeclaration, EnumMemberIndex, EnumValue};
-use super::fixture::imported;
 
 pub struct EnumData {
     pub shape: ValueType,

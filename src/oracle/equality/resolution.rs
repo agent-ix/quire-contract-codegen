@@ -13,6 +13,7 @@ enum Frame {
     Enter {
         id: CheckedNodeId,
         external_bound: Option<CheckedNodeId>,
+        direct_root: bool,
     },
     FinishBound(CheckedNodeId),
     FinishOption(CheckedNodeId),
@@ -129,7 +130,7 @@ fn collection_parts(
 
 /// Resolve a root within the item's shared closure and work counter.
 pub(super) fn resolve_type(
-    admitted: &qsl_replay::AdmittedContext,
+    admitted: Option<&qsl_replay::AdmittedContext>,
     graph: &Graph<'_>,
     bounds_by_type: &BTreeMap<&CheckedNodeId, Vec<&CheckedSemanticNodeV2>>,
     closure: &mut TypeClosure,
@@ -138,17 +139,28 @@ pub(super) fn resolve_type(
     let mut frames = vec![Frame::Enter {
         id: type_id.clone(),
         external_bound: None,
+        direct_root: true,
     }];
     let mut values = Vec::new();
     let mut active = BTreeSet::new();
     while let Some(frame) = frames.pop() {
         match frame {
-            Frame::Enter { id, external_bound } => {
+            Frame::Enter {
+                id,
+                external_bound,
+                direct_root,
+            } => {
                 closure.charge()?;
                 let node = lookup(graph, &id)?;
                 match CheckedNodeTag::from_wire(&node.node_tag) {
                     Some(CheckedNodeTag::ScalarType) => {
-                        let bounds = bounds_by_type.get(&id).map_or(&[][..], Vec::as_slice);
+                        // Direct Integer IDs denote the unbounded source/target, never a sibling's interval.
+                        // Recursive member-associated resolution keeps its existing AC16 behavior.
+                        let bounds = if direct_root && node.semantic_form.as_ref() == "integer" {
+                            &[][..]
+                        } else {
+                            bounds_by_type.get(&id).map_or(&[][..], Vec::as_slice)
+                        };
                         values.push(resolve_scalar(admitted, closure, bounds, &id, node)?);
                     }
                     Some(CheckedNodeTag::BoundedDomain) => {
@@ -169,6 +181,7 @@ pub(super) fn resolve_type(
                             frames.push(Frame::Enter {
                                 id: base.node_id.clone(),
                                 external_bound: Some(id),
+                                direct_root: false,
                             });
                         } else {
                             closure.charge()?; // the bounded-domain semantic_type edge
@@ -203,6 +216,8 @@ pub(super) fn resolve_type(
                     }
                     Some(CheckedNodeTag::CompositeType) => match &*node.semantic_form {
                         "record" | "tuple" => {
+                            super::admitted::require_context(admitted, &id)?;
+                            // A present enum capability does not supply QSL937's composite owner lookup.
                             let key = node_key(&id)?;
                             if closure.composites.contains_key(&key)
                                 || closure.in_progress.contains(&key)
@@ -247,6 +262,7 @@ pub(super) fn resolve_type(
                                 frames.push(Frame::Enter {
                                     id: child,
                                     external_bound: None,
+                                    direct_root: false,
                                 });
                             }
                         }
@@ -272,6 +288,7 @@ pub(super) fn resolve_type(
                             frames.push(Frame::Enter {
                                 id: target,
                                 external_bound: None,
+                                direct_root: false,
                             });
                         }
                         "sequence" | "set" | "bag" | "ordered_set" => {
@@ -290,6 +307,7 @@ pub(super) fn resolve_type(
                             frames.push(Frame::Enter {
                                 id: element,
                                 external_bound: None,
+                                direct_root: false,
                             });
                         }
                         "reference" => {
