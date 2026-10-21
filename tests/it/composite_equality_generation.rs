@@ -16,8 +16,8 @@ use quire_contract_codegen::{
     generate_composite_equality_oracles, ClaimDisposition, CompositeEqualityClaim,
     CompositeEqualityItem, CompositeEqualityLimits, CompositeEqualityOracles,
     CompositeEqualityRefusal, ContractRequestPosition, DeclarationRefusalCause,
-    EqualityOperandDescriptor, EqualityOperatorKind, OracleGenerationError,
-    RecordedSchedule, UpstreamBlocker, COMPOSITE_EQUALITY_CRATE_NAME,
+    EqualityOperandDescriptor, EqualityOperatorKind, OracleGenerationError, RecordedSchedule,
+    UpstreamBlocker, COMPOSITE_EQUALITY_CRATE_NAME,
 };
 use quire_contract_model::{
     derive_structural_candidates, CheckedNodeTag, CheckedPackageLimit, CheckedPackageReadLimits,
@@ -996,10 +996,22 @@ fn tc_029_a_body_operand_disagreeing_with_the_descriptor_refuses_before_generati
 #[test]
 fn tc_029_ac6_ieee_at_any_depth_is_operator_ineligible() {
     let source = "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\nrecord FloatRecord { f: Float64; }\nrecord IntegerRecord { f: Integer; }\n";
-    let compiled = super::admitted_composite_fixture::compile(source, &qsl_replay::DependencyInput::default());
-    let owner_key = |name: &str| compiled.context().composites()
-        .find(|actual| actual.qualified_name().iter().map(|part| part.as_str()).eq([name]))
-        .expect("real source declaration").key();
+    let compiled =
+        super::admitted_composite_fixture::compile(source, &qsl_replay::DependencyInput::default());
+    let owner_key = |name: &str| {
+        compiled
+            .context()
+            .composites()
+            .find(|actual| {
+                actual
+                    .qualified_name()
+                    .iter()
+                    .map(|part| part.as_str())
+                    .eq([name])
+            })
+            .expect("real source declaration")
+            .key()
+    };
     // Reconstruct SEQ_R_FLOAT (a sequence of R_FLOAT { f: Float64 }) exactly
     // as the runtime environment sees it, and confirm the reader refusal
     // asserted by `tc_052_nested_ieee_equality_is_refused_by_reader`

@@ -1,9 +1,9 @@
 //! Bounded, iterative reconstruction of equality operand types.
 
 use super::{
-    aggregate_members, bound_members, is_option_node, literal_count, lookup,
-    read_record_field, read_reference, resolve_scalar, CardinalityBound, CheckedNodeId,
-    CheckedNodeTag, CheckedSemanticNodeV2, CollectionKind, CollectionType, CompositeDeclaration,
+    aggregate_members, bound_members, is_option_node, literal_count, lookup, read_record_field,
+    read_reference, resolve_scalar, CardinalityBound, CheckedNodeId, CheckedNodeTag,
+    CheckedSemanticNodeV2, CollectionKind, CollectionType, CompositeDeclaration,
     CompositeEqualityRefusal, CompositeShape, FieldDeclaration, Graph, ItemCheckError, NodeKey,
     Presence, TypeClosure, ValueType, COLLECTION_BOUNDS_MEMBERS,
 };

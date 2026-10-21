@@ -3,8 +3,21 @@
 use qsl_replay::{AdmittedCompilation, DependencyInput, ReplayLimits, SourceIdentity, StageLimits};
 
 pub const CASES: &[&str] = &[
-    "record", "tuple", "option", "collection", "recursive", "nested", "text", "enum",
-    "conv", "conv_charge", "conv_rat_rat", "conv_rat_int", "conv_dec_rat", "conv_dec_dec", "conv_dec_int",
+    "record",
+    "tuple",
+    "option",
+    "collection",
+    "recursive",
+    "nested",
+    "text",
+    "enum",
+    "conv",
+    "conv_charge",
+    "conv_rat_rat",
+    "conv_rat_int",
+    "conv_dec_rat",
+    "conv_dec_dec",
+    "conv_dec_int",
 ];
 
 pub fn source(case: &str) -> String {
@@ -26,19 +39,28 @@ pub fn source(case: &str) -> String {
         "conv_dec_int" => ("", "Decimal[-100, 100; 0, 0; nearest-even]", "Integer", Some("Integer")),
         other => panic!("unknown agreement source case {other}"),
     };
-    let left_expression = target.map_or_else(|| "a".to_owned(), |target| format!("convert<{target}>(a)"));
+    let left_expression =
+        target.map_or_else(|| "a".to_owned(), |target| format!("convert<{target}>(a)"));
     format!("language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\n{declarations}function f using v(a: {left},b: {right}): Boolean pure {{ {left_expression} = b }}\n")
 }
 
 pub fn compile(case: &str) -> AdmittedCompilation {
-    assert!(CASES.contains(&case), "the retained source case is declared");
+    assert!(
+        CASES.contains(&case),
+        "the retained source case is declared"
+    );
     compile_source(&source(case))
 }
 
 pub fn compile_source(source: &str) -> AdmittedCompilation {
     qsl_replay::compile_admitted(
         SourceIdentity::new("test", "composite-agreement.native", "git", "fixture"),
-        "composite-agreement.native", source.as_bytes(), [], &DependencyInput::default(),
-        StageLimits::default(), ReplayLimits::default(),
-    ).expect("the original agreement source must admit before any key is used")
+        "composite-agreement.native",
+        source.as_bytes(),
+        [],
+        &DependencyInput::default(),
+        StageLimits::default(),
+        ReplayLimits::default(),
+    )
+    .expect("the original agreement source must admit before any key is used")
 }

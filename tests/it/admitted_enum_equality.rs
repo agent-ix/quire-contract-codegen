@@ -467,7 +467,10 @@ fn public_generator_rejects_another_authentic_source_context() {
     }
 }
 
-pub(super) fn direct_source_item(package: &CheckedPackageV2, function: &str) -> CompositeEqualityItem {
+pub(super) fn direct_source_item(
+    package: &CheckedPackageV2,
+    function: &str,
+) -> CompositeEqualityItem {
     let node_id = application(package, function);
     let expression = package
         .graph()

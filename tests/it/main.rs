@@ -44,10 +44,10 @@ pub(crate) const fn unbounded_decode_limits() -> quire_contract_codegen::Witness
     }
 }
 
-mod admitted_enum_equality;
 mod admitted_composite_equality;
 #[path = "../admitted_composite_support/fixture.rs"]
 mod admitted_composite_fixture;
+mod admitted_enum_equality;
 #[path = "../admitted_enum_support/fixture.rs"]
 mod admitted_enum_fixture;
 mod bound_census;
