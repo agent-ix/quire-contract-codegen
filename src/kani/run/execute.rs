@@ -3053,6 +3053,20 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
             let result = std::thread::scope(|scope| {
                 let worker =
                     scope.spawn(|| execute_kani_obligation(&stand_in.request(&harness, T)));
+                let ready_until = Instant::now() + T;
+                while !memory.gate.claimed.load(Ordering::Acquire) {
+                    if worker.is_finished() {
+                        panic!(
+                            "real namespace never reached the observation barrier: {:?}",
+                            worker.join().unwrap()
+                        );
+                    }
+                    assert!(
+                        Instant::now() < ready_until,
+                        "real backend became observable"
+                    );
+                    std::thread::yield_now();
+                }
                 memory_control.entered();
                 assert!(memory.captured.lock().unwrap().is_some());
                 if cancel_before_cleanup == Some(true) {
