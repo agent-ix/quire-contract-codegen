@@ -96,7 +96,15 @@ fn generate(
 ) -> CompositeEqualityOracles {
     let checked = checked(compiled, libraries);
     let items = enum_items(&checked, compiled.context());
-    generate_items_with_libraries(&checked, Some(compiled.context()), &items, &[], Default::default(), libraries).expect("real enum generation")
+    generate_items_with_libraries(
+        &checked,
+        Some(compiled.context()),
+        &items,
+        &[],
+        Default::default(),
+        libraries,
+    )
+    .expect("real enum generation")
 }
 
 fn enum_items(
@@ -163,12 +171,25 @@ pub(super) fn generate_items_with_libraries(
     limits: quire_contract_codegen::CompositeEqualityLimits,
     libraries: &[(String, qsl_replay::AdmittedCompilation)],
 ) -> Result<CompositeEqualityOracles, OracleGenerationError> {
-    let retained = libraries.iter().enumerate().map(|(position, (identity, library))| {
-        (identity.as_str(), self::checked(library, &libraries[..position]))
-    }).collect::<Vec<_>>();
-    let dependencies = retained.iter().map(|(identity, package)| {
-        (*identity, quire_contract_model::ContractDependencyInput { identity: *identity, package })
-    }).collect::<ContractDependencies<'_>>();
+    let retained = libraries
+        .iter()
+        .enumerate()
+        .map(|(position, (identity, library))| {
+            (
+                identity.as_str(),
+                self::checked(library, &libraries[..position]),
+            )
+        })
+        .collect::<Vec<_>>();
+    let dependencies = retained
+        .iter()
+        .map(|(identity, package)| {
+            (
+                *identity,
+                quire_contract_model::ContractDependencyInput { identity, package },
+            )
+        })
+        .collect::<ContractDependencies<'_>>();
     let mut roots = items
         .iter()
         .map(|item| item.node_id.clone())
