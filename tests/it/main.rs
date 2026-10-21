@@ -77,6 +77,7 @@ mod no_generation_panics;
 mod oracle_arithmetic;
 mod oracle_generation;
 mod routed_generation;
+mod scalar_literal_operands;
 mod scalar_playback;
 pub(crate) mod scratch_crate;
 mod skeleton_spine;
