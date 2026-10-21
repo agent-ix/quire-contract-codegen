@@ -121,10 +121,11 @@ mod tests {
         ];
 
         let selected = profile(superset_matrix());
-        let selected: KaniProfile = serde_json::from_value(serde_json::to_value(&selected)
-            .expect("supported/refused profile serializes")).expect("supported/refused profile round-trips");
-        let census = classify_bounded_kani_profile(selected, &request, "source")
-            .expect(
+        let selected: KaniProfile = serde_json::from_value(
+            serde_json::to_value(&selected).expect("supported/refused profile serializes"),
+        )
+        .expect("supported/refused profile round-trips");
+        let census = classify_bounded_kani_profile(selected, &request, "source").expect(
             "a structurally valid request yields the complete census, never an early-exit error",
         );
 
@@ -194,16 +195,27 @@ mod tests {
         for code in ["profile_not_qualified", "kani_vacuous_proof"] {
             let mut wire = serde_json::to_value(profile(vec![entry(
                 "collection.contains",
-                CapabilityDisposition::Refused { code: std001_code!("profile_not_qualified") },
-            )])).expect("otherwise valid profile serializes");
-            let positive: KaniProfile = serde_json::from_value(wire.clone())
-                .expect("valid refused profile is admitted");
-            let census = classify_bounded_kani_profile(positive, &["collection.contains".into()], "source")
-                .expect("valid refused profile classifies");
-            assert_eq!(census, vec![entry("collection.contains", CapabilityDisposition::Refused {
-                code: std001_code!("profile_not_qualified"),
-            })]);
-            wire["capabilities"][0]["disposition"] = serde_json::json!({"inconclusive": {"code": code}});
+                CapabilityDisposition::Refused {
+                    code: std001_code!("profile_not_qualified"),
+                },
+            )]))
+            .expect("otherwise valid profile serializes");
+            let positive: KaniProfile =
+                serde_json::from_value(wire.clone()).expect("valid refused profile is admitted");
+            let census =
+                classify_bounded_kani_profile(positive, &["collection.contains".into()], "source")
+                    .expect("valid refused profile classifies");
+            assert_eq!(
+                census,
+                vec![entry(
+                    "collection.contains",
+                    CapabilityDisposition::Refused {
+                        code: std001_code!("profile_not_qualified"),
+                    }
+                )]
+            );
+            wire["capabilities"][0]["disposition"] =
+                serde_json::json!({"inconclusive": {"code": code}});
             let error = serde_json::from_value::<KaniProfile>(wire)
                 .expect_err("legacy disposition cannot reach the census or lowerers");
             assert!(error.to_string().contains("unknown variant `inconclusive`"));
@@ -213,15 +225,24 @@ mod tests {
     #[trace("TC-023", "FR-015-AC-83")]
     #[test]
     fn empty_or_duplicate_construct_name_refuses_without_a_partial_census() {
-        for request in [vec![" ".into()], vec!["graph.reachable".into(), "graph.reachable".into()]] {
-            let failure = classify_bounded_kani_profile(profile(superset_matrix()), &request, "source:invalid")
-                .expect_err("invalid names cannot return a partial census");
-            assert_eq!(failure.kind, quire_contract_ir::kani::KaniOutcomeKind::Refused);
+        for request in [
+            vec![" ".into()],
+            vec!["graph.reachable".into(), "graph.reachable".into()],
+        ] {
+            let failure = classify_bounded_kani_profile(
+                profile(superset_matrix()),
+                &request,
+                "source:invalid",
+            )
+            .expect_err("invalid names cannot return a partial census");
+            assert_eq!(
+                failure.kind,
+                quire_contract_ir::kani::KaniOutcomeKind::Refused
+            );
             assert_eq!(failure.code, Std001Code::KANI_CAPABILITY_REQUEST_INVALID);
             assert_eq!(failure.source_id, "source:invalid");
             assert_eq!(failure.context, "profile-r1");
             assert_eq!(failure.boolean_claim(), None);
         }
     }
-
 }
