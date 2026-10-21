@@ -93,6 +93,28 @@ mod tests {
         assert_eq!(capture.stdout().as_bytes(), output.stdout);
     }
 
+    /// The installed launcher resolves its resources even when invoked through the observer.
+    #[trace("FR-016-AC-25", "TC-026")]
+    #[test]
+    #[ignore = "kani lane: requires installed cargo-kani"]
+    fn tc_026_observing_installed_launcher_preserves_version_output() {
+        let real = KaniInstallation::discover().expect("cargo-kani is installed");
+        let scratch = TemporaryDirectory::new("kani-stdout-capture-version");
+        let capture = KaniStdoutCapture::new(&scratch.path, &real);
+        let expected = Command::new(&real.launcher)
+            .arg("--version")
+            .output()
+            .expect("run installed launcher directly");
+        let observed = Command::new(&capture.installation.launcher)
+            .arg("--version")
+            .output()
+            .expect("run installed launcher through observer");
+        assert_eq!(observed.status, expected.status);
+        assert_eq!(observed.stdout, expected.stdout);
+        assert_eq!(observed.stderr, expected.stderr);
+        assert_eq!(capture.stdout().as_bytes(), expected.stdout);
+    }
+
     /// Selection reads the first eligible block for this harness and preserves its test text.
     #[trace("FR-016-AC-25", "TC-026")]
     #[test]
