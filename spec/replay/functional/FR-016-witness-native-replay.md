@@ -52,9 +52,10 @@ failure is reported.
   bound to the identity of the harness being replayed, and decode
   each witness value into its declared complete-V1 scalar type within the
   caller-supplied witness byte and value-count limits.
-- When the installed backend classifies a run as falsified, the generator shall retain the
-  assertion playback selected from that run's captured launcher output unchanged through
-  witness decoding, then replay the values decoded from that retained playback.
+- When the installed backend classifies a run as falsified, the generator shall retain the first
+  eligible assertion playback for that harness in the run's captured launcher output order after
+  excluding cover blocks, preserve its bytes through witness decoding, then replay the values
+  decoded from that retained playback.
 - The generator shall read the concrete values of a Kani playback only
   through the Kani adapter's output module, `src/kani/output/playback.rs`.
   At this revision `src/replay/witness.rs` selects and reads the block through
@@ -152,7 +153,7 @@ failure is reported.
 | FR-016-AC-22 | For two functions with the same parameters, the identities differ. The identity of one function is the same across recompiles that only add comments or blank lines, and across a change of the harness's source span. It differs between two different `ObligationKind`s over the same function, and when any argument's domain differs. A function yields one identity per existing `ObligationKind` it requests, not one per conjunct of its body: a function whose body has two conjuncts, replayed under one kind, has one identity. | Test (TC-026) |
 | FR-016-AC-23 | The function-contract identity function derives nothing from the package: with the `FunctionSite`'s `function` and `declaration`, the kind and the arguments held fixed, perturbing every other node of the compiled package (an unrelated declaration, the order of `FunctionSite.parameters`) leaves the identity unchanged, and a perturbed `function` or `declaration` changes it. | Test (TC-026) |
 | FR-016-AC-24 | A lock whose only defect is one library identity selected twice is refused by QSL's `DependencyInput::new` as `DuplicateIdentity`, code `invalid_package` with cause `conflicting-definition`, and reaches the caller as `DependencyLockError::Input`. | Test (TC-026) |
-| FR-016-AC-25 | In an installed-Kani run that classifies a generated harness as `Falsified`, the retained counterexample is byte-identical to the assertion playback independently read from that same launcher's complete captured stdout, and native replay uses values decoded from that retained counterexample; a `Verified` run supplies no counterexample. A test oracle observing stdout independently compares it with the retained counterexample before decoding or replay. Substituting another valid, self-consistent playback immediately after classification fails that oracle even when the replacement's comments, bytes, decoded values and replay agree. | Test (TC-026) |
+| FR-016-AC-25 | In an installed-Kani run that classifies a generated harness as `Falsified`, the retained counterexample is byte-identical to the first eligible assertion playback for that harness in the same launcher's complete captured stdout order, excluding cover blocks, and native replay uses values decoded from that retained counterexample; a `Verified` run supplies no counterexample. A test oracle observing stdout independently compares the complete fence interior, trimmed only of surrounding whitespace, with the retained counterexample before decoding or replay. Substituting another valid, self-consistent playback immediately after classification fails that oracle even when the replacement's comments, bytes, decoded values and replay agree. | Test (TC-026) |
 
 ## Dependencies
 

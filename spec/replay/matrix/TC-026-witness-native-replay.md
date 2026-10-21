@@ -35,17 +35,24 @@ in a category other than `violation`. Inspect the replay error for the fault
 
 For the installed-Kani spine, observe the launcher's complete stdout independently of
 `KaniRunOutcome::Falsified.counterexample` before the execution adapter classifies the run.
-After a healthy subject verifies and an injected violation falsifies, select the assertion
-playback for that same harness from the observed stdout without using the production playback
-extractor or witness decoder. Compare its complete test text between the fences, excluding only
-surrounding whitespace, byte for byte with the retained counterexample before decoding or replaying
-it. Replace the returned counterexample at the classification boundary with another well-formed,
-self-consistent playback as a mutation
-control: the comparison must fail even though that replacement's comments, byte vectors,
+After a healthy subject verifies and an injected violation falsifies, scan the observed stdout
+in print order. Select the first fenced playback for that same harness whose test invokes
+`kani::concrete_playback_run` and is not a cover playback. Exclude blocks headed for other
+harnesses and satisfied-cover blocks; do not choose a later assertion block if more than one
+eligible block is printed for this harness. Use neither the production playback extractor nor
+the witness decoder for this selection. Trim only surrounding whitespace from the complete text
+between the fences, then compare its bytes with the retained counterexample before decoding or
+replay. Replace the returned counterexample at the classification boundary with another
+well-formed, self-consistent playback as a mutation control: the comparison must fail even though
+that replacement's comments, byte vectors,
 decoder and replay all agree with each other. Continue the existing point and neighbouring-point
 replay checks against the original process output. This exercises FR-017-AC-5 together with
 FR-016-AC-9 and AC-10. The comparison is the test oracle over independently observed stdout;
 production replay receives only the retained counterexample and performs no second stream check.
+In a separate selection control, put a cover block, a block headed for another harness and two
+eligible assertion blocks for the target harness in one stdout stream. The oracle selects the first
+eligible target block in print order, then refuses the second target block as a substituted
+counterexample.
 
 For FR-016-AC-21 to AC-23, build the replay request for a function with two parameters declared
 in an order that differs from their ascending identifier order. Recompute the O-09 digest from
@@ -78,7 +85,8 @@ owns its terminal `Failed` reading.
 The retained falsification is byte-identical to the independently selected assertion
 playback in that run's stdout. A valid replacement after classification fails the comparison
 before replay; healthy verification, the original witness-point replay and its neighbour
-control still pass.
+control still pass. In the multi-block selection control, the cover, other-harness and later
+same-harness assertion blocks cannot replace the first eligible target assertion block.
 The slot equals the recomputed digest (AC-21). The two functions' identities differ, comments and
 blank lines and the span change leave one unchanged, the kind change and the domain change each
 alter it, and the two-conjunct function has one identity (AC-22). The identity is unchanged by the
