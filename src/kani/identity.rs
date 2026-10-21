@@ -73,7 +73,8 @@ pub enum ObligationKind {
     Precondition,
     /// Lowered to a `kani::ensures` checked by `kani::proof_for_contract`.
     Postcondition,
-    /// Lowered to a `kani::requires`/`kani::ensures` preservation contract.
+    /// V1 uses a preservation contract; V2 asserts the admitted invariant clause
+    /// over its bounded drawn state without calling a subject.
     Invariant,
     /// A frame's effects; generated from its operation's `state_clause` by
     /// [`generate_state_frame_obligations`](crate::kani::generate::frame::generate_state_frame_obligations),

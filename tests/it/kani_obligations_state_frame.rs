@@ -466,10 +466,10 @@ fn qsl_state_invariant_is_a_separate_v2_assertion_obligation() {
         panic!("one selected invariant");
     };
     assert_eq!(record.kind, Some(ObligationKind::Invariant));
-    assert!(matches!(
-        record.disposition,
-        ObligationDisposition::Supported { .. }
-    ));
+    assert!(
+        matches!(record.disposition, ObligationDisposition::Supported { .. }),
+        "{record:?}"
+    );
     let KaniObligationOutcome::Emitted {
         v2_clause_harnesses,
         ..
@@ -482,7 +482,15 @@ fn qsl_state_invariant_is_a_separate_v2_assertion_obligation() {
     };
     assert_eq!(harness.identity.kind, ObligationKind::Invariant);
     assert_eq!(harness.rust.contents.matches("kani::cover!(").count(), 1);
-    assert!(harness.rust.contents.contains("assert!("));
+    assert_eq!(harness.rust.contents.matches("assert!(").count(), 1);
+    assert!(harness
+        .rust
+        .contents
+        .contains("assert!(matches!(&outcome, Ok(rt::Outcome::Completed(true)))"));
+    assert!(
+        harness.rust.contents.find("assert!(").unwrap()
+            < harness.rust.contents.find("kani::cover!(").unwrap()
+    );
     assert!(harness.rust.contents.contains("current_balance >= 0"));
     assert!(harness.rust.contents.contains("current_balance <= 1000"));
     assert!(!harness.rust.contents.contains("crate::subject::"));

@@ -1,4 +1,4 @@
-//! Bounded cover harness for an admitted V2 parameter precondition (FR-015).
+//! Bounded harnesses for admitted V2 preconditions and state invariants (FR-015).
 
 use quire_contract_model::{CheckedNodeId, CheckedPackageV2, CheckedSemanticId};
 
@@ -25,6 +25,7 @@ pub(in crate::kani::generate) struct LoweredV2Clause {
     pub(super) package: CheckedSemanticId,
     pub(super) node_id: CheckedNodeId,
     oracle: V2ClauseOracle,
+    kind: ObligationKind,
     pub(super) module_symbol: String,
     pub(super) harness_symbol: String,
 }
@@ -32,6 +33,7 @@ pub(in crate::kani::generate) struct LoweredV2Clause {
 pub(in crate::kani::generate) fn lower(
     package: &CheckedPackageV2,
     clause: &CheckedNodeId,
+    kind: ObligationKind,
 ) -> Result<LoweredV2Clause, UnsupportedObligation> {
     let refusal = || UnsupportedObligation::V2ClauseConditionNotRendered {
         node_id: clause.clone(),
@@ -40,7 +42,12 @@ pub(in crate::kani::generate) fn lower(
     let [input] = oracle.descriptor.inputs.as_slice() else {
         return Err(refusal());
     };
-    if input.name.strip_prefix("parameter_").is_none()
+    let supported_input = match kind {
+        ObligationKind::Precondition => input.name.starts_with("parameter_"),
+        ObligationKind::Invariant => input.name.starts_with("current_"),
+        ObligationKind::Postcondition | ObligationKind::Frame => false,
+    };
+    if !supported_input
         || input.lower > input.upper
         || i64::try_from(input.lower).is_err()
         || i64::try_from(input.upper).is_err()
@@ -54,7 +61,12 @@ pub(in crate::kani::generate) fn lower(
     let digest = crate::core::canonical::content_digest(&preimage)
         .map_err(|_| UnsupportedObligation::RenderFailed)?;
     let module_symbol = format!(
-        "kob_v2_pre_{}",
+        "kob_v2_{}_{}",
+        match kind {
+            ObligationKind::Precondition => "pre",
+            ObligationKind::Invariant => "inv",
+            ObligationKind::Postcondition | ObligationKind::Frame => return Err(refusal()),
+        },
         digest
             .iter()
             .map(|byte| format!("{byte:02x}"))
@@ -64,8 +76,14 @@ pub(in crate::kani::generate) fn lower(
         package: package.package_id().clone(),
         node_id: clause.clone(),
         oracle,
+        kind,
         module_symbol,
-        harness_symbol: "cover_precondition".to_owned(),
+        harness_symbol: match kind {
+            ObligationKind::Precondition => "cover_precondition",
+            ObligationKind::Invariant => "assert_invariant",
+            ObligationKind::Postcondition | ObligationKind::Frame => return Err(refusal()),
+        }
+        .to_owned(),
     })
 }
 
@@ -80,7 +98,7 @@ pub(in crate::kani::generate) fn render_clause(
     };
     let minimum = i64::try_from(input.lower).map_err(|_| UnsupportedObligation::RenderFailed)?;
     let maximum = i64::try_from(input.upper).map_err(|_| UnsupportedObligation::RenderFailed)?;
-    let body = vec![
+    let mut body = vec![
         Statement::Input {
             name: input.name.clone(),
             ty: KaniPrimitiveType::I64,
@@ -110,21 +128,45 @@ pub(in crate::kani::generate) fn render_clause(
             ],
         },
     ];
+    if lowered.kind == ObligationKind::Invariant {
+        body.push(Statement::Assert {
+            condition: ExprText::new("matches!(&outcome, Ok(rt::Outcome::Completed(true)))")?,
+            message: "the V2 invariant holds for every admitted state".to_owned(),
+        });
+    }
+    let (label, cover) = match lowered.kind {
+        ObligationKind::Precondition => (
+            "precondition",
+            Cover {
+                condition: ExprText::new("matches!(outcome, Ok(rt::Outcome::Completed(true)))")?,
+                message: "the V2 precondition is satisfiable within admitted parameter bounds"
+                    .to_owned(),
+            },
+        ),
+        ObligationKind::Invariant => (
+            "invariant",
+            Cover {
+                condition: ExprText::new("matches!(&outcome, Ok(rt::Outcome::Completed(_)))")?,
+                message: "the V2 invariant's admitted state domain is reachable".to_owned(),
+            },
+        ),
+        ObligationKind::Postcondition | ObligationKind::Frame => {
+            return Err(UnsupportedObligation::V2ClauseConditionNotRendered {
+                node_id: lowered.node_id.clone(),
+            });
+        }
+    };
     let path = harness_path(&lowered.module_symbol, &lowered.harness_symbol)?;
     let spec = HarnessSpec::new(
         format!(
-            "V2 precondition {}/{}",
-            lowered.node_id.domain, lowered.node_id.digest
+            "V2 {label} {}/{}",
+            lowered.node_id.domain, lowered.node_id.digest,
         ),
         path,
         lowered.oracle.source.clone(),
         ProofKind::Proof,
         body,
-        vec![Cover {
-            condition: ExprText::new("matches!(outcome, Ok(rt::Outcome::Completed(true)))")?,
-            message: "the V2 precondition is satisfiable within admitted parameter bounds"
-                .to_owned(),
-        }],
+        vec![cover],
         request.unwind,
         KaniSolver::Cadical,
     )?;
@@ -133,7 +175,7 @@ pub(in crate::kani::generate) fn render_clause(
         ceilings: request.ceilings,
         package: lowered.package.clone(),
         clause: lowered.node_id.clone(),
-        kind: ObligationKind::Precondition,
+        kind: lowered.kind,
         oracle_symbol: "oracle_clause".to_owned(),
         subject_path: request.subject_path.to_owned(),
         arguments: vec![ScalarObligationArgument {
