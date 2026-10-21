@@ -3552,6 +3552,27 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
         );
     }
 
+    /// Two members at T = 20 s complete after 30 s: beyond (N - 1) times T (20 s), with
+    /// ten seconds left before N times T (40 s). The real batch launch must count both members.
+    // Exercises the real Linux namespace/procfs bounded execution API.
+    #[trace("FR-017-AC-21", "FR-028-AC-12", "TC-039", "TC-043")]
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_batch_finishes_between_one_fewer_members_bound_and_its_full_bound() {
+        let stand_in = StandIn::running(
+            "full-member-count-bound",
+            &format!("sleep 30\n{VERIFY_EVERY_HARNESS}"),
+        );
+        let evidence = only_group(stand_in.batch(&pair(), Duration::from_secs(20)))
+            .expect("both members must finish before their full 40-second batch bound");
+        assert_eq!(
+            outcomes(&evidence),
+            vec![KaniRunOutcome::Verified; 2],
+            "using one fewer member at the batch launch would kill this process before its report"
+        );
+        assert_eq!(stand_in.calls().len(), 1, "both members share one process");
+    }
+
     /// The outer bound is the member count times T, and a product that does not fit never
     /// elapses.
     #[trace("FR-017-AC-21", "FR-028-AC-12", "TC-039", "TC-043")]
