@@ -230,7 +230,7 @@ fn entered_clause_classifies_zero_some_and_all_consequent_probes() {
     );
 }
 
-#[trace("FR-004-AC-18", "FR-004-AC-23")]
+#[trace("FR-004-AC-23")]
 #[test]
 fn changed_map_census_and_missing_probe_refuse_all_classifications() {
     let (package, mut inputs) = fixture("self.balance >= 0 implies self.balance <= 1000");
