@@ -102,6 +102,7 @@ fn set_counts(input: &mut V2ClauseCoverageInput<'_>, counts: &[u64]) {
 }
 
 #[trace(
+    "TC-006",
     "FR-004-AC-16",
     "FR-004-AC-19",
     "FR-004-AC-20",
@@ -119,6 +120,54 @@ fn admitted_clause_body_sets_the_population_and_implication_count() {
     set_counts(&mut inputs[0], &[1, 1, 1]);
     let row = report(&package, &inputs);
     assert_eq!(row["clauses"][0]["classification"], "exercised");
+}
+
+#[trace(
+    "TC-006",
+    "FR-004-AC-16",
+    "FR-004-AC-19",
+    "FR-004-AC-20",
+    "FR-004-AC-21",
+    "FR-004-AC-22"
+)]
+#[test]
+fn one_admitted_population_retains_all_four_coverage_classes() {
+    let (package, _) = Twin::with_mixed_coverage_clauses().emitted_package("BalanceNeverDrops");
+    let mut inputs: Vec<_> = package
+        .graph()
+        .nodes
+        .iter()
+        .filter(|node| &*node.node_tag == "state" && &*node.semantic_form == "state_clause")
+        .map(|node| input_for(&package, node.node_id.clone()))
+        .collect();
+    assert_eq!(inputs.len(), 4);
+    let mut zero_consequent_clauses = 0;
+    for input in &mut inputs {
+        let map: Value = serde_json::from_slice(input.source_map).unwrap();
+        match map[0]["expectedConsequents"].as_u64().unwrap() {
+            0 => {
+                zero_consequent_clauses += 1;
+                set_counts(input, &[u64::from(zero_consequent_clauses == 2)]);
+            }
+            1 => set_counts(input, &[1, 0]),
+            2 => set_counts(input, &[1, 1, 0]),
+            count => panic!("unexpected implication count {count}"),
+        }
+    }
+    assert_eq!(zero_consequent_clauses, 2);
+    let row = report(&package, &inputs);
+    assert_eq!(row["state"], "complete", "{row}");
+    let mut classes: Vec<_> = row["clauses"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|clause| clause["classification"].as_str().unwrap())
+        .collect();
+    classes.sort_unstable();
+    assert_eq!(
+        classes,
+        ["exercised", "partially_exercised", "unexecuted", "vacuous"]
+    );
 }
 
 #[trace("FR-004-AC-16", "FR-004-AC-23")]
