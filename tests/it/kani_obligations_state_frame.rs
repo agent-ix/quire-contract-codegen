@@ -395,7 +395,7 @@ fn qsl_parameter_precondition_is_a_separate_v2_cover_obligation() {
     };
     assert_eq!(harness.identity.kind, ObligationKind::Precondition);
     assert_eq!(harness.rust.contents.matches("kani::cover!(").count(), 1);
-    assert!(!harness.rust.contents.contains("kani::assert!("));
+    assert!(!harness.rust.contents.contains("assert!("));
     assert!(harness.rust.contents.contains("parameter_other >= 0"));
     assert!(harness.rust.contents.contains("parameter_other <= 1000"));
     assert!(harness.rust.contents.contains(&oracle.source));
