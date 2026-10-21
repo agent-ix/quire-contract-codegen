@@ -129,7 +129,7 @@ fn qsl_parameter_only_clause_negotiates_one_postcondition_harness() {
         result.records()[0].disposition
     );
     let KaniObligationOutcome::Emitted {
-        v2_clause_harnesses,
+        ref v2_clause_harnesses,
         ..
     } = result
     else {
@@ -284,15 +284,54 @@ fn v2_clause_checks_each_bounded_arithmetic_subterm_independently() {
     let KaniObligationOutcome::Emitted {
         v2_clause_harnesses,
         ..
-    } = result
+    } = &result
     else {
         panic!("admitted Boolean clause must emit: {result:?}");
     };
+    assert_eq!(v2_clause_harnesses.len(), 1, "{result:?}");
     let source = &v2_clause_harnesses[0].rust.contents;
-    assert_eq!(source.matches("rt::evaluate_integer_arithmetic(").count(), 2);
-    assert!(source.contains("rt::IntegerArithmetic::Add("));
-    assert_eq!(source.matches("arithmetic subterm agrees with native i128").count(), 2);
-    assert_eq!(source.matches("kani::assume(").count(), 1);
+    let proof = source.split("#[cfg(kani)]").last().unwrap();
+    assert_eq!(
+        proof.matches("rt::evaluate_integer_arithmetic(").count(),
+        2
+    );
+    assert!(proof.contains("rt::IntegerArithmetic::Add("));
+    assert_eq!(
+        proof
+            .matches("arithmetic subterm agrees with native i128")
+            .count(),
+        2
+    );
+    assert_eq!(proof.matches("kani::assume(").count(), 1);
+}
+
+#[trace("FR-015-AC-40", "TC-025")]
+#[test]
+fn v2_clause_renders_boolean_connectives_and_comparisons_for_named_parameter() {
+    let (package, clause) = Twin::with_bounded_parameter_condition(
+        "budget",
+        "not (budget < 0) and (budget = 0 or budget != 0) and budget >= 0",
+    )
+    .emitted_package("BalanceNeverDrops");
+    let result = negotiate(&[ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+    }]);
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = &result
+    else {
+        panic!("admitted Boolean clause must emit: {result:?}");
+    };
+    assert_eq!(v2_clause_harnesses.len(), 1, "{result:?}");
+    let harness = &v2_clause_harnesses[0];
+    let source = &harness.rust.contents;
+    assert_eq!(harness.identity.arguments[0].identifier, "budget_current");
+    assert!(source.contains("let parameter_budget = rt::Integer::from(budget_current)"));
+    assert!(source.contains("i128::from(budget_current) == 0i128"));
+    assert!(source.contains("i128::from(budget_current) != 0i128"));
+    assert!(source.contains("let subject = "));
 }
 
 #[trace("FR-015-AC-119", "TC-025")]

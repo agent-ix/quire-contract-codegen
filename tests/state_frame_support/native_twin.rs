@@ -431,6 +431,10 @@ impl Twin {
 
     /// Source-authored postcondition over only the operation's bounded `amount` parameter.
     pub fn with_bounded_amount_condition(condition: &str) -> Self {
+        Self::with_bounded_parameter_condition("amount", condition)
+    }
+
+    pub fn with_bounded_parameter_condition(parameter: &str, condition: &str) -> Self {
         let mut twin = Self::with_bounded_other_condition();
         let mut domain: Value = serde_json::from_slice(&twin.domain).expect("domain document");
         let account = domain["types"]
@@ -445,8 +449,8 @@ impl Twin {
             .iter_mut()
             .find(|operation| operation["name"] == "deposit")
             .expect("deposit operation");
-        deposit["params"][0]["name"] = json!("amount");
-        deposit["params"][0]["identity"] = json!(format!("{}/deposit/amount", account_type()));
+        deposit["params"][0]["name"] = json!(parameter);
+        deposit["params"][0]["identity"] = json!(format!("{}/deposit/{parameter}", account_type()));
         twin.domain = domain.to_string().into_bytes();
         twin.unit = unit_source(&hex(&jcs_digest(&twin.domain)), &[CLAUSES[0]], 0)
             .replace("self.balance >= pre(self.balance)", condition)
