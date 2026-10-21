@@ -87,10 +87,14 @@ fn application(package: &CheckedPackageV2, function: &str) -> CheckedNodeId {
 
 fn generate(compiled: &qsl_replay::AdmittedCompilation, libraries: &[(String, qsl_replay::AdmittedCompilation)]) -> CompositeEqualityOracles {
     let checked = checked(compiled, libraries);
+    let items = enum_items(&checked, compiled.context());
+    generate_items(&checked, compiled.context(), &items, &[]).expect("real enum generation")
+}
+
+fn enum_items(checked: &CheckedPackageV2, context: &qsl_replay::AdmittedContext) -> Vec<CompositeEqualityItem> {
     let mut items = Vec::new();
     for (function, name, operator) in CASES {
-        let admitted = compiled
-            .context()
+        let admitted = context
             .enums()
             .find(|item| {
                 item.qualified_name()
@@ -114,7 +118,7 @@ fn generate(compiled: &qsl_replay::AdmittedCompilation, libraries: &[(String, qs
             right: EqualityOperandDescriptor::typed(type_id),
         });
     }
-    generate_items(&checked, compiled.context(), &items, &[]).expect("real enum generation")
+    items
 }
 
 /// Lower only the unchanged authentic package. Extra roots select genuine caller types;
@@ -125,10 +129,20 @@ fn generate_items(
     items: &[CompositeEqualityItem],
     extra_roots: &[CheckedNodeId],
 ) -> Result<CompositeEqualityOracles, OracleGenerationError> {
-    let roots = items
+    let mut roots = items
         .iter()
         .map(|item| item.node_id.clone())
         .collect::<Vec<_>>();
+    roots.sort();
+    let mut available = std::collections::BTreeMap::new();
+    for (position, node_id) in roots.iter().enumerate() {
+        available.entry(node_id.clone()).or_insert_with(std::collections::VecDeque::new)
+            .push_back(position);
+    }
+    let positions = items.iter().map(|item| {
+        available.get_mut(&item.node_id).and_then(std::collections::VecDeque::pop_front)
+            .expect("canonical request retains every descriptor's source item")
+    }).collect::<Vec<_>>();
     let profile = CompleteLoweringProfileV2 {
         reference: LoweringProfileRef {
             authority: "agent-ix".into(),
@@ -174,7 +188,7 @@ fn generate_items(
         &package,
         context,
         &requested,
-        &(0..items.len()).collect::<Vec<_>>(),
+        &positions,
         items,
         Default::default(),
     )
@@ -290,9 +304,7 @@ fn only_result(oracles: &CompositeEqualityOracles) -> &ClaimDisposition<quire_co
 }
 
 /// The source/body/context stay authentic; only the caller's descriptor disagrees.
-#[trace("FR-018-AC-15", "TC-029")]
-#[test]
-fn authentic_operand_descriptor_mismatch_retains_left_then_right_refusal() {
+pub(super) fn assert_authentic_operand_descriptor_mismatch() {
     let compiled = fixture::compile(INTEGER_SOURCE);
     let package = checked(&compiled, &[]);
     let (valid, boolean) = integer_item(&package);
@@ -315,9 +327,7 @@ fn authentic_operand_descriptor_mismatch_retains_left_then_right_refusal() {
 }
 
 /// An independently declared conversion target does not change the admitted source expression.
-#[trace("FR-018-AC-5", "TC-029")]
-#[test]
-fn authentic_integer_to_boolean_caller_conversion_is_ill_typed() {
+pub(super) fn assert_authentic_disallowed_caller_conversion() {
     let compiled = fixture::compile(INTEGER_SOURCE);
     let package = checked(&compiled, &[]);
     let (mut item, boolean) = integer_item(&package);
@@ -362,4 +372,132 @@ fn public_generator_rejects_another_authentic_source_context() {
         }
         other => panic!("expected whole-generation context refusal without artifacts, got {other:?}"),
     }
+}
+
+
+fn direct_source_item(package: &CheckedPackageV2, function: &str) -> CompositeEqualityItem {
+    let node_id = application(package, function);
+    let expression = package.graph().nodes.iter().find(|node| node.node_id == node_id)
+        .expect("actual expression");
+    let arguments = expression.body.get("arguments").and_then(serde_json::Value::as_array)
+        .expect("actual binary arguments");
+    assert_eq!(arguments.len(), 2);
+    let operand = |position: usize| {
+        assert_eq!(arguments[position]["term"], "reference");
+        let target: CheckedNodeId = serde_json::from_value(arguments[position]["target"].clone())
+            .expect("actual IR reference ID, never a reconstructed semantic key");
+        let parameter = package.graph().nodes.iter().find(|node| node.node_id == target)
+            .expect("original source parameter");
+        assert_ne!(parameter.semantic_form.as_ref(), "conversion");
+        EqualityOperandDescriptor::typed(parameter.semantic_type.clone())
+    };
+    CompositeEqualityItem { node_id, operator: EqualityOperatorKind::Equal,
+        left: operand(0), right: operand(1) }
+}
+
+#[trace("FR-018-AC-4", "FR-018-AC-14", "FR-018-AC-16", "TC-029")]
+#[test]
+fn authentic_text_option_and_primitive_sequence_generate_with_real_bounds() {
+    for (kind, expected_schedule, reconstruction) in [
+        ("Text[0, 16; nfc]", quire_contract_codegen::RecordedSchedule::Text, "rebuild_text(0, 16,"),
+        ("Option<Int[0, 9]>", quire_contract_codegen::RecordedSchedule::Plan, "exact::ValueType::option("),
+        ("Sequence<Int[0, 9]>[0, 3]", quire_contract_codegen::RecordedSchedule::Plan, "rebuild_cardinality(0, 3)?"),
+    ] {
+        let source = format!("language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\nfunction f using v(a: {kind}, b: {kind}): Boolean pure {{ a = b }}\n");
+        let compiled = fixture::compile(&source);
+        let package = checked(&compiled, &[]);
+        let item = direct_source_item(&package, "f");
+        let bounds = package.graph().nodes.iter().filter(|node| {
+            CheckedNodeTag::from_wire(&node.node_tag) == Some(CheckedNodeTag::BoundedDomain)
+        }).map(|node| node.node_id.clone()).collect::<Vec<_>>();
+        assert!(!bounds.is_empty(), "source profile carries actual admitted bounds");
+        let output = generate_items(&package, compiled.context(), &[item], &bounds)
+            .expect("unchanged actual source package");
+        let ClaimDisposition::Generated(claim) = only_result(&output) else {
+            panic!("source-backed primitive profile refused: {:?}", only_result(&output))
+        };
+        assert_eq!(claim.schedule, expected_schedule);
+        let emitted = &output.artifacts.iter().find(|item| item.path == "src/lib.rs")
+            .expect("emitted source").contents;
+        assert!(emitted.contains(reconstruction), "preserve actual source profile reconstruction: {kind}");
+        assert!(!emitted.contains("NodeKey::"), "primitive profiles need no composite key constructor");
+    }
+}
+
+
+pub(super) fn authentic_text_oracles() -> CompositeEqualityOracles {
+    let compiled = fixture::compile("language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\nfunction f using v(a: Text[0, 16; nfc],b: Text[0, 16; nfc]): Boolean pure { a = b }\n");
+    let package = checked(&compiled, &[]);
+    let item = direct_source_item(&package, "f");
+    let bounds = package.graph().nodes.iter().filter(|node| {
+        CheckedNodeTag::from_wire(&node.node_tag) == Some(CheckedNodeTag::BoundedDomain)
+    }).map(|node| node.node_id.clone()).collect::<Vec<_>>();
+    generate_items(&package, compiled.context(), &[item], &bounds).expect("genuine source text equality")
+}
+
+
+/// Independent enum/primitive slice; the legacy record/tuple golden corpus remains separate.
+#[trace("FR-018-AC-10", "FR-018-AC-11", "TC-029")]
+#[test]
+fn authentic_enum_request_order_repeatability_and_dual_operator_symbols() {
+    let compiled = fixture::compile(fixture::SOURCE);
+    let package = checked(&compiled, &[]);
+    let mut items = enum_items(&package, compiled.context());
+    let mut dual = items[0].clone();
+    dual.operator = EqualityOperatorKind::NotEqual;
+    items.push(dual);
+    let forward = generate_items(&package, compiled.context(), &items, &[]).expect("forward");
+    items.reverse();
+    let reverse = generate_items(&package, compiled.context(), &items, &[]).expect("reverse");
+    assert_eq!(forward, reverse, "same canonical request gives identical artifacts and claims");
+    let fresh = fixture::compile(fixture::SOURCE);
+    let fresh_package = checked(&fresh, &[]);
+    let repeated = generate_items(&fresh_package, fresh.context(), &items, &[]).expect("fresh compilation");
+    assert_eq!(forward, repeated);
+    let mut symbols = std::collections::BTreeSet::new();
+    for claim in &forward.claim_map.items {
+        let ClaimDisposition::Generated(generated) = &claim.result else { panic!("healthy enum refused") };
+        assert!(symbols.insert(&generated.oracle_symbol));
+        assert!(symbols.insert(&generated.environment_symbol));
+        assert_eq!(claim.operation.provenance,
+            quire_contract_codegen::CompositeOperationProvenance::CallerDeclared {
+                blocked_on: quire_contract_codegen::UpstreamBlocker::OperationIdentityNotConsumed,
+            });
+    }
+    let ordered = application(&package, "ordered_same");
+    let dual_claims = forward.claim_map.items.iter().filter(|claim| claim.node_id == ordered).collect::<Vec<_>>();
+    assert_eq!(dual_claims.len(), 2, "same node's two caller operators are distinct items");
+    assert_ne!(dual_claims[0].operation.identity, dual_claims[1].operation.identity);
+}
+
+
+fn genuine_asymmetric_integer_equality() -> (qsl_replay::AdmittedCompilation, CheckedPackageV2, CompositeEqualityItem) {
+    let compiled = fixture::compile("language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\nfunction f using v(a: Int[0, 9],b: Integer): Boolean pure { convert<Integer>(a) = b }\n");
+    let package = checked(&compiled, &[]);
+    assert!(!package.graph().nodes.iter().any(|node| node.semantic_form.as_ref() == "conversion"),
+        "this measured source grounds caller descriptors, not a conversion-reference path");
+    let source = package.graph().nodes.iter().find(|node| node.semantic_form.as_ref() == "integer_range")
+        .expect("real source's bounded integer type").node_id.clone();
+    let integer = package.graph().nodes.iter().find(|node| node.semantic_form.as_ref() == "integer")
+        .expect("real Integer type").node_id.clone();
+    let item = CompositeEqualityItem {
+        node_id: application(&package, "f"), operator: EqualityOperatorKind::Equal,
+        left: EqualityOperandDescriptor::converted(source, integer.clone()),
+        right: EqualityOperandDescriptor::typed(integer),
+    };
+    (compiled, package, item)
+}
+
+pub(super) fn assert_authentic_conversion_descriptor() {
+    let (compiled, package, item) = genuine_asymmetric_integer_equality();
+    let output = generate_items(&package, compiled.context(), std::slice::from_ref(&item), &[])
+        .expect("actual bounded/base descriptor generation");
+    let ClaimDisposition::Generated(claim) = only_result(&output) else {
+        panic!("valid caller conversion descriptor refused: {:?}", only_result(&output))
+    };
+    assert_eq!(claim.descriptor.operator, item.operator);
+    assert_eq!(claim.descriptor.left_source_type, item.left.source_type);
+    assert_eq!(claim.descriptor.left_conversion_target, item.left.conversion_target);
+    assert_eq!(claim.descriptor.right_source_type, item.right.source_type);
+    assert_eq!(claim.descriptor.right_conversion_target, item.right.conversion_target);
 }

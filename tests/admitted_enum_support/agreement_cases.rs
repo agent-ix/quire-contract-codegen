@@ -1,6 +1,8 @@
 //! Actual generated enum oracles versus direct QSV, both using real admitted identities.
 #[path = "fixture.rs"]
 mod fixture;
+#[path = "native_values.rs"]
+mod native_values;
 mod generated {
     // Include the exact emitted SUT, preserving its private prepared fields for private controls.
     include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/lib.rs"));
@@ -9,7 +11,7 @@ mod generated {
     #[ix_trace_rs::trace("FR-018-AC-35", "TC-029")]
     #[test]
     fn emitted_lookup_retains_direct_or_transitive_original_foreign_package() {
-        let (compiled, libraries) = super::fixture::native_compilation();
+        let (compiled, libraries) = super::native_values::native_compilation();
         let prepared = environment_ordered_same(compiled.context()).expect("same original package bound first");
         let shades = libraries.iter().find(|(identity, _)| identity == "test/shades").expect("original shade package");
         let shade = shades.1.context().enums().next().expect("genuine foreign enum");
@@ -30,7 +32,7 @@ mod generated {
     #[ix_trace_rs::trace("FR-018-AC-35", "TC-029")]
     #[test]
     fn emitted_lookup_components_preserve_unknown_declaration_and_case() {
-        let (compiled, _) = super::fixture::native_compilation();
+        let (compiled, _) = super::native_values::native_compilation();
         let prepared = environment_ordered_same(compiled.context()).expect("genuine prepared");
         let unknown = qsl_replay::WireNodeId::from_digest([7; 32]);
         assert!(matches!(prepared.context.enum_declaration(unknown),
@@ -95,7 +97,7 @@ fn denials(run: impl Fn(&mut Meter) -> Outcome<bool>) -> Vec<(ChargePoint, u64, 
 #[trace("FR-018-AC-34", "FR-018-AC-36", "TC-029")]
 #[test]
 fn complete_genuine_enum_pairs_match_outcomes_ordered_charges_counters_and_every_denial() {
-    let (compiled, _) = fixture::native_compilation();
+    let (compiled, _) = native_values::native_compilation();
     assert!(!fixture::SOURCE.contains("::"));
     let cases: [(&str, Constructor, Oracle, EqualityOperator); 4] = [
         ("Ordered", generated::environment_ordered_same, generated::oracle_ordered_same, EqualityOperator::Equal),
@@ -104,7 +106,7 @@ fn complete_genuine_enum_pairs_match_outcomes_ordered_charges_counters_and_every
         ("Other", generated::environment_other_same, generated::oracle_other_same, EqualityOperator::Equal),
     ];
     for (name, construct, oracle, operator) in cases {
-        let data = fixture::enum_data(compiled.context(), name);
+        let data = native_values::enum_data(compiled.context(), name);
         assert!(data.names.iter().any(|case| case == "UNUSED"));
         let expected_names = if name == "Unordered" { ["DONE", "READY", "UNUSED"] } else { ["READY", "DONE", "UNUSED"] };
         assert_eq!(data.names, expected_names);
@@ -130,9 +132,9 @@ fn complete_genuine_enum_pairs_match_outcomes_ordered_charges_counters_and_every
 #[trace("FR-018-AC-34", "FR-018-AC-36", "TC-029")]
 #[test]
 fn same_case_of_distinct_genuine_declarations_is_not_an_alias() {
-    let (compiled, _) = fixture::native_compilation();
-    let ordered = fixture::enum_data(compiled.context(), "Ordered");
-    let other = fixture::enum_data(compiled.context(), "Other");
+    let (compiled, _) = native_values::native_compilation();
+    let ordered = native_values::enum_data(compiled.context(), "Ordered");
+    let other = native_values::enum_data(compiled.context(), "Other");
     assert_eq!(ordered.names, other.names);
     for (left, right) in ordered.members.iter().zip(&other.members) {
         assert_ne!(left.variant(), right.variant());
@@ -151,13 +153,13 @@ fn same_case_of_distinct_genuine_declarations_is_not_an_alias() {
 #[trace("FR-018-AC-33", "FR-018-AC-36", "TC-029")]
 #[test]
 fn wrong_original_package_and_wrong_prepared_item_stop_before_lookup_or_charge() {
-    let (compiled, _) = fixture::native_compilation();
+    let (compiled, _) = native_values::native_compilation();
     let changed = fixture::compile(&format!("{}enum Extra {{ X, Y }}\n", fixture::SOURCE));
     assert_ne!(compiled.context().package_id(), changed.context().package_id());
     assert!(matches!(generated::environment_ordered_same(changed.context()),
         Err(generated::EnvironmentError::ContextPackageMismatch { .. })));
     let prepared = generated::environment_ordered_same(compiled.context()).expect("real prepared");
-    let data = fixture::enum_data(compiled.context(), "Unordered");
+    let data = native_values::enum_data(compiled.context(), "Unordered");
     let result = metered(|meter| generated::oracle_unordered_same(&prepared, &data.values[0], &data.values[0], meter));
     assert_eq!(result.0, Outcome::Refused(Refusal::CheckedInvariant { cause: CheckedInvariantCause::GeneratedDescriptorReconstructionFailed }));
     assert!(result.1.is_empty());

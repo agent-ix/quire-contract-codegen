@@ -3292,8 +3292,8 @@ fn deep_matches_shallow() {{
         json!({"term": "literal", "value_kind": kind, "value": value})
     }
 
-    /// Integer ranges, decimal ranges, text bounds and collection cardinalities are read from
-    /// binding-shaped members named as in QSpec's `positive-operation-identities.json`.
+    /// Private parser defense over binding-shaped members. Reordered integer/collection
+    /// inputs here are not public reader-admitted generator inputs; intake controls are separate.
     #[trace("FR-018-AC-14", "TC-029")]
     #[test]
     fn tc_029_bound_members_are_read_from_named_bindings() {
@@ -3325,8 +3325,8 @@ fn deep_matches_shallow() {{
         );
     }
 
-    /// A bare literal in place of a `binding` member is refused: the integer endpoints, the
-    /// decimal `rounding`, the text `text_profile` and a collection cardinality.
+    /// Private parser defense refuses bare members without weakening the reader boundary.
+    /// Integer/collection malformed shapes are already excluded before public generation.
     #[trace("FR-018-AC-14", "TC-029")]
     #[test]
     fn tc_029_bare_literal_bound_members_are_refused() {
