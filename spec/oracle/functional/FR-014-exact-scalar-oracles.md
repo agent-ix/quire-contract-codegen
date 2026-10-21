@@ -21,7 +21,8 @@ relationships:
 When a caller supplies an admitted `quire.checked-package/v2` package and a set
 of scalar expression nodes, the code generator shall emit a deterministic Rust
 oracle crate whose functions evaluate each node by calling the
-Contract Runtime `exact` operators and metering. It never approximates a
+direct `quire-exact` kernel operators and metering, QSV semantic operators,
+and only the remaining Contract Runtime functions it still owns. It never approximates a
 scalar family through another family and never copies a resource charge.
 
 FR-014 is the one oracle generator for every family it covers, the Boolean
@@ -31,7 +32,7 @@ Q2). Its composite/structural equality sibling is
 [FR-018](./FR-018-composite-equality-oracles.md).
 
 FR-014 owns the integer and Boolean `eq` and `ne` nodes. Their oracles call the
-runtime's one equality relation, `TypeEnvironment::check_equality` followed by
+QSV's one equality relation, `TypeEnvironment::check_equality` followed by
 `CheckedEquality::evaluate`, as FR-018's oracles do, and return its
 `Outcome<bool>` unchanged; no oracle compares two values itself. A Boolean
 connective's oracle calls `exact::evaluate_boolean` with the matching
@@ -46,13 +47,27 @@ admission is a separate caller-ingress operation: a caller constructs a
 `exact_numeric` operand. A generated comparison oracle does not certify how its
 caller obtained either `Text` operand.
 
+The direct-owner migration is PLANNED until implementation and focused
+qualification. Kernel values, scalar types, outcomes and metering come from
+`quire-exact`; declarations/equality and enum semantics come from QSV
+(`quire-semantic-value`); functions still owned by Contract Runtime remain
+at that owner. Historical uses of the runtime's `exact` facade below do not
+authorize re-exporting removed owner APIs or retaining a compatibility shim.
+Boolean/integer equality passes QSV an empty `EnumMemberIndex`, which is valid
+for those domains. These scalar oracle bodies and their proof manifests need
+no source recompilation or admitted enum context at execution; FR-018's
+generated context ABI applies to its equality generator, not to this scalar
+proof path. Existing scalar input, result, charge and proof domains remain
+unchanged.
+
 ## Inputs
 
 - An admitted `CheckedPackageV2` read through Contract IR's strict reader.
 - A request of items, each naming one checked node id and one typed exact
   scalar operation descriptor.
-- Contract Runtime with the `exact` feature, as this repository's `Cargo.toml`
-  names it.
+- Direct exact/QSV dependencies and the Runtime residue dependency, named by
+  the one `core/profile` emitted-manifest authority and this repository's
+  `Cargo.toml`; no dependency on a QSL implementation layer.
 
 The V2 transport carries each application term's `operation` member — its
 catalogued identity, its laws and its mode — so the operation law (for example
@@ -230,8 +245,8 @@ otherwise.
 
 ## Outputs
 
-- A generated crate: `Cargo.toml` (`publish = false`, the Contract Runtime
-  dependency this repository's `Cargo.toml` names, with the `exact` feature) and `src/lib.rs` with one oracle function
+- A generated crate: `Cargo.toml` (`publish = false`, direct exact/QSV and
+  Runtime residue dependencies from the one profile authority) and `src/lib.rs` with one oracle function
   per supported item.
 - A coverage-probe source map for the generated crate.
 - `derive_exact_scalar_items`: one `Result<ExactScalarItem, ExactScalarRefusal>`
@@ -478,7 +493,7 @@ otherwise.
 | FR-014-AC-5 | Every claim-map entry carries the node id, IR id, package id, source map, claims, bounds and operation identity of its item, and, for a `quire.op.quantity.convert` item, the `type_argument` type node id (FR-014-AC-48). | Test (TC-024) |
 | FR-014-AC-6 | Executing generated oracles on the QSpec TC-185, TC-186, TC-192 and TC-193 vectors, and on these QSpec TC-187 vectors, yields outcomes, charges and consumed counters equal to direct runtime execution: U02 (dimension normalization through a product and a quotient, and a zero power), U03 (the dimension mismatch), U05 (arithmetic and a power on `degC` and `degF`, refused `ill_typed`), U09 (a base dimension of the same declaration and shape as `L` under a different node key, refused `ill_typed`), U12 (compound-unit products, quotients and powers, with the `s` family), U13 and U21 (powers), U14 (the static refusals under zero limits), U19 and U24 (same-unit sums), U20 (affine by composed offset, and a non-affine sum), U23 (comparison tuples), U27 (division by a zero quantity) and U28 (the compound product), each under QSpec's own limit tuple, unchanged, where QSpec tables one (U13, U14, U19, U20, U21, U23's tabled tuples, U24, U27 and U28), and U03 under U14's zero tuple, which QSpec gives its identical `1 m + 1 s` case, and under unlimited limits where it gives none (U02, U05, U09, U12 and the untabled parts of U23), with QSpec's disposition and, for an incomplete one, the whole incomplete record asserted, plus the generated grid of quantity arithmetic, comparisons and powers over `m`, `cm`, `in`, `rev`, `u2` and `s`. U06 and U11 are a Contract Runtime unit-graph admission check (Contract Runtime FR-012-AC-4, TC-033), not oracle agreement: they have no generated oracle, because an oracle takes an already admitted unit graph, and the one test that asserts them exercises no CG code, so it is not evidence about any generated oracle; it asserts the runtime's admission, which refuses a zero scale (`ZeroScale`), a second root (`DuplicateRoot`), no root (`MissingRoot`), an unknown target (`UnknownTarget`), a target under another dimension (`CrossDimensionTarget`) and a target cycle (`TargetCycle`) as `invalid_semantic_graph`. The TC-187 vectors that convert a quantity are part of this agreement set through the exact conversion oracle (FR-014-AC-48): U01, U04, U09b, U10, U15, U22, U25's second step and U26, with U03-style `m` to `s`, U09 and U22's `N_m` to `J` agreeing as `ill_typed` with zero charges (FR-014-AC-49), each under QSpec's own limit tuple where it tables one. U07, U08, U16, U17, U18 and U29 convert to a Decimal or Integer target and give a scalar result, and U25's first step is a compound-unit target: all are outside this criterion (FR-014-AC-50; compound targets IR-831). This criterion claims no agreement with the QSL value authority (FR-014-AC-47). A vector or row of this criterion that yields no agreement fails the test. | Test (TC-024) |
 | FR-014-AC-7 | Composite, collection, function, model, relation, state, temporal and protocol nodes are refused with their blocked or unsupported reason and never reported as generated. | Test (TC-024) |
-| FR-014-AC-8 | The generated crate declares `publish = false`, names the Contract Runtime dependency this repository's `Cargo.toml` names with the `exact` feature, contains no charge amount (every charge comes from runtime metering), and compiles. | Test (TC-024) |
+| FR-014-AC-8 | The generated crate declares `publish = false`, names the direct exact/QSV and Runtime residue dependencies from the one profile authority without a replay-context dependency for Boolean/integer scalar proofs, contains no charge amount (every charge comes from runtime metering), and compiles. | Test (TC-024) |
 | FR-014-AC-9 | Generated oracle functions do not panic: an invalid generated constant, including a decimal target, stops as `InvalidConstant`, an operand of the wrong width stops before any charge, and generated source over its ceiling is a typed error with no output. | Test (TC-024) |
 | FR-014-AC-10 | A descriptor parameter whose admitted bound is missing, repeated or unequal to the reachable `bounded_domain` node, an operand that is neither a literal nor a reference, and a literal quantity operand, are each refused by CG with a typed reason. A malformed bound with a noncanonical integer endpoint such as `05` is refused by Contract IR's strict checked-package reader before CG receives an admitted item; CG retains its defensive typed `UnreadableBound` refusal for an admitted bound it cannot decode. Contract IR's FR-038 "Mode" reader rule also refuses a bare Float32 addition authored with the non-exact `nearest-even` mode and no `float_rounding` type pin as `invalid_package`/`operation-mode-type-mismatch` at `operation.mode/value`, before CG can classify a missing rounding bound. | Test (TC-024) |
 | FR-014-AC-11 | A claim whose descriptor passes every check this requirement states, and whose descriptor agrees with the node's catalogued `operation.identity`, law definition and mode value, marks its operation `ir_confirmed`. An item refused by any of those checks is `caller_declared` even where its operation agrees. | Test (TC-024) |

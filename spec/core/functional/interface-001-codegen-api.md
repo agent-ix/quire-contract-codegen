@@ -163,11 +163,16 @@ operations:
   - name: OriginalCompositeEqContext::new
     inputs: [original admitted CheckedPackageV2, retained ReplayInputs, selected function identifier, retained canonical proof-content DigestRecord, CheckedPackageReadLimits]
     output: OriginalCompositeEqContext | CompositeBuildError
-    semantics: retain immutable original inputs and require the exact source owner and source-byte binding in the package lock; content identity remains a caller-retained binding input and does not authenticate a generated artifact
+    semantics: retain immutable original inputs and require the exact source owner and source-byte binding in the package lock; content identity remains a caller-retained binding input and does not authenticate a generated artifact; construction does not compile or authenticate an AdmittedContext
   - name: OriginalCompositeEqContext::request
     inputs: [original CheckedNodeId, original CheckedOccurrence, EqualityOperator (Equal or NotEqual), harness ProofBound list, IR operand-projection work ceiling]
     output: immutable OriginalCompositeEqRequest | CompositeBuildError
-    semantics: Eq or Ne graph-child route through IR composite_application_operands; require the requested EqualityOperator to equal the original node's structural.eq or structural.ne operation and refuse a difference with the typed OperatorMismatch before invocation (the claim carries the node's operator); require admitted original node/occurrence presence, preserve positional parameter bounds and empty literal Bounds, compute O-09 through owning parity_obligation, decode the real wire to obtain QSL stage limits, and require exact recompiled package/context equality before invocation; projection/encoder refusal can precede context authentication because public stage-limit decoding needs the genuine O-09 wire; QSL owns selected-function body and occurrence-origin membership at invocation through its composite-site locator, with binding-checked Refused reports; imported contexts return ImportedContextUnsupported until original admitted dependency packages are retained by CG; inline operands refuse
+    semantics: Eq or Ne graph-child route through IR composite_application_operands; require the requested EqualityOperator to equal the original node's structural.eq or structural.ne operation and refuse a difference with the typed OperatorMismatch before invocation (the claim carries the node's operator); require admitted original node/occurrence presence, preserve positional parameter bounds and empty literal Bounds, compute O-09 through owning parity_obligation, decode the real wire to obtain QSL stage limits, and call root qsl_replay::compile_admitted with authentic retained source, original dependency provision, decoded request stage limits and replay limits; require equality of compiled/context/original checked-package identities, preserve the original source/library-lock binding, strictly read the emitted bytes and compare the full recompiled CheckedPackageV2 with the original before retaining AdmittedCompilation and exposing its context or invoking the request; projection/encoder refusal can precede context authentication because public stage-limit decoding needs the genuine O-09 wire; QSL owns selected-function body and occurrence-origin membership at invocation through its composite-site locator, with binding-checked Refused reports; imported contexts return ImportedContextUnsupported until original admitted dependency packages are retained by CG; inline operands refuse
+  - name: OriginalCompositeEqRequest::admitted_context
+    status: planned; package-bound enum migration under FR-018
+    inputs: [immutable successfully authenticated OriginalCompositeEqRequest reference]
+    output: immutable qsl_replay AdmittedContext reference borrowed from the retained AdmittedCompilation
+    semantics: expose only the genuine context retained after source, original lock, identity and exact full-package checks; Recompile carries AdmittedRefusal and preserves Package, Resource and Fault instead of stringifying or reclassifying a stopped compile; existing pre-invocation RequestDecode, PackageRead, PackageReadLimit, ContextMismatch and ImportedContextUnsupported boundaries remain distinct; a failed request exposes no context or partial preparation
   - name: OriginalCompositeEqRequest::settle_verified
     inputs: [retained VerifiedShadow evidence]
     output: OriginalCompositeEqReport | CompositeBuildError
@@ -177,9 +182,10 @@ operations:
     output: VerifiedShadowSettlement | CompositeReportError (MissingReport | ClaimMismatch)
     semantics: compare the full report.claim() with the retained sent identity before reading its typed result; a missing or different report has no terminal value; the private settlement stores QSL's VerifiedShadowResult and derives terminal_value() from that result (FR-033 AC-9)
   - name: generate_composite_equality_oracles
-    inputs: [admitted CheckedPackageV2, CompositeEqualityItem list]
+    status: planned admitted-context signature; existing scalar/composite closure obligations remain required
+    inputs: [admitted ContractPackageV1 reference, immutable genuine root qsl_replay AdmittedContext reference, full ContractRequestPosition list, matching item positions, CompositeEqualityItem list, CompositeEqualityLimits]
     output: CompositeEqualityOracles | OracleGenerationError
-    semantics: composite equality oracles plus a typed claim map identical to claim-map.json; per-item problems are refusals, and only a whole-generation failure is an error (FR-018)
+    semantics: FR-018 defines the exact Rust signature and generated prepared-environment ABI; preserve whole-request accounting/position checks, then require the context package identity to equal package.source.package_id (original checked package, not lowered ContractPackage identity); per-item Unknown declaration/case and Foreign lookup refusals retain owning fields; source/lock/full-original-package authentication occurs before a retained context is exposed; no raw caller index, generated NodeKey constructor, or replacement replay evaluator is admitted; a whole-generation failure publishes no artifact
   - name: negotiate_backend_provider
     inputs: [BackendProviderEnvelope]
     output: ItemSettlement list | EnvelopeRefusal

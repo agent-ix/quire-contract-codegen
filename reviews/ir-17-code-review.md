@@ -1,117 +1,667 @@
 ---
-id: SR-11690
-title: "IR-17 PR 397 code-review review"
+id: SR-14680
+title: IR-17 admitted equality ABI code-review review
 type: SpecReview
 analysis: code-review
-scope: "agent-ix/quire-contract-codegen@01c8b4f8e1f5c0066ef61ee3f0ea005777c71dfe (base 2897d5eb9cf30e294e3cb8c24b3a29f5d5c37f3b); git diff origin/main...01c8b4f, 35 files: Cargo.lock; src/core/profile.rs, src/kani/generate/frame.rs, src/kani/generate/scalar.rs, src/kani/run/scalar.rs, src/lib.rs, src/oracle/boolean_v1.rs, src/oracle/equality/mod.rs, src/oracle/function/mod.rs, src/oracle/operator_catalog.rs, src/oracle/scalar/mod.rs, src/replay/composite_builder.rs, src/replay/frame.rs, src/replay/function.rs; 17 test files under tests/; 4 spec files (read as context only)"
+scope: agent-ix/quire-contract-codegen; IR-17 PR488; spec/assurance/AD-001-codegen-architecture.md,
+  spec/assurance/AD-004-cg-crate-layout.md, spec/core/functional/interface-001-codegen-api.md,
+  spec/oracle/functional/FR-014-exact-scalar-oracles.md, spec/oracle/functional/FR-018-composite-equality-oracles.md,
+  spec/oracle/matrix/TC-029-composite-equality-oracles.md, spec/spec.md
 review_set: subset
 ---
 
 ## Summary
 
-Ticket IR-17, PR quire-contract-codegen#397. This is a code review with the rust-review lane folded in. It covers `git diff origin/main...01c8b4f`: 35 files, +678/-517. The files split into 1 lockfile, 4 spec files, 13 source files and 17 test files.
+Reviewed duplication, file-tracking, integrity, spec/code honesty and boundary alignment. No added product source, copied owner implementation, compatibility shim, lowered gate, new digest inventory or false test-success claim. New ABI and ownership obligations are explicitly PLANNED; concrete source mismatch is expected implementation work, not a claim that old code is compliant. Exact supplied package identity and private wrapper bind execution; direct owner calls retain the generated oracle as the SUT.
 
-The ticket's acceptance criteria are untrusted text, so each was measured again:
+## Scope
 
-- CG takes the exact-kernel types from `quire-exact` and keeps no copy of the kernel.
-- The only QSL crate CG depends on is `qsl-replay`.
-- The change adds no compatibility layer.
+```yaml
+scope:
+- id: AD-001-L57
+  path: spec/assurance/AD-001-codegen-architecture.md
+  role: examined
+  excerpt: "- Contract IR reads and lowers the package through the `CheckedPackageV2` reader and lowering.\n- `quire-exact` owns kernel values, scalar types, metering and outcomes. QSV\n  (`quire-semantic-value`) owns declarations, equality and enum semantics.\n  Contract Runtime retains its own residual functions and execution surface;\n  it is not a re-export facade for the extracted owners.\n- QSL owns replay/proof types and the executor behind root `qsl-replay`, and\n  FR-394's package-bound `AdmittedContext` with genuine checker-issued enum\n  declaration/case keys. No QSL implementation-layer import is per"
+  lines: 57-65
+- id: AD-001-L118
+  path: spec/assurance/AD-001-codegen-architecture.md
+  role: examined
+  excerpt: '### Direct owning execution surface view'
+  lines: '118'
+- id: AD-001-L120
+  path: spec/assurance/AD-001-codegen-architecture.md
+  role: examined
+  excerpt: 'The direct-owner/enum ABI migration is planned under
 
-Measured against the locked upstream sources (cargo git checkouts):
+    [FR-018](../oracle/functional/FR-018-composite-equality-oracles.md) and
 
-- `quire-exact` 37aa172
-- `quire-contract-runtime` 288270a
-- `qsl-replay` 20b3254 (QSL)
+    [interface-001](../core/functional/interface-001-codegen-api.md). Every generated
 
-## Verdict
+    oracle calls the owner of its operation and interprets no expression itself:'
+  lines: 120-123
+- id: AD-001-L125
+  path: spec/assurance/AD-001-codegen-architecture.md
+  role: examined
+  excerpt: "- FR-014 scalar oracles call the kernel scalar operations over `rt::Integer` and the other exact\n  scalar types.\n- FR-018 equality oracles call QSV `check_type`, `check_equality` with their\n  complete genuine enum index, and `CheckedEquality::evaluate`. A generated\n  opaque prepared environment retains the immutable replay-root context,\n  environment, index, descriptors and original-package/item binding.\n- FR-021 function-application oracles admit a `PackageDeclarations` through\n  `PackageDeclarations::check` and apply one function through `CheckedPackage::call`."
+  lines: 125-132
+- id: AD-001-L134
+  path: spec/assurance/AD-001-codegen-architecture.md
+  role: examined
+  excerpt: 'Only the source-retaining preparation boundary calls root `compile_admitted`,
 
-**FAIL**: one high finding, one medium and one low.
+    authenticates original source/lock, compares the complete recompiled package
 
-The library migration is sound:
+    and retains its context. CG''s oracle generator takes that root facade type,
 
-- **One kernel copy.** `Cargo.lock` holds one `quire-exact` entry (37aa172). `cargo tree -d` lists no duplicated first-party crate. `scripts/check_one_copy.awk` passes and `cargo deny check` passes.
-- **QSL dependency.** CG's only direct QSL dependency is `qsl-replay` 20b3254.
-- **No kernel copy or compatibility layer.** CG defines no kernel type: no `Meter`, `Outcome`, `Refusal`, `Integer` or `ChargePoint`. It has no `pub use` of `quire_exact` or of the runtime's `exact` module, and no shim or alias module.
-- **Ownership is enforced by the compiler.** RT 288270a deleted its kernel re-exports; `src/exact/mod.rs` carries a `compile_fail` doctest for `quire_contract_runtime::exact::Integer`. Any kernel name CG still spelled through `quire_contract_runtime::exact` would therefore fail to build.
-- **Emitted source strings.** Every `rt::`/`residue::`/`exact::` name in the emitted source of the scalar, equality, function and boolean_v1 oracles was checked against the export lists of both crates:
-  - The equality and function oracles keep `rt` = runtime only for runtime-owned items: `TypeEnvironment`, `Value`, `ValueType`, `NodeKey`, `Presence`, `FieldDeclaration`, `CollectionType`, `CheckedPackage`, `Frame`, `PackageDeclarations`. Their kernel names moved to `exact::`.
-  - The scalar oracle aliases `quire_exact as rt` and `quire_contract_runtime::exact as residue`. Only enum and quantity residue go through `residue::`.
-- **Duplicate names in RT.** RT still defines its own `Value`, `ValueType`, `NodeKey`, `Presence`, `FieldDeclaration`, `CollectionType`, `Location`, `Origin` and `Quantity`, next to same-named `quire_exact` items. RT's module doc lists this as its own open FR-275 residue (QSL-358). It is not a CG copy, and CG cannot swap them, because RT's `TypeEnvironment` and `CheckedEquality` consume RT's types.
-- **Wildcard arms.** The removed `_`/`&_` arms over closed kernel enums are correct. The remaining `&_` arm over `QuantityTarget` covers a `#[non_exhaustive]` RT enum. `(Kind::Integer, _)` at `src/oracle/scalar/mod.rs:3095` cannot be reached because of the early return above it.
-- **Panics, casts and lints.** The new `execute_native` parse of the observer's `integer_out_of_domain` bounds (`src/kani/run/scalar.rs:679-693`) maps every parse and interval error to a typed `NativeResult`; there is no `unwrap`, no indexing and no `as`. No `#[allow]` was added. New `unwrap`/`expect` calls appear only in tests.
-- **Identity test.** `runtime_boolean_outcome_has_the_kernel_type` (`src/core/profile.rs:38`) is a real compile-time identity check. It passes a `quire_exact::Meter` and a closure returning `quire_exact::Outcome` into RT's `evaluate_boolean_short_circuit`, and hands the result to a `fn(quire_exact::Outcome<bool>)`.
-  - Mutant: an out-of-tree probe crate declared `quire-exact` by `rev = d41a1da` beside RT 288270a. Cargo resolved two `quire-exact` entries, and the test body failed with three E0308 errors (`Outcome<bool>` ≠ `quire_exact::outcome::Outcome<bool>`, and the same for `Meter`). It cannot be satisfied vacuously.
+    not a peer `replay` module type. Emitted code resolves `WireNodeId`/case
 
-The high finding is in the code CG emits for the Kani scalar native observer. It does not compile against the kernel that the canonical emitted manifest selects.
+    identifiers by genuine owner lookup and constructs no kernel key. The
 
-Gates run in a throwaway detached worktree with its own `CARGO_TARGET_DIR`:
+    facade''s enum-only inventory leaves record/tuple owner-key lookup as separate
 
-- `cargo fmt --check`: clean.
-- `cargo clippy --locked --all-targets -- -D warnings`: clean.
-- `cargo test --locked --workspace --no-run`: builds.
-- Focused tests, with no namespace or Kani tests:
-  - lib `core::profile`: 2 passed.
-  - lib `oracle::`/`replay::`/`kani::generate::`/`core::`: 140 passed.
-  - `it` modules `oracle_arithmetic`, `exact_scalar_generation` and `tc_031_ac20`: 67 passed, with `QSPEC_DIR` at QSpec origin/main. The sibling QSpec checkout is 75 commits behind, which fails `tc_024_ac44` for environment reasons only.
-  - `it` modules `capability_settlement`, `composite_equality_generation`, `composite_parity_converter`, `exact_function_agreement`, `exact_function_generation`, `exact_scalar_agreement` and `routed_generation`: 191 passed.
+    unresolved migration work; existing composite behavior remains required.
 
-These are not the full gate. Kani and the namespace tests were not run here.
+    Scalar Boolean/integer proof execution has no added source-compiler leg.
+
+    Th'
+  lines: 134-143
+- id: AD-004-L347
+  path: spec/assurance/AD-004-cg-crate-layout.md
+  role: examined
+  excerpt: 'The planned FR-018 admitted-context migration preserves this internal graph:
+
+    `oracle` accepts the external root `qsl_replay::AdmittedContext`, not CG''s peer
+
+    `replay::OriginalCompositeEqContext`. The existing source-retaining builder
+
+    in `replay` authenticates the original source/lock, calls root
+
+    `compile_admitted` under the admitted request limits, compares the complete
+
+    original checked package, and retains the genuine compilation/context pair.
+
+    A successful request exposes its immutable context to the caller, which
+
+    passes it to generation. This adds no `oracle --> replay` or QSL
+
+    implementation-'
+  lines: 347-355
+- id: AD-004-L357
+  path: spec/assurance/AD-004-cg-crate-layout.md
+  role: examined
+  excerpt: 'Generated equality''s prepared environment privately holds the facade context,
+
+    QSV environment and complete enum index plus package/item binding. Exact
+
+    kernel types/meters/outcomes come from `quire-exact`; QSV owns declaration,
+
+    equality and enum APIs; Runtime imports name only its remaining functions.
+
+    `core/profile` remains the sole emitted-manifest authority. Equality''s
+
+    manifest/scratch consumers add root `qsl-replay` when they name its context;
+
+    ordinary scalar Boolean/integer proof manifests/body acquire no such leg.
+
+    No emitted key constructor or backend decoder is permitted. The enum-only
+
+    fa'
+  lines: 357-368
+- id: interface_001-L10
+  path: spec/core/functional/interface-001-codegen-api.md
+  role: examined
+  excerpt: "```yaml\nname: ContractCodegen\nversion: draft-codegen-v1\ninput:\n  contract_package: public IR BoundPackage from the public IR derived executable projection decoder; no private wire or codegen input schema\n  configuration: backend selection, customer bindings, output profile\noperations:\n  - name: source_obligation_census\n    status: planned; complete producer/consumer implementation gated on IR-759 reviewed neutral correspondence\n    inputs: [SourceCensusRequest borrowing the selected admitted checked package, complete owner semantic-obligation inventory, criterion and production-symbol inventor"
+  lines: 10-410
+- id: FR-014-L21
+  path: spec/oracle/functional/FR-014-exact-scalar-oracles.md
+  role: examined
+  excerpt: 'When a caller supplies an admitted `quire.checked-package/v2` package and a set
+
+    of scalar expression nodes, the code generator shall emit a deterministic Rust
+
+    oracle crate whose functions evaluate each node by calling the
+
+    direct `quire-exact` kernel operators and metering, QSV semantic operators,
+
+    and only the remaining Contract Runtime functions it still owns. It never approximates a
+
+    scalar family through another family and never copies a resource charge.'
+  lines: 21-26
+- id: FR-014-L34
+  path: spec/oracle/functional/FR-014-exact-scalar-oracles.md
+  role: examined
+  excerpt: 'FR-014 owns the integer and Boolean `eq` and `ne` nodes. Their oracles call the
+
+    QSV''s one equality relation, `TypeEnvironment::check_equality` followed by
+
+    `CheckedEquality::evaluate`, as FR-018''s oracles do, and return its
+
+    `Outcome<bool>` unchanged; no oracle compares two values itself. A Boolean
+
+    connective''s oracle calls `exact::evaluate_boolean` with the matching
+
+    `BooleanConnective` when both operands are decided values, and
+
+    `exact::evaluate_boolean_short_circuit` when its right operand is itself an
+
+    oracle that may stop, and returns the runtime''s `Outcome<bool>` unchanged.'
+  lines: 34-41
+- id: FR-014-L50
+  path: spec/oracle/functional/FR-014-exact-scalar-oracles.md
+  role: examined
+  excerpt: 'The direct-owner migration is PLANNED until implementation and focused
+
+    qualification. Kernel values, scalar types, outcomes and metering come from
+
+    `quire-exact`; declarations/equality and enum semantics come from QSV
+
+    (`quire-semantic-value`); functions still owned by Contract Runtime remain
+
+    at that owner. Historical uses of the runtime''s `exact` facade below do not
+
+    authorize re-exporting removed owner APIs or retaining a compatibility shim.
+
+    Boolean/integer equality passes QSV an empty `EnumMemberIndex`, which is valid
+
+    for those domains. These scalar oracle bodies and their proof manifests need'
+  lines: 50-61
+- id: FR-014-L65
+  path: spec/oracle/functional/FR-014-exact-scalar-oracles.md
+  role: examined
+  excerpt: "- An admitted `CheckedPackageV2` read through Contract IR's strict reader.\n- A request of items, each naming one checked node id and one typed exact\n  scalar operation descriptor.\n- Direct exact/QSV dependencies and the Runtime residue dependency, named by\n  the one `core/profile` emitted-manifest authority and this repository's\n  `Cargo.toml`; no dependency on a QSL implementation layer."
+  lines: 65-70
+- id: FR-014-L248
+  path: spec/oracle/functional/FR-014-exact-scalar-oracles.md
+  role: examined
+  excerpt: "- A generated crate: `Cargo.toml` (`publish = false`, direct exact/QSV and\n  Runtime residue dependencies from the one profile authority) and `src/lib.rs` with one oracle function\n  per supported item.\n- A coverage-probe source map for the generated crate.\n- `derive_exact_scalar_items`: one `Result<ExactScalarItem, ExactScalarRefusal>`\n  per requested node id, in input order. A refusal is a lowering or bound\n  refusal `generate_exact_scalar_oracles` also gives, or `NoDerivableClaim`\n  carrying a `ClaimDerivationRefusal`, a tagged `code` enum:\n  `not_application`, `missing_operation_identity`, "
+  lines: 248-265
+- id: FR-014-AC-8
+  path: spec/oracle/functional/FR-014-exact-scalar-oracles.md
+  role: examined
+  excerpt: The generated crate declares `publish = false`, names the direct exact/QSV and Runtime residue dependencies from the one profile authority without a replay-context dependency for Boolean/integer scalar proofs, contains no charge amount (every charge comes from runtime metering), and compiles.
+  lines: '496'
+- id: FR-018-L1
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: "---\nid: FR-018\ntitle: \"Generate exact complete-V1 composite equality oracles\"\ntype: FR\nrelationships:\n  - target: ix://agent-ix/quire-contract-codegen/StR-001\n    type: satisfies\n  - target: ix://agent-ix/quire-contract-codegen/FR-014\n    type: depends_on\n  - target: ix://agent-ix/quire-contract-runtime/FR-008\n    type: references\n  - target: ix://agent-ix/quire-contract-ir/FR-036\n    type: references\n  - target: ix://agent-ix/quire-contract-ir/FR-038\n    type: references\n  - target: ix://agent-ix/quire-specification/FR-460\n    type: references\n  - target: ix://agent-ix/quire-spec-language/ADR"
+  lines: 1-27
+- id: FR-018-L31
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: 'When a caller supplies an admitted `ContractPackageV1`, its package-bound
+
+    admitted equality context, and a set
+
+    of equality expression nodes, the code generator shall emit a deterministic Rust
+
+    oracle crate whose functions decide each node by reconstructing the item''s
+
+    `TypeEnvironment` and calling the QSV declaration/equality owner''s
+
+    `TypeEnvironment::check_equality` and `CheckedEquality::evaluate` with a
+
+    caller-supplied `Meter`. It never compares two values structurally, and never
+
+    copies a resource charge or a planned pair count.'
+  lines: 31-38
+- id: FR-018-L67
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: 'That second stage must include `TypeEnvironment::check_type` on both operand
+
+    comparison types, before `check_equality`. `check_equality` consults the
+
+    environment only through `contains_ieee`, which treats a composite key absent
+
+    from the environment as bearing no IEEE value and returns `false`; and
+
+    `CheckedEquality::evaluate` takes no environment at all, comparing the caller''s
+
+    two values directly. Without `check_type` the emitted function''s
+
+    prepared environment therefore decides almost nothing, and an environment
+
+    that declares none of the item''s composites still completes. `check_type` is the
+
+    r'
+  lines: 67-78
+- id: FR-018-L80
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: 'The admitted-context ABI and direct-owner migration below are PLANNED until
+
+    CG implementation, native generated-code controls and independent review
+
+    qualify them. Upstream facade availability is not a CG acceptance result.
+
+    The existing record, tuple, recursive closure and collection behavior remains
+
+    required; the enum-only facade does not justify withdrawing those routes.'
+  lines: 80-84
+- id: FR-018-L88
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: "- An admitted `ContractPackageV1` from Contract IR's FR-330 lowerer and strict\n  reader, with the caller's complete root-position request and the positions\n  of the equality items in it. Its retained checked-V2 graph supplies the\n  equality expressions and declaration closure below.\n- The immutable genuine `qsl_replay::AdmittedContext` returned alongside the\n  original compiled package by root `qsl_replay::compile_admitted`. Its\n  `package_id()` must equal the original checked-package identity in\n  `ContractPackageV1::wire().package.source.package_id`, not the lowered\n  ContractPackage's own `"
+  lines: 88-123
+- id: FR-018-L152
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: 'A declaration or case key SHALL be the original checker-issued key selected
+
+    through its owning admitted lookup. Equality with the corresponding V2 wire
+
+    identity is retained, including its domain; it is not permission for CG to
+
+    hash a preimage, decode a digest into `NodeKey`, or emit a key constructor.
+
+    A generated identifier literal is a facade `WireNodeId` used for lookup.'
+  lines: 152-156
+- id: FR-018-L158
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: 'For enums, the generator SHALL call `AdmittedContext::enum_declaration` and
+
+    `enum_case`, verify the declaration''s qualified name and ordering against the
+
+    selected IR node, and use all `AdmittedEnum::cases()`, including unused cases.
+
+    QSV `EnumDeclaration::new` receives that genuine declaration key, ordered flag
+
+    and complete case names. Each `EnumDeclaration::member` receives the exact
+
+    case key returned by the facade. Every resulting `EnumValue` is recorded in
+
+    one `EnumMemberIndex`; its `variant()` and `position()` supply exact enum shape
+
+    variants and canonical positions. A position, spelling, a'
+  lines: 158-167
+- id: FR-018-L169
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: 'The published facade currently supplies enum lookups only. A record or tuple
+
+    `CompositeDeclaration` still requires its genuine owner-issued `NodeKey`.
+
+    Complete migration of those routes requires an owning composite/general-key
+
+    lookup or prepared composite capability; passing a record id to
+
+    `enum_declaration` is not that capability. This residual owner gap authorizes
+
+    neither backend key construction nor a new `Unsupported` regression for an
+
+    existing record/tuple route. The existing closure obligations remain pending
+
+    qualification through the actual owning capability.'
+  lines: 169-176
+- id: FR-018-L180
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: "- A generated crate: `Cargo.toml` (`publish = false`, direct exact/QSV\n  dependencies, and root `qsl-replay` for admitted-context lookup) and\n  `src/lib.rs`. The single `core/profile` manifest authority supplies normal\n  Git branch-main dependencies; consumer lockfiles perform ordinary resolution.\n- One public opaque `PreparedEqualityEnvironment<'ctx>` type whose private\n  fields retain the borrowed `&'ctx qsl_replay::AdmittedContext`, expected\n  original package and item/descriptor binding, admitted QSV `TypeEnvironment`,\n  complete genuine `EnumMemberIndex`, and reconstructed operand descrip"
+  lines: 180-189
+- id: FR-018-L191
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: "  ```rust\n  pub fn environment_symbol<'ctx>(\n      context: &'ctx qsl_replay::AdmittedContext,\n  ) -> Result<PreparedEqualityEnvironment<'ctx>, EnvironmentError>;"
+  lines: 191-194
+- id: FR-018-L196
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: "  pub fn oracle_symbol(\n      prepared: &PreparedEqualityEnvironment<'_>,\n      left: &quire_exact::Value,\n      right: &quire_exact::Value,\n      meter: &mut quire_exact::Meter,\n  ) -> quire_exact::Outcome<bool>;\n  ```"
+  lines: 196-202
+- id: FR-018-L204
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: "  `symbol` denotes the existing deterministic per-item generated symbol.\n  Constructors and descriptor/module helpers thread this same context;\n  neither a zero-argument helper nor a planning-only context may reconstruct\n  nominal keys. The constructor compares the expected original package\n  identity before any key lookup and publishes no partial prepared value.\n- Generated `EnvironmentError` SHALL distinguish `ContextPackageMismatch`,\n  `Lookup(qsl_replay::AdmittedLookupRefusal)`, `Declaration` retaining the\n  QSV `EnvironmentFailure`, and `Reconstruction(ReconstructionError)`.\n  QSV admissi"
+  lines: 204-224
+- id: FR-018-L228
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: '### Admitted-context ABI'
+  lines: '228'
+- id: FR-018-L230
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: 'The public generation signature SHALL be:'
+  lines: '230'
+- id: FR-018-L232
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: "```rust\npub fn generate_composite_equality_oracles(\n    package: &ContractPackageV1,\n    admitted: &qsl_replay::AdmittedContext,\n    requested: &[ContractRequestPosition],\n    positions: &[usize],\n    items: &[CompositeEqualityItem],\n    limits: CompositeEqualityLimits,\n) -> Result<CompositeEqualityOracles, OracleGenerationError>;\n```"
+  lines: 232-241
+- id: FR-018-L243
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: 'After the existing whole-request accounting/position checks, a mismatched
+
+    context package SHALL refuse the whole generation with a typed context
+
+    mismatch and no artifact. Unknown declaration, unknown case and foreign
+
+    package lookup failures SHALL remain distinct typed per-item refusals,
+
+    retaining the declaration, optional case and foreign package identity as the
+
+    owning cause supplies them. Claim-map serialization may project these fields
+
+    into CG''s typed refusal representation but never infer the cause from text.'
+  lines: 243-249
+- id: FR-018-L251
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: 'The generated constructor SHALL create its private enum index only from the
+
+    same genuine context. The oracle SHALL reject a prepared package or
+
+    item/descriptor binding other than its own as `Refused(CheckedInvariant)`
+
+    before a meter charge. It SHALL check both expected operand comparison types
+
+    against the prepared environment and call QSV `check_equality` with the
+
+    prepared index before every evaluation. A private negative-test replacement
+
+    of that environment does not replace its genuine context/index or create a
+
+    public unchecked constructor. These tests retain AC-8''s empty, missing-key
+
+    and wro'
+  lines: 251-261
+- id: FR-018-L263
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: '### Existing equality behavior'
+  lines: '263'
+- id: FR-018-L265
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: "- When generation begins, the generator shall consume each requested node's\n  existing complete-lowering accounting in the admitted ContractPackage,\n  with its full request-position mapping, and select exactly one generated\n  or refused disposition per bound item; it shall not lower a second package.\n- When a lowered node is a `binary` expression whose operand `semantic_type`s\n  reconstruct to a declaration closure that `TypeEnvironment::new` admits, and\n  whose descriptor `TypeEnvironment::check_equality` admits, the generator shall\n  emit that item's environment constructor and oracle functi"
+  lines: 265-477
+- id: FR-018-AC-12
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: The generated crate declares `publish = false`, names direct exact/QSV and root replay dependencies through the one manifest authority, contains no charge amount and no planned pair count (every charge and every pair comes from runtime metering), and compiles.
+  lines: '504'
+- id: FR-018-AC-13
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: Every claim-map entry carries the node id, IR id, package id, source map, claims, reconstructed declaration keys and selected schedule of its item, and its genuine owner-issued declaration keys equal the exact domain and digest of the V2 node ids its operand types reach, selected through owning lookup without CG/emitted key construction.
+  lines: '505'
+- id: FR-018-AC-17
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: The `src/lib.rs` that `generate_composite_equality_oracles` returns for the TC-029 step 1 package (every generated item) contains zero occurrences of the panic tokens FR-018-AC-19 lists, no `.ok()`, `.unwrap_or(` or `.unwrap_or_default(` anywhere, and no `[` index or slice expression directly after an identifier character, `)` or `]`; every reconstruction helper in it returns `Result<_, ReconstructionError>`, and each of `rebuild_integer`, `rebuild_interval`, `rebuild_rational`, `rebuild_decimal`, `rebuild_text` and `rebuild_cardinality` turns a failed constructor or parse into exactly the mat
+  lines: '509'
+- id: FR-018-AC-33
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: A genuine root-facade compilation of authentic retained source, original dependencies and admitted request limits has equal compiled/context/original package identities and exact full recompiled/original CheckedPackageV2 equality before its context is exposed. A different context package refuses generation and emitted environment construction before lookup, publishes no prepared value, and cannot evaluate with a completed Boolean or meter charge.
+  lines: '525'
+- id: FR-018-AC-34
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: The actual generated ABI executes ordered and unordered enum comparisons over all declared cases, including a case absent from every selected literal and an enum parameter with no member literals. Exact shape variants and canonical positions come from genuine facade/QSV values. Same-spelled cases from distinct declarations retain distinct identities; matching and mismatching declaration comparisons preserve the owning equality disposition.
+  lines: '526'
+- id: FR-018-AC-35
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: Unknown declaration, unknown case and a directly or transitively imported declaration produce the original typed Unknown/Foreign details at consumed and generated lookup boundaries. Malformed source/dependency input, QSL stage or above-reader resource limits, and internal Fault remain Package, Resource and Fault at the source-retaining boundary; a subsequent IR read stop remains the separate PackageReadLimit, with no partial context or successful prepared wrapper. The current ImportedContextUnsupported guard remains until original admitted dependency packages are retained.
+  lines: '527'
+- id: FR-018-AC-36
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: Emitted source uses only WireNodeId and case identifiers for lookup and contains no NodeKey constructor/decoder or generated nominal preimage/hash. Only the prepared wrapper's private genuine index reaches check_equality. A private environment-only fault fixture still satisfies AC-8, every original charge-stop case still satisfies AC-9, and a wrong item/descriptor prepared wrapper refuses before charging. Record/tuple/recursive/collection cases remain required by AC-2 and AC-21 through AC-30; an absent owner lookup capability is recorded as unresolved migration work, not as accepted Unsupporte
+  lines: '528'
+- id: FR-018-AC-37
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: Equality's generated manifest and native scratch consumers use the one profile authority's direct exact/QSV/replay dependencies, while ordinary Boolean/integer FR-014 scalar proof manifests and oracle bodies acquire no replay source-compilation/context leg. Native generated enum acceptance is reported separately from original TC025/TC027 proof qualification; neither result substitutes for the other.
+  lines: '529'
+- id: FR-018-L577
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: '| FR-018-AC-33 | Compare the context against lowered ContractPackage identity instead of original source package identity, skip full-package/source-lock authentication, or expose the retained context before those checks. |'
+  lines: '577'
+- id: FR-018-L578
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: '| FR-018-AC-34 | Build shape/index from only used literals, substitute positions for member keys, or conflate identical case names under distinct declarations. |'
+  lines: '578'
+- id: FR-018-L579
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: '| FR-018-AC-35 | Collapse Unknown case and declaration, drop Foreign package details, map Resource/Fault to Package, or publish a partial context after stopped admission. |'
+  lines: '579'
+- id: FR-018-L580
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: '| FR-018-AC-36 | Emit a NodeKey literal, accept an arbitrary caller index, skip check_type on the prepared environment, or evaluate a wrapper for another descriptor. |'
+  lines: '580'
+- id: FR-018-L581
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: '| FR-018-AC-37 | Add replay compilation to scalar proof execution, let scratch and emitted manifest sources drift, or count native enum success as an original Kani receipt. |'
+  lines: '581'
+- id: FR-018-L585
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: "- **Upstream**: [FR-014](./FR-014-exact-scalar-oracles.md), Contract IR FR-036/FR-038\n  (CheckedPackage V2 lowering), Contract Runtime FR-008 (composite, collection\n  and equality families before their owner extraction), QSL\n  [FR-394](ix://agent-ix/quire-spec-language/FR-394) and\n  [FR-087](ix://agent-ix/quire-spec-language/FR-087) (genuine admitted context\n  and key lookup), and QSV [FR-060](ix://agent-ix/quire-semantic-value/FR-060)\n  (no identity minting). Direct owning imports follow the migration above.\n- **Downstream**: [TC-029](../matrix/TC-029-composite-equality-oracles.md);\n  [FR-015"
+  lines: 585-596
+- id: TC-029-L28
+  path: spec/oracle/matrix/TC-029-composite-equality-oracles.md
+  role: examined
+  excerpt: 'The FR-018 admitted-context and direct-owner procedure amendments are
+
+    PLANNED/UNRUN until CG implements them and qualifies the generated ABI.
+
+    The existing full record/tuple/recursive/collection corpus remains required;
+
+    the enum-only owner facade does not excuse dropping it.'
+  lines: 28-31
+- id: TC-029-L35
+  path: spec/oracle/matrix/TC-029-composite-equality-oracles.md
+  role: examined
+  excerpt: "1. Build an admitted V2 package holding `binary` expression nodes over: record,\n   tuple and option types; `sequence`, `set`, `bag` and `ordered_set` collection\n   types with their `collection_bounds` domains; nested composites inside\n   collections and collections inside records; scalar leaves of every equality\n   schedule (text, enum, quantity, and the `Plan` types); admitted `convert<T>`\n   operands from each `admits_equality_conversion` row exercised; plus operands\n   with distinct text profiles, distinct enum declarations, incompatible\n   dimensions, distinct units, no common type, a `con"
+  lines: 35-114
+- id: TC-029-L269
+  path: spec/oracle/matrix/TC-029-composite-equality-oracles.md
+  role: examined
+  excerpt: '### Package-bound enum migration controls'
+  lines: '269'
+- id: TC-029-L271
+  path: spec/oracle/matrix/TC-029-composite-equality-oracles.md
+  role: examined
+  excerpt: 'Use authentic retained QSL source, original dependency provision and original
+
+    request stage/replay limits. Call root `compile_admitted`, check the emitted
+
+    and context package identities against the original checked-package identity,
+
+    strictly re-read emitted bytes and compare the complete package with the
+
+    original. Preserve original source-byte/owner and library-lock authentication;
+
+    only a successfully authenticated request exposes `admitted_context()`.
+
+    Exercise malformed source and dependency input (Package), QSL stage and
+
+    above-reader resource refusal (Resource), a subsequent IR read stop
+
+    (Pa'
+  lines: 271-281
+- id: TC-029-L283
+  path: spec/oracle/matrix/TC-029-composite-equality-oracles.md
+  role: examined
+  excerpt: 'Run the real generated `environment_symbol(context)` and
+
+    `oracle_symbol(prepared, left, right, meter)` ABI, with ordered and unordered
+
+    enums including unused cases and a parameter without member literal nodes.
+
+    Check canonical positions and original member identities against genuine
+
+    facade/QSV values. Use same-spelled cases under distinct declarations to
+
+    expose conflated identity. Reject a different package context before lookup;
+
+    reject a different item/descriptor prepared wrapper before charging. Exercise
+
+    Unknown declaration, Unknown case and Foreign direct/transitive dependency
+
+    identities, pr'
+  lines: 283-293
+- id: TC-029-L295
+  path: spec/oracle/matrix/TC-029-composite-equality-oracles.md
+  role: examined
+  excerpt: 'Retain the empty/missing/wrong-key environment controls of step 6 and every
+
+    charge-stop vector of step 5 with the same genuine index. Mutate generated
+
+    operator, descriptor and case lookup independently so direct-vs-generated
+
+    agreement fails. Check deterministic bytes and claim order after context
+
+    threading, with no NodeKey constructor/decoder, generated nominal preimage,
+
+    hash or ordinal-as-identity in emitted source. All helpers/modules receive
+
+    the actual context; retaining one only on the planning side is a failing
+
+    control. Source compilation occurs before oracle invocation, and the
+
+    emitted o'
+  lines: 295-303
+- id: TC-029-L305
+  path: spec/oracle/matrix/TC-029-composite-equality-oracles.md
+  role: examined
+  excerpt: 'The enum-only lookup cannot issue record/tuple keys. Record the missing
+
+    owner lookup/preparation capability separately until it exists; preserve all
+
+    original closure/cycle/bound/collection corpus requirements rather than
+
+    accepting an Unsupported regression or synthetic key. Manifest/scratch checks
+
+    cover equality''s root replay dependency and scalar Boolean/integer proof
+
+    bodies with a legitimate empty index and no added replay compile leg.
+
+    Native enum results are not TC025/TC027 healthy/mutant proof receipts, and
+
+    those original proof domains and controls remain unchanged.'
+  lines: 305-312
+- id: spec-master-L50
+  path: spec/spec.md
+  role: examined
+  excerpt: 'StR-001 is the one stakeholder requirement. Every functional requirement satisfies it. NFR-001 and
+
+    NFR-002 constrain it, NFR-004 constrains FR-008 to FR-013, and NFR-005 constrains the panic-free
+
+    generation of FR-014, FR-015, FR-019, FR-021 and FR-022. NFR-006 constrains FR-015, FR-017,
+
+    FR-031 and FR-041 by gating a change that can alter what real Kani proves on the real-Kani lane.
+
+    `interface-001` defines the serialized input, the library and CLI operations, the artifact bundle,
+
+    the diagnostics and the evidence contract. AD-001 describes the architecture and its seams to
+
+    Contract IR, Contract '
+  lines: 50-72
+- id: FR-018-AC-2
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: context_only
+  excerpt: 'On every vector of the composite-equality corpus, the generated oracle''s `Outcome<bool>`, its admitted charge sequence and its consumed counters are equal to those of `quire_contract_runtime::exact::TypeEnvironment::check_equality` plus `CheckedEquality::evaluate` invoked directly on an independently constructed environment, operands and fresh `Meter`. This criterion claims no agreement with the QSL value authority: that boundary is owned by quire-integration IR-842 (FR-014-AC-47).'
+  lines: '494'
+- id: FR-018-AC-8
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: context_only
+  excerpt: A declaration closure `TypeEnvironment::new` refuses is refused at generation time carrying that `DeclarationCause`, including both recursion passes and a duplicate record field; and each generated oracle calls `TypeEnvironment::check_type` on both operand comparison types before `check_equality`, so calling it with an empty environment, one omitting a key its operand types reach, or one declaring that closure under a different key, yields `Outcome::Refused(Refusal::CheckedInvariant)` with no charge admitted, rather than a panic or a completed Boolean.
+  lines: '500'
+- id: FR-018-AC-9
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: context_only
+  excerpt: "Every generated oracle function returns `Outcome<bool>`, never `bool`: with a denial injected at each of `equality.plan-form`, `equality.plan`, `equality.pair`, `equality.result-retain` and each conversion charge point in turn, the oracle yields `Outcome::Incomplete` naming that point, the denied charge is not applied \u2014 every counter equals those of the same run stopped immediately before that point \u2014 and never a completed Boolean."
+  lines: '501'
+- id: FR-018-AC-21
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: context_only
+  excerpt: Each generated item's claim-map entry records its declaration closure as every declaration's key, form (record, tuple or option), members in declaration order with each member's name, presence and type, and each leaf's family and declared bound, and the closure equals member by member (name, presence, value type, order) the declarations of the `TypeEnvironment` the item's generated environment constructor returns, for every item of the TC-029 corpus whose leaves are Boolean or bounded integers. PLANNED (IR-264).
+  lines: '513'
+- id: FR-018-AC-22
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: context_only
+  excerpt: 'For every pair of operand values in the item''s refinement domain (FR-028-AC-16: every case where the domain fits the case cap, the boundary and seeded cases otherwise; every presence state of an option and of an optional field included) of an item whose leaves are Boolean or bounded integers, the generated oracle called with its own environment and a `Meter` whose every limit is `u64::MAX` returns `Outcome::Completed` with the verdict of QSpec FR-149 for the item''s operator and admits exactly `equality.plan-form`, `equality.plan`, one `equality.pair` per node of the occurrence-pair tree, then '
+  lines: '514'
+- id: FR-018-AC-23
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: context_only
+  excerpt: For every item of the TC-029 corpus whose leaves are Boolean or bounded integers, the claim-map closure's member names, presence and each integer leaf's inclusive bounds equal those of an independent read of the checked package (the V2 composite and `bounded_domain` nodes read through Contract IR's reader, never through the generator's reconstruction); a closure that dropped a member, narrowed a bound by one or read an optional member as required fails the check. PLANNED (IR-264).
+  lines: '515'
+- id: FR-018-AC-24
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: context_only
+  excerpt: Type reconstruction of QSpec's `positive-recursive-records.json` List (through `Option<List>`) and Tree (through `Sequence<Tree>` bounded `[0,3]`) closes each back-edge at the in-progress record key, generates equality items built over both record types, and terminates; a synthetic unclosed `Option` self-cycle and a `Sequence` self-cycle each refuse as `TypeResolutionCycle` naming the repeated type node, without a panic, stack overflow or generated symbol. PLANNED (IR-643).
+  lines: '516'
+- id: FR-018-AC-25
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: context_only
+  excerpt: 'The per-item type-resolution counter charges one unit for each root type-node entry or followed type-node reference or bounded-domain `semantic_type` edge, including a repeated or memoized reference, across both operands and conversion targets, independently of Contract IR lowering; with the default limit, an acyclic chain reaches its 65,537th entry and refuses only its item as `TypeResolutionWorkExhausted { limit: 65_536, consumed: 65_537 }` before further descent and without call-stack exhaustion or generated symbols, while a sibling needing at most 65,536 entries still generates. PLANNED (I'
+  lines: '517'
+- id: FR-018-AC-26
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: context_only
+  excerpt: Reading the QSpec List `next` field as `binding(next, aggregate([binding(optional, reference Option<List>)]))` yields exactly one `FieldDeclaration` named `next`, with `Presence::Optional` and payload type `ValueType::Composite(List NodeKey)`; removing or renaming `optional`, adding a second nested member, or targeting a non-option node refuses only that item as malformed, never as a required field or a generated oracle. PLANNED (IR-643).
+  lines: '518'
+- id: FR-018-AC-27
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: context_only
+  excerpt: Reading the QSpec Tree `kids` field's direct reference to `collection_bounds` follows that node's `semantic_type` to `Sequence<Tree>`, reads its sole element reference as the Tree `NodeKey`, and reconstructs cardinality `[0,3]` from that bound node's named `min` and `max`; changing the semantic type to a non-sequence, dropping or duplicating either bound, or making either value non-integer refuses only that item with a typed cause and emits no code, never silently yielding an unbounded collection. PLANNED (IR-643).
+  lines: '519'
+- id: FR-018-AC-28
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: context_only
+  excerpt: With a caller-selected type-resolution work limit of at least 100,000 and `cg.equality.source_bytes` raised to the measured flat source size, an admitted acyclic type chain of 100,000 entries reconstructs and generates an oracle with the same result as an equivalent shallow type on a 512 KiB stack; with the same raised source-byte limit, the default type-resolution work limit refuses it at entry 65,537, and a selected work limit one below its entry count refuses it at the first denied entry. No depth setting or fixed depth refusal participates in these runs. PLANNED (IR-511).
+  lines: '520'
+- id: FR-018-AC-29
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: context_only
+  excerpt: A cycle detected after a charged repeated entry reports `TypeResolutionCycle` without following a child; if that repeated entry is the first denied work entry, `TypeResolutionWorkExhausted` wins and reports the effective limit and first denied count. An unaffected sibling keeps its original disposition in either case. PLANNED (IR-511).
+  lines: '521'
+- id: FR-018-AC-30
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: context_only
+  excerpt: The 100,000-entry acyclic closure renders as flat source without a type-depth-sized constructor expression; under the 1,048,576-byte default it returns `SourceTooLarge` naming that limit when the source exceeds it, and under a caller limit equal to its measured source bytes it emits a complete, compilable oracle within the publication artifact and bundle byte limits. One byte less refuses before that byte is appended and publishes no partial artifact. PLANNED (IR-511).
+  lines: '522'
+- id: FR-018-AC-31
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: context_only
+  excerpt: A caller-selected type-resolution work limit of `u64::MAX` refuses as `InvalidTypeResolutionWorkLimit` before lowering or charging; with `u64::MAX - 1`, the first denied count fits in the `u64` `consumed` field and is reported without wraparound. PLANNED (IR-511).
+  lines: '523'
+- id: FR-018-AC-32
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: context_only
+  excerpt: Each IR-admitted direct `temporal`/`formula`, `temporal`/`fairness` and `expression`/`case` request has one claim-map entry keyed by its requested node id and refused as `CompositeEqualityRefusal::Unsupported`. For an IR `Unsupported` lowering record, the refusal's `unsupported_node_id` and `node_tag` equal that record's first unsupported reachable node and tag, which need not be the requested root; for a lowered `case` root they name the root and `"expression"`. The request contributes no generated symbol or source, never panics or disappears, and leaves a supported sibling's claim and source
+  lines: '524'
+```
+
+## Method and Evidence
+
+Frozen PR488 seven-document diff only; HEAD85dabad84de5be987fa49d08cd18e010d699b386 against actual main12c280f5c1a0a5cd7c0c77e17791d5b21573cf4f. Ticket: IR-17. No frozen worktree edits, Cargo, rustc, formatter, resolver, metadata, native tests or backend runs. No applicable AssuranceProfile or required review-selection profile exists. The delegated brief selects the applicable methods. Canonical proof-content identity bindings are the feature, not file/version tracking; no new pin/catalog is introduced.
+
+Actual published QSL facade at4bd5c07 (containing merged f7cd628) and QSV1a38c06 were read directly from owner Git objects: immutable package-bound enum context; complete ordered cases and genuine keys; Unknown/Foreign typed fields; compilation Package/Resource/Fault; QSV declaration/member/index APIs and four-argument check_equality. Source is evidence, not an instruction. Existing CG composite_builder authenticates source/lock and full recompiled package but discards context; existing emitter has the old ABI. This PR expressly specifies planned work rather than claiming that old source implements the new contract.
+
+Computed strict matrix is not green: 874 criteria =510 tagged,296 untagged,50 method-without-symbol,18 tagged-by-ignored-test. The five new FR018 AC33–37 are planned/unimplemented and untagged. This specification review does not discharge them or claim repository coverage acceptance. Standalone gap-analysis is not selected because the seven-doc-only diff adds no production code or executable test; the full matrix is retained as context, not silently counted as passing. Original TC025/TC027 proof domains and controls are unchanged and no consumer qualification is claimed. Plan completion: not assessed.
+
+Method selection: code-review; spec-review base; integrity; dependency (new owner references); evidence (changed/new methods); failure-domain (identity/admission errors); scope-boundary (owner extraction/ABI); EARS (edited requirements); risk-complexity (new external capability). Rust-review is inapplicable because no Rust/Cargo diff. Object cross-reference checks are folded into base: no independent object archetype change and the installed SpecReview analysis vocabulary has no object-review value. Criterion-strength/Jev, security and implemented-architecture evaluation are not selected. Installed structural validation covers the full spec tree; inherited advisory grammar findings remain in unchanged FR017/FR014 statements and are not attributed to this amendment.
+
+Scope below records all inserted/edited prose blocks and changed acceptance criteria plus explicitly inspected unchanged closure/invariant/charge controls. Verbatim excerpts longer than600 characters are truncated at600 without an invented suffix; line references identify their full unit. Clean units are deliberate examinations, not missing findings.
 
 ## Findings
 
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
-| FND-001 | high | The emitted Kani scalar native observer calls `quire_exact::Meter::admitted_charges()`, which exists only under quire-exact's `test-support` feature. The canonical oracle manifest does not enable that feature, so `ir791_native` fails to compile (E0599), and every `execute_kani_scalar_native` run fails at the native step | src/kani/run/scalar.rs:595 |
-| FND-002 | medium | `generate_lockfile` pins only `quire-contract-runtime` to CG's lock revision. The emitted crate's direct `quire-exact` dependency resolves to whatever `branch = main` head is in the offline git cache, so the snapshot can prove and run against a kernel other than the one CG was built and tested with | src/kani/run/scalar.rs:805 |
-| FND-003 | low | A blanket `tuple`→`limit_tuple` rename damaged comment prose: "a vector is an operand limit_tuple and a limit limit_tuple", "DIV-08 exact limit_tuple", "T11 NFC limit_tuple" | tests/exact_scalar_support/agreement_cases.rs:10 |
+| FND-001 | low | No findings (placeholder) | - |
 
-## Checks
+## Verdict
 
-- FND-001: `write_observer` emits `use quire_exact as rt;` and `for charge in meter.admitted_charges() { ... charge.point.as_str() }` (`src/kani/run/scalar.rs:561,595`).
-  - **Why it does not compile.** In quire-exact 37aa172, `Meter::admitted_charges` and `AdmittedCharge` are `#[cfg(feature = "test-support")]` (`src/accounting.rs:570,722`; `src/lib.rs:101`). quire-exact's `Cargo.toml` says a normal or build dependency must never enable that feature.
-    - The staged package must equal `oracle_crate_manifest` byte for byte (`src/kani/run/scalar.rs:402`).
-    - That manifest declares `quire-exact = { git, branch = "main" }` with no features (`src/core/profile.rs:31`).
-    - RT 288270a enables `test-support` only in its own `[dev-dependencies]`, which are not built for a dependent.
-  - **Reproduced.** A probe crate used the canonical manifest text, `cargo generate-lockfile --offline`, then `cargo update --offline -p quire-contract-runtime --precise 288270a`, which is the same steps as `generate_lockfile`. It resolved one `quire-exact` at 37aa172, and `cargo build --bin ir791_native` failed with `E0599: no method named admitted_charges found for struct Meter`.
-  - **Why this is new.** On main the observer used RT 3cc88c4's own `Meter`, whose `admitted_charges` had no feature gate (`src/exact/accounting.rs:525`).
-  - **Consequence.** `execute_native` returns `KaniScalarNativeError::NativeLaunch` after the proof verifies, so no `KaniScalarNativeReceipt` can be produced. The kani-lane tests `tc_027_attested_scalar_receipt_binds_real_proof_and_native_result` and `tc_027_attested_scalar_subtraction_receipts_bind_both_operand_orders` (`tests/it/kani_obligations.rs:2497,2585`) should fail.
-  - **Why the test crate passed.** The author's own scratch crate for `oracle_arithmetic` adds `features = ["test-support"]` explicitly (`tests/it/oracle_arithmetic.rs:1266`); the observer did not get the same treatment.
-  - **Fix constraint.** Adding `test-support` to the emitted normal dependency would break quire-exact's stated rule. The fix needs a design choice:
-    - build the observer as a test or example target, with a dev-dependency that enables the feature; or
-    - drop the per-charge log from `NativeMeterObservation` (`src/kani/run/scalar.rs:102-115`) and from FR-017-AC-27..30, keeping the consumed counters.
-- FND-002: `generate_lockfile` runs `cargo generate-lockfile --offline`, then `cargo update --offline -p quire-contract-runtime --precise <CG lock rev>`. It checks only the runtime revision (`src/kani/run/scalar.rs:805-890`).
-  - **Why it matters now.** The emitted crate now depends on `quire-exact` directly, and the emitted source names kernel APIs directly: `Refusal::IntegerOutOfDomain { target }`, `CheckedInvariantCause::*`, `DivisionMember::Quotient`. Its kernel revision is whichever `main` head was last fetched into `~/.cargo/git/db`, not 37aa172.
-  - **Failure scenario.** quire-exact `main` moves; 21 revisions are cached locally. Any other build then refreshes the cache. The snapshot then compiles against a different kernel. Depending on what changed, the emitted source stops compiling, or the observer's tab-separated output no longer matches `execute_native`'s parser. Either way the receipt is not for the kernel CG was tested with.
-  - **Mitigation and current state.** The receipt's identity hashes the staged `Cargo.lock`, so provenance is recorded, but nothing prevents the drift. It is latent today: `gh api` shows `main` of both repos equal to the locked revisions (37aa172, 288270a).
-  - **Fix.** Pin `quire-exact` with `--precise` to CG's lock revision and check it, the same way the runtime is pinned.
-- FND-003: these lines are comments only, and test behaviour is unchanged.
-- One kernel identity: `cargo tree --locked -i quire-exact` shows one `quire-exact` (37aa1721). It is reached by CG directly, by RT, by `qsl-replay`/`qsl-cst`/`qsl-eval`/`qsl-forms`/`qsl-foundation`/`qsl-package`/`qsl-semantics`, and by `quire-semantic-value`.
-- Lock delta: besides the three locks named in the brief, the lock also moves `quire-contract-ir`/`quire-contract-model` (9be7387 → ef4ab49) and `quire-semantic-value` (b7d5531 → ad6e975). The new IR adds `CheckedMemberType::{String, Uuid, Timestamp}`, and the new qsl-replay adds `WitnessValue::{Uuid, Timestamp}` and `supplied_limits`. CG handles all of these with explicit refusal arms, not wildcards (`src/kani/generate/frame.rs:961`, `src/replay/frame.rs:380`, `src/replay/function.rs:239`), and sets `supplied_limits: None`, as QSL's own doc examples do.
-- `CompositeBuildError::PackageRead` now boxes `CheckedPackageRefusal` (`src/replay/composite_builder.rs:58`). This is an API shape change made for clippy's `large_enum_variant`, and all uses are updated.
-- Generated emitted-crate manifests: the only emitted `Cargo.toml` is `oracle_crate_manifest`, used by the scalar, equality and function oracles. It names `quire-exact` with the same spelling as CG's own `Cargo.toml` (`EXACT_DEPENDENCY_SOURCE`). The pinned-text test `tc_024_oracle_manifest_names_the_runtime_by_branch_and_carries_no_pinned_revision` asserts that line.
-- Boolean V1 native oracle: the emitted source now uses `use quire_exact as rt;` and `rt::planned_equality`/`rt::retain_boolean`. Each connective retains through `completed_boolean` once, after the operands complete. The inline short-circuit table is correct for and, or and implies (`src/oracle/boolean_v1.rs:1228-1297`).
-  - Mutant analysis by inspection: in-tree edits were refused, because this review is reviewer-only. Dropping the `retain_boolean` call would make `tc_044_native_connectives_retain_only_completed_results` see 0 retains against the expected 1, 2 or 3. Retaining after a child stop would break its `left_stops` expectation of 0. Either mutant is killed. The test and `tc_044_the_first_stop_in_evaluation_order_is_the_outcome` pass at head.
-- CLAUDE.md rules:
-  - No new hash, digest or pin record is introduced. The lockfile pin in `generate_lockfile` is CG's own lock, used as the build's source of truth.
-  - No new `=` exact pin of a shared ecosystem crate in `Cargo.toml`, which is unchanged.
-  - No new top-level `tests/*.rs` file.
-  - No new `unsafe`.
-
-## New findings (disposition pass 1)
-
-| ID | Severity | Summary | Refs |
-| --- | --- | --- | --- |
-| FND-004 | low | The new lock-pin test reads the same `LOCKED_DEPENDENCIES` constant that `generate_lockfile` reads, then repeats the pin commands itself. Deleting `quire-exact` from that constant still passes the test, so FND-002 could regress without any test failing | src/kani/run/scalar.rs:1117 |
-
-- FND-004:
-  - The test's assertions loop `for (package, repository) in LOCKED_DEPENDENCIES`, the constant the production loop also uses (`src/kani/run/scalar.rs:41,858`). A mutant that drops the `quire-exact` entry would stop production from pinning the kernel, and the test would still pass. It would only pin and check the runtime, and today `main` still equals the lock (37aa172).
-  - The test also copies CG's `Cargo.lock` into the snapshot, but `cargo generate-lockfile` overwrites that copy straight away, so the copy does nothing.
-  - Fix: name `quire-exact` and `quire-contract-runtime` literally in the test's assertion. Alternatively, assert `LOCKED_DEPENDENCIES` contains both names.
-
-## Dispositions
-
-| FND | Outcome | Reason |
-| --- | --- | --- |
-| FND-001 | fixed | f315205: the staged scalar manifest (`scalar_oracle_crate_manifest`, `src/core/profile.rs:31-49`) adds `[[example]] ir791_native` and `[dev-dependencies] quire-exact` with `features = ["test-support"]`. The normal dependency and the emitted `oracle_crate_manifest` carry no features: `tc_024_generated_crate_is_unpublished_charge_free_and_compiles` asserts no `test-support` and no `[[example]]`, and the emitted manifest must still equal `oracle_crate_manifest` (scalar.rs:402). The observer moved to `examples/ir791_native.rs` with `#[path = "../src/lib.rs"]` and is launched with `cargo run --locked --example ir791_native`. Its output format is byte-identical. Probe: the staged manifest plus runtime 288270a and quire-exact 37aa172 pinned gives `cargo build --offline --locked --example ir791_native` Finished. Dropping the dev-dependency feature gives E0599 again. `cargo tree -e features --edges normal` shows no `test-support` |
-| FND-002 | fixed | f315205: `generate_lockfile` loops `LOCKED_DEPENDENCIES` = [quire-contract-runtime, quire-exact] (scalar.rs:41,858). It reads each revision from `include_str!("../../../Cargo.lock")` at build time, not from a literal, then runs `cargo update --offline -p <pkg> --precise <rev>` and checks the result. `tc_027_staged_native_observer_compiles_with_locked_kernel_and_charge_log` asserts both pins in a staged lock |
-| FND-003 | fixed | f315205: `agreement_cases.rs:10-11` reads "an operand tuple and a limit tuple", line 217 "DIV-08 exact limits", line 414 "T11 NFC tuple" |
+PASS for this method and frozen specification diff. Implementation and original consumer proof acceptance remain outstanding.

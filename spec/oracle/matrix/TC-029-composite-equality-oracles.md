@@ -25,6 +25,11 @@ against independently constructed native runs whose descriptor comes from the
 request, so a generator change to an emitted operator, operand order or
 descriptor fails step 4. Determinism is checked by regeneration in step 2.
 
+The FR-018 admitted-context and direct-owner procedure amendments are
+PLANNED/UNRUN until CG implements them and qualifies the generated ABI.
+The existing full record/tuple/recursive/collection corpus remains required;
+the enum-only owner facade does not excuse dropping it.
+
 ## Test Procedure
 
 1. Build an admitted V2 package holding `binary` expression nodes over: record,
@@ -46,7 +51,8 @@ descriptor fails step 4. Determinism is checked by regeneration in step 2.
    id, operator rank, then each operand's source-type and conversion-target node
    ids, every node id compared in node-id order; the expression node
    id alone ties those two entries — reconstructed declaration keys against
-   `NodeKey::from_hex` of the V2 node ids, and `caller_declared` provenance.
+   the genuine owner-issued keys corresponding to exact V2 node identities,
+   without any backend key construction, and `caller_declared` provenance.
    Assert each entry's recorded descriptor is equal to the one the request
    supplied — operator, both operand source types, both conversion targets — and
    its recorded `EqualitySchedule` equal to `CheckedEquality::schedule()` of the
@@ -59,7 +65,8 @@ descriptor fails step 4. Determinism is checked by regeneration in step 2.
    the generated source contains no `unwrap`, `expect`, panicking index or
    charge or pair-count literal, and that the crate manifest declares
    `publish = false` and the runtime dependency (git source, `branch = "main"`, no pinned `rev`)
-   with the `exact` feature.
+   with the `exact` feature only for Runtime residue; direct exact/QSV and
+   equality's root replay dependency come from the same profile authority.
 4. Generate the corpus crate at test time, compile it with the agreement cases
    as its integration test, and execute it on the corpus vectors. For each vector compare the `Outcome<bool>`, the admitted
    charge sequence and the consumed counters against a direct call to
@@ -76,13 +83,14 @@ descriptor fails step 4. Determinism is checked by regeneration in step 2.
    `Outcome::Incomplete` naming that point and that the denied charge was not
    applied — every counter equal to those of the same run stopped immediately
    before that point, not to the counters at entry.
-6. Call each generated oracle whose operand types reach a declaration key with a
-   `TypeEnvironment` other than the one its environment constructor returns — an
+6. Call each generated oracle whose operand types reach a declaration key with
+   a genuine prepared wrapper whose environment is privately replaced by the
+   test fixture (no public raw wrapper/index constructor): an
    empty environment, and one omitting a key its operand types reach, and one
    declaring that closure under a different key; confirm `Outcome::Refused(Refusal::CheckedInvariant)`, no panic, and no charge
    admitted on the `Meter`. Assert that this is the emitted `check_type` calls
    deciding it, by confirming the same environments pass `check_equality`: that
-   call consults the environment only through `contains_ieee`, which returns
+   call uses the same genuine enum index and consults the environment through `contains_ieee`, which returns
    `false` for a composite key the environment does not hold, and
    `CheckedEquality::evaluate` takes no environment at all — so without
    `check_type` these vectors complete with a Boolean.
@@ -257,6 +265,51 @@ descriptor fails step 4. Determinism is checked by regeneration in step 2.
     source bytes with a run without the refused request. As a separate
     control, request a temporal clause whose closure reaches a formula or
     fairness node and assert its existing QSL-121 blocker.
+
+### Package-bound enum migration controls
+
+Use authentic retained QSL source, original dependency provision and original
+request stage/replay limits. Call root `compile_admitted`, check the emitted
+and context package identities against the original checked-package identity,
+strictly re-read emitted bytes and compare the complete package with the
+original. Preserve original source-byte/owner and library-lock authentication;
+only a successfully authenticated request exposes `admitted_context()`.
+Exercise malformed source and dependency input (Package), QSL stage and
+above-reader resource refusal (Resource), a subsequent IR read stop
+(PackageReadLimit), and the typed internal Fault path;
+none exposes a partial successful context. Do not widen the current imported
+context guard without retaining its original admitted dependency packages.
+
+Run the real generated `environment_symbol(context)` and
+`oracle_symbol(prepared, left, right, meter)` ABI, with ordered and unordered
+enums including unused cases and a parameter without member literal nodes.
+Check canonical positions and original member identities against genuine
+facade/QSV values. Use same-spelled cases under distinct declarations to
+expose conflated identity. Reject a different package context before lookup;
+reject a different item/descriptor prepared wrapper before charging. Exercise
+Unknown declaration, Unknown case and Foreign direct/transitive dependency
+identities, preserving typed owning fields. A raw caller-built member index
+cannot satisfy the public ABI. Test-only inconsistent reconstruction must
+produce the specified typed error, never a default or empty index.
+
+Retain the empty/missing/wrong-key environment controls of step 6 and every
+charge-stop vector of step 5 with the same genuine index. Mutate generated
+operator, descriptor and case lookup independently so direct-vs-generated
+agreement fails. Check deterministic bytes and claim order after context
+threading, with no NodeKey constructor/decoder, generated nominal preimage,
+hash or ordinal-as-identity in emitted source. All helpers/modules receive
+the actual context; retaining one only on the planning side is a failing
+control. Source compilation occurs before oracle invocation, and the
+emitted oracle remains the implementation under test.
+
+The enum-only lookup cannot issue record/tuple keys. Record the missing
+owner lookup/preparation capability separately until it exists; preserve all
+original closure/cycle/bound/collection corpus requirements rather than
+accepting an Unsupported regression or synthetic key. Manifest/scratch checks
+cover equality's root replay dependency and scalar Boolean/integer proof
+bodies with a legitimate empty index and no added replay compile leg.
+Native enum results are not TC025/TC027 healthy/mutant proof receipts, and
+those original proof domains and controls remain unchanged.
 
 ## Expected Results
 
