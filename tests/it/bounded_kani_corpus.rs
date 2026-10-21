@@ -922,11 +922,9 @@ fn public_family_and_corpus_results_have_direct_ir_errors_and_unchanged_successe
         .strategy
         .contents
         .contains("CORPUS_CASE: bool = true"));
-    assert!(corpus
-        .artifacts
-        .kani_harness
-        .contents
-        .contains("kani::cover!(true)"));
+    assert!(corpus.artifacts.kani_harness.contents.contains(
+        "kani::cover!(true, \"the harness runs to its end past the oracle assertion\");"
+    ));
     let duplicate: Result<BoundedCorpusCase, KaniOutcome> = generate_bounded_kani_corpus_case(
         crate::common::proof_ceilings::proof_ceilings(),
         &profile,
