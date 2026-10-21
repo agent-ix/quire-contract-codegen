@@ -1,0 +1,430 @@
+<!-- reviewer repo=agent-ix/quire-contract-codegen visibility=public quoin=0.28.4 module=spec-artifacts-process@b82e42e893612b4b4ee94127714b4577ee893502 id=SR-15332 method=gap-analysis lang=spec pr=quire-contract-codegen#504 model=gpt-6.1-sol run=ee04c2e1-a216-4171-b1d1-5ad7837787dc -->
+
+| FND | Severity | Check | Summary |
+| --- | --- | --- | --- |
+| FND-253 | medium | coverage | Inherited criterion has no tagged test. |
+| FND-254 | medium | coverage | Inherited criterion has only ignored-test bindings. |
+| FND-255 | medium | coverage | Inherited criterion has only ignored-test bindings. |
+| FND-256 | medium | coverage | Inherited criterion has no tagged test. |
+| FND-257 | medium | coverage | Inherited criterion has no tagged test. |
+| FND-258 | medium | coverage | Inherited criterion has no tagged test. |
+| FND-259 | medium | coverage | Inherited criterion has no tagged test. |
+| FND-260 | medium | coverage | Inherited criterion has no tagged test. |
+| FND-261 | medium | coverage | Inherited criterion has no tagged test. |
+| FND-262 | medium | coverage | Inherited criterion has no tagged test. |
+| FND-263 | medium | coverage | Inherited criterion has no tagged test. |
+| FND-264 | medium | coverage | Inherited criterion has no tagged test. |
+
++++ [reviewer data]
+
+```yaml
+clean: false
+scope:
+- id: spec/assurance/AD-006-admitted-native-integer-oracles.md#unit-1
+  path: spec/assurance/AD-006-admitted-native-integer-oracles.md
+  role: examined
+  excerpt: 'Peter approved IR-705 option 2: a kernel-owned admitted bounded-native
+    API with a proven refinement to BigInt, followed by genuine IR-705, IR-917 and
+    IR-948 proof qualification. CG selects and renders that production API from authentic
+    IR-admitted CheckedPackageV2 data. quire-exact owns native value/operation admission,
+    arithmetic and Meter semantics. This decision does not authorize a private CG
+    evaluator or replace existing general Integer and as_big contracts.'
+- id: spec/assurance/AD-006-admitted-native-integer-oracles.md#unit-2
+  path: spec/assurance/AD-006-admitted-native-integer-oracles.md
+  role: examined
+  excerpt: The views below separate authentic graph admission, production native execution
+    and independent proof qualification. Each retains its own owner and refusal boundary.
+- id: spec/assurance/AD-006-admitted-native-integer-oracles.md#unit-3
+  path: spec/assurance/AD-006-admitted-native-integer-oracles.md
+  role: examined
+  excerpt: CG reads operand intervals and every reachable arithmetic operation from
+    the admitted graph through the existing IR-owned seams. It derives conservative
+    interval bounds in expression order, preserving source identities and parameter
+    relationships. The native capacity request includes intermediate results, not
+    only the final declared domain. The kernel checks Add/Subtract/Multiply/Negate
+    interval capacity and creates a checked operation plan; per-call membership creates
+    an opaque admitted operation. A plan and a value from unrelated domains cannot
+    be combined without that check.
+- id: spec/assurance/AD-006-admitted-native-integer-oracles.md#unit-4
+  path: spec/assurance/AD-006-admitted-native-integer-oracles.md
+  role: examined
+  excerpt: Host admission derives canonical native endpoints from the genuine IR domains.
+    Generated production/proof code reconstructs the selected interval plan from those
+    native constant endpoints through the same checked kernel constructor, then admits
+    actual payloads before evaluation. Both constructors and operand admission remain
+    bounded-native on their successful paths. The host does not serialize an unchecked
+    capability and the emitted proof does not repeat general Integer/BigInt admission
+    or cache construction. This boundary must be evidenced in the actual generated
+    call graph.
+- id: spec/assurance/AD-006-admitted-native-integer-oracles.md#unit-5
+  path: spec/assurance/AD-006-admitted-native-integer-oracles.md
+  role: examined
+  excerpt: CG records the selected kernel capability and its input/result interval
+    decisions in the generated artifacts and identity inputs using the repository's
+    existing canonical identity mechanism. It does not invent checked node ids or
+    equate a caller descriptor with package admission. Any public struct/serialized
+    identity change follows the owning schema's compatibility rules rather than silently
+    changing a digest interpretation.
+- id: spec/assurance/AD-006-admitted-native-integer-oracles.md#unit-6
+  path: spec/assurance/AD-006-admitted-native-integer-oracles.md
+  role: examined
+  excerpt: Generated production native and Kani clients call the same kernel-owned
+    admitted operations with the real public Meter. Chained values remain native i128
+    carriers, without promotion into general Integer/cache on the successful arithmetic
+    path. Comparison and Boolean operations remain kernel-owned; subjects and independent
+    expected-value expressions preserve their existing distinct roles.
+- id: spec/assurance/AD-006-admitted-native-integer-oracles.md#unit-7
+  path: spec/assurance/AD-006-admitted-native-integer-oracles.md
+  role: examined
+  excerpt: A kernel capacity refusal is a typed generation/capability disposition
+    carrying the offending source and capacity reason, before artifact success. It
+    is distinct from IntegerOutOfDomain for a completed mathematical result outside
+    a declared semantic domain. The general exact route remains available under its
+    existing capability rules; selection failure is not proof success. No added assumption
+    may shrink the authored population to make a native plan admissible.
+- id: spec/assurance/AD-006-admitted-native-integer-oracles.md#unit-8
+  path: spec/assurance/AD-006-admitted-native-integer-oracles.md
+  role: examined
+  excerpt: Kernel qualification supplies machine-checked full-capacity refinement
+    against an independent mathematical abstraction of actual BigInt semantics; sampled
+    differential tests alone are not a universal proof. Kernel qualification proves
+    native admission and every operation against BigInt semantics over the full accepted
+    capacity, including real Meter/refusal refinement. CG qualification separately
+    obtains authentic QSL-emitted, IR-admitted inputs through the public generator
+    and installed backend. No generated fixture is hand-edited into a replacement
+    evaluator, and no healthy proof becomes igno
+- id: spec/assurance/AD-006-admitted-native-integer-oracles.md#unit-9
+  path: spec/assurance/AD-006-admitted-native-integer-oracles.md
+  role: examined
+  excerpt: The route can change generated oracle source bytes and native ABI carriers.
+    Those changes are recorded and reviewed. It preserves the original proposition,
+    selected clause, input/domain bounds, compiled subject intent, independent oracle/expectation,
+    assertions, final completion cover and substantive mutants. The general-only route's
+    source bytes are not an acceptance oracle for this architecture change.
+- id: spec/kani/functional/FR-015-bounded-kani-obligations.md#unit-1
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: When selecting the additive kernel facility of [quire-exact FR-384](ix://agent-ix/quire-exact/FR-384),
+    CG SHALL obtain finite operand domains and operation structure from the authentic
+    CheckedPackageV2 and existing IR-owned accessors, preserve every original input
+    valuation, and request kernel capacity admission for every reachable intermediate.
+    CG SHALL render the same production kernel API in native and proof clients, retain
+    the real Meter and semantic result-domain refusals, and return a typed source-associated
+    capability/generation refusal if capacity or value admission fails. It SHALL NOT
+- id: FR-015-AC-125
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: Authentic QSL-emitted, IR-admitted bounded integer scalar and clause inputs
+    generate kernel-owned native carriers and checked operation plans for all intermediates,
+    with original graph identities/domains retained. Reversed/oversized capacities
+    and operands outside a selected plan yield typed source-associated refusal, never
+    narrowed assumptions or a completed value. Native production and proof artifacts
+    use the same kernel implementation and real Meter; inspection finds no copied
+    arithmetic or verification-only evaluator.
+- id: FR-015-AC-126
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: Genuine TC-027 healthy and bound mutant, TC-025 arithmetic mutant, IR-917
+    clause implication and IR-948 V2 pre/post/invariant profiles regenerate through
+    public CG with the reviewed admitted kernel API. Original semantic domains, selected
+    propositions/clauses, independent expected values, subject controls, assertions,
+    final completion covers and existing solver/unwind/time settings remain. Each
+    healthy profile verifies at 16 GiB; each required substantive mutant falsifies
+    with original-domain native playback. The IR-948 impossible-precondition control
+    must complete as CoverUnsatisfied at the s
+- id: FR-015-AC-127
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: End-to-end denied/cancelled admitted-native controls retain all real Meter
+    counters, charge order, complete incomplete/refusal fields and admitted prefixes
+    at every reached charge point, compared with independent normative expectations
+    and the general exact route. A semantic result-domain failure remains after arithmetic
+    charge and before result-retain, separately from generation-time native-capacity
+    failure.
+- id: spec/kani/matrix/TC-027-kani-execution-evidence.md#unit-1
+  path: spec/kani/matrix/TC-027-kani-execution-evidence.md
+  role: examined
+  excerpt: After reviewed [kernel FR-384](ix://agent-ix/quire-exact/FR-384) refinement
+    evidence, regenerate the authentic TC-027 healthy/bound-mutant controls, TC-025
+    arithmetic mutant, IR-917 clause implication and IR-948 V2 contract pre/post/invariant
+    profiles through the public generator under [AD-006](../../assurance/AD-006-admitted-native-integer-oracles.md).
+    Record the reviewed kernel identity and native-capability selection without copying
+    runtime source or mutating historical fixtures. Preserve original populations,
+    semantic bounds, clauses, independent oracle/expectation, compiled subject contro
+- id: spec/kani/matrix/TC-027-kani-execution-evidence.md#unit-2
+  path: spec/kani/matrix/TC-027-kani-execution-evidence.md
+  role: examined
+  excerpt: Run one backend job at a time with the original per-profile solver, unwind
+    and time settings and a measured 16 GiB memory envelope. Require healthy Verified
+    with cover satisfied and every specified mutant Falsified with concrete original-domain
+    native playback; a successful compiler or generation Boolean is insufficient.
+    Record actual terminal outcome, peak and confirmed cleanup per proof. Diagnostic
+    runs with larger authorized ceilings are attributed separately and cannot establish
+    16 GiB fit. Exercise real cumulative Meter exact/one-less limits, cancellation,
+    each named injected denial and d
+- id: spec/kani/matrix/TC-027-kani-execution-evidence.md#unit-3
+  path: spec/kani/matrix/TC-027-kani-execution-evidence.md
+  role: examined
+  excerpt: For IR-948, retain the authentic impossible-precondition package and require
+    CoverUnsatisfied at the same 16 GiB ceiling and original unwind8. This is an adverse
+    cover control rather than an arithmetic falsification witness. Healthy Verified
+    alone does not complete the profile pair.
+- id: src/oracle/boolean_v1.rs
+  path: src/oracle/boolean_v1.rs
+  role: context_only
+  excerpt: "//! Deterministic, fail-closed lowering for Boolean clauses over Boolean\
+    \ and integer values.\n\nuse std::collections::BTreeMap;\n\nuse crate::{\n   \
+    \ core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES},\n    core::canonical::artifact_json,\n\
+    \    core::diagnostic::{GenerationDiagnostic, GenerationErrorCode},\n    core::naming::{observation_name,\
+    \ oracle_symbol, reference_identifier},\n    core::source_map::{SourceProbe, SourceRegion},\n\
+    };\nuse quire_contract_model::{\n    BooleanOperator, ClauseId, ComparisonOperator,\
+    \ DefinednessObligationKind, DependencyIdentity,\n    DependencyKind, Expression,\
+    \ Expression"
+- id: src/kani/generate/clause.rs
+  path: src/kani/generate/clause.rs
+  role: context_only
+  excerpt: "//! The V1 clause lowering that the precondition and contract families\
+    \ share: the lowered clause\n//! form, the clause oracle, the subject ABI and\
+    \ its slots.\n\nuse std::collections::BTreeMap;\n\nuse quire_contract_model::{\n\
+    \    BoundClause, BoundPackage, ClauseKind, ClauseRef, DependencyIdentity, DependencyKind,\n\
+    \    ExecutionPoint, StateObservation,\n};\n\nuse crate::{\n    core::diagnostic::{GenerationDiagnostic,\
+    \ GenerationErrorCode},\n    core::naming::{oracle_symbol, reference_identifier},\n\
+    \    kani::abi::{\n        i64_literal, readable_component, KaniBindingRole, KaniIntegerBounds,\
+    \ KaniPrimitiveType,"
+- id: src/kani/generate/contract.rs
+  path: src/kani/generate/contract.rs
+  role: context_only
+  excerpt: "//! The contract family: rendering the Kani contract harness of a V1 postcondition\
+    \ or invariant\n//! clause (FR-015).\n\nuse crate::{\n    kani::abi::i64_literal,\n\
+    \    kani::generate::clause::{call, symbolic_arguments, Abi, LoweredClause, SlotContext},\n\
+    \    kani::identity::ObligationKind,\n};\n\n/// The non-vacuity cover every contract\
+    \ harness ends with. It is reachable only on a path where\n/// the IR argument\
+    \ bounds and every `requires` hold together, so an unsatisfied cover means the\n\
+    /// `ensures` was never checked.\nconst CONTRACT_COVER: &str = \"contract requires\
+    \ and IR bounds are jointly satisfiable"
+- id: src/oracle/scalar/mod.rs
+  path: src/oracle/scalar/mod.rs
+  role: context_only
+  excerpt: '//! Exact complete-V1 scalar oracle generation from CheckedPackage V2
+    (FR-014).
+
+    //!
+
+    //! The V2 transport names only an operator class (`binary`, `unary`,
+
+    //! `convert`) for a scalar expression, not the operation law. Each request
+
+    //! item therefore pairs a checked node with a typed [`ExactScalarOperation`]
+
+    //! built from Contract Runtime `exact` values, and this module cross-checks
+
+    //! that descriptor against the lowered node before emitting anything.
+
+    //!
+
+    //! Every parameter the node can carry is checked against the IR: the
+
+    //! descriptor''s integer, rational and decimal domains, IEEE rounding '
+findings:
+- fnd: FND-253
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-024-AC-8
+  related_ids: []
+  path: spec/replay/functional/FR-024-counterexample-envelope-intake.md
+  lines: ''
+  excerpt: A retained reduced `Witness`-arm envelope carries its own backend re-run's
+    transcript, never the original counterexample's.
+  finding: Inherited criterion has no tagged test.
+- fnd: FND-254
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-024-AC-18
+  related_ids: []
+  path: spec/replay/functional/FR-024-counterexample-envelope-intake.md
+  lines: ''
+  excerpt: With the installed backend, the falsified operation-contract harness of
+    a postcondition state clause over a subject mutated to debit is replayed from
+    its real Kani playback through `replay_state_clause` and settles `reproduced-with-evaluated-witness`,
+    `violation`. The test is `tc_035_real_kani_state_clause_counterexample_replays_through_qsl`
+    in the module `kani_obligations_state_clause_replay`, so the `kani_obligations`
+    filter of `make kani` selects it.
+  finding: Inherited criterion has only ignored-test bindings.
+- fnd: FND-255
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-024-AC-34
+  related_ids: []
+  path: spec/replay/functional/FR-024-counterexample-envelope-intake.md
+  lines: ''
+  excerpt: PLANNED (IR-624), IR-628 accessor merged; CG dependency update and implementation
+    pending. With the installed backend, the real playback of the falsified frame
+    harness of a forbidden write (FR-024-AC-30) and the falsified postcondition harness
+    of a debit mutation (FR-024-AC-18) replay and settle as those criteria state,
+    each harness generated from QSL's emitted package using accessor-derived ranges.
+    The modules `kani_obligations_state_frame` and `kani_obligations_state_clause_replay`
+    are selected by the `kani_obligations` filter of `make kani`.
+  finding: Inherited criterion has only ignored-test bindings.
+- fnd: FND-256
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-024-AC-35
+  related_ids: []
+  path: spec/replay/functional/FR-024-counterexample-envelope-intake.md
+  lines: ''
+  excerpt: PLANNED (IR-624), IR-628 accessor merged; CG dependency update and implementation
+    pending. A falsified frame or postcondition harness draws a present model field
+    whose accessor type has no `i64` range (for example `IntRange` with a lower endpoint
+    below `i64::MIN` and an upper endpoint of -1), and playback binds an `i64` value
+    outside that model range. QSL refuses the pre state and settlement is `Inconclusive`
+    with `ReplayRefused` (FR-029-AC-16), naming the field and its persisted `TypeNotRange`
+    reason; it never reports `Verified` or a violation. Playback inside the model
+    range is unaffected, a
+  finding: Inherited criterion has no tagged test.
+- fnd: FND-257
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-024-AC-36
+  related_ids: []
+  path: spec/replay/functional/FR-024-counterexample-envelope-intake.md
+  lines: ''
+  excerpt: 'Two distinct test backend adapters each produce a typed outcome: success
+    carries equivalent assignments, each adapter''s backend identity, the same opaque
+    obligation identity, declared domains, source/provenance and replay packet members;
+    decode refusal carries only backend identity, obligation identity and typed cause.
+    Native text is observed only within its own adapter; the common intake neither
+    parses native text nor remints the obligation identity, and QSL receives each
+    successful adapter''s original backend and source identity in a complete packet.'
+  finding: Inherited criterion has no tagged test.
+- fnd: FND-258
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-024-AC-37
+  related_ids: []
+  path: spec/replay/functional/FR-024-counterexample-envelope-intake.md
+  lines: ''
+  excerpt: The common intake maps an adapter's decode-refusal arm to a typed decode
+    evidence failure retaining its cause, with no envelope or replay. Before native
+    replay, an out-of-domain assignment yields a distinct typed domain evidence failure;
+    an incomplete or QSL-refused witness/packet yields a distinct typed QSL admission
+    evidence failure retaining its cause. A replay verdict disagreement remains a
+    distinct typed evidence failure. None settles as contract success or contract
+    failure, and none of the pre-replay failures invokes replay. Kani's exact decode
+    and refusal partition remain governed by FR
+  finding: Inherited criterion has no tagged test.
+- fnd: FND-259
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-024-AC-38
+  related_ids: []
+  path: spec/replay/functional/FR-024-counterexample-envelope-intake.md
+  lines: ''
+  excerpt: 'Starting from one admitted original failure, one valid reduced candidate
+    that preserves the failure becomes a new CG lineage revision referring to its
+    exact admitted QSL envelope, its exact parent revision and the unchanged opaque
+    obligation identity. After retention, the original QSL envelope compares equal
+    to its pre-reduction clone by `WitnessEnvelope<P>: Eq`, and the original CG record''s
+    revision identity, parent, obligation and typed evidence fields read back equal
+    to their captured values. No lineage member is added to QSL''s envelope or packet.'
+  finding: Inherited criterion has no tagged test.
+- fnd: FND-260
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-024-AC-39
+  related_ids: []
+  path: spec/replay/functional/FR-024-counterexample-envelope-intake.md
+  lines: ''
+  excerpt: From a retained failure revision, an out-of-domain reduction and a domain-valid
+    reduction that changes the native verdict each create no revision. After each
+    rejection, every prior QSL envelope compares equal to its pre-proposal clone and
+    every prior CG record's revision identity, parent, obligation and typed evidence
+    fields equal their captured values; a later valid reduction names the actual retained
+    parent, with no skipped or substituted parent.
+  finding: Inherited criterion has no tagged test.
+- fnd: FND-261
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-024-AC-40
+  related_ids: []
+  path: spec/replay/functional/FR-024-counterexample-envelope-intake.md
+  lines: ''
+  excerpt: A retained reduced `Witness` envelope holds a transcript from its own backend
+    re-run, bound to its own reduced assignments; it cannot reuse any ancestor's transcript.
+  finding: Inherited criterion has no tagged test.
+- fnd: FND-262
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-032-AC-1
+  related_ids: []
+  path: spec/replay/functional/FR-032-routed-scalar-replay-binding.md
+  lines: ''
+  excerpt: PLANNED (IR-631) / CODE-GATED (CG retention, observation and consumer conformance).
+    A public consumer passes the routed harness's `ScalarObligationIdentity` directly
+    to the scalar builder; its typed call constructs neither `KaniObligationIdentity`
+    nor V1 `ReplayPackage`. After the ordered setup checks, an otherwise valid request
+    returns unsupported-capability only while a named step-5 capability is unavailable;
+    when all are available it returns an admitted plan, and authenticated completion
+    enables replay/conversion. Conversion of a capability refusal returns no settlement
+    rather than a synthe
+  finding: Inherited criterion has no tagged test.
+- fnd: FND-263
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-032-AC-4
+  related_ids: []
+  path: spec/replay/functional/FR-032-routed-scalar-replay-binding.md
+  lines: ''
+  excerpt: PLANNED (IR-631) / CODE-GATED (CG retention, observation and consumer conformance).
+    The driver's actual native observation of the proved generated oracle is required
+    and tied to this operand vector, limits and canonical proof-content identity;
+    the checked completion requires driver authentication; a bare outcome/digest echo,
+    missing observation, another artifact's observation or fresh regeneration that
+    removes the arithmetic mutation refuses before QSL evaluation. Playback bytes
+    and Kani falsification alone cannot supply a generated outcome.
+  finding: Inherited criterion has no tagged test.
+- fnd: FND-264
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-032-AC-5
+  related_ids: []
+  path: spec/replay/functional/FR-032-routed-scalar-replay-binding.md
+  lines: ''
+  excerpt: PLANNED (IR-631) / CODE-GATED (CG retention, observation and consumer conformance).
+    The public consumer executes the same proved generated artifact and invokes QSL
+    between the builder and converter. QSL compares its actual native observation
+    with authoritative exact operator evaluation using the four-operator projection
+    owned by [FR-015](../../kani/functional/FR-015-bounded-kani-obligations.md) AC-37,
+    without adding refusal-cause or accounting-counter equality; changing the generated
+    arithmetic while keeping original node/operator identity changes the measured
+    parity result. `Undefined`, `Inco
+  finding: Inherited criterion has no tagged test.
+bindings: []
+part: 22
+parts: 27
+```
+
++++

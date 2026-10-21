@@ -1,0 +1,98 @@
+<!-- reviewer repo=agent-ix/quire-contract-codegen visibility=public quoin=0.28.4 module=spec-artifacts-process@b82e42e893612b4b4ee94127714b4577ee893502 id=SR-15332 method=gap-analysis lang=spec pr=quire-contract-codegen#504 model=gpt-6.1-sol run=2cd63a51-54f0-4e4c-b4c4-c2b8832000bf -->
+
+Disposition pass 1 new findings: three prospective Test obligations now extract correctly but remain unbacked. Full gap verdict remains FAIL; IR-705 implementation owns them.
+
++++ [reviewer data]
+
+```yaml
+clean: false
+scope:
+- id: FR-015-AC-125
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: Authentic QSL-emitted, IR-admitted bounded integer scalar and clause inputs
+    generate kernel-owned native carriers and checked operation plans for all intermediates,
+    with original graph identities/domains retained. Reversed/oversized capacities
+    and operands outside a selected plan yield typed source-associated refusal, never
+    narrowed assumptions or a completed value. Native production and proof artifacts
+    use the same kernel implementation and real Meter; inspection finds no copied
+    arithmetic or verification-only evaluator.
+- id: FR-015-AC-126
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: Genuine TC-027 healthy and bound mutant, TC-025 arithmetic mutant, IR-917
+    clause implication and IR-948 V2 pre/post/invariant profiles regenerate through
+    public CG with the reviewed admitted kernel API. Original semantic domains, selected
+    propositions/clauses, independent expected values, subject controls, assertions,
+    final completion covers and existing solver/unwind/time settings remain. Each
+    healthy profile verifies at 16 GiB; each required substantive mutant falsifies
+    with original-domain native playback. The IR-948 impossible-precondition control
+    must complete as CoverUnsatisfied at the s
+- id: FR-015-AC-127
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: End-to-end denied/cancelled admitted-native controls retain all real Meter
+    counters, charge order, complete incomplete/refusal fields and admitted prefixes
+    at every reached charge point, compared with independent normative expectations
+    and the general exact route. A semantic result-domain failure remains after arithmetic
+    charge and before result-retain, separately from generation-time native-capacity
+    failure.
+findings:
+- fnd: FND-319
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-015-AC-125
+  related_ids: []
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  lines: '865'
+  excerpt: Authentic QSL-emitted, IR-admitted bounded integer scalar and clause inputs
+    generate kernel-owned native carriers and checked operation plans for all intermediates,
+    with original graph identities/domains retained. Reversed/oversized capacities
+    and operands outside a selected plan yield typed source-associated refusal, never
+    narrowed assumptions or a completed value. Native production and proof artifacts
+    use the same kernel implementation and real Meter; inspection finds no copied
+    arithmetic or verification-only evaluator.
+  finding: New prospective native-capability criterion has no tagged implementation
+    or qualification test.
+- fnd: FND-320
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-015-AC-126
+  related_ids: []
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  lines: '866'
+  excerpt: Genuine TC-027 healthy and bound mutant, TC-025 arithmetic mutant, IR-917
+    clause implication and IR-948 V2 pre/post/invariant profiles regenerate through
+    public CG with the reviewed admitted kernel API. Original semantic domains, selected
+    propositions/clauses, independent expected values, subject controls, assertions,
+    final completion covers and existing solver/unwind/time settings remain. Each
+    healthy profile verifies at 16 GiB; each required substantive mutant falsifies
+    with original-domain native playback. The IR-948 impossible-precondition control
+    must complete as CoverUnsatisfied at the s
+  finding: New prospective native-capability criterion has no tagged implementation
+    or qualification test.
+- fnd: FND-321
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-015-AC-127
+  related_ids: []
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  lines: '867'
+  excerpt: End-to-end denied/cancelled admitted-native controls retain all real Meter
+    counters, charge order, complete incomplete/refusal fields and admitted prefixes
+    at every reached charge point, compared with independent normative expectations
+    and the general exact route. A semantic result-domain failure remains after arithmetic
+    charge and before result-retain, separately from generation-time native-capacity
+    failure.
+  finding: New prospective native-capability criterion has no tagged implementation
+    or qualification test.
+bindings: []
+```
+
++++

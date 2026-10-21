@@ -1,0 +1,1596 @@
+<!-- reviewer-dispositions repo=agent-ix/quire-contract-codegen visibility=public quoin=0.28.4 module=spec-artifacts-process@b82e42e893612b4b4ee94127714b4577ee893502 id=SR-15332 round=2 model=gpt-6.1-sol run=cf6b1001-a968-4e77-890c-b2acedd8c631 -->
+
+Inherited findings FND-001 through FND-317: machine-readable counterparts of the existing unchanged SR dispositions and verified IR-878 owner handoff f48c5980. No new findings, source changes, coverage waiver or proof credit. New prospective findings FND-319 through FND-321 remain owned by IR-705; FND-318 was fixed in round 1.
+
++++ [reviewer data]
+
+```yaml
+dispositions:
+- fnd: FND-001
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-002
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-003
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-004
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-005
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-006
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-007
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-008
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-009
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-010
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-011
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-012
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-013
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-014
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-015
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-016
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-017
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-018
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-019
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-020
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-021
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-022
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-023
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-024
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-025
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-026
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-027
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-028
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-029
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-030
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-031
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-032
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-033
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-034
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-035
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-036
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-037
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-038
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-039
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-040
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-041
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-042
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-043
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-044
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-045
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-046
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-047
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-048
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-049
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-050
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-051
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-052
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-053
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-054
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-055
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-056
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-057
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-058
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-059
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-060
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-061
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-062
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-063
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-064
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-065
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-066
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-067
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-068
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-069
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-070
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-071
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-072
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-073
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-074
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-075
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-076
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-077
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-078
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-079
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-080
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-081
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-082
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-083
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-084
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-085
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-086
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-087
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-088
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-089
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-090
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-091
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-092
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-093
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-094
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-095
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-096
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-097
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-098
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-099
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-100
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-101
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-102
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-103
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-104
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-105
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-106
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-107
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-108
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-109
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-110
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-111
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-112
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-113
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-114
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-115
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-116
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-117
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-118
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-119
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-120
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-121
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-122
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-123
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-124
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-125
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-126
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-127
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-128
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-129
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-130
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-131
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-132
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-133
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-134
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-135
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-136
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-137
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-138
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-139
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-140
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-141
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-142
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-143
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-144
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-145
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-146
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-147
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-148
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-149
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-150
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-151
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-152
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-153
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-154
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-155
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-156
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-157
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-158
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-159
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-160
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-161
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-162
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-163
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-164
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-165
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-166
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-167
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-168
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-169
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-170
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-171
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-172
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-173
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-174
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-175
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-176
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-177
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-178
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-179
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-180
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-181
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-182
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-183
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-184
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-185
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-186
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-187
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-188
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-189
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-190
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-191
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-192
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-193
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-194
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-195
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-196
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-197
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-198
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-199
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-200
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-201
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-202
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-203
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-204
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-205
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-206
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-207
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-208
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-209
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-210
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-211
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-212
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-213
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-214
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-215
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-216
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-217
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-218
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-219
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-220
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-221
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-222
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-223
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-224
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-225
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-226
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-227
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-228
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-229
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-230
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-231
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-232
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-233
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-234
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-235
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-236
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-237
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-238
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-239
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-240
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-241
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-242
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-243
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-244
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-245
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-246
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-247
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-248
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-249
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-250
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-251
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-252
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-253
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-254
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-255
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-256
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-257
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-258
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-259
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-260
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-261
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-262
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-263
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-264
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-265
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-266
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-267
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-268
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-269
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-270
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-271
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-272
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-273
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-274
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-275
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-276
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-277
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-278
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-279
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-280
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-281
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-282
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-283
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-284
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-285
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-286
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-287
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-288
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-289
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-290
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-291
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-292
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-293
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-294
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-295
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-296
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-297
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-298
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-299
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-300
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-301
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-302
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-303
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-304
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-305
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-306
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-307
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-308
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-309
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-310
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-311
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-312
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-313
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-314
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-315
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-316
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+- fnd: FND-317
+  outcome: deferred
+  reason: IR-878 owns inherited repository assurance triage; verified owner handoff
+    f48c5980-228b-468e-bd08-dae2f6e79748. Existing Kani-lane ownership remains; no
+    waiver or completed credit.
+```
+
++++
