@@ -442,6 +442,53 @@ fn qsl_v2_precondition_harness_identity_tracks_request_facts() {
     assert_ne!(first.record, changed_subject.record);
 }
 
+/// A QSL invariant is selected by its checked clause node and draws the object's field from
+/// the admitted selected-model range; its own oracle is asserted without a subject call.
+#[trace("TC-025")]
+#[test]
+fn qsl_state_invariant_is_a_separate_v2_assertion_obligation() {
+    let (package, clause) = Twin::with_balance_invariant().emitted_package("BalanceNonnegative");
+    let oracle = generate_v2_clause_oracle(&package, &clause).expect("QSL invariant oracle");
+    assert_eq!(oracle.descriptor.inputs.len(), 1);
+    assert_eq!(oracle.descriptor.inputs[0].name, "current_balance");
+    assert_eq!(
+        (
+            oracle.descriptor.inputs[0].lower,
+            oracle.descriptor.inputs[0].upper
+        ),
+        (0, 1000)
+    );
+    let outcome = negotiate(&[ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+    }]);
+    let [record] = outcome.records() else {
+        panic!("one selected invariant");
+    };
+    assert_eq!(record.kind, Some(ObligationKind::Invariant));
+    assert!(matches!(
+        record.disposition,
+        ObligationDisposition::Supported { .. }
+    ));
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("the invariant is admitted");
+    };
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("one invariant harness");
+    };
+    assert_eq!(harness.identity.kind, ObligationKind::Invariant);
+    assert_eq!(harness.rust.contents.matches("kani::cover!(").count(), 1);
+    assert!(harness.rust.contents.contains("assert!("));
+    assert!(harness.rust.contents.contains("current_balance >= 0"));
+    assert!(harness.rust.contents.contains("current_balance <= 1000"));
+    assert!(!harness.rust.contents.contains("crate::subject::"));
+    assert!(harness.rust.contents.contains(&oracle.source));
+}
+
 /// Real Kani must satisfy the admitted QSL precondition. The impossible-condition cover
 /// remains separately blocked by IR-705 after exceeding the fixture's memory ceiling.
 #[trace("TC-025")]

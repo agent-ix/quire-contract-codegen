@@ -440,6 +440,19 @@ impl Twin {
         twin
     }
 
+    /// A QSL invariant over the selected model object's bounded `balance` field.
+    pub fn with_balance_invariant() -> Self {
+        let mut twin = Self::build(&model::GRANTED, &[CLAUSES[0]], 0);
+        let source = String::from_utf8(twin.unit).expect("native unit");
+        let changed = source.replace(
+            "post BalanceNeverDrops using v on Bank::Account::deposit { self.balance >= pre(self.balance) }",
+            "invariant BalanceNonnegative using v on Bank::Account at current { self.balance >= 0 }",
+        );
+        assert_ne!(changed, source, "the invariant replaced the postcondition");
+        twin.unit = changed.into_bytes();
+        twin
+    }
+
     /// QSL-emitted postcondition package whose operation declares a Boolean result.
     pub fn with_deposit_result() -> Self {
         Self::with_deposit_declaration(false, true)
