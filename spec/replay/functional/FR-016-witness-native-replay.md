@@ -76,8 +76,9 @@ failure is reported.
   report an out-of-domain witness and shall not report a failure.
 - When a witness is in domain, the generator shall replay it through native
   runtime execution and compare the typed outcome with the harness result.
-  The same typed outcome means an equal value or typed refusal, equal admitted
-  charges, equal consumed counters, and equal limits.
+  The same typed outcome means an equal value or typed refusal. Kani reports no
+  scalar accounting charges or consumed counters to compare with QSL's replay
+  charges; the two tools' limit types bound different work and are not compared.
 - The generator shall classify every witness into exactly one of the
   outcomes in the partition below. The conditions are checked in the order
   the table lists them, and the first that holds decides the outcome.
@@ -90,7 +91,7 @@ failure is reported.
   | `qsl_replay::replay` returns `Err(ReplayRefusal::Fault(_))`, an internal fault of the executor | typed replay refusal retaining the fault; the terminal value is `Failed` (FR-029-AC-10) |
   | `qsl_replay::replay` returns any other `Err(ReplayRefusal)` | QSL request refusal, returned with its cause (FR-016-AC-11) |
   | `qsl_replay::replay` returns the `Input` arm for a witness-sourced request | adapter refusal (FR-016-AC-11) |
-  | The `Witness` arm settles `inconclusive`, or matches the harness value but differs in admitted charges, consumed counters or limits | mismatch |
+  | The `Witness` arm settles `inconclusive` | mismatch |
   | The `Witness` arm settles `reproduced-with-evaluated-witness` with category `violation` | reproduced failure |
   | The `Witness` arm settles `reproduced-with-evaluated-witness` with any category other than `violation` | mismatch |
 
@@ -131,7 +132,6 @@ failure is reported.
 | FR-016-AC-4 | A native replay that runs and disagrees with the harness result yields a typed mismatch, and never a failure or a replay error. | Test (TC-026) |
 | FR-016-AC-5 | A witness bound to a different harness identity is reported as malformed and never replayed. | Test (TC-026) |
 | FR-016-AC-6 | Every witness decode receives required caller-supplied byte and value-count bounds at its entry point; replay inputs carry both as non-optional fields with no default, and an over-bound witness is reported malformed without reading beyond either bound. | Test (TC-026) |
-| FR-016-AC-7 | A native replay that matches the harness value but differs in admitted charges, consumed counters or limits yields a typed mismatch. | Test (TC-026) |
 | FR-016-AC-8 | A witness schema binds the obligation's persisted argument bindings, in the order the obligation persists them, position for position to the harness's symbolic arguments, and each decoded value is named by the binding at its position; a binding that is not an argument is refused with a typed schema refusal that reports no failure and is none of the replay results. | Test (TC-026) |
 | FR-016-AC-9 | A decoded falsification whose witness makes the native function evaluate the clause to false settles as `reproduced-with-evaluated-witness` with category `violation`; the verdict depends on the witness value, so a witness at which the function holds does not settle so. | Test (TC-026) |
 | FR-016-AC-10 | A decoded falsification at which the native function evaluates the clause to true settles `inconclusive` with the proved violation and the replayed success both named. | Test (TC-026) |
@@ -160,3 +160,14 @@ failure is reported.
 - **Downstream**: [TC-026](../matrix/TC-026-witness-native-replay.md),
   [FR-024](./FR-024-counterexample-envelope-intake.md), which carries the decoded
   values to QSL in QSL's counterexample envelope.
+
+## Rationale
+
+FR-016-AC-7 was retired under IR-604. The installed Kani runner's
+`KaniExecutionEvidence` carries proof ceilings, an observed memory peak,
+backend checks and an outcome, but no admitted scalar charges or consumed
+counters. QSL's `WitnessArmResult` carries replay charges; `ReplayInputs` and
+`ReplayLimits` bound that replay, not the Kani run. Comparing these as if they
+were two observations of the same accounting fact would invent proof evidence.
+The typed value/refusal and verdict comparisons remain required by AC-3, AC-4,
+AC-9, AC-10 and AC-13. AC-6 continues to bound witness decoding independently.
