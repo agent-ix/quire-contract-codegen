@@ -321,7 +321,11 @@ pub(super) fn render_clause(
             Init::Expression(expression(lowered.native_expectation.clone())?),
             false,
         ),
-        let_binding("meter", Init::UnlimitedMeter, true),
+        let_binding(
+            "meter",
+            Init::ScalarMeter(crate::kani::abi::SCALAR_HARNESS_LIMITS),
+            true,
+        ),
         Statement::Call {
             result: "outcome".to_owned(),
             callee: "oracle_clause".to_owned(),
@@ -360,7 +364,7 @@ pub(super) fn render_clause(
         ));
         body.push(let_binding(
             &format!("arithmetic_meter_{index}"),
-            Init::UnlimitedMeter,
+            Init::ScalarMeter(crate::kani::abi::SCALAR_HARNESS_LIMITS),
             true,
         ));
         let operands = operand_names
