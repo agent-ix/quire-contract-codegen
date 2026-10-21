@@ -2177,7 +2177,11 @@ exit 0
     #[cfg(target_os = "linux")]
     #[test]
     fn output_over_limit_is_not_relabelled_as_cancellation() {
-        let harness = member("capture_cancel", "check", 4);
+        let mut harness = member("capture_cancel", "check", 4);
+        // This ceiling bounds a stuck launcher; draining the large stream can
+        // take longer than the shared 30-second test ceiling under host load.
+        let timeout = Duration::from_secs(90);
+        harness.identity.ceilings.wall_clock = timeout;
         let body = format!(
             r#"printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
 printf '%s' "$$" > "$CALLS.child"
@@ -2195,10 +2199,10 @@ exec sleep 45
             let harness = &harness;
             let worker = scope.spawn(move || {
                 sender
-                    .send(execute_kani_obligation(&owner.request(harness, T)))
+                    .send(execute_kani_obligation(&owner.request(harness, timeout)))
                     .unwrap();
             });
-            let deadline = Instant::now() + T;
+            let deadline = Instant::now() + timeout;
             let result = loop {
                 match receiver.try_recv() {
                     Ok(result) => break result,
@@ -2209,7 +2213,9 @@ exec sleep 45
                 }
                 if stand_in.directory.join("calls.ready").is_file() {
                     stand_in.cancel.cancel(quire_exact::CancelCause::Requested);
-                    break receiver.recv_timeout(T).expect("the capture stop returns");
+                    break receiver
+                        .recv_timeout(timeout)
+                        .expect("the capture stop returns");
                 }
                 assert!(
                     Instant::now() < deadline,
@@ -2221,14 +2227,17 @@ exec sleep 45
             worker.join().unwrap();
             result
         });
-        assert!(matches!(
-            result,
-            Err(KaniExecutionRefusal::OutputOverLimit {
-                stream: CaptureStream::Stdout,
-                limit: CAPTURE_LIMIT,
-                harnesses: 1,
-            })
-        ));
+        assert!(
+            matches!(
+                result,
+                Err(KaniExecutionRefusal::OutputOverLimit {
+                    stream: CaptureStream::Stdout,
+                    limit: CAPTURE_LIMIT,
+                    harnesses: 1,
+                })
+            ),
+            "unexpected result: {result:?}"
+        );
         recorded_process_gone(&stand_in.directory.join("calls.child"));
     }
 
