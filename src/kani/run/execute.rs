@@ -2177,58 +2177,68 @@ exit 0
     #[cfg(target_os = "linux")]
     #[test]
     fn output_over_limit_is_not_relabelled_as_cancellation() {
-        let harness = member("capture_cancel", "check", 4);
+        use super::super::owners::{LaunchOwners, SystemPoll};
+        let mut harness = member("capture_cancel", "check", 4);
+        // This ceiling bounds a stuck launcher; draining the large stream can
+        // take longer than the shared 30-second test ceiling under host load.
+        let ceiling = Duration::from_secs(90);
+        harness.identity.ceilings.wall_clock = ceiling;
         let body = format!(
             r#"printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
 printf '%s' "$$" > "$CALLS.child"
-head -c {} /dev/zero
 printf 'ready' > "$CALLS.ready"
+while [ ! -f "$CALLS.start" ]; do sleep 0.01; done
+head -c {} /dev/zero
+printf 'written' > "$CALLS.written"
 exec sleep 45
 "#,
             CAPTURE_LIMIT + 1,
         );
-        let stand_in = StandIn::running("capture-cancel-precedence", &body);
+        let mut stand_in = StandIn::running("capture-cancel-precedence", &body);
         stand_in.containing(&[&harness]);
+        let (memory, paused) = OwnerGate::within(ceiling);
+        stand_in.installation = KaniInstallation::with_owners(
+            stand_in.installation.launcher.clone(),
+            std::sync::Arc::new(LaunchOwners {
+                memory: std::sync::Arc::new(ControlledMemory {
+                    ready: stand_in.directory.join("calls.ready"),
+                    gate: memory,
+                }),
+                stdout: std::sync::Arc::new(SystemPoll),
+                stderr: std::sync::Arc::new(SystemPoll),
+                confirmation: std::sync::Arc::new(SystemPoll),
+            }),
+        );
         let result = std::thread::scope(|scope| {
-            let (sender, receiver) = std::sync::mpsc::sync_channel(1);
-            let owner = &stand_in;
-            let harness = &harness;
-            let worker = scope.spawn(move || {
-                sender
-                    .send(execute_kani_obligation(&owner.request(harness, T)))
-                    .unwrap();
-            });
-            let deadline = Instant::now() + T;
-            let result = loop {
-                match receiver.try_recv() {
-                    Ok(result) => break result,
-                    Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                        panic!("execution worker disconnected")
-                    }
-                    Err(std::sync::mpsc::TryRecvError::Empty) => {}
-                }
-                if stand_in.directory.join("calls.ready").is_file() {
-                    stand_in.cancel.cancel(quire_exact::CancelCause::Requested);
-                    break receiver.recv_timeout(T).expect("the capture stop returns");
-                }
-                assert!(
-                    Instant::now() < deadline,
-                    "capture or backend readiness was not observed"
-                );
+            let worker =
+                scope.spawn(|| execute_kani_obligation(&stand_in.request(&harness, ceiling)));
+            // Hold the real memory observation before the launcher selects a stop.
+            // Capture remains live while the backend writes beyond its output limit.
+            paused
+                .entered
+                .recv_timeout(ceiling)
+                .expect("actual memory observation reached within the launcher ceiling");
+            fs::write(stand_in.directory.join("calls.start"), b"start").unwrap();
+            let until = Instant::now() + ceiling;
+            while !stand_in.directory.join("calls.written").is_file() {
+                assert!(Instant::now() < until, "backend wrote over-limit output");
                 std::thread::yield_now();
-            };
-            stand_in.cancel.cancel(quire_exact::CancelCause::Deadline);
-            worker.join().unwrap();
-            result
+            }
+            stand_in.cancel.cancel(quire_exact::CancelCause::Requested);
+            paused.release();
+            worker.join().unwrap()
         });
-        assert!(matches!(
-            result,
-            Err(KaniExecutionRefusal::OutputOverLimit {
-                stream: CaptureStream::Stdout,
-                limit: CAPTURE_LIMIT,
-                harnesses: 1,
-            })
-        ));
+        assert!(
+            matches!(
+                result,
+                Err(KaniExecutionRefusal::OutputOverLimit {
+                    stream: CaptureStream::Stdout,
+                    limit: CAPTURE_LIMIT,
+                    harnesses: 1,
+                })
+            ),
+            "unexpected result: {result:?}"
+        );
         recorded_process_gone(&stand_in.directory.join("calls.child"));
     }
 
@@ -2450,6 +2460,7 @@ exec sleep 45
     struct OwnerGate {
         entered: std::sync::mpsc::SyncSender<()>,
         release: std::sync::Mutex<std::sync::mpsc::Receiver<()>>,
+        ceiling: Duration,
         claimed: std::sync::atomic::AtomicBool,
         attempts: std::sync::atomic::AtomicUsize,
         failed: std::sync::atomic::AtomicBool,
@@ -2464,12 +2475,17 @@ exec sleep 45
     #[cfg(target_os = "linux")]
     impl OwnerGate {
         fn new() -> (std::sync::Arc<Self>, OwnerControl) {
+            Self::within(T)
+        }
+
+        fn within(ceiling: Duration) -> (std::sync::Arc<Self>, OwnerControl) {
             let (entered, observed) = std::sync::mpsc::sync_channel(1);
             let (release, released) = std::sync::mpsc::sync_channel(1);
             (
                 std::sync::Arc::new(Self {
                     entered,
                     release: std::sync::Mutex::new(released),
+                    ceiling,
                     claimed: std::sync::atomic::AtomicBool::new(false),
                     attempts: std::sync::atomic::AtomicUsize::new(0),
                     failed: std::sync::atomic::AtomicBool::new(false),
@@ -2493,7 +2509,7 @@ exec sleep 45
             self.release
                 .lock()
                 .unwrap()
-                .recv_timeout(T)
+                .recv_timeout(self.ceiling)
                 .expect("owner operation released");
             true
         }
