@@ -270,6 +270,31 @@ fn v2_clause_harness_native_expectation_tracks_the_admitted_condition() {
     assert!(harness.rust.contents.contains("<= 501i128"));
 }
 
+#[trace("FR-015-AC-40", "FR-015-AC-41", "TC-025")]
+#[test]
+fn v2_clause_checks_each_bounded_arithmetic_subterm_independently() {
+    let (package, clause) = Twin::with_bounded_amount_condition(
+        "amount < 1000 implies amount + 1 <= 1000 and amount + 2 >= 2",
+    )
+    .emitted_package("BalanceNeverDrops");
+    let result = negotiate(&[ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+    }]);
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = result
+    else {
+        panic!("admitted Boolean clause must emit: {result:?}");
+    };
+    let source = &v2_clause_harnesses[0].rust.contents;
+    assert_eq!(source.matches("rt::evaluate_integer_arithmetic(").count(), 2);
+    assert!(source.contains("rt::IntegerArithmetic::Add("));
+    assert_eq!(source.matches("arithmetic subterm agrees with native i128").count(), 2);
+    assert_eq!(source.matches("kani::assume(").count(), 1);
+}
+
 #[trace("FR-015-AC-119", "TC-025")]
 #[test]
 fn v2_clause_falsification_decoder_recovers_the_single_in_domain_amount() {
