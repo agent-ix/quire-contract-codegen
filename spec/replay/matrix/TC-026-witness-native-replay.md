@@ -33,6 +33,18 @@ native replay returns `ReplayRefusal::Fault`, and a witness whose replay agrees
 in a category other than `violation`. Inspect the replay error for the fault
 (FR-016-AC-12).
 
+For the installed-Kani spine, observe the launcher's complete stdout independently of
+`KaniRunOutcome::Falsified.counterexample` before the execution adapter classifies the run.
+After a healthy subject verifies and an injected violation falsifies, select the assertion
+playback for that same harness from the observed stdout without using the production playback
+extractor or witness decoder. Compare its complete test text byte for byte with the retained
+counterexample before decoding or replaying it. Replace the returned counterexample at the
+classification boundary with another well-formed, self-consistent playback as a mutation
+control: the comparison must fail even though that replacement's comments, byte vectors,
+decoder and replay all agree with each other. Continue the existing point and neighbouring-point
+replay checks against the original process output. This exercises FR-017-AC-5 together with
+FR-016-AC-9 and AC-10.
+
 For FR-016-AC-21 to AC-23, build the replay request for a function with two parameters declared
 in an order that differs from their ascending identifier order. Recompute the O-09 digest from
 the `FunctionSite`'s `function` and `declaration`, the requested kind and the arguments ascending
@@ -61,6 +73,10 @@ yield out-of-domain and mismatch results. The witness that agrees in a category 
 than `violation` is a mismatch and never a reproduced failure. The executor fault
 remains a typed `SpineReplayError::Refused(ReplayRefusal::Fault)`; FR-029-AC-10
 owns its terminal `Failed` reading.
+The retained falsification is byte-identical to the independently selected assertion
+playback in that run's stdout. A valid replacement after classification fails the comparison
+before replay; healthy verification, the original witness-point replay and its neighbour
+control still pass.
 The slot equals the recomputed digest (AC-21). The two functions' identities differ, comments and
 blank lines and the span change leave one unchanged, the kind change and the domain change each
 alter it, and the two-conjunct function has one identity (AC-22). The identity is unchanged by the
@@ -113,7 +129,9 @@ swaps the two values, and one that returns a fixed in-domain pair. The witness c
 replay to the transcript it is given. A constant substituted at the source, right after the run is
 classified `Falsified` and before anything reads it, stays green, because the independent reader,
 the decoder and the replay then all see the same self-consistent block. The link from the Kani run
-to that transcript rests on the `Verified` then `Falsified` outcome assertions.
+to that transcript rests on the `Verified` then `Falsified` outcome assertions. The independent
+process-stdout comparison described above is planned under IR-604; its mutation control must
+turn the lane red for a replacement made immediately after `Falsified` classification.
 
 What stays unbacked: the native twin is hand-mirrored QSL source, not derived from the contract or
 the Rust subject, and the input package is hand-built, so the contract-to-Contract-IR step does not
