@@ -15,6 +15,8 @@ relationships:
     type: references
   - target: ix://agent-ix/quire-specification/FR-460
     type: references
+  - target: ix://agent-ix/quire-specification/FR-149
+    type: references
   - target: ix://agent-ix/quire-spec-language/ADR-030
     type: references
   - target: ix://agent-ix/quire-spec-language/FR-394
@@ -28,8 +30,8 @@ relationships:
 
 ## Description
 
-When a caller supplies an admitted `ContractPackageV1`, its package-bound
-admitted equality context, and a set
+When a caller supplies an admitted `ContractPackageV1`, an optional
+package-bound admitted identity capability, and a set
 of equality expression nodes, the code generator shall emit a deterministic Rust
 oracle crate whose functions decide each node by reconstructing the item's
 `TypeEnvironment` and calling the QSV declaration/equality owner's
@@ -89,15 +91,18 @@ required; the enum-only facade does not justify withdrawing those routes.
   reader, with the caller's complete root-position request and the positions
   of the equality items in it. Its retained checked-V2 graph supplies the
   equality expressions and declaration closure below.
-- The immutable genuine `qsl_replay::AdmittedContext` returned alongside the
-  original compiled package by root `qsl_replay::compile_admitted`. Its
-  `package_id()` must equal the original checked-package identity in
-  `ContractPackageV1::wire().package.source.package_id`, not the lowered
-  ContractPackage's own `identity`. The context is an identity capability,
-  not another package-meaning input. Authentic source, original library-lock
-  binding, request-admitted stage/replay limits and exact full original-package
-  comparison precede exposing a retained context through interface-001's
-  `OriginalCompositeEqRequest::admitted_context`.
+- `Option<&qsl_replay::AdmittedContext>`: `None` permits genuinely
+  context-free reconstruction and existing precise early refusals that need
+  no nominal key. `Some` is the immutable genuine capability returned beside
+  the original compiled package by root `qsl_replay::compile_admitted`; its
+  `package_id()` must equal `ContractPackageV1::wire().package.source.package_id`,
+  the original checked-package identity, not the lowered package's `identity`.
+  Presence grants identity lookup only; absence grants no source authenticity.
+  Every reached nominal-key reconstruction requires `Some`, as Behavior
+  specifies. The native `OriginalCompositeEqContext` route remains stricter:
+  authentic source, original library lock, request-admitted limits and exact
+  full original-package comparison remain mandatory before its request
+  exposes a genuine context, and that route always supplies `Some`.
 - A request of items, each naming one checked `expression` node of semantic form
   `binary` and one typed equality descriptor: an `EqualityOperator`
   (`Equal` or `NotEqual`) and two `EqualityOperand`s, each either
@@ -182,7 +187,7 @@ qualification through the actual owning capability.
   `src/lib.rs`. The single `core/profile` manifest authority supplies normal
   Git branch-main dependencies; consumer lockfiles perform ordinary resolution.
 - One public opaque `PreparedEqualityEnvironment<'ctx>` type whose private
-  fields retain the borrowed `&'ctx qsl_replay::AdmittedContext`, expected
+  fields retain `Option<&'ctx qsl_replay::AdmittedContext>`, expected
   original package and item/descriptor binding, admitted QSV `TypeEnvironment`,
   complete genuine `EnumMemberIndex`, and reconstructed operand descriptors.
   No public struct literal or raw-index constructor can create this capability.
@@ -190,7 +195,7 @@ qualification through the actual owning capability.
 
   ```rust
   pub fn environment_symbol<'ctx>(
-      context: &'ctx qsl_replay::AdmittedContext,
+      context: Option<&'ctx qsl_replay::AdmittedContext>,
   ) -> Result<PreparedEqualityEnvironment<'ctx>, EnvironmentError>;
 
   pub fn oracle_symbol(
@@ -202,11 +207,17 @@ qualification through the actual owning capability.
   ```
 
   `symbol` denotes the existing deterministic per-item generated symbol.
-  Constructors and descriptor/module helpers thread this same context;
-  neither a zero-argument helper nor a planning-only context may reconstruct
-  nominal keys. The constructor compares the expected original package
-  identity before any key lookup and publishes no partial prepared value.
-- Generated `EnvironmentError` SHALL distinguish `ContextPackageMismatch`,
+  Constructors and descriptor/module helpers thread this same optional
+  capability. A nominal recipe requires genuine context before key lookup;
+  a completely context-free recipe may publish a prepared value retaining
+  `None`. The constructor checks a supplied context's expected original
+  package identity before reconstruction, even for primitive recipes, and
+  publishes no partial value on failure. Expected package/item/descriptor
+  binding stays private and checked in both cases. Recorded package identity
+  without context binds the recipe; it does not authenticate source.
+- Generated `EnvironmentError` SHALL distinguish
+  `MissingAdmittedContext { declaration: qsl_replay::WireNodeId }`,
+  `ContextPackageMismatch`,
   `Lookup(qsl_replay::AdmittedLookupRefusal)`, `Declaration` retaining the
   QSV `EnvironmentFailure`, and `Reconstruction(ReconstructionError)`.
   QSV admission's semantic refusal and resource failure remain distinguishable
@@ -232,7 +243,7 @@ The public generation signature SHALL be:
 ```rust
 pub fn generate_composite_equality_oracles(
     package: &ContractPackageV1,
-    admitted: &qsl_replay::AdmittedContext,
+    admitted: Option<&qsl_replay::AdmittedContext>,
     requested: &[ContractRequestPosition],
     positions: &[usize],
     items: &[CompositeEqualityItem],
@@ -240,25 +251,91 @@ pub fn generate_composite_equality_oracles(
 ) -> Result<CompositeEqualityOracles, OracleGenerationError>;
 ```
 
-After the existing whole-request accounting/position checks, a mismatched
-context package SHALL refuse the whole generation with a typed context
-mismatch and no artifact. Unknown declaration, unknown case and foreign
-package lookup failures SHALL remain distinct typed per-item refusals,
-retaining the declaration, optional case and foreign package identity as the
-owning cause supplies them. Claim-map serialization may project these fields
-into CG's typed refusal representation but never infer the cause from text.
+After the existing work-setting and whole-request accounting/position
+checks, `Some` with a mismatched source package SHALL refuse the whole
+generation as the existing typed context mismatch before item classification,
+including primitive-only or empty requests. An explicitly wrong capability
+is never treated as `None`. Generated preparation applies the same supplied
+context mismatch check before reconstructing any descriptor.
 
-The generated constructor SHALL create its private enum index only from the
-same genuine context. The oracle SHALL reject a prepared package or
-item/descriptor binding other than its own as `Refused(CheckedInvariant)`
-before a meter charge. It SHALL check both expected operand comparison types
-against the prepared environment and call QSV `check_equality` with the
-prepared index before every evaluation. A private negative-test replacement
-of that environment does not replace its genuine context/index or create a
-public unchecked constructor. These tests retain AC-8's empty, missing-key
-and wrong-key environment refusals. Passing a raw caller-created
-`EnumMemberIndex` is not a public alternative ABI. Source compilation belongs
-at context preparation, not in an oracle's metered execution.
+When traversal reaches the first operation requiring an enum, record or
+tuple identity, `None` SHALL refuse only that item as
+`CompositeEqualityRefusal::MissingAdmittedContext { type_node_id }`, naming
+that nominal declaration, without constructing a key or emitting its symbols.
+Generated preparation of a nominal recipe with `None` SHALL return the
+corresponding `EnvironmentError::MissingAdmittedContext` before lookup or
+partial publication. Both operands' source types and conversion targets,
+all nested Option payloads and collection elements, record/tuple fields and
+recursive closure edges are subject to this rule. An outer structural
+wrapper or primitive source type cannot hide a reached nominal target.
+A present enum-only capability still does not supply the record/tuple owner
+lookup missing above; optionality does not resolve that owner gap.
+
+Capability demand SHALL occur in the existing charged traversal, immediately
+before nominal identity reconstruction/lookup, not as a preflight scan of
+outer tags, all descriptors or the complete context. Existing precise
+key-free classification and descriptor refusals remain earlier where the
+original procedure makes them earlier. Work charges, first-denied-entry and
+cycle precedence, deterministic request/descriptor order, source-byte limits
+and sibling isolation remain unchanged. A failed lookup or absent required
+capability never becomes `Unsupported`, a default key or omitted declaration.
+Unknown declaration, unknown case and Foreign package lookup failures retain
+their original typed distinctions and fields. Claim-map serialization may
+project those fields into CG's typed refusal representation, not parse text.
+
+A successfully resolved closure with zero enums SHALL use a private empty
+`EnumMemberIndex`; emptiness is a result of complete reconstruction, never a
+fallback after absent capability, stopped traversal or failed lookup. This
+includes genuine zero-enum nominal closures only when their required owner
+keys have been obtained. A reached enum SHALL construct every admitted case,
+including unused cases, from that same immutable genuine capability.
+
+Every prepared wrapper SHALL retain private expected package, item and
+descriptor binding, its descriptors, admitted environment and index, and its
+optional context plus whether its recipe requires nominal identity. The
+oracle SHALL refuse a wrong private binding, a mismatched retained `Some`,
+or missing context for a nominal recipe as `Refused(CheckedInvariant)` before
+any meter charge. For a valid context-free recipe, retained `None` is not
+such a fault. The oracle SHALL check both expected comparison types against
+its prepared environment and call QSV `check_equality` with that same private
+index before every evaluation. A private environment-only fault fixture
+retains the correct optional capability/index and creates no public unchecked
+constructor. AC-8 and AC-9 retain all their environment and charge-stop
+controls. A raw caller-created index is not an alternative ABI. Preparation
+and any source compilation remain outside metered execution; generated
+oracles still execute the implementation under test, not a replay substitute.
+
+Standalone `None` authenticates neither source meaning nor native semantic
+agreement. It changes no strict IR admission requirement or caller-declared
+operation limitation. It SHALL NOT bypass native
+`OriginalCompositeEqContext::request` source/lock/package checks, exact full
+recompiled-package equality, typed admission failures, selected occurrence/
+operator checks or import guard. A successful native request always retains
+and supplies its genuine admitted capability. Ordinary scalar proof manifests
+and bodies acquire no replay compilation/context leg.
+
+### Direct Integer operand and target identity
+
+When a directly selected operand source or caller conversion-target ID names
+canonical `scalar_type` / `integer`, the generator SHALL reconstruct unbounded
+`Integer`, even when another parameter or context root has an `integer_range`
+over that same canonical base. When that selected ID names `integer_range`,
+the generator SHALL use that domain's exact own interval. A package-wide
+base-to-bound index, an unrelated sibling range or a union of ranges is not
+a direct operand's declared bound. This follows the parameter type identity
+of Contract IR FR-038 and the distinct Int/Integer conversion rows of
+[QSpec FR-149](ix://agent-ix/quire-specification/FR-149). It requires no new
+public descriptor field and changes no type-resolution charge or
+equality-conversion rule.
+
+This direct-root rule does not rewrite AC-16's existing numeric member/base
+equivalence or its precise regression. Genuine record/tuple member association
+is separate unresolved scope: an unqualified canonical base key alone does
+not identify a lexical owner or distinguish a genuinely associated member
+bound from another parameter's range. Do not invent that association or claim
+this operand-only clarification resolves it. The genuine record/tuple key
+capability gap also remains. Existing specified member behavior and tests
+remain required pending explicit owning resolution.
 
 ### Existing equality behavior
 
@@ -492,7 +569,7 @@ reaches it today, so the mapping is asserted where reachable.
 |----|----------|--------------|
 | FR-018-AC-1 | Every requested item receives exactly one generated or typed-refused disposition; a refused item contributes no function, no environment constructor and no symbol to the generated crate, while its siblings are generated unchanged. | Test (TC-029) |
 | FR-018-AC-2 | On every vector of the composite-equality corpus, the generated oracle's `Outcome<bool>`, its admitted charge sequence and its consumed counters are equal to those of `quire_contract_runtime::exact::TypeEnvironment::check_equality` plus `CheckedEquality::evaluate` invoked directly on an independently constructed environment, operands and fresh `Meter`. This criterion claims no agreement with the QSL value authority: that boundary is owned by quire-integration IR-842 (FR-014-AC-47). | Test (TC-029) |
-| FR-018-AC-3 | Each generated item's claim-map entry records the descriptor the request supplied — operator, both operand source types and both conversion targets — and it is equal to the request's, so the independent native run of AC-2 is driven from the request and never read back out of the generated crate. | Test (TC-029) |
+| FR-018-AC-3 | Each generated item's claim-map entry records the descriptor the request supplied — operator, both operand source types and both conversion targets — and it is equal to the request's, so the independent native run of AC-2 is driven from the request and never read back out of the generated crate. An authentic asymmetric source control preserves the actual bounded-left/unbounded-Integer-right source IDs and independent caller target; a source conversion erased from the emitted graph is not evidence of a retained conversion-reference branch. | Test (TC-029) |
 | FR-018-AC-4 | Each generated item's claim-map entry records an `EqualitySchedule` equal to `CheckedEquality::schedule()` of the `CheckedEquality` its descriptor admits, for a top-level text, enum and quantity pair and for each `Plan`-schedule composite and collection shape. | Test (TC-029) |
 | FR-018-AC-5 | A descriptor with a `convert<T>` operand outside `admits_equality_conversion`, distinct text profiles, distinct enum declarations, incompatible dimensions, distinct units, or no common type is refused at generation time with its `IllTypedCause`, emits no code, and admits no charge on any `Meter`. | Test (TC-029) |
 | FR-018-AC-6 | An operand type bearing an IEEE value at any depth — including a `float64` field of a record nested inside a `sequence` — is refused as `OperatorIneligible`, and the refusal agrees with `TypeEnvironment::contains_ieee` on the reconstructed type at every depth in the corpus. | Test (TC-029) |
@@ -504,7 +581,7 @@ reaches it today, so the mapping is asserted where reachable.
 | FR-018-AC-12 | The generated crate declares `publish = false`, names direct exact/QSV and root replay dependencies through the one manifest authority, contains no charge amount and no planned pair count (every charge and every pair comes from runtime metering), and compiles. | Test (TC-029) |
 | FR-018-AC-13 | Every claim-map entry carries the node id, IR id, package id, source map, claims, reconstructed declaration keys and selected schedule of its item, and its genuine owner-issued declaration keys equal the exact domain and digest of the V2 node ids its operand types reach, selected through owning lookup without CG/emitted key construction. | Test (TC-029) |
 | FR-018-AC-14 | Admitted `bounded_domain` nodes an operand type reaches retain the exact named bound values FR-014 specifies. For `integer_range` and `collection_bounds`, Contract IR FR-038 admission requires exactly `min` then `max` bindings with their canonical typed integer literals; a reordered, bare, missing, duplicate or unlisted binding control is an IR-intake refusal before CG, with no admitted package or public CG `UnreadableBound` result. CG private parser tests retain their precise malformed-bound defenses separately and do not count as public-generator acceptance for these reader-ineligible inputs. For `rational_range`, `decimal_range` and `text_bounds`, binding lookup remains by name in any admitted order, and genuinely reader-admitted bare/missing/duplicate/unlisted-name controls retain the public unreadable-bound refusal; this criterion makes no new admission claim for those mutations. Existing valid-bound reconstruction, values/domains and missing-bound behavior remain unchanged. | Test |
-| FR-018-AC-15 | A `binary` node's operand is read through its `reference`: a reference to a `convert` expression node is read as the type of what it converts, following nested conversions to the first node that is not a conversion, and a reference to any other node, including a non-`convert` application, as that node's own `semantic_type`. A descriptor whose `source_type` is the read type generates, and any other source is refused as an operand-type disagreement at that position, reporting the read type as found. | Test (TC-029) |
+| FR-018-AC-15 | A `binary` node's operand is read through its `reference`: a reference to a `convert` expression node is read as the type of what it converts, following nested conversions to the first node that is not a conversion, and a reference to any other node, including a non-`convert` application, as that node's own `semantic_type`. A descriptor whose `source_type` is the read type generates, and any other source is refused as an operand-type disagreement at that position, reporting the read type as found. A genuine source fixture with no emitted convert node exercises its actual parameter source types only; it cannot replace the precise admitted-IR reference-to-conversion control, which remains required independently. | Test (TC-029) |
 | FR-018-AC-16 | A tuple position whose type node is a `text_bounds` `bounded_domain` node generates the declaration `Text(min, max, profile)` read from that node's own members, an integer, decimal or rational `bounded_domain` member reads as the same type as a member naming its base scalar, and a second bound over the same base is never read: naming either of two `text_bounds` nodes over one text scalar reads that node's own `min` and `max`. A `bounded_domain` member whose form does not fit its base scalar is refused as missing the form the base reads, and one over a boolean scalar, over QSL's enum declaration or over a record is refused as unsupported `bounded_domain`, naming the bound node, in every case with no code emitted for the item. A `collection_bounds` domain over a sequence follows AC-27. A member whose type is a `float_rounding` `bounded_domain` over a float scalar reads as that float, and the equality is refused as `IllTypedCause::OperatorIneligible`. | Test (TC-029) |
 | FR-018-AC-17 | The `src/lib.rs` that `generate_composite_equality_oracles` returns for the TC-029 step 1 package (every generated item) contains zero occurrences of the panic tokens FR-018-AC-19 lists, no `.ok()`, `.unwrap_or(` or `.unwrap_or_default(` anywhere, and no `[` index or slice expression directly after an identifier character, `)` or `]`; every reconstruction helper in it returns `Result<_, ReconstructionError>`, and each of `rebuild_integer`, `rebuild_interval`, `rebuild_rational`, `rebuild_decimal`, `rebuild_text` and `rebuild_cardinality` turns a failed constructor or parse into exactly the matching variant (`Integer`, `Interval`, `Rational`, `Decimal`, `Text`, `Cardinality`) through one `map_err` to it, with no other variant and no `or_else`, `or`, `ok`, `unwrap_or`, `map_or` or `match` over the failure, so a failure is never recovered, widened or reported as another cause; every call of one is followed by `?` or a `match` whose `Err` arm yields `EnvironmentError::Reconstruction` or `Outcome::Refused(Refusal::CheckedInvariant)`, `EnvironmentError` has the typed variants defined in Outputs, retaining context/lookup, QSV environment and reconstruction causes separately; `ReconstructionError` has the unit variants `Integer`, `Interval`, `Rational`, `Decimal`, `Text`, `Cardinality` and `Enum`, and no call of `IntegerInterval::new`, `RationalDomain::new`, `TextType::new`, `CardinalityBound::new`, `DecimalType::new` or an integer `.parse()` appears outside a reconstruction helper. | Test (TC-029) |
 | FR-018-AC-18 | `render_value_type` called with `ValueType::Quantity` and with `ValueType::Reference` returns `Err(RenderError::UnsupportedValueType { family })` with `family` equal to `"quantity"` and `"reference"` respectively and does not panic, and the item-boundary mapping turns `RenderError::UnsupportedValueType` into `CompositeEqualityRefusal::Unsupported` with `node_tag` equal to `family` and `unsupported_node_id` equal to the item's expression node id, emitting no code for the item and leaving its siblings unchanged, while `RenderError::Generation(OracleGenerationError::UnknownRuntimeVariant { .. })` still fails the whole call. No request reaches these arms through `generate_composite_equality_oracles`: a quantity operand is refused earlier as `CompositeEqualityRefusal::Unsupported { node_tag: "quantity" }` and a reference operand by Contract IR (FR-018-AC-7), each a per-item refusal that leaves its siblings unchanged, so the criterion is asserted by a unit test in the module's own `#[cfg(test)]` tests. | Test (TC-029) |
@@ -522,11 +599,17 @@ reaches it today, so the mapping is asserted where reachable.
 | FR-018-AC-30 | The 100,000-entry acyclic closure renders as flat source without a type-depth-sized constructor expression; under the 1,048,576-byte default it returns `SourceTooLarge` naming that limit when the source exceeds it, and under a caller limit equal to its measured source bytes it emits a complete, compilable oracle within the publication artifact and bundle byte limits. One byte less refuses before that byte is appended and publishes no partial artifact. PLANNED (IR-511). | Test (TC-029) |
 | FR-018-AC-31 | A caller-selected type-resolution work limit of `u64::MAX` refuses as `InvalidTypeResolutionWorkLimit` before lowering or charging; with `u64::MAX - 1`, the first denied count fits in the `u64` `consumed` field and is reported without wraparound. PLANNED (IR-511). | Test (TC-029) |
 | FR-018-AC-32 | Each IR-admitted direct `temporal`/`formula`, `temporal`/`fairness` and `expression`/`case` request has one claim-map entry keyed by its requested node id and refused as `CompositeEqualityRefusal::Unsupported`. For an IR `Unsupported` lowering record, the refusal's `unsupported_node_id` and `node_tag` equal that record's first unsupported reachable node and tag, which need not be the requested root; for a lowered `case` root they name the root and `"expression"`. The request contributes no generated symbol or source, never panics or disappears, and leaves a supported sibling's claim and source byte-identical to a run without it. AC-7's temporal-clause blocker remains unchanged. | Test (TC-029) |
-| FR-018-AC-33 | A genuine root-facade compilation of authentic retained source, original dependencies and admitted request limits has equal compiled/context/original package identities and exact full recompiled/original CheckedPackageV2 equality before its context is exposed. A different context package refuses generation and emitted environment construction before lookup, publishes no prepared value, and cannot evaluate with a completed Boolean or meter charge. | Test |
+| FR-018-AC-33 | A genuine root-facade compilation of authentic retained source, original dependencies and admitted request limits has equal compiled/context/original package identities and exact full recompiled/original CheckedPackageV2 equality before its context is exposed. An explicitly supplied different context package refuses generation and emitted environment construction before classification or lookup, including primitive-only requests, publishes no prepared value, and cannot evaluate with a completed Boolean or meter charge. | Test |
 | FR-018-AC-34 | The actual generated ABI executes ordered and unordered enum comparisons over all declared cases, including a case absent from every selected literal and an enum parameter with no member literals. Exact shape variants and canonical positions come from genuine facade/QSV values. Same-spelled cases from distinct declarations retain distinct identities; matching and mismatching declaration comparisons preserve the owning equality disposition. | Test |
 | FR-018-AC-35 | Unknown declaration, unknown case and a directly or transitively imported declaration produce the original typed Unknown/Foreign details at consumed and generated lookup boundaries. Malformed source/dependency input, QSL stage or above-reader resource limits, and internal Fault remain Package, Resource and Fault at the source-retaining boundary; a subsequent IR read stop remains the separate PackageReadLimit, with no partial context or successful prepared wrapper. The current ImportedContextUnsupported guard remains until original admitted dependency packages are retained. | Test |
 | FR-018-AC-36 | Emitted source uses only WireNodeId and case identifiers for lookup and contains no NodeKey constructor/decoder or generated nominal preimage/hash. Only the prepared wrapper's private genuine index reaches check_equality. A private environment-only fault fixture still satisfies AC-8, every original charge-stop case still satisfies AC-9, and a wrong item/descriptor prepared wrapper refuses before charging. Record/tuple/recursive/collection cases remain required by AC-2 and AC-21 through AC-30; an absent owner lookup capability is recorded as unresolved migration work, not as accepted Unsupported behavior. | Test |
 | FR-018-AC-37 | Equality's generated manifest and native scratch consumers use the one profile authority's direct exact/QSV/replay dependencies, while ordinary Boolean/integer FR-014 scalar proof manifests and oracle bodies acquire no replay source-compilation/context leg. Native generated enum acceptance is reported separately from original TC025/TC027 proof qualification; neither result substitutes for the other. | Test |
+| FR-018-AC-38 | With `None`, standalone generation and emitted preparation accept successfully reconstructed non-nominal primitive and nested Option/Collection closures; their index is empty only after complete zero-enum resolution. Existing admitted-IR conversion-form and quantity-family negatives retain respectively exact FormMismatch("conversion") and Unsupported("quantity"), with no replacement ContextPackageMismatch or MissingAdmittedContext, no symbols for the refused item and unchanged independent siblings. This does not claim matching QSL source emission or source authentication for those IR fixtures. | Test |
+| FR-018-AC-39 | `None` at the first reached nominal identity returns typed MissingAdmittedContext naming that declaration. Cover left and right source operands, left and right conversion targets from primitive sources, nested Option and Collection enum types, and eventual record/tuple field and recursive closures through their genuine owner capability. No key, default/partial index, omitted nominal declaration or Unsupported substitute is produced. Retain the existing charged-entry/cycle/error precedence and unaffected sibling results; the separate missing record/tuple owner lookup remains outstanding. | Test |
+| FR-018-AC-40 | Some(wrong-package context) fails the whole standalone call after existing setting/accounting checks and before item classification, for primitive-only, nominal and empty requests. Emitted context-free and nominal constructors both reject the same supplied mismatch before reconstruction. None and Some(wrong) have distinct outcomes; no failure publishes partial artifacts or a prepared wrapper. | Test |
+| FR-018-AC-41 | A reached enum still reconstructs every owner-admitted case, including unused cases and an enum parameter with no member literal, using the supplied genuine keys and canonical positions. Failed nominal admission/lookup/traversal cannot yield an empty-index success. A successfully resolved zero-enum closure may use an empty index; merely inspecting an outer primitive/Option/Collection tag does not establish zero enums. | Test |
+| FR-018-AC-42 | Generated oracle invocations under Some or valid context-free None preserve private package/item/descriptor/index binding, both check_type guards, same-index check_equality and evaluate. Private wrong-binding, present-context mismatch, missing nominal context and environment-only faults refuse without charge. The native OriginalCompositeEqContext route retains every mandatory authentic source/lock/package/whole-IR comparison and cannot use None to bypass them. No scalar proof manifest/body acquires replay compilation. | Test |
+| FR-018-AC-43 | For genuine source with a: Int[0,9] and b: Integer, the admitted left parameter names its integer_range and the right parameter names canonical base Integer. Direct source/target reconstruction preserves Int[0,9] versus unbounded Integer despite the sibling range: a caller descriptor converting the left to Integer compares with the unbounded right under the original equality rule, including right values outside [0,9]; an unbounded Integer source cannot acquire a narrowing conversion by borrowing that sibling interval. Claim/native descriptor checks remain independent of generated output. If source convert<Integer>(a) is erased in emission, no retained conversion-node branch is claimed. AC-16 member/base behavior and tests remain unchanged. | Test |
 
 AC-5 requires each listed condition to be refused with its `IllTypedCause`, not
 that the six causes be distinct. Two of them are not: a `convert<T>` operand
@@ -579,6 +662,12 @@ without one is not written.
 | FR-018-AC-35 | Collapse Unknown case and declaration, drop Foreign package details, map Resource/Fault to Package, or publish a partial context after stopped admission. |
 | FR-018-AC-36 | Emit a NodeKey literal, accept an arbitrary caller index, skip check_type on the prepared environment, or evaluate a wrapper for another descriptor. |
 | FR-018-AC-37 | Add replay compilation to scalar proof execution, let scratch and emitted manifest sources drift, or count native enum success as an original Kani receipt. |
+| FR-018-AC-38 | Universally demand context before a key-free refusal, mistake standalone absence for source authentication, or return an empty index before complete closure resolution. |
+| FR-018-AC-39 | Check only an operand's outer type, skip a nominal conversion target/nested field, fabricate a key, or let capability checks reorder charged refusal/cycle precedence. |
+| FR-018-AC-40 | Treat Some(wrong) as None or skip the package guard because all selected types are primitive. |
+| FR-018-AC-41 | Build only used enum literals or recover from a failed nominal lookup with an empty index. |
+| FR-018-AC-42 | Drop private binding/context checks for None, allow a nominal recipe without context, omit check_type, accept a caller index, or make native authentication optional. |
+| FR-018-AC-43 | Narrow a direct canonical Integer operand or target using an unrelated sibling integer_range, infer member ownership from the shared base key, or label an erased source conversion as a retained conversion-node control. |
 
 ## Dependencies
 
