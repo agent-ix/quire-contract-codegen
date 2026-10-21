@@ -1,5 +1,5 @@
 ---
-id: SR-15232
+id: SR-15259
 title: "IR-914 PR #495 spec-review/base review"
 type: SpecReview
 analysis: base
@@ -45,7 +45,7 @@ Ticket: IR-914. Exact reviewed head: 94b9d41bb7f57bf0f6222520c978391aa6690ea6. D
 
 ## Verdict
 
-**PASS (applicability)** — no specification or plan file changes. The existing FR-017-AC-42 and FR-040-AC-3/4 statements are internally consistent with the intended controls; no spec amendment is needed. This verdict does not cure the AC-4 test gap recorded in SR-15231.
+**PASS (applicability)** — no specification or plan file changes. The existing FR-017-AC-42 and FR-040-AC-3/4 statements are internally consistent with the intended controls; no spec amendment is needed. This verdict does not cure the AC-4 test gap recorded in SR-15258.
 
 ## Findings
 
