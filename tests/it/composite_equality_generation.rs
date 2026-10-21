@@ -16,7 +16,7 @@ use quire_contract_codegen::{
     generate_composite_equality_oracles, ClaimDisposition, CompositeEqualityClaim,
     CompositeEqualityItem, CompositeEqualityLimits, CompositeEqualityOracles,
     CompositeEqualityRefusal, ContractRequestPosition, DeclarationRefusalCause,
-    EqualityOperandDescriptor, EqualityOperatorKind, IllTypedCauseKind, OracleGenerationError,
+    EqualityOperandDescriptor, EqualityOperatorKind, OracleGenerationError,
     RecordedSchedule, UpstreamBlocker, COMPOSITE_EQUALITY_CRATE_NAME,
 };
 use quire_contract_model::{
@@ -27,7 +27,7 @@ use quire_contract_model::{
     ContractPackageReadResult, ContractPackageWireV1, StructuralCandidateError,
 };
 use quire_exact::{CardinalityBound, CollectionKind, IeeeWidth};
-use quire_exact::{CollectionType, NodeKey, Presence, ValueType};
+use quire_exact::{CollectionType, Presence, ValueType};
 use quire_semantic_value::declaration::{
     CompositeDeclaration, CompositeShape, FieldDeclaration, ObjectTypeDeclaration, TypeEnvironment,
 };
@@ -593,8 +593,7 @@ fn tc_029_ac24_recursive_list_and_tree_items_emit_one_oracle_each() {
 #[trace("FR-018-AC-24", "FR-018-AC-26", "FR-018-AC-27", "TC-029")]
 #[test]
 fn tc_029_public_qsl_recursive_items_generate_through_reader() {
-    let (builder, list, tree) = qsl_recursive_items_package();
-    assert_recursive_item_generation(builder, list, tree);
+    super::admitted_composite_equality::assert_authentic_recursive_item_generation();
 }
 
 fn assert_recursive_item_generation(
@@ -602,22 +601,15 @@ fn assert_recursive_item_generation(
     list: quire_contract_model::CheckedNodeId,
     tree: quire_contract_model::CheckedNodeId,
 ) {
-    fn emitted_key(node: &quire_contract_model::CheckedNodeId) -> String {
-        let key = NodeKey::from_hex(&node.digest).expect("a checked node digest is a runtime key");
-        let bytes = key
-            .as_bytes()
-            .iter()
-            .map(u8::to_string)
-            .collect::<Vec<_>>()
-            .join(", ");
-        format!("rt::NodeKey::from_bytes([{bytes}])")
+    fn emitted_key(node: &quire_contract_model::CheckedNodeId, name: &str) -> String {
+        format!("lookup_composite_key(_context, {:?}, &[{name:?}], qsl_replay::AdmittedCompositeForm::Record)?", node.digest)
     }
 
     fn composites_block<'a>(source: &'a str, oracle_symbol: &str) -> &'a str {
         let stem = oracle_symbol
             .strip_prefix("oracle_")
             .expect("generated oracle symbol");
-        let marker = format!("fn composites_{stem}()");
+        let marker = format!("fn composites_{stem}(");
         let (_, block) = source
             .split_once(&marker)
             .expect("item's declaration block");
@@ -650,25 +642,25 @@ fn assert_recursive_item_generation(
     assert_eq!(lib.matches("pub fn oracle_").count(), 2);
     assert_eq!(lib.matches("pub fn environment_").count(), 2);
     let list_block = composites_block(lib, &list_claim.oracle_symbol);
-    let list_key = emitted_key(&list);
+    let list_key = emitted_key(&list, "List");
     assert!(
-        list_block.contains(&format!("rt::CompositeDeclaration::new({list_key}, ")),
+        list_block.contains(&format!("sv::CompositeDeclaration::new({list_key}, ")),
         "List declaration: {list_block}"
     );
-    assert!(list_block.contains("rt::FieldDeclaration::new(\"next\", {"));
-    assert!(list_block.contains(&format!("rt::ValueType::Composite({list_key})")));
-    assert!(list_block.contains("rt::Presence::Optional)"));
+    assert!(list_block.contains("sv::FieldDeclaration::new(\"next\", {"));
+    assert!(list_block.contains(&format!("exact::ValueType::Composite({list_key})")));
+    assert!(list_block.contains("exact::Presence::Optional)"));
     let tree_block = composites_block(lib, &tree_claim.oracle_symbol);
-    let tree_key = emitted_key(&tree);
+    let tree_key = emitted_key(&tree, "Tree");
     assert!(
-        tree_block.contains(&format!("rt::CompositeDeclaration::new({tree_key}, ")),
+        tree_block.contains(&format!("sv::CompositeDeclaration::new({tree_key}, ")),
         "Tree declaration: {tree_block}"
     );
-    assert!(tree_block.contains("rt::FieldDeclaration::new(\"kids\", {"));
-    assert!(tree_block.contains(&format!("rt::ValueType::Composite({tree_key})")));
+    assert!(tree_block.contains("sv::FieldDeclaration::new(\"kids\", {"));
+    assert!(tree_block.contains(&format!("exact::ValueType::Composite({tree_key})")));
     assert!(tree_block.contains("exact::CollectionKind::Sequence"));
     assert!(tree_block.contains("rebuild_cardinality(0, 3)?"));
-    assert!(tree_block.contains("rt::Presence::Required)"));
+    assert!(tree_block.contains("exact::Presence::Required)"));
 }
 
 /// Optional local conformance against the private QSpec fixture. The public
@@ -1003,18 +995,22 @@ fn tc_029_a_body_operand_disagreeing_with_the_descriptor_refuses_before_generati
 #[trace("FR-018-AC-6", "TC-029")]
 #[test]
 fn tc_029_ac6_ieee_at_any_depth_is_operator_ineligible() {
-    let package = admit(corpus_package());
+    let source = "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\nrecord FloatRecord { f: Float64; }\nrecord IntegerRecord { f: Integer; }\n";
+    let compiled = super::admitted_composite_fixture::compile(source, &qsl_replay::DependencyInput::default());
+    let owner_key = |name: &str| compiled.context().composites()
+        .find(|actual| actual.qualified_name().iter().map(|part| part.as_str()).eq([name]))
+        .expect("real source declaration").key();
     // Reconstruct SEQ_R_FLOAT (a sequence of R_FLOAT { f: Float64 }) exactly
     // as the runtime environment sees it, and confirm the reader refusal
     // asserted by `tc_052_nested_ieee_equality_is_refused_by_reader`
     // agrees with an independent, direct `contains_ieee` call over that
     // reconstructed type at both its depths (the record field, and the
     // sequence wrapping it) rather than merely riding on the same code path.
-    let float_record_key = NodeKey::from_hex(package.key(R_FLOAT).digest.as_ref()).unwrap();
+    let float_record_key = owner_key("FloatRecord");
     let environment = TypeEnvironment::new(
         vec![CompositeDeclaration::new(
             float_record_key,
-            "R_FLOAT",
+            "FloatRecord",
             CompositeShape::Record(vec![FieldDeclaration::new(
                 "f",
                 ValueType::Float(quire_exact::FloatType::exact(IeeeWidth::Binary64)),
@@ -1025,11 +1021,11 @@ fn tc_029_ac6_ieee_at_any_depth_is_operator_ineligible() {
     )
     .unwrap();
     let record_type = ValueType::Composite(float_record_key);
-    let sequence_type = ValueType::Collection(Box::new(CollectionType::new(
+    let sequence_type = ValueType::collection(CollectionType::new(
         CollectionKind::Sequence,
         record_type.clone(),
-        CardinalityBound::new(0, 8).unwrap(),
-    )));
+        Some(CardinalityBound::new(0, 8).unwrap()),
+    ));
     // The leaf itself: `ValueType::Float(_) => return true` is `contains_ieee`'s
     // base case, unasserted by the record/sequence checks above (both of those
     // pass by *reaching* an IEEE leaf through a composite, never by naming the
@@ -1046,11 +1042,11 @@ fn tc_029_ac6_ieee_at_any_depth_is_operator_ineligible() {
     // a field) would pass every assertion above. A structurally identical
     // record and sequence, but with an `Integer` field instead of `Float64`,
     // must report `false` at both depths.
-    let not_float_record_key = NodeKey::from_hex(&key(R_NOT_FLOAT)).unwrap();
+    let not_float_record_key = owner_key("IntegerRecord");
     let not_ieee_environment = TypeEnvironment::new(
         vec![CompositeDeclaration::new(
             not_float_record_key,
-            "R_NOT_FLOAT",
+            "IntegerRecord",
             CompositeShape::Record(vec![FieldDeclaration::new(
                 "f",
                 ValueType::Integer,
@@ -1061,11 +1057,11 @@ fn tc_029_ac6_ieee_at_any_depth_is_operator_ineligible() {
     )
     .unwrap();
     let not_float_record_type = ValueType::Composite(not_float_record_key);
-    let not_float_sequence_type = ValueType::Collection(Box::new(CollectionType::new(
+    let not_float_sequence_type = ValueType::collection(CollectionType::new(
         CollectionKind::Sequence,
         not_float_record_type.clone(),
-        CardinalityBound::new(0, 8).unwrap(),
-    )));
+        Some(CardinalityBound::new(0, 8).unwrap()),
+    ));
     assert!(!not_ieee_environment.contains_ieee(&ValueType::Integer));
     assert!(!not_ieee_environment.contains_ieee(&not_float_record_type));
     assert!(!not_ieee_environment.contains_ieee(&not_float_sequence_type));
@@ -1658,7 +1654,7 @@ fn tc_029_ac13_declaration_keys_are_the_reached_v2_node_ids() {
     assert_eq!(
         single.declaration_runtime_keys,
         vec![oracles.runtime_key(R_POINT)],
-        "declaration_runtime_keys must equal NodeKey::from_hex of declaration_keys"
+        "declaration_runtime_keys must retain the original admitted declaration identities"
     );
 
     let nested = generated(only_claim(&oracles, E_PAIR_OF_POINTS));

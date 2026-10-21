@@ -72,3 +72,50 @@ fn same_shaped_record_and_tuple_names_keep_distinct_repeatable_owner_identities(
         assert_eq!(fresh.context().composite_declaration(wire).expect("same real source"), actual);
     }
 }
+
+/// Retain source, complete package and capability together; no expressions are appended or rekeyed.
+pub(super) fn assert_authentic_recursive_item_generation() {
+    let source = concat!(
+        "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\n",
+        "record List { next: List?; }\nrecord Tree { kids: Sequence<Tree>[0, 3]; }\n",
+        "function list_same using v(a: List,b: List): Boolean pure { a = b }\n",
+        "function tree_same using v(a: Tree,b: Tree): Boolean pure { a = b }\n",
+    );
+    let compiled = fixture::compile(source, &qsl_replay::DependencyInput::default());
+    let package = checked(&compiled, &[]);
+    for (function, name, field, optional) in [
+        ("list_same", "List", "next", true),
+        ("tree_same", "Tree", "kids", false),
+    ] {
+        let item = direct_source_item(&package, function);
+        let actual = compiled.context().composites().find(|declaration|
+            declaration.qualified_name().iter().map(|part| part.as_str()).eq([name])
+        ).expect("genuine recursive source declaration");
+        assert_eq!(actual.form(), qsl_replay::AdmittedCompositeForm::Record);
+        assert_eq!(actual.key().to_string(), item.left.source_type.digest.as_ref());
+        assert_eq!(item.left.source_type, item.right.source_type);
+        let output = generate_items(&package, Some(compiled.context()), std::slice::from_ref(&item), &[])
+            .expect("actual source and original capability lower together");
+        assert_eq!(output.claim_map.items.len(), 1);
+        let ClaimDisposition::Generated(claim) = &output.claim_map.items[0].result else {
+            panic!("authentic recursive item refused: {:?}", output.claim_map.items[0].result)
+        };
+        assert_eq!(claim.declaration_keys, vec![item.left.source_type.clone()]);
+        assert_eq!(claim.declaration_runtime_keys, vec![actual.key().to_string()]);
+        let lib = &output.artifacts.iter().find(|artifact| artifact.path == "src/lib.rs").expect("emitted library").contents;
+        assert_eq!(lib.matches("pub fn oracle_").count(), 1);
+        assert_eq!(lib.matches("pub fn environment_").count(), 1);
+        assert!(lib.contains(&claim.oracle_symbol));
+        let recipe = format!("lookup_composite_key(_context, {:?}, &[{name:?}], qsl_replay::AdmittedCompositeForm::Record)?", item.left.source_type.digest);
+        assert!(lib.contains(&format!("sv::CompositeDeclaration::new({recipe}, ")));
+        assert!(lib.contains(&format!("sv::FieldDeclaration::new({field:?}, {{")));
+        assert!(lib.contains(&format!("exact::ValueType::Composite({recipe})")));
+        let presence = if optional { "exact::Presence::Optional)" } else { "exact::Presence::Required)" };
+        assert!(lib.contains(presence));
+        if !optional {
+            assert!(lib.contains("exact::CollectionKind::Sequence"));
+            assert!(lib.contains("rebuild_cardinality(0, 3)?"));
+        }
+        assert!(!lib.contains("NodeKey::from_"));
+    }
+}

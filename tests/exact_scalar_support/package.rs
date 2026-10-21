@@ -2090,7 +2090,6 @@ fn corpus_operation(expr: &Expression) -> (&'static str, Value) {
                 (EqualityOperandKind::Boolean, EqualityOperator::NotEqual) => "quire.op.boolean.ne",
                 (EqualityOperandKind::Integer, EqualityOperator::Equal) => "quire.op.integer.eq",
                 (EqualityOperandKind::Integer, EqualityOperator::NotEqual) => "quire.op.integer.ne",
-                _ => panic!("unknown equality operator"),
             }),
         ),
         Op::IntegerArithmetic { operator, .. } => {
