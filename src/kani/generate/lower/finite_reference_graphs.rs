@@ -3,12 +3,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use quire_contract_ir::kani::{
-    DispatchIndex, KaniOutcomeKind, KaniProfile, SemanticFamily, ValidatedFiniteInput,
+    DispatchIndex, KaniOutcome, KaniProfile, SemanticFamily, ValidatedFiniteInput,
 };
 
 use quire_contract_model::std001_code;
 
-use super::{admit_family, refusal, FamilyLoweringError};
+use super::admit_family;
 
 /// A positive-length reachability request.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -47,7 +47,7 @@ pub fn prepare_finite_graph_reaches(
     dispatch: &DispatchIndex,
     input: &ValidatedFiniteInput,
     request: GraphRequest,
-) -> Result<GraphLowering, FamilyLoweringError> {
+) -> Result<GraphLowering, KaniOutcome> {
     admit_family(
         profile,
         dispatch,
@@ -56,11 +56,10 @@ pub fn prepare_finite_graph_reaches(
         &request.source_id,
     )?;
     if request.max_expansions == 0 {
-        return Err(refusal(
-            KaniOutcomeKind::InvalidInput,
+        return Err(KaniOutcome::invalid_input(
             std001_code!("kani_graph_bound_invalid"),
             &request.source_id,
-            profile,
+            profile.selection().revision.clone(),
         ));
     }
     let identities: BTreeSet<_> = input
@@ -72,11 +71,10 @@ pub fn prepare_finite_graph_reaches(
     if !identities.contains(request.start_id.as_str())
         || !identities.contains(request.target_id.as_str())
     {
-        return Err(refusal(
-            KaniOutcomeKind::InvalidInput,
+        return Err(KaniOutcome::invalid_input(
             std001_code!("kani_graph_identity_invalid"),
             &request.source_id,
-            profile,
+            profile.selection().revision.clone(),
         ));
     }
     // Index the selected reference field once. The ordered sets give each source a stable
@@ -116,11 +114,10 @@ pub fn prepare_finite_graph_reaches(
         };
         seen.insert(current);
         if expanded.len() == request.max_expansions {
-            return Err(refusal(
-                KaniOutcomeKind::ResourceExhausted,
+            return Err(KaniOutcome::resource_exhausted(
                 std001_code!("kani_graph_expansion_exhausted"),
                 &request.source_id,
-                profile,
+                profile.selection().revision.clone(),
             ));
         }
         expanded.push(current.to_owned());
@@ -262,7 +259,7 @@ mod tests {
             },
         )
         .expect_err("the other branch consumes the third expansion");
-        let outcome = exhausted.outcome().expect("IR built the typed outcome");
+        let outcome = exhausted;
         assert_eq!(outcome.kind, KaniOutcomeKind::ResourceExhausted);
         assert_eq!(outcome.code.as_str(), "kani_graph_expansion_exhausted");
 

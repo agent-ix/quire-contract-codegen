@@ -1,12 +1,12 @@
 //! CG-owned ordered collection queries over IR's validated finite input and typed outcome.
 
 use quire_contract_ir::kani::{
-    DispatchIndex, KaniOutcomeKind, KaniProfile, SemanticFamily, ValidatedFiniteInput,
+    DispatchIndex, KaniOutcome, KaniProfile, SemanticFamily, ValidatedFiniteInput,
 };
 
 use quire_contract_model::std001_code;
 
-use super::{admit_family, refusal, FamilyLoweringError};
+use super::admit_family;
 
 /// Query over one ordered finite sequence.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -47,7 +47,7 @@ pub fn prepare_bounded_collection_query(
     dispatch: &DispatchIndex,
     _input: &ValidatedFiniteInput,
     query: CollectionQuery,
-) -> Result<CollectionLowering, FamilyLoweringError> {
+) -> Result<CollectionLowering, KaniOutcome> {
     admit_family(
         profile,
         dispatch,
@@ -56,11 +56,10 @@ pub fn prepare_bounded_collection_query(
         &query.source_id,
     )?;
     if query.values.len() > query.max_items {
-        return Err(refusal(
-            KaniOutcomeKind::ResourceExhausted,
+        return Err(KaniOutcome::resource_exhausted(
             std001_code!("kani_collection_bound_exhausted"),
             &query.source_id,
-            profile,
+            profile.selection().revision.clone(),
         ));
     }
     let position = match query.kind {
@@ -168,7 +167,6 @@ mod tests {
             },
         )
         .expect_err("one-past bound must not lower");
-        let exhausted = exhausted.outcome().expect("IR outcome was built");
         assert_eq!(exhausted.kind, KaniOutcomeKind::ResourceExhausted);
         assert_eq!(exhausted.boolean_claim(), None);
     }
