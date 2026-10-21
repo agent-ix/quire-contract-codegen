@@ -1,5 +1,5 @@
 ---
-id: SR-15239
+id: SR-15266
 title: "IR-604 PR498 scope-boundary review"
 type: SpecReview
 analysis: scope-boundary
