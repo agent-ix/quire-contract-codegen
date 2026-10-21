@@ -97,3 +97,15 @@ bindings:
 - test_id: batch_tests::cleanup_observation_omissions_retain_real_confirmation_and_refusal_precedence
   ac_id: FR-040-AC-4
   trace: correct
+
+## Disposition round 1
+
+Exact current head 1340f7adae6951fac29d9384bc650bd8cb4ba3f4; same reviewer independently inspected the source diff and actual fix receipts. PASS for code/Rust: FND-001 fixed, no new findings. Merge readiness remains conditional on root final aggregate, fresh-base disposition if needed and latest byte-exact custody.
+
+Five confined formatter/check/clippy/four-native-test/fmt-check phases pass at this exact head under actual16GiB/swap0; terminal native peak4,242,739,200B, all cap/OOM events0 and complete cgroup hierarchies gone. The native output contains four genuine passing tests including original TC043, unchanged confirmation errno control, the five-mode observation control and late-cancellation control. No reviewer heavy command ran; full aggregate remains pending. Namespace production source is byte-identical to the original review: AC56 inspection remains PASS, with original signal/poll/errno/Drop semantics. No natural Luna failure reproduction, causal diagnosis, whole-IR877 completion or proof qualification is claimed. Fresh matrix still887 criteria:525 tagged/293 untagged/18 ignored-only/51 method-without-symbol, with no store-bound run evidence. All19 original comment bodies and both original SR prefixes remain unchanged.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Exact fix1340f7a gives the byte-identical ready/finish/report launcher body one private test-owned home, called by both existing errno and new observation-omission controls. No production logic or test assertion changed. |
