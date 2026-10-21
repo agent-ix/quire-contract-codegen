@@ -497,6 +497,45 @@ fn qsl_state_invariant_is_a_separate_v2_assertion_obligation() {
     assert!(harness.rust.contents.contains(&oracle.source));
 }
 
+/// Each field read by an object invariant is a separate bounded symbolic argument.
+#[trace("TC-025")]
+#[test]
+fn qsl_invariant_draws_each_selected_model_field_it_reads() {
+    let twin = Twin::with_balance_invariant_condition("self.balance <= self.audit");
+    let (package, clause) = twin.emitted_package("BalanceNonnegative");
+    let oracle = generate_v2_clause_oracle(&package, &clause).expect("two-field QSL oracle");
+    assert_eq!(oracle.descriptor.inputs.len(), 2);
+    assert_eq!(
+        oracle
+            .descriptor
+            .inputs
+            .iter()
+            .map(|input| (input.name.as_str(), input.lower, input.upper))
+            .collect::<Vec<_>>(),
+        [("current_audit", 0, 1000), ("current_balance", 0, 1000)]
+    );
+    let outcome = negotiate(&[ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+    }]);
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("two-field invariant admitted");
+    };
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("one two-field invariant harness");
+    };
+    assert_eq!(harness.identity.arguments.len(), 2);
+    assert!(harness.rust.contents.contains("current_balance >= 0"));
+    assert!(harness.rust.contents.contains("current_balance <= 1000"));
+    assert!(harness.rust.contents.contains("current_audit >= 0"));
+    assert!(harness.rust.contents.contains("current_audit <= 1000"));
+    assert!(harness.rust.contents.contains(&oracle.source));
+}
+
 fn run_real_v2_clause(twin: Twin, clause_name: &str) -> KaniRunOutcome {
     let (package, clause) = twin.emitted_package(clause_name);
     let item = ObligationItem::V2Clause {
