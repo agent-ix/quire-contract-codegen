@@ -21,20 +21,21 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Mutex, OnceLock};
 
-use quire_contract_codegen::oracle::operator_catalog::IntegerOperator;
-use quire_contract_codegen::{
+use super::scalar_fixture_types::{
     BooleanOperator, DecimalOperator, EqualityOperandKind, ExactScalarItem, ExactScalarOperation,
     IeeeArithmeticOperator, OrderingOperandKind, QuantityOperator, RationalOperator,
 };
+use quire_contract_codegen::oracle::operator_catalog::IntegerOperator;
 use quire_contract_model::{
     derive_application_node_id, ApplicationNodeDraft, CheckedNodeId, CheckedPackageEvidence,
     CheckedPackageReadLimits, CheckedPackageV2, CheckedPackageV2ReadResult, CheckedSemanticNodeV2,
 };
-use quire_contract_runtime::exact::{
-    ComparisonOperator, DecimalType, DivisionProfile, EqualityOperator, IeeeComparison, IeeeWidth,
-    Integer, IntegerDomain, IntegerInterval, OrderingOperator, RationalDomain, RoundingMode,
-    TextProfile, TextType,
+use quire_exact::{
+    ComparisonOperator, DecimalType, DivisionProfile, IeeeComparison, IeeeWidth, Integer,
+    IntegerDomain, IntegerInterval, OrderingOperator, RationalDomain, RoundingMode, TextProfile,
+    TextType,
 };
+use quire_semantic_value::declaration::EqualityOperator;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
@@ -221,10 +222,15 @@ fn declaration_for(tag: &str, form: &str, digest: &str) -> Option<Value> {
 /// caller of this helper has already registered.
 pub fn application(
     operator: &str,
-    operation: Value,
+    mut operation: Value,
     result_type: &str,
     arguments: Vec<Value>,
 ) -> Value {
+    if operation["member"]["kind"] == "type_argument"
+        && operation["member"].get("declaration").is_none()
+    {
+        operation["member"]["declaration"] = node_ref(result_type);
+    }
     json!({
         "term": "application",
         "operator": operator,
@@ -234,11 +240,9 @@ pub fn application(
     })
 }
 
-/// IR-280's FR-322 application-node dependency join: every `reference`
-/// term's `target` digest reachable anywhere inside `body`, deduplicated and
-/// digest-ascending. `result_type` and a `literal`'s own `type` are bare
-/// node ids, not `reference` terms, so this walk never picks them up --
-/// exactly the exclusion FR-322 states.
+/// Reference targets used to anchor bounds on operand nodes. The application
+/// dependency join also includes an operation member declaration, added after
+/// choosing the anchor. `result_type` and a literal's `type` stay excluded.
 fn reference_targets(body: &Value) -> Vec<String> {
     fn walk(value: &Value, targets: &mut BTreeSet<String>) {
         match value {
@@ -929,6 +933,8 @@ impl PackageBuilder {
                 self.add_dependency(&anchor, key);
             }
         }
+        dependencies.sort();
+        dependencies.dedup();
         self.application_code_with(code, tag, form, semantic_type, body, &dependencies);
         self
     }
@@ -2225,8 +2231,7 @@ fn corpus_operation(expr: &Expression) -> (&'static str, Value) {
                 }
                 (IeeeWidth::Binary64, IeeeArithmeticOperator::Divide) => {
                     "quire.op.ieee.float64.div"
-                },
-                (&_, _) => unreachable!("IeeeWidth gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above")
+                }
             };
             (
                 expr.operator,
@@ -2243,7 +2248,6 @@ fn corpus_operation(expr: &Expression) -> (&'static str, Value) {
                 IeeeComparison::NumericEqual => "quire.op.ieee.numeric_equal",
                 IeeeComparison::TotalOrder => "quire.op.ieee.total_order",
                 IeeeComparison::BitIdentical => "quire.op.ieee.bit_identical",
-                &_ => unreachable!("IeeeComparison gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
             };
             (
                 // Overrides `expr.operator` ("binary" per `corpus()`'s own
@@ -2347,7 +2351,6 @@ fn ordering_suffix(operator: OrderingOperator) -> &'static str {
         OrderingOperator::LessOrEqual => "le",
         OrderingOperator::Greater => "gt",
         OrderingOperator::GreaterOrEqual => "ge",
-        _ => unreachable!("OrderingOperator gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
     }
 }
 

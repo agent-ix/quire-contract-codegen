@@ -18,6 +18,12 @@ mod scalar_native_digest;
 #[path = "kani_scalar_native_fixture.rs"]
 mod scalar_native_fixture;
 use crate::common::proof_ceilings::proof_ceilings_with_wall_clock;
+use quire_contract_codegen as scalar_fixture_types;
+use quire_contract_codegen::{
+    generate_routed, Artifact, BackendDescriptor, Candidate, ContractDriverResultSelection,
+    ContractRequestPosition, GenerationContexts, KaniGenerationContext, KindOutput, ProviderOrigin,
+    RoutedGenerationItem,
+};
 use scalar_native_digest::independent_digest;
 use scalar_native_fixture::routed_scalar_with_artifacts;
 
@@ -3052,7 +3058,7 @@ fn tc_027_a_routed_scalar_harness_verifies() {
 #[test]
 #[ignore = "kani lane: run serially through make kani"]
 fn tc_027_attested_scalar_receipt_binds_real_proof_and_native_result() {
-    use quire_contract_runtime::exact::{ChargePoint, LimitKind, Outcome};
+    use quire_exact::{ChargePoint, LimitKind, Outcome};
     let (harness, artifacts) = routed_scalar_increment_with_artifacts();
     let operands = [4_i64, 1_i64];
     let limits = attested_scalar_limits();
@@ -3145,7 +3151,7 @@ fn tc_027_attested_scalar_subtraction_fixture_has_two_bounded_operands() {
 #[test]
 #[ignore = "kani lane: run serially through make kani"]
 fn tc_027_attested_scalar_subtraction_receipts_bind_both_operand_orders() {
-    use quire_contract_runtime::exact::Outcome;
+    use quire_exact::Outcome;
 
     let (harness, artifacts) = routed_scalar_binary_subtraction_with_artifacts();
     assert_eq!(harness.identity.arguments.len(), 2);
@@ -3230,6 +3236,8 @@ fn assert_retained_scalar_content(
             "Cargo.toml",
             "claim-map.json",
             &harness.record.path,
+            "observer/Cargo.lock",
+            "observer/Cargo.toml",
             "source-maps/lib.json",
             "src/bin/ir791_native.rs",
             "src/lib.rs",
@@ -3295,8 +3303,8 @@ fn assert_retained_scalar_content(
     assert!(receipt.cleanup_diagnostic().is_none());
 }
 
-fn attested_scalar_limits() -> quire_contract_runtime::exact::ScalarLimits {
-    quire_contract_runtime::exact::ScalarLimits {
+fn attested_scalar_limits() -> quire_exact::ScalarLimits {
+    quire_exact::ScalarLimits {
         integer_bits: 10000,
         decimal_digits: 10001,
         scale_expansion: 10002,
@@ -3553,5 +3561,5 @@ fn tc_027_scalar_limits_is_available_at_codegen_root_with_request_type_identity(
         result_units: 1000,
     };
     let _typed_accessor = request_limits;
-    let _runtime_limits: quire_contract_runtime::exact::ScalarLimits = limits;
+    let _kernel_limits: quire_exact::ScalarLimits = limits;
 }

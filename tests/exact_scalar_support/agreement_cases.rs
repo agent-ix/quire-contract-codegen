@@ -41,9 +41,9 @@ use generated::{
     text_not_equal, OracleStop,
 };
 use ix_trace_rs::trace;
-use quire_contract_runtime::exact::{
-    EnumValue, IllTyped, Integer, Meter, Outcome, Quantity, ScalarLimits, Text,
-};
+use quire_contract_runtime::exact::Quantity;
+use quire_semantic_value::enumeration::EnumValue;
+use quire_exact::{IllTyped, Integer, Meter, Outcome, ScalarLimits, Text};
 
 /// Generated oracles in `ComparisonOperator::ALL` order.
 type Compare<T> = fn(&T, &T, &mut Meter) -> Result<Outcome<bool>, OracleStop>;
@@ -152,9 +152,9 @@ fn tc_024_tc192_division_and_modulus_oracles_agree() {
                 limits: UNLIMITED,
                 setup: { let (a, b) = (int(a), int(b)); },
                 direct: |m| (
-                    divide(DivisionProfile::Truncating, &a, &b, &wide(), m),
-                    divide(DivisionProfile::Floor, &a, &b, &wide(), m),
-                    divide(DivisionProfile::Euclidean, &a, &b, &wide(), m),
+                    divide(DivisionProfile::Truncating, DivisionMember::Quotient, &a, &b, &wide(), m),
+                    divide(DivisionProfile::Floor, DivisionMember::Quotient, &a, &b, &wide(), m),
+                    divide(DivisionProfile::Euclidean, DivisionMember::Quotient, &a, &b, &wide(), m),
                 ),
                 generated: |m| (
                     done(divide_truncating(&a, &b, m)),
@@ -165,7 +165,7 @@ fn tc_024_tc192_division_and_modulus_oracles_agree() {
             agree2! {
                 limits: UNLIMITED,
                 setup: { let (a, b) = (int(a), int(b)); let bounded = IntegerDomain::Bounded(IntegerInterval::new(int(-5), int(5)).unwrap()); },
-                direct: |m| divide(DivisionProfile::Truncating, &a, &b, &bounded, m),
+                direct: |m| divide(DivisionProfile::Truncating, DivisionMember::Quotient, &a, &b, &bounded, m),
                 generated: |m| done(divide_bounded(&a, &b, m)),
             };
             agree2! {
@@ -180,9 +180,9 @@ fn tc_024_tc192_division_and_modulus_oracles_agree() {
     assert_rows_agreed(&[("TC-192 generated vectors", vectors)]);
     assert_eq!(vectors, 5 * 41 * 41);
 
-    // DIV-08 exact tuple, short work, short result; DIV-11 and DIV-13.
+    // DIV-08 exact limits, short work, short result; DIV-11 and DIV-13.
     let mut named = 0_usize;
-    for (a, b, tuple) in [
+    for (a, b, limit_tuple) in [
         (7, 3, DIV_08),
         (7, 3, with(DIV_08, 8, 3)),
         (7, 3, with(DIV_08, 9, 1)),
@@ -191,15 +191,15 @@ fn tc_024_tc192_division_and_modulus_oracles_agree() {
         (7, 0, with(DIV_08, 8, 0)),
     ] {
         agree2! {
-            limits: limits(tuple),
+            limits: limits(limit_tuple),
             setup: { let (a, b) = (int(a), int(b)); },
-            direct: |m| divide(DivisionProfile::Truncating, &a, &b, &wide(), m),
+            direct: |m| divide(DivisionProfile::Truncating, DivisionMember::Quotient, &a, &b, &wide(), m),
             generated: |m| done(divide_truncating(&a, &b, m)),
         };
         named += 1;
     }
     // DIV-10, DIV-11 and DIV-12 (the modulus refused before retention).
-    for (a, b, tuple) in [
+    for (a, b, limit_tuple) in [
         (-7, 3, DIV_10),
         (7, 0, with(DIV_10, 8, 1)),
         (7, 0, with(DIV_10, 8, 0)),
@@ -207,7 +207,7 @@ fn tc_024_tc192_division_and_modulus_oracles_agree() {
         (-9, 1, with(with(DIV_10, 9, 0), 8, 2)),
     ] {
         agree2! {
-            limits: limits(tuple),
+            limits: limits(limit_tuple),
             setup: { let (a, b) = (int(a), int(b)); let bounded = IntegerDomain::Bounded(IntegerInterval::new(int(-5), int(5)).unwrap()); },
             direct: |m| modulo(&a, &b, &bounded, m),
             generated: |m| done(modulo_bounded(&a, &b, m)),
@@ -283,11 +283,11 @@ fn tc_024_tc185_decimal_oracles_agree() {
         named += 1;
     }
     let with_work = |work: u64| {
-        let mut tuple = D09;
-        tuple[8] = work;
-        tuple
+        let mut limit_tuple = D09;
+        limit_tuple[8] = work;
+        limit_tuple
     };
-    for ((ca, sa), (cb, sb), tuple) in [
+    for ((ca, sa), (cb, sb), limit_tuple) in [
         ((1, 0), (3, 0), [u64::MAX; 10]),
         ((1, 0), (0, 0), [u64::MAX; 10]),
         ((1, 0), (0, 3), [u64::MAX; 10]),
@@ -297,7 +297,7 @@ fn tc_024_tc185_decimal_oracles_agree() {
         ((1, 0), (0, 3), with_work(0)),
     ] {
         agree2! {
-            limits: limits(tuple),
+            limits: limits(limit_tuple),
             setup: { let (a, b) = (dec(ca, sa), dec(cb, sb)); let target = decimal_type(-1000, 1000, 0, 2, RoundingMode::TowardZero); },
             direct: |m| evaluate_decimal(DecimalOperation::Divide(&a, &b), &target, m),
             generated: |m| done(decimal_divide(&a, &b, m)),
@@ -321,12 +321,12 @@ fn tc_024_tc185_decimal_oracles_agree() {
             ordering += 1;
         }
     }
-    for tuple in [
+    for limit_tuple in [
         [5, 2, 1, 0, 0, 0, 0, 2, 3, 1],
         [4, 2, 1, 0, 0, 0, 0, 2, 3, 1],
     ] {
         agree2! {
-            limits: limits(tuple),
+            limits: limits(limit_tuple),
             setup: { let (a, b) = (dec(15, 1), dec(2, 0)); },
             direct: |m| order_numbers(OrderingOperator::LessOrEqual, OrderedOperands::Decimals(&a, &b), m),
             generated: |m| done(decimal_at_most(&a, &b, m)),
@@ -382,14 +382,14 @@ fn tc_024_tc186_text_and_enum_oracles_agree() {
         }
     }
     // T10 distinct profiles, T11 NFC tuple, T14 non-normalizing tuples.
-    for (left, lp, right, rp, tuple) in [
+    for (left, lp, right, rp, limit_tuple) in [
         ("abc", 1, "abc", 5, [0; 10]),
         (E_ACUTE, 1, E_COMBINING, 1, T11),
         (E_ACUTE, 0, E_COMBINING, 0, T14),
         (E_ACUTE, 5, E_COMBINING, 5, T14),
     ] {
         agree2! {
-            limits: limits(tuple),
+            limits: limits(limit_tuple),
             setup: { let (l, r) = (text(left, TextProfile::ALL[lp]), text(right, TextProfile::ALL[rp])); },
             direct: |m| compare_text(ComparisonOperator::Less, &l, &r, m),
             generated: |m| typed(text_less(&l, &r, m)),
@@ -412,9 +412,9 @@ fn tc_024_tc186_text_and_enum_oracles_agree() {
             for lc in lm {
                 for rc in rm {
                     for (o, compare) in ENUM_COMPARISONS.into_iter().enumerate() {
-                        for tuple in [[u64::MAX; 10], [0; 10]] {
+                        for limit_tuple in [[u64::MAX; 10], [0; 10]] {
                             agree2! {
-                                limits: limits(tuple),
+                                limits: limits(limit_tuple),
                                 setup: {
                                     let left = enum_declaration(ln, lo, lm).unwrap().value(lc).unwrap();
                                     let right = enum_declaration(rn, ro, rm).unwrap().value(rc).unwrap();
@@ -1300,7 +1300,7 @@ fn tc_024_tc193_ieee_oracles_agree() {
 #[trace("FR-014-AC-9", "TC-024")]
 #[test]
 fn tc_024_operand_width_mismatch_is_a_typed_stop_before_any_charge() {
-    use quire_contract_runtime::exact::{IeeeValue, Meter, ScalarLimits};
+    use quire_exact::{IeeeValue, Meter, ScalarLimits};
     let mut meter = Meter::new(ScalarLimits {
         integer_bits: u64::MAX,
         decimal_digits: u64::MAX,
@@ -1728,7 +1728,7 @@ fn conversion_with_incomplete_meter_mutation(
                 Some(&zero),
                 meter,
             ),
-            Outcome::Refused(rt::Refusal::IntegerOutOfDomain)
+            Outcome::Refused(rt::Refusal::IntegerOutOfDomain { target: Box::new(zero.clone()) })
         );
     }
     outcome

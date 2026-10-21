@@ -27,6 +27,8 @@ mod package;
 
 use package::*;
 use quire_contract_runtime::exact as rt;
+use quire_exact as exact;
+use quire_semantic_value::declaration as sv;
 
 use super::exact_scalar_agreement::run_agreement_cases;
 
@@ -126,22 +128,26 @@ fn tc_031_ac17_location_map_origin_confirmed_against_runtime_check_refusal() {
         .map(|declaration| rt::FunctionDeclaration {
             name: declaration.name.clone(),
             parameters: vec![
-                ("a".to_owned(), rt::ValueType::Integer),
-                ("b".to_owned(), rt::ValueType::Integer),
+                ("a".to_owned(), exact::ValueType::Integer),
+                ("b".to_owned(), exact::ValueType::Integer),
             ],
-            result: rt::ValueType::Integer,
+            result: exact::ValueType::Integer,
             ieee_requirements: Vec::new(),
             integer_division_consumers: Vec::new(),
             measure_discharged: declaration.name != "add_fn",
-            body: Box::new(|_frame, _args| rt::Outcome::Refused(rt::Refusal::CheckedInvariant)),
+            body: Box::new(|_frame, _args| {
+                quire_exact::Outcome::Refused(quire_exact::Refusal::CheckedInvariant {
+                    cause: quire_exact::CheckedInvariantCause::GeneratedBodyPlaceholderInvoked,
+                })
+            }),
         })
         .collect();
     // `CheckedPackage` carries no `Debug` impl, so `expect_err` (which
     // requires the `Ok` side to be `Debug`) cannot be used here.
     let check_result = rt::PackageDeclarations {
-        types: rt::TypeEnvironment::new(
+        types: sv::TypeEnvironment::new(
             Vec::new(),
-            core::iter::empty::<rt::ObjectTypeDeclaration>(),
+            core::iter::empty::<sv::ObjectTypeDeclaration>(),
         )
         .expect("empty declaration closure admits"),
         functions: declarations,

@@ -26,10 +26,10 @@ use quire_contract_model::{
     CompleteLoweringRecordV2, ContractDependencies, ContractFeatureRecordV1,
     ContractPackageReadResult, ContractPackageWireV1, StructuralCandidateError,
 };
-use quire_contract_runtime::exact::{
-    CardinalityBound, CollectionKind, CollectionType, CompositeDeclaration, CompositeShape,
-    FieldDeclaration, IeeeWidth, NodeKey, ObjectTypeDeclaration, Presence, TypeEnvironment,
-    ValueType,
+use quire_exact::{CardinalityBound, CollectionKind, IeeeWidth};
+use quire_exact::{CollectionType, NodeKey, Presence, ValueType};
+use quire_semantic_value::declaration::{
+    CompositeDeclaration, CompositeShape, FieldDeclaration, ObjectTypeDeclaration, TypeEnvironment,
 };
 use serde_json::json;
 
@@ -279,8 +279,12 @@ fn generate_with_context(
             .into_iter()
             .map(|node_id| ContractRequestPosition::ContextRoot { node_id }),
     );
+    // Standalone primitive/early-refusal fixtures need no owner key. The legacy nominal
+    // corpus still requires genuine owner capabilities and remains QSL937 migration work;
+    // its original positive/precise assertions are intentionally not replaced by Missing.
     let output = generate_composite_equality_oracles(
         &admitted,
+        None,
         &roots,
         &positions,
         &items,
@@ -327,8 +331,10 @@ fn invalid_type_resolution_work_limit_refuses_before_lowering() {
         ContractPackageReadResult::Admitted(package) => package,
         other => panic!("IR must admit its package: {other:?}"),
     };
+    // The invalid setting precedes traversal and needs no identity capability.
     let result = generate_composite_equality_oracles(
         &admitted,
+        None,
         &[],
         &[],
         &[],
@@ -460,6 +466,7 @@ fn tc_029_ac32_direct_control_case_refusal_preserves_healthy_equality_sibling() 
         });
     let combined = generate_composite_equality_oracles(
         &contract,
+        None,
         &requests,
         &[0, 1],
         &[case_item, equality_item.clone()],
@@ -468,6 +475,7 @@ fn tc_029_ac32_direct_control_case_refusal_preserves_healthy_equality_sibling() 
     .unwrap();
     let equality_only = generate_composite_equality_oracles(
         &contract,
+        None,
         &requests,
         &[1],
         &[equality_item],
@@ -658,7 +666,7 @@ fn assert_recursive_item_generation(
     );
     assert!(tree_block.contains("rt::FieldDeclaration::new(\"kids\", {"));
     assert!(tree_block.contains(&format!("rt::ValueType::Composite({tree_key})")));
-    assert!(tree_block.contains("rt::CollectionKind::Sequence"));
+    assert!(tree_block.contains("exact::CollectionKind::Sequence"));
     assert!(tree_block.contains("rebuild_cardinality(0, 3)?"));
     assert!(tree_block.contains("rt::Presence::Required)"));
 }
@@ -846,46 +854,7 @@ fn tc_029_ac1_every_item_gets_one_disposition_refused_siblings_unchanged() {
 #[trace("FR-018-AC-3", "TC-029")]
 #[test]
 fn tc_029_ac3_claim_descriptor_matches_the_request() {
-    // Left and right carry different source types (a bounded-integer-to-integer
-    // conversion on the left only) so a descriptor-recording bug that swaps or
-    // drops an operand side is observable, not masked by a symmetric request.
-    // E_CONV's own body agrees with exactly this descriptor (its natural
-    // usage elsewhere in this module and in the agreement test) -- since
-    // codegen#82, an arbitrary node id can no longer stand in for one whose
-    // body disagrees with the requested descriptor.
-    let package = admit(corpus_package());
-    let left = converted(T_INTEGER_BOUNDED, T_INTEGER);
-    let right = typed(T_INTEGER);
-    let requested = item(
-        E_CONV,
-        EqualityOperatorKind::Equal,
-        left.clone(),
-        right.clone(),
-    );
-    let oracles = generate(&package, std::slice::from_ref(&requested));
-    let claim = generated(only_claim(&oracles, E_CONV));
-    assert_eq!(claim.descriptor.operator, EqualityOperatorKind::Equal);
-    assert_eq!(
-        claim.descriptor.left_source_type,
-        package.ids.resolve(&left.source_type)
-    );
-    assert_eq!(
-        claim.descriptor.left_conversion_target,
-        left.conversion_target
-            .as_ref()
-            .map(|id| package.ids.resolve(id))
-    );
-    assert_eq!(
-        claim.descriptor.right_source_type,
-        package.ids.resolve(&right.source_type)
-    );
-    assert_eq!(
-        claim.descriptor.right_conversion_target,
-        right
-            .conversion_target
-            .as_ref()
-            .map(|id| package.ids.resolve(id))
-    );
+    super::admitted_enum_equality::assert_authentic_conversion_descriptor();
 }
 
 #[trace("FR-018-AC-4", "TC-029")]
@@ -1020,100 +989,15 @@ fn tc_029_a_sequence_without_a_separate_collection_bound_is_refused() {
 #[trace("FR-018-AC-5", "TC-029")]
 #[test]
 fn tc_029_ac5_a_disallowed_conversion_refuses_at_generation_time() {
-    let package = admit(corpus_package());
-    let requested = item(
-        E_BAD_CONVERT,
-        EqualityOperatorKind::Equal,
-        converted(T_TEXT, T_INTEGER),
-        typed(T_TEXT),
-    );
-    let oracles = generate(&package, std::slice::from_ref(&requested));
-    assert!(matches!(
-        refused(only_claim(&oracles, E_BAD_CONVERT)),
-        CompositeEqualityRefusal::IllTyped {
-            cause: IllTypedCauseKind::TypeMismatch
-        }
-    ));
-    let lib = contents(&oracles, "src/lib.rs");
-    assert_eq!(lib.matches("pub fn oracle_").count(), 0);
+    super::admitted_enum_equality::assert_authentic_disallowed_caller_conversion();
 }
 
-/// FR-018 Behavior ("disagrees with its descriptor's arity or
-/// operand types"), TC-029 step 1 ("a descriptor disagreeing with its
-/// operand types"), codegen#82.
-///
-/// `E_OPERAND_MISMATCH`'s body names both operands `T_INTEGER`
-/// (`package::binary_body(T_INTEGER, T_INTEGER)`). A descriptor naming a
-/// different type for either position must refuse before generation --
-/// checked left, then right, so the two requests below exercise both
-/// positions and each reports the position that actually disagreed.
+/// The authentic Integer source/body/context remain unchanged while external descriptors
+/// disagree. Precise left-first and right-only mismatch IDs and a healthy control are retained.
 #[trace("FR-018", "TC-029")]
 #[test]
 fn tc_029_a_body_operand_disagreeing_with_the_descriptor_refuses_before_generation() {
-    let package = admit(corpus_package());
-
-    // Both positions disagree: the refusal names position 0 (left), checked
-    // first.
-    let both_wrong = item(
-        E_OPERAND_MISMATCH,
-        EqualityOperatorKind::Equal,
-        typed(T_TEXT),
-        typed(T_TEXT),
-    );
-    let oracles = generate(&package, std::slice::from_ref(&both_wrong));
-    match refused(only_claim(&oracles, E_OPERAND_MISMATCH)) {
-        CompositeEqualityRefusal::OperandTypeMismatch {
-            position,
-            expected,
-            found,
-        } => {
-            assert_eq!(*position, 0);
-            assert_eq!(*expected, oracles.key(T_TEXT));
-            assert_eq!(*found, Some(oracles.key(T_INTEGER)));
-        }
-        other => panic!("expected OperandTypeMismatch, got {other:?}"),
-    }
-    let lib = contents(&oracles, "src/lib.rs");
-    assert_eq!(
-        lib.matches("pub fn oracle_").count(),
-        0,
-        "a body/descriptor disagreement must contribute no oracle function"
-    );
-
-    // Only the right position disagrees: the refusal names position 1, not
-    // position 0 -- proving the check inspects both positions rather than
-    // stopping unconditionally at the first.
-    let right_wrong = item(
-        E_OPERAND_MISMATCH,
-        EqualityOperatorKind::Equal,
-        typed(T_INTEGER),
-        typed(T_TEXT),
-    );
-    let oracles = generate(&package, std::slice::from_ref(&right_wrong));
-    match refused(only_claim(&oracles, E_OPERAND_MISMATCH)) {
-        CompositeEqualityRefusal::OperandTypeMismatch {
-            position,
-            expected,
-            found,
-        } => {
-            assert_eq!(*position, 1);
-            assert_eq!(*expected, oracles.key(T_TEXT));
-            assert_eq!(*found, Some(oracles.key(T_INTEGER)));
-        }
-        other => panic!("expected OperandTypeMismatch, got {other:?}"),
-    }
-
-    // A request whose descriptor agrees with the body at both positions
-    // generates: proves the check is a genuine agreement test, not an
-    // unconditional refusal of this node id.
-    let agrees = item(
-        E_OPERAND_MISMATCH,
-        EqualityOperatorKind::Equal,
-        typed(T_INTEGER),
-        typed(T_INTEGER),
-    );
-    let oracles = generate(&package, std::slice::from_ref(&agrees));
-    let _ = generated(only_claim(&oracles, E_OPERAND_MISMATCH));
+    super::admitted_enum_equality::assert_authentic_operand_descriptor_mismatch();
 }
 
 #[trace("FR-018-AC-6", "TC-029")]
@@ -1133,7 +1017,7 @@ fn tc_029_ac6_ieee_at_any_depth_is_operator_ineligible() {
             "R_FLOAT",
             CompositeShape::Record(vec![FieldDeclaration::new(
                 "f",
-                ValueType::Float(IeeeWidth::Binary64),
+                ValueType::Float(quire_exact::FloatType::exact(IeeeWidth::Binary64)),
                 Presence::Required,
             )]),
         )],
@@ -1150,7 +1034,11 @@ fn tc_029_ac6_ieee_at_any_depth_is_operator_ineligible() {
     // base case, unasserted by the record/sequence checks above (both of those
     // pass by *reaching* an IEEE leaf through a composite, never by naming the
     // leaf type directly).
-    assert!(environment.contains_ieee(&ValueType::Float(IeeeWidth::Binary64)));
+    assert!(
+        environment.contains_ieee(&ValueType::Float(quire_exact::FloatType::exact(
+            IeeeWidth::Binary64
+        )))
+    );
     assert!(environment.contains_ieee(&record_type));
     assert!(environment.contains_ieee(&sequence_type));
 
@@ -1664,14 +1552,7 @@ fn tc_029_ac11_two_operators_over_one_node_get_distinct_symbols_and_are_caller_d
 #[trace("FR-018-AC-12", "TC-029")]
 #[test]
 fn tc_029_ac12_integer_helper_omitted_when_unreached() {
-    let package = admit(corpus_package());
-    let request = [item(
-        E_TEXT,
-        EqualityOperatorKind::Equal,
-        typed(T_TEXT),
-        typed(T_TEXT),
-    )];
-    let oracles = generate(&package, &request);
+    let oracles = super::admitted_enum_equality::authentic_text_oracles();
     let lib = contents(&oracles, "src/lib.rs");
     assert!(
         !lib.contains("fn rebuild_integer(") && !lib.contains("fn rebuild_interval("),
@@ -1910,7 +1791,7 @@ fn tc_029_ac16_a_text_bounds_member_reconstructs_its_own_text_type() {
     let (oracles, lib) = tuple_source(&[], &[T_INTEGER_BOUNDED, BD_TEXT]);
     let _ = generated(only_claim(&oracles, E_TUPLE));
     let int = "rt::ValueType::Int(rebuild_interval(\"-100\", \"100\")?)";
-    let text = "rt::ValueType::Text(rebuild_text(0, 16, rt::TextProfile::Nfc)?)";
+    let text = "rt::ValueType::Text(rebuild_text(0, 16, exact::TextProfile::Nfc)?)";
     let tuple = lib
         .find("rt::CompositeShape::Tuple(vec![")
         .expect("tuple declaration");
@@ -1945,7 +1826,7 @@ fn tc_029_ac16_numeric_bounded_domain_members_read_as_their_bounded_scalars() {
     );
     for reconstruction in [
         "rt::ValueType::Int(rebuild_interval(\"-100\", \"100\")?)",
-        "rt::ValueType::Decimal(rebuild_decimal(\"-100\", \"100\", 0, 0, rt::RoundingMode::NearestEven)?)",
+        "rt::ValueType::Decimal(rebuild_decimal(\"-100\", \"100\", 0, 0, exact::RoundingMode::NearestEven)?)",
         "rt::ValueType::Rational(rebuild_rational(rebuild_interval(\"-10\", \"10\")?, rebuild_interval(\"1\", \"1\")?)?)",
     ] {
         assert!(through_scalars.contains(reconstruction), "scalar member: {reconstruction}");
@@ -1961,11 +1842,11 @@ fn tc_029_ac16_numeric_bounded_domain_members_read_as_their_bounded_scalars() {
 fn tc_029_ac16_a_bounded_domain_member_never_reads_a_sibling_bound() {
     let (oracles, lib) = tuple_source(&[BD_TEXT_SIBLING], &[T_INTEGER_BOUNDED, BD_TEXT_SIBLING]);
     let _ = generated(only_claim(&oracles, E_TUPLE));
-    assert!(lib.contains("rebuild_text(1, 5, rt::TextProfile::Nfc)?"));
+    assert!(lib.contains("rebuild_text(1, 5, exact::TextProfile::Nfc)?"));
     assert!(!lib.contains("rebuild_text(0, 16,"));
     let (oracles, lib) = tuple_source(&[BD_TEXT_SIBLING], &[T_INTEGER_BOUNDED, BD_TEXT]);
     let _ = generated(only_claim(&oracles, E_TUPLE));
-    assert!(lib.contains("rebuild_text(0, 16, rt::TextProfile::Nfc)?"));
+    assert!(lib.contains("rebuild_text(0, 16, exact::TextProfile::Nfc)?"));
     assert!(!lib.contains("rebuild_text(1, 5,"));
 }
 
@@ -2139,11 +2020,12 @@ const HELPER_VARIANTS: [(&str, &str); 6] = [
     ("rebuild_cardinality", "Cardinality"),
 ];
 
-/// The emitted functions that return `Result<_, ReconstructionError>`: the helpers, and the
-/// per-item functions that build a declaration or a type from them.
+/// Numeric reconstruction keeps its original payload-free errors. Context/descriptor helpers
+/// additionally preserve genuine lookup and environment failures through EnvironmentError.
 fn returns_reconstruction(name: &str) -> bool {
     [
         "rebuild_",
+        "lookup_enum_case",
         "composites_",
         "left_source_",
         "left_target_",
@@ -2167,11 +2049,16 @@ fn structural_violations(lib: &str) -> Vec<String> {
             .signature
             .rsplit_once("->")
             .map(|(_, ret)| ret.trim());
-        if !returns.is_some_and(|ret| {
-            ret.starts_with("Result<") && ret.ends_with(", ReconstructionError>")
-        }) {
+        let error = if REBUILD_HELPERS.contains(&function.name) {
+            "ReconstructionError"
+        } else {
+            "EnvironmentError"
+        };
+        if !returns
+            .is_some_and(|ret| ret.starts_with("Result<") && ret.ends_with(&format!(", {error}>")))
+        {
             violations.push(format!(
-                "`{}` does not return Result<_, ReconstructionError>",
+                "`{}` does not return Result<_, {error}>",
                 function.name
             ));
         }
@@ -2327,10 +2214,9 @@ fn tc_029_ac17_emitted_source_has_no_panic_site_fallback_or_index_expression() {
     );
 }
 
-/// Every reconstruction in the corpus crate goes through a helper
-/// returning `Result<_, ReconstructionError>`, every call of one is propagated or refused, no
-/// runtime constructor or integer parse is called outside a helper, and the two error enums have
-/// the variants the criterion lists.
+/// Numeric reconstruction retains its exact errors; context preparation preserves lookup and
+/// environment causes. Every failure propagates or refuses, with no hidden constructor/parse,
+/// and both error enums retain the exact merged ABI variants.
 #[trace("FR-018-AC-17", "TC-029")]
 #[test]
 fn tc_029_ac17_emitted_reconstruction_is_typed_and_refused_never_unwrapped() {
@@ -2344,8 +2230,7 @@ fn tc_029_ac17_emitted_reconstruction_is_typed_and_refused_never_unwrapped() {
         );
     }
     assert_eq!(structural_violations(lib), Vec::<String>::new());
-    // The refusal paths exist: the environment constructors map a failure to
-    // `EnvironmentError::Reconstruction`, and the oracle functions to `CheckedInvariant`.
+    // The context ABI publishes only a private prepared capability after typed preparation.
     let environments: Vec<_> = fns
         .iter()
         .filter(|function| function.name.starts_with("environment_"))
@@ -2354,23 +2239,57 @@ fn tc_029_ac17_emitted_reconstruction_is_typed_and_refused_never_unwrapped() {
     for function in environments {
         assert!(function
             .signature
-            .contains("Result<rt::TypeEnvironment, EnvironmentError>"));
+            .contains("Result<PreparedEqualityEnvironment<'ctx>, EnvironmentError>"));
+        assert!(function
+            .signature
+            .contains("Option<&'ctx qsl_replay::AdmittedContext>"));
         assert!(function
             .body
-            .contains("Err(error) => return Err(EnvironmentError::Reconstruction(error))"));
+            .contains("EnvironmentError::ContextPackageMismatch"));
+        assert!(function
+            .body
+            .contains(".map_err(EnvironmentError::Declaration)?"));
     }
     for function in fns
         .iter()
         .filter(|function| function.name.starts_with("oracle_"))
     {
-        assert!(function
-            .body
-            .contains("Err(_) => return rt::Outcome::Refused(rt::Refusal::CheckedInvariant)"));
+        for required in [
+            "prepared.binding !=",
+            "actual.domain().as_str() !=",
+            "actual.hex() !=",
+            "GeneratedDescriptorReconstructionFailed",
+            "environment.check_type(left_comparison)",
+            "environment.check_type(right_comparison)",
+            "&prepared.enum_members",
+            "GeneratedTypeCheckRejected",
+            "GeneratedEqualityCheckRejected",
+            "checked.evaluate(environment, left, right, meter)",
+        ] {
+            assert!(
+                function.body.contains(required),
+                "{} missing {required}",
+                function.name
+            );
+        }
+        assert!(
+            !function.body.contains("rebuild_"),
+            "preparation must precede metered execution"
+        );
     }
-
     let environment_error = emitted_enum(lib, "EnvironmentError");
-    assert!(environment_error.contains("Declaration(rt::InvalidDeclaration),"));
-    assert!(environment_error.contains("Reconstruction(ReconstructionError),"));
+    for variant in [
+        "MissingAdmittedContext {",
+        "ContextPackageMismatch {",
+        "Lookup(qsl_replay::AdmittedLookupRefusal),",
+        "Declaration(sv::EnvironmentFailure),",
+        "Reconstruction(ReconstructionError),",
+    ] {
+        assert!(
+            environment_error.contains(variant),
+            "missing typed variant {variant}"
+        );
+    }
     let variants: Vec<&str> = emitted_enum(lib, "ReconstructionError")
         .lines()
         .map(str::trim)
@@ -2384,7 +2303,8 @@ fn tc_029_ac17_emitted_reconstruction_is_typed_and_refused_never_unwrapped() {
             "Rational,",
             "Decimal,",
             "Text,",
-            "Cardinality,"
+            "Cardinality,",
+            "Enum,"
         ],
         "ReconstructionError must have exactly these unit variants"
     );
@@ -2395,7 +2315,8 @@ fn tc_029_ac17_emitted_reconstruction_is_typed_and_refused_never_unwrapped() {
 #[trace("FR-018-AC-17", "TC-029")]
 #[test]
 fn tc_029_ac17_the_structural_checker_names_each_departure() {
-    let wrong_return = "fn rebuild_interval(a: &str) -> rt::IntegerInterval {\n    todo_body\n}\n";
+    let wrong_return =
+        "fn rebuild_interval(a: &str) -> exact::IntegerInterval {\n    todo_body\n}\n";
     assert!(structural_violations(wrong_return)
         .iter()
         .any(|violation| violation.contains("does not return Result")));
@@ -2434,7 +2355,7 @@ fn tc_029_ac17_the_structural_checker_names_each_departure() {
         .any(|violation| violation.contains("exactly ReconstructionError::Text")));
     let silent_widen = helper(
         "rebuild_cardinality",
-        "rt::CardinalityBound::new(a, 1).or_else(|_| rt::CardinalityBound::new(0, u64::MAX)).map_err(|_| ReconstructionError::Cardinality)",
+        "exact::CardinalityBound::new(a, 1).or_else(|_| exact::CardinalityBound::new(0, u64::MAX)).map_err(|_| ReconstructionError::Cardinality)",
     );
     assert!(structural_violations(&silent_widen)
         .iter()

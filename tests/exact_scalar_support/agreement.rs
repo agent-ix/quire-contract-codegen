@@ -28,7 +28,7 @@
 
 use std::collections::BTreeMap;
 
-use quire_contract_runtime::exact::NODE_KEY_DOMAIN;
+use quire_exact::NODE_KEY_DOMAIN;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
@@ -176,7 +176,11 @@ macro_rules! shared_helpers {
                 .iter()
                 .map(|kind| meter.consumed(*kind))
                 .collect();
-            (outcome, meter.admitted_charges().to_vec(), consumed)
+            (
+                outcome,
+                meter.admitted_charges().iter().map(|charge| charge.point).collect(),
+                consumed,
+            )
         }
 
         /// One denied execution with its complete meter observation.
@@ -202,7 +206,7 @@ macro_rules! shared_helpers {
         ) -> Vec<DeniedRun<T>> {
             let mut meter = Meter::new(limits);
             let _ = run(&mut meter);
-            let charges = meter.admitted_charges().to_vec();
+            let charges = meter.admitted_charges().iter().map(|charge| charge.point).collect::<Vec<_>>();
             let mut seen: Vec<ChargePoint> = Vec::new();
             charges
                 .into_iter()
@@ -218,7 +222,7 @@ macro_rules! shared_helpers {
                         point,
                         occurrence,
                         outcome,
-                        admitted_charges: denied.admitted_charges().to_vec(),
+                        admitted_charges: denied.admitted_charges().iter().map(|charge| charge.point).collect(),
                         consumed: LimitKind::ALL.iter().map(|kind| denied.consumed(*kind)).collect(),
                     }
                 })
@@ -238,7 +242,6 @@ macro_rules! shared_helpers {
             match IeeeWidth::ALL[width] {
                 IeeeWidth::Binary32 => IeeeValue::binary32(u32::try_from(bits).unwrap()),
                 IeeeWidth::Binary64 => IeeeValue::binary64(bits),
-                _ => unreachable!("IeeeWidth gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
             }
         }
 
@@ -479,7 +482,16 @@ pub fn enum_member_key(declaration_key: &str, case: &str) -> String {
 pub mod rt_side {
     use std::collections::BTreeMap;
 
-    pub use quire_contract_runtime::exact::*;
+    pub use quire_exact::*;
+    pub use quire_contract_runtime::exact::{
+        compare_quantity, convert_quantity, evaluate_quantity, CompoundUnit,
+        evaluate_boolean_short_circuit, ShortCircuitConnective, ConvertedValue,
+        Conversion, Quantity, QuantityOperation, QuantityTarget, QuantityUnit, Unit, UnitDeclaration,
+        UnitGraph,
+    };
+
+    pub use quire_semantic_value::enumeration::{compare_enum, EnumDeclaration, EnumValue};
+    pub use quire_semantic_value::semantic_node::{InvalidSemanticGraph, SemanticGraphCause};
 
     /// The runtime's `InjectedDenial::occurrence` is `NonZeroU64`
     /// (`agent-ix/quire-contract-runtime#20`). Every caller in this crate
@@ -496,7 +508,6 @@ pub mod rt_side {
         match domain {
             IntegerDomain::Mathematical => None,
             IntegerDomain::Bounded(interval) => Some(interval),
-            &_ => unreachable!("IntegerDomain gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
         }
     }
 
@@ -558,7 +569,7 @@ pub mod rt_side {
         members: &[&str],
     ) -> Result<Enum, InvalidSemanticGraph> {
         let key = super::enum_declaration_key(declaration, ordered, members);
-        EnumDeclaration::new(NodeKey::from_hex(&key).unwrap(), ordered, members).map(Enum)
+        EnumDeclaration::new(NodeKey::from_hex(&key).unwrap(), ordered, members.iter().map(|member| (*member).to_owned()).collect()).map(Enum)
     }
 
     impl Enum {

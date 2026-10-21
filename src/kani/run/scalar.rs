@@ -9,17 +9,18 @@ use std::{
 
 use qsl_replay::{DigestDomain, DigestRecord};
 use quire_canonical::{FixedShape, Limits};
-use quire_contract_runtime::exact::{
-    ChargePoint, Incomplete, Integer, LimitKind, Outcome, Refusal, ScalarLimits, Undefined,
-};
 use quire_exact::Cancel;
+use quire_exact::{
+    ChargePoint, Incomplete, Integer, IntegerInterval, LimitKind, Outcome, Refusal, ScalarLimits,
+    Undefined,
+};
 use serde::Serialize;
 
 use crate::{
     core::{
         artifact::{Artifact, ArtifactBundle, PublicationDiagnostic},
         canonical::{content_digest_with_limits, DigestError},
-        profile::oracle_crate_manifest,
+        profile::{oracle_crate_manifest, scalar_observer_manifest},
     },
     kani::{
         classify::{KaniInconclusiveReason, KaniRunOutcome},
@@ -40,7 +41,14 @@ use crate::{
 };
 
 static NEXT_SNAPSHOT: AtomicU64 = AtomicU64::new(0);
-const SCALAR_PROOF_SCHEMA: &str = "agent-ix/cg-kani-scalar-proof-content/v2";
+const SCALAR_PROOF_SCHEMA: &str = "agent-ix/cg-kani-scalar-proof-content/v3";
+const LOCKED_DEPENDENCIES: [(&str, &str); 2] = [
+    (
+        "quire-contract-runtime",
+        "https://github.com/agent-ix/quire-contract-runtime",
+    ),
+    ("quire-exact", "https://github.com/agent-ix/quire-exact"),
+];
 
 #[derive(Serialize, FixedShape)]
 struct CanonicalArtifact {
@@ -460,10 +468,16 @@ pub(crate) fn execute_with_cleanup(
     validate_request(request)?;
     let snapshot = PrivateSnapshot::create()?;
     let package = stage_package(request, snapshot.path())?;
-    write_observer(&request.harness.identity, snapshot.path())?;
+    write_observer(
+        &request.harness.identity.oracle_symbol,
+        request.harness.identity.arguments.len(),
+        snapshot.path(),
+    )?;
     generate_lockfile(request, snapshot.path())?;
-    seal_snapshot(snapshot.path())?;
+    generate_lockfile(request, &snapshot.path().join("observer"))?;
     let entries = capture_entries(&package, snapshot.path())?;
+    seal_snapshot(snapshot.path())?;
+    ensure_snapshot_matches(snapshot.path(), &entries)?;
     let identity = identity_from_entries(&entries, Limits::new(256 * 1024 * 1024))?;
     let proof_target = request.target_directory.join("kani-scalar-proof");
     let evidence = execute_kani_obligation_readonly(
@@ -478,6 +492,7 @@ pub(crate) fn execute_with_cleanup(
         snapshot.path(),
     )
     .map_err(KaniScalarNativeError::Kani)?;
+    ensure_snapshot_matches(snapshot.path(), &entries)?;
     if evidence.outcome != KaniRunOutcome::Verified {
         return Err(KaniScalarNativeError::ProofNotVerified(Box::new(evidence)));
     }
@@ -684,6 +699,9 @@ fn stage_package(
         || unique.contains("Cargo.lock")
         || unique.contains("src/oracle-artifacts-lib.rs")
         || unique.contains("src/bin/ir791_native.rs")
+        || artifacts
+            .iter()
+            .any(|artifact| artifact.path.starts_with("observer/"))
     {
         return Err(KaniScalarNativeError::InvalidRequest(
             "emitted package has duplicate or runner-reserved artifact paths",
@@ -741,7 +759,12 @@ fn capture_entries(
     root: &Path,
 ) -> Result<Vec<(String, Vec<u8>)>, KaniScalarNativeError> {
     let mut entries = staged.to_vec();
-    for path in ["Cargo.lock", "src/bin/ir791_native.rs"] {
+    for path in [
+        "Cargo.lock",
+        "observer/Cargo.lock",
+        "observer/Cargo.toml",
+        "src/bin/ir791_native.rs",
+    ] {
         let bytes = fs::read(root.join(path)).map_err(KaniScalarNativeError::Snapshot)?;
         std::str::from_utf8(&bytes).map_err(|error| {
             KaniScalarNativeError::Snapshot(std::io::Error::new(
@@ -817,13 +840,14 @@ fn limits_array(limits: ScalarLimits) -> [u64; 10] {
 }
 
 fn write_observer(
-    identity: &crate::kani::identity::ScalarObligationIdentity,
+    oracle_symbol: &str,
+    argument_count: usize,
     root: &Path,
 ) -> Result<(), KaniScalarNativeError> {
-    let operand_bindings = (0..identity.arguments.len())
+    let operand_bindings = (0..argument_count)
         .map(|index| format!(" let operand_{index} = next_i64(&mut arguments)?;"))
         .collect::<String>();
-    let parameters = (0..identity.arguments.len())
+    let parameters = (0..argument_count)
         .map(|index| format!("&rt::Integer::from(operand_{index})"))
         .collect::<Vec<_>>()
         .join(", ");
@@ -845,7 +869,7 @@ fn write_observer(
     let helper = format!(
         r#"
 #[path = "../lib.rs"] mod generated;
-use quire_contract_runtime::exact as rt;
+use quire_exact as rt;
 fn next_argument(arguments: &mut impl Iterator<Item = String>) -> Result<String, std::io::Error> {{
  arguments.next().ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, "missing native request argument"))
 }}
@@ -870,7 +894,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {{
    Ok(rt::Outcome::Undefined(rt::Undefined::IeeeNotFinite)) => println!("IR791_NATIVE_V1\tundefined\tieee_not_finite"),
    Ok(rt::Outcome::Undefined(rt::Undefined::EmptyReduction)) => println!("IR791_NATIVE_V1\tundefined\tempty_reduction"),
    Ok(rt::Outcome::Undefined(rt::Undefined::NoneValue)) => println!("IR791_NATIVE_V1\tundefined\tnone_value"),
-   Ok(rt::Outcome::Refused(rt::Refusal::IntegerOutOfDomain)) => println!("IR791_NATIVE_V1\trefused\tinteger_out_of_domain"),
+   Ok(rt::Outcome::Refused(rt::Refusal::IntegerOutOfDomain {{ target }})) => println!("IR791_NATIVE_V1\trefused\tinteger_out_of_domain\t{{}}\t{{}}", target.lower(), target.upper()),
    Ok(rt::Outcome::Incomplete(value)) => println!("IR791_NATIVE_V1\tincomplete\t{{}}\t{{}}\t{{}}\t{{}}\t{{}}", value.limit_kind.as_str(), value.limit, value.consumed, value.next_charge, value.charge_point.as_str()),
    Ok(_) => println!("IR791_NATIVE_V1\tunsupported"),
    Err(generated::OracleStop::IllTyped(_)) => println!("IR791_NATIVE_V1\toracle_stop\till_typed"),
@@ -881,14 +905,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {{
  println!("IR791_LIMITS_V1\t{{}}\t{{}}\t{{}}\t{{}}\t{{}}\t{{}}\t{{}}\t{{}}\t{{}}\t{{}}", used.integer_bits, used.decimal_digits, used.scale_expansion, used.text_input_bytes, used.text_scalars, used.normalized_scalars, used.unit_edges, used.value_occurrences, used.work_units, used.result_units);
  print!("IR791_METER_V1");
  for kind in rt::LimitKind::ALL {{ print!("\t{{}}", meter.consumed(kind)); }}
- for point in meter.admitted_charges() {{ print!("\t{{}}", point.as_str()); }}
+ for charge in meter.admitted_charges() {{ print!("\t{{}}", charge.point.as_str()); }}
  println!();
  Ok(())
 }}
 "#,
-        identity.oracle_symbol, parameters,
+        oracle_symbol, parameters,
     );
     write_private(&root.join("src/bin/ir791_native.rs"), helper.as_bytes())?;
+    write_private(
+        &root.join("observer/Cargo.toml"),
+        scalar_observer_manifest().as_bytes(),
+    )?;
     Ok(())
 }
 
@@ -897,16 +925,7 @@ fn execute_native(
     root: &Path,
 ) -> Result<(Outcome<Integer>, NativeMeterObservation), KaniScalarNativeError> {
     let mut command = BackendCommand::new(request.installation.scalar_native_launcher());
-    let mut arguments = vec![
-        "run".to_owned(),
-        "--quiet".to_owned(),
-        "--locked".to_owned(),
-        "--bin".to_owned(),
-        "ir791_native".to_owned(),
-        "--".to_owned(),
-    ];
-    arguments.extend(request.operands.iter().map(ToString::to_string));
-    arguments.extend(limits_array(request.scalar_limits).map(|value| value.to_string()));
+    let arguments = native_arguments(request.operands, request.scalar_limits);
     command.args(&arguments);
     command.current_dir(root);
     command.read_only_bind(root);
@@ -934,6 +953,22 @@ fn execute_native(
         })
     })?;
     decode_native_launch(result.outcome, request.scalar_limits)
+}
+
+fn native_arguments(operands: &[i64], limits: ScalarLimits) -> Vec<String> {
+    let mut arguments = vec![
+        "run".to_owned(),
+        "--quiet".to_owned(),
+        "--locked".to_owned(),
+        "--manifest-path".to_owned(),
+        "observer/Cargo.toml".to_owned(),
+        "--example".to_owned(),
+        "ir791_native".to_owned(),
+        "--".to_owned(),
+    ];
+    arguments.extend(operands.iter().map(ToString::to_string));
+    arguments.extend(limits_array(limits).map(|value| value.to_string()));
+    arguments
 }
 
 fn decode_native_launch(
@@ -978,8 +1013,21 @@ fn decode_native_output(
                 ))
             })?)
         }
-        ["IR791_NATIVE_V1", "refused", "integer_out_of_domain"] => {
-            Outcome::Refused(Refusal::IntegerOutOfDomain)
+        ["IR791_NATIVE_V1", "refused", "integer_out_of_domain", lower, upper] => {
+            let parse_bound = |bound: &str| {
+                bound.parse::<Integer>().map_err(|error| {
+                    KaniScalarNativeError::NativeResult(format!(
+                        "invalid integer domain bound: {error}"
+                    ))
+                })
+            };
+            let target =
+                IntegerInterval::new(parse_bound(lower)?, parse_bound(upper)?).map_err(|_| {
+                    KaniScalarNativeError::NativeResult("empty integer target interval".into())
+                })?;
+            Outcome::Refused(Refusal::IntegerOutOfDomain {
+                target: Box::new(target),
+            })
         }
         ["IR791_NATIVE_V1", "undefined", reason] => Outcome::Undefined(parse_undefined(reason)?),
         ["IR791_NATIVE_V1", "incomplete", kind, limit, consumed, next, point] => {
@@ -1165,49 +1213,66 @@ fn generate_lockfile(
             )))
         }
     };
-    let expected = codegen_runtime_revision(include_str!("../../../Cargo.lock"))?;
-    let mut update = BackendCommand::new("cargo");
-    update.args(&[
-        "update".into(),
-        "--offline".into(),
-        "-p".into(),
-        "quire-contract-runtime".into(),
-        "--precise".into(),
-        expected.clone(),
-    ]);
-    update.current_dir(root);
-    let deadline = Instant::now().checked_add(request.harness.identity.ceilings.wall_clock);
-    let updated = run_bounded_launcher(
-        update,
-        request.harness.identity.ceilings,
-        std::num::NonZeroUsize::MIN,
-        deadline,
-        request.cancel,
-        request.installation.owners(),
-    )
-    .map_err(|error| {
-        KaniScalarNativeError::NativeLaunch(match error {
-            crate::kani::run::launch::BoundedLaunchError::Unavailable(cause) => {
-                format!("runtime lock memory enforcement unavailable: {cause}")
+    for (package, repository) in LOCKED_DEPENDENCIES {
+        let expected = if package == "quire-contract-runtime" {
+            codegen_runtime_revision(include_str!("../../../Cargo.lock"))?
+        } else {
+            lock_revision(include_str!("../../../Cargo.lock"), package, repository)
+                .ok_or(KaniScalarNativeError::CodegenLock)?
+        };
+        let mut update = BackendCommand::new("cargo");
+        update.args(&[
+            "update".into(),
+            "--offline".into(),
+            "-p".into(),
+            package.into(),
+            "--precise".into(),
+            expected.clone(),
+        ]);
+        update.current_dir(root);
+        let deadline = Instant::now().checked_add(request.harness.identity.ceilings.wall_clock);
+        let updated = run_bounded_launcher(
+            update,
+            request.harness.identity.ceilings,
+            std::num::NonZeroUsize::MIN,
+            deadline,
+            request.cancel,
+            request.installation.owners(),
+        )
+        .map_err(|error| {
+            KaniScalarNativeError::NativeLaunch(match error {
+                crate::kani::run::launch::BoundedLaunchError::Unavailable(cause) => {
+                    format!("runtime lock memory enforcement unavailable: {cause}")
+                }
+                crate::kani::run::launch::BoundedLaunchError::Io(cause) => {
+                    format!("runtime lock launcher I/O failed: {cause}")
+                }
+            })
+        })?;
+        if !matches!(
+            updated.outcome,
+            LaunchOutcome::Completed {
+                exited_successfully: true,
+                ..
             }
-            crate::kani::run::launch::BoundedLaunchError::Io(cause) => {
-                format!("runtime lock launcher I/O failed: {cause}")
-            }
-        })
-    })?;
-    if !matches!(
-        updated.outcome,
-        LaunchOutcome::Completed {
-            exited_successfully: true,
-            ..
+        ) {
+            return Err(KaniScalarNativeError::NativeLaunch(format!(
+                "runtime lock update failed: {:?}",
+                updated.outcome
+            )));
         }
-    ) {
-        return Err(KaniScalarNativeError::NativeLaunch(format!(
-            "runtime lock update failed: {:?}",
-            updated.outcome
-        )));
+        if package == "quire-contract-runtime" {
+            verify_runtime_revision(&expected, fs::read_to_string(root.join("Cargo.lock")))?;
+        } else {
+            verify_dependency_revision(
+                &expected,
+                fs::read_to_string(root.join("Cargo.lock")),
+                package,
+                repository,
+            )?;
+        }
     }
-    verify_runtime_revision(&expected, fs::read_to_string(root.join("Cargo.lock")))
+    Ok(())
 }
 
 fn codegen_runtime_revision(lock: &str) -> Result<String, KaniScalarNativeError> {
@@ -1223,19 +1288,27 @@ fn verify_runtime_revision(
     expected: &str,
     lock: std::io::Result<String>,
 ) -> Result<(), KaniScalarNativeError> {
+    verify_dependency_revision(
+        expected,
+        lock,
+        "quire-contract-runtime",
+        "https://github.com/agent-ix/quire-contract-runtime",
+    )
+}
+
+fn verify_dependency_revision(
+    expected: &str,
+    lock: std::io::Result<String>,
+    package: &str,
+    repository: &str,
+) -> Result<(), KaniScalarNativeError> {
     let lock = match lock {
         Err(error) if error.kind() == std::io::ErrorKind::InvalidData => {
             return Err(KaniScalarNativeError::Snapshot(error));
         }
         other => other.ok(),
     };
-    let actual = lock.and_then(|lock| {
-        lock_revision(
-            &lock,
-            "quire-contract-runtime",
-            "https://github.com/agent-ix/quire-contract-runtime",
-        )
-    });
+    let actual = lock.and_then(|lock| lock_revision(&lock, package, repository));
     if actual.as_deref() != Some(expected) {
         return Err(KaniScalarNativeError::DependencyLock {
             expected: expected.to_owned(),
@@ -1348,9 +1421,10 @@ fn snapshot_files(
         for entry in fs::read_dir(directory).map_err(KaniScalarNativeError::Snapshot)? {
             let entry = entry.map_err(KaniScalarNativeError::Snapshot)?;
             let path = entry.path();
-            if path.is_dir() {
+            let file_type = entry.file_type().map_err(KaniScalarNativeError::Snapshot)?;
+            if file_type.is_dir() {
                 visit(root, &path, output)?;
-            } else if path.is_file() {
+            } else if file_type.is_file() {
                 let relative = path
                     .strip_prefix(root)
                     .map_err(|_| KaniScalarNativeError::SnapshotChanged)?;
@@ -1411,11 +1485,349 @@ fn seal_snapshot(root: &Path) -> Result<(), KaniScalarNativeError> {
     seal(root)
 }
 
+// This control never constructs proof evidence or a paired receipt.
+#[cfg(test)]
+pub(crate) fn qualify_staged_native_for_test(request: &KaniScalarNativeRequest<'_>) {
+    use std::process::Command;
+    validate_request(request).unwrap();
+    let snapshot = PrivateSnapshot::create().unwrap();
+    let root = snapshot.path();
+    let staged = stage_package(request, root).unwrap();
+    write_observer(
+        &request.harness.identity.oracle_symbol,
+        request.operands.len(),
+        root,
+    )
+    .unwrap();
+    for directory in [root.to_owned(), root.join("observer")] {
+        assert!(!directory.join("Cargo.lock").exists());
+        generate_lockfile(request, &directory).unwrap();
+        let lock = fs::read_to_string(directory.join("Cargo.lock")).unwrap();
+        for (name, repository) in LOCKED_DEPENDENCIES {
+            assert_eq!(
+                lock_revision(&lock, name, repository),
+                lock_revision(include_str!("../../../Cargo.lock"), name, repository)
+            );
+        }
+        eprintln!("fresh native qualification {}: {lock}", directory.display());
+    }
+    let entries = capture_entries(&staged, root).unwrap();
+    assert_eq!(entries.len(), 10);
+    let identity = identity_from_entries(&entries, Limits::new(256 * 1024 * 1024)).unwrap();
+    assert_eq!(
+        *identity.as_bytes(),
+        crate::kani::test_support::scalar_native_digest::independent_digest(&entries)
+    );
+    for artifact in request.oracle_artifacts {
+        let retained = if artifact.path == "src/lib.rs" {
+            "src/oracle-artifacts-lib.rs"
+        } else {
+            &artifact.path
+        };
+        assert_eq!(
+            fs::read(root.join(retained)).unwrap(),
+            artifact.contents.as_bytes()
+        );
+    }
+    seal_snapshot(root).unwrap();
+    let run = |directory: &Path, arguments: &[String]| {
+        eprintln!(
+            "native qualification cargo {arguments:?} in {}",
+            directory.display()
+        );
+        let output = Command::new(env!("CARGO"))
+            .args(arguments)
+            .current_dir(directory)
+            .env("CARGO_TARGET_DIR", request.target_directory)
+            .output()
+            .unwrap();
+        eprintln!(
+            "status: {}\nstdout: {}\nstderr: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        output
+    };
+    let args = |arguments: &[&str]| {
+        arguments
+            .iter()
+            .map(|s| (*s).to_owned())
+            .collect::<Vec<_>>()
+    };
+    assert!(
+        run(root, &args(&["build", "--offline", "--locked", "--lib"]))
+            .status
+            .success()
+    );
+    ensure_snapshot_matches(root, &entries).unwrap();
+    assert!(run(
+        root,
+        &args(&[
+            "build",
+            "--offline",
+            "--locked",
+            "--manifest-path",
+            "observer/Cargo.toml",
+            "--example",
+            "ir791_native"
+        ])
+    )
+    .status
+    .success());
+    ensure_snapshot_matches(root, &entries).unwrap();
+    let output = run(
+        root,
+        &native_arguments(request.operands, request.scalar_limits),
+    );
+    assert!(output.status.success());
+    let (outcome, observation) = decode_native_output(
+        std::str::from_utf8(&output.stdout).unwrap(),
+        request.scalar_limits,
+    )
+    .unwrap();
+    assert_eq!(outcome, Outcome::Completed(Integer::from(5_i64)));
+    assert_eq!(observation.limits(), &request.scalar_limits);
+    assert!(observation.consumed().iter().any(|value| *value > 0));
+    assert_eq!(
+        observation.admitted_charges(),
+        &[
+            ChargePoint::IntegerArithmeticOperands,
+            ChargePoint::IntegerArithmeticArithmetic,
+            ChargePoint::IntegerArithmeticResultRetain,
+        ]
+    );
+    ensure_snapshot_matches(root, &entries).unwrap();
+    let (bounded_outcome, bounded_observation) = execute_native(request, root).unwrap();
+    assert_eq!(bounded_outcome, outcome);
+    assert_eq!(bounded_observation, observation);
+    ensure_snapshot_matches(root, &entries).unwrap();
+    eprintln!("sealed direct and bounded native outcome {outcome:?}; limits {:?}; counters {:?}; ordered charges {:?}", observation.limits(), observation.consumed(), observation.admitted_charges());
+
+    // An independent negative package changes only the dev feature and resolves its own locks.
+    let negative = PrivateSnapshot::create().unwrap();
+    stage_package(request, negative.path()).unwrap();
+    write_observer(
+        &request.harness.identity.oracle_symbol,
+        request.operands.len(),
+        negative.path(),
+    )
+    .unwrap();
+    let manifest = scalar_observer_manifest().replace(", features = [\"test-support\"]", "");
+    assert!(!manifest.contains("test-support"));
+    write_private(
+        &negative.path().join("observer/Cargo.toml"),
+        manifest.as_bytes(),
+    )
+    .unwrap();
+    for directory in [negative.path().to_owned(), negative.path().join("observer")] {
+        assert!(!directory.join("Cargo.lock").exists());
+        generate_lockfile(request, &directory).unwrap();
+    }
+    assert_eq!(
+        fs::read(negative.path().join("src/bin/ir791_native.rs")).unwrap(),
+        fs::read(root.join("src/bin/ir791_native.rs")).unwrap()
+    );
+    let output = run(
+        negative.path(),
+        &args(&[
+            "build",
+            "--offline",
+            "--locked",
+            "--manifest-path",
+            "observer/Cargo.toml",
+            "--example",
+            "ir791_native",
+        ]),
+    );
+    let errors = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success());
+    assert!(
+        errors.contains("E0599") && errors.contains("admitted_charges"),
+        "{errors}"
+    );
+    assert!(
+        !errors.contains("E0080"),
+        "negative control must fail for the missing dev-only API"
+    );
+    ensure_snapshot_matches(root, &entries).unwrap();
+
+    let mut proof_arguments = vec!["kani".to_owned()];
+    proof_arguments.extend(request.harness.identity.options.clone());
+    proof_arguments.extend(args(&["--lib", "--only-codegen"]));
+    let proof = run(root, &proof_arguments);
+    ensure_snapshot_matches(root, &entries).unwrap();
+    assert!(
+        proof.status.success(),
+        "production proof-target compilation failed; no verification was requested"
+    );
+    eprintln!("production library and proof target compiled without observer test-support; no backend proof or paired receipt");
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::kani::test_support::scalar_native_digest::independent_digest;
     use ix_trace_rs::trace;
+    use std::process::Command;
+
+    #[trace("FR-014-AC-8", "FR-017-AC-27", "FR-017-AC-30", "TC-024", "TC-027")]
+    #[test]
+    fn tc_027_staged_native_observer_compiles_with_locked_kernel_and_charge_log() {
+        let snapshot = PrivateSnapshot::create().unwrap();
+        let root = snapshot.path();
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::write(
+            root.join("Cargo.toml"),
+            oracle_crate_manifest(EXACT_SCALAR_CRATE_NAME),
+        )
+        .unwrap();
+        fs::write(
+            root.join("src/lib.rs"),
+            "pub enum OracleStop { IllTyped(String), InvalidConstant, OperandWidth }\n\
+             pub fn oracle(value: &quire_exact::Integer, _meter: &mut quire_exact::Meter)\n\
+             -> Result<quire_exact::Outcome<quire_exact::Integer>, OracleStop> {\n\
+             Ok(quire_exact::Outcome::Completed(value.clone())) }\n",
+        )
+        .unwrap();
+        write_observer("oracle", 1, root).unwrap();
+
+        let cargo = env!("CARGO");
+        let run = |directory: &Path, args: &[&str]| {
+            let output = Command::new(cargo)
+                .args(args)
+                .current_dir(directory)
+                .env(
+                    "CARGO_TARGET_DIR",
+                    Path::new(env!("CARGO_MANIFEST_DIR")).join("target"),
+                )
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "cargo {args:?}: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            output
+        };
+        let cg_lock = include_str!("../../../Cargo.lock");
+        for directory in [root.to_owned(), root.join("observer")] {
+            assert!(
+                !directory.join("Cargo.lock").exists(),
+                "each package resolves independently"
+            );
+            run(&directory, &["generate-lockfile", "--offline"]);
+            for (package, repository) in [
+                (
+                    "quire-contract-runtime",
+                    "https://github.com/agent-ix/quire-contract-runtime",
+                ),
+                ("quire-exact", "https://github.com/agent-ix/quire-exact"),
+            ] {
+                assert!(LOCKED_DEPENDENCIES.contains(&(package, repository)));
+                let expected = lock_revision(cg_lock, package, repository).unwrap();
+                run(
+                    &directory,
+                    &["update", "--offline", "-p", package, "--precise", &expected],
+                );
+                let staged_lock = fs::read_to_string(directory.join("Cargo.lock")).unwrap();
+                assert_eq!(
+                    lock_revision(&staged_lock, package, repository),
+                    Some(expected.clone())
+                );
+                eprintln!(
+                    "independent lock {}: {package} {repository} {expected}",
+                    directory.display()
+                );
+            }
+            let lock = fs::read_to_string(directory.join("Cargo.lock")).unwrap();
+            let normalization = lock
+                .split("[[package]]")
+                .find(|entry| entry.contains("name = \"unicode-normalization\""));
+            eprintln!(
+                "{} normalization selection: {normalization:?}",
+                directory.display()
+            );
+        }
+        for (manifest, observer) in [("Cargo.toml", false), ("observer/Cargo.toml", true)] {
+            let metadata = run(
+                root,
+                &[
+                    "metadata",
+                    "--offline",
+                    "--locked",
+                    "--format-version",
+                    "1",
+                    "--manifest-path",
+                    manifest,
+                ],
+            );
+            let metadata: serde_json::Value = serde_json::from_slice(&metadata.stdout).unwrap();
+            let package = metadata["packages"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|package| {
+                    package["manifest_path"].as_str() == Some(root.join(manifest).to_str().unwrap())
+                })
+                .unwrap();
+            for dependency in package["dependencies"].as_array().unwrap() {
+                assert_eq!(dependency["kind"].as_str(), observer.then_some("dev"));
+            }
+            let exact_package = metadata["packages"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|package| package["name"] == "quire-exact")
+                .unwrap();
+            let node = metadata["resolve"]["nodes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|node| node["id"] == exact_package["id"])
+                .unwrap();
+            assert_eq!(
+                node["features"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|feature| feature == "test-support"),
+                observer
+            );
+            if observer {
+                let targets = package["targets"].as_array().unwrap();
+                assert_eq!(targets.len(), 1);
+                assert_eq!(targets[0]["kind"], serde_json::json!(["example"]));
+                assert_eq!(
+                    fs::canonicalize(targets[0]["src_path"].as_str().unwrap()).unwrap(),
+                    fs::canonicalize(root.join("src/bin/ir791_native.rs")).unwrap()
+                );
+            }
+        }
+        let before = snapshot_files(root)
+            .unwrap()
+            .into_iter()
+            .map(|path| {
+                let bytes = fs::read(root.join(&path)).unwrap();
+                (path, bytes)
+            })
+            .collect::<Vec<_>>();
+        seal_snapshot(root).unwrap();
+        ensure_snapshot_matches(root, &before).unwrap();
+        run(
+            root,
+            &[
+                "build",
+                "--offline",
+                "--locked",
+                "--manifest-path",
+                "observer/Cargo.toml",
+                "--example",
+                "ir791_native",
+            ],
+        );
+        ensure_snapshot_matches(root, &before).unwrap();
+    }
 
     #[trace("FR-017-AC-28")]
     #[test]
@@ -1551,6 +1963,9 @@ mod tests {
             ("Cargo.toml", "manifest"),
             ("claim-map.json", "{}"),
             ("kani-obligations/m.json", "record"),
+            ("observer/Cargo.lock", "observer-lock\n"),
+            ("observer/Cargo.toml", "observer-manifest"),
+            ("source-maps/lib.json", "source-map"),
             ("src/bin/ir791_native.rs", "adapter"),
             ("src/lib.rs", "harness"),
             ("src/oracle-artifacts-lib.rs", "oracle"),
@@ -1562,7 +1977,7 @@ mod tests {
 
     #[trace("FR-017-AC-43", "FR-017-AC-45", "FR-017-AC-46", "FR-017-AC-49")]
     #[test]
-    fn literal_seven_entry_jcs_golden_and_mutation_controls() {
+    fn literal_ten_entry_jcs_golden_and_mutation_controls() {
         use sha2::{Digest, Sha256};
         const GOLDEN: &str = concat!(
             "{\"artifacts\":[",
@@ -1570,10 +1985,13 @@ mod tests {
             "{\"contents\":\"manifest\",\"path\":\"Cargo.toml\"},",
             "{\"contents\":\"{}\",\"path\":\"claim-map.json\"},",
             "{\"contents\":\"record\",\"path\":\"kani-obligations/m.json\"},",
+            "{\"contents\":\"observer-lock\\n\",\"path\":\"observer/Cargo.lock\"},",
+            "{\"contents\":\"observer-manifest\",\"path\":\"observer/Cargo.toml\"},",
+            "{\"contents\":\"source-map\",\"path\":\"source-maps/lib.json\"},",
             "{\"contents\":\"adapter\",\"path\":\"src/bin/ir791_native.rs\"},",
             "{\"contents\":\"harness\",\"path\":\"src/lib.rs\"},",
             "{\"contents\":\"oracle\",\"path\":\"src/oracle-artifacts-lib.rs\"}",
-            "],\"schema\":\"agent-ix/cg-kani-scalar-proof-content/v2\"}"
+            "],\"schema\":\"agent-ix/cg-kani-scalar-proof-content/v3\"}"
         );
         let entries = literal_entries();
         let identity = identity_from_entries(&entries, Limits::new(256 * 1024 * 1024)).unwrap();
@@ -1587,8 +2005,8 @@ mod tests {
                     .collect::<String>()
             ),
             (
-                "agent-ix/cg-kani-scalar-proof-content/v2",
-                "571d6199414afadc065744e9c47df06fbeb18ee36cca995ba029309add15d356".to_owned()
+                "agent-ix/cg-kani-scalar-proof-content/v3",
+                "68a4416d5e11d9cd244a8fb9d7ffbca3890597c32d25bc915a01b271a2da79df".to_owned()
             )
         );
         assert_eq!(*identity.as_bytes(), golden);
@@ -1633,7 +2051,15 @@ mod tests {
         }
         let supplied = entries
             .iter()
-            .filter(|(path, _)| path != "Cargo.lock" && path != "src/bin/ir791_native.rs")
+            .filter(|(path, _)| {
+                !matches!(
+                    path.as_str(),
+                    "Cargo.lock"
+                        | "observer/Cargo.lock"
+                        | "observer/Cargo.toml"
+                        | "src/bin/ir791_native.rs"
+                )
+            })
             .cloned()
             .collect::<Vec<_>>();
         let captured = capture_entries(&supplied, snapshot.path()).unwrap();
@@ -1653,7 +2079,12 @@ mod tests {
             "cleanup finishes before data is observed"
         );
         assert_eq!(independent_digest(&captured), digest);
-        for path in ["Cargo.lock", "src/bin/ir791_native.rs"] {
+        for path in [
+            "Cargo.lock",
+            "observer/Cargo.lock",
+            "observer/Cargo.toml",
+            "src/bin/ir791_native.rs",
+        ] {
             let snapshot = PrivateSnapshot::create().unwrap();
             for (name, bytes) in &entries {
                 write_private(&snapshot.path().join(name), bytes).unwrap();
@@ -2080,5 +2511,162 @@ mod tests {
         ] {
             assert_native_result(decode_native_output(&text, limits));
         }
+    }
+    #[trace(
+        "FR-017-AC-29",
+        "FR-017-AC-46",
+        "FR-017-AC-48",
+        "FR-017-AC-52",
+        "FR-017-AC-53",
+        "TC-027"
+    )]
+    #[test]
+    fn companion_staging_retains_every_original_artifact_and_one_canonical_adapter() {
+        let (harness, artifacts) =
+            crate::kani::test_support::scalar_source_fixture(std::time::Duration::from_secs(600));
+        let snapshot = PrivateSnapshot::create().unwrap();
+        let cancel = Cancel::new();
+        let installation = crate::kani::run::tool::KaniInstallation::new("cargo-kani");
+        let limits = unequal_limits();
+        let request = KaniScalarNativeRequest {
+            cancel: &cancel,
+            installation: &installation,
+            harness: &harness,
+            oracle_artifacts: &artifacts,
+            operands: &[4, 1],
+            scalar_limits: limits,
+            target_directory: Path::new("unused-by-host-staging"),
+        };
+        validate_request(&request).unwrap();
+        assert_eq!(artifacts.len(), 4);
+        let staged = stage_package(&request, snapshot.path()).unwrap();
+        write_observer(
+            &harness.identity.oracle_symbol,
+            harness.identity.arguments.len(),
+            snapshot.path(),
+        )
+        .unwrap();
+        write_private(&snapshot.path().join("Cargo.lock"), b"host-lock").unwrap();
+        write_private(
+            &snapshot.path().join("observer/Cargo.lock"),
+            b"independent-host-lock",
+        )
+        .unwrap();
+        let entries = capture_entries(&staged, snapshot.path()).unwrap();
+        assert_eq!(entries.len(), 10);
+        for artifact in &artifacts {
+            let path = if artifact.path == "src/lib.rs" {
+                "src/oracle-artifacts-lib.rs"
+            } else {
+                &artifact.path
+            };
+            assert_eq!(
+                &entries.iter().find(|(name, _)| name == path).unwrap().1,
+                artifact.contents.as_bytes()
+            );
+        }
+        assert_eq!(
+            &entries
+                .iter()
+                .find(|(path, _)| path == "src/lib.rs")
+                .unwrap()
+                .1,
+            harness.rust.contents.as_bytes()
+        );
+        assert_eq!(
+            &entries
+                .iter()
+                .find(|(path, _)| path == &harness.record.path)
+                .unwrap()
+                .1,
+            harness.record.contents.as_bytes()
+        );
+        let adapter = fs::read_to_string(snapshot.path().join("src/bin/ir791_native.rs")).unwrap();
+        assert!(adapter.contains("#[path = \"../lib.rs\"] mod generated;"));
+        assert!(!snapshot.path().join("examples").exists());
+        assert_eq!(
+            fs::read_to_string(snapshot.path().join("observer/Cargo.toml")).unwrap(),
+            scalar_observer_manifest()
+        );
+        for (path, bytes) in &entries {
+            write_private(&snapshot.path().join(path), b"replacement").unwrap();
+            assert!(
+                matches!(
+                    ensure_snapshot_matches(snapshot.path(), &entries),
+                    Err(KaniScalarNativeError::SnapshotChanged)
+                ),
+                "{path}"
+            );
+            write_private(&snapshot.path().join(path), bytes).unwrap();
+        }
+        for extra in [
+            "extra.rs",
+            "observer/extra.rs",
+            "observer/.cargo/config.toml",
+        ] {
+            write_private(&snapshot.path().join(extra), b"unmeasured").unwrap();
+            assert!(
+                matches!(
+                    ensure_snapshot_matches(snapshot.path(), &entries),
+                    Err(KaniScalarNativeError::SnapshotChanged)
+                ),
+                "{extra}"
+            );
+            fs::remove_file(snapshot.path().join(extra)).unwrap();
+        }
+        ensure_snapshot_matches(snapshot.path(), &entries).unwrap();
+        seal_snapshot(snapshot.path()).unwrap();
+        ensure_snapshot_matches(snapshot.path(), &entries).unwrap();
+        let digest = independent_digest(&entries);
+        snapshot.cleanup().unwrap();
+        assert_eq!(independent_digest(&entries), digest);
+        assert!(!snapshot.path().exists());
+    }
+
+    #[trace("FR-017-AC-29", "FR-017-AC-52", "TC-027")]
+    #[test]
+    fn native_command_selects_only_the_companion_and_preserves_ordered_inputs() {
+        let limits = unequal_limits();
+        let args = native_arguments(&[4, -1], limits);
+        assert_eq!(
+            &args[..9],
+            [
+                "run",
+                "--quiet",
+                "--locked",
+                "--manifest-path",
+                "observer/Cargo.toml",
+                "--example",
+                "ir791_native",
+                "--",
+                "4"
+            ]
+        );
+        assert_eq!(args[9], "-1");
+        assert_eq!(
+            args[10..],
+            limits_array(limits).map(|value| value.to_string())
+        );
+        assert!(!args
+            .iter()
+            .any(|arg| arg.contains("features") || arg.contains("test-support")));
+    }
+
+    #[cfg(unix)]
+    #[trace("FR-017-AC-29", "FR-017-AC-53", "TC-027")]
+    #[test]
+    fn snapshot_rejects_same_bytes_replaced_by_a_symlink() {
+        let snapshot = PrivateSnapshot::create().unwrap();
+        let root = snapshot.path();
+        write_private(&root.join("original"), b"bytes").unwrap();
+        std::os::unix::fs::symlink(root.join("original"), root.join("linked")).unwrap();
+        let expected = vec![
+            ("original".to_owned(), b"bytes".to_vec()),
+            ("linked".to_owned(), b"bytes".to_vec()),
+        ];
+        assert!(matches!(
+            ensure_snapshot_matches(root, &expected),
+            Err(KaniScalarNativeError::SnapshotChanged)
+        ));
     }
 }
