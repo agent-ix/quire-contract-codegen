@@ -109,3 +109,20 @@ Five confined formatter/check/clippy/four-native-test/fmt-check phases pass at t
 | FND | outcome | reason |
 | --- | --- | --- |
 | FND-001 | fixed | Exact fix1340f7a gives the byte-identical ready/finish/report launcher body one private test-owned home, called by both existing errno and new observation-omission controls. No production logic or test assertion changed. |
+| FND-002 | fixed | Fixed atca459b65: all103 exact failed raw files are 100% byte-identical .md-to-.txt renames, including preserved reviewer markers and parsed YAML. No fabricated frontmatter, body edit, source/test/lock change or CI/glob change. Actual unchanged make spec now exits0; all1130 typed SpecReview files are byte-identical to failed head54dcb824. The author map counted1123; independent review additionally verified seven quoted-ID SR2520–2526, without any missing preservation. |
+
+## Narrow disposition round 2
+
+Same-reviewer narrow round2 at exact candidate ca459b65c67e0d1a9c8381250d02d40330080166, failed root aggregate head 54dcb824c72be262465aae8c2685d82b639729e4. Root first make ci exit2 stopped at make spec's103 missing-type frontmatter errors before aggregate Rust/backend gates; actual Linear failure receipt b61300f7-1d6d-4783-9670-23e610ee0ede independently read back. The failure is retained and recorded below, not relabelled a successful aggregate.
+
+Independent git comparison verifies exactly103 R100 .md-to-.txt renames against the precise failed path set; every body is byte-identical, has its original reviewer marker, and its YAML parses. There are zero added/deleted body lines and zero existing tracked-content references to renamed old filenames before this historical review entry. Typed SpecReview documents remain .md. All1130 typed reviews are byte-identical, comprising the author's1123 checked entries plus seven quoted-ID SR2520–2526. No production/source/test/manifests/lock/scripts/Makefile/workflow change exists relative to focused Rust head1340f7ad. Therefore the real four-test focused basis, all prior assertions, AC54/55 bindings, the full887 criterion inventory, all319 gap deferrals and actual AC56 source inspection are unchanged.
+
+The actual unchanged make spec phase passes atca459b65 under16GiB/swap0, peak54,210,560B, zero memory events, full hierarchy released. No Cargo/native/backend/aggregate command ran for this narrow reviewer pass. Corrected root make ci and required real Kani37 remain pending. The new gate-custody defect was fixed by the same author before this disposition; no remaining introduced finding is open. This is partial diagnostic delivery, with no natural Luna flake reproduction, causal diagnosis or wholeIR877 completion. Original initial and round1 SR prefixes, original findings and raw body bytes remain intact.
+
+Current verdict: PASS for code/Rust after FND001 and new FND002 fixes; conditional on corrected root aggregate/fresh-base/latest custody.
+
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-002 | high | Raw reviewer comment/disposition bodies were committed under the typed reviews/**/*.md validation glob without required type metadata. Unchanged make spec fails on 103 such files at54dcb824 before aggregate Rust gates, including27 current-PR raw bodies and76 inherited bodies. Raw tracker text must be retained as non-artifact text while typed SpecReview documents remain validated Markdown. | reviews/ir-877-cleanup-observations-code-review-comment-1.md:1 at54dcb824 |
