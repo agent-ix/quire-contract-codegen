@@ -32,7 +32,7 @@ rejected certificates to their distinct terminal results and certification.
    `Counterexample` with a reproduced replay. Inspect the basis, certification and category of
    both proof payloads, and confirm the counterexample has no proof fields.
 5. Map `Inconclusive` with cause `kani_vacuous_proof`, and with another cause.
-6. Map `Unavailable` with cause `kani_solver_absent`, with `kani_backend_absent`, and with another
+6. Map `Unavailable` with cause `kani_checker_absent`, with `kani_backend_absent`, and with another
    cause.
 7. Inspect the map's source for a wildcard arm (inspection step, FR-030-AC-7).
 8. Map `Counterexample` with a replay disagreement, and with a non-fault `ReplayRefusal`.

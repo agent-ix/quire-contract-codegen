@@ -103,7 +103,7 @@ Kani path and cannot relabel a Kani result as an SMT proof.
   | `Refused` | `Declined { cause: ProofRefusalCause::Refused, code: DeclineCode::Std001(c) }`, `c` the outcome's `Std001Code` | none / none |
   | `InvalidInput` | `Declined { cause: ProofRefusalCause::InvalidInput, code: DeclineCode::Std001(c) }`, `c` the outcome's `Std001Code` | none / none |
   | `IncompleteInput` | `Declined { cause: ProofRefusalCause::IncompleteInput, code: DeclineCode::Std001(c) }`, `c` the outcome's `Std001Code` | none / none |
-  | `Unavailable` with cause `kani_solver_absent` | `Unsupported(UnavailabilityCause::SolverAbsent)` | none / none |
+  | `Unavailable` with cause `kani_checker_absent` | `Unsupported(UnavailabilityCause::SolverAbsent)` | none / none |
   | `Unavailable` with cause `kani_backend_absent` | `Unsupported(UnavailabilityCause::BackendAbsent)` | none / none |
   | `Unavailable`, any other cause | `Unsupported(UnavailabilityCause::BackendAbsent)` | none / none |
   | `TimedOut` | `Incomplete(IncompleteCause::TimedOut)` | none / none |
@@ -223,7 +223,7 @@ composite facade. QSL #645 owns these rows. IR-666 tests their public reports th
 | FR-030-AC-5 | `Inconclusive` with cause `kani_vacuous_proof` maps to `Proved { basis: Checks { success_checks: 0 }, certification: Certified }` (category inconclusive/vacuous), and `Inconclusive` with any other cause maps to `Failed`. | Test (TC-041) |
 | FR-030-AC-6 | No outcome maps to `Tested`. | Test (TC-041) |
 | FR-030-AC-7 | The map is one `match` over the pair (`KaniOutcomeKind`, replay settlement) with no wildcard arm. | Inspection (TC-041) |
-| FR-030-AC-8 | `Unavailable` with cause `kani_solver_absent` maps to `Unsupported(SolverAbsent)`; with `kani_backend_absent` or any other cause it maps to `Unsupported(BackendAbsent)`. | Test (TC-041) |
+| FR-030-AC-8 | `Unavailable` with cause `kani_checker_absent` maps to `Unsupported(SolverAbsent)`; with `kani_backend_absent` or any other cause it maps to `Unsupported(BackendAbsent)`. | Test (TC-041) |
 | FR-030-AC-9 | `Counterexample` with a replay disagreement maps to `Inconclusive(ReplayParity)`, and with a non-fault `ReplayRefusal` maps to `Inconclusive(ReplayRefused)` carrying `ReplayRefusal::code()` of that refusal. | Test (TC-041) |
 | FR-030-AC-10 | `Counterexample` with a fault, walked through every wrapper FR-029-AC-10 lists, and with each CG-raised failure FR-029-AC-11 lists, maps to `Failed`. | Test (TC-041) |
 | FR-030-AC-11 | Across every replay settlement other than reproduced, `Counterexample` maps to a value other than `Refuted`. | Test (TC-041) |
