@@ -2935,6 +2935,18 @@ exec sleep 45
         }
     }
 
+    /// A real backend records its namespace, then awaits the controller's normal finish event.
+    #[cfg(target_os = "linux")]
+    fn finishable_namespace_body() -> String {
+        format!(
+            r#"printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
+printf '%s' "$$" > "$CALLS.child"
+printf 'ready' > "$CALLS.ready"
+while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
+{VERIFY_EVERY_HARNESS}"#
+        )
+    }
+
     /// Confirmation failure leaves the actual owner unconfirmed; its real Drop retries teardown.
     #[trace("FR-040-AC-4")]
     #[cfg(target_os = "linux")]
@@ -2943,13 +2955,7 @@ exec sleep 45
         use super::super::owners::{LaunchOwners, ProcessMemory, SystemPoll};
         for cancel_before_cleanup in [false, true] {
             let harness = member("failed_cleanup", "check", 4);
-            let body = format!(
-                r#"printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
-printf '%s' "$$" > "$CALLS.child"
-printf 'ready' > "$CALLS.ready"
-while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
-{VERIFY_EVERY_HARNESS}"#
-            );
+            let body = finishable_namespace_body();
             let mut stand_in = StandIn::running("cancel-cleanup-confirmation", &body);
             stand_in.containing(&[&harness]);
             let (cleanup, teardown) = OwnerGate::new();
@@ -3020,13 +3026,7 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
             (ConfirmationObservation::OmitWithPositiveCount, Some(false)),
         ] {
             let harness = member("cleanup_observation", "check", 4);
-            let body = format!(
-                r#"printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
-printf '%s' "$$" > "$CALLS.child"
-printf 'ready' > "$CALLS.ready"
-while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
-{VERIFY_EVERY_HARNESS}"#
-            );
+            let body = finishable_namespace_body();
             let mut stand_in = StandIn::running("cleanup-observation-omission", &body);
             stand_in.containing(&[&harness]);
             let (memory_gate, memory_control) = OwnerGate::new();
