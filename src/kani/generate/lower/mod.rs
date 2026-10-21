@@ -6,81 +6,9 @@ pub(crate) mod bounded_kani_profile;
 pub(crate) mod finite_reference_graphs;
 
 use quire_contract_ir::kani::{
-    CapabilityDisposition, DispatchIndex, KaniOutcome, KaniOutcomeError, KaniOutcomeKind,
-    KaniProfile, SemanticFamily,
+    CapabilityDisposition, DispatchIndex, KaniOutcome, KaniProfile, SemanticFamily,
 };
 use quire_contract_model::{std001_code, Std001Code};
-
-/// A family-lowering refusal, preserving IR's outcome-construction failure separately.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum FamilyLoweringError {
-    /// A typed non-Boolean IR outcome.
-    Outcome(KaniOutcome),
-    /// IR refused construction of the requested outcome.
-    OutcomeConstruction(KaniOutcomeError),
-}
-
-impl FamilyLoweringError {
-    /// Returns the IR outcome when its construction succeeded.
-    #[must_use]
-    pub const fn outcome(&self) -> Option<&KaniOutcome> {
-        match self {
-            Self::Outcome(outcome) => Some(outcome),
-            Self::OutcomeConstruction(_) => None,
-        }
-    }
-
-    /// The stable code of the outcome or of IR's construction refusal.
-    #[must_use]
-    pub const fn code(&self) -> Std001Code {
-        match self {
-            Self::Outcome(outcome) => outcome.code,
-            Self::OutcomeConstruction(error) => error.code(),
-        }
-    }
-}
-
-impl std::fmt::Display for FamilyLoweringError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Outcome(outcome) => write!(f, "{}: {}", outcome.code, outcome.source_id),
-            Self::OutcomeConstruction(error) => error.fmt(f),
-        }
-    }
-}
-
-impl std::error::Error for FamilyLoweringError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::Outcome(_) => None,
-            Self::OutcomeConstruction(error) => Some(error),
-        }
-    }
-}
-
-impl From<KaniOutcome> for FamilyLoweringError {
-    fn from(outcome: KaniOutcome) -> Self {
-        Self::Outcome(outcome)
-    }
-}
-
-impl From<KaniOutcomeError> for FamilyLoweringError {
-    fn from(error: KaniOutcomeError) -> Self {
-        Self::OutcomeConstruction(error)
-    }
-}
-
-fn refusal(
-    kind: KaniOutcomeKind,
-    code: Std001Code,
-    source_id: &str,
-    profile: &KaniProfile,
-) -> FamilyLoweringError {
-    match KaniOutcome::non_success(kind, code, source_id, profile.selection().revision.clone()) {
-        Ok(outcome) => FamilyLoweringError::Outcome(outcome),
-        Err(error) => FamilyLoweringError::OutcomeConstruction(error),
-    }
-}
 
 /// Admit one construct through the shared profile and dispatch authorities.
 fn admit_family(
@@ -89,40 +17,39 @@ fn admit_family(
     construct: &str,
     family: SemanticFamily,
     source_id: &str,
-) -> Result<(), FamilyLoweringError> {
+) -> Result<(), KaniOutcome> {
     let entries = profile.classify(&[construct.to_owned()], source_id)?;
     // A successful single-construct classification contains exactly that entry.
     let Some(entry) = entries.first() else {
-        return Err(refusal(
-            KaniOutcomeKind::Refused,
+        return Err(KaniOutcome::refused(
             Std001Code::KANI_CAPABILITY_MISSING,
             source_id,
-            profile,
+            profile.selection().revision.clone(),
         ));
     };
     match &entry.disposition {
         CapabilityDisposition::Supported { module } => {
             let descriptor = dispatch.resolve(construct).map_err(|_| {
-                refusal(
-                    KaniOutcomeKind::Refused,
+                KaniOutcome::refused(
                     std001_code!("kani_dispatch_unowned"),
                     source_id,
-                    profile,
+                    profile.selection().revision.clone(),
                 )
             })?;
             if descriptor.family != family || descriptor.module_id != *module {
-                return Err(refusal(
-                    KaniOutcomeKind::Refused,
+                return Err(KaniOutcome::refused(
                     std001_code!("kani_dispatch_profile_mismatch"),
                     source_id,
-                    profile,
+                    profile.selection().revision.clone(),
                 ));
             }
             Ok(())
         }
-        CapabilityDisposition::Refused { code } => {
-            Err(refusal(KaniOutcomeKind::Refused, *code, source_id, profile))
-        }
+        CapabilityDisposition::Refused { code } => Err(KaniOutcome::refused(
+            *code,
+            source_id,
+            profile.selection().revision.clone(),
+        )),
     }
 }
 
@@ -140,7 +67,7 @@ mod tests {
         prepare_bounded_collection_query, CollectionQuery, QueryKind,
     };
     use super::finite_reference_graphs::{prepare_finite_graph_reaches, GraphRequest};
-    use super::FamilyLoweringError;
+    use quire_contract_ir::kani::KaniOutcome;
 
     fn fixture(
         disposition: impl Fn(&str) -> CapabilityDisposition,
@@ -219,7 +146,7 @@ mod tests {
         profile: &KaniProfile,
         dispatch: &DispatchIndex,
         input: &ValidatedFiniteInput,
-    ) -> [Result<(), FamilyLoweringError>; 2] {
+    ) -> [Result<(), KaniOutcome>; 2] {
         [
             prepare_bounded_collection_query(
                 profile,
@@ -256,10 +183,7 @@ mod tests {
         ]
     }
 
-    fn assert_refusal(failure: FamilyLoweringError, code: Std001Code) {
-        let outcome = failure
-            .outcome()
-            .expect("a profile or dispatch refusal is an actual outcome");
+    fn assert_refusal(outcome: KaniOutcome, code: Std001Code) {
         assert_eq!(outcome.kind, KaniOutcomeKind::Refused);
         assert_eq!(outcome.code, code);
         assert_eq!(outcome.source_id, "source:family");

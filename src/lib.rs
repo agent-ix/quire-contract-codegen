@@ -57,8 +57,8 @@ pub use strategy::bound::relation::{
 
 pub use kani::generate::corpus::bounded_kani_corpus::{
     generate_bounded_kani_corpus_case, BoundedCorpusArtifacts, BoundedCorpusCase,
-    BoundedCorpusError, BoundedCorpusFamily, BoundedCorpusRequest, CorpusProofDependencyGraph,
-    EmittedCorpusIdentities, CORPUS_PROOF_GRAPH_SCHEMA,
+    BoundedCorpusFamily, BoundedCorpusRequest, CorpusProofDependencyGraph, EmittedCorpusIdentities,
+    CORPUS_PROOF_GRAPH_SCHEMA,
 };
 pub use kani::generate::lower::bounded_collections::{
     prepare_bounded_collection_query, CollectionLowering, CollectionQuery, QueryKind,
@@ -69,7 +69,6 @@ pub use kani::generate::lower::bounded_kani_profile::{
 pub use kani::generate::lower::finite_reference_graphs::{
     prepare_finite_graph_reaches, GraphLowering, GraphRequest,
 };
-pub use kani::generate::lower::FamilyLoweringError;
 pub use oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
 pub use oracle::scalar::{
     derive_exact_scalar_items, generate_exact_scalar_oracles, plan_exact_scalar_oracles,

@@ -12,7 +12,7 @@ relationships:
 
 Verify the current bounded-profile classifier, graph and collection finite-input
 lowerers and corpus emitter against FR-015-AC-82 through
-FR-015-AC-95, planned FR-015-AC-123/AC-124, and the retirement slices FR-015-AC-109 to FR-015-AC-111. Before AD-004 step 4g, the hand-built path's generated
+FR-015-AC-95, FR-015-AC-123/AC-124, and the retirement slices FR-015-AC-109 to FR-015-AC-111. Before AD-004 step 4g, the hand-built path's generated
 `KaniOutcome` is a case classification; after step 4g, generation returns no
 `KaniOutcome`. Only FR-017's installed-backend run provides proof evidence.
 Each successful case retains a QSL source unit and its imported dependency
@@ -26,7 +26,7 @@ A trace tag alone does not establish installed-backend proof evidence.
 
 ## Test Procedure
 
-IR-621 direct-error procedure (planned): from an external consumer test, explicitly
+IR-621 direct-error procedure: from an external consumer test, explicitly
 assign each public collection, graph and corpus operation's result to
 `Result<CollectionLowering, KaniOutcome>`, `Result<GraphLowering, KaniOutcome>`
 and `Result<BoundedCorpusCase, KaniOutcome>` respectively. Exercise each retained
@@ -181,7 +181,20 @@ step 4h and actual AC-99 controls. Graph/final retirement (AC-111) also waits fo
 AC-110 and IR-805/QSL-820. Held steps 4c–4f, 5 and 6 and the separately gated
 IR-854 division/modulo replacement remain unchanged.
 
-IR-621 status: FR-015-AC-123/AC-124 and the direct-error signature adoption are planned.
-This specification amendment claims no source implementation, tagged controls or
+IR-621 direct-error adoption is implemented. The external consumer tests assign
+all three public results to their exact `Result<Success, KaniOutcome>` types and
+exercise supported results, profile/dispatch precedence, malformed graph inputs,
+collection/graph bounds, corpus dependency and profile mismatch ordering,
+preimage refusal, collision, and a same-request retry after dispatch failure.
+They retain the exact non-success kind, typed code, source and profile context.
+The original identity and no-partial-artifact controls remain, and the real
+artifact renderer retains its over-ceiling serialization refusal control.
+That serializer control is a private rendering-boundary test, not an observed
+public-generator typed serialization failure: the public generator's earlier
+bounded preimage check limits which dependency graphs can reach rendering.
+The public serialization-failure branch still uses the exact infallible
+`refused` constructor and original cause/source/context.
+Focused native family/corpus tests and doctests pass; the eight separately named
+Kani-lane integration tests remain ignored in that run. This adoption claims no
 new backend proof qualification. Existing family/corpus behavior and the separate
 AC-111 retirement prerequisites remain in force.
