@@ -12,7 +12,7 @@ relationships:
 
 Verify the current bounded-profile classifier, graph and collection finite-input
 lowerers and corpus emitter against FR-015-AC-82 through
-FR-015-AC-95 and the retirement slices FR-015-AC-109 to FR-015-AC-111. Before AD-004 step 4g, the hand-built path's generated
+FR-015-AC-95, planned FR-015-AC-123/AC-124, and the retirement slices FR-015-AC-109 to FR-015-AC-111. Before AD-004 step 4g, the hand-built path's generated
 `KaniOutcome` is a case classification; after step 4g, generation returns no
 `KaniOutcome`. Only FR-017's installed-backend run provides proof evidence.
 Each successful case retains a QSL source unit and its imported dependency
@@ -25,6 +25,25 @@ refusal tests. FR-015-AC-95 and FR-015-AC-110 to FR-015-AC-111 remain planned.
 A trace tag alone does not establish installed-backend proof evidence.
 
 ## Test Procedure
+
+IR-621 direct-error procedure (planned): from an external consumer test, explicitly
+assign each public collection, graph and corpus operation's result to
+`Result<CollectionLowering, KaniOutcome>`, `Result<GraphLowering, KaniOutcome>`
+and `Result<BoundedCorpusCase, KaniOutcome>` respectively. Exercise each retained
+family's actual profile/dispatch refusal, graph malformed-input and expansion-bound
+refusals, collection bound exhaustion, and the corpus identity/dependency/serialization
+failure controls. Assert the original exact kind and typed code, source identity,
+selected profile/bound context, `boolean_claim() == None`, and absence of partial
+artifacts or premature identity claims. Keep successful family outputs and corpus
+artifacts/identities unchanged. Inspect that these consumer paths call the matching
+infallible IR constructor and that the retired public error names have no exported
+type, alias or replacement wrapper. Replace the manufactured Boolean-kind
+`OutcomeConstruction` wrapper test with these reachable public consumer controls;
+IR's broad-constructor negative controls remain owned by IR. Preserve the IR-615
+ordered profile census, strict-subset/late-entry and legacy-disposition rejection
+controls. This procedure does not include the terminal cancellation adapter or
+AD-004's independently gated generator retirement and invokes no backend merely
+to establish the public API/refusal change.
 
 Request supported and refused constructs from one selected profile in a
 reordered subset; compare the returned modules and cause codes with the selected
@@ -161,3 +180,8 @@ IR-598 and IR-348 remain open. Collection retirement (AC-110) waits for released
 step 4h and actual AC-99 controls. Graph/final retirement (AC-111) also waits for
 AC-110 and IR-805/QSL-820. Held steps 4c–4f, 5 and 6 and the separately gated
 IR-854 division/modulo replacement remain unchanged.
+
+IR-621 status: FR-015-AC-123/AC-124 and the direct-error signature adoption are planned.
+This specification amendment claims no source implementation, tagged controls or
+new backend proof qualification. Existing family/corpus behavior and the separate
+AC-111 retirement prerequisites remain in force.
