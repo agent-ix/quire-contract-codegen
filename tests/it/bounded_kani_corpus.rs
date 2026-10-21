@@ -13,17 +13,17 @@ use crate::scratch_crate::TemporaryDirectory;
 use ix_trace_rs::trace;
 use jsonschema::{Draft, JSONSchema};
 use quire_contract_codegen::{
-    classify_kani_run, generate_bounded_kani_corpus_case, prepare_finite_graph_reaches,
-    prepare_bounded_collection_query, BoundedCorpusCase, CollectionLowering, GraphLowering,
-    BoundedCorpusRequest, CollectionQuery, CorpusProofDependencyGraph, EmittedCorpusIdentities,
+    classify_kani_run, generate_bounded_kani_corpus_case, prepare_bounded_collection_query,
+    prepare_finite_graph_reaches, BoundedCorpusCase, BoundedCorpusRequest, CollectionLowering,
+    CollectionQuery, CorpusProofDependencyGraph, EmittedCorpusIdentities, GraphLowering,
     GraphRequest, KaniInconclusiveReason, KaniRunOutcome, ProofDependencyKind,
     ProofDependencyRequest, ProofDependencyState, ProofReadiness, QueryKind, ReplayVerdict,
     CORPUS_PROOF_GRAPH_SCHEMA,
 };
 use quire_contract_ir::kani::{
     CapabilityDisposition, CapabilityEntry, DispatchIndex, FiniteInput, FiniteObject,
-    FiniteReference, KaniOutcome, KaniOutcomeKind, KaniProfile, ModuleDescriptor, PopulationCompleteness,
-    ProfileSelection, ResourceBounds, SemanticFamily,
+    FiniteReference, KaniOutcome, KaniOutcomeKind, KaniProfile, ModuleDescriptor,
+    PopulationCompleteness, ProfileSelection, ResourceBounds, SemanticFamily,
 };
 
 use quire_contract_model::{std001_code, Std001Code};
@@ -870,7 +870,12 @@ fn direct_graph(max_expansions: usize) -> GraphRequest {
     }
 }
 
-fn assert_direct_refusal(outcome: &KaniOutcome, kind: KaniOutcomeKind, code: Std001Code, source: &str) {
+fn assert_direct_refusal(
+    outcome: &KaniOutcome,
+    kind: KaniOutcomeKind,
+    code: Std001Code,
+    source: &str,
+) {
     assert_eq!(outcome.kind, kind);
     assert_eq!(outcome.code, code);
     assert_eq!(outcome.source_id, source);
@@ -882,79 +887,188 @@ fn assert_direct_refusal(outcome: &KaniOutcome, kind: KaniOutcomeKind, code: Std
 #[test]
 fn public_family_and_corpus_results_have_direct_ir_errors_and_unchanged_successes() {
     let (profile, dispatch, input) = fixture();
-    let collection: Result<CollectionLowering, KaniOutcome> = prepare_bounded_collection_query(
-        &profile, &dispatch, &input, direct_query(3),
-    );
+    let collection: Result<CollectionLowering, KaniOutcome> =
+        prepare_bounded_collection_query(&profile, &dispatch, &input, direct_query(3));
     let collection = collection.expect("admitted collection result");
     assert!(collection.value);
     assert_eq!(collection.examined, 3);
     assert_eq!(collection.query.values, [2, 2, 7]);
-    let graph: Result<GraphLowering, KaniOutcome> = prepare_finite_graph_reaches(
-        &profile, &dispatch, &input, direct_graph(1),
-    );
+    let graph: Result<GraphLowering, KaniOutcome> =
+        prepare_finite_graph_reaches(&profile, &dispatch, &input, direct_graph(1));
     let graph = graph.expect("the target edge needs only its source expansion");
     assert!(graph.reachable);
     assert_eq!(graph.expanded, ["a"]);
     let mut emitted = EmittedCorpusIdentities::new();
     let corpus: Result<BoundedCorpusCase, KaniOutcome> = generate_bounded_kani_corpus_case(
-        crate::common::proof_ceilings::proof_ceilings(), &profile, &dispatch, &input,
-        BoundedCorpusRequest::Collection(direct_query(3)), &[], &mut emitted,
+        crate::common::proof_ceilings::proof_ceilings(),
+        &profile,
+        &dispatch,
+        &input,
+        BoundedCorpusRequest::Collection(direct_query(3)),
+        &[],
+        &mut emitted,
     );
     let corpus = corpus.expect("all corpus artifacts are retained");
     assert_eq!(corpus.outcome.boolean_claim(), Some(true));
     assert_eq!(corpus.outcome.source_id, "source:direct");
     assert_eq!(corpus.outcome.context, "r1");
-    assert!(corpus.artifacts.oracle.contents.contains("let values = [2i128, 2i128, 7i128]"));
-    assert!(corpus.artifacts.strategy.contents.contains("CORPUS_CASE: bool = true"));
-    assert!(corpus.artifacts.kani_harness.contents.contains("kani::cover!(true)"));
+    assert!(corpus
+        .artifacts
+        .oracle
+        .contents
+        .contains("let values = [2i128, 2i128, 7i128]"));
+    assert!(corpus
+        .artifacts
+        .strategy
+        .contents
+        .contains("CORPUS_CASE: bool = true"));
+    assert!(corpus
+        .artifacts
+        .kani_harness
+        .contents
+        .contains("kani::cover!(true)"));
     let duplicate: Result<BoundedCorpusCase, KaniOutcome> = generate_bounded_kani_corpus_case(
-        crate::common::proof_ceilings::proof_ceilings(), &profile, &dispatch, &input,
-        BoundedCorpusRequest::Collection(direct_query(3)), &[], &mut emitted,
+        crate::common::proof_ceilings::proof_ceilings(),
+        &profile,
+        &dispatch,
+        &input,
+        BoundedCorpusRequest::Collection(direct_query(3)),
+        &[],
+        &mut emitted,
     );
-    assert_direct_refusal(&duplicate.unwrap_err(), KaniOutcomeKind::InvalidInput,
-        std001_code!("kani_corpus_identity_collision"), "source:direct");
+    assert_direct_refusal(
+        &duplicate.unwrap_err(),
+        KaniOutcomeKind::InvalidInput,
+        std001_code!("kani_corpus_identity_collision"),
+        "source:direct",
+    );
 }
 
 #[trace("FR-015-AC-124")]
 #[test]
 fn direct_family_errors_preserve_profile_dispatch_and_bound_precedence() {
     let (profile, dispatch, input) = fixture();
-    let refused = KaniProfile::new(profile.selection().clone(), vec![
-        CapabilityEntry { construct: "bounded-collection-query".into(), disposition: CapabilityDisposition::Refused { code: std001_code!("collection_not_qualified") } },
-        CapabilityEntry { construct: "finite-reference-graph".into(), disposition: CapabilityDisposition::Refused { code: std001_code!("graph_not_qualified") } },
-    ]).unwrap();
+    let refused = KaniProfile::new(
+        profile.selection().clone(),
+        vec![
+            CapabilityEntry {
+                construct: "bounded-collection-query".into(),
+                disposition: CapabilityDisposition::Refused {
+                    code: std001_code!("collection_not_qualified"),
+                },
+            },
+            CapabilityEntry {
+                construct: "finite-reference-graph".into(),
+                disposition: CapabilityDisposition::Refused {
+                    code: std001_code!("graph_not_qualified"),
+                },
+            },
+        ],
+    )
+    .unwrap();
     let empty = DispatchIndex::new(vec![]).unwrap();
     // Both requests are also malformed or over-bound; profile refusal must win.
-    assert_direct_refusal(&prepare_bounded_collection_query(&refused, &empty, &input, direct_query(0)).unwrap_err(),
-        KaniOutcomeKind::Refused, std001_code!("collection_not_qualified"), "source:direct");
-    assert_direct_refusal(&prepare_finite_graph_reaches(&refused, &empty, &input, direct_graph(0)).unwrap_err(),
-        KaniOutcomeKind::Refused, std001_code!("graph_not_qualified"), "source:direct");
+    assert_direct_refusal(
+        &prepare_bounded_collection_query(&refused, &empty, &input, direct_query(0)).unwrap_err(),
+        KaniOutcomeKind::Refused,
+        std001_code!("collection_not_qualified"),
+        "source:direct",
+    );
+    assert_direct_refusal(
+        &prepare_finite_graph_reaches(&refused, &empty, &input, direct_graph(0)).unwrap_err(),
+        KaniOutcomeKind::Refused,
+        std001_code!("graph_not_qualified"),
+        "source:direct",
+    );
     for outcome in [
         prepare_bounded_collection_query(&profile, &empty, &input, direct_query(0)).unwrap_err(),
         prepare_finite_graph_reaches(&profile, &empty, &input, direct_graph(0)).unwrap_err(),
     ] {
-        assert_direct_refusal(&outcome, KaniOutcomeKind::Refused, std001_code!("kani_dispatch_unowned"), "source:direct");
+        assert_direct_refusal(
+            &outcome,
+            KaniOutcomeKind::Refused,
+            std001_code!("kani_dispatch_unowned"),
+            "source:direct",
+        );
     }
-    let mismatched = KaniProfile::new(profile.selection().clone(), vec![
-        CapabilityEntry { construct: "bounded-collection-query".into(), disposition: CapabilityDisposition::Supported { module: "foreign".into() } },
-        CapabilityEntry { construct: "finite-reference-graph".into(), disposition: CapabilityDisposition::Supported { module: "foreign".into() } },
-    ]).unwrap();
+    let mismatched = KaniProfile::new(
+        profile.selection().clone(),
+        vec![
+            CapabilityEntry {
+                construct: "bounded-collection-query".into(),
+                disposition: CapabilityDisposition::Supported {
+                    module: "foreign".into(),
+                },
+            },
+            CapabilityEntry {
+                construct: "finite-reference-graph".into(),
+                disposition: CapabilityDisposition::Supported {
+                    module: "foreign".into(),
+                },
+            },
+        ],
+    )
+    .unwrap();
     for outcome in [
-        prepare_bounded_collection_query(&mismatched, &dispatch, &input, direct_query(0)).unwrap_err(),
+        prepare_bounded_collection_query(&mismatched, &dispatch, &input, direct_query(0))
+            .unwrap_err(),
         prepare_finite_graph_reaches(&mismatched, &dispatch, &input, direct_graph(0)).unwrap_err(),
     ] {
-        assert_direct_refusal(&outcome, KaniOutcomeKind::Refused, std001_code!("kani_dispatch_profile_mismatch"), "source:direct");
+        assert_direct_refusal(
+            &outcome,
+            KaniOutcomeKind::Refused,
+            std001_code!("kani_dispatch_profile_mismatch"),
+            "source:direct",
+        );
     }
-    assert_direct_refusal(&prepare_bounded_collection_query(&profile, &dispatch, &input, direct_query(2)).unwrap_err(),
-        KaniOutcomeKind::ResourceExhausted, std001_code!("kani_collection_bound_exhausted"), "source:direct");
-    let unknown = GraphRequest { start_id: "foreign".into(), ..direct_graph(0) };
-    assert_direct_refusal(&prepare_finite_graph_reaches(&profile, &dispatch, &input, unknown.clone()).unwrap_err(),
-        KaniOutcomeKind::InvalidInput, std001_code!("kani_graph_bound_invalid"), "source:direct");
-    assert_direct_refusal(&prepare_finite_graph_reaches(&profile, &dispatch, &input, GraphRequest { max_expansions: 1, ..unknown }).unwrap_err(),
-        KaniOutcomeKind::InvalidInput, std001_code!("kani_graph_identity_invalid"), "source:direct");
+    assert_direct_refusal(
+        &prepare_bounded_collection_query(&profile, &dispatch, &input, direct_query(2))
+            .unwrap_err(),
+        KaniOutcomeKind::ResourceExhausted,
+        std001_code!("kani_collection_bound_exhausted"),
+        "source:direct",
+    );
+    let unknown = GraphRequest {
+        start_id: "foreign".into(),
+        ..direct_graph(0)
+    };
+    assert_direct_refusal(
+        &prepare_finite_graph_reaches(&profile, &dispatch, &input, unknown.clone()).unwrap_err(),
+        KaniOutcomeKind::InvalidInput,
+        std001_code!("kani_graph_bound_invalid"),
+        "source:direct",
+    );
+    assert_direct_refusal(
+        &prepare_finite_graph_reaches(
+            &profile,
+            &dispatch,
+            &input,
+            GraphRequest {
+                max_expansions: 1,
+                ..unknown
+            },
+        )
+        .unwrap_err(),
+        KaniOutcomeKind::InvalidInput,
+        std001_code!("kani_graph_identity_invalid"),
+        "source:direct",
+    );
     // A positive-length search back to a has to expand b, exceeding the one-expansion limit.
-    assert_direct_refusal(&prepare_finite_graph_reaches(&profile, &dispatch, &input, GraphRequest { target_id: "a".into(), ..direct_graph(1) }).unwrap_err(),
-        KaniOutcomeKind::ResourceExhausted, std001_code!("kani_graph_expansion_exhausted"), "source:direct");
+    assert_direct_refusal(
+        &prepare_finite_graph_reaches(
+            &profile,
+            &dispatch,
+            &input,
+            GraphRequest {
+                target_id: "a".into(),
+                ..direct_graph(1)
+            },
+        )
+        .unwrap_err(),
+        KaniOutcomeKind::ResourceExhausted,
+        std001_code!("kani_graph_expansion_exhausted"),
+        "source:direct",
+    );
 }
 
 #[trace("FR-015-AC-124")]
@@ -962,55 +1076,131 @@ fn direct_family_errors_preserve_profile_dispatch_and_bound_precedence() {
 fn direct_corpus_refusals_preserve_earliest_failure_and_identity_transactions() {
     let (profile, dispatch, input) = fixture();
     let dependency = ProofDependencyRequest {
-        proof_id: "duplicate", kind: ProofDependencyKind::Required,
-        state: ProofDependencyState::Passed, original_path: None, replacement_path: None,
+        proof_id: "duplicate",
+        kind: ProofDependencyKind::Required,
+        state: ProofDependencyState::Passed,
+        original_path: None,
+        replacement_path: None,
     };
     let empty = DispatchIndex::new(vec![]).unwrap();
     let mut emitted = EmittedCorpusIdentities::new();
     let bad: Result<BoundedCorpusCase, KaniOutcome> = generate_bounded_kani_corpus_case(
-        crate::common::proof_ceilings::proof_ceilings(), &profile, &empty, &input,
-        BoundedCorpusRequest::Collection(direct_query(0)), &[dependency, dependency], &mut emitted,
+        crate::common::proof_ceilings::proof_ceilings(),
+        &profile,
+        &empty,
+        &input,
+        BoundedCorpusRequest::Collection(direct_query(0)),
+        &[dependency, dependency],
+        &mut emitted,
     );
-    assert_direct_refusal(&bad.unwrap_err(), KaniOutcomeKind::InvalidInput,
-        std001_code!("kani_corpus_dependency_invalid"), "source:direct");
-    let mismatch = KaniProfile::new(ProfileSelection { revision: "r2".into(), ..profile.selection().clone() }, vec![]).unwrap();
+    assert_direct_refusal(
+        &bad.unwrap_err(),
+        KaniOutcomeKind::InvalidInput,
+        std001_code!("kani_corpus_dependency_invalid"),
+        "source:direct",
+    );
+    let mismatch = KaniProfile::new(
+        ProfileSelection {
+            revision: "r2".into(),
+            ..profile.selection().clone()
+        },
+        vec![],
+    )
+    .unwrap();
     let mismatch_error = generate_bounded_kani_corpus_case(
-        crate::common::proof_ceilings::proof_ceilings(), &mismatch, &empty, &input,
-        BoundedCorpusRequest::Collection(direct_query(0)), &[dependency, dependency], &mut emitted,
-    ).unwrap_err();
+        crate::common::proof_ceilings::proof_ceilings(),
+        &mismatch,
+        &empty,
+        &input,
+        BoundedCorpusRequest::Collection(direct_query(0)),
+        &[dependency, dependency],
+        &mut emitted,
+    )
+    .unwrap_err();
     assert_eq!(mismatch_error.kind, KaniOutcomeKind::InvalidInput);
-    assert_eq!(mismatch_error.code, std001_code!("kani_profile_input_mismatch"));
+    assert_eq!(
+        mismatch_error.code,
+        std001_code!("kani_profile_input_mismatch")
+    );
     assert_eq!(mismatch_error.source_id, "source:direct");
     assert_eq!(mismatch_error.context, "r2");
     assert_eq!(mismatch_error.boolean_claim(), None);
     let oversized_source = "x".repeat(1 << 20);
     let oversized = generate_bounded_kani_corpus_case(
-        crate::common::proof_ceilings::proof_ceilings(), &profile, &empty, &input,
-        BoundedCorpusRequest::Collection(CollectionQuery { source_id: oversized_source.clone(), ..direct_query(0) }), &[], &mut emitted,
-    ).unwrap_err();
-    assert_direct_refusal(&oversized, KaniOutcomeKind::InvalidInput,
-        std001_code!("kani_corpus_identity_unencodable"), &oversized_source);
+        crate::common::proof_ceilings::proof_ceilings(),
+        &profile,
+        &empty,
+        &input,
+        BoundedCorpusRequest::Collection(CollectionQuery {
+            source_id: oversized_source.clone(),
+            ..direct_query(0)
+        }),
+        &[],
+        &mut emitted,
+    )
+    .unwrap_err();
+    assert_direct_refusal(
+        &oversized,
+        KaniOutcomeKind::InvalidInput,
+        std001_code!("kani_corpus_identity_unencodable"),
+        &oversized_source,
+    );
     let bound = generate_bounded_kani_corpus_case(
-        crate::common::proof_ceilings::proof_ceilings(), &profile, &dispatch, &input,
-        BoundedCorpusRequest::Collection(direct_query(2)), &[], &mut emitted,
-    ).unwrap_err();
-    assert_direct_refusal(&bound, KaniOutcomeKind::ResourceExhausted,
-        std001_code!("kani_collection_bound_exhausted"), "source:direct");
+        crate::common::proof_ceilings::proof_ceilings(),
+        &profile,
+        &dispatch,
+        &input,
+        BoundedCorpusRequest::Collection(direct_query(2)),
+        &[],
+        &mut emitted,
+    )
+    .unwrap_err();
+    assert_direct_refusal(
+        &bound,
+        KaniOutcomeKind::ResourceExhausted,
+        std001_code!("kani_collection_bound_exhausted"),
+        "source:direct",
+    );
     // Dispatch is not part of the case identity: retrying the exact request with
     // its admitted dispatch proves that a failure did not reserve its identity.
     let unowned = generate_bounded_kani_corpus_case(
-        crate::common::proof_ceilings::proof_ceilings(), &profile, &empty, &input,
-        BoundedCorpusRequest::Collection(direct_query(3)), &[], &mut emitted,
-    ).unwrap_err();
-    assert_direct_refusal(&unowned, KaniOutcomeKind::Refused,
-        std001_code!("kani_dispatch_unowned"), "source:direct");
+        crate::common::proof_ceilings::proof_ceilings(),
+        &profile,
+        &empty,
+        &input,
+        BoundedCorpusRequest::Collection(direct_query(3)),
+        &[],
+        &mut emitted,
+    )
+    .unwrap_err();
+    assert_direct_refusal(
+        &unowned,
+        KaniOutcomeKind::Refused,
+        std001_code!("kani_dispatch_unowned"),
+        "source:direct",
+    );
     let accepted = generate_bounded_kani_corpus_case(
-        crate::common::proof_ceilings::proof_ceilings(), &profile, &dispatch, &input,
-        BoundedCorpusRequest::Collection(direct_query(3)), &[], &mut emitted,
-    ).expect("the repaired case still admits in the same registry");
+        crate::common::proof_ceilings::proof_ceilings(),
+        &profile,
+        &dispatch,
+        &input,
+        BoundedCorpusRequest::Collection(direct_query(3)),
+        &[],
+        &mut emitted,
+    )
+    .expect("the repaired case still admits in the same registry");
     let independent = generate_bounded_kani_corpus_case(
-        crate::common::proof_ceilings::proof_ceilings(), &profile, &dispatch, &input,
-        BoundedCorpusRequest::Collection(direct_query(3)), &[], &mut EmittedCorpusIdentities::new(),
-    ).unwrap();
-    assert_eq!(accepted, independent, "earlier failures do not change successful bytes or identity");
+        crate::common::proof_ceilings::proof_ceilings(),
+        &profile,
+        &dispatch,
+        &input,
+        BoundedCorpusRequest::Collection(direct_query(3)),
+        &[],
+        &mut EmittedCorpusIdentities::new(),
+    )
+    .unwrap();
+    assert_eq!(
+        accepted, independent,
+        "earlier failures do not change successful bytes or identity"
+    );
 }

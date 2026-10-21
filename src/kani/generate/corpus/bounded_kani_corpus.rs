@@ -10,8 +10,8 @@ use std::{collections::BTreeSet, fmt::Write as _};
 
 use quire_canonical::FixedShape;
 use quire_contract_ir::kani::{
-    DispatchIndex, FiniteInput, FiniteObject, FiniteReference, KaniOutcome,
-    KaniProfile, ProfileSelection, ValidatedFiniteInput,
+    DispatchIndex, FiniteInput, FiniteObject, FiniteReference, KaniOutcome, KaniProfile,
+    ProfileSelection, ValidatedFiniteInput,
 };
 use quire_contract_model::std001_code;
 use serde::{Deserialize, Serialize};
@@ -1072,7 +1072,8 @@ mod tests {
             "true",
             &graph.dependencies,
         );
-        let refusal = rendering.expect_err("real artifact rendering retains its serialization refusal");
+        let refusal =
+            rendering.expect_err("real artifact rendering retains its serialization refusal");
         assert!(refusal.contains("exceeds the artifact ceiling"));
     }
 
@@ -1754,8 +1755,7 @@ mod tests {
         let mut emitted = EmittedCorpusIdentities::new();
         let first = emit(&fixture, collection(3, "same"), &[], &mut emitted).unwrap();
         for _ in 0..2 {
-            let refusal = emit(&fixture, collection(3, "same"), &[], &mut emitted)
-                        .unwrap_err();
+            let refusal = emit(&fixture, collection(3, "same"), &[], &mut emitted).unwrap_err();
             assert_eq!(refusal.kind, KaniOutcomeKind::InvalidInput);
             assert_eq!(refusal.code, std001_code!("kani_corpus_identity_collision"));
             assert_eq!(refusal.context, "r1");
@@ -1993,8 +1993,7 @@ mod tests {
         );
         let mut emitted = EmittedCorpusIdentities::new();
         emit(&forward, request(), &[], &mut emitted).unwrap();
-        let refusal = emit(&permuted, request(), &[], &mut emitted)
-                .unwrap_err();
+        let refusal = emit(&permuted, request(), &[], &mut emitted).unwrap_err();
         assert_eq!(refusal.code, std001_code!("kani_corpus_identity_collision"));
     }
 
