@@ -315,7 +315,7 @@ above-reader resource refusal (Resource), a subsequent IR read stop
 none exposes a partial successful context. Do not widen the current imported
 context guard without retaining its original admitted dependency packages.
 
-Run the real generated `environment_symbol(context)` and
+Run the real generated `environment_symbol(Some(context))` and
 `oracle_symbol(prepared, left, right, meter)` ABI, with ordered and unordered
 enums including unused cases and a parameter without member literal nodes.
 Check canonical positions and original member identities against genuine
@@ -333,7 +333,7 @@ operator, descriptor and case lookup independently so direct-vs-generated
 agreement fails. Check deterministic bytes and claim order after context
 threading, with no NodeKey constructor/decoder, generated nominal preimage,
 hash or ordinal-as-identity in emitted source. All helpers/modules receive
-the actual context; retaining one only on the planning side is a failing
+the same actual optional capability, with genuine Some on nominal paths; retaining one only on the planning side is a failing
 control. Source compilation occurs before oracle invocation, and the
 emitted oracle remains the implementation under test.
 
@@ -345,6 +345,75 @@ cover equality's root replay dependency and scalar Boolean/integer proof
 bodies with a legitimate empty index and no added replay compile leg.
 Native enum results are not TC025/TC027 healthy/mutant proof receipts, and
 those original proof domains and controls remain unchanged.
+
+### Optional standalone capability controls
+
+Keep the native authenticated preparation above mandatory and unchanged:
+its successful request always supplies Some. Separately exercise standalone
+IR generation with Option context. With None, use reader-admitted
+non-nominal primitive and nested Option/Collection closures and verify their
+exact original successful behavior, descriptors, values/domains and charges.
+Retain the exact conversion FormMismatch("conversion") and quantity
+Unsupported("quantity") IR negatives where they need no nominal key; do
+not substitute a numeric source fixture for a retained conversion node or
+claim the unavailable source quantity declaration compiled. None is neither
+source authentication nor an empty nominal capability.
+
+Cover None at nominal identity reconstruction from each left/right operand
+source, each primitive-source nominal conversion target and nested
+Option/Collection enum types. After the separate genuine record/tuple lookup
+capability exists, cover its fields and recursive closures too. Assert
+MissingAdmittedContext names the first actually reached nominal declaration,
+with no fabricated key, fallback index, Unsupported substitute, missing
+member or partial publication. Preserve the existing charged traversal,
+first-error/cycle/work precedence, deterministic order and sibling isolation;
+capability demand must not become an outer-tag or complete-context pre-scan.
+
+Pass Some of a genuine wrong-package context to primitive-only, nominal and
+empty standalone requests. After existing setting/accounting checks, each
+must fail the global context guard before classification. Both primitive
+and nominal emitted constructors reject that Some, while a context-free
+recipe can prepare with None. Nominal emitted preparation with None gives
+the typed missing-capability error before lookup or partial publication.
+Equality's typed Option ABI may still name root replay in its manifest;
+ordinary scalar proof manifests and bodies do not acquire that dependency.
+
+After complete zero-enum closure resolution only, require a private empty
+index. Reached enums must still include every genuine case, used or not;
+failed lookup, missing context or a stopped walk never proves zero enums.
+For wrappers prepared with None and Some, retain expected package/item/
+descriptor binding and the complete index privately. Exercise wrong binding,
+present-context mismatch, missing context in a nominal recipe, and private
+environment-only faults; assert invariant refusal before any meter charge.
+Then execute both check_type guards, same-index check_equality and evaluate
+on the valid path. No raw caller index or public unchecked wrapper is added.
+These controls change neither the merged AC-14 bound-intake split nor the
+original TC025/TC027 domains, harnesses or proof obligations.
+
+### Direct Integer root and asymmetric descriptor control
+
+Use the genuine source fixture with `a: Int[0,9]` and `b: Integer` and its
+reader-admitted graph, preserving the original package/lock/source bindings
+for any native route. Assert a's parameter semantic_type names its own range
+and b's names canonical base Integer, which is also that range's base. The
+standalone descriptor uses the actual left/right source IDs and an independent
+caller-selected Integer conversion target for the left. Reconstruct direct
+base Integer sources/targets as unbounded and the explicit range as [0,9],
+without adopting the sibling's bound. Compare generated/native behavior over
+the original domains, including right values outside [0,9], and preserve the
+refusal of a narrowing conversion from unbounded Integer. Keep charges and
+descriptor order unchanged and derive the native expectation from the request,
+not generated Rust.
+
+Inspect whether the genuine graph actually retains a convert node. If source
+`convert<Integer>(a)` is erased, this is the parameter/asymmetric caller-target
+control of AC-3/AC-43, not proof of AC-15's conversion-reference branch.
+Retain the exact admitted-IR conversion-reference assertion independently,
+using the correctly scoped standalone capability without claiming unavailable
+source emission. The existing AC-16 numeric member/base equivalence test and
+record/tuple member semantics stay unchanged. Their unresolved genuine member
+bound association must not be filled by guessing lexical ownership or adding
+a public descriptor field; this control is direct-root-only.
 
 ## Expected Results
 
