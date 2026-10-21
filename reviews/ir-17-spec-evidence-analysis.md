@@ -666,3 +666,24 @@ Scope below records all inserted/edited prose blocks and changed acceptance crit
 ## Verdict
 
 FAIL for this method and frozen specification diff. Implementation and original consumer proof acceptance remain outstanding.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round1: FR-018-AC-36 Verification cell is now catalogued Test at reviewed fix71a5e6b; original criterion and TC-029 semantics unchanged. |
+| FND-002 | fixed | Round1: FR-018-AC-37 Verification cell is now catalogued Test at reviewed fix71a5e6b; original criterion and TC-029 semantics unchanged. |
+
+## Disposition Round 1
+
+Inspected the actual clean fix head71a5e6b180a56de2f48876b66c995f8d30fa881d against original85dabad. The normative diff changes exactly the two Verification cells from `Test, Inspection` to `Test`; TC-029 and all remaining specification text are unchanged. Independently re-ran installed `quoin advise --json`: both criteria authored Test, mismatch=false, uncatalogued=false, inconclusive=false. All nine original SR files in the reviewed fix commit were independently verified byte-exact to this reviewer's initial files before this disposition append. No heavy jobs or worktree edits. Both original findings and FAIL verdict remain unmodified above; current disposition result is PASS with both findings fixed and no new findings. Implementation, native ABI controls and original consumer Kani qualification are still outstanding.
+
+```yaml
+dispositions:
+- fnd: FND-001
+  outcome: fixed
+  after_excerpt: only WireNodeId and case identifiers for lookup and contains no NodeKey constructor/decoder or generated nominal preimage/hash. Only the prepared wrapper's private genuine index reaches check_equality. A private environment-only fault fixture still satisfies AC-8, every original charge-stop case still satisfies AC-9, and a wrong item/descriptor prepared wrapper refuses before charging. Record/tuple/recursive/collection cases remain required by AC-2 and AC-21 through AC-30; an absent owner lookup capability is recorded as unresolved migration work, not as accepted Unsupported behavior. | Test |
+- fnd: FND-002
+  outcome: fixed
+  after_excerpt: '| FR-018-AC-37 | Equality''s generated manifest and native scratch consumers use the one profile authority''s direct exact/QSV/replay dependencies, while ordinary Boolean/integer FR-014 scalar proof manifests and oracle bodies acquire no replay source-compilation/context leg. Native generated enum acceptance is reported separately from original TC025/TC027 proof qualification; neither result substitutes for the other. | Test |'
+```
