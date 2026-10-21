@@ -805,15 +805,27 @@ pub fn generate_composite_equality_oracles(
                     limits.type_resolution_work_units,
                 ) {
                     Ok(generated) => {
-                        let runtime_by_node = generated.composites.iter().map(|declaration| {
-                            let binding = generated.composite_bindings.get(&declaration.key())
-                                .ok_or(OracleGenerationError::InvalidPlanState)?;
-                            Ok((&binding.node, declaration.key()))
-                        }).collect::<Result<BTreeMap<_, _>, OracleGenerationError>>()?;
-                        let runtime_keys = generated.declaration_keys.iter().map(|id| {
-                            runtime_by_node.get(id).map(ToString::to_string)
-                                .ok_or(OracleGenerationError::InvalidPlanState)
-                        }).collect::<Result<Vec<_>, _>>()?;
+                        let runtime_by_node = generated
+                            .composites
+                            .iter()
+                            .map(|declaration| {
+                                let binding = generated
+                                    .composite_bindings
+                                    .get(&declaration.key())
+                                    .ok_or(OracleGenerationError::InvalidPlanState)?;
+                                Ok((&binding.node, declaration.key()))
+                            })
+                            .collect::<Result<BTreeMap<_, _>, OracleGenerationError>>()?;
+                        let runtime_keys = generated
+                            .declaration_keys
+                            .iter()
+                            .map(|id| {
+                                runtime_by_node
+                                    .get(id)
+                                    .map(ToString::to_string)
+                                    .ok_or(OracleGenerationError::InvalidPlanState)
+                            })
+                            .collect::<Result<Vec<_>, _>>()?;
                         let claim = ClaimDisposition::Generated(Box::new(
                             GeneratedCompositeEqualityClaim {
                                 environment_symbol: String::new(),
@@ -2373,8 +2385,13 @@ mod tests {
 
     /// Start from genuine owner-admitted numeric members. Changes below exercise only
     /// the private parser/resolver, not package/source/context authentication.
-    fn numeric_tuple_component(base_members: bool, mutation: Option<&str>) -> (String, CheckedNodeId) {
-        use quire_contract_model::{CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2ReadResult};
+    fn numeric_tuple_component(
+        base_members: bool,
+        mutation: Option<&str>,
+    ) -> (String, CheckedNodeId) {
+        use quire_contract_model::{
+            CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2ReadResult,
+        };
         let source = concat!(
             "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\n",
             "enum Marker { UNUSED, ALSO_UNUSED }\nrecord Point { x: Boolean; }\n",
@@ -2383,49 +2400,148 @@ mod tests {
         );
         let compiled = qsl_replay::compile_admitted(
             qsl_replay::SourceIdentity::new("test", "numeric-member.native", "git", "fixture"),
-            "numeric-member.native", source.as_bytes(), [], &qsl_replay::DependencyInput::default(),
-            qsl_replay::StageLimits::default(), qsl_replay::ReplayLimits::default(),
-        ).expect("the unchanged original numeric member source compiles");
-        let mut evidence = CheckedPackageEvidence::new(); evidence.support_feature("quire.value.complete/v1");
-        let CheckedPackageV2ReadResult::Admitted(package) = CheckedPackageV2::read(compiled.package().bytes(), CheckedPackageReadLimits::bounded(), &evidence) else {
+            "numeric-member.native",
+            source.as_bytes(),
+            [],
+            &qsl_replay::DependencyInput::default(),
+            qsl_replay::StageLimits::default(),
+            qsl_replay::ReplayLimits::default(),
+        )
+        .expect("the unchanged original numeric member source compiles");
+        let mut evidence = CheckedPackageEvidence::new();
+        evidence.support_feature("quire.value.complete/v1");
+        let CheckedPackageV2ReadResult::Admitted(package) = CheckedPackageV2::read(
+            compiled.package().bytes(),
+            CheckedPackageReadLimits::bounded(),
+            &evidence,
+        ) else {
             panic!("the unmodified public tuple package must admit");
         };
         let mut nodes = package.graph().nodes.clone();
-        let bound = |form: &str| nodes.iter().find(|node| node.semantic_form.as_ref() == form).expect("original numeric/text bound").clone();
-        let integer = bound("integer_range"); let text = bound("text_bounds");
-        let decimal = bound("decimal_range"); let rational = bound("rational_range");
+        let bound = |form: &str| {
+            nodes
+                .iter()
+                .find(|node| node.semantic_form.as_ref() == form)
+                .expect("original numeric/text bound")
+                .clone()
+        };
+        let integer = bound("integer_range");
+        let text = bound("text_bounds");
+        let decimal = bound("decimal_range");
+        let rational = bound("rational_range");
         let members = [
-            if base_members { integer.semantic_type.clone() } else { integer.node_id.clone() },
+            if base_members {
+                integer.semantic_type.clone()
+            } else {
+                integer.node_id.clone()
+            },
             text.node_id.clone(),
-            if base_members { decimal.semantic_type.clone() } else { decimal.node_id.clone() },
-            if base_members { rational.semantic_type.clone() } else { rational.node_id.clone() },
+            if base_members {
+                decimal.semantic_type.clone()
+            } else {
+                decimal.node_id.clone()
+            },
+            if base_members {
+                rational.semantic_type.clone()
+            } else {
+                rational.node_id.clone()
+            },
         ];
-        let tuple = nodes.iter_mut().find(|node| node.semantic_form.as_ref() == "tuple").expect("actual Pair");
+        let tuple = nodes
+            .iter_mut()
+            .find(|node| node.semantic_form.as_ref() == "tuple")
+            .expect("actual Pair");
         let root = tuple.node_id.clone();
-        tuple.body["members"] = json!(members.iter().map(|id| json!({"term":"reference","target":id})).collect::<Vec<_>>());
+        tuple.body["members"] = json!(members
+            .iter()
+            .map(|id| json!({"term":"reference","target":id}))
+            .collect::<Vec<_>>());
         if let Some(mutation) = mutation {
             let base = match mutation {
                 "wrong_form" => None,
-                "boolean" => Some(nodes.iter().find(|node| node.semantic_form.as_ref() == "boolean").unwrap().node_id.clone()),
-                "enum" | "record" => Some(nodes.iter().find(|node| node.declaration.as_ref().is_some_and(|declaration| declaration.qualified_name.iter().map(|part| part.as_ref()).eq([if mutation == "enum" { "Marker" } else { "Point" }]))).unwrap().node_id.clone()),
+                "boolean" => Some(
+                    nodes
+                        .iter()
+                        .find(|node| node.semantic_form.as_ref() == "boolean")
+                        .unwrap()
+                        .node_id
+                        .clone(),
+                ),
+                "enum" | "record" => Some(
+                    nodes
+                        .iter()
+                        .find(|node| {
+                            node.declaration.as_ref().is_some_and(|declaration| {
+                                declaration
+                                    .qualified_name
+                                    .iter()
+                                    .map(|part| part.as_ref())
+                                    .eq([if mutation == "enum" {
+                                        "Marker"
+                                    } else {
+                                        "Point"
+                                    }])
+                            })
+                        })
+                        .unwrap()
+                        .node_id
+                        .clone(),
+                ),
                 _ => panic!("unknown private numeric member mutation"),
             };
-            let bound = nodes.iter_mut().find(|node| node.node_id == integer.node_id).unwrap();
-            if let Some(base) = base { bound.semantic_type = base; }
-            else { bound.semantic_form = "text_bounds".into(); }
+            let bound = nodes
+                .iter_mut()
+                .find(|node| node.node_id == integer.node_id)
+                .unwrap();
+            if let Some(base) = base {
+                bound.semantic_type = base;
+            } else {
+                bound.semantic_form = "text_bounds".into();
+            }
         }
         let typed = EqualityOperandDescriptor::typed(root);
-        let healthy = EqualityOperandDescriptor::typed(nodes.iter().find(|node| node.semantic_form.as_ref() == "boolean").unwrap().node_id.clone());
+        let healthy = EqualityOperandDescriptor::typed(
+            nodes
+                .iter()
+                .find(|node| node.semantic_form.as_ref() == "boolean")
+                .unwrap()
+                .node_id
+                .clone(),
+        );
         let operands = vec![(typed.clone(), typed), (healthy.clone(), healthy)];
-        let (outcomes, source) = check_component_items_with_context(Some(compiled.context()), nodes, &operands, CompositeEqualityLimits { source_bytes: usize::MAX, ..Default::default() });
+        let (outcomes, source) = check_component_items_with_context(
+            Some(compiled.context()),
+            nodes,
+            &operands,
+            CompositeEqualityLimits {
+                source_bytes: usize::MAX,
+                ..Default::default()
+            },
+        );
         match mutation {
-            Some("wrong_form") => assert_eq!(outcomes[0], Err(CompositeEqualityRefusal::MissingBound { bounded_type: integer.node_id.clone(), expected_form: "integer_range" })),
-            Some(_) => assert_eq!(outcomes[0], Err(CompositeEqualityRefusal::Unsupported { unsupported_node_id: integer.node_id.clone(), node_tag: "bounded_domain" })),
+            Some("wrong_form") => assert_eq!(
+                outcomes[0],
+                Err(CompositeEqualityRefusal::MissingBound {
+                    bounded_type: integer.node_id.clone(),
+                    expected_form: "integer_range"
+                })
+            ),
+            Some(_) => assert_eq!(
+                outcomes[0],
+                Err(CompositeEqualityRefusal::Unsupported {
+                    unsupported_node_id: integer.node_id.clone(),
+                    node_tag: "bounded_domain"
+                })
+            ),
             None => assert_eq!(outcomes, vec![Ok(()), Ok(())]),
         }
         assert_eq!(outcomes[1], Ok(()));
         let artifacts = source.finish(usize::MAX).expect("private component source");
-        let lib = artifacts.into_iter().find(|artifact| artifact.path == "src/lib.rs").unwrap().contents;
+        let lib = artifacts
+            .into_iter()
+            .find(|artifact| artifact.path == "src/lib.rs")
+            .unwrap()
+            .contents;
         (lib, integer.node_id)
     }
 
@@ -2434,8 +2550,14 @@ mod tests {
     fn legacy_numeric_member_alias_equivalence_is_a_private_resolution_control() {
         let (through_scalars, _) = numeric_tuple_component(true, None);
         let (through_domains, _) = numeric_tuple_component(false, None);
-        assert_eq!(through_scalars, through_domains, "both private numeric member forms reconstruct identical source");
-        assert!(through_scalars.contains("exact::ValueType::Decimal(") && through_scalars.contains("exact::ValueType::Rational("));
+        assert_eq!(
+            through_scalars, through_domains,
+            "both private numeric member forms reconstruct identical source"
+        );
+        assert!(
+            through_scalars.contains("exact::ValueType::Decimal(")
+                && through_scalars.contains("exact::ValueType::Rational(")
+        );
         for reconstruction in [
             "exact::ValueType::Int(rebuild_interval(\"-100\", \"100\")?)",
             "exact::ValueType::Decimal(rebuild_decimal(\"-100\", \"100\", 0, 0, exact::RoundingMode::NearestEven)?)",
@@ -2450,8 +2572,21 @@ mod tests {
         let (baseline, _) = numeric_tuple_component(false, None);
         for name in ["oracle_test1", "environment_test1"] {
             let marker = format!("pub fn {name}");
-            let body = |source: &str| source.split_once(&marker).expect("healthy sibling function").1.split_once("\n}\n").expect("healthy sibling closes").0.to_owned();
-            assert_eq!(body(actual), body(&baseline), "{name}: independent sibling source remains identical");
+            let body = |source: &str| {
+                source
+                    .split_once(&marker)
+                    .expect("healthy sibling function")
+                    .1
+                    .split_once("\n}\n")
+                    .expect("healthy sibling closes")
+                    .0
+                    .to_owned()
+            };
+            assert_eq!(
+                body(actual),
+                body(&baseline),
+                "{name}: independent sibling source remains identical"
+            );
         }
     }
 
@@ -2474,8 +2609,14 @@ mod tests {
             assert_numeric_private_sibling_unchanged(&lib);
             assert!(!lib.contains("pub fn oracle_test0"), "{base}");
             assert!(!lib.contains("pub fn environment_test0"), "{base}");
-            assert!(lib.contains("pub fn oracle_test1"), "{base}: healthy sibling");
-            assert!(lib.contains("pub fn environment_test1"), "{base}: healthy sibling");
+            assert!(
+                lib.contains("pub fn oracle_test1"),
+                "{base}: healthy sibling"
+            );
+            assert!(
+                lib.contains("pub fn environment_test1"),
+                "{base}: healthy sibling"
+            );
         }
     }
 
@@ -2487,21 +2628,42 @@ mod tests {
         let mut nodes = recursive_shape_nodes();
         nodes[0].body["members"][0]["name"] = json!("x");
         let duplicate = nodes[0].body["members"][0].clone();
-        nodes[0].body["members"].as_array_mut().unwrap().push(duplicate);
+        nodes[0].body["members"]
+            .as_array_mut()
+            .unwrap()
+            .push(duplicate);
         let list = EqualityOperandDescriptor::typed(recursive_node_id('a'));
         let tree = EqualityOperandDescriptor::typed(recursive_node_id('c'));
         let (outcomes, source) = check_nominal_items_with_limits(
-            nodes, &[(list.clone(), list), (tree.clone(), tree)],
-            CompositeEqualityLimits { source_bytes: usize::MAX, ..Default::default() },
+            nodes,
+            &[(list.clone(), list), (tree.clone(), tree)],
+            CompositeEqualityLimits {
+                source_bytes: usize::MAX,
+                ..Default::default()
+            },
         );
-        assert!(matches!(&outcomes[0], Err(CompositeEqualityRefusal::Declaration {
+        assert!(
+            matches!(&outcomes[0], Err(CompositeEqualityRefusal::Declaration {
             cause: DeclarationRefusalCause::DuplicateMember { name }, ..
-        }) if name == "x"));
+        }) if name == "x")
+        );
         assert_eq!(outcomes[1], Ok(()));
         let artifacts = source.finish(usize::MAX).expect("healthy sibling source");
-        let lib = &artifacts.iter().find(|artifact| artifact.path == "src/lib.rs").unwrap().contents;
-        assert_eq!(lib.matches("pub fn oracle_").count(), 1, "refused item has no oracle");
-        assert_eq!(lib.matches("pub fn environment_").count(), 1, "refused item has no constructor");
+        let lib = &artifacts
+            .iter()
+            .find(|artifact| artifact.path == "src/lib.rs")
+            .unwrap()
+            .contents;
+        assert_eq!(
+            lib.matches("pub fn oracle_").count(),
+            1,
+            "refused item has no oracle"
+        );
+        assert_eq!(
+            lib.matches("pub fn environment_").count(),
+            1,
+            "refused item has no constructor"
+        );
         assert!(!lib.contains("oracle_test0"));
         assert!(lib.contains("oracle_test1"));
     }
@@ -2822,7 +2984,10 @@ mod tests {
         let mut bounds = BTreeMap::new();
         for node in &nodes {
             if CheckedNodeTag::from_wire(&node.node_tag) == Some(CheckedNodeTag::BoundedDomain) {
-                bounds.entry(&node.semantic_type).or_insert_with(Vec::new).push(node);
+                bounds
+                    .entry(&node.semantic_type)
+                    .or_insert_with(Vec::new)
+                    .push(node);
             }
         }
         let mut source = SourceBuilder::new(limits.source_bytes).expect("synthetic source starts");

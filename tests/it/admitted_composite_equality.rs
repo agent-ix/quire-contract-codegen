@@ -169,10 +169,20 @@ pub(super) fn assert_authentic_recursive_item_generation() {
     let compiled = fixture::compile(source, &qsl_replay::DependencyInput::default());
     let package = checked(&compiled, &[]);
     let batch = ["list_same", "tree_same"].map(|function| direct_source_item(&package, function));
-    let both = generate_items(&package, Some(compiled.context()), &batch, &[]).expect("both original recursive equalities lower together");
+    let both = generate_items(&package, Some(compiled.context()), &batch, &[])
+        .expect("both original recursive equalities lower together");
     assert_eq!(both.claim_map.items.len(), 2);
-    assert!(both.claim_map.items.iter().all(|claim| matches!(claim.result, ClaimDisposition::Generated(_))));
-    let batch_source = &both.artifacts.iter().find(|artifact| artifact.path == "src/lib.rs").unwrap().contents;
+    assert!(both
+        .claim_map
+        .items
+        .iter()
+        .all(|claim| matches!(claim.result, ClaimDisposition::Generated(_))));
+    let batch_source = &both
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.path == "src/lib.rs")
+        .unwrap()
+        .contents;
     assert_eq!(batch_source.matches("pub fn oracle_").count(), 2);
     assert_eq!(batch_source.matches("pub fn environment_").count(), 2);
     for (function, name, field, optional) in [

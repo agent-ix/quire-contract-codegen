@@ -15,9 +15,9 @@ use crate::scratch_crate::{runtime_dependency, TemporaryDirectory};
 use quire_contract_codegen::{
     generate_composite_equality_oracles, ClaimDisposition, CompositeEqualityClaim,
     CompositeEqualityItem, CompositeEqualityLimits, CompositeEqualityOracles,
-    CompositeEqualityRefusal, ContractRequestPosition,
-    EqualityOperandDescriptor, EqualityOperatorKind, OracleGenerationError, RecordedSchedule,
-    UpstreamBlocker, COMPOSITE_EQUALITY_CRATE_NAME,
+    CompositeEqualityRefusal, ContractRequestPosition, EqualityOperandDescriptor,
+    EqualityOperatorKind, OracleGenerationError, RecordedSchedule, UpstreamBlocker,
+    COMPOSITE_EQUALITY_CRATE_NAME,
 };
 use quire_contract_model::{
     derive_structural_candidates, CheckedNodeTag, CheckedPackageLimit, CheckedPackageReadLimits,
@@ -306,30 +306,49 @@ fn genuine_host_case(case: &str, reversed: bool) -> CompositeEqualityOracles {
     };
     let package = super::admitted_enum_equality::checked(&compiled, &[]);
     let mut items = if case == "mixed" {
-        ["pair_same", "holder_same", "other_pair_same", "other_holder_same"]
-            .iter().map(|name| super::admitted_enum_equality::direct_source_item(&package, name))
-            .collect::<Vec<_>>()
+        [
+            "pair_same",
+            "holder_same",
+            "other_pair_same",
+            "other_holder_same",
+        ]
+        .iter()
+        .map(|name| super::admitted_enum_equality::direct_source_item(&package, name))
+        .collect::<Vec<_>>()
     } else {
-        vec![super::composite_equality_agreement::original_item(&package, case.starts_with("conv"))]
+        vec![super::composite_equality_agreement::original_item(
+            &package,
+            case.starts_with("conv"),
+        )]
     };
     let mut not_equal = items[0].clone();
     not_equal.operator = EqualityOperatorKind::NotEqual;
     items.push(not_equal);
-    if reversed { items.reverse(); }
+    if reversed {
+        items.reverse();
+    }
     let output = super::admitted_enum_equality::generate_items(
-        &package, Some(compiled.context()), &items, &[],
-    ).expect("the unchanged genuine case generates");
+        &package,
+        Some(compiled.context()),
+        &items,
+        &[],
+    )
+    .expect("the unchanged genuine case generates");
     assert_eq!(output.claim_map.items.len(), items.len(), "{case}");
-    for claim in &output.claim_map.items { let _ = generated(claim); }
+    for claim in &output.claim_map.items {
+        let _ = generated(claim);
+    }
     output
 }
 
 fn genuine_host_cases() -> impl Iterator<Item = &'static str> {
-    genuine_fixture::CASES.iter().copied().chain(std::iter::once("mixed"))
+    genuine_fixture::CASES
+        .iter()
+        .copied()
+        .chain(std::iter::once("mixed"))
 }
 
-#[path = "../composite_equality_support/authentic_native.rs"]
-mod genuine_fixture;
+use super::composite_equality_agreement::fixture as genuine_fixture;
 
 fn admitted_profile() -> CompleteLoweringProfileV2 {
     CompleteLoweringProfileV2 {
@@ -602,17 +621,38 @@ fn tc_029_ac24_recursive_list_and_tree_items_emit_one_oracle_each() {
         let compiled = genuine_fixture::compile_source(&source);
         let package = super::admitted_enum_equality::checked(&compiled, &[]);
         let item = super::composite_equality_agreement::original_item(&package, false);
-        let oracles = super::admitted_enum_equality::generate_items(&package, Some(compiled.context()), std::slice::from_ref(&item), &[]).expect("original recursive shape");
+        let oracles = super::admitted_enum_equality::generate_items(
+            &package,
+            Some(compiled.context()),
+            std::slice::from_ref(&item),
+            &[],
+        )
+        .expect("original recursive shape");
         assert_eq!(oracles.claim_map.items.len(), 1);
         let claim = generated(&oracles.claim_map.items[0]);
         assert_eq!(claim.declaration_keys, vec![item.left.source_type.clone()]);
-        let actual = compiled.context().composites().find(|actual| actual.qualified_name().iter().map(|part| part.as_str()).eq([name])).unwrap();
-        assert_eq!(claim.declaration_runtime_keys, vec![actual.key().to_string()]);
+        let actual = compiled
+            .context()
+            .composites()
+            .find(|actual| {
+                actual
+                    .qualified_name()
+                    .iter()
+                    .map(|part| part.as_str())
+                    .eq([name])
+            })
+            .unwrap();
+        assert_eq!(
+            claim.declaration_runtime_keys,
+            vec![actual.key().to_string()]
+        );
         let lib = contents(&oracles, "src/lib.rs");
         assert_eq!(lib.matches("pub fn oracle_").count(), 1);
         assert_eq!(lib.matches("pub fn environment_").count(), 1);
         assert!(lib.contains(&claim.oracle_symbol));
-        if name == "Tree" { assert!(lib.contains("rebuild_cardinality(0, 2)?")); }
+        if name == "Tree" {
+            assert!(lib.contains("rebuild_cardinality(0, 2)?"));
+        }
     }
 }
 
@@ -628,37 +668,76 @@ fn assert_recursive_fixture_shapes(package: &CheckedPackageV2) {
     use quire_contract_model::CheckedNodeId;
     fn members(node: &CheckedSemanticNodeV2) -> &[serde_json::Value] {
         assert_eq!(node.body["term"], "aggregate");
-        node.body["members"].as_array().expect("original aggregate members")
+        node.body["members"]
+            .as_array()
+            .expect("original aggregate members")
     }
     fn reference(term: &serde_json::Value) -> CheckedNodeId {
         assert_eq!(term["term"], "reference");
         serde_json::from_value(term["target"].clone()).expect("reader-admitted wire reference")
     }
     let nodes = &package.graph().nodes;
-    let lookup = |id: &CheckedNodeId| nodes.iter().find(|node| &node.node_id == id).expect("original referenced node");
-    let named = |name: &str| nodes.iter().find(|node| node.declaration.as_ref().is_some_and(|declaration| declaration.qualified_name.iter().map(|part| part.as_ref()).eq([name]))).expect("original record declaration");
-    let list = named("List"); let tree = named("Tree");
+    let lookup = |id: &CheckedNodeId| {
+        nodes
+            .iter()
+            .find(|node| &node.node_id == id)
+            .expect("original referenced node")
+    };
+    let named = |name: &str| {
+        nodes
+            .iter()
+            .find(|node| {
+                node.declaration.as_ref().is_some_and(|declaration| {
+                    declaration
+                        .qualified_name
+                        .iter()
+                        .map(|part| part.as_ref())
+                        .eq([name])
+                })
+            })
+            .expect("original record declaration")
+    };
+    let list = named("List");
+    let tree = named("Tree");
     assert_eq!(list.semantic_form.as_ref(), "record");
     assert_eq!(tree.semantic_form.as_ref(), "record");
-    let list_members = members(list); assert_eq!(list_members.len(), 1);
-    assert_eq!(list_members[0]["term"], "binding"); assert_eq!(list_members[0]["name"], "next");
-    let next = &list_members[0]["value"]; assert_eq!(next["term"], "aggregate");
-    let optional = next["members"].as_array().unwrap(); assert_eq!(optional.len(), 1);
-    assert_eq!(optional[0]["term"], "binding"); assert_eq!(optional[0]["name"], "optional");
-    let option = lookup(&reference(&optional[0]["value"])); assert_eq!(option.semantic_form.as_ref(), "option");
-    let payload = members(option); assert_eq!(payload.len(), 1); assert_eq!(reference(&payload[0]), list.node_id);
-    let tree_members = members(tree); assert_eq!(tree_members.len(), 1);
-    assert_eq!(tree_members[0]["term"], "binding"); assert_eq!(tree_members[0]["name"], "kids");
+    let list_members = members(list);
+    assert_eq!(list_members.len(), 1);
+    assert_eq!(list_members[0]["term"], "binding");
+    assert_eq!(list_members[0]["name"], "next");
+    let next = &list_members[0]["value"];
+    assert_eq!(next["term"], "aggregate");
+    let optional = next["members"].as_array().unwrap();
+    assert_eq!(optional.len(), 1);
+    assert_eq!(optional[0]["term"], "binding");
+    assert_eq!(optional[0]["name"], "optional");
+    let option = lookup(&reference(&optional[0]["value"]));
+    assert_eq!(option.semantic_form.as_ref(), "option");
+    let payload = members(option);
+    assert_eq!(payload.len(), 1);
+    assert_eq!(reference(&payload[0]), list.node_id);
+    let tree_members = members(tree);
+    assert_eq!(tree_members.len(), 1);
+    assert_eq!(tree_members[0]["term"], "binding");
+    assert_eq!(tree_members[0]["name"], "kids");
     let bound = lookup(&reference(&tree_members[0]["value"]));
-    assert_eq!(bound.node_tag.as_ref(), "bounded_domain"); assert_eq!(bound.semantic_form.as_ref(), "collection_bounds");
-    let sequence = lookup(&bound.semantic_type); assert_eq!(sequence.semantic_form.as_ref(), "sequence");
-    let elements = members(sequence); assert_eq!(elements.len(), 1); assert_eq!(reference(&elements[0]), tree.node_id);
-    let bounds = members(bound); assert_eq!(bounds.len(), 2);
+    assert_eq!(bound.node_tag.as_ref(), "bounded_domain");
+    assert_eq!(bound.semantic_form.as_ref(), "collection_bounds");
+    let sequence = lookup(&bound.semantic_type);
+    assert_eq!(sequence.semantic_form.as_ref(), "sequence");
+    let elements = members(sequence);
+    assert_eq!(elements.len(), 1);
+    assert_eq!(reference(&elements[0]), tree.node_id);
+    let bounds = members(bound);
+    assert_eq!(bounds.len(), 2);
     for (binding, (name, value)) in bounds.iter().zip([("min", "0"), ("max", "3")]) {
-        assert_eq!(binding["term"], "binding"); assert_eq!(binding["name"], name);
-        assert_eq!(binding["value"]["term"], "literal"); assert_eq!(binding["value"]["value_kind"], "integer");
+        assert_eq!(binding["term"], "binding");
+        assert_eq!(binding["name"], name);
+        assert_eq!(binding["value"]["term"], "literal");
+        assert_eq!(binding["value"]["value_kind"], "integer");
         assert_eq!(binding["value"]["value"], value);
-        let integer: CheckedNodeId = serde_json::from_value(binding["value"]["type"].clone()).unwrap();
+        let integer: CheckedNodeId =
+            serde_json::from_value(binding["value"]["type"].clone()).unwrap();
         assert_eq!(lookup(&integer).semantic_form.as_ref(), "integer");
     }
 }
@@ -669,7 +748,8 @@ fn assert_recursive_fixture_shapes(package: &CheckedPackageV2) {
 #[test]
 fn tc_029_authoritative_qspec_recursive_items_generate_through_reader() {
     const FIXTURE: &str = "proposals/checked-package-v2/fixtures/positive-recursive-records.json";
-    let Some(repo) = std::env::var_os("QSPEC_REPO").or_else(|| std::env::var_os("QSPEC_DIR")) else {
+    let Some(repo) = std::env::var_os("QSPEC_REPO").or_else(|| std::env::var_os("QSPEC_DIR"))
+    else {
         println!("UNAVAILABLE QSpec reader/shape conformance: neither QSPEC_REPO nor QSPEC_DIR is set; no conformance or public-generation credit");
         return;
     };
@@ -807,37 +887,92 @@ fn tc_029_ac20_byte_ceiling_has_failed_records_and_no_contract_package() {
 #[test]
 fn tc_029_ac1_every_item_gets_one_disposition_refused_siblings_unchanged() {
     let compiled = super::admitted_composite_fixture::compile(
-        super::admitted_composite_fixture::SOURCE, &qsl_replay::DependencyInput::default(),
+        super::admitted_composite_fixture::SOURCE,
+        &qsl_replay::DependencyInput::default(),
     );
     let package = super::admitted_enum_equality::checked(&compiled, &[]);
     let healthy = super::admitted_enum_equality::direct_source_item(&package, "pair_same");
     let mut bad = super::admitted_enum_equality::direct_source_item(&package, "holder_same");
     let original = bad.left.source_type.clone();
-    let boolean = package.graph().nodes.iter().find(|node| node.semantic_form.as_ref() == "boolean").expect("actual source Boolean").node_id.clone();
+    let boolean = package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| node.semantic_form.as_ref() == "boolean")
+        .expect("actual source Boolean")
+        .node_id
+        .clone();
     bad.left.source_type = boolean.clone();
-    let alone = super::admitted_enum_equality::generate_items(&package, Some(compiled.context()), std::slice::from_ref(&healthy), &[]).unwrap();
-    let output = super::admitted_enum_equality::generate_items(&package, Some(compiled.context()), &[healthy.clone(), bad.clone()], std::slice::from_ref(&boolean)).unwrap();
+    let alone = super::admitted_enum_equality::generate_items(
+        &package,
+        Some(compiled.context()),
+        std::slice::from_ref(&healthy),
+        &[],
+    )
+    .unwrap();
+    let output = super::admitted_enum_equality::generate_items(
+        &package,
+        Some(compiled.context()),
+        &[healthy.clone(), bad.clone()],
+        std::slice::from_ref(&boolean),
+    )
+    .unwrap();
     assert_eq!(output.claim_map.items.len(), 2);
-    let healthy_claim = output.claim_map.items.iter().find(|claim| claim.node_id == healthy.node_id).unwrap();
+    let healthy_claim = output
+        .claim_map
+        .items
+        .iter()
+        .find(|claim| claim.node_id == healthy.node_id)
+        .unwrap();
     let healthy_generated = generated(healthy_claim);
-    let bad_claim = output.claim_map.items.iter().find(|claim| claim.node_id == bad.node_id).unwrap();
-    assert_eq!(refused(bad_claim), &CompositeEqualityRefusal::OperandTypeMismatch {
-        position: 0, expected: boolean, found: Some(original),
-    });
+    let bad_claim = output
+        .claim_map
+        .items
+        .iter()
+        .find(|claim| claim.node_id == bad.node_id)
+        .unwrap();
+    assert_eq!(
+        refused(bad_claim),
+        &CompositeEqualityRefusal::OperandTypeMismatch {
+            position: 0,
+            expected: boolean,
+            found: Some(original),
+        }
+    );
     let baseline = generated(&alone.claim_map.items[0]);
     assert_eq!(healthy_generated.descriptor, baseline.descriptor);
     assert_eq!(healthy_generated.schedule, baseline.schedule);
     assert_eq!(healthy_generated.source_map, baseline.source_map);
     let lib = contents(&output, "src/lib.rs");
-    assert_eq!(lib.matches("pub fn oracle_").count(), 1, "refused item contributes no oracle");
-    assert_eq!(lib.matches("pub fn environment_").count(), 1, "refused item contributes no constructor");
-    for symbol in [&healthy_generated.oracle_symbol, &healthy_generated.environment_symbol] {
+    assert_eq!(
+        lib.matches("pub fn oracle_").count(),
+        1,
+        "refused item contributes no oracle"
+    );
+    assert_eq!(
+        lib.matches("pub fn environment_").count(),
+        1,
+        "refused item contributes no constructor"
+    );
+    for symbol in [
+        &healthy_generated.oracle_symbol,
+        &healthy_generated.environment_symbol,
+    ] {
         let combined = emitted_fns(lib);
         let single = emitted_fns(contents(&alone, "src/lib.rs"));
-        let actual = combined.iter().find(|function| function.name == symbol.as_str()).unwrap();
-        let expected = single.iter().find(|function| function.name == symbol.as_str()).unwrap();
+        let actual = combined
+            .iter()
+            .find(|function| function.name == symbol.as_str())
+            .unwrap();
+        let expected = single
+            .iter()
+            .find(|function| function.name == symbol.as_str())
+            .unwrap();
         assert_eq!(actual.signature, expected.signature);
-        assert_eq!(actual.body, expected.body, "healthy sibling function bytes stay unchanged");
+        assert_eq!(
+            actual.body, expected.body,
+            "healthy sibling function bytes stay unchanged"
+        );
     }
     // DuplicateMember x and its unchanged sibling are retained at the labelled private
     // declaration seam; duplicate source has no successful public admitted context.
@@ -886,9 +1021,12 @@ fn tc_029_admitted_one_reference_sequence_resolves_its_separate_bound() {
 #[test]
 fn tc_029_ac4_schedule_matches_checked_equality_for_every_shape() {
     for (case, schedule) in [
-        ("record", RecordedSchedule::Plan), ("tuple", RecordedSchedule::Plan),
-        ("option", RecordedSchedule::Plan), ("collection", RecordedSchedule::Plan),
-        ("text", RecordedSchedule::Text), ("enum", RecordedSchedule::Enum),
+        ("record", RecordedSchedule::Plan),
+        ("tuple", RecordedSchedule::Plan),
+        ("option", RecordedSchedule::Plan),
+        ("collection", RecordedSchedule::Plan),
+        ("text", RecordedSchedule::Text),
+        ("enum", RecordedSchedule::Enum),
     ] {
         let oracles = genuine_host_case(case, false);
         for claim in &oracles.claim_map.items {
@@ -1267,11 +1405,16 @@ fn tc_029_ac8_a_duplicate_field_is_refused_with_its_declaration_cause() {
     );
     let result = qsl_replay::compile_admitted(
         qsl_replay::SourceIdentity::new("test", "duplicate-field.native", "git", "fixture"),
-        "duplicate-field.native", source.as_bytes(), [],
-        &qsl_replay::DependencyInput::default(), qsl_replay::StageLimits::default(),
+        "duplicate-field.native",
+        source.as_bytes(),
+        [],
+        &qsl_replay::DependencyInput::default(),
+        qsl_replay::StageLimits::default(),
         qsl_replay::ReplayLimits::default(),
     );
-    let qsl_replay::AdmittedRefusal::Package(refusal) = result.expect_err("duplicate source produces no admitted context") else {
+    let qsl_replay::AdmittedRefusal::Package(refusal) =
+        result.expect_err("duplicate source produces no admitted context")
+    else {
         panic!("duplicate source must retain its owning Package refusal");
     };
     assert_eq!(refusal.code(), qsl_replay::Code::AmbiguousDeclaration);
@@ -1284,13 +1427,39 @@ fn tc_029_ac10_bytes_are_deterministic_across_request_permutations() {
     for case in genuine_host_cases() {
         let forward = genuine_host_case(case, false);
         let reversed = genuine_host_case(case, true);
-        assert_eq!(serde_json::to_string(&forward.claim_map).unwrap(), serde_json::to_string(&reversed.claim_map).unwrap(), "{case}");
-        assert_eq!(contents(&forward, "src/lib.rs"), contents(&reversed, "src/lib.rs"), "{case}");
+        assert_eq!(
+            serde_json::to_string(&forward.claim_map).unwrap(),
+            serde_json::to_string(&reversed.claim_map).unwrap(),
+            "{case}"
+        );
+        assert_eq!(
+            contents(&forward, "src/lib.rs"),
+            contents(&reversed, "src/lib.rs"),
+            "{case}"
+        );
         for output in [&forward, &reversed] {
-            let distinct = output.claim_map.items.iter().find(|claim| generated(claim).descriptor.operator == EqualityOperatorKind::NotEqual).unwrap();
-            let same_node = output.claim_map.items.iter().filter(|claim| claim.node_id == distinct.node_id).collect::<Vec<_>>();
-            assert_eq!(same_node.len(), 2, "the caller declares both operators over one real node");
-            for claim in same_node { let _ = generated(claim); }
+            let distinct = output
+                .claim_map
+                .items
+                .iter()
+                .find(|claim| {
+                    generated(claim).descriptor.operator == EqualityOperatorKind::NotEqual
+                })
+                .unwrap();
+            let same_node = output
+                .claim_map
+                .items
+                .iter()
+                .filter(|claim| claim.node_id == distinct.node_id)
+                .collect::<Vec<_>>();
+            assert_eq!(
+                same_node.len(),
+                2,
+                "the caller declares both operators over one real node"
+            );
+            for claim in same_node {
+                let _ = generated(claim);
+            }
         }
     }
 }
@@ -1300,9 +1469,23 @@ fn tc_029_ac10_bytes_are_deterministic_across_request_permutations() {
 fn tc_029_ac10_claim_map_entries_ascend_by_the_descriptor_key() {
     for case in genuine_host_cases() {
         let output = genuine_host_case(case, true);
-        let keys = output.claim_map.items.iter().map(|claim| (claim.node_id.digest.to_string(), generated(claim).descriptor.operator as u8)).collect::<Vec<_>>();
-        let mut sorted = keys.clone(); sorted.sort();
-        assert_eq!(keys, sorted, "{case}: claim map entries already ascend by descriptor key");
+        let keys = output
+            .claim_map
+            .items
+            .iter()
+            .map(|claim| {
+                (
+                    claim.node_id.digest.to_string(),
+                    generated(claim).descriptor.operator as u8,
+                )
+            })
+            .collect::<Vec<_>>();
+        let mut sorted = keys.clone();
+        sorted.sort();
+        assert_eq!(
+            keys, sorted,
+            "{case}: claim map entries already ascend by descriptor key"
+        );
     }
 }
 
@@ -1312,45 +1495,48 @@ fn tc_029_ac10_claim_map_entries_ascend_by_the_descriptor_key() {
 #[test]
 fn tc_029_ac10_generation_is_repeatable_from_a_fresh_package() {
     for case in genuine_host_cases() {
-
-    let first = genuine_host_case(case, false);
-    let second = genuine_host_case(case, false);
-    assert_eq!(first, second);
-    let subjects = first
-        .claim_map
-        .items
-        .iter()
-        .filter(|claim| matches!(&claim.result, ClaimDisposition::Generated(_)))
-        .map(|claim| format!("{}/{}", claim.node_id.domain, claim.node_id.digest))
-        .collect::<Vec<String>>();
-    let subject_refs = subjects.iter().map(String::as_str).collect::<Vec<_>>();
-    let declaration_subjects = first
-        .claim_map
-        .items
-        .iter()
-        .filter_map(|claim| match &claim.result {
-            ClaimDisposition::Generated(generated) => Some(&generated.declaration_keys),
-            ClaimDisposition::Refused { .. } => None,
-        })
-        .flatten()
-        .map(|id| format!("{}/{}", id.domain, id.digest))
-        .collect::<Vec<_>>();
-    let declaration_refs = declaration_subjects
-        .iter()
-        .map(String::as_str)
-        .collect::<Vec<_>>();
-    let lib = contents(&first, "src/lib.rs");
-    crate::generated_headers::assert_header("src/lib.rs", lib, &declaration_refs);
-    for artifact in first
-        .artifacts
-        .iter()
-        .filter(|artifact| artifact.path.ends_with(".rs"))
-    {
-        crate::generated_headers::assert_header(&artifact.path, &artifact.contents, &subject_refs);
-    }
-    for path in ["Cargo.toml", "src/lib.rs", "claim-map.json"] {
-        assert_eq!(contents(&first, path), contents(&second, path), "{path}");
-    }
+        let first = genuine_host_case(case, false);
+        let second = genuine_host_case(case, false);
+        assert_eq!(first, second);
+        let subjects = first
+            .claim_map
+            .items
+            .iter()
+            .filter(|claim| matches!(&claim.result, ClaimDisposition::Generated(_)))
+            .map(|claim| format!("{}/{}", claim.node_id.domain, claim.node_id.digest))
+            .collect::<Vec<String>>();
+        let subject_refs = subjects.iter().map(String::as_str).collect::<Vec<_>>();
+        let declaration_subjects = first
+            .claim_map
+            .items
+            .iter()
+            .filter_map(|claim| match &claim.result {
+                ClaimDisposition::Generated(generated) => Some(&generated.declaration_keys),
+                ClaimDisposition::Refused { .. } => None,
+            })
+            .flatten()
+            .map(|id| format!("{}/{}", id.domain, id.digest))
+            .collect::<Vec<_>>();
+        let declaration_refs = declaration_subjects
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+        let lib = contents(&first, "src/lib.rs");
+        crate::generated_headers::assert_header("src/lib.rs", lib, &declaration_refs);
+        for artifact in first
+            .artifacts
+            .iter()
+            .filter(|artifact| artifact.path.ends_with(".rs"))
+        {
+            crate::generated_headers::assert_header(
+                &artifact.path,
+                &artifact.contents,
+                &subject_refs,
+            );
+        }
+        for path in ["Cargo.toml", "src/lib.rs", "claim-map.json"] {
+            assert_eq!(contents(&first, path), contents(&second, path), "{path}");
+        }
     }
 }
 
@@ -1360,55 +1546,65 @@ fn tc_029_ac10_generation_is_repeatable_from_a_fresh_package() {
 #[test]
 fn tc_029_ac11_two_operators_over_one_node_get_distinct_symbols_and_are_caller_declared() {
     for case in genuine_host_cases() {
-
-    let oracles = genuine_host_case(case, false);
-    let node = &oracles.claim_map.items.iter().find(|claim| generated(claim).descriptor.operator == EqualityOperatorKind::NotEqual).unwrap().node_id;
-    let claims = oracles.claim_map.items.iter().filter(|claim| &claim.node_id == node).collect::<Vec<_>>();
-    assert_eq!(claims.len(), 2);
-    let equal = claims
-        .iter()
-        .find(|c| generated(c).descriptor.operator == EqualityOperatorKind::Equal)
-        .unwrap();
-    let not_equal = claims
-        .iter()
-        .find(|c| generated(c).descriptor.operator == EqualityOperatorKind::NotEqual)
-        .unwrap();
-    assert_ne!(
-        generated(equal).oracle_symbol,
-        generated(not_equal).oracle_symbol
-    );
-    assert_ne!(
-        generated(equal).environment_symbol,
-        generated(not_equal).environment_symbol
-    );
-    for claim in &claims {
-        assert_eq!(
-            claim.operation.provenance,
-            quire_contract_codegen::CompositeOperationProvenance::CallerDeclared {
-                blocked_on: UpstreamBlocker::OperationIdentityNotConsumed
-            }
+        let oracles = genuine_host_case(case, false);
+        let node = &oracles
+            .claim_map
+            .items
+            .iter()
+            .find(|claim| generated(claim).descriptor.operator == EqualityOperatorKind::NotEqual)
+            .unwrap()
+            .node_id;
+        let claims = oracles
+            .claim_map
+            .items
+            .iter()
+            .filter(|claim| &claim.node_id == node)
+            .collect::<Vec<_>>();
+        assert_eq!(claims.len(), 2);
+        let equal = claims
+            .iter()
+            .find(|c| generated(c).descriptor.operator == EqualityOperatorKind::Equal)
+            .unwrap();
+        let not_equal = claims
+            .iter()
+            .find(|c| generated(c).descriptor.operator == EqualityOperatorKind::NotEqual)
+            .unwrap();
+        assert_ne!(
+            generated(equal).oracle_symbol,
+            generated(not_equal).oracle_symbol
         );
-    }
-    assert!(oracles
-        .claim_map
-        .blocked
-        .contains(&UpstreamBlocker::OperationIdentityNotConsumed));
+        assert_ne!(
+            generated(equal).environment_symbol,
+            generated(not_equal).environment_symbol
+        );
+        for claim in &claims {
+            assert_eq!(
+                claim.operation.provenance,
+                quire_contract_codegen::CompositeOperationProvenance::CallerDeclared {
+                    blocked_on: UpstreamBlocker::OperationIdentityNotConsumed
+                }
+            );
+        }
+        assert!(oracles
+            .claim_map
+            .blocked
+            .contains(&UpstreamBlocker::OperationIdentityNotConsumed));
 
-    let lib = contents(&oracles, "src/lib.rs");
-    let mut functions: Vec<&str> = lib
-        .lines()
-        .filter(|line| {
-            line.starts_with("pub fn oracle_") || line.starts_with("pub fn environment_")
-        })
-        .collect();
-    let total = functions.len();
-    functions.sort();
-    functions.dedup();
-    assert_eq!(
-        functions.len(),
-        total,
-        "every generated symbol line must be unique"
-    );
+        let lib = contents(&oracles, "src/lib.rs");
+        let mut functions: Vec<&str> = lib
+            .lines()
+            .filter(|line| {
+                line.starts_with("pub fn oracle_") || line.starts_with("pub fn environment_")
+            })
+            .collect();
+        let total = functions.len();
+        functions.sort();
+        functions.dedup();
+        assert_eq!(
+            functions.len(),
+            total,
+            "every generated symbol line must be unique"
+        );
     }
 }
 
@@ -1489,8 +1685,14 @@ fn tc_029_ac12_manifest_is_unpublished_and_charge_free() {
     let resolved = Command::new(env!("CARGO"))
         .arg("generate-lockfile")
         .env("CARGO_TARGET_DIR", directory.path.join("target"))
-        .current_dir(&directory.path).output().unwrap();
-    assert!(resolved.status.success(), "independent generated manifest resolution failed: {}", String::from_utf8_lossy(&resolved.stderr));
+        .current_dir(&directory.path)
+        .output()
+        .unwrap();
+    assert!(
+        resolved.status.success(),
+        "independent generated manifest resolution failed: {}",
+        String::from_utf8_lossy(&resolved.stderr)
+    );
     let output = Command::new(env!("CARGO"))
         .args(["build", "--locked", "--offline", "--quiet"])
         .env("CARGO_TARGET_DIR", directory.path.join("target"))
@@ -1509,30 +1711,78 @@ fn tc_029_ac12_manifest_is_unpublished_and_charge_free() {
 #[trace("FR-018-AC-13", "TC-029")]
 #[test]
 fn tc_029_ac13_declaration_keys_are_the_reached_v2_node_ids() {
-    for (case, names) in [("record", &["Point"][..]), ("nested", &["Point", "PairOfPoints"][..])] {
+    for (case, names) in [
+        ("record", &["Point"][..]),
+        ("nested", &["Point", "PairOfPoints"][..]),
+    ] {
         let compiled = genuine_fixture::compile(case);
         let package = super::admitted_enum_equality::checked(&compiled, &[]);
         let item = super::composite_equality_agreement::original_item(&package, false);
-        let oracles = super::admitted_enum_equality::generate_items(&package, Some(compiled.context()), std::slice::from_ref(&item), &[]).expect("original complete package and context");
+        let oracles = super::admitted_enum_equality::generate_items(
+            &package,
+            Some(compiled.context()),
+            std::slice::from_ref(&item),
+            &[],
+        )
+        .expect("original complete package and context");
         let claim = generated(&oracles.claim_map.items[0]);
-        let declarations = compiled.context().composites().filter(|actual| names.iter().any(|name| actual.qualified_name().iter().map(|part| part.as_str()).eq([*name]))).collect::<Vec<_>>();
+        let declarations = compiled
+            .context()
+            .composites()
+            .filter(|actual| {
+                names.iter().any(|name| {
+                    actual
+                        .qualified_name()
+                        .iter()
+                        .map(|part| part.as_str())
+                        .eq([*name])
+                })
+            })
+            .collect::<Vec<_>>();
         assert_eq!(declarations.len(), names.len());
-        let mut wire = declarations.iter().map(|actual| quire_contract_model::CheckedNodeId {
-            domain: quire_exact::NODE_KEY_DOMAIN.into(), digest: actual.node().to_string().into_boxed_str(),
-        }).collect::<Vec<_>>(); wire.sort();
-        let runtime = wire.iter().map(|id| declarations.iter().find(|actual| actual.node().to_string() == id.digest.as_ref()).expect("actual wire-to-kernel pairing").key().to_string()).collect::<Vec<_>>();
-        assert_eq!(claim.declaration_keys, wire, "wire identities ascend by domain/digest");
-        assert_eq!(claim.declaration_runtime_keys, runtime, "kernel identities retain the corresponding wire declaration order");
-        for actual in declarations { assert_ne!(actual.node(), actual.key()); }
+        let mut wire = declarations
+            .iter()
+            .map(|actual| quire_contract_model::CheckedNodeId {
+                domain: quire_exact::NODE_KEY_DOMAIN.into(),
+                digest: actual.node().to_string().into_boxed_str(),
+            })
+            .collect::<Vec<_>>();
+        wire.sort();
+        let runtime = wire
+            .iter()
+            .map(|id| {
+                declarations
+                    .iter()
+                    .find(|actual| actual.node().to_string() == id.digest.as_ref())
+                    .expect("actual wire-to-kernel pairing")
+                    .key()
+                    .to_string()
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            claim.declaration_keys, wire,
+            "wire identities ascend by domain/digest"
+        );
+        assert_eq!(
+            claim.declaration_runtime_keys, runtime,
+            "kernel identities retain the corresponding wire declaration order"
+        );
+        for actual in declarations {
+            assert_ne!(actual.node(), actual.key());
+        }
         assert_eq!(claim.node_id, item.node_id);
         assert_eq!(claim.schedule, RecordedSchedule::Plan);
         assert_eq!(claim.package_id, *package.package_id());
         // Independently recompute exact claims and source locations via public IR lowering,
         // without reading the generator's private profile or claim-map to build expectations.
         let profile = CompleteLoweringProfileV2 {
-            reference: quire_contract_model::LoweringProfileRef { authority: "agent-ix".into(), identity: "quire.codegen.composite-equality/v1".into() },
+            reference: quire_contract_model::LoweringProfileRef {
+                authority: "agent-ix".into(),
+                identity: "quire.codegen.composite-equality/v1".into(),
+            },
             supported_tags: CheckedNodeTag::ALL.iter().copied().collect::<BTreeSet<_>>(),
-            require_bounds: false, work_limit: 10_000,
+            require_bounds: false,
+            work_limit: 10_000,
         };
         let lowered = package.lower(std::slice::from_ref(&item.node_id), &profile);
         assert_eq!(*lowered.package.source_package_id(), *package.package_id());
@@ -1553,7 +1803,13 @@ fn genuine_tuple_source(members: &str, extras: &str) -> (CompositeEqualityOracle
     let compiled = genuine_fixture::compile_source(&source);
     let package = super::admitted_enum_equality::checked(&compiled, &[]);
     let item = super::composite_equality_agreement::original_item(&package, false);
-    let output = super::admitted_enum_equality::generate_items(&package, Some(compiled.context()), std::slice::from_ref(&item), &[]).expect("original genuine tuple");
+    let output = super::admitted_enum_equality::generate_items(
+        &package,
+        Some(compiled.context()),
+        std::slice::from_ref(&item),
+        &[],
+    )
+    .expect("original genuine tuple");
     assert_eq!(output.claim_map.items.len(), 1);
     let _ = generated(&output.claim_map.items[0]);
     let source = contents(&output, "src/lib.rs").to_owned();
@@ -1595,10 +1851,21 @@ fn tc_029_ac16_numeric_bounded_domain_members_read_as_their_bounded_scalars() {
         "exact::ValueType::Decimal(rebuild_decimal(\"-100\", \"100\", 0, 0, exact::RoundingMode::NearestEven)?)",
         "exact::ValueType::Rational(rebuild_rational(rebuild_interval(\"-10\", \"10\")?, rebuild_interval(\"1\", \"1\")?)?)",
     ] { assert!(lib.contains(reconstruction), "actual public member: {reconstruction}"); }
-    let tuple = lib.find("sv::CompositeShape::Tuple(vec![").expect("public tuple declaration");
-    let expected_order = ["exact::ValueType::Int(", "exact::ValueType::Text(", "exact::ValueType::Decimal(", "exact::ValueType::Rational("];
-    let positions = expected_order.map(|member| lib[tuple..].find(member).expect("actual public member"));
-    assert!(positions.windows(2).all(|pair| pair[0] < pair[1]), "all four original member positions remain ordered");
+    let tuple = lib
+        .find("sv::CompositeShape::Tuple(vec![")
+        .expect("public tuple declaration");
+    let expected_order = [
+        "exact::ValueType::Int(",
+        "exact::ValueType::Text(",
+        "exact::ValueType::Decimal(",
+        "exact::ValueType::Rational(",
+    ];
+    let positions =
+        expected_order.map(|member| lib[tuple..].find(member).expect("actual public member"));
+    assert!(
+        positions.windows(2).all(|pair| pair[0] < pair[1]),
+        "all four original member positions remain ordered"
+    );
     // Reviewed AC16 separately allocates both exact numeric forms to the private resolver
     // control, without claiming public authentication for rewritten member references.
 }
@@ -1610,13 +1877,24 @@ fn tc_029_ac16_numeric_bounded_domain_members_read_as_their_bounded_scalars() {
 #[test]
 fn tc_029_ac16_a_bounded_domain_member_never_reads_a_sibling_bound() {
     for (selected, sibling, present, absent) in [
-        ("Text[1, 5; nfc]", "Text[0, 16; nfc]", "rebuild_text(1, 5, exact::TextProfile::Nfc)?", "rebuild_text(0, 16,"),
-        ("Text[0, 16; nfc]", "Text[1, 5; nfc]", "rebuild_text(0, 16, exact::TextProfile::Nfc)?", "rebuild_text(1, 5,"),
+        (
+            "Text[1, 5; nfc]",
+            "Text[0, 16; nfc]",
+            "rebuild_text(1, 5, exact::TextProfile::Nfc)?",
+            "rebuild_text(0, 16,",
+        ),
+        (
+            "Text[0, 16; nfc]",
+            "Text[1, 5; nfc]",
+            "rebuild_text(0, 16, exact::TextProfile::Nfc)?",
+            "rebuild_text(1, 5,",
+        ),
     ] {
         let extras = format!("function sibling using v(a: {sibling}): Boolean pure {{ true }}\n");
         let (oracles, lib) = genuine_tuple_source(&format!("Int[-100, 100], {selected}"), &extras);
         let _ = generated(&oracles.claim_map.items[0]);
-        assert!(lib.contains(present)); assert!(!lib.contains(absent));
+        assert!(lib.contains(present));
+        assert!(!lib.contains(absent));
     }
 }
 
@@ -1629,14 +1907,26 @@ fn tc_029_ac16_a_bound_form_that_does_not_fit_its_base_is_refused() {
     let compiled = genuine_fixture::compile_source(&source);
     let mut wire: serde_json::Value = serde_json::from_slice(compiled.package().bytes()).unwrap();
     let nodes = wire["semantic_graph"]["nodes"].as_array_mut().unwrap();
-    let position = nodes.iter().position(|node| node["semantic_form"] == "integer_range").expect("genuine Int bound");
-    let id: quire_contract_model::CheckedNodeId = serde_json::from_value(nodes[position]["node_id"].clone()).unwrap();
+    let position = nodes
+        .iter()
+        .position(|node| node["semantic_form"] == "integer_range")
+        .expect("genuine Int bound");
+    let id: quire_contract_model::CheckedNodeId =
+        serde_json::from_value(nodes[position]["node_id"].clone()).unwrap();
     nodes[position]["semantic_form"] = json!("text_bounds");
     let result = read_mutated_wire(wire);
-    let CheckedPackageV2ReadResult::Refused(refusal) = result else { panic!("wrong-form source wire unexpectedly admitted: {result:?}") };
+    let CheckedPackageV2ReadResult::Refused(refusal) = result else {
+        panic!("wrong-form source wire unexpectedly admitted: {result:?}")
+    };
     assert_eq!(refusal.code, CheckedPackageRefusalCode::InvalidPackage);
-    assert_eq!(refusal.cause, Some(CheckedPackageRefusalCause::StaleNodeKey));
-    assert_eq!(refusal.path.as_ref().map(|path| path.as_str().to_owned()), Some(format!("/semantic_graph/nodes/{position}/node_id")));
+    assert_eq!(
+        refusal.cause,
+        Some(CheckedPackageRefusalCause::StaleNodeKey)
+    );
+    assert_eq!(
+        refusal.path.as_ref().map(|path| path.as_str().to_owned()),
+        Some(format!("/semantic_graph/nodes/{position}/node_id"))
+    );
     assert_eq!(refusal.locus, Some(id));
     // Exact CG MissingBound(integer_range) remains a separate private defensive assertion.
 }
@@ -1969,25 +2259,24 @@ fn emitted_enum<'l>(lib: &'l str, name: &str) -> &'l str {
 #[test]
 fn tc_029_ac17_emitted_source_has_no_panic_site_fallback_or_index_expression() {
     for case in genuine_host_cases() {
-
-    let oracles = genuine_host_case(case, false);
-    let lib = contents(&oracles, "src/lib.rs");
-    assert!(
-        lib.matches("pub fn oracle_").count() > 1,
-        "the corpus must generate more than one item"
-    );
-    assert_eq!(panic_tokens_in(lib), Vec::<String>::new());
-    for fallback in [".ok()", ".unwrap_or(", ".unwrap_or_default("] {
+        let oracles = genuine_host_case(case, false);
+        let lib = contents(&oracles, "src/lib.rs");
         assert!(
-            !lib.contains(fallback),
-            "the emitted source holds `{fallback}`"
+            lib.matches("pub fn oracle_").count() > 1,
+            "the corpus must generate more than one item"
         );
-    }
-    assert_eq!(
-        index_expressions(lib),
-        Vec::<usize>::new(),
-        "an index or slice expression in the emitted source"
-    );
+        assert_eq!(panic_tokens_in(lib), Vec::<String>::new());
+        for fallback in [".ok()", ".unwrap_or(", ".unwrap_or_default("] {
+            assert!(
+                !lib.contains(fallback),
+                "the emitted source holds `{fallback}`"
+            );
+        }
+        assert_eq!(
+            index_expressions(lib),
+            Vec::<usize>::new(),
+            "an index or slice expression in the emitted source"
+        );
     }
 }
 
@@ -1999,94 +2288,102 @@ fn tc_029_ac17_emitted_source_has_no_panic_site_fallback_or_index_expression() {
 fn tc_029_ac17_emitted_reconstruction_is_typed_and_refused_never_unwrapped() {
     let mut exercised = BTreeSet::new();
     for case in genuine_host_cases() {
-
-    let oracles = genuine_host_case(case, false);
-    let lib = contents(&oracles, "src/lib.rs");
-    let fns = emitted_fns(lib);
-    exercised.extend(fns.iter().filter(|function| REBUILD_HELPERS.contains(&function.name)).map(|function| function.name.to_owned()));
-    assert_eq!(structural_violations(lib), Vec::<String>::new());
-    // The context ABI publishes only a private prepared capability after typed preparation.
-    let environments: Vec<_> = fns
-        .iter()
-        .filter(|function| function.name.starts_with("environment_"))
-        .collect();
-    assert!(!environments.is_empty());
-    for function in environments {
-        assert!(function
-            .signature
-            .contains("Result<PreparedEqualityEnvironment<'ctx>, EnvironmentError>"));
-        assert!(function
-            .signature
-            .contains("Option<&'ctx qsl_replay::AdmittedContext>"));
-        assert!(function
-            .body
-            .contains("EnvironmentError::ContextPackageMismatch"));
-        assert!(function
-            .body
-            .contains(".map_err(EnvironmentError::Declaration)?"));
-    }
-    for function in fns
-        .iter()
-        .filter(|function| function.name.starts_with("oracle_"))
-    {
-        for required in [
-            "prepared.binding !=",
-            "actual.domain().as_str() !=",
-            "actual.hex() !=",
-            "GeneratedDescriptorReconstructionFailed",
-            "environment.check_type(left_comparison)",
-            "environment.check_type(right_comparison)",
-            "&prepared.enum_members",
-            "GeneratedTypeCheckRejected",
-            "GeneratedEqualityCheckRejected",
-            "checked.evaluate(environment, left, right, meter)",
-        ] {
+        let oracles = genuine_host_case(case, false);
+        let lib = contents(&oracles, "src/lib.rs");
+        let fns = emitted_fns(lib);
+        exercised.extend(
+            fns.iter()
+                .filter(|function| REBUILD_HELPERS.contains(&function.name))
+                .map(|function| function.name.to_owned()),
+        );
+        assert_eq!(structural_violations(lib), Vec::<String>::new());
+        // The context ABI publishes only a private prepared capability after typed preparation.
+        let environments: Vec<_> = fns
+            .iter()
+            .filter(|function| function.name.starts_with("environment_"))
+            .collect();
+        assert!(!environments.is_empty());
+        for function in environments {
+            assert!(function
+                .signature
+                .contains("Result<PreparedEqualityEnvironment<'ctx>, EnvironmentError>"));
+            assert!(function
+                .signature
+                .contains("Option<&'ctx qsl_replay::AdmittedContext>"));
+            assert!(function
+                .body
+                .contains("EnvironmentError::ContextPackageMismatch"));
+            assert!(function
+                .body
+                .contains(".map_err(EnvironmentError::Declaration)?"));
+        }
+        for function in fns
+            .iter()
+            .filter(|function| function.name.starts_with("oracle_"))
+        {
+            for required in [
+                "prepared.binding !=",
+                "actual.domain().as_str() !=",
+                "actual.hex() !=",
+                "GeneratedDescriptorReconstructionFailed",
+                "environment.check_type(left_comparison)",
+                "environment.check_type(right_comparison)",
+                "&prepared.enum_members",
+                "GeneratedTypeCheckRejected",
+                "GeneratedEqualityCheckRejected",
+                "checked.evaluate(environment, left, right, meter)",
+            ] {
+                assert!(
+                    function.body.contains(required),
+                    "{} missing {required}",
+                    function.name
+                );
+            }
             assert!(
-                function.body.contains(required),
-                "{} missing {required}",
-                function.name
+                !function.body.contains("rebuild_"),
+                "preparation must precede metered execution"
             );
         }
-        assert!(
-            !function.body.contains("rebuild_"),
-            "preparation must precede metered execution"
+        let environment_error = emitted_enum(lib, "EnvironmentError");
+        for variant in [
+            "MissingAdmittedContext {",
+            "ContextPackageMismatch {",
+            "Lookup(qsl_replay::AdmittedLookupRefusal),",
+            "Declaration(sv::EnvironmentFailure),",
+            "Reconstruction(ReconstructionError),",
+        ] {
+            assert!(
+                environment_error.contains(variant),
+                "missing typed variant {variant}"
+            );
+        }
+        let variants: Vec<&str> = emitted_enum(lib, "ReconstructionError")
+            .lines()
+            .map(str::trim)
+            .filter(|line| {
+                !line.is_empty() && !line.starts_with("///") && *line != "{" && *line != "}"
+            })
+            .collect();
+        assert_eq!(
+            variants,
+            [
+                "Integer,",
+                "Interval,",
+                "Rational,",
+                "Decimal,",
+                "Text,",
+                "Cardinality,",
+                "Enum,",
+                "Composite,"
+            ],
+            "ReconstructionError must have exactly these unit variants"
         );
-    }
-    let environment_error = emitted_enum(lib, "EnvironmentError");
-    for variant in [
-        "MissingAdmittedContext {",
-        "ContextPackageMismatch {",
-        "Lookup(qsl_replay::AdmittedLookupRefusal),",
-        "Declaration(sv::EnvironmentFailure),",
-        "Reconstruction(ReconstructionError),",
-    ] {
-        assert!(
-            environment_error.contains(variant),
-            "missing typed variant {variant}"
-        );
-    }
-    let variants: Vec<&str> = emitted_enum(lib, "ReconstructionError")
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty() && !line.starts_with("///") && *line != "{" && *line != "}")
-        .collect();
-    assert_eq!(
-        variants,
-        [
-            "Integer,",
-            "Interval,",
-            "Rational,",
-            "Decimal,",
-            "Text,",
-            "Cardinality,",
-            "Enum,",
-            "Composite,"
-        ],
-        "ReconstructionError must have exactly these unit variants"
-    );
     }
     for helper in REBUILD_HELPERS {
-        assert!(exercised.contains(helper), "the genuine corpus union does not exercise {helper}");
+        assert!(
+            exercised.contains(helper),
+            "the genuine corpus union does not exercise {helper}"
+        );
     }
 }
 

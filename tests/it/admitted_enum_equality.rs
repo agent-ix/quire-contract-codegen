@@ -123,7 +123,7 @@ fn enum_items(
             .node_id
             .clone();
         items.push(CompositeEqualityItem {
-            node_id: application(&checked, function),
+            node_id: application(checked, function),
             operator,
             left: EqualityOperandDescriptor::typed(type_id.clone()),
             right: EqualityOperandDescriptor::typed(type_id),

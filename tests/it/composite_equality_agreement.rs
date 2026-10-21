@@ -149,7 +149,7 @@ fn tc_029_generated_composite_equality_crate_agrees_with_direct_runtime() {
 }
 
 #[path = "../composite_equality_support/authentic_native.rs"]
-mod fixture;
+pub(super) mod fixture;
 
 pub(super) fn original_item(
     package: &quire_contract_model::CheckedPackageV2,
