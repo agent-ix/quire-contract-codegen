@@ -9,6 +9,14 @@ license = "AGPL-3.0-or-later"
 publish = false
 repository = "https://github.com/agent-ix/quire-contract-codegen"
 
+[workspace]
+
+[workspace.lints.clippy]
+undocumented_unsafe_blocks = "deny"
+
+[lints]
+workspace = true
+
 [lib]
 name = "quire_contract_codegen"
 path = "src/lib.rs"
