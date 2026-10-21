@@ -28,7 +28,6 @@ make tools            # once per machine: llvm-tools (stable), cargo-llvm-cov an
 make deny             # cargo-deny lanes plus the one-copy check (scripts/check_one_copy.awk: one Cargo.lock entry per agent-ix git crate)
 make use-local        # patch first-party git deps to sibling checkouts via a gitignored .cargo/config.toml; snapshots Cargo.lock to .cargo/Cargo.lock.pre-local; fails if cargo metadata fails or a patch is unused
 make use-remote       # delete the patch config and restore Cargo.lock from that snapshot (no snapshot: lock untouched)
-make audit-unsafe     # check that every unsafe block has a // SAFETY: comment
 make rustdoc          # build warning-free API documentation
 make ci               # every local gate above except build and clean
 ```
@@ -53,7 +52,7 @@ armed can still release an unowned backend; IR-639 owns the deferred caller-deat
 
 - `clippy.toml` caps cognitive complexity / arg count
 - `deny.toml` allow-lists licenses and denies unknown registries/git sources
-- `scripts/check_unsafe_comments.sh` runs in CI and locally via `make audit-unsafe`. Every `unsafe {` block must have a `// SAFETY:` comment within the 3 preceding lines, or be listed in `scripts/unsafe_comment_baseline.txt`. A line whose every occurrence is written `"unsafe {`, the token immediately preceded by a double quote, is a mention rather than a block and is not audited: this repository generates Rust and asserts properties of the generated text, so `"unsafe {"` appears as data in the tests that forbid unsafe code in generated output. The test is quote-prefixing, not string-literal membership, and only the exact spelling `"unsafe {` counts: a mention with a leading space, one mid-literal, or one inside a multi-line expected-output fixture is still audited and needs a baseline entry. Update the baseline with `bash scripts/check_unsafe_comments.sh --update-baseline`. A tree with no Rust source roots, or a scan that fails, exits 2 as inconclusive rather than printing "unsafe audit passed"; the earlier version reported success when it had nothing to audit.
+- The root crate opts into the workspace's denied Clippy `undocumented_unsafe_blocks` lint; `make lint` and CI enforce it.
 - `rustfmt.toml` uses stable rustfmt settings with a 100-char width. CI fails on drift.
 
 ## Layout
@@ -64,7 +63,7 @@ tests/it/main.rs           # the merged integration test binary; each former tes
 schemas/                   # domain output contracts included by their owning library producers
 spec/                      # spec.md (Subsystem Registry), tests.md (matrix index), <subsystem>/{stakeholder,functional,non-functional,matrix}/ per quire-contract-ir:ADR-0056; the suite registry is spec/core/matrix/suites.md
 reviews/                   # quire-validated SpecReview artifacts
-scripts/                   # the unsafe-comment audit
+scripts/                   # Kani, dependency, and QSpec gates
 ```
 
 New integration tests go under `tests/it/` as a module of the single `it` binary (add the file plus a

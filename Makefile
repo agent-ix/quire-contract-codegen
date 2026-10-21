@@ -31,7 +31,6 @@ help:
 	@echo "  make spec             - Quire-validate the specification"
 	@echo "  make clean            - cargo clean"
 	@echo "  make deny             - Run all configured cargo-deny checks"
-	@echo "  make audit-unsafe     - Enforce // SAFETY: comments on unsafe blocks"
 	@echo "  make rustdoc          - Build warning-free API documentation"
 	@echo "  make use-local        - Patch first-party git deps to sibling checkouts (.cargo/config.toml)"
 	@echo "  make use-remote       - Remove the local patch file and restore Cargo.lock; build from GitHub"
@@ -149,20 +148,6 @@ deny:
 cargo-audit:
 	$(CARGO) audit --ignore RUSTSEC-2026-0009
 
-# Self-test first (#119): scripts/check_unsafe_comments.sh had no coverage of
-# its own, and a prior draft of it silently stopped flagging real unsafe
-# blocks in the exact escape-adjacent shapes this exercises, with
-# `audit-unsafe` staying green throughout (agent-ix/quire-contract-codegen#118).
-# The fixture corpus lives outside every root the scanner scans, so it never
-# makes this target red on the repository's own code.
-.PHONY: audit-unsafe-selftest
-audit-unsafe-selftest:
-	$(BASH) scripts/test_check_unsafe_comments.sh
-
-.PHONY: audit-unsafe
-audit-unsafe: audit-unsafe-selftest
-	$(BASH) scripts/check_unsafe_comments.sh
-
 .PHONY: rustdoc
 rustdoc:
 	RUSTDOCFLAGS=-Dwarnings $(CARGO) doc $(LOCKED) --no-deps --document-private-items
@@ -243,4 +228,4 @@ use-remote:
 .NOTPARALLEL: ci
 .PHONY: ci
 ci: qspec-preflight
-	$(MAKE) -j1 fmt-check spec lint msrv deny audit-unsafe rustdoc test
+	$(MAKE) -j1 fmt-check spec lint msrv deny rustdoc test
