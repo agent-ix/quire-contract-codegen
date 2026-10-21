@@ -37,13 +37,15 @@ For the installed-Kani spine, observe the launcher's complete stdout independent
 `KaniRunOutcome::Falsified.counterexample` before the execution adapter classifies the run.
 After a healthy subject verifies and an injected violation falsifies, select the assertion
 playback for that same harness from the observed stdout without using the production playback
-extractor or witness decoder. Compare its complete test text byte for byte with the retained
-counterexample before decoding or replaying it. Replace the returned counterexample at the
-classification boundary with another well-formed, self-consistent playback as a mutation
+extractor or witness decoder. Compare its complete test text between the fences, excluding only
+surrounding whitespace, byte for byte with the retained counterexample before decoding or replaying
+it. Replace the returned counterexample at the classification boundary with another well-formed,
+self-consistent playback as a mutation
 control: the comparison must fail even though that replacement's comments, byte vectors,
 decoder and replay all agree with each other. Continue the existing point and neighbouring-point
 replay checks against the original process output. This exercises FR-017-AC-5 together with
-FR-016-AC-9 and AC-10.
+FR-016-AC-9 and AC-10. The comparison is the test oracle over independently observed stdout;
+production replay receives only the retained counterexample and performs no second stream check.
 
 For FR-016-AC-21 to AC-23, build the replay request for a function with two parameters declared
 in an order that differs from their ascending identifier order. Recompute the O-09 digest from
@@ -130,7 +132,7 @@ replay to the transcript it is given. A constant substituted at the source, righ
 classified `Falsified` and before anything reads it, stays green, because the independent reader,
 the decoder and the replay then all see the same self-consistent block. The link from the Kani run
 to that transcript rests on the `Verified` then `Falsified` outcome assertions. The independent
-process-stdout comparison described above is planned under IR-604; its mutation control must
+process-stdout test oracle described above is planned under IR-604; its mutation control must
 turn the lane red for a replacement made immediately after `Falsified` classification.
 
 What stays unbacked: the native twin is hand-mirrored QSL source, not derived from the contract or
