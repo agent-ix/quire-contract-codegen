@@ -118,17 +118,27 @@ the enum-only owner facade does not excuse dropping it.
    that their outcomes are complementary on a vector whose operands differ. This
    is not the duplicate case of step 1: a duplicate is one node id under one
    descriptor.
-8. Generate an equality over a tuple whose member types are `bounded_domain`
-   nodes (FR-018-AC-16): the text position names a `text_bounds` node, and the
-   generated declaration is `Text(0, 16, Nfc)`; integer, decimal and rational
-   `bounded_domain` members generate source identical to members naming their
-   base scalars; with a second `text_bounds` node over the same text scalar,
-   naming either reads that node's own bounds. Then name a `text_bounds` node
-   over an integer scalar (refused as missing `integer_range`), and
-   `bounded_domain` nodes over a boolean scalar, over the base package's enum
-   declaration and over a record (each refused as unsupported `bounded_domain`).
-   Name a `float_rounding` node over a `float64` scalar as a member: it reads as the
-   float and the equality is refused as `OperatorIneligible`.
+8. Through unchanged genuine source, checked package and admitted context,
+   generate an equality over a tuple whose bounded member types name their
+   `bounded_domain` nodes (FR-018-AC-16). Preserve position order and exact
+   Int[-100,100], Text[0,16;nfc], Decimal[-100,100;0,0;nearest-even] and
+   Rational[-10,10;1,1] reconstruction. With a second `text_bounds` over the
+   same text scalar, independently select either genuine text member and
+   assert only its own bounds are reconstructed, never the sibling's.
+
+   At the explicitly private resolver seam, retain both numeric member forms:
+   each bounded-domain reference and each corresponding base-scalar reference
+   generate identical source for the exact original values, position order
+   and decimal rounding. Retain the precise wrong-form control (`text_bounds`
+   over Integer) as MissingBound(integer_range), naming the original bound;
+   retain unsupported `bounded_domain` over boolean, enum and record bases,
+   naming each bound, with no emitted code and unchanged healthy siblings.
+   These private controls do not claim public source/context admission for
+   either a rewritten tuple or its malformed variants. Keep the separately
+   exercised wrong-form wire control's exact actual reader code, cause, path
+   and locus; it is not public MissingBound acceptance. Retain the existing
+   float-rounding reader refusal as OperatorIneligible. These stage allocations
+   do not alter unbounded Integer member/sibling association semantics.
 
    For FR-018-AC-14, separate bound reconstruction from intake and defensive
    controls. First read valid `integer_range` and `collection_bounds` nodes
@@ -168,9 +178,17 @@ the enum-only owner facade does not excuse dropping it.
    `Result<_, ReconstructionError>`, every call of one is followed by `?` or a
    `match` whose `Err` arm yields `EnvironmentError::Reconstruction` or
    `Outcome::Refused(Refusal::CheckedInvariant)`, and `EnvironmentError` has the
-   variants `Declaration(InvalidDeclaration)` and `Reconstruction(ReconstructionError)`,
+   typed variants required by FR-018 Outputs, including `Declaration` retaining
+   QSV `EnvironmentFailure` and `Reconstruction(ReconstructionError)`.
    `ReconstructionError` has the unit variants `Integer`, `Interval`, `Rational`,
-   `Decimal`, `Text` and `Cardinality`, and no call of `IntegerInterval::new`,
+   `Decimal`, `Text`, `Cardinality`, `Enum` and `Composite`. Inspect the emitted
+   composite lookup: an invalid retained WireNodeId literal or a successful
+   genuine lookup whose record/tuple form or qualified name disagrees with
+   the retained recipe returns `Reconstruction(Composite)`. Facade Unknown,
+   Foreign and WrongKind retain `Lookup` and their owning details; missing
+   context, package mismatch and QSV environment admission keep their separate
+   typed errors. No key is constructed or substituted. Keep this structural
+   defense distinct from public admission or execution credit. Assert no call of `IntegerInterval::new`,
    `RationalDomain::new`, `TextType::new`, `CardinalityBound::new`,
    `DecimalType::new` or an integer `.parse()` appears outside a reconstruction
    helper. Assert each of `rebuild_integer`, `rebuild_interval`, `rebuild_rational`,
@@ -238,17 +256,28 @@ the enum-only owner facade does not excuse dropping it.
 16. Recursive records and authoritative shape reads (FR-018-AC-24, AC-26 and AC-27, planned,
     IR-643). Read the authoritative QSpec
     `proposals/checked-package-v2/fixtures/positive-recursive-records.json` through Contract IR's
-    strict reader, without copying it into this repository. Build equality expression items over
-    the fixture's List (`Option<List>`) and Tree (`Sequence<Tree>[0,3]`) record declarations in a
-    valid test package; the fixture itself supplies type nodes, not equality expressions. Assert
-    both items generate and the call terminates. Independently inspect the exact fixture's
-    List `next` binding: its value is an aggregate with one `optional` binding to the Option node,
-    whose sole payload reference returns to List. Assert the generated declaration has one
-    `next` field with `Presence::Optional` and the List `NodeKey`. Inspect Tree `kids`: its
-    direct reference targets `collection_bounds`, whose `semantic_type` names the Sequence node;
-    that sequence body has only the Tree element reference. Assert the generated `kids` type
-    uses the Tree `NodeKey` and `[0,3]` read from the bound node's named bindings. At the
-    equality module's type-resolution seam, make separate synthetic shape mutants without
+    strict reader, without copying it into this repository. Preserve exact
+    admission and inspect the original List `next` binding: its value is an
+    aggregate with one `optional` binding to the Option node, whose sole
+    payload reference returns to List. Inspect Tree `kids`: its direct
+    reference targets `collection_bounds`, whose `semantic_type` names a
+    Sequence with only the Tree element reference; the named bounds are [0,3].
+    A skipped external check, including QSPEC_REPO being unset, supplies no
+    conformance or public-generation credit.
+
+    Independently author authentic source with these same List/Tree shapes
+    and equality expressions. Compile it through `compile_admitted`, read and
+    normally lower its unchanged checked package, and generate both items
+    with that package's own genuine context. Assert termination, exactly one
+    optional `next` field with the source List's genuine NodeKey, and Tree
+    `kids` with that source Tree's genuine NodeKey and exact [0,3] bounds.
+    Preserve each source's original identity and context binding: this is a
+    separate public positive, not the original QSpec fixture or an appended
+    fixture package authenticated by its old identity. Retain the exact
+    fixture-shaped reconstruction assertions at the separately labelled
+    private type-resolution seam, including optional presence, both record
+    keys and cardinality; these do not supply public-generation credit.
+    At the equality module's type-resolution seam, make separate synthetic shape mutants without
     altering or copying the fixture: remove or rename the nested `optional` binding, add a second
     nested member, redirect it to a non-option node, make the bound's `semantic_type`
     non-sequence, remove or
@@ -439,8 +468,10 @@ Inspect whether the genuine graph actually retains a convert node. If source
 control of AC-3/AC-43, not proof of AC-15's conversion-reference branch.
 Retain the exact admitted-IR conversion-reference assertion independently,
 using the correctly scoped standalone capability without claiming unavailable
-source emission. The existing AC-16 numeric member/base equivalence test and
-record/tuple member semantics stay unchanged. Their unresolved genuine member
+source emission. The existing AC-16 numeric member/base equivalence assertions
+remain exact at the private resolver seam allocated by step 8; the public
+bounded-member positive uses the owner's genuine bounded-domain references.
+Record/tuple member semantics stay unchanged. Their unresolved genuine member
 bound association must not be filled by guessing lexical ownership or adding
 a public descriptor field; this control is direct-root-only.
 
