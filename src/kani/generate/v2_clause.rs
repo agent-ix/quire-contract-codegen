@@ -73,7 +73,11 @@ pub(super) fn render_clause(
     request: &KaniObligationRequest<'_>,
     lowered: &LoweredV2Clause,
 ) -> Result<KaniV2ClauseObligationHarness, UnsupportedObligation> {
-    let input = &lowered.oracle.descriptor.inputs[0];
+    let [input] = lowered.oracle.descriptor.inputs.as_slice() else {
+        return Err(UnsupportedObligation::V2ClauseConditionNotRendered {
+            node_id: lowered.node_id.clone(),
+        });
+    };
     let minimum = i64::try_from(input.lower).map_err(|_| UnsupportedObligation::RenderFailed)?;
     let maximum = i64::try_from(input.upper).map_err(|_| UnsupportedObligation::RenderFailed)?;
     let body = vec![
