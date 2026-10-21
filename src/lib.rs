@@ -123,7 +123,10 @@ pub use evidence::vacuity::{
     LlvmCoverage, ProbeObservation, MAX_COVERAGE_BYTES,
 };
 
-pub use evidence::v2_llvm::{analyze_v2_llvm_coverage, V2ClauseCoverageInput, V2CoverageAnalysis};
+pub use evidence::v2_llvm::{
+    analyze_v2_llvm_coverage, V2ClauseCoverageInput, V2CoverageAnalysis, V2_COVERAGE_FORMAT,
+    V2_COVERAGE_SCHEMA,
+};
 
 pub use oracle::bound_v1::{
     generate_bound_oracles, BoundGenerationError, BoundOracleClause, BoundOracleGeneration,

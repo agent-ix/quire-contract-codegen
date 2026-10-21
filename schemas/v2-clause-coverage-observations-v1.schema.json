@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-ix.github.io/quire-contract-codegen/schemas/v2-clause-coverage-observations-v1.schema.json",
+  "title": "Checked V2 clause LLVM observations, not native qualification",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "state", "population", "clauses", "diagnostics"],
+  "properties": {
+    "format": {"const": "codegen.v2-clause-coverage-observations/v1"},
+    "state": {"enum": ["complete", "incomplete", "invalid_input", "unsupported", "no_executable"]},
+    "population": {"enum": ["complete", "not_emitted"]},
+    "clauses": {"type": "array", "maxItems": 2048, "items": {"$ref": "#/$defs/clause"}},
+    "diagnostics": {"type": "array", "items": {"$ref": "#/$defs/diagnostic"}}
+  },
+  "allOf": [
+    {"if": {"properties": {"state": {"enum": ["invalid_input", "unsupported"]}}}, "then": {"properties": {"population": {"const": "not_emitted"}, "clauses": {"maxItems": 0}, "diagnostics": {"minItems": 1}}}},
+    {"if": {"properties": {"state": {"const": "no_executable"}}}, "then": {"properties": {"population": {"const": "complete"}, "clauses": {"maxItems": 0}, "diagnostics": {"maxItems": 0}}}},
+    {"if": {"properties": {"state": {"enum": ["complete", "incomplete"]}}}, "then": {"properties": {"population": {"const": "complete"}, "clauses": {"minItems": 1}, "diagnostics": {"maxItems": 0}}}},
+    {"if": {"properties": {"state": {"const": "complete"}}}, "then": {"properties": {"clauses": {"items": {"properties": {"classification": {"type": "string"}, "evaluation_count": {"$ref": "#/$defs/count"}, "diagnostics": {"maxItems": 0}, "consequents": {"items": {"properties": {"count": {"$ref": "#/$defs/count"}}}}}}}}}},
+    {"if": {"properties": {"state": {"const": "incomplete"}}}, "then": {"properties": {"clauses": {"contains": {"properties": {"classification": {"type": "null"}, "diagnostics": {"minItems": 1}}}}}}}
+  ],
+  "$defs": {
+    "count": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+    "optional_count": {"anyOf": [{"$ref": "#/$defs/count"}, {"type": "null"}]},
+    "identity": {
+      "type": "object", "additionalProperties": false, "required": ["domain", "digest"],
+      "properties": {
+        "domain": {"const": "quire.checked-semantic-node/v1"},
+        "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "diagnostic": {
+      "type": "object", "additionalProperties": false, "required": ["code", "message"],
+      "properties": {
+        "code": {"enum": ["artifact_mismatch", "map_mismatch", "foreign_generated_file", "resource_limit_exceeded", "malformed_export", "unsupported_profile", "invalid_path", "duplicate_file", "unavailable_observation", "population_mismatch", "inconsistent_observation"]},
+        "message": {"type": "string", "minLength": 1}
+      }
+    },
+    "consequent": {
+      "type": "object", "additionalProperties": false, "required": ["ordinal", "count"],
+      "properties": {"ordinal": {"type": "integer", "minimum": 0}, "count": {"$ref": "#/$defs/optional_count"}}
+    },
+    "clause": {
+      "type": "object", "additionalProperties": false,
+      "required": ["identity", "expected_consequents", "evaluation_count", "consequents", "classification", "diagnostics"],
+      "properties": {
+        "identity": {"$ref": "#/$defs/identity"},
+        "expected_consequents": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "evaluation_count": {"$ref": "#/$defs/optional_count"},
+        "consequents": {"type": "array", "items": {"$ref": "#/$defs/consequent"}},
+        "classification": {"enum": ["exercised", "partially_exercised", "vacuous", "unexecuted", null]},
+        "diagnostics": {"type": "array", "items": {"$ref": "#/$defs/diagnostic"}}
+      },
+      "allOf": [{"if": {"properties": {"classification": {"type": "null"}}}, "then": {"properties": {"diagnostics": {"minItems": 1}}}, "else": {"properties": {"diagnostics": {"maxItems": 0}, "evaluation_count": {"$ref": "#/$defs/count"}, "consequents": {"items": {"properties": {"count": {"$ref": "#/$defs/count"}}}}}}}]
+    }
+  }
+}
