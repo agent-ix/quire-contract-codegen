@@ -61,8 +61,12 @@ input decision to expression and contract claims.
 The planned direct-owner migration in
 [FR-018](oracle/functional/FR-018-composite-equality-oracles.md) and
 [interface-001](core/functional/interface-001-codegen-api.md) binds equality
-generation and its emitted prepared environment to the genuine replay-root
-`AdmittedContext` of the original checked package. Exact owns kernel
+generation and its emitted prepared environment to an optional genuine
+replay-root `AdmittedContext` of the original checked package. Standalone
+context-free traversals may use None; every reached nominal reconstruction
+requires genuine context. An explicit wrong context always refuses before
+classification, and absence does not authenticate source. The native
+source-retaining route keeps mandatory full authentication. Exact owns kernel
 values/types/metering, QSV owns declaration/equality/enum semantics, and Runtime
 retains only its own residual functions. All enum cases use checker-issued
 keys, including unused cases. The existing record/tuple closure requirements
