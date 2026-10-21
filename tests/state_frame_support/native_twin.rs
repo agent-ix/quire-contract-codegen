@@ -440,16 +440,6 @@ impl Twin {
         twin
     }
 
-    /// The same admitted parameter domain with an impossible precondition.
-    pub fn with_impossible_other_precondition() -> Self {
-        let mut twin = Self::with_bounded_other_precondition();
-        let source = String::from_utf8(twin.unit).expect("native unit");
-        let changed = source.replace("{ other < 1000 }", "{ other < 0 }");
-        assert_ne!(changed, source, "the precondition condition changed");
-        twin.unit = changed.into_bytes();
-        twin
-    }
-
     /// QSL-emitted postcondition package whose operation declares a Boolean result.
     pub fn with_deposit_result() -> Self {
         Self::with_deposit_declaration(false, true)
