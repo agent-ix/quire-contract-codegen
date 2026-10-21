@@ -10,12 +10,12 @@
 use std::fmt;
 
 use qsl_replay::{
-    compile_package, parity_obligation, settle_verified_shadow, BoundEntries, ByteDigest,
-    CompositeEvidence, CompositeIdentity, CompositeParityClaim, DependencyInput, DigestDomain,
-    DigestRecord, Domain, DomainKey, EqualityOperator, Identifier, IdentityEncodeError,
-    OperandIdentity, Origin, ParityArgument, ParityPreimage, ProofBound, QualifiedName,
-    ReplayRefusal, ReplayRequest, ReplayRequestRefusal, ReplayRequestWire, ReplaySource, Role,
-    VerifiedShadow, VerifiedShadowReport, WireNodeId,
+    compile_admitted, parity_obligation, settle_verified_shadow, AdmittedCompilation,
+    AdmittedContext, AdmittedRefusal, BoundEntries, ByteDigest, CompositeEvidence,
+    CompositeIdentity, CompositeParityClaim, DependencyInput, DigestDomain, DigestRecord, Domain,
+    DomainKey, EqualityOperator, Identifier, IdentityEncodeError, OperandIdentity, Origin,
+    ParityArgument, ParityPreimage, ProofBound, QualifiedName, ReplayRequest, ReplayRequestRefusal,
+    ReplayRequestWire, ReplaySource, Role, VerifiedShadow, VerifiedShadowReport, WireNodeId,
 };
 use quire_contract_model::{
     CheckedCompositeOperandDomain, CheckedCompositeOperandError, CheckedCompositeOperands,
@@ -51,7 +51,7 @@ pub enum CompositeBuildError {
     /// The lock's dependency inputs are not admitted.
     Dependencies(DependencyLockError),
     /// QSL refused recompilation of the retained source.
-    Recompile(Box<ReplayRefusal>),
+    Recompile(Box<AdmittedRefusal>),
     /// QSL's public request decoder refused the original wire before recompilation.
     RequestDecode(Box<ReplayRequestRefusal>),
     /// IR refused the recompiled checked package.
@@ -323,8 +323,9 @@ impl OriginalCompositeEqContext {
             *obligation.as_bytes(),
             &[],
         );
-        self.check_recompiled_context(&wire)?;
+        let admitted = self.check_recompiled_context(&wire)?;
         Ok(OriginalCompositeEqRequest {
+            admitted,
             wire,
             claim,
             operands,
@@ -338,10 +339,10 @@ impl OriginalCompositeEqContext {
     fn check_recompiled_context(
         &self,
         wire: &ReplayRequestWire,
-    ) -> Result<(), CompositeBuildError> {
+    ) -> Result<AdmittedCompilation, CompositeBuildError> {
         let request = ReplayRequest::decode(wire.clone(), self.inputs.replay_limits)
             .map_err(|cause| CompositeBuildError::RequestDecode(Box::new(cause)))?;
-        let compiled = compile_package(
+        let compiled = compile_admitted(
             self.inputs.source.source_identity(),
             &self.inputs.source.identity,
             &self.inputs.source.bytes,
@@ -350,28 +351,30 @@ impl OriginalCompositeEqContext {
             request.stage_limits().clone(),
             self.inputs.replay_limits,
         )
-        .map_err(|cause| CompositeBuildError::Recompile(Box::new(cause)))?;
-        if self.package_id != compiled.package_id() {
+        .map_err(recompile_failure)?;
+        if self.package_id != compiled.package().package_id()
+            || !compiled.context().package_id().matches(&self.package_id)
+        {
             return Err(CompositeBuildError::PackageMismatch);
         }
         let mut evidence = CheckedPackageEvidence::new();
         for feature in &self.original.lock().required_features {
             evidence.support_feature(feature.as_ref());
         }
-        let recompiled = match CheckedPackageV2::read(compiled.bytes(), self.read_limits, &evidence)
-        {
-            CheckedPackageV2ReadResult::Admitted(package) => package,
-            CheckedPackageV2ReadResult::Refused(cause) => {
-                return Err(CompositeBuildError::PackageRead(Box::new(cause)))
-            }
-            CheckedPackageV2ReadResult::Incomplete(cause) => {
-                return Err(CompositeBuildError::PackageReadLimit(cause))
-            }
-        };
+        let recompiled =
+            match CheckedPackageV2::read(compiled.package().bytes(), self.read_limits, &evidence) {
+                CheckedPackageV2ReadResult::Admitted(package) => package,
+                CheckedPackageV2ReadResult::Refused(cause) => {
+                    return Err(CompositeBuildError::PackageRead(Box::new(cause)))
+                }
+                CheckedPackageV2ReadResult::Incomplete(cause) => {
+                    return Err(CompositeBuildError::PackageReadLimit(cause))
+                }
+            };
         if self.original != *recompiled {
             return Err(CompositeBuildError::ContextMismatch);
         }
-        Ok(())
+        Ok(compiled)
     }
 }
 
@@ -393,8 +396,51 @@ fn origin(occurrence: &CheckedOccurrence) -> Origin {
     Origin::new(Role::new(role), occurrence.ordinal)
 }
 
+fn recompile_failure(cause: AdmittedRefusal) -> CompositeBuildError {
+    CompositeBuildError::Recompile(Box::new(cause))
+}
+
+#[cfg(test)]
+mod admitted_failure_tests {
+    use super::*;
+    use ix_trace_rs::trace;
+
+    #[trace("FR-018-AC-35", "TC-029")]
+    #[test]
+    fn boundary_mapping_retains_a_genuine_malformed_source_package_refusal() {
+        let cause = compile_admitted(
+            qsl_replay::SourceIdentity::new("test", "invalid.native", "git", "fixture"),
+            "invalid.native", b"language \"ix:native\" edition \"1-draft\"; record { ",
+            [], &DependencyInput::default(), qsl_replay::StageLimits::default(),
+            qsl_replay::ReplayLimits::default(),
+        ).expect_err("malformed source cannot produce an admitted context");
+        assert!(matches!(cause, AdmittedRefusal::Package(_)));
+        let CompositeBuildError::Recompile(cause) = recompile_failure(cause) else {
+            panic!("mapping lost the real compiler refusal");
+        };
+        assert!(matches!(*cause, AdmittedRefusal::Package(_)));
+    }
+
+    /// Exercises the real boundary mapping, not an induced compiler invariant fault.
+    #[trace("FR-018-AC-35", "TC-029")]
+    #[test]
+    fn actual_boundary_mapping_retains_public_fault_payload() {
+        let fault = qsl_replay::InternalFault::new("fixture-stage", "fixture-invariant");
+        let mapped = recompile_failure(AdmittedRefusal::Fault(fault));
+        let CompositeBuildError::Recompile(cause) = mapped else {
+            panic!("mapping lost its typed recompile envelope");
+        };
+        let AdmittedRefusal::Fault(fault) = *cause else {
+            panic!("mapping reclassified the fault as a package/resource refusal");
+        };
+        assert_eq!(fault.stage(), "fixture-stage");
+        assert_eq!(fault.invariant(), "fixture-invariant");
+    }
+}
+
 /// A constructed original equality request. Its claim and wire cannot be mutated after construction.
 pub struct OriginalCompositeEqRequest {
+    admitted: AdmittedCompilation,
     wire: ReplayRequestWire,
     claim: CompositeParityClaim,
     operands: CheckedCompositeOperands,
@@ -414,6 +460,11 @@ impl fmt::Debug for OriginalCompositeEqRequest {
 }
 
 impl OriginalCompositeEqRequest {
+    /// Genuine immutable context retained only after full original-package authentication.
+    pub fn admitted_context(&self) -> &AdmittedContext {
+        self.admitted.context()
+    }
+
     /// The retained original operands and their package-authored domains, in positional order.
     pub fn operands(&self) -> &CheckedCompositeOperands {
         &self.operands

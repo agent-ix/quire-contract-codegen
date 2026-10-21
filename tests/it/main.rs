@@ -44,6 +44,9 @@ pub(crate) const fn unbounded_decode_limits() -> quire_contract_codegen::Witness
     }
 }
 
+#[path = "../admitted_enum_support/fixture.rs"]
+mod admitted_enum_fixture;
+mod admitted_enum_equality;
 mod bound_census;
 mod bound_coverage;
 mod bound_generation;

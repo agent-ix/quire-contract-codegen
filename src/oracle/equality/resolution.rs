@@ -4,8 +4,8 @@ use super::{
     aggregate_members, bound_members, is_option_node, literal_count, lookup, node_key,
     read_record_field, read_reference, resolve_scalar, CardinalityBound, CheckedNodeId,
     CheckedNodeTag, CheckedSemanticNodeV2, CollectionKind, CollectionType, CompositeDeclaration,
-    CompositeEqualityRefusal, CompositeShape, FieldDeclaration, Graph, NodeKey, Presence,
-    TypeClosure, ValueType, COLLECTION_BOUNDS_MEMBERS,
+    CompositeEqualityRefusal, CompositeShape, FieldDeclaration, Graph, ItemCheckError, NodeKey,
+    Presence, TypeClosure, ValueType, COLLECTION_BOUNDS_MEMBERS,
 };
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -129,11 +129,12 @@ fn collection_parts(
 
 /// Resolve a root within the item's shared closure and work counter.
 pub(super) fn resolve_type(
+    admitted: &qsl_replay::AdmittedContext,
     graph: &Graph<'_>,
     bounds_by_type: &BTreeMap<&CheckedNodeId, Vec<&CheckedSemanticNodeV2>>,
     closure: &mut TypeClosure,
     type_id: &CheckedNodeId,
-) -> Result<ValueType, CompositeEqualityRefusal> {
+) -> Result<ValueType, ItemCheckError> {
     let mut frames = vec![Frame::Enter {
         id: type_id.clone(),
         external_bound: None,
@@ -148,7 +149,7 @@ pub(super) fn resolve_type(
                 match CheckedNodeTag::from_wire(&node.node_tag) {
                     Some(CheckedNodeTag::ScalarType) => {
                         let bounds = bounds_by_type.get(&id).map_or(&[][..], Vec::as_slice);
-                        values.push(resolve_scalar(bounds, &id, node)?);
+                        values.push(resolve_scalar(admitted, closure, bounds, &id, node)?);
                     }
                     Some(CheckedNodeTag::BoundedDomain) => {
                         let base = lookup(graph, &node.semantic_type)?;
@@ -161,7 +162,7 @@ pub(super) fn resolve_type(
                                 != Some(CheckedNodeTag::CompositeType)
                                 || &*base.semantic_form != "sequence"
                             {
-                                return Err(unsupported());
+                                return Err(unsupported().into());
                             }
                             entered(&mut active, &id)?;
                             frames.push(Frame::FinishBound(id.clone()));
@@ -174,7 +175,7 @@ pub(super) fn resolve_type(
                             if CheckedNodeTag::from_wire(&base.node_tag)
                                 != Some(CheckedNodeTag::ScalarType)
                             {
-                                return Err(unsupported());
+                                return Err(unsupported().into());
                             }
                             let expected_form = match &*base.semantic_form {
                                 "integer" => "integer_range",
@@ -182,15 +183,22 @@ pub(super) fn resolve_type(
                                 "decimal" => "decimal_range",
                                 "text" => "text_bounds",
                                 "float32" | "float64" => "float_rounding",
-                                _ => return Err(unsupported()),
+                                _ => return Err(unsupported().into()),
                             };
                             if &*node.semantic_form != expected_form {
                                 return Err(CompositeEqualityRefusal::MissingBound {
                                     bounded_type: id,
                                     expected_form,
-                                });
+                                }
+                                .into());
                             }
-                            values.push(resolve_scalar(core::slice::from_ref(&node), &id, base)?);
+                            values.push(resolve_scalar(
+                                admitted,
+                                closure,
+                                core::slice::from_ref(&node),
+                                &id,
+                                base,
+                            )?);
                         }
                     }
                     Some(CheckedNodeTag::CompositeType) => match &*node.semantic_form {
@@ -217,7 +225,7 @@ pub(super) fn resolve_type(
                                     let (name, target, wrapped) =
                                         read_record_field(member).ok_or_else(malformed)?;
                                     if wrapped && !is_option_node(lookup(graph, &target)?) {
-                                        return Err(malformed());
+                                        return Err(malformed().into());
                                     }
                                     fields.push((name, wrapped));
                                     children.push(target);
@@ -252,7 +260,8 @@ pub(super) fn resolve_type(
                             let [payload] = members else {
                                 return Err(CompositeEqualityRefusal::MalformedComposite {
                                     composite: id,
-                                });
+                                }
+                                .into());
                             };
                             let target = read_reference(payload).ok_or_else(|| {
                                 CompositeEqualityRefusal::MalformedComposite {
@@ -288,20 +297,23 @@ pub(super) fn resolve_type(
                                 unsupported_node_id: id,
                                 node_tag: "composite_type.reference",
                                 issue: super::UpstreamBlocker::QuireSpecLanguage120,
-                            })
+                            }
+                            .into())
                         }
                         _ => {
                             return Err(CompositeEqualityRefusal::Unsupported {
                                 unsupported_node_id: id,
                                 node_tag: "composite_type",
-                            })
+                            }
+                            .into())
                         }
                     },
                     _ => {
                         return Err(CompositeEqualityRefusal::Unsupported {
                             unsupported_node_id: id,
                             node_tag: "unknown",
-                        })
+                        }
+                        .into())
                     }
                 }
             }
@@ -348,7 +360,8 @@ pub(super) fn resolve_type(
                         let ValueType::Option(payload) = &value else {
                             return Err(CompositeEqualityRefusal::MalformedComposite {
                                 composite: id,
-                            });
+                            }
+                            .into());
                         };
                         // The kernel owns iterative Clone and Drop. Clone the child's type
                         // without mutating the shared Arc or another descriptor's payload.
@@ -400,4 +413,5 @@ pub(super) fn resolve_type(
         .ok_or_else(|| CompositeEqualityRefusal::UnknownTypeNode {
             type_node_id: type_id.clone(),
         })
+        .map_err(Into::into)
 }

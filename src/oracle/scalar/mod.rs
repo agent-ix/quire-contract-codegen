@@ -65,12 +65,12 @@ use quire_contract_model::{
     ContractOccurrenceKeyV1, ContractPackageV1, ContractResultContextV1, ContractResultViewV1,
     ContractRootViewError,
 };
-use quire_semantic_value::declaration::EqualityOperator;
 use quire_exact::{
     ComparisonOperator, DecimalType, DivisionProfile, IeeeComparison, IeeeWidth, Integer,
     IntegerDomain, IntegerInterval, OrderingOperator, RationalDomain, RoundingMode, TextProfile,
     TextType,
 };
+use quire_semantic_value::declaration::EqualityOperator;
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};

@@ -615,8 +615,17 @@ mod tests {
             EqualityOperatorKind,
         };
         let (_, admitted, positions, _, excluded) = excluded_fixture();
+        // Context authentication must not mask the preceding excluded-position refusal.
+        let genuine = qsl_replay::compile_admitted(
+            qsl_replay::SourceIdentity::new("test", "accounting-order.native", "git", "fixture"),
+            "accounting-order.native",
+            b"language \"ix:native\" edition \"1-draft\"; profile v = \"quire.value.complete/v1\"; function same using v(a: Integer): Boolean pure { a = a }",
+            [], &qsl_replay::DependencyInput::default(), qsl_replay::StageLimits::default(),
+            qsl_replay::ReplayLimits::default(),
+        ).expect("real source context for the preceding accounting boundary");
         let result = generate_composite_equality_oracles(
             &admitted,
+            genuine.context(),
             &positions,
             &[1],
             &[CompositeEqualityItem {
@@ -2492,6 +2501,22 @@ mod tests {
             function same using v(a: Integer): Boolean pure { a = a }\n\
             function mixed using v(a: Int[0, 9], p: Integer): Integer pure { a + p }\n";
         let checked = admitted_source(source);
+        let genuine = qsl_replay::compile_admitted(
+            SourceIdentity::new("test", "package-items.native", "git", "fixture"),
+            "package-items.native", source.as_bytes(), [], &DependencyInput::default(),
+            StageLimits::default(), ReplayLimits::default(),
+        ).expect("same original source supplies the admitted context");
+        let mut evidence = CheckedPackageEvidence::new();
+        evidence.support_feature("quire.value.complete/v1");
+        let recompiled = match CheckedPackageV2::read(
+            genuine.package().bytes(), CheckedPackageReadLimits::bounded(), &evidence,
+        ) {
+            CheckedPackageV2ReadResult::Admitted(package) => *package,
+            other => panic!("actual admitted facade output must read: {other:?}"),
+        };
+        assert_eq!(checked, recompiled, "retain the whole unchanged source package");
+        assert!(genuine.context().package_id().matches(&genuine.package().package_id()));
+
         let integer = checked
             .graph()
             .nodes
@@ -2615,6 +2640,7 @@ mod tests {
         ));
         let equality = generate_composite_equality_oracles(
             &admitted,
+            genuine.context(),
             &drivers(&requested),
             &[2],
             &[CompositeEqualityItem {

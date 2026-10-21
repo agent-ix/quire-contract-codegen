@@ -27,8 +27,8 @@ mod package;
 
 use package::*;
 use quire_contract_runtime::exact as rt;
-use quire_semantic_value::declaration as sv;
 use quire_exact as exact;
+use quire_semantic_value::declaration as sv;
 
 use super::exact_scalar_agreement::run_agreement_cases;
 

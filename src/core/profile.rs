@@ -34,6 +34,12 @@ pub(crate) fn oracle_crate_manifest(crate_name: &str) -> String {
     )
 }
 
+/// The equality ABI alone needs the public admitted-context facade.
+pub(crate) fn equality_oracle_crate_manifest(crate_name: &str) -> String {
+    let manifest = oracle_crate_manifest(crate_name);
+    manifest.replacen("[dependencies]\n", "[dependencies]\nqsl-replay = { git = \"https://github.com/agent-ix/quire-spec-language\", branch = \"main\" }\n", 1)
+}
+
 /// The isolated observer workspace; only its dev dependencies enable charge logging.
 pub(crate) fn scalar_observer_manifest() -> String {
     format!(
@@ -44,7 +50,7 @@ pub(crate) fn scalar_observer_manifest() -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        oracle_crate_manifest, scalar_observer_manifest, EXACT_DEPENDENCY_SOURCE,
+        equality_oracle_crate_manifest, oracle_crate_manifest, scalar_observer_manifest, EXACT_DEPENDENCY_SOURCE,
         RUNTIME_DEPENDENCY_SOURCE,
     };
     use ix_trace_rs::trace;
@@ -95,6 +101,17 @@ mod tests {
         assert!(manifest.contains("unsafe_code = \"forbid\""));
         assert!(manifest.contains("--max-field-sensitivity-array-size"));
     }
+    #[trace("FR-018-AC-37", "FR-014-AC-8", "TC-029")]
+    #[test]
+    fn only_equality_manifests_acquire_the_admitted_context_facade() {
+        let equality = equality_oracle_crate_manifest("equality-probe");
+        assert!(equality.contains("qsl-replay = { git = \"https://github.com/agent-ix/quire-spec-language\", branch = \"main\" }"));
+        assert!(!equality.contains("rev ="));
+        assert!(!equality.contains("test-support"));
+        assert!(!oracle_crate_manifest("scalar-probe").contains("qsl-replay"));
+        assert!(!scalar_observer_manifest().contains("qsl-replay"));
+    }
+
     #[trace("FR-017-AC-52", "TC-027")]
     #[test]
     fn observer_is_an_isolated_dev_only_example_over_the_canonical_adapter() {
