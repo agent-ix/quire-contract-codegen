@@ -73,9 +73,11 @@ emitted text. When a family renders through `HarnessSpec`, its constructor refus
 Current interim ownership (IR-329): the bounded-profile classifier, the two
 retained finite-input semantic-family lowerers (collection and graph) and the
 bounded-corpus emitter are auxiliary operations of this Kani generator, governed
-today by FR-015-AC-82 to FR-015-AC-94. Planned (IR-615): remove the legacy
-profile `Inconclusive` disposition: profile selection cannot establish the run-only
-vacuity classification governed by
+today by FR-015-AC-82 to FR-015-AC-94. Implemented (IR-615): the owning IR
+profile reader rejects the legacy `Inconclusive` disposition, and no family
+admission arm turns a profile code into an inconclusive run. The census preserves
+admitted Supported/Refused entries in request order. Profile selection cannot
+establish the run-only vacuity classification governed by
 [Contract IR FR-030](ix://agent-ix/quire-contract-ir/FR-030). This cleanup does
 not complete the `unsupported` matrix entry, capability-kind warning and
 no-artifact negotiation behavior required by
