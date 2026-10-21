@@ -55,9 +55,13 @@ The generator owns:
 Outside the boundary, each a dependency `Cargo.toml` names:
 
 - Contract IR reads and lowers the package through the `CheckedPackageV2` reader and lowering.
-- Contract Runtime publishes the `exact` surface every generated oracle calls, and co-owns the
-  bounded shadow model and its refinement obligation for its kernel types.
-- QSL owns the replay and proof types in `qsl-replay` and the executor behind them.
+- `quire-exact` owns kernel values, scalar types, metering and outcomes. QSV
+  (`quire-semantic-value`) owns declarations, equality and enum semantics.
+  Contract Runtime retains its own residual functions and execution surface;
+  it is not a re-export facade for the extracted owners.
+- QSL owns replay/proof types and the executor behind root `qsl-replay`, and
+  FR-394's package-bound `AdmittedContext` with genuine checker-issued enum
+  declaration/case keys. No QSL implementation-layer import is permitted.
 - Kani and CBMC prove; the Rust compiler and proptest build and run what is generated.
 
 ## Views
@@ -111,16 +115,32 @@ The QSL-produced ConfigVersion direct postcondition is the admission control; it
 is a typed refusal. IR-703 is implemented; a CG-side real QSL producer fixture must exist before CG
 V2 implementation can claim the corresponding runtime tests.
 
-### Runtime `exact` surface view
+### Direct owning execution surface view
 
-Every generated oracle crate calls `quire_contract_runtime::exact` and interprets no expression
-itself:
+The direct-owner/enum ABI migration is planned under
+[FR-018](../oracle/functional/FR-018-composite-equality-oracles.md) and
+[interface-001](../core/functional/interface-001-codegen-api.md). Every generated
+oracle calls the owner of its operation and interprets no expression itself:
 
 - FR-014 scalar oracles call the kernel scalar operations over `rt::Integer` and the other exact
   scalar types.
-- FR-018 equality oracles call `check_equality` and `CheckedEquality::evaluate`.
+- FR-018 equality oracles call QSV `check_type`, `check_equality` with their
+  complete genuine enum index, and `CheckedEquality::evaluate`. A generated
+  opaque prepared environment retains the immutable replay-root context,
+  environment, index, descriptors and original-package/item binding.
 - FR-021 function-application oracles admit a `PackageDeclarations` through
   `PackageDeclarations::check` and apply one function through `CheckedPackage::call`.
+
+Only the source-retaining preparation boundary calls root `compile_admitted`,
+authenticates original source/lock, compares the complete recompiled package
+and retains its context. CG's oracle generator takes that root facade type,
+not a peer `replay` module type. Emitted code resolves `WireNodeId`/case
+identifiers by genuine owner lookup and constructs no kernel key. The
+facade's enum-only inventory leaves record/tuple owner-key lookup as separate
+unresolved migration work; existing composite behavior remains required.
+Scalar Boolean/integer proof execution has no added source-compiler leg.
+The generated oracle remains the implementation under test; QSL context
+preparation does not replace it with replay evaluation.
 
 Each oracle takes a caller-supplied `Meter` and returns the runtime `Outcome` unchanged. A Kani
 harness embeds its FR-014 oracle, so the prover proves the generated code through the same `exact`

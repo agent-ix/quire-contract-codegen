@@ -58,6 +58,17 @@ generators, the input model, the backend adapter, Kani tractability and the gene
 ADR-005 records the open original guardian-gate architecture decision and its activation hold.
 ADR-006 proposes the distinct caller Text-admission route and scopes ADR-001's checked-package
 input decision to expression and contract claims.
+The planned direct-owner migration in
+[FR-018](oracle/functional/FR-018-composite-equality-oracles.md) and
+[interface-001](core/functional/interface-001-codegen-api.md) binds equality
+generation and its emitted prepared environment to the genuine replay-root
+`AdmittedContext` of the original checked package. Exact owns kernel
+values/types/metering, QSV owns declaration/equality/enum semantics, and Runtime
+retains only its own residual functions. All enum cases use checker-issued
+keys, including unused cases. The existing record/tuple closure requirements
+remain; their genuine owner-key lookup is a separate capability gap in the
+currently enum-only facade. Native enum qualification and the original
+scalar proof qualification are distinct, both still required.
 [tests.md](tests.md) indexes the per-subsystem matrices that map every criterion to its test case.
 
 | Area | Requirements | Test cases |
