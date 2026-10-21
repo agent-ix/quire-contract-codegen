@@ -164,7 +164,7 @@ pub(super) fn resolve_composite(
         _ => return Err(mismatch()),
     };
     let expected_name = node.declaration.as_ref().ok_or_else(mismatch)?;
-    if actual.form() != expected_form || !actual.qualified_name().iter()
+    if actual.node().to_string() != node.node_id.digest.as_ref() || actual.form() != expected_form || !actual.qualified_name().iter()
         .map(|part| part.as_str())
         .eq(expected_name.qualified_name.iter().map(|part| part.as_ref()))
     {
@@ -207,7 +207,7 @@ mod tests {
             let leaf = &libraries.iter().find(|(identity,_)| identity == "test/composites").expect("original library").1;
             let owner = leaf.context().package_id().record();
             for actual in leaf.context().composites() {
-                let wire = WireNodeId::from_digest(*actual.key().as_bytes());
+                let wire = WireNodeId::from_digest(*actual.node().as_bytes());
                 let cause = context.composite_declaration(wire).expect_err("foreign closure declaration");
                 assert_eq!(composite_lookup_refusal(cause), CompositeEqualityRefusal::ForeignComposite {
                     declaration: wire.to_string(), package_domain: owner.domain().as_str().to_owned(),

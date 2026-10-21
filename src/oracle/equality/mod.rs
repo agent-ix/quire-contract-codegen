@@ -1606,9 +1606,8 @@ fn render_item(generated: &CheckedItem) -> Result<RenderedItem, RenderError> {
     let declared = generated.declaration_keys.iter().collect::<BTreeSet<_>>();
     if generated.composite_bindings.len() != generated.declaration_keys.len()
         || generated.composites.len() != generated.composite_bindings.len()
-        || generated.composite_bindings.iter().any(|(key, binding)| {
+        || generated.composite_bindings.values().any(|binding| {
             binding.node.domain.as_ref() != exact::NODE_KEY_DOMAIN
-                || binding.node.digest.as_ref() != key.to_string()
                 || !declared.contains(&binding.node)
         })
     {

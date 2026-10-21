@@ -19,12 +19,16 @@ mod generated {
         assert!(matches!(lookup(wrong, &["Marker"], qsl_replay::AdmittedCompositeForm::Record), Err(EnvironmentError::Lookup(qsl_replay::AdmittedLookupRefusal::WrongKind { declaration })) if declaration == wrong));
         let leaf = &libraries.iter().find(|(name,_)| name == "test/composites").expect("real leaf").1;
         for declaration in leaf.context().composites() {
-            let wire = qsl_replay::WireNodeId::from_digest(*declaration.key().as_bytes());
+            let wire = qsl_replay::WireNodeId::from_digest(*declaration.node().as_bytes());
             let names = declaration.qualified_name().iter().map(|part| part.as_str()).collect::<Vec<_>>();
             assert!(matches!(lookup(wire, &names, declaration.form()), Err(EnvironmentError::Lookup(qsl_replay::AdmittedLookupRefusal::Foreign { declaration: actual, package })) if actual == wire && package == leaf.context().package_id()));
         }
         let pair = super::declaration(compiled.context(), "Pair");
-        let wire = qsl_replay::WireNodeId::from_digest(*pair.key().as_bytes());
+        let wire = qsl_replay::WireNodeId::from_digest(*pair.node().as_bytes());
+        assert_ne!(pair.node(), pair.key());
+        assert_eq!(lookup(wire, &["Pair"], pair.form()).expect("real wire resolves kernel key"), pair.key());
+        let kernel_as_wire = qsl_replay::WireNodeId::from_digest(*pair.key().as_bytes());
+        assert!(matches!(lookup(kernel_as_wire, &["Pair"], pair.form()), Err(EnvironmentError::Lookup(qsl_replay::AdmittedLookupRefusal::Unknown { declaration, case: None })) if declaration == kernel_as_wire));
         assert!(matches!(lookup(wire, &["WrongName"], pair.form()), Err(EnvironmentError::Reconstruction(ReconstructionError::Composite))));
         assert!(matches!(lookup(wire, &["Pair"], qsl_replay::AdmittedCompositeForm::Record), Err(EnvironmentError::Reconstruction(ReconstructionError::Composite))));
         assert!(matches!(lookup_composite_key(None, &wire.to_string(), &["Pair"], pair.form()), Err(EnvironmentError::MissingAdmittedContext { declaration }) if declaration == wire));
@@ -134,6 +138,14 @@ fn genuine_nested_composites_match_outcomes_charges_counters_and_each_denial() {
         let prepared = constructor(Some(compiled.context())).expect("actual emitted preparation");
         let shape = ValueType::Composite(declaration(compiled.context(),name).key());
         environment.check_type(&shape).expect("independent type check");
+        let wire_node = declaration(compiled.context(),name).node();
+        assert_ne!(wire_node, declaration(compiled.context(),name).key());
+        let wrong_identity = if name.ends_with("Pair") {
+            environment.tuple(wire_node, vec![Value::Boolean(false), Value::Boolean(false)])
+        } else {
+            environment.record(wire_node, Vec::new())
+        }.expect_err("a genuine wire node is not a kernel declaration key");
+        assert_eq!(wrong_identity.cause, quire_semantic_value::declaration::ConstructionCause::UnknownDeclaration);
         let checked = environment.check_equality(operator, EqualityOperand::typed(shape.clone()), EqualityOperand::typed(shape), &index).expect("independent equality check");
         for left in values(&environment,compiled.context(),name) {
             for right in values(&environment,compiled.context(),name) {

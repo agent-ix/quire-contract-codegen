@@ -67,7 +67,7 @@ fn same_shaped_record_and_tuple_names_keep_distinct_repeatable_owner_identities(
     let keys = declarations.iter().map(|item| item.key()).collect::<std::collections::BTreeSet<_>>();
     assert_eq!(keys.len(), 4, "same-shaped declarations are not aliases");
     for actual in declarations {
-        let wire = qsl_replay::WireNodeId::from_digest(*actual.key().as_bytes());
+        let wire = qsl_replay::WireNodeId::from_digest(*actual.node().as_bytes());
         assert_eq!(compiled.context().composite_declaration(wire).expect("repeat lookup"), actual);
         assert_eq!(fresh.context().composite_declaration(wire).expect("same real source"), actual);
     }
@@ -92,7 +92,8 @@ pub(super) fn assert_authentic_recursive_item_generation() {
             declaration.qualified_name().iter().map(|part| part.as_str()).eq([name])
         ).expect("genuine recursive source declaration");
         assert_eq!(actual.form(), qsl_replay::AdmittedCompositeForm::Record);
-        assert_eq!(actual.key().to_string(), item.left.source_type.digest.as_ref());
+        assert_eq!(actual.node().to_string(), item.left.source_type.digest.as_ref());
+        assert_ne!(actual.key(), actual.node(), "wire identity is not the kernel declaration key");
         assert_eq!(item.left.source_type, item.right.source_type);
         let output = generate_items(&package, Some(compiled.context()), std::slice::from_ref(&item), &[])
             .expect("actual source and original capability lower together");
