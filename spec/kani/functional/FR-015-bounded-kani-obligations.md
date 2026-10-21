@@ -730,6 +730,10 @@ pairing and the independently gated AC-111 generator retirement are excluded.
 No new installed-backend evidence or IR constructor/proof-count acceptance is
 claimed by this consumer change.
 
+## Admitted native integer capability (IR-705 option 2)
+
+When selecting the additive kernel facility of [quire-exact FR-384](ix://agent-ix/quire-exact/FR-384), CG SHALL obtain finite operand domains and operation structure from the authentic CheckedPackageV2 and existing IR-owned accessors, preserve every original input valuation, and request kernel capacity admission for every reachable intermediate. CG SHALL render the same production kernel API in native and proof clients, retain the real Meter and semantic result-domain refusals, and return a typed source-associated capability/generation refusal if capacity or value admission fails. It SHALL NOT add a domain-narrowing assumption, copy evaluator logic, fabricate an admitted key/certificate or present admission failure as a proof verdict. [AD-006](../../assurance/AD-006-admitted-native-integer-oracles.md) owns the selection and evidence decision. Existing general exact generation remains available under its existing capability policy.
+
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
@@ -881,6 +885,9 @@ claimed by this consumer change.
 | FR-015-AC-79 | Reorder request fields to the accessor's name order, insert an unrequested inherited field, or emit the hand-built fixture's scope ids. |
 | FR-015-AC-80 | Generate the harness from the hand-built fixture rather than the emitted package. |
 | FR-015-AC-81 | Mark an unread `IntRange` as `NoRead`, give an untyped member a range, omit its reason, or accept a duplicate unranged name. |
+| FR-015-AC-125 | Authentic QSL-emitted, IR-admitted bounded integer scalar and clause inputs generate kernel-owned native carriers and checked operation plans for all intermediates, with original graph identities/domains retained. Reversed/oversized capacities and operands outside a selected plan yield typed source-associated refusal, never narrowed assumptions or a completed value. Native production and proof artifacts use the same kernel implementation and real Meter; inspection finds no copied arithmetic or verification-only evaluator. | Test |
+| FR-015-AC-126 | Genuine TC-027 healthy and bound mutant, TC-025 arithmetic mutant, IR-917 clause implication and IR-948 V2 pre/post/invariant profiles regenerate through public CG with the reviewed admitted kernel API. Original semantic domains, selected propositions/clauses, independent expected values, subject controls, assertions, final completion covers and existing solver/unwind/time settings remain. Each healthy profile verifies at 16 GiB; each required substantive mutant falsifies with original-domain native playback. The IR-948 impossible-precondition control must complete as CoverUnsatisfied at the same ceiling, not resource exhaustion or a vacuous Verified. Recorded source/ABI/identity changes explain the new route without reusing stale proof evidence. MemoryExhausted, timeout, unknown, missing cover/mutant or missing teardown is inconclusive. | Test |
+| FR-015-AC-127 | End-to-end denied/cancelled admitted-native controls retain all real Meter counters, charge order, complete incomplete/refusal fields and admitted prefixes at every reached charge point, compared with independent normative expectations and the general exact route. A semantic result-domain failure remains after arithmetic charge and before result-retain, separately from generation-time native-capacity failure. | Test |
 
 ### FR-015-AC-106
 
