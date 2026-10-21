@@ -113,6 +113,36 @@ the enum-only owner facade does not excuse dropping it.
    Name a `float_rounding` node over a `float64` scalar as a member: it reads as the
    float and the equality is refused as `OperatorIneligible`.
 
+   For FR-018-AC-14, separate bound reconstruction from intake and defensive
+   controls. First read valid `integer_range` and `collection_bounds` nodes
+   whose bodies contain exactly `min` then `max`, each a canonical integer
+   literal typed at the owning Integer node. Through normal lowering and
+   public generation, verify the exact original bound values and domains;
+   do not widen, reorder or substitute them. Keep the existing missing-bound
+   request/root-selection controls unchanged.
+
+   At Contract IR intake, independently reorder these bindings, replace one
+   with a bare literal, remove one, repeat one, and introduce an unlisted name.
+   Use an ungrouped bound node in otherwise valid wire. Refresh the
+   package-level canonical identity and matching identity-projection mirrors
+   while retaining the offending node key, so earlier identity checks do not
+   mask the derived closed-shape refusal. Do not ask a candidate-key helper
+   to manufacture a key for an invalid closed shape.
+   Require its `invalid_package` / `stale-node-key` refusal at the offending
+   node's `node_id`, with no admitted package. These rejected inputs never
+   call public CG generation and have no CG `UnreadableBound` disposition.
+   Do not attach an unrelated genuine context to claim a later refusal.
+
+   Retain private CG bound-parser/type-resolution tests with the same precise
+   malformed-bound assertions as defense against inconsistent internal input;
+   label them separately from the public valid-bound and IR-intake controls.
+   A private defense does not supply public-generator acceptance credit for
+   an input the reader rejects. This stage split applies only to
+   `integer_range` and `collection_bounds`. For `rational_range`,
+   `decimal_range` and `text_bounds`, preserve named lookup in any admitted
+   order and each genuinely reader-admitted unreadable-bound negative; do
+   not infer their admission or reader refusal from the two closed forms.
+
 9. Emitted-source scan (FR-018-AC-17). Read the `src/lib.rs` that
    `generate_composite_equality_oracles` returns for the step 1 package and assert
    zero occurrences of the panic tokens of step 11, no `.ok()`, `.unwrap_or(` or
@@ -207,6 +237,11 @@ the enum-only owner facade does not excuse dropping it.
     non-sequence, remove or
     duplicate `min` or `max`, and make either bound non-integer; each affected item receives its
     typed malformed or bound refusal with no symbol while an unaffected sibling generates.
+    The `collection_bounds` malformed-name/order/shape controls at this private
+    seam are defensive parser evidence, not public-generator acceptance;
+    step 8 owns their separate IR-intake refusal and valid-bound controls.
+    This clarification does not reclassify the record optional-wrapper or
+    cycle controls.
     At the equality module's type-resolution seam, supply separate synthetic graphs with `Option`
     referring to itself and `Sequence` referring to itself, so earlier package admission cannot
     mask the resolver behavior. Assert each returns `TypeResolutionCycle` with the repeated node
