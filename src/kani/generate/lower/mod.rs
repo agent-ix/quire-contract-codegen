@@ -6,8 +6,7 @@ pub(crate) mod bounded_kani_profile;
 pub(crate) mod finite_reference_graphs;
 
 use quire_contract_ir::kani::{
-    CapabilityDisposition, DispatchIndex, KaniOutcome,
-    KaniProfile, SemanticFamily,
+    CapabilityDisposition, DispatchIndex, KaniOutcome, KaniProfile, SemanticFamily,
 };
 use quire_contract_model::{std001_code, Std001Code};
 
@@ -46,9 +45,11 @@ fn admit_family(
             }
             Ok(())
         }
-        CapabilityDisposition::Refused { code } => {
-            Err(KaniOutcome::refused(*code, source_id, profile.selection().revision.clone()))
-        }
+        CapabilityDisposition::Refused { code } => Err(KaniOutcome::refused(
+            *code,
+            source_id,
+            profile.selection().revision.clone(),
+        )),
     }
 }
 
