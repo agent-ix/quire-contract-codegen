@@ -210,6 +210,33 @@ authored).
   node and its occurrence key) and are kept, so that no function-path identity changes
   (FR-024-AC-20). If QSL later recomputes or compares the identity, QSL pins the spelling and CG
   follows in a follow-up; until then the spelling is CG's own and interim.
+- E-1 per-step refinement records (PLANNED/CODE-GATED, IR-942). The QSL
+  ADR-013 O-07 occurrence of a QSV `StepSimulationRecord` is a locator on the
+  owning refinement node: role `generated`, ordinal 0 for `Initial` and 1 +
+  the zero-based `StepRowRef` index for `Step`. The index is in QSpec FR-375's
+  total `steps` order; ties on node-key digest and member name are broken by
+  alias-free class spelling in UTF-8 byte order (FR-375-AC-19). CG does not
+  derive that order from source positions. The record *content* identity is a
+  separate SHA-256 over one RFC 8785 object with exactly `subject_kind` equal
+  to `protocol-refinement-step` and `record` equal to QSV's canonical
+  `StepSimulationRecord` encoding. CG uses `quire-canonical` and QSV's owned
+  type/encoder directly; it does not copy or reinterpret the record schema.
+  The QSV record's `refinement`, `obligation` and supplied-order `hypotheses`
+  all participate. The O-07 occurrence key, source regions, `source_span`, CG
+  proof kind, CG `ObligationKind`, and harness execution settings do not enter
+  that content identity. The per-step `KaniObligationIdentity` is a distinct
+  persisted *harness* identity record: its per-step subject carries the exact
+  QSV record, its content identity, and the separate O-07 occurrence key;
+  its persisted harness-record digest covers every record member except
+  `source_span`. This planned producer closes the current link-3 no-digest
+  gap for per-step records. A CG kind needed by the harness remains a harness field,
+  never a second discriminator in the record content preimage. CG refuses
+  before generating a harness when the record owner and selected refinement
+  differ, a `StepRowRef` is out of range, the occurrence role or ordinal does
+  not match the obligation, or a package repeats a `(refinement, obligation)`
+  pair even with different hypotheses. A refusal has no content identity or
+  proof credit. The existing V1 clause identity rule above does not define
+  this per-step record shape; FR-015-AC-120 through AC-122 own its tests.
 - E-1 scalar allocation (PLANNED/CODE-GATED, IR-631). CG owns and mints the scalar
   operation-application preimage under measured merged QSL change #650. ADR-013 O-09,
   FR-357 and `qsl-replay/src/execute/parity_identity.rs` agree on tagged `domain` entries.
