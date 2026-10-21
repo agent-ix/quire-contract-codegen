@@ -244,7 +244,7 @@ pub(super) fn assert_authentic_recursive_item_generation() {
 #[trace("FR-018-AC-2", "FR-018-AC-8", "FR-018-AC-39", "FR-018-AC-42", "TC-029")]
 #[test]
 fn genuine_composite_host_generation_preserves_closure_and_capability_ordering() {
-    for (mode, transitive) in [("direct", false), ("transitive", true)] {
+    for transitive in [false, true] {
         let (compiled, libraries) = fixture::imported(transitive);
         let package = checked(&compiled, &libraries);
         let items = FUNCTIONS

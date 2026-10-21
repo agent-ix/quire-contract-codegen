@@ -73,8 +73,6 @@ use crate::core::contract_package::{
 };
 use crate::core::naming::unique_names;
 use crate::core::profile::equality_oracle_crate_manifest;
-#[cfg(test)]
-use crate::core::profile::oracle_crate_manifest;
 use crate::oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
 use crate::oracle::direct_unsupported_form;
 use crate::oracle::scalar::{
