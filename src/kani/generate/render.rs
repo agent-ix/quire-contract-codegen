@@ -22,8 +22,32 @@ fn binding(source: &mut String, binding: &LetBinding) {
         Some(LetType::I128) => ": i128",
     };
     let init = match &binding.init {
-        Init::Expression(expression) => expression.as_str(),
-        Init::UnlimitedMeter => "rt::Meter::new(rt::ScalarLimits {\ninteger_bits: u64::MAX,\ndecimal_digits: u64::MAX,\nscale_expansion: u64::MAX,\ntext_input_bytes: u64::MAX,\ntext_scalars: u64::MAX,\nnormalized_scalars: u64::MAX,\nunit_edges: u64::MAX,\nvalue_occurrences: u64::MAX,\nwork_units: u64::MAX,\nresult_units: u64::MAX,\n})",
+        Init::Expression(expression) => expression.as_str().to_owned(),
+        Init::ScalarMeter(limits) => {
+            let fields = [
+                ("integer_bits", limits.integer_bits),
+                ("decimal_digits", limits.decimal_digits),
+                ("scale_expansion", limits.scale_expansion),
+                ("text_input_bytes", limits.text_input_bytes),
+                ("text_scalars", limits.text_scalars),
+                ("normalized_scalars", limits.normalized_scalars),
+                ("unit_edges", limits.unit_edges),
+                ("value_occurrences", limits.value_occurrences),
+                ("work_units", limits.work_units),
+                ("result_units", limits.result_units),
+            ];
+            let mut text = "rt::Meter::new(rt::ScalarLimits {\n".to_owned();
+            for (name, value) in fields {
+                let literal = if value == u64::MAX {
+                    "u64::MAX".to_owned()
+                } else {
+                    value.to_string()
+                };
+                text.push_str(&format!("{name}: {literal},\n"));
+            }
+            text.push_str("})");
+            text
+        }
     };
     line(
         source,

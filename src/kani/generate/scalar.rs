@@ -424,6 +424,7 @@ pub(super) fn render_scalar(
         mutable: false,
         init,
     };
+    let scalar_limits = crate::kani::abi::SCALAR_HARNESS_LIMITS;
     let mut body = Vec::new();
     for (name, (minimum, maximum)) in lowered
         .operation
@@ -453,7 +454,7 @@ pub(super) fn render_scalar(
         name: "meter".to_owned(),
         ty: None,
         mutable: true,
-        init: Init::UnlimitedMeter,
+        init: Init::ScalarMeter(scalar_limits),
     }));
     let mut args = lowered
         .operation
@@ -522,8 +523,11 @@ pub(super) fn render_scalar(
         options: spec.options().to_vec(),
     };
     let record = record(&lowered.module_symbol, &identity, &rust)?;
-    Ok(KaniScalarObligationHarness::generated(
-        identity, rust, record,
+    Ok(KaniScalarObligationHarness::generated_with_scalar_limits(
+        identity,
+        rust,
+        record,
+        scalar_limits,
     ))
 }
 
@@ -531,6 +535,7 @@ fn render_boolean_implies(
     request: &KaniObligationRequest<'_>,
     lowered: &LoweredScalarClaim,
 ) -> Result<KaniScalarObligationHarness, UnsupportedObligation> {
+    let scalar_limits = crate::kani::abi::SCALAR_HARNESS_LIMITS;
     use super::spec::{
         Argument, Cover, ExprText, HarnessSpec, Init, LetBinding, ProofKind, Statement,
     };
@@ -554,7 +559,7 @@ fn render_boolean_implies(
             name: "meter".to_owned(),
             ty: None,
             mutable: true,
-            init: Init::UnlimitedMeter,
+            init: Init::ScalarMeter(scalar_limits),
         }),
         Statement::Call {
             result: "outcome".to_owned(),
@@ -631,8 +636,11 @@ fn render_boolean_implies(
         options: spec.options().to_vec(),
     };
     let record = record(&lowered.module_symbol, &identity, &rust)?;
-    Ok(KaniScalarObligationHarness::generated(
-        identity, rust, record,
+    Ok(KaniScalarObligationHarness::generated_with_scalar_limits(
+        identity,
+        rust,
+        record,
+        scalar_limits,
     ))
 }
 
@@ -799,8 +807,11 @@ mod {module} {{\n\
         source,
     );
     let record = record(&lowered.module_symbol, &identity, &rust)?;
-    Ok(KaniScalarObligationHarness::generated(
-        identity, rust, record,
+    Ok(KaniScalarObligationHarness::generated_with_scalar_limits(
+        identity,
+        rust,
+        record,
+        crate::kani::abi::SCALAR_HARNESS_LIMITS,
     ))
 }
 

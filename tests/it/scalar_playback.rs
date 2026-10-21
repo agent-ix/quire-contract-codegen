@@ -9,8 +9,9 @@ use qsl_replay::{compile_package, DependencyInput, ReplayLimits, SourceIdentity,
 use quire_contract_codegen::{
     decode_scalar_falsification, generate_routed, routed_contract_lowering_profile,
     BackendDescriptor, Candidate, ContractDriverResultSelection, ContractRequestPosition,
-    DecodeFailure, GenerationContexts, KaniGenerationContext, KindOutput, ProviderOrigin,
-    RoutedGenerationItem, ScalarObligationIdentity,
+    DecodeFailure, GenerationContexts, KaniGenerationContext, KaniScalarObligationHarness,
+    KindOutput, ProviderOrigin, RoutedGenerationItem, ScalarObligationIdentity,
+    ScalarOriginalLimitsError,
 };
 use quire_contract_model::{
     CheckedOccurrenceRole, CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2,
@@ -20,12 +21,12 @@ use quire_contract_model::{
 
 const PLAYBACK_BYTES: usize = 8 * 1024 * 1024;
 
-fn identity(
+fn harness(
     operation: &str,
     parameters: &str,
     result: &str,
     expression: &str,
-) -> ScalarObligationIdentity {
+) -> KaniScalarObligationHarness {
     let source = format!(
         "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\nfunction subject using v({parameters}): {result} pure {{ {expression} }}\n"
     );
@@ -158,7 +159,16 @@ fn identity(
     else {
         panic!("routed scalar harness: {:?}", item.output)
     };
-    harness.identity.clone()
+    (**harness).clone()
+}
+
+fn identity(
+    operation: &str,
+    parameters: &str,
+    result: &str,
+    expression: &str,
+) -> ScalarObligationIdentity {
+    harness(operation, parameters, result, expression).identity
 }
 
 fn sum() -> ScalarObligationIdentity {
@@ -458,5 +468,82 @@ fn unsupported_operator_and_invalid_persisted_schema_refuse_before_parsing() {
         &duplicate,
         "no block",
         "cg_scalar_witness_schema_duplicate_binding",
+    );
+}
+
+#[trace("FR-032-AC-3")]
+#[test]
+fn original_renderer_limits_are_retained_with_genuine_routed_source() {
+    let harness = harness(
+        "quire.op.integer.add",
+        "x: Int[0, 9]",
+        "Int[0, 10]",
+        "x + 1",
+    );
+    let limits = harness
+        .original_scalar_limits()
+        .expect("generation retained its actual meter limits");
+    assert_eq!(
+        limits,
+        quire_contract_runtime::exact::ScalarLimits {
+            integer_bits: u64::MAX,
+            decimal_digits: u64::MAX,
+            scale_expansion: u64::MAX,
+            text_input_bytes: u64::MAX,
+            text_scalars: u64::MAX,
+            normalized_scalars: u64::MAX,
+            unit_edges: u64::MAX,
+            value_occurrences: u64::MAX,
+            work_units: u64::MAX,
+            result_units: u64::MAX,
+        }
+    );
+    assert!(harness.rust.contents.contains("rt::Meter::new(rt::ScalarLimits {\ninteger_bits: u64::MAX,\ndecimal_digits: u64::MAX,\nscale_expansion: u64::MAX,\ntext_input_bytes: u64::MAX,\ntext_scalars: u64::MAX,\nnormalized_scalars: u64::MAX,\nunit_edges: u64::MAX,\nvalue_occurrences: u64::MAX,\nwork_units: u64::MAX,\nresult_units: u64::MAX,\n})"));
+    assert_eq!(
+        harness
+            .identity
+            .arguments
+            .iter()
+            .map(|arg| (arg.minimum, arg.maximum))
+            .collect::<Vec<_>>(),
+        [(0, 9), (1, 1)]
+    );
+    assert!(harness
+        .rust
+        .contents
+        .contains("exact >= i128::from(0_i64) && exact <= i128::from(10_i64)"));
+}
+
+#[trace("FR-032-AC-3")]
+#[test]
+fn original_limits_refuse_changed_retained_identity_source_or_record() {
+    let harness = harness(
+        "quire.op.integer.sub",
+        "x: Int[0, 9], y: Int[0, 9]",
+        "Int[-9, 9]",
+        "x - y",
+    );
+    assert_eq!(
+        harness.original_scalar_limits().unwrap().integer_bits,
+        u64::MAX
+    );
+    let mut identity_changed = harness.clone();
+    identity_changed.identity.arguments[0].maximum = 8;
+    let mut source_changed = harness.clone();
+    source_changed
+        .rust
+        .contents
+        .push_str("\n// changed retained source");
+    let mut record_changed = harness.clone();
+    record_changed.record.contents.push(' ');
+    for changed in [identity_changed, source_changed, record_changed] {
+        assert_eq!(
+            changed.original_scalar_limits(),
+            Err(ScalarOriginalLimitsError::GeneratedArtifactChanged)
+        );
+    }
+    assert_eq!(
+        harness.original_scalar_limits().unwrap().integer_bits,
+        u64::MAX
     );
 }
