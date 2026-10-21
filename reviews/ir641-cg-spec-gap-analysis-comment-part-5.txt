@@ -1,0 +1,952 @@
+<!-- reviewer repo=agent-ix/quire-contract-codegen visibility=public quoin=0.28.4 module=spec-artifacts-process@b82e42e893612b4b4ee94127714b4577ee893502 id=SR-15325 method=gap-analysis lang=spec pr=quire-contract-codegen#502 model=unavailable run=23ce763a-e82d-46ed-97f5-512b2a58c66f part=5 -->
+
+SR-15325 full repository gap review: FAIL (299 untagged criteria + four inherited annotation defects). Partition 5 of 12. Linear refused the complete 702123-character body: limit 100000 characters. This partition reports only the units and findings below; all partitions collectively equal the single unchanged validated SR. A clean partition does not change the overall FAIL. New four PLANNED Test criteria remain IR-641 coding work; inherited 295+four annotations are handed to IR-878 comment 93895fc0. No consumer implementation or passing committed-lock baseline is claimed.
+
++++ [reviewer data]
+
+```yaml
+clean: false
+scope:
+- id: FR-028-AC-24
+  path: spec/kani/functional/FR-028-bounded-proof-ceilings.md
+  role: examined
+  excerpt: 'The refinement run is a native process launched through one typed refinement execution entry that reuses
+    FR-017''s launcher and FR-028''s ceilings: it is held to the memory and wall-clock ceilings its harness identity
+    records, its evidence (class, case count, cases run, seed, both ceilings, mechanism, peak where observed, outcome,
+    versions) is recorded beside the shadow run''s evidence, and a run that reaches either ceiling is stopped, records
+    the ceiling, and yields strength `shadow_proved_refinement_inconclusive`, never `exhaustive`, `sampled`, `not_run`
+    or `refinement_failed`. PLANNED (IR-241)'
+- id: FR-029-AC-1
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  role: examined
+  excerpt: '`verified` with three SUCCESS checks maps to `Proved { success_checks: 3 }`, and `falsified` with a
+    reproduced replay maps to `Refuted`.'
+- id: FR-029-AC-2
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  role: examined
+  excerpt: '`inconclusive` with the vacuous-proof reason and `cover-unsatisfied` each map to `Proved { success_checks:
+    0 }`, whose QSL category is `inconclusive` with cause `KaniVacuousProof`.'
+- id: FR-029-AC-3
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  role: examined
+  excerpt: The timed-out reason maps to `Incomplete(TimedOut)`, and the memory-exhausted and exhausted-unwind-bound
+    reasons each map to `Incomplete(ResourceExhausted)`.
+- id: FR-029-AC-4
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  role: examined
+  excerpt: The no-verdict reason maps to `Failed`.
+- id: FR-029-AC-5
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  role: examined
+  excerpt: The missing-cover-summary reason maps to `Failed`. The failure-without-counterexample reason maps by
+    its cause (FR-029-AC-32 to FR-029-AC-35).
+- id: FR-029-AC-6
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  role: examined
+  excerpt: The ordinary production/source-predicate map returns no `Tested`.
+- id: FR-029-AC-8
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  role: examined
+  excerpt: '`falsified` with a replay disagreement of each `DisagreementCause` (`Verdicts`, `Witness` and `NoValue`)
+    maps to `Inconclusive(ReplayParity)` carrying that `DisagreementCause`.'
+- id: FR-029-AC-9
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  role: examined
+  excerpt: '`falsified` with a non-fault `ReplayRefusal` maps to `Inconclusive(ReplayRefused)` carrying `ReplayRefusal::code()`
+    of that refusal.'
+- id: FR-029-AC-10
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  role: examined
+  excerpt: '`falsified` with a fault maps to `Failed` for each of: the call-site fault''s own reading (`ReplaySettlement::Fault`,
+    which QSL''s replay result does not carry: QSL reports a fault as an error); `ReplayRefusal::Fault` and `ReplayRefusal::Admission(AdmissionFailure::Fault)`,
+    each bare and as the cause of `SpineReplayError::Refused`, `FrameReplayError::Refused` and `StateClauseReplayError::Refused`;
+    and `CallSiteRefusal::Fault` bare and wrapped in `ReplayPackageError::CallSite`, `FrameReplayError::CallSite`
+    and `StateClauseReplayError::CallSite`.'
+- id: FR-029-AC-11
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  role: examined
+  excerpt: '`falsified` with each CG-raised failure that carries no QSL code maps to `Failed`: `SpineReplayError::UnboundArgument`,
+    `FieldDelimiter`, `Transcript`, `WrongArm` and `Identity`; `FrameReplayError::Transcript`, `Envelope`, `Name`,
+    `NotAFrame`, `FieldSetMismatch`, `Decode`, `OutOfDomain`, `PreState` (a pre state the generator cannot read
+    from the driver''s documents, or one that differs from the playback; a document whose bytes do not match its
+    digest is QSL''s `Refused`, read by its code), `ScopeMismatch` and `Identity`; `ReplayPackageError::InvalidFunction`;
+    a playback outside the harness proof'
+- id: FR-029-AC-12
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  role: examined
+  excerpt: Across every replay settlement other than reproduced, `falsified` maps to a value other than `Refuted`.
+- id: FR-029-AC-13
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  role: examined
+  excerpt: '`falsified` with a non-fault `CallSiteRefusal` or a `DependencyLockError::Input`, each bare and wrapped
+    in `ReplayPackageError` and `FrameReplayError`, maps to `Inconclusive(ReplayRefused)` carrying `CallSiteRefusal::code()`
+    or `DependencyInputRefusal::code()` of that refusal, and never to `Declined`.'
+- id: FR-029-AC-14
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  role: examined
+  excerpt: '`falsified` with a `DependencyLockError::Input` that carries QSL''s `DuplicateIdentity` refusal (code
+    `invalid_package`), as a lock whose only defect is a repeated library identity produces it (FR-016-AC-24), maps
+    to `Inconclusive(ReplayRefused)` carrying `invalid_package`.'
+- id: FR-029-AC-15
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  role: examined
+  excerpt: For the ordinary source-predicate `ReplaySettlement` input, a falsified outcome given no replay settlement
+    is refused with `TerminalPairError::MissingSettlement`, and each other outcome (`verified`, `cover-unsatisfied`,
+    `cancelled` and every inconclusive reason) given a settlement is refused with `TerminalPairError::UnexpectedSettlement`;
+    neither returns a terminal value. The distinct typed composite-parity settlement input is governed by AC-17
+    and AC-19 to AC-28, not this criterion.
+- id: FR-029-AC-16
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  role: examined
+  excerpt: 'The state-clause replay path (FR-024) settles as the other replay paths do: a `StateClauseReplayResult`
+    that settles `ReproducedWithEvaluatedWitness` in category `violation` is a reproduction and an `inconclusive`
+    one is a disagreement carrying its `DisagreementCause`, so `falsified` maps to `Refuted` and `Inconclusive(ReplayParity)`;
+    `StateClauseReplayError::Refused` and `CallSite` read as `ReplayRefusal` and `CallSiteRefusal` do for a non-fault
+    refusal (`Inconclusive(ReplayRefused)` with its catalog code; their fault reading is FR-029-AC-10''s), and `Dependencies`
+    as `DependencyLockError` doe'
+- id: FR-029-AC-17
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  role: examined
+  excerpt: 'PLANNED (IR-806). IR-635''s Eq-only verified constructor invokes QSL with supplied evidence; the closed
+    FR-028 strength producer/projection remains gated. The strength projection enumerates every FR-028-AC-17 strength:
+    production retains its ordinary map; exhaustive projects to Exhausted, sampled/not_run to NotExhausted, ceiling-inconclusive
+    to CeilingReached, and refinement_failed to Disagreed. Backend-inconclusive outcomes acquire no invented verified
+    proof strength.'
+- id: FR-029-AC-18
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  role: examined
+  excerpt: For the `falsified` state-clause run of the wrapping debit subject `deposit_debiting`, whose post-state
+    value (-1) lies outside `balance`'s declared range, this repository builds the post snapshot with that exact
+    unclamped value and does not refuse it itself (not as `StateClauseReplayError::OutOfDomain` or any other CG
+    defect), and the run maps to `Refuted`, the ordinary violated terminal, and not to `Inconclusive(ReplayRefused)`
+    or `Failed`. QSL settles the exact post-state observation as a reproduced violation (QSL-634).
+- id: FR-029-AC-19
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  role: examined
+  excerpt: PLANNED/GATED (IR-806/QSL-640). After the cross-outcome disagreement rule, verified shadow CeilingReached
+    yields Incomplete(ResourceExhausted); nonzero Exhausted with QSL-derived complete coverage yields Proved n;
+    remaining completed nonzero verification yields Tested. Tested is excluded for disagreement, ceilings and zero
+    checks; tightening or missing coverage cannot promote it to Proved.
+- id: FR-029-AC-20
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  role: examined
+  excerpt: 'PARTIAL (IR-666 direct F-1 to F-7 report consumption covered; IR-806 must reach these rows from a CG-built
+    request over the original proving context). An identity-valid falsified composite shadow consumes the shared
+    Refinement and ordered F-1 to F-7 result: Disagreed/Failed/CgDefect; native Incomplete or ExecutionFault as
+    GeneratedFault/Failed with NativeCause, winning over an invalid operand and every later limit; RefusedInput/ReplayRefused
+    with QSL code and operand index, winning over CeilingReached; admission accounting exhaustion as Incomplete(ResourceExhausted)/Admission
+    with counter; exa'
+- id: FR-029-AC-21
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  role: examined
+  excerpt: 'PLANNED (IR-806): `run_terminal_value` has no proof-subject or proof-strength input and `TerminalPairError`
+    has no variant for a bounded-shadow outcome; adding either to the map is a deliberate, tested change rather
+    than a wildcard arm.'
+- id: FR-029-AC-22
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  role: examined
+  excerpt: PLANNED (IR-806). The strength set enumerated by the map equals FR-028-AC-17's closed set; adding a strength
+    without its projection and outcome row fails the build or test rather than entering a wildcard mapping.
+- id: FR-029-AC-23
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  role: examined
+  excerpt: PLANNED/GATED (IR-806/QSL-640). A stopped backend run retains its ordinary timeout/memory inconclusive
+    classification; a stopped refinement retains FR-028-AC-24's CeilingReached projection and recorded ceiling.
+    Neither stop, nor QSL settlement resource refusal, becomes completed NotExhausted evidence or Tested.
+- id: FR-029-AC-24
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  role: examined
+  excerpt: 'PLANNED/GATED (IR-806/QSL-640). After common claim/source/node/bounds/O-09 validation, retained refinement_failed/Disagreed
+    evidence for the same valid claim yields Failed/CgDefect for verified, falsified, inconclusive and cover-unsatisfied
+    backend outcomes, including zero checks, an operand field x declared Int[0, 9] but supplied as x: 12, missing/fault
+    native observation and a falsified replay agreeing on its retained case; no early operand/native setup refusal
+    loses this disagreement, which precedes resource, vacuity and agreement rows. Missing observations are never
+    fabricated.'
+- id: FR-029-AC-25
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  role: examined
+  excerpt: 'PLANNED (IR-806). With no retained refinement disagreement, every bounded_shadow inconclusive reason
+    maps through the ordinary rows: vacuous proof and cover-unsatisfied are Proved0; timeout is Incomplete(TimedOut);
+    memory and unwind exhaustion are Incomplete(ResourceExhausted); no-verdict and missing-summary are Failed; failure-without-counterexample
+    takes the cause rows (FR-029-AC-32 to FR-029-AC-35). No vacuous outcome is coerced into verified evidence.'
+- id: FR-029-AC-26
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  role: examined
+  excerpt: 'PLANNED/GATED (IR-806/QSL-640). The converter preserves the actual QSL record category/cause: Proved0
+    remains inconclusive/KaniVacuousProof and is never promoted by its payload. Zero-count backend cases use AC-25,
+    not an unreachable verified-count-zero row.'
+- id: FR-029-AC-27
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  role: examined
+  excerpt: PLANNED/GATED (IR-806/QSL-640). The distinct typed composite settlement input refuses a missing settlement
+    or another claim's node/run/operation/operand/domain/limits/content binding with no value; ordinary source-predicate
+    AC-15 does not consume or reject a valid verified-parity settlement as UnexpectedSettlement.
+- id: FR-029-AC-28
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  role: examined
+  excerpt: 'IR-666 public converter delivered. For any full-identity-bound QSL `CompositeParityResult::Refused`
+    report, CG preserves `report.terminal_value()`: non-fault refusal is Inconclusive(ReplayRefused) with QSL''s
+    code, while `Fault` and `Admission(Fault)` are Failed. QSL `prepare` refusal precedes F-1; operand-admission
+    and exact-comparison refusals follow F-1, so Disagreed wins over those later faults. CG verifies a reachable
+    non-fault report by invoking QSL''s public facade with a valid wire request and a replay input-byte limit below
+    that request''s size, then passing the actual report through its'
+- id: FR-029-AC-29
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  role: examined
+  excerpt: A direct `KaniRunOutcome::Cancelled { source }` maps both IR source variants to QSL `IncompleteCause::Cancelled`
+    with the matching exact cause, using the same exhaustive conversion as FR-030; supplying a replay settlement
+    returns `UnexpectedSettlement`. The production cancellation path publishes only FR-030's result.
+- id: FR-029-AC-30
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  role: examined
+  excerpt: PLANNED (IR-806). A `bounded_shadow` outcome (verified, falsified, inconclusive or cover-unsatisfied)
+    reaches only the composite parity route on the production path and never `run_terminal_value`, because `KaniRunOutcome`
+    cannot tell a shadow from a production proof and a verified shadow outcome there would read as `Proved`, which
+    FR-028-AC-17 forbids.
+- id: FR-029-AC-31
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  role: examined
+  excerpt: 'PLANNED (IR-806). The parity route fabricates no predicate replay and no terminal cause for a bounded-shadow
+    outcome: its terminal value is the one QSL''s report carries under AC-17 and AC-19 to AC-27.'
+- id: FR-029-AC-32
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  role: examined
+  excerpt: PLANNED (IR-848). A `FailedWithoutCounterexample` run with cause `out_of_memory` maps to `Incomplete(ResourceExhausted)`,
+    and the same reason with cause `properties_failed`, `exit_code` (any code), `unknown` or no cause maps to `Failed`.
+    Over a single-run stand-in that exits 1 and exports a `Failure` report for `proofs::check` with no checks and
+    one `error_details` entry with exit status `out_of_memory`, the evidence passed to `run_terminal_value` gives
+    `Incomplete(ResourceExhausted)`; the same report with exit status `exit_code_64`, `cbmc_exploded`, `properties_failed`,
+    a null status or no `e
+- id: FR-029-AC-33
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  role: examined
+  excerpt: 'PLANNED (IR-848). A `FailedWithoutCounterexample` run with cause `timeout` maps to `Incomplete(TimedOut)`:
+    the single-run stand-in of FR-029-AC-32 with exit status `timeout` gives `Incomplete(TimedOut)`. The batch member
+    `c::check` of FR-017-AC-39 (a `Failure` with no checks and exit status `timeout`, classified `TimedOut`) keeps
+    `Incomplete(TimedOut)` through the timed-out row, and the member `d::check` (a `Failure` listing a failed check
+    with no playback, exit status `timeout`, classified `FailedWithoutCounterexample` with cause `timeout`) gives
+    `Incomplete(TimedOut)` through the cause.'
+- id: FR-029-AC-34
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  role: examined
+  excerpt: 'PLANNED (IR-848). CG''s own memory stop (the memory-exhausted reason) and a `FailedWithoutCounterexample`
+    run with cause `out_of_memory` give the same terminal value, `Incomplete(ResourceExhausted)`, so one exhaustion
+    has one value whoever observed it. The cause is read for the failure-without-counterexample reason only: every
+    other outcome and reason maps identically whatever cause is passed, including a cause passed with `NoVerdict`
+    or `MissingCoverSummary`.'
+- id: FR-029-AC-35
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  role: examined
+  excerpt: 'PLANNED (IR-848). The cause never creates a verdict. Over every combination of outcome, reason and cause
+    (absent, `properties_failed`, `timeout`, `out_of_memory`, `exit_code`, `unknown`), and with the replay settlement
+    each outcome takes: a `falsified` outcome with a reproduced replay is `Refuted` whatever the cause; the cause
+    never turns a non-`Refuted` result into `Refuted`, and never turns any result into `Proved` (`Proved` appears
+    only for the rows FR-029-AC-1 and FR-029-AC-2 give). The `NoVerdict` and `MissingCoverSummary` reasons map to
+    `Failed` whatever the cause. Classification is unch'
+- id: FR-029-AC-36
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  role: examined
+  excerpt: PLANNED (IR-848). The rationale of this requirement states that Kani reports any `SIGKILL` of CBMC as
+    `out_of_memory`, that an `out_of_memory` cause is accepted as `Incomplete(ResourceExhausted)` without corroboration,
+    and that the raw cause stays in the evidence.
+- id: FR-030-AC-1
+  path: spec/kani/functional/FR-030-ir-outcome-terminal-map.md
+  role: examined
+  excerpt: Every pair (`KaniOutcomeKind`, replay settlement) that the map's input can express maps to exactly one
+    `TerminalValue`.
+- id: FR-030-AC-2
+  path: spec/kani/functional/FR-030-ir-outcome-terminal-map.md
+  role: examined
+  excerpt: '`Refused`, `InvalidInput` and `IncompleteInput` map to `Declined` with `ProofRefusalCause::Refused`,
+    `InvalidInput` and `IncompleteInput` respectively, so no refusal cause is lost, and each carries the outcome''s
+    `Std001Code` unchanged as `DeclineCode::Std001`, including a code STD-001 does not register.'
+- id: FR-030-AC-3
+  path: spec/kani/functional/FR-030-ir-outcome-terminal-map.md
+  role: examined
+  excerpt: '`TimedOut` and `ResourceExhausted` map to their distinct `Incomplete` causes. `Cancelled { source: Requested
+    }` and `Cancelled { source: Deadline }` map to `IncompleteCause::Cancelled` carrying the corresponding `quire_exact::CancelCause`,
+    with no source inferred from `code`, `source_id`, `context` or elapsed time.'
+- id: FR-030-AC-4
+  path: spec/kani/functional/FR-030-ir-outcome-terminal-map.md
+  role: examined
+  excerpt: '`Proved` with three SUCCESS checks maps to `Proved { basis: Checks { success_checks: 3 }, certification:
+    Certified }`, zero checks maps to `Proved { basis: Checks { success_checks: 0 }, certification: Certified }`
+    (category inconclusive/vacuous), and `Counterexample` with reproduced replay maps to `Refuted`.'
+- id: FR-030-AC-5
+  path: spec/kani/functional/FR-030-ir-outcome-terminal-map.md
+  role: examined
+  excerpt: '`Inconclusive` with cause `kani_vacuous_proof` maps to `Proved { basis: Checks { success_checks: 0 },
+    certification: Certified }` (category inconclusive/vacuous), and `Inconclusive` with any other cause maps to
+    `Failed`.'
+- id: FR-030-AC-6
+  path: spec/kani/functional/FR-030-ir-outcome-terminal-map.md
+  role: examined
+  excerpt: No outcome maps to `Tested`.
+- id: FR-030-AC-7
+  path: spec/kani/functional/FR-030-ir-outcome-terminal-map.md
+  role: examined
+  excerpt: The map is one `match` over the pair (`KaniOutcomeKind`, replay settlement) with no wildcard arm.
+- id: FR-030-AC-8
+  path: spec/kani/functional/FR-030-ir-outcome-terminal-map.md
+  role: examined
+  excerpt: '`Unavailable` with cause `kani_checker_absent` maps to `Unsupported(SolverAbsent)`; with `kani_backend_absent`
+    or any other cause it maps to `Unsupported(BackendAbsent)`.'
+- id: FR-030-AC-9
+  path: spec/kani/functional/FR-030-ir-outcome-terminal-map.md
+  role: examined
+  excerpt: '`Counterexample` with a replay disagreement maps to `Inconclusive(ReplayParity)`, and with a non-fault
+    `ReplayRefusal` maps to `Inconclusive(ReplayRefused)` carrying `ReplayRefusal::code()` of that refusal.'
+- id: FR-030-AC-10
+  path: spec/kani/functional/FR-030-ir-outcome-terminal-map.md
+  role: examined
+  excerpt: '`Counterexample` with a fault, walked through every wrapper FR-029-AC-10 lists, and with each CG-raised
+    failure FR-029-AC-11 lists, maps to `Failed`.'
+- id: FR-030-AC-11
+  path: spec/kani/functional/FR-030-ir-outcome-terminal-map.md
+  role: examined
+  excerpt: Across every replay settlement other than reproduced, `Counterexample` maps to a value other than `Refuted`.
+- id: FR-030-AC-12
+  path: spec/kani/functional/FR-030-ir-outcome-terminal-map.md
+  role: examined
+  excerpt: '`Counterexample` with a non-fault `CallSiteRefusal` or a `DependencyLockError::Input`, each bare and
+    wrapped, maps to `Inconclusive(ReplayRefused)` carrying that refusal''s QSL catalog code, never to `Declined`.'
+- id: FR-030-AC-13
+  path: spec/kani/functional/FR-030-ir-outcome-terminal-map.md
+  role: examined
+  excerpt: '`Counterexample` with a `DependencyLockError::Input` that carries QSL''s `DuplicateIdentity` refusal
+    (code `invalid_package`), as a lock whose only defect is a repeated library identity produces it (FR-016-AC-24),
+    maps to `Inconclusive(ReplayRefused)` carrying `invalid_package`.'
+- id: FR-030-AC-14
+  path: spec/kani/functional/FR-030-ir-outcome-terminal-map.md
+  role: examined
+  excerpt: A `Counterexample` given no replay settlement is refused with `TerminalPairError::MissingSettlement`,
+    and each other kind given a settlement is refused with `TerminalPairError::UnexpectedSettlement`; neither returns
+    a terminal value.
+- id: FR-030-AC-15
+  path: spec/kani/functional/FR-030-ir-outcome-terminal-map.md
+  role: examined
+  excerpt: PARTIAL (IR-666 direct public report controls; IR-806 must reach the same rows from a CG-built request
+    over the original proving context). For an identity-valid IR `Counterexample` composite claim, F-1 Disagreed
+    yields Failed/CgDefect even with a native fault or invalid operand; without Disagreed, native Incomplete and
+    ExecutionFault each yield a binding-checked GeneratedFault/Failed report with the actual NativeCause even when
+    an operand would refuse, admission or exact limits would stop, or refinement is CeilingReached. CG asserts the
+    typed result and terminal value; QSL FR-358 owns the inte
+- id: FR-030-AC-16
+  path: spec/kani/functional/FR-030-ir-outcome-terminal-map.md
+  role: examined
+  excerpt: PARTIAL (IR-666 direct public report controls; IR-806 must reach the same rows from a CG-built request
+    over the original proving context). With valid identity, no Disagreed and Completed native, an out-of-domain
+    operand yields F-3 RefusedInput/ReplayRefused with its index and QSL code even with CeilingReached; a request
+    accounting limit reached during admission yields F-4 Incomplete(ResourceExhausted)/Admission with the counter;
+    an exact limit reached after admission yields F-5 Incomplete(ResourceExhausted)/ExactEvaluation even with CeilingReached;
+    with sufficient limits, CeilingReached yields
+- id: FR-030-AC-17
+  path: spec/kani/functional/FR-030-ir-outcome-terminal-map.md
+  role: examined
+  excerpt: PARTIAL (IR-666 F-7 and binding controls; IR-806 original-artifact path planned). With valid identity
+    and all earlier rows absent, changing only the retained shadow verdict or pair count yields F-7 Diverged/Failed/CgDefect;
+    agreement yields Inconclusive(ScalarAgrees) with the CompositeEquality claim and Equality outcome. A binding-valid
+    QSL `prepare` non-fault `Refused` report precedes Disagreed and yields Inconclusive(ReplayRefused) with QSL's
+    code. `Refused` from later admission or exact comparison follows Disagreed; if QSL returns `Fault` or `Admission(Fault)`,
+    its bound report yields Faile
+- id: FR-030-AC-18
+  path: spec/kani/functional/FR-030-ir-outcome-terminal-map.md
+  role: examined
+  excerpt: Every Kani `Proved` row carries `ProofBasis::Checks` with the transcript count and `Certification::Certified`,
+    including the zero-check row; zero checks remain category inconclusive/vacuous. No Kani non-`Proved` row carries
+    basis or certification.
+- id: FR-030-AC-19
+  path: spec/kani/functional/FR-030-ir-outcome-terminal-map.md
+  role: examined
+  excerpt: For both `BoundedComplete { depth }` and `Inductive { depth }`, an SMT proof whose certificate FR-314
+    verifies maps to `Proved` with the same basis/depth and `Certified`; no certificate or an `Unverifiable` unchecked
+    rule maps to `Proved` with the same basis/depth and `Uncertified`, retaining the unverifiable locus when present.
+    No SMT proof maps to `Trusted`.
+- id: FR-030-AC-20
+  path: spec/kani/functional/FR-030-ir-outcome-terminal-map.md
+  role: examined
+  excerpt: For either SMT basis, a foreign query, wrong certificate shape, invalid checked proof step or missing
+    final empty clause rejected by FR-314 maps to `Inconclusive(CertificateRejected { rule, at })` retaining the
+    exact rejection; none produces `Proved`, basis or certification. When cvc5 and Z3 also disagree, `CertificateRejected`
+    remains the one terminal cause while the parity failure and both verdicts are retained alongside it.
+- id: FR-030-AC-21
+  path: spec/kani/functional/FR-030-ir-outcome-terminal-map.md
+  role: examined
+  excerpt: SMT/cross-check disagreement without certificate rejection keeps both verdicts and settles inconclusive;
+    agreement does not change certification; missing Z3 retains its warning and cvc5 settlement. An SMT counterexample
+    becomes `Refuted` only after FR-197 replay reproduces it; replay disagreement, non-fault refusal and fault map
+    to their distinct non-proof results.
+- id: FR-030-AC-22
+  path: spec/kani/functional/FR-030-ir-outcome-terminal-map.md
+  role: examined
+  excerpt: Every expressible accepted SMT backend/checker/replay settlement produces one terminal result, never
+    `Tested`; no non-`Proved` result carries basis or certification. Negotiation refusals produce no terminal from
+    this map, and neither SMT nor Kani map consumes the other backend's outcome.
+- id: FR-034-AC-1
+  path: spec/kani/functional/FR-034-caller-death-ownership.md
+  role: examined
+  excerpt: Before the exclusive caller lease, matching helper identity, verified monitor/INIT/peer, observer readiness
+    and positive typed Dispatch are established, no production backend instruction is created. Caller SIGKILL, abort
+    or OOM-equivalent forced death during initialization may start only bounded guardian bootstrap, which exits
+    without backend on absent lease or authorization.
+- id: FR-034-AC-2
+  path: spec/kani/functional/FR-034-caller-death-ownership.md
+  role: examined
+  excerpt: Before any M spawn, O is positively verified outer PID 1 with armed parent-death protection and original-exclusive
+    bootstrap authority. Unclaimed inner I is contained by O even if M dies before internal child_wait handoff or
+    startup-info reader loss aborts M. Owned outer pidfd termination confirms teardown; missing authority refuses
+    before spawn. No host scan, monitor/group exit or successful signal proves cleanup.
+- id: FR-034-AC-3
+  path: spec/kani/functional/FR-034-caller-death-ownership.md
+  role: examined
+  excerpt: In ClaimedBootstrap, InitReady or Dispatched, original-caller lease EOF causes guardian cancellation/exit
+    and confirmed INIT termination; Dispatched descendants are torn down by the kernel. The test controller observes
+    dead-caller cleanup without manufacturing that caller's outcome or evidence.
+- id: FR-034-AC-4
+  path: spec/kani/functional/FR-034-caller-death-ownership.md
+  role: examined
+  excerpt: 'Mutual authority is the specific anonymous connected pair: guardian checks the actual mapped creator
+    UID and only the original caller holds its executor endpoint. The bounded executor binds kernel credentials
+    of Ready''s actual sender to claimed host INIT/start/pidfd/parent/namespace, not socketpair creator credentials
+    alone. Guardian''s creator PID0 is not a host identity. A foreign actor cannot rebind a public name or supply
+    replacement lease/Dispatch; another pair, mismatched UID or replayed authority refuses.'
+- id: FR-034-AC-5
+  path: spec/kani/functional/FR-034-caller-death-ownership.md
+  role: examined
+  excerpt: C retains actual unreaped Child L; L/O/M/I ownership is verified through host pidfds, start/parent/namespace
+    identities and actual outer/inner PID 1. O owns actual M Child and I is M's inner child. Reused, stale, incomplete,
+    translated incorrectly or dead identity refuses before Dispatch.
+- id: FR-034-AC-6
+  path: spec/kani/functional/FR-034-caller-death-ownership.md
+  role: examined
+  excerpt: The owned tree memory observer is ready before typed Dispatch; failed observer preparation releases no
+    backend instruction.
+- id: FR-034-AC-7
+  path: spec/kani/functional/FR-034-caller-death-ownership.md
+  role: examined
+  excerpt: Bounded inner startup/identity recovery is required before Dispatch. M death/reparenting or malformed/missing
+    info cancels through retained outer INIT authority and yields typed setup refusal; complete outer termination
+    is independently confirmed. No host scan or gate EOF authorizes a backend.
+- id: FR-034-AC-8
+  path: spec/kani/functional/FR-034-caller-death-ownership.md
+  role: examined
+  excerpt: After Dispatch, original-caller death cancels double-fork/reparented, setsid, late-born and nested-PID-namespace
+    descendants through kernel-owned INIT teardown, including descendants absent from previous samples. Observed-PID
+    lists or normal-operation host scans are not cancellation authority.
+- id: FR-034-AC-9
+  path: spec/kani/functional/FR-034-caller-death-ownership.md
+  role: examined
+  excerpt: Cancelling one owned namespace leaves concurrent independent runs and unrelated host children unaffected.
+- id: FR-034-AC-10
+  path: spec/kani/functional/FR-034-caller-death-ownership.md
+  role: examined
+  excerpt: Normal backend completion, backend exec failure, explicit cancellation, timeout, memory excess, capture
+    failure and observation failure each require confirmed owned teardown before any proof conclusion. Backend exit
+    or valid success output alone never authorizes acceptance.
+- id: FR-034-AC-11
+  path: spec/kani/functional/FR-034-caller-death-ownership.md
+  role: examined
+  excerpt: 'Guardian SIGKILL, abort or OOM-equivalent death during bootstrap, InitReady or immediately after Dispatch
+    cannot release an unowned production backend: the guardian is INIT, and its death tears down that namespace.
+    With a live original caller, guardian failure always yields a typed refusal and never verified/falsified evidence,
+    even after confirmed teardown and beside a valid success report.'
+- id: FR-034-AC-12
+  path: spec/kani/functional/FR-034-caller-death-ownership.md
+  role: examined
+  excerpt: Every startup refusal, completion and cancellation settles actual owned roles before conclusions. Anonymous
+    controls and report pipe/memfd have no persistent names and end at final close. All report-owner death reclaims
+    kernel report backing without Drop/unlink; other assigned artifacts retain surviving-owner cleanup and truthful
+    all-owner-death limits. No dead actor is claimed to reap or unlink.
+- id: FR-034-AC-13
+  path: spec/kani/functional/FR-034-caller-death-ownership.md
+  role: examined
+  excerpt: The bounded executor requires an explicit path to this package's actual Cargo executable quire-kani-guardian,
+    built and supplied with the library from the same package source/build inputs. A missing, non-executable or
+    unusable helper gives a typed setup refusal before backend Dispatch, with no PATH/global discovery, copied executable,
+    shell substitute or alternate launcher. Cargo library dependency resolution alone is not helper delivery.
+- id: FR-034-AC-14
+  path: spec/kani/functional/FR-034-caller-death-ownership.md
+  role: examined
+  excerpt: Setup docs require the matched package helper roles, safe caller-context user/PID/private-mount permissions,
+    verified mapping/setgroups/private proc, nested installed bwrap and pidfd/observer facilities. The compiled
+    caller security profile is checked, not inferred from binary mode. Caller-profile restriction can refuse runs
+    formerly available through bwrap-only permission; ordinary-caller availability requires actual measurement.
+    Missing capability gives typed pre-Dispatch refusal without host-policy mutation or weaker mode. Added L/O roles
+    and bounded controls/storage are charged to existing
+- id: FR-034-AC-15
+  path: spec/kani/functional/FR-034-caller-death-ownership.md
+  role: examined
+  excerpt: Typed private controls reject malformed and unknown fields and enforce finite encoded-byte, pending-message
+    and startup-work bounds. Ancillary descriptor count/type is exact, received descriptors are CLOEXEC, and unknown/extra/truncated
+    ancillary data refuses while closing all received descriptors. Invalid/overlimit control or EOF cancels or refuses
+    rather than authorizing Dispatch.
+- id: FR-034-AC-16
+  path: spec/kani/functional/FR-034-caller-death-ownership.md
+  role: examined
+  excerpt: Only the original caller holds the pair's executor endpoint. Guardian receives only its control end as
+    fd0 through safe CLOEXEC child-only mapping, borrows it with a safe descriptor API and receives actual backend
+    stdin separately as OwnedFd through safe ancillary rights. Backend fd0 restores that original stdin or closed
+    state, while the control/lease descriptor is excluded from backend and unrelated exec inheritance. No arbitrary
+    raw-fd adoption or unsafe exception occurs.
+- id: FR-034-AC-17
+  path: spec/kani/functional/FR-034-caller-death-ownership.md
+  role: examined
+  excerpt: 'Backend receives unchanged raw argument bytes except the explicitly allocated internal report locator:
+    harness options then -Z unstable-options --export-json /proc/self/fd/N with actual mapped N >=5. Evidence records
+    that exact argv. Inherited stdin, inherited/overridden environment and cwd remain unchanged.'
+findings:
+- fnd: FND-101
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-028-AC-24
+  related_ids: []
+  path: spec/kani/functional/FR-028-bounded-proof-ceilings.md
+  lines: '223'
+  excerpt: 'The refinement run is a native process launched through one typed refinement execution entry that reuses
+    FR-017''s launcher and FR-028''s ceilings: it is held to the memory and wall-clock ceilings its harness identity
+    records, its evidence (class, case count, cases run, seed, both ceilings, mechanism, peak where observed, outcome,
+    versions) is recorded beside the shadow run''s evidence, and a run that reaches either ceiling is stopped, records
+    the ceiling, and yields strength `shadow_proved_refinement_inconclusive`, never `exhaustive`, `sampled`, `not_run`
+    or `refinement_failed`. PLANNED (IR-241)'
+  finding: 'FR-028-AC-24 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-102
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-029-AC-17
+  related_ids: []
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  lines: '377'
+  excerpt: 'PLANNED (IR-806). IR-635''s Eq-only verified constructor invokes QSL with supplied evidence; the closed
+    FR-028 strength producer/projection remains gated. The strength projection enumerates every FR-028-AC-17 strength:
+    production retains its ordinary map; exhaustive projects to Exhausted, sampled/not_run to NotExhausted, ceiling-inconclusive
+    to CeilingReached, and refinement_failed to Disagreed. Backend-inconclusive outcomes acquire no invented verified
+    proof strength.'
+  finding: 'FR-029-AC-17 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-103
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-029-AC-19
+  related_ids: []
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  lines: '379'
+  excerpt: PLANNED/GATED (IR-806/QSL-640). After the cross-outcome disagreement rule, verified shadow CeilingReached
+    yields Incomplete(ResourceExhausted); nonzero Exhausted with QSL-derived complete coverage yields Proved n;
+    remaining completed nonzero verification yields Tested. Tested is excluded for disagreement, ceilings and zero
+    checks; tightening or missing coverage cannot promote it to Proved.
+  finding: 'FR-029-AC-19 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-104
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-029-AC-21
+  related_ids: []
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  lines: '381'
+  excerpt: 'PLANNED (IR-806): `run_terminal_value` has no proof-subject or proof-strength input and `TerminalPairError`
+    has no variant for a bounded-shadow outcome; adding either to the map is a deliberate, tested change rather
+    than a wildcard arm.'
+  finding: 'FR-029-AC-21 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-105
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-029-AC-22
+  related_ids: []
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  lines: '382'
+  excerpt: PLANNED (IR-806). The strength set enumerated by the map equals FR-028-AC-17's closed set; adding a strength
+    without its projection and outcome row fails the build or test rather than entering a wildcard mapping.
+  finding: 'FR-029-AC-22 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-106
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-029-AC-23
+  related_ids: []
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  lines: '383'
+  excerpt: PLANNED/GATED (IR-806/QSL-640). A stopped backend run retains its ordinary timeout/memory inconclusive
+    classification; a stopped refinement retains FR-028-AC-24's CeilingReached projection and recorded ceiling.
+    Neither stop, nor QSL settlement resource refusal, becomes completed NotExhausted evidence or Tested.
+  finding: 'FR-029-AC-23 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-107
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-029-AC-24
+  related_ids: []
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  lines: '384'
+  excerpt: 'PLANNED/GATED (IR-806/QSL-640). After common claim/source/node/bounds/O-09 validation, retained refinement_failed/Disagreed
+    evidence for the same valid claim yields Failed/CgDefect for verified, falsified, inconclusive and cover-unsatisfied
+    backend outcomes, including zero checks, an operand field x declared Int[0, 9] but supplied as x: 12, missing/fault
+    native observation and a falsified replay agreeing on its retained case; no early operand/native setup refusal
+    loses this disagreement, which precedes resource, vacuity and agreement rows. Missing observations are never
+    fabricated.'
+  finding: 'FR-029-AC-24 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-108
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-029-AC-25
+  related_ids: []
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  lines: '385'
+  excerpt: 'PLANNED (IR-806). With no retained refinement disagreement, every bounded_shadow inconclusive reason
+    maps through the ordinary rows: vacuous proof and cover-unsatisfied are Proved0; timeout is Incomplete(TimedOut);
+    memory and unwind exhaustion are Incomplete(ResourceExhausted); no-verdict and missing-summary are Failed; failure-without-counterexample
+    takes the cause rows (FR-029-AC-32 to FR-029-AC-35). No vacuous outcome is coerced into verified evidence.'
+  finding: 'FR-029-AC-25 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-109
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-029-AC-26
+  related_ids: []
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  lines: '386'
+  excerpt: 'PLANNED/GATED (IR-806/QSL-640). The converter preserves the actual QSL record category/cause: Proved0
+    remains inconclusive/KaniVacuousProof and is never promoted by its payload. Zero-count backend cases use AC-25,
+    not an unreachable verified-count-zero row.'
+  finding: 'FR-029-AC-26 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-110
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-029-AC-27
+  related_ids: []
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  lines: '387'
+  excerpt: PLANNED/GATED (IR-806/QSL-640). The distinct typed composite settlement input refuses a missing settlement
+    or another claim's node/run/operation/operand/domain/limits/content binding with no value; ordinary source-predicate
+    AC-15 does not consume or reject a valid verified-parity settlement as UnexpectedSettlement.
+  finding: 'FR-029-AC-27 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-111
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-029-AC-30
+  related_ids: []
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  lines: '390'
+  excerpt: PLANNED (IR-806). A `bounded_shadow` outcome (verified, falsified, inconclusive or cover-unsatisfied)
+    reaches only the composite parity route on the production path and never `run_terminal_value`, because `KaniRunOutcome`
+    cannot tell a shadow from a production proof and a verified shadow outcome there would read as `Proved`, which
+    FR-028-AC-17 forbids.
+  finding: 'FR-029-AC-30 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-112
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-029-AC-31
+  related_ids: []
+  path: spec/kani/functional/FR-029-run-outcome-terminal-record.md
+  lines: '391'
+  excerpt: 'PLANNED (IR-806). The parity route fabricates no predicate replay and no terminal cause for a bounded-shadow
+    outcome: its terminal value is the one QSL''s report carries under AC-17 and AC-19 to AC-27.'
+  finding: 'FR-029-AC-31 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-113
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-030-AC-19
+  related_ids: []
+  path: spec/kani/functional/FR-030-ir-outcome-terminal-map.md
+  lines: '237'
+  excerpt: For both `BoundedComplete { depth }` and `Inductive { depth }`, an SMT proof whose certificate FR-314
+    verifies maps to `Proved` with the same basis/depth and `Certified`; no certificate or an `Unverifiable` unchecked
+    rule maps to `Proved` with the same basis/depth and `Uncertified`, retaining the unverifiable locus when present.
+    No SMT proof maps to `Trusted`.
+  finding: 'FR-030-AC-19 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-114
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-030-AC-20
+  related_ids: []
+  path: spec/kani/functional/FR-030-ir-outcome-terminal-map.md
+  lines: '238'
+  excerpt: For either SMT basis, a foreign query, wrong certificate shape, invalid checked proof step or missing
+    final empty clause rejected by FR-314 maps to `Inconclusive(CertificateRejected { rule, at })` retaining the
+    exact rejection; none produces `Proved`, basis or certification. When cvc5 and Z3 also disagree, `CertificateRejected`
+    remains the one terminal cause while the parity failure and both verdicts are retained alongside it.
+  finding: 'FR-030-AC-20 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-115
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-030-AC-21
+  related_ids: []
+  path: spec/kani/functional/FR-030-ir-outcome-terminal-map.md
+  lines: '239'
+  excerpt: SMT/cross-check disagreement without certificate rejection keeps both verdicts and settles inconclusive;
+    agreement does not change certification; missing Z3 retains its warning and cvc5 settlement. An SMT counterexample
+    becomes `Refuted` only after FR-197 replay reproduces it; replay disagreement, non-fault refusal and fault map
+    to their distinct non-proof results.
+  finding: 'FR-030-AC-21 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-116
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-030-AC-22
+  related_ids: []
+  path: spec/kani/functional/FR-030-ir-outcome-terminal-map.md
+  lines: '240'
+  excerpt: Every expressible accepted SMT backend/checker/replay settlement produces one terminal result, never
+    `Tested`; no non-`Proved` result carries basis or certification. Negotiation refusals produce no terminal from
+    this map, and neither SMT nor Kani map consumes the other backend's outcome.
+  finding: 'FR-030-AC-22 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-117
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-034-AC-1
+  related_ids: []
+  path: spec/kani/functional/FR-034-caller-death-ownership.md
+  lines: '1844'
+  excerpt: Before the exclusive caller lease, matching helper identity, verified monitor/INIT/peer, observer readiness
+    and positive typed Dispatch are established, no production backend instruction is created. Caller SIGKILL, abort
+    or OOM-equivalent forced death during initialization may start only bounded guardian bootstrap, which exits
+    without backend on absent lease or authorization.
+  finding: 'FR-034-AC-1 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-118
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-034-AC-2
+  related_ids: []
+  path: spec/kani/functional/FR-034-caller-death-ownership.md
+  lines: '1845'
+  excerpt: Before any M spawn, O is positively verified outer PID 1 with armed parent-death protection and original-exclusive
+    bootstrap authority. Unclaimed inner I is contained by O even if M dies before internal child_wait handoff or
+    startup-info reader loss aborts M. Owned outer pidfd termination confirms teardown; missing authority refuses
+    before spawn. No host scan, monitor/group exit or successful signal proves cleanup.
+  finding: 'FR-034-AC-2 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-119
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-034-AC-3
+  related_ids: []
+  path: spec/kani/functional/FR-034-caller-death-ownership.md
+  lines: '1846'
+  excerpt: In ClaimedBootstrap, InitReady or Dispatched, original-caller lease EOF causes guardian cancellation/exit
+    and confirmed INIT termination; Dispatched descendants are torn down by the kernel. The test controller observes
+    dead-caller cleanup without manufacturing that caller's outcome or evidence.
+  finding: 'FR-034-AC-3 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-120
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-034-AC-4
+  related_ids: []
+  path: spec/kani/functional/FR-034-caller-death-ownership.md
+  lines: '1847'
+  excerpt: 'Mutual authority is the specific anonymous connected pair: guardian checks the actual mapped creator
+    UID and only the original caller holds its executor endpoint. The bounded executor binds kernel credentials
+    of Ready''s actual sender to claimed host INIT/start/pidfd/parent/namespace, not socketpair creator credentials
+    alone. Guardian''s creator PID0 is not a host identity. A foreign actor cannot rebind a public name or supply
+    replacement lease/Dispatch; another pair, mismatched UID or replayed authority refuses.'
+  finding: 'FR-034-AC-4 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-121
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-034-AC-5
+  related_ids: []
+  path: spec/kani/functional/FR-034-caller-death-ownership.md
+  lines: '1848'
+  excerpt: C retains actual unreaped Child L; L/O/M/I ownership is verified through host pidfds, start/parent/namespace
+    identities and actual outer/inner PID 1. O owns actual M Child and I is M's inner child. Reused, stale, incomplete,
+    translated incorrectly or dead identity refuses before Dispatch.
+  finding: 'FR-034-AC-5 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-122
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-034-AC-6
+  related_ids: []
+  path: spec/kani/functional/FR-034-caller-death-ownership.md
+  lines: '1849'
+  excerpt: The owned tree memory observer is ready before typed Dispatch; failed observer preparation releases no
+    backend instruction.
+  finding: 'FR-034-AC-6 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-123
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-034-AC-7
+  related_ids: []
+  path: spec/kani/functional/FR-034-caller-death-ownership.md
+  lines: '1850'
+  excerpt: Bounded inner startup/identity recovery is required before Dispatch. M death/reparenting or malformed/missing
+    info cancels through retained outer INIT authority and yields typed setup refusal; complete outer termination
+    is independently confirmed. No host scan or gate EOF authorizes a backend.
+  finding: 'FR-034-AC-7 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-124
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-034-AC-8
+  related_ids: []
+  path: spec/kani/functional/FR-034-caller-death-ownership.md
+  lines: '1851'
+  excerpt: After Dispatch, original-caller death cancels double-fork/reparented, setsid, late-born and nested-PID-namespace
+    descendants through kernel-owned INIT teardown, including descendants absent from previous samples. Observed-PID
+    lists or normal-operation host scans are not cancellation authority.
+  finding: 'FR-034-AC-8 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-125
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-034-AC-9
+  related_ids: []
+  path: spec/kani/functional/FR-034-caller-death-ownership.md
+  lines: '1852'
+  excerpt: Cancelling one owned namespace leaves concurrent independent runs and unrelated host children unaffected.
+  finding: 'FR-034-AC-9 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-126
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-034-AC-10
+  related_ids: []
+  path: spec/kani/functional/FR-034-caller-death-ownership.md
+  lines: '1853'
+  excerpt: Normal backend completion, backend exec failure, explicit cancellation, timeout, memory excess, capture
+    failure and observation failure each require confirmed owned teardown before any proof conclusion. Backend exit
+    or valid success output alone never authorizes acceptance.
+  finding: 'FR-034-AC-10 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-127
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-034-AC-11
+  related_ids: []
+  path: spec/kani/functional/FR-034-caller-death-ownership.md
+  lines: '1854'
+  excerpt: 'Guardian SIGKILL, abort or OOM-equivalent death during bootstrap, InitReady or immediately after Dispatch
+    cannot release an unowned production backend: the guardian is INIT, and its death tears down that namespace.
+    With a live original caller, guardian failure always yields a typed refusal and never verified/falsified evidence,
+    even after confirmed teardown and beside a valid success report.'
+  finding: 'FR-034-AC-11 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-128
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-034-AC-12
+  related_ids: []
+  path: spec/kani/functional/FR-034-caller-death-ownership.md
+  lines: '1855'
+  excerpt: Every startup refusal, completion and cancellation settles actual owned roles before conclusions. Anonymous
+    controls and report pipe/memfd have no persistent names and end at final close. All report-owner death reclaims
+    kernel report backing without Drop/unlink; other assigned artifacts retain surviving-owner cleanup and truthful
+    all-owner-death limits. No dead actor is claimed to reap or unlink.
+  finding: 'FR-034-AC-12 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-129
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-034-AC-13
+  related_ids: []
+  path: spec/kani/functional/FR-034-caller-death-ownership.md
+  lines: '1856'
+  excerpt: The bounded executor requires an explicit path to this package's actual Cargo executable quire-kani-guardian,
+    built and supplied with the library from the same package source/build inputs. A missing, non-executable or
+    unusable helper gives a typed setup refusal before backend Dispatch, with no PATH/global discovery, copied executable,
+    shell substitute or alternate launcher. Cargo library dependency resolution alone is not helper delivery.
+  finding: 'FR-034-AC-13 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-130
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-034-AC-14
+  related_ids: []
+  path: spec/kani/functional/FR-034-caller-death-ownership.md
+  lines: '1857'
+  excerpt: Setup docs require the matched package helper roles, safe caller-context user/PID/private-mount permissions,
+    verified mapping/setgroups/private proc, nested installed bwrap and pidfd/observer facilities. The compiled
+    caller security profile is checked, not inferred from binary mode. Caller-profile restriction can refuse runs
+    formerly available through bwrap-only permission; ordinary-caller availability requires actual measurement.
+    Missing capability gives typed pre-Dispatch refusal without host-policy mutation or weaker mode. Added L/O roles
+    and bounded controls/storage are charged to existing
+  finding: 'FR-034-AC-14 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-131
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-034-AC-15
+  related_ids: []
+  path: spec/kani/functional/FR-034-caller-death-ownership.md
+  lines: '1858'
+  excerpt: Typed private controls reject malformed and unknown fields and enforce finite encoded-byte, pending-message
+    and startup-work bounds. Ancillary descriptor count/type is exact, received descriptors are CLOEXEC, and unknown/extra/truncated
+    ancillary data refuses while closing all received descriptors. Invalid/overlimit control or EOF cancels or refuses
+    rather than authorizing Dispatch.
+  finding: 'FR-034-AC-15 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-132
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-034-AC-16
+  related_ids: []
+  path: spec/kani/functional/FR-034-caller-death-ownership.md
+  lines: '1859'
+  excerpt: Only the original caller holds the pair's executor endpoint. Guardian receives only its control end as
+    fd0 through safe CLOEXEC child-only mapping, borrows it with a safe descriptor API and receives actual backend
+    stdin separately as OwnedFd through safe ancillary rights. Backend fd0 restores that original stdin or closed
+    state, while the control/lease descriptor is excluded from backend and unrelated exec inheritance. No arbitrary
+    raw-fd adoption or unsafe exception occurs.
+  finding: 'FR-034-AC-16 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-133
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-034-AC-17
+  related_ids: []
+  path: spec/kani/functional/FR-034-caller-death-ownership.md
+  lines: '1860'
+  excerpt: 'Backend receives unchanged raw argument bytes except the explicitly allocated internal report locator:
+    harness options then -Z unstable-options --export-json /proc/self/fd/N with actual mapped N >=5. Evidence records
+    that exact argv. Inherited stdin, inherited/overridden environment and cwd remain unchanged.'
+  finding: 'FR-034-AC-17 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+bindings: []
+```
+
++++
