@@ -2730,7 +2730,8 @@ exec sleep 45
             root: u32,
         ) -> std::io::Result<u64> {
             let measured = observer.observe(root)?;
-            if self.ready.is_file() && !self.gate.claimed.load(std::sync::atomic::Ordering::Acquire) {
+            if self.ready.is_file() && !self.gate.claimed.load(std::sync::atomic::Ordering::Acquire)
+            {
                 let stat = fs::read_to_string(format!("/proc/{root}/stat"))?;
                 let fields: Vec<_> = stat
                     .rsplit_once(')')
@@ -3099,7 +3100,10 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
                 );
                 assert_eq!(fields["revents_bits"].parse::<u16>().unwrap(), 0);
                 let _measured_elapsed_ns = fields["poll_elapsed_ns"].parse::<u128>().unwrap();
-                assert_eq!(fields["init_pid"].parse::<u32>().unwrap(), captured.init_pid);
+                assert_eq!(
+                    fields["init_pid"].parse::<u32>().unwrap(),
+                    captured.init_pid
+                );
                 assert_eq!(
                     fields["init_start_ticks"].parse::<u64>().unwrap(),
                     captured.init_start_ticks
@@ -3114,7 +3118,11 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
                     "dispatch already consumed its gate"
                 );
                 assert_eq!(fields["cleaned"], "false");
-                assert_eq!(fields.len(), 9, "only observed fields from the failed attempt");
+                assert_eq!(
+                    fields.len(),
+                    9,
+                    "only observed fields from the failed attempt"
+                );
                 assert_eq!(samples.len(), 2, "Drop really confirmed the retained owner");
                 assert_eq!(samples[0].descriptor, samples[1].descriptor);
                 assert!(samples[1].count > 0);
@@ -3125,10 +3133,13 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
             recorded_process_gone(&stand_in.directory.join("calls.child"));
             let namespace = fs::read_to_string(stand_in.directory.join("calls.namespace")).unwrap();
             assert!(
-                !fs::read_dir("/proc").unwrap().filter_map(Result::ok).any(|entry| {
-                    fs::read_link(entry.path().join("ns/pid"))
-                        .is_ok_and(|link| link.as_os_str() == namespace.as_str())
-                }),
+                !fs::read_dir("/proc")
+                    .unwrap()
+                    .filter_map(Result::ok)
+                    .any(|entry| {
+                        fs::read_link(entry.path().join("ns/pid"))
+                            .is_ok_and(|link| link.as_os_str() == namespace.as_str())
+                    }),
                 "the actual backend namespace has no surviving processes"
             );
         }
