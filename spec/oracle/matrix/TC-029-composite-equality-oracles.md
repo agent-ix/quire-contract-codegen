@@ -42,10 +42,25 @@ the enum-only owner facade does not excuse dropping it.
    dimensions, distinct units, no common type, a `convert<T>` outside the table,
    a record with a `float64` field nested inside a `sequence`, a `reference`
    composite form, model, relation, function, `call`, state, temporal and
-   protocol nodes, a duplicate record field, both recursion-rule cycles, an
+   protocol nodes, both recursion-rule cycles, an
    unlowered node, a non-`binary` form, a descriptor disagreeing with its
    operand types, one node id repeated under one descriptor, and a request that
    exceeds the lowering work limit.
+   Exercise a duplicate record field in authentic source as a separate QSL
+   admission control through root `compile_admitted`, with ordinary source and
+   dependency provision. Retain `AdmittedRefusal::Package` and its real
+   `CompileRefusal` code/cause and available locus: `ambiguous_declaration` /
+   `ambiguous-name`. Use the root facade's public refusal accessors; do not
+   add a dependency on QSL assembly internals. The owner maps its duplicate
+   `InvalidTypeDeclaration` to those values; the precise duplicate name remains
+   asserted in the separate private declaration-defense control below.
+   No successful `AdmittedContext` or CG artifact is produced; do not attempt
+   public CG generation with a fabricated or mismatched context for that source.
+   Retain private CG declaration-admission checks of the precise
+   `DuplicateMember` cause/name and healthy-sibling isolation separately,
+   without claiming public malformed-declaration acceptance. This specific
+   allocation does not classify the unrelated recursion controls.
+
 2. Generate twice and with a permuted request that includes both descriptors of
    step 7 over one node id; compare bytes with each other, and inspect claim-map ordering by the descriptor key — expression node
    id, operator rank, then each operand's source-type and conversion-target node
@@ -237,11 +252,23 @@ the enum-only owner facade does not excuse dropping it.
     non-sequence, remove or
     duplicate `min` or `max`, and make either bound non-integer; each affected item receives its
     typed malformed or bound refusal with no symbol while an unaffected sibling generates.
+    The four malformed optional-wrapper mutations above are private defense
+    controls: preserve exact `MalformedComposite`, no generated symbol, no
+    silent reinterpretation as required, and the healthy Tree sibling. They
+    are not a claim that the checked source emitter can produce those
+    inconsistent wrappers or that they satisfy public genuine-context
+    preconditions. The owning emitter derives the one valid wrapper from
+    admitted `Presence::Optional`; keep the genuine public List/Tree positive
+    controls, original key/source/context binding and field assertions intact.
+    For any additional malformed source/wire intake control, assert its real
+    owning refusal under that control's prerequisites, before CG; do not invent
+    a common intake diagnostic or a source spelling for every internal mutation.
+    These intake controls do not discharge the private parser assertions.
     The `collection_bounds` malformed-name/order/shape controls at this private
     seam are defensive parser evidence, not public-generator acceptance;
     step 8 owns their separate IR-intake refusal and valid-bound controls.
-    This clarification does not reclassify the record optional-wrapper or
-    cycle controls.
+    The optional-wrapper defenses have their separate allocation above;
+    this change does not reclassify the cycle controls.
     At the equality module's type-resolution seam, supply separate synthetic graphs with `Option`
     referring to itself and `Sequence` referring to itself, so earlier package admission cannot
     mask the resolver behavior. Assert each returns `TypeResolutionCycle` with the repeated node
