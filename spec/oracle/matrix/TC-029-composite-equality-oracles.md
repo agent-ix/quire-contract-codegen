@@ -178,9 +178,17 @@ the enum-only owner facade does not excuse dropping it.
    `Result<_, ReconstructionError>`, every call of one is followed by `?` or a
    `match` whose `Err` arm yields `EnvironmentError::Reconstruction` or
    `Outcome::Refused(Refusal::CheckedInvariant)`, and `EnvironmentError` has the
-   variants `Declaration(InvalidDeclaration)` and `Reconstruction(ReconstructionError)`,
+   typed variants required by FR-018 Outputs, including `Declaration` retaining
+   QSV `EnvironmentFailure` and `Reconstruction(ReconstructionError)`.
    `ReconstructionError` has the unit variants `Integer`, `Interval`, `Rational`,
-   `Decimal`, `Text` and `Cardinality`, and no call of `IntegerInterval::new`,
+   `Decimal`, `Text`, `Cardinality`, `Enum` and `Composite`. Inspect the emitted
+   composite lookup: an invalid retained WireNodeId literal or a successful
+   genuine lookup whose record/tuple form or qualified name disagrees with
+   the retained recipe returns `Reconstruction(Composite)`. Facade Unknown,
+   Foreign and WrongKind retain `Lookup` and their owning details; missing
+   context, package mismatch and QSV environment admission keep their separate
+   typed errors. No key is constructed or substituted. Keep this structural
+   defense distinct from public admission or execution credit. Assert no call of `IntegerInterval::new`,
    `RationalDomain::new`, `TextType::new`, `CardinalityBound::new`,
    `DecimalType::new` or an integer `.parse()` appears outside a reconstruction
    helper. Assert each of `rebuild_integer`, `rebuild_interval`, `rebuild_rational`,
