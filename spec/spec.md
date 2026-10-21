@@ -36,8 +36,7 @@ oracles, tri-state test harnesses, shaped proptest strategies, Kani obligations 
 
 The crate consumes a versioned serialized contract package and emits a deterministic artifact bundle.
 It uses a bounded deterministic renderer plus `syn` validation for Rust syntax, depends generated customer code only on
-`quire-contract-runtime` with its `exact` feature, the direct authoritative `quire-exact` dependency,
-proptest and declared customer types, adapts to Kani, and consumes LLVM
+`quire-contract-runtime` and declared customer types, adapts to proptest and Kani, and consumes LLVM
 coverage exports rather than implementing those engines.
 
 ### Intended Users

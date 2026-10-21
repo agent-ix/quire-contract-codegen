@@ -26,10 +26,10 @@ use quire_contract_model::{
     CompleteLoweringRecordV2, ContractDependencies, ContractFeatureRecordV1,
     ContractPackageReadResult, ContractPackageWireV1, StructuralCandidateError,
 };
-use quire_contract_runtime::exact::{
-    CollectionType, CompositeDeclaration, CompositeShape, FieldDeclaration, NodeKey,
-    ObjectTypeDeclaration, Presence, TypeEnvironment, ValueType,
+use quire_semantic_value::declaration::{
+    CompositeDeclaration, CompositeShape, FieldDeclaration, ObjectTypeDeclaration, TypeEnvironment,
 };
+use quire_exact::{CollectionType, NodeKey, Presence, ValueType};
 use quire_exact::{CardinalityBound, CollectionKind, IeeeWidth};
 use serde_json::json;
 
@@ -1133,7 +1133,7 @@ fn tc_029_ac6_ieee_at_any_depth_is_operator_ineligible() {
             "R_FLOAT",
             CompositeShape::Record(vec![FieldDeclaration::new(
                 "f",
-                ValueType::Float(IeeeWidth::Binary64),
+                ValueType::Float(quire_exact::FloatType::exact(IeeeWidth::Binary64)),
                 Presence::Required,
             )]),
         )],
@@ -1150,7 +1150,7 @@ fn tc_029_ac6_ieee_at_any_depth_is_operator_ineligible() {
     // base case, unasserted by the record/sequence checks above (both of those
     // pass by *reaching* an IEEE leaf through a composite, never by naming the
     // leaf type directly).
-    assert!(environment.contains_ieee(&ValueType::Float(IeeeWidth::Binary64)));
+    assert!(environment.contains_ieee(&ValueType::Float(quire_exact::FloatType::exact(IeeeWidth::Binary64))));
     assert!(environment.contains_ieee(&record_type));
     assert!(environment.contains_ieee(&sequence_type));
 

@@ -65,7 +65,7 @@ use quire_contract_model::{
     ContractOccurrenceKeyV1, ContractPackageV1, ContractResultContextV1, ContractResultViewV1,
     ContractRootViewError,
 };
-use quire_contract_runtime::exact::EqualityOperator;
+use quire_semantic_value::declaration::EqualityOperator;
 use quire_exact::{
     ComparisonOperator, DecimalType, DivisionProfile, IeeeComparison, IeeeWidth, Integer,
     IntegerDomain, IntegerInterval, OrderingOperator, RationalDomain, RoundingMode, TextProfile,
@@ -3203,7 +3203,6 @@ fn catalogued_operation(
             (EqualityOperandKind::Boolean, EqualityOperator::NotEqual) => "quire.op.boolean.ne",
             (EqualityOperandKind::Integer, EqualityOperator::Equal) => "quire.op.integer.eq",
             (EqualityOperandKind::Integer, EqualityOperator::NotEqual) => "quire.op.integer.ne",
-            _ => return Err(OracleGenerationError::unknown_variant("EqualityOperator")),
         }),
         Op::IntegerArithmetic { operator, .. } => plain(match operator {
             IntegerOperator::Add => CatalogOperator::Add.entry().identity,
@@ -3466,7 +3465,6 @@ fn operation_identity(operation: &ExactScalarOperation) -> Result<String, Oracle
             let name = match operator {
                 EqualityOperator::Equal => "eq",
                 EqualityOperator::NotEqual => "ne",
-                _ => return Err(OracleGenerationError::unknown_variant("EqualityOperator")),
             };
             format!("{kind}.{name}")
         }
@@ -3747,6 +3745,12 @@ impl SourceBuilder {
 
     fn finish(self) -> String {
         let mut source = SOURCE_HEADER.to_owned();
+        if self.functions.contains("sv::") {
+            source.push_str("use quire_semantic_value::declaration as sv;\n");
+        }
+        if self.functions.contains("enum_owner::") {
+            source.push_str("use quire_semantic_value::enumeration as enum_owner;\n");
+        }
         if self.functions.contains("residue::") {
             source.push_str("use quire_contract_runtime::exact as residue;\n");
         }
@@ -3844,7 +3848,6 @@ impl SourceBuilder {
                 let operator = match operator {
                     EqualityOperator::Equal => "Equal",
                     EqualityOperator::NotEqual => "NotEqual",
-                    _ => return Err(OracleGenerationError::unknown_variant("EqualityOperator")),
                 };
                 let (ty, value_type, value) = match operands {
                     EqualityOperandKind::Boolean => ("bool", "Boolean", "Boolean"),
@@ -3858,9 +3861,9 @@ impl SourceBuilder {
                     parameters: binary(ty),
                     output: "bool",
                     prelude: vec![format!(
-                        "let checked = residue::TypeEnvironment::default().check_equality(residue::EqualityOperator::{operator}, residue::EqualityOperand::typed(residue::ValueType::{value_type}), residue::EqualityOperand::typed(residue::ValueType::{value_type})).map_err(OracleStop::IllTyped)?;"
+                        "let environment = sv::TypeEnvironment::default();\n    let checked = environment.check_equality(sv::EqualityOperator::{operator}, sv::EqualityOperand::typed(rt::ValueType::{value_type}), sv::EqualityOperand::typed(rt::ValueType::{value_type}), &quire_semantic_value::enumeration::EnumMemberIndex::default()).map_err(OracleStop::IllTyped)?;"
                     )],
-                    call: format!("Ok(checked.evaluate(&residue::Value::{value}({left}), &residue::Value::{value}({right}), meter))"),
+                    call: format!("Ok(checked.evaluate(&environment, &rt::Value::{value}({left}), &rt::Value::{value}({right}), meter))"),
                 }
             }
             ExactScalarOperation::IntegerArithmetic { operator, domain } => {
@@ -4087,7 +4090,7 @@ impl SourceBuilder {
                 comparison_body("&rt::Text", "rt::compare_text", *operator)?
             }
             ExactScalarOperation::EnumComparison { operator } => {
-                comparison_body("&residue::EnumValue", "residue::compare_enum", *operator)?
+                comparison_body("&enum_owner::EnumValue", "enum_owner::compare_enum", *operator)?
             }
             ExactScalarOperation::QuantityConversion => Body {
                 parameters: vec![("operand", "&residue::Quantity"), ("unit", "&residue::QuantityUnit")],

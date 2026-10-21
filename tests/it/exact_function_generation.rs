@@ -3352,7 +3352,7 @@ fn tc_031_ac19_emitted_function_oracle_source_has_no_panicking_path() {
         !invokes_panicking_macro(&lib),
         "main corpus emits a panicking macro"
     );
-    assert!(lib.contains("rt::TypeEnvironment::default()"));
+    assert!(lib.contains("sv::TypeEnvironment::default()"));
 }
 
 /// In the emitted bodies of `add_fn` and `eq_fn`
@@ -3366,11 +3366,11 @@ fn tc_031_ac20_closed_kernel_outcomes_are_exhaustive() {
     for (function, completed) in [
         (
             "add_fn",
-            "Ok(exact::Outcome::Completed(value)) => exact::Outcome::Completed(rt::Value::Integer(value)),",
+            "Ok(exact::Outcome::Completed(value)) => exact::Outcome::Completed(exact::Value::Integer(value)),",
         ),
         (
             "eq_fn",
-            "Ok(exact::Outcome::Completed(value)) => exact::Outcome::Completed(rt::Value::Boolean(value)),",
+            "Ok(exact::Outcome::Completed(value)) => exact::Outcome::Completed(exact::Value::Boolean(value)),",
         ),
     ] {
         let name = format!("name: {function:?}.to_owned(),");
@@ -3526,8 +3526,8 @@ fn tc_031_ac14_manifest_and_source_shape() {
     // remove one of these patterns, where the equivalent absence-only
     // checks this replaced could be defeated by any differently-formatted
     // literal.
-    assert!(lib.contains("Outcome::Completed(rt::Value::Integer(value))"));
-    assert!(lib.contains("Outcome::Completed(rt::Value::Boolean(value))"));
+    assert!(lib.contains("Outcome::Completed(exact::Value::Integer(value))"));
+    assert!(lib.contains("Outcome::Completed(exact::Value::Boolean(value))"));
 }
 
 /// FR-021-AC-15 (origin half only -- see module doc "Location

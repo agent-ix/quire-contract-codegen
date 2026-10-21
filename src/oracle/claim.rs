@@ -72,6 +72,8 @@ pub struct ClaimMap<C> {
 /// result in doubt, not just the one that surfaced it.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum OracleGenerationError {
+    /// Bounded declaration admission failed before an equality plan could be checked.
+    EnvironmentAdmission(quire_semantic_value::declaration::EnvironmentFailure),
     /// The caller's request sequence disagrees with admitted FR-330 accounting.
     PackageRequest(crate::core::contract_package::PackageRequestError),
     /// A lowered record has no admitted Contract IR package value.

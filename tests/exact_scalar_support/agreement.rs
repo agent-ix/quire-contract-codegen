@@ -28,7 +28,7 @@
 
 use std::collections::BTreeMap;
 
-use quire_contract_runtime::exact::NODE_KEY_DOMAIN;
+use quire_exact::NODE_KEY_DOMAIN;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
@@ -484,12 +484,14 @@ pub mod rt_side {
 
     pub use quire_exact::*;
     pub use quire_contract_runtime::exact::{
-        compare_enum, compare_quantity, convert_quantity, evaluate_quantity, CompoundUnit,
-        evaluate_boolean_short_circuit, ShortCircuitConnective, ConvertedValue, Value,
-        Conversion, EnumDeclaration, EnumValue, InvalidSemanticGraph, NodeKey, Quantity,
-        QuantityOperation, QuantityTarget, QuantityUnit, SemanticGraphCause, Unit, UnitDeclaration,
+        compare_quantity, convert_quantity, evaluate_quantity, CompoundUnit,
+        evaluate_boolean_short_circuit, ShortCircuitConnective, ConvertedValue,
+        Conversion, Quantity, QuantityOperation, QuantityTarget, QuantityUnit, Unit, UnitDeclaration,
         UnitGraph,
     };
+
+    pub use quire_semantic_value::enumeration::{compare_enum, EnumDeclaration, EnumValue};
+    pub use quire_semantic_value::semantic_node::{InvalidSemanticGraph, SemanticGraphCause};
 
     /// The runtime's `InjectedDenial::occurrence` is `NonZeroU64`
     /// (`agent-ix/quire-contract-runtime#20`). Every caller in this crate
@@ -567,7 +569,7 @@ pub mod rt_side {
         members: &[&str],
     ) -> Result<Enum, InvalidSemanticGraph> {
         let key = super::enum_declaration_key(declaration, ordered, members);
-        EnumDeclaration::new(NodeKey::from_hex(&key).unwrap(), ordered, members).map(Enum)
+        EnumDeclaration::new(NodeKey::from_hex(&key).unwrap(), ordered, members.iter().map(|member| (*member).to_owned()).collect()).map(Enum)
     }
 
     impl Enum {

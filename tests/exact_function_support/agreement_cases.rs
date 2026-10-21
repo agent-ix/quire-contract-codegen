@@ -25,6 +25,7 @@ mod generated {
 }
 
 use quire_contract_runtime::exact as rt;
+use quire_semantic_value::declaration as sv;
 use quire_exact as exact;
 use std::num::NonZeroU64;
 
@@ -41,11 +42,11 @@ const UNLIMITED: exact::ScalarLimits = exact::ScalarLimits {
     result_units: u64::MAX,
 };
 
-fn empty_objects() -> rt::ObjectEnvironment {
+fn empty_objects() -> quire_semantic_value::object_closure::ObjectClosure {
     let types =
-        rt::TypeEnvironment::new(Vec::new(), core::iter::empty::<rt::ObjectTypeDeclaration>())
+        sv::TypeEnvironment::new(Vec::new(), core::iter::empty::<sv::ObjectTypeDeclaration>())
             .expect("empty declaration closure admits");
-    rt::ObjectEnvironment::new(&types, core::iter::empty()).expect("no objects admits trivially")
+    quire_semantic_value::object_closure::ObjectClosure::new(&types, core::iter::empty(), &[]).expect("no objects admits trivially")
 }
 
 /// A direct, independently assembled `PackageDeclarations` mirroring the
@@ -58,8 +59,8 @@ fn empty_objects() -> rt::ObjectEnvironment {
 fn direct_package() -> rt::CheckedPackage {
     fn add_body() -> rt::Body {
         Box::new(
-            |frame: &rt::Frame, args: &[rt::Value]| -> exact::Outcome<rt::Value> {
-                let [rt::Value::Integer(left), rt::Value::Integer(right)] = args else {
+            |frame: &rt::Frame, args: &[exact::Value]| -> exact::Outcome<exact::Value> {
+                let [exact::Value::Integer(left), exact::Value::Integer(right)] = args else {
                     return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {
                         cause: exact::CheckedInvariantCause::GeneratedArgumentShapeMismatch,
                     });
@@ -72,7 +73,7 @@ fn direct_package() -> rt::CheckedPackage {
                     )
                 }) {
                     Ok(exact::Outcome::Completed(value)) => {
-                        exact::Outcome::Completed(rt::Value::Integer(value))
+                        exact::Outcome::Completed(exact::Value::Integer(value))
                     }
                     Ok(exact::Outcome::Undefined(undefined)) => exact::Outcome::Undefined(undefined),
                     Ok(exact::Outcome::Refused(refusal)) => exact::Outcome::Refused(refusal),
@@ -87,10 +88,10 @@ fn direct_package() -> rt::CheckedPackage {
         rt::FunctionDeclaration {
             name: "add_fn".to_owned(),
             parameters: vec![
-                ("a".to_owned(), rt::ValueType::Integer),
-                ("b".to_owned(), rt::ValueType::Integer),
+                ("a".to_owned(), exact::ValueType::Integer),
+                ("b".to_owned(), exact::ValueType::Integer),
             ],
-            result: rt::ValueType::Integer,
+            result: exact::ValueType::Integer,
             ieee_requirements: Vec::new(),
             integer_division_consumers: Vec::new(),
             measure_discharged: true,
@@ -99,10 +100,10 @@ fn direct_package() -> rt::CheckedPackage {
         rt::FunctionDeclaration {
             name: "unrelated_fn".to_owned(),
             parameters: vec![
-                ("a".to_owned(), rt::ValueType::Integer),
-                ("b".to_owned(), rt::ValueType::Integer),
+                ("a".to_owned(), exact::ValueType::Integer),
+                ("b".to_owned(), exact::ValueType::Integer),
             ],
-            result: rt::ValueType::Integer,
+            result: exact::ValueType::Integer,
             ieee_requirements: Vec::new(),
             integer_division_consumers: Vec::new(),
             measure_discharged: true,
@@ -111,35 +112,36 @@ fn direct_package() -> rt::CheckedPackage {
         rt::FunctionDeclaration {
             name: "eq_fn".to_owned(),
             parameters: vec![
-                ("a".to_owned(), rt::ValueType::Integer),
-                ("b".to_owned(), rt::ValueType::Integer),
+                ("a".to_owned(), exact::ValueType::Integer),
+                ("b".to_owned(), exact::ValueType::Integer),
             ],
-            result: rt::ValueType::Boolean,
+            result: exact::ValueType::Boolean,
             ieee_requirements: Vec::new(),
             integer_division_consumers: Vec::new(),
             measure_discharged: true,
             body: Box::new(
-                |frame: &rt::Frame, args: &[rt::Value]| -> exact::Outcome<rt::Value> {
+                |frame: &rt::Frame, args: &[exact::Value]| -> exact::Outcome<exact::Value> {
                     let [left, right] = args else {
                         return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {
                             cause: exact::CheckedInvariantCause::GeneratedArgumentShapeMismatch,
                         });
                     };
-                    let environment = rt::TypeEnvironment::new(
+                    let environment = sv::TypeEnvironment::new(
                         Vec::new(),
-                        core::iter::empty::<rt::ObjectTypeDeclaration>(),
+                        core::iter::empty::<sv::ObjectTypeDeclaration>(),
                     )
                     .expect("empty declaration closure admits");
                     let checked = environment
                         .check_equality(
-                            rt::EqualityOperator::Equal,
-                            rt::EqualityOperand::typed(rt::ValueType::Integer),
-                            rt::EqualityOperand::typed(rt::ValueType::Integer),
+                            sv::EqualityOperator::Equal,
+                            sv::EqualityOperand::typed(exact::ValueType::Integer),
+                            sv::EqualityOperand::typed(exact::ValueType::Integer),
+                            &quire_semantic_value::enumeration::EnumMemberIndex::default(),
                         )
                         .expect("Integer/Integer Equal admits");
-                    match frame.meter(|meter| checked.evaluate(left, right, meter)) {
+                    match frame.meter(|meter| checked.evaluate(&environment, left, right, meter)) {
                         Ok(exact::Outcome::Completed(value)) => {
-                            exact::Outcome::Completed(rt::Value::Boolean(value))
+                            exact::Outcome::Completed(exact::Value::Boolean(value))
                         }
                         Ok(exact::Outcome::Undefined(undefined)) => exact::Outcome::Undefined(undefined),
                         Ok(exact::Outcome::Refused(refusal)) => exact::Outcome::Refused(refusal),
@@ -154,24 +156,24 @@ fn direct_package() -> rt::CheckedPackage {
         rt::FunctionDeclaration {
             name: "call_fn".to_owned(),
             parameters: vec![
-                ("a".to_owned(), rt::ValueType::Integer),
-                ("b".to_owned(), rt::ValueType::Integer),
+                ("a".to_owned(), exact::ValueType::Integer),
+                ("b".to_owned(), exact::ValueType::Integer),
             ],
-            result: rt::ValueType::Integer,
+            result: exact::ValueType::Integer,
             ieee_requirements: Vec::new(),
             integer_division_consumers: Vec::new(),
             measure_discharged: true,
             body: Box::new(
-                |frame: &rt::Frame, args: &[rt::Value]| -> exact::Outcome<rt::Value> {
+                |frame: &rt::Frame, args: &[exact::Value]| -> exact::Outcome<exact::Value> {
                     frame.call("add_fn", args)
                 },
             ),
         },
     ];
     rt::PackageDeclarations {
-        types: rt::TypeEnvironment::new(
+        types: sv::TypeEnvironment::new(
             Vec::new(),
-            core::iter::empty::<rt::ObjectTypeDeclaration>(),
+            core::iter::empty::<sv::ObjectTypeDeclaration>(),
         )
         .expect("empty declaration closure admits"),
         functions,
@@ -187,7 +189,7 @@ fn direct_package() -> rt::CheckedPackage {
 /// so the direct leg here does the identical `.map` before formatting, or
 /// the two Debug strings would differ on `Evaluation`'s `location`/`losses`
 /// fields alone, which is not what AC-2 is asking to compare.
-fn call_debug(package: &rt::CheckedPackage, function: &str, arguments: Vec<rt::Value>) -> String {
+fn call_debug(package: &rt::CheckedPackage, function: &str, arguments: Vec<exact::Value>) -> String {
     let objects = empty_objects();
     let mut meter = exact::Meter::new(UNLIMITED);
     let outcome = package
@@ -210,8 +212,8 @@ fn tc_031_ac2_generated_oracle_agrees_with_direct_runtime_call() {
     // add_fn(2, 3)
     {
         let args = vec![
-            rt::Value::Integer(2i64.into()),
-            rt::Value::Integer(3i64.into()),
+            exact::Value::Integer(2i64.into()),
+            exact::Value::Integer(3i64.into()),
         ];
         let direct_result = call_debug(&direct, "add_fn", args.clone());
         let mut meter = exact::Meter::new(UNLIMITED);
@@ -231,7 +233,7 @@ fn tc_031_ac2_generated_oracle_agrees_with_direct_runtime_call() {
 
     // eq_fn(5, 5) and eq_fn(5, 6)
     for (a, b) in [(5i64, 5i64), (5i64, 6i64)] {
-        let args = vec![rt::Value::Integer(a.into()), rt::Value::Integer(b.into())];
+        let args = vec![exact::Value::Integer(a.into()), exact::Value::Integer(b.into())];
         let direct_result = call_debug(&direct, "eq_fn", args.clone());
         let mut meter = exact::Meter::new(UNLIMITED);
         let generated_result =
@@ -251,8 +253,8 @@ fn tc_031_ac2_generated_oracle_agrees_with_direct_runtime_call() {
     // call_fn(7, 8) -- nests into add_fn via Frame::call.
     {
         let args = vec![
-            rt::Value::Integer(7i64.into()),
-            rt::Value::Integer(8i64.into()),
+            exact::Value::Integer(7i64.into()),
+            exact::Value::Integer(8i64.into()),
         ];
         let direct_result = call_debug(&direct, "call_fn", args.clone());
         let mut meter = exact::Meter::new(UNLIMITED);
@@ -299,7 +301,7 @@ fn tc_031_ac4_input_refusal_surfaces_unchanged_before_any_charge() {
         let result =
             generated::oracle_add_fn(
                 &generated,
-                vec![rt::Value::Integer(1i64.into())],
+                vec![exact::Value::Integer(1i64.into())],
                 &objects,
                 &mut meter,
             );
@@ -319,7 +321,7 @@ fn tc_031_ac4_input_refusal_surfaces_unchanged_before_any_charge() {
         let result =
             generated::oracle_add_fn(
                 &generated,
-                vec![rt::Value::Boolean(true), rt::Value::Integer(1i64.into())],
+                vec![exact::Value::Boolean(true), exact::Value::Integer(1i64.into())],
                 &objects,
                 &mut meter,
             );
@@ -345,8 +347,8 @@ fn tc_031_ac4_input_refusal_surfaces_unchanged_before_any_charge() {
             generated::oracle_add_fn(
                 &generated,
                 vec![
-                    rt::Value::Reference(dangling),
-                    rt::Value::Integer(1i64.into()),
+                    exact::Value::Reference(dangling),
+                    exact::Value::Integer(1i64.into()),
                 ],
                 &objects,
                 &mut meter,
@@ -383,7 +385,7 @@ fn tc_031_ac5_arity_is_decided_before_value_kind() {
     let result =
         generated::oracle_add_fn(
             &generated,
-            vec![rt::Value::Boolean(true)], // wrong arity AND wrong kind
+            vec![exact::Value::Boolean(true)], // wrong arity AND wrong kind
             &objects,
             &mut meter,
         );
@@ -412,8 +414,8 @@ fn tc_031_ac9_denial_at_function_call_yields_incomplete_with_no_charge_applied()
         generated::oracle_add_fn(
             &generated,
             vec![
-                rt::Value::Integer(1i64.into()),
-                rt::Value::Integer(2i64.into()),
+                exact::Value::Integer(1i64.into()),
+                exact::Value::Integer(2i64.into()),
             ],
             &objects,
             &mut meter,

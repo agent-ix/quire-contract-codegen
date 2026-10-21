@@ -16,9 +16,9 @@ use generated::{
 };
 use ix_trace_rs::trace;
 use quire_exact::{Outcome, Refusal};
-use quire_contract_runtime::exact::{
-    EqualityOperand, EqualityOperator, TypeEnvironment, ValueType,
-};
+use quire_semantic_value::declaration::{EqualityOperand, EqualityOperator, TypeEnvironment};
+use quire_semantic_value::enumeration::EnumMemberIndex;
+use quire_exact::ValueType;
 
 fn done(result: Result<Outcome<bool>, OracleStop>) -> Outcome<bool> {
     result.expect("a generated oracle over admitted operands does not stop")
@@ -81,11 +81,13 @@ fn boolean_connectives_agree_in_outcome_charges_counters_and_denials() {
 #[test]
 fn typed_scalar_equalities_agree_in_outcome_charges_counters_and_denials() {
     let environment = TypeEnvironment::default();
+    let enum_members = EnumMemberIndex::default();
     let boolean_equal = environment
         .check_equality(
             EqualityOperator::Equal,
             EqualityOperand::typed(ValueType::Boolean),
             EqualityOperand::typed(ValueType::Boolean),
+            &enum_members,
         )
         .expect("Boolean equality");
     let boolean_not_equal = environment
@@ -93,6 +95,7 @@ fn typed_scalar_equalities_agree_in_outcome_charges_counters_and_denials() {
             EqualityOperator::NotEqual,
             EqualityOperand::typed(ValueType::Boolean),
             EqualityOperand::typed(ValueType::Boolean),
+            &enum_members,
         )
         .expect("Boolean inequality");
     let integer_equal = environment
@@ -100,6 +103,7 @@ fn typed_scalar_equalities_agree_in_outcome_charges_counters_and_denials() {
             EqualityOperator::Equal,
             EqualityOperand::typed(ValueType::Integer),
             EqualityOperand::typed(ValueType::Integer),
+            &enum_members,
         )
         .expect("Integer equality");
     let integer_not_equal = environment
@@ -107,6 +111,7 @@ fn typed_scalar_equalities_agree_in_outcome_charges_counters_and_denials() {
             EqualityOperator::NotEqual,
             EqualityOperand::typed(ValueType::Integer),
             EqualityOperand::typed(ValueType::Integer),
+            &enum_members,
         )
         .expect("Integer inequality");
     for left in [false, true] {
@@ -115,8 +120,8 @@ fn typed_scalar_equalities_agree_in_outcome_charges_counters_and_denials() {
                 limits: support::rt_side::UNLIMITED,
                 setup: { let (l, r) = (Value::Boolean(left), Value::Boolean(right)); },
                 direct: |m| (
-                    boolean_equal.evaluate(&l, &r, m),
-                    boolean_not_equal.evaluate(&l, &r, m),
+                    boolean_equal.evaluate(&environment, &l, &r, m),
+                    boolean_not_equal.evaluate(&environment, &l, &r, m),
                 ),
                 generated: |m| (
                     done(boolean_eq(left, right, m)),
@@ -134,8 +139,8 @@ fn typed_scalar_equalities_agree_in_outcome_charges_counters_and_denials() {
                     let (lv, rv) = (Value::Integer(l.clone()), Value::Integer(r.clone()));
                 },
                 direct: |m| (
-                    integer_equal.evaluate(&lv, &rv, m),
-                    integer_not_equal.evaluate(&lv, &rv, m),
+                    integer_equal.evaluate(&environment, &lv, &rv, m),
+                    integer_not_equal.evaluate(&environment, &lv, &rv, m),
                     order_numbers(OrderingOperator::Less, OrderedOperands::Integers(&l, &r), m),
                     order_numbers(OrderingOperator::LessOrEqual, OrderedOperands::Integers(&l, &r), m),
                     order_numbers(OrderingOperator::Greater, OrderedOperands::Integers(&l, &r), m),

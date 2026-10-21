@@ -332,30 +332,27 @@ pub(super) fn resolve_type(
                 values.push(ValueType::collection(CollectionType::new(
                     kind,
                     element,
-                    cardinality,
+                    Some(cardinality),
                 )));
                 active.remove(&id);
             }
             Frame::FinishRecord { id, key, fields } => {
                 let mut built = Vec::with_capacity(fields.len());
                 for (name, wrapped) in fields.into_iter().rev() {
-                    let mut value = values.pop().ok_or_else(|| {
+                    let value = values.pop().ok_or_else(|| {
                         CompositeEqualityRefusal::MalformedComposite {
                             composite: id.clone(),
                         }
                     })?;
                     let (value, presence) = if wrapped {
-                        let ValueType::Option(payload) = &mut value else {
+                        let ValueType::Option(payload) = &value else {
                             return Err(CompositeEqualityRefusal::MalformedComposite {
                                 composite: id,
                             });
                         };
-                        // `ValueType` owns iterative Drop glue, so detach its child before
-                        // the discarded Option shell is dropped.
-                        (
-                            std::mem::replace(payload.as_mut(), ValueType::Boolean),
-                            Presence::Optional,
-                        )
+                        // The kernel owns iterative Clone and Drop. Clone the child's type
+                        // without mutating the shared Arc or another descriptor's payload.
+                        (payload.as_ref().clone(), Presence::Optional)
                     } else {
                         (value, Presence::Required)
                     };

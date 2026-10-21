@@ -41,7 +41,8 @@ use generated::{
     text_not_equal, OracleStop,
 };
 use ix_trace_rs::trace;
-use quire_contract_runtime::exact::{EnumValue, Quantity};
+use quire_contract_runtime::exact::Quantity;
+use quire_semantic_value::enumeration::EnumValue;
 use quire_exact::{IllTyped, Integer, Meter, Outcome, ScalarLimits, Text};
 
 /// Generated oracles in `ComparisonOperator::ALL` order.

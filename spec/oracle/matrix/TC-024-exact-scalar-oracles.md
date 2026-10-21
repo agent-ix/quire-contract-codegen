@@ -39,7 +39,7 @@ byte-deterministic, and agree with direct runtime execution. Agreement with the 
    execution, including the outcome of denying each admitted charge in turn.
    No TC-187 vector is compared with the QSL value authority here (FR-014-AC-47).
    U06 and U11 are a Contract Runtime unit-graph admission check (Contract Runtime FR-012-AC-4, TC-033), not oracle agreement.
-5. Compile the generated crate manifest with one direct `quire-exact` entry. For division, select only `DivisionMember::Quotient` under each admitted profile, including an in-domain quotient whose remainder is outside the domain.
+5. Compile the generated crate manifest.
 6. Derive an item for every node of the exact-scalar corpus with `derive_exact_scalar_items`
    and compare it with the descriptor the fixture declares (FR-014-AC-19);
    generate from the derived items and read each claim's provenance. Derive
@@ -249,7 +249,7 @@ by quire-integration IR-842.
    generate every node and read each oracle's runtime call. Every node derives, every oracle is
    `ir_confirmed`, each connective calls `evaluate_boolean` or `evaluate_boolean_short_circuit`, and
    each `eq`/`ne` calls `check_equality` and `CheckedEquality::evaluate`, each returning
-   `Outcome<bool>` (FR-014-AC-35). Compile the crate with the exact kernel and runtime residue and run each oracle
+   `Outcome<bool>` (FR-014-AC-35). Compile the crate against the runtime alone and run each oracle
    over the bounded domain beside direct runtime execution. Outcomes, charges and counters agree on
    every input (FR-014-AC-37). No comparison with the QSL value authority runs here: it is outside
    CG's boundary (CG may call the `qsl-replay` facade only, QSL arch-lint T12-A), owned by

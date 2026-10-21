@@ -50,7 +50,8 @@
 //! `Outcome::Refused(Refusal::CheckedInvariant)`. A runtime that tightens a
 //! constructor therefore refuses; it never panics a generated oracle and never
 //! widens a type. `TypeEnvironment::new`'s own refusal is the constructor's
-//! `EnvironmentError::Declaration`.
+//! `EnvironmentError::Declaration`; a bounded admission resource stop remains
+//! `EnvironmentError::Admission` and is never fabricated as a declaration cause.
 //!
 //! Model graph, identity and reachability oracles
 //! (agent-ix/quire-spec-language#120), function application oracles
@@ -84,13 +85,13 @@ use quire_contract_model::{
     CheckedNodeId, CheckedNodeTag, CheckedSemanticId, CheckedSemanticNodeV2, CheckedSourceMapEntry,
     ContractFeatureRecordV1, ContractPackageV1,
 };
-use quire_contract_runtime::exact::{
-    self as rt, CollectionType, CompositeDeclaration, CompositeShape, EqualityOperand,
-    EqualitySchedule, FieldDeclaration, NodeKey, Presence, TypeEnvironment, ValueType,
+use quire_semantic_value::declaration::{
+    self as sv, CompositeDeclaration, CompositeShape, EqualityOperand, EqualitySchedule,
+    FieldDeclaration, TypeEnvironment,
 };
 use quire_exact::{
-    self as exact, CardinalityBound, CollectionKind, DecimalType, IllTypedCause, IntegerInterval,
-    RoundingMode, TextProfile,
+    self as exact, CardinalityBound, CollectionKind, CollectionType, DecimalType, IllTypedCause,
+    IntegerInterval, NodeKey, Presence, RoundingMode, TextProfile, ValueType,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -138,10 +139,10 @@ pub enum EqualityOperatorKind {
 }
 
 impl EqualityOperatorKind {
-    fn to_runtime(self) -> rt::EqualityOperator {
+    fn to_runtime(self) -> sv::EqualityOperator {
         match self {
-            Self::Equal => rt::EqualityOperator::Equal,
-            Self::NotEqual => rt::EqualityOperator::NotEqual,
+            Self::Equal => sv::EqualityOperator::Equal,
+            Self::NotEqual => sv::EqualityOperator::NotEqual,
         }
     }
 
@@ -154,8 +155,8 @@ impl EqualityOperatorKind {
 
     fn path(self) -> &'static str {
         match self {
-            Self::Equal => "rt::EqualityOperator::Equal",
-            Self::NotEqual => "rt::EqualityOperator::NotEqual",
+            Self::Equal => "sv::EqualityOperator::Equal",
+            Self::NotEqual => "sv::EqualityOperator::NotEqual",
         }
     }
 }
@@ -288,19 +289,18 @@ pub enum RecursionEdgesKind {
     NonEscaping,
 }
 
-impl TryFrom<rt::RecursionEdges> for RecursionEdgesKind {
+impl TryFrom<sv::RecursionEdges> for RecursionEdgesKind {
     type Error = OracleGenerationError;
 
-    fn try_from(edges: rt::RecursionEdges) -> Result<Self, Self::Error> {
+    fn try_from(edges: sv::RecursionEdges) -> Result<Self, Self::Error> {
         match edges {
-            rt::RecursionEdges::Unnamed => Ok(Self::Unnamed),
-            rt::RecursionEdges::NonEscaping => Ok(Self::NonEscaping),
-            _ => Err(OracleGenerationError::unknown_variant("RecursionEdges")),
+            sv::RecursionEdges::Unnamed => Ok(Self::Unnamed),
+            sv::RecursionEdges::NonEscaping => Ok(Self::NonEscaping),
         }
     }
 }
 
-/// A serializable mirror of `quire_contract_runtime::exact::DeclarationCause`.
+/// A serializable mirror of `quire_semantic_value::declaration::DeclarationCause`.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum DeclarationRefusalCause {
@@ -330,20 +330,20 @@ pub enum DeclarationRefusalCause {
     },
 }
 
-impl TryFrom<rt::DeclarationCause> for DeclarationRefusalCause {
+impl TryFrom<sv::DeclarationCause> for DeclarationRefusalCause {
     type Error = OracleGenerationError;
 
-    fn try_from(cause: rt::DeclarationCause) -> Result<Self, Self::Error> {
+    fn try_from(cause: sv::DeclarationCause) -> Result<Self, Self::Error> {
         Ok(match cause {
-            rt::DeclarationCause::DuplicateKey => Self::DuplicateKey,
-            rt::DeclarationCause::DuplicateMember(name) => Self::DuplicateMember { name },
-            rt::DeclarationCause::UnknownDeclaration(key) => Self::UnknownDeclaration {
+            sv::DeclarationCause::DuplicateKey => Self::DuplicateKey,
+            sv::DeclarationCause::DuplicateMember(name) => Self::DuplicateMember { name },
+            sv::DeclarationCause::UnknownDeclaration(key) => Self::UnknownDeclaration {
                 key: hex_digest(&key),
             },
-            rt::DeclarationCause::Type(cause) => Self::Type {
+            sv::DeclarationCause::Type(cause) => Self::Type {
                 cause: cause.try_into()?,
             },
-            rt::DeclarationCause::Recursion { edges, cycle } => Self::Recursion {
+            sv::DeclarationCause::Recursion { edges, cycle } => Self::Recursion {
                 edges: edges.try_into()?,
                 cycle,
             },
@@ -562,7 +562,6 @@ impl TryFrom<EqualitySchedule> for RecordedSchedule {
             EqualitySchedule::Enum => Ok(Self::Enum),
             EqualitySchedule::Quantity => Ok(Self::Quantity),
             EqualitySchedule::Plan => Ok(Self::Plan),
-            _ => Err(OracleGenerationError::unknown_variant("EqualitySchedule")),
         }
     }
 }
@@ -917,7 +916,7 @@ impl DescriptorKey {
 
 /// A checked, admitted item ready to emit.
 struct CheckedItem {
-    checked: rt::CheckedEquality,
+    checked: sv::CheckedEquality,
     left_source: ValueType,
     left_target: Option<ValueType>,
     right_source: ValueType,
@@ -1014,13 +1013,14 @@ fn check_item(
     let composites: Vec<CompositeDeclaration> = closure.composites.values().cloned().collect();
     let environment = match TypeEnvironment::new(composites.clone(), std::iter::empty()) {
         Ok(environment) => environment,
-        Err(invalid) => {
+        Err(sv::EnvironmentFailure::Refused(invalid)) => {
             return Err(CompositeEqualityRefusal::Declaration {
                 declaration: invalid.declaration,
                 cause: invalid.cause.try_into()?,
             }
             .into())
         }
+        Err(failure) => return Err(OracleGenerationError::EnvironmentAdmission(failure).into()),
     };
 
     let left_operand = match left_target.clone() {
@@ -1315,8 +1315,8 @@ fn resolve_scalar(
             })?;
             Ok(ValueType::Decimal(decimal))
         }
-        "float32" => Ok(ValueType::Float(exact::IeeeWidth::Binary32)),
-        "float64" => Ok(ValueType::Float(exact::IeeeWidth::Binary64)),
+        "float32" => Ok(ValueType::Float(exact::FloatType::exact(exact::IeeeWidth::Binary32))),
+        "float64" => Ok(ValueType::Float(exact::FloatType::exact(exact::IeeeWidth::Binary64))),
         "text" => {
             let members = bound("text_bounds")?;
             let text_type = read_text_bounds(members).ok_or_else(|| {
@@ -1359,7 +1359,7 @@ const SOURCE_HEADER: &str = "\
 // every pair comes from runtime metering. The source has no inner attributes
 // so that it can be `include!`d; the manifest forbids unsafe code instead.
 
-use quire_contract_runtime::exact as rt;
+use quire_semantic_value::declaration as sv;
 use quire_exact as exact;
 
 /// Why an emitted bound could not be rebuilt from its generation-time spelling. Each variant
@@ -1383,8 +1383,10 @@ pub enum ReconstructionError {
 /// Why an environment constructor returned no environment.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum EnvironmentError {
-    /// The runtime refused the declaration closure.
-    Declaration(rt::InvalidDeclaration),
+    /// The declaration owner refused the reconstructed closure.
+    Declaration(sv::InvalidDeclaration),
+    /// Bounded admission stopped without a declaration refusal.
+    Admission(sv::EnvironmentFailure),
     /// A bound of a declaration did not reconstruct.
     Reconstruction(ReconstructionError),
 }
@@ -1538,7 +1540,7 @@ fn render_item(generated: &CheckedItem) -> Result<RenderedItem, RenderError> {
     let keys_by_runtime_key = generated
         .declaration_keys
         .iter()
-        .map(|id| NodeKey::from_hex(&id.digest).map(|key| (key, id)))
+        .map(|id| node_key(id).ok().map(|key| (key, id)))
         .collect::<Option<BTreeMap<_, _>>>()
         .ok_or(OracleGenerationError::InvalidPlanState)?;
     if keys_by_runtime_key.len() != generated.composites.len() {
@@ -1711,7 +1713,7 @@ impl SourceBuilder {
         {
             if composites.is_empty() {
                 self.append_function(format!(
-                    "\nfn composites_{symbol}() -> Result<Vec<rt::CompositeDeclaration>, ReconstructionError> {{\n    Ok(Vec::new())\n}}\n"
+                    "\nfn composites_{symbol}() -> Result<Vec<sv::CompositeDeclaration>, ReconstructionError> {{\n    Ok(Vec::new())\n}}\n"
                 ))?;
             } else {
                 self.inline_composite_subjects
@@ -1721,7 +1723,7 @@ impl SourceBuilder {
                     .map(|(_, value)| format!("    declarations.push({value});\n"))
                     .collect::<String>();
                 self.append_function(format!(
-                    "\nfn composites_{symbol}() -> Result<Vec<rt::CompositeDeclaration>, ReconstructionError> {{\n    let mut declarations = Vec::with_capacity({});\n{declarations}    Ok(declarations)\n}}\n",
+                    "\nfn composites_{symbol}() -> Result<Vec<sv::CompositeDeclaration>, ReconstructionError> {{\n    let mut declarations = Vec::with_capacity({});\n{declarations}    Ok(declarations)\n}}\n",
                     composites.len()
                 ))?;
             }
@@ -1767,30 +1769,30 @@ impl SourceBuilder {
                 )?;
             }
             self.append_function(format!(
-                "\nfn composites_{symbol}() -> Result<Vec<rt::CompositeDeclaration>, ReconstructionError> {{\n    let mut declarations = Vec::new();\n{chunk_calls}    Ok(declarations)\n}}\n"
+                "\nfn composites_{symbol}() -> Result<Vec<sv::CompositeDeclaration>, ReconstructionError> {{\n    let mut declarations = Vec::new();\n{chunk_calls}    Ok(declarations)\n}}\n"
             ))?;
         }
 
         self.append_function(format!(
-            "\nfn left_source_{symbol}() -> Result<rt::ValueType, ReconstructionError> {{\n    Ok({left_source})\n}}\n\
-             fn left_target_{symbol}() -> Result<Option<rt::ValueType>, ReconstructionError> {{\n    Ok({left_target})\n}}\n\
-             fn right_source_{symbol}() -> Result<rt::ValueType, ReconstructionError> {{\n    Ok({right_source})\n}}\n\
-             fn right_target_{symbol}() -> Result<Option<rt::ValueType>, ReconstructionError> {{\n    Ok({right_target})\n}}\n"
+            "\nfn left_source_{symbol}() -> Result<exact::ValueType, ReconstructionError> {{\n    Ok({left_source})\n}}\n\
+             fn left_target_{symbol}() -> Result<Option<exact::ValueType>, ReconstructionError> {{\n    Ok({left_target})\n}}\n\
+             fn right_source_{symbol}() -> Result<exact::ValueType, ReconstructionError> {{\n    Ok({right_source})\n}}\n\
+             fn right_target_{symbol}() -> Result<Option<exact::ValueType>, ReconstructionError> {{\n    Ok({right_target})\n}}\n"
         ))?;
 
         self.append_function(format!(
             "\n/// `{}`. Its operation identity is caller-declared: CheckedPackage V2 carries\n\
              /// an operator class, not this operator law.\n\
-             pub fn environment_{symbol}() -> Result<rt::TypeEnvironment, EnvironmentError> {{\n\
+             pub fn environment_{symbol}() -> Result<sv::TypeEnvironment, EnvironmentError> {{\n\
              \x20   let composites = match composites_{symbol}() {{\n\
              \x20       Ok(composites) => composites,\n\
              \x20       Err(error) => return Err(EnvironmentError::Reconstruction(error)),\n\x20   }};\n\
-             \x20   rt::TypeEnvironment::new(composites, core::iter::empty::<rt::ObjectTypeDeclaration>())\n\
-             \x20       .map_err(EnvironmentError::Declaration)\n}}\n",
+             \x20   sv::TypeEnvironment::new(composites, core::iter::empty::<sv::ObjectTypeDeclaration>())\n\
+             \x20       .map_err(|failure| match failure {{ sv::EnvironmentFailure::Refused(invalid) => EnvironmentError::Declaration(invalid), other => EnvironmentError::Admission(other) }})\n}}\n",
             item.operator.identity()
         ))?;
         self.append_function(format!(
-            "\n/// Environment-checked oracle for `{}`.\npub fn oracle_{symbol}(\n    environment: &rt::TypeEnvironment,\n    left: &rt::Value,\n    right: &rt::Value,\n    meter: &mut exact::Meter,\n) -> exact::Outcome<bool> {{\n\
+            "\n/// Environment-checked oracle for `{}`.\npub fn oracle_{symbol}(\n    environment: &sv::TypeEnvironment,\n    left: &exact::Value,\n    right: &exact::Value,\n    meter: &mut exact::Meter,\n) -> exact::Outcome<bool> {{\n\
              \x20   let left_source = match left_source_{symbol}() {{\n\
              \x20       Ok(value_type) => value_type,\n\
              \x20       Err(_) => return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedDescriptorReconstructionFailed }}),\n\x20   }};\n\
@@ -1814,15 +1816,15 @@ impl SourceBuilder {
              \x20   if let Err(error) = environment.check_type(&right_comparison) {{\n\
              \x20       return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedTypeCheckRejected {{ cause: error.cause }} }});\n\x20   }}\n\
              \x20   let left_operand = match left_target {{\n\
-             \x20       Some(target) => rt::EqualityOperand::converted(left_source, target),\n\
-             \x20       None => rt::EqualityOperand::typed(left_source),\n\x20   }};\n\
+             \x20       Some(target) => sv::EqualityOperand::converted(left_source, target),\n\
+             \x20       None => sv::EqualityOperand::typed(left_source),\n\x20   }};\n\
              \x20   let right_operand = match right_target {{\n\
-             \x20       Some(target) => rt::EqualityOperand::converted(right_source, target),\n\
-             \x20       None => rt::EqualityOperand::typed(right_source),\n\x20   }};\n\
+             \x20       Some(target) => sv::EqualityOperand::converted(right_source, target),\n\
+             \x20       None => sv::EqualityOperand::typed(right_source),\n\x20   }};\n\
              \x20   let checked = match environment.check_equality({}, left_operand, right_operand) {{\n\
              \x20       Ok(checked) => checked,\n\
              \x20       Err(error) => return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedEqualityCheckRejected {{ cause: error.cause }} }}),\n\x20   }};\n\
-             \x20   checked.evaluate(left, right, meter)\n}}\n",
+             \x20   checked.evaluate(environment, left, right, meter)\n}}\n",
             item.operator.identity(),
             item.operator.path()
         ))?;
@@ -1841,7 +1843,7 @@ impl SourceBuilder {
         let name = format!("composites_{symbol}_{index}");
         let module_declaration = format!("mod {name};\n");
         let module_source = crate::core::provenance::with_rust_header(
-            format!("use super::*;\npub(super) fn declarations() -> Result<Vec<rt::CompositeDeclaration>, ReconstructionError> {{\n    let mut declarations = Vec::new();\n{declarations}    Ok(declarations)\n}}\n"),
+            format!("use super::*;\npub(super) fn declarations() -> Result<Vec<sv::CompositeDeclaration>, ReconstructionError> {{\n    let mut declarations = Vec::new();\n{declarations}    Ok(declarations)\n}}\n"),
             std::iter::once(subject).chain(composite_subjects.iter().map(String::as_str)),
         );
         self.charge(module_declaration.len().saturating_add(module_source.len()))?;
@@ -1914,7 +1916,7 @@ fn source_too_large(limit: usize) -> OracleGenerationError {
 }
 
 /// Render one admitted `CompositeDeclaration` as a Rust expression of type
-/// `rt::CompositeDeclaration`.
+/// `sv::CompositeDeclaration`.
 fn render_composite_declaration(declaration: &CompositeDeclaration) -> Result<String, RenderError> {
     let key = render_key(declaration.key());
     let shape = match declaration.shape() {
@@ -1923,38 +1925,38 @@ fn render_composite_declaration(declaration: &CompositeDeclaration) -> Result<St
                 .iter()
                 .map(|field| {
                     Ok(format!(
-                        "rt::FieldDeclaration::new({:?}, {}, {}), ",
+                        "sv::FieldDeclaration::new({:?}, {}, {}), ",
                         field.name(),
                         render_value_type(field.value_type())?,
                         presence_path(field.presence())
                     ))
                 })
                 .collect::<Result<_, RenderError>>()?;
-            format!("rt::CompositeShape::Record(vec![{rendered}])")
+            format!("sv::CompositeShape::Record(vec![{rendered}])")
         }
         CompositeShape::Tuple(positions) => {
             let rendered: String = positions
                 .iter()
                 .map(|value_type| Ok(format!("{}, ", render_value_type(value_type)?)))
                 .collect::<Result<_, RenderError>>()?;
-            format!("rt::CompositeShape::Tuple(vec![{rendered}])")
+            format!("sv::CompositeShape::Tuple(vec![{rendered}])")
         }
         &_ => return Err(OracleGenerationError::unknown_variant("CompositeShape").into()),
     };
     Ok(format!(
-        "rt::CompositeDeclaration::new({key}, {:?}, {shape})",
+        "sv::CompositeDeclaration::new({key}, {:?}, {shape})",
         declaration.name()
     ))
 }
 
 fn presence_path(presence: Presence) -> &'static str {
     match presence {
-        Presence::Required => "rt::Presence::Required",
-        Presence::Optional => "rt::Presence::Optional",
+        Presence::Required => "exact::Presence::Required",
+        Presence::Optional => "exact::Presence::Optional",
     }
 }
 
-/// Render one `ValueType` as a Rust expression of type `rt::ValueType`.
+/// Render one `ValueType` as a Rust expression of type `exact::ValueType`.
 ///
 /// Every bound is rebuilt through an emitted `rebuild_*` helper whose `Result` the expression
 /// propagates with `?`, so the expression belongs in a function returning
@@ -1965,8 +1967,7 @@ fn render_value_type(value_type: &ValueType) -> Result<String, RenderError> {
         FinishOption,
         FinishCollection {
             kind: CollectionKind,
-            minimum: u64,
-            maximum: u64,
+            bound: Option<CardinalityBound>,
         },
     }
 
@@ -1980,61 +1981,70 @@ fn render_value_type(value_type: &ValueType) -> Result<String, RenderError> {
                 let child = values
                     .pop()
                     .ok_or_else(|| OracleGenerationError::unknown_variant("ValueType"))?;
-                format!("rt::ValueType::option({child})")
+                format!("exact::ValueType::option({child})")
             }
-            Task::FinishCollection {
-                kind,
-                minimum,
-                maximum,
-            } => {
+            Task::FinishCollection { kind, bound } => {
                 let child = values
                     .pop()
                     .ok_or_else(|| OracleGenerationError::unknown_variant("ValueType"))?;
-                format!("rt::ValueType::collection(rt::CollectionType::new({}, {child}, rebuild_cardinality({minimum}, {maximum})?))", collection_kind_path(kind)?)
+                let bound = match bound {
+                    Some(bound) => format!(
+                        "Some(rebuild_cardinality({}, {})?)",
+                        bound.minimum(), bound.maximum()
+                    ),
+                    None => "None".to_owned(),
+                };
+                format!("exact::ValueType::collection(exact::CollectionType::new({}, {child}, {bound}))", collection_kind_path(kind)?)
             }
             Task::Value(value_type) => match value_type {
-                ValueType::Boolean => "rt::ValueType::Boolean".to_owned(),
-                ValueType::Integer => "rt::ValueType::Integer".to_owned(),
+                ValueType::Boolean => "exact::ValueType::Boolean".to_owned(),
+                ValueType::Integer => "exact::ValueType::Integer".to_owned(),
                 ValueType::Int(interval) => {
-                    format!("rt::ValueType::Int({})", render_interval(interval))
+                    format!("exact::ValueType::Int({})", render_interval(interval))
                 }
                 ValueType::Rational(domain) => format!(
-                    "rt::ValueType::Rational(rebuild_rational({}, {})?)",
+                    "exact::ValueType::Rational(rebuild_rational({}, {})?)",
                     render_interval(domain.numerator()),
                     render_interval(domain.denominator())
                 ),
                 ValueType::Decimal(decimal) => {
-                    format!("rt::ValueType::Decimal({})", render_decimal_type(decimal)?)
+                    format!("exact::ValueType::Decimal({})", render_decimal_type(decimal)?)
                 }
-                ValueType::Float(exact::IeeeWidth::Binary32) => {
-                    "rt::ValueType::Float(exact::IeeeWidth::Binary32)".to_owned()
-                }
-                ValueType::Float(exact::IeeeWidth::Binary64) => {
-                    "rt::ValueType::Float(exact::IeeeWidth::Binary64)".to_owned()
+                ValueType::Float(float) => {
+                    let width = match float.width() {
+                        exact::IeeeWidth::Binary32 => "exact::IeeeWidth::Binary32",
+                        exact::IeeeWidth::Binary64 => "exact::IeeeWidth::Binary64",
+                    };
+                    format!("exact::ValueType::Float(exact::FloatType::new({width}, {}))", rounding_path(float.rounding())?)
                 }
                 ValueType::Quantity(_) => {
                     return Err(RenderError::UnsupportedValueType { family: "quantity" });
                 }
                 ValueType::Text(text_type) => format!(
-                    "rt::ValueType::Text(rebuild_text({}, {}, {})?)",
+                    "exact::ValueType::Text(rebuild_text({}, {}, {})?)",
                     text_type.min(),
                     text_type.max(),
                     profile_path(text_type.profile())?
                 ),
-                ValueType::Enum(key) => format!("rt::ValueType::Enum({})", render_key(*key)),
+                ValueType::Enum(shape) => {
+                    let variants = shape.variants().map(|variant| {
+                        let bytes = variant.as_bytes().iter().map(|byte| byte.to_string()).collect::<Vec<_>>().join(", ");
+                        format!("exact::VariantId::from_digest([{bytes}])")
+                    }).collect::<Vec<_>>().join(", ");
+                    format!("exact::ValueType::Enum(exact::EnumShape::new({}, vec![{variants}]))", shape.is_ordered())
+                },
                 ValueType::Option(payload) => {
                     tasks.push(Task::FinishOption);
                     tasks.push(Task::Value(payload));
                     continue;
                 }
                 ValueType::Composite(key) => {
-                    format!("rt::ValueType::Composite({})", render_key(*key))
+                    format!("exact::ValueType::Composite({})", render_key(*key))
                 }
                 ValueType::Collection(collection) => {
                     tasks.push(Task::FinishCollection {
                         kind: collection.kind(),
-                        minimum: collection.bound().minimum(),
-                        maximum: collection.bound().maximum(),
+                        bound: collection.bound(),
                     });
                     tasks.push(Task::Value(collection.element()));
                     continue;
@@ -2086,7 +2096,7 @@ fn render_key(key: NodeKey) -> String {
         .map(|byte| byte.to_string())
         .collect::<Vec<_>>()
         .join(", ");
-    format!("rt::NodeKey::from_bytes([{bytes}])")
+    format!("exact::NodeKey::from_bytes([{bytes}])")
 }
 
 fn collection_kind_path(kind: CollectionKind) -> Result<&'static str, OracleGenerationError> {
@@ -2643,8 +2653,8 @@ mod tests {
                 let copy = value_type.clone();
                 assert_eq!(copy, value_type);
                 let rendered = render_value_type(&value_type).expect("deep Option renders");
-                assert_eq!(rendered.matches("rt::ValueType::option(").count(), DEPTH);
-                assert!(rendered.contains("rt::ValueType::Boolean"));
+                assert_eq!(rendered.matches("exact::ValueType::option(").count(), DEPTH);
+                assert!(rendered.contains("exact::ValueType::Boolean"));
                 assert!(rendered.len() < MAX_GENERATED_SOURCE_BYTES);
                 drop(copy);
                 drop(value_type);
@@ -3000,23 +3010,23 @@ mod tests {
         let test = format!(
             r#"
 use quire_composite_equality_oracles::{{environment_test0, oracle_test0}};
-use quire_contract_runtime::exact as rt;
+use quire_semantic_value::declaration as sv;
 use quire_exact as exact;
 
 #[test]
 fn deep_matches_shallow() {{
     std::thread::Builder::new().stack_size(512 * 1024).spawn(|| {{
     let deep = environment_test0().expect("deep environment");
-    let deep_key = rt::NodeKey::from_hex("{}").expect("deep key");
+    let deep_key = exact::NodeKey::from_hex("{}").expect("deep key");
     let deep_value = deep.record(deep_key, vec![]).expect("absent optional field");
-    let shallow_key = rt::NodeKey::from_hex("{}").expect("shallow key");
-    let shallow = rt::TypeEnvironment::new(vec![rt::CompositeDeclaration::new(
+    let shallow_key = exact::NodeKey::from_hex("{}").expect("shallow key");
+    let shallow = sv::TypeEnvironment::new(vec![sv::CompositeDeclaration::new(
         shallow_key,
         "shallow",
-        rt::CompositeShape::Record(vec![rt::FieldDeclaration::new(
-            "next", rt::ValueType::Boolean, rt::Presence::Optional,
+        sv::CompositeShape::Record(vec![sv::FieldDeclaration::new(
+            "next", exact::ValueType::Boolean, exact::Presence::Optional,
         )]),
-    )], core::iter::empty::<rt::ObjectTypeDeclaration>()).expect("shallow environment");
+    )], core::iter::empty::<sv::ObjectTypeDeclaration>()).expect("shallow environment");
     let shallow_value = shallow.record(shallow_key, vec![]).expect("absent optional field");
     let limits = exact::ScalarLimits {{
         integer_bits: u64::MAX, decimal_digits: u64::MAX,
@@ -3027,10 +3037,11 @@ fn deep_matches_shallow() {{
     }};
     let actual = oracle_test0(&deep, &deep_value, &deep_value, &mut exact::Meter::new(limits));
     let expected = shallow.check_equality(
-        rt::EqualityOperator::Equal,
-        rt::EqualityOperand::typed(rt::ValueType::Composite(shallow_key)),
-        rt::EqualityOperand::typed(rt::ValueType::Composite(shallow_key)),
-    ).expect("shallow equality").evaluate(&shallow_value, &shallow_value, &mut exact::Meter::new(limits));
+        sv::EqualityOperator::Equal,
+        sv::EqualityOperand::typed(exact::ValueType::Composite(shallow_key)),
+        sv::EqualityOperand::typed(exact::ValueType::Composite(shallow_key)),
+        &quire_semantic_value::enumeration::EnumMemberIndex::default(),
+    ).expect("shallow equality").evaluate(&shallow, &shallow_value, &shallow_value, &mut exact::Meter::new(limits));
     assert_eq!(actual, expected);
     assert_eq!(actual, exact::Outcome::Completed(true));
     }}).expect("runtime worker starts").join().expect("runtime fits 512 KiB");
@@ -3347,11 +3358,11 @@ fn deep_matches_shallow() {{
     }
 
     fn quantity() -> ValueType {
-        ValueType::Quantity(rt::QuantityUnit::Compound(rt::CompoundUnit::dimensionless()))
+        ValueType::Quantity(quire_contract_runtime::exact::QuantityUnit::Compound(quire_contract_runtime::exact::CompoundUnit::dimensionless()))
     }
 
     fn reference() -> ValueType {
-        ValueType::Reference(NodeKey::from_bytes([7; 32]))
+        ValueType::Reference(exact::EffectiveId::from_digest([7; 32]))
     }
 
     fn node_id(digit: char) -> CheckedNodeId {
@@ -3426,9 +3437,9 @@ fn deep_matches_shallow() {{
     fn rendered_item() -> RenderedItem {
         RenderedItem {
             composites: Vec::new(),
-            left_source: "rt::ValueType::Integer".to_owned(),
+            left_source: "exact::ValueType::Integer".to_owned(),
             left_target: None,
-            right_source: "rt::ValueType::Integer".to_owned(),
+            right_source: "exact::ValueType::Integer".to_owned(),
             right_target: None,
         }
     }

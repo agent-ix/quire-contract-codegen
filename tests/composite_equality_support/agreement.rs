@@ -36,7 +36,7 @@ fn enum_status_member_json(case: &str) -> JsonValue {
     json!({
         "version": "quire.enum-member-node/v1",
         "declaration_node_id": {
-            "domain": quire_contract_runtime::exact::NODE_KEY_DOMAIN,
+            "domain": quire_exact::NODE_KEY_DOMAIN,
             "digest": crate::generated::ENUM_TYPE_DIGEST,
         },
         "case": case,
@@ -472,12 +472,12 @@ macro_rules! shared_helpers {
 }
 
 pub mod rt_side {
-    pub use quire_contract_runtime::exact::*;
-    pub use quire_exact::{
-        admit_text, CardinalityBound, ChargePoint, CollectionKind, Decimal, DecimalType,
-        InjectedDenial, Integer, IntegerInterval, LimitKind, Meter, Outcome, Rational,
-        RationalDomain, Refusal, RoundingMode, ScalarLimits, TextPayload, TextProfile, TextType,
+    pub use quire_semantic_value::declaration::{
+        CompositeDeclaration, CompositeShape, EqualityOperand, EqualityOperator, FieldDeclaration,
+        ObjectTypeDeclaration, TypeEnvironment,
     };
+    pub use quire_semantic_value::enumeration::{EnumDeclaration, EnumValue};
+    pub use quire_exact::*;
     shared_helpers!();
 
     /// The base package's `Example.Phase` declaration, under its node key
