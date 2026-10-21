@@ -1,0 +1,219 @@
+<!-- reviewer repo=agent-ix/quire-contract-codegen visibility=public quoin=0.28.4 module=spec-artifacts-process@b82e42e893612b4b4ee94127714b4577ee893502 id=SR-15331 method=spec-review/architecture-evaluation lang=spec pr=quire-contract-codegen#504 model=gpt-6.1-sol run=ee04c2e1-a216-4171-b1d1-5ad7837787dc -->
+
+No findings.
+
++++ [reviewer data]
+
+```yaml
+clean: true
+scope:
+- id: spec/assurance/AD-006-admitted-native-integer-oracles.md#unit-1
+  path: spec/assurance/AD-006-admitted-native-integer-oracles.md
+  role: examined
+  excerpt: 'Peter approved IR-705 option 2: a kernel-owned admitted bounded-native
+    API with a proven refinement to BigInt, followed by genuine IR-705, IR-917 and
+    IR-948 proof qualification. CG selects and renders that production API from authentic
+    IR-admitted CheckedPackageV2 data. quire-exact owns native value/operation admission,
+    arithmetic and Meter semantics. This decision does not authorize a private CG
+    evaluator or replace existing general Integer and as_big contracts.'
+- id: spec/assurance/AD-006-admitted-native-integer-oracles.md#unit-2
+  path: spec/assurance/AD-006-admitted-native-integer-oracles.md
+  role: examined
+  excerpt: The views below separate authentic graph admission, production native execution
+    and independent proof qualification. Each retains its own owner and refusal boundary.
+- id: spec/assurance/AD-006-admitted-native-integer-oracles.md#unit-3
+  path: spec/assurance/AD-006-admitted-native-integer-oracles.md
+  role: examined
+  excerpt: CG reads operand intervals and every reachable arithmetic operation from
+    the admitted graph through the existing IR-owned seams. It derives conservative
+    interval bounds in expression order, preserving source identities and parameter
+    relationships. The native capacity request includes intermediate results, not
+    only the final declared domain. The kernel checks Add/Subtract/Multiply/Negate
+    interval capacity and creates a checked operation plan; per-call membership creates
+    an opaque admitted operation. A plan and a value from unrelated domains cannot
+    be combined without that check.
+- id: spec/assurance/AD-006-admitted-native-integer-oracles.md#unit-4
+  path: spec/assurance/AD-006-admitted-native-integer-oracles.md
+  role: examined
+  excerpt: Host admission derives canonical native endpoints from the genuine IR domains.
+    Generated production/proof code reconstructs the selected interval plan from those
+    native constant endpoints through the same checked kernel constructor, then admits
+    actual payloads before evaluation. Both constructors and operand admission remain
+    bounded-native on their successful paths. The host does not serialize an unchecked
+    capability and the emitted proof does not repeat general Integer/BigInt admission
+    or cache construction. This boundary must be evidenced in the actual generated
+    call graph.
+- id: spec/assurance/AD-006-admitted-native-integer-oracles.md#unit-5
+  path: spec/assurance/AD-006-admitted-native-integer-oracles.md
+  role: examined
+  excerpt: CG records the selected kernel capability and its input/result interval
+    decisions in the generated artifacts and identity inputs using the repository's
+    existing canonical identity mechanism. It does not invent checked node ids or
+    equate a caller descriptor with package admission. Any public struct/serialized
+    identity change follows the owning schema's compatibility rules rather than silently
+    changing a digest interpretation.
+- id: spec/assurance/AD-006-admitted-native-integer-oracles.md#unit-6
+  path: spec/assurance/AD-006-admitted-native-integer-oracles.md
+  role: examined
+  excerpt: Generated production native and Kani clients call the same kernel-owned
+    admitted operations with the real public Meter. Chained values remain native i128
+    carriers, without promotion into general Integer/cache on the successful arithmetic
+    path. Comparison and Boolean operations remain kernel-owned; subjects and independent
+    expected-value expressions preserve their existing distinct roles.
+- id: spec/assurance/AD-006-admitted-native-integer-oracles.md#unit-7
+  path: spec/assurance/AD-006-admitted-native-integer-oracles.md
+  role: examined
+  excerpt: A kernel capacity refusal is a typed generation/capability disposition
+    carrying the offending source and capacity reason, before artifact success. It
+    is distinct from IntegerOutOfDomain for a completed mathematical result outside
+    a declared semantic domain. The general exact route remains available under its
+    existing capability rules; selection failure is not proof success. No added assumption
+    may shrink the authored population to make a native plan admissible.
+- id: spec/assurance/AD-006-admitted-native-integer-oracles.md#unit-8
+  path: spec/assurance/AD-006-admitted-native-integer-oracles.md
+  role: examined
+  excerpt: Kernel qualification supplies machine-checked full-capacity refinement
+    against an independent mathematical abstraction of actual BigInt semantics; sampled
+    differential tests alone are not a universal proof. Kernel qualification proves
+    native admission and every operation against BigInt semantics over the full accepted
+    capacity, including real Meter/refusal refinement. CG qualification separately
+    obtains authentic QSL-emitted, IR-admitted inputs through the public generator
+    and installed backend. No generated fixture is hand-edited into a replacement
+    evaluator, and no healthy proof becomes igno
+- id: spec/assurance/AD-006-admitted-native-integer-oracles.md#unit-9
+  path: spec/assurance/AD-006-admitted-native-integer-oracles.md
+  role: examined
+  excerpt: The route can change generated oracle source bytes and native ABI carriers.
+    Those changes are recorded and reviewed. It preserves the original proposition,
+    selected clause, input/domain bounds, compiled subject intent, independent oracle/expectation,
+    assertions, final completion cover and substantive mutants. The general-only route's
+    source bytes are not an acceptance oracle for this architecture change.
+- id: spec/kani/functional/FR-015-bounded-kani-obligations.md#unit-1
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: When selecting the additive kernel facility of [quire-exact FR-384](ix://agent-ix/quire-exact/FR-384),
+    CG SHALL obtain finite operand domains and operation structure from the authentic
+    CheckedPackageV2 and existing IR-owned accessors, preserve every original input
+    valuation, and request kernel capacity admission for every reachable intermediate.
+    CG SHALL render the same production kernel API in native and proof clients, retain
+    the real Meter and semantic result-domain refusals, and return a typed source-associated
+    capability/generation refusal if capacity or value admission fails. It SHALL NOT
+- id: FR-015-AC-125
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: Authentic QSL-emitted, IR-admitted bounded integer scalar and clause inputs
+    generate kernel-owned native carriers and checked operation plans for all intermediates,
+    with original graph identities/domains retained. Reversed/oversized capacities
+    and operands outside a selected plan yield typed source-associated refusal, never
+    narrowed assumptions or a completed value. Native production and proof artifacts
+    use the same kernel implementation and real Meter; inspection finds no copied
+    arithmetic or verification-only evaluator.
+- id: FR-015-AC-126
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: Genuine TC-027 healthy and bound mutant, TC-025 arithmetic mutant, IR-917
+    clause implication and IR-948 V2 pre/post/invariant profiles regenerate through
+    public CG with the reviewed admitted kernel API. Original semantic domains, selected
+    propositions/clauses, independent expected values, subject controls, assertions,
+    final completion covers and existing solver/unwind/time settings remain. Each
+    healthy profile verifies at 16 GiB; each required substantive mutant falsifies
+    with original-domain native playback. The IR-948 impossible-precondition control
+    must complete as CoverUnsatisfied at the s
+- id: FR-015-AC-127
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: End-to-end denied/cancelled admitted-native controls retain all real Meter
+    counters, charge order, complete incomplete/refusal fields and admitted prefixes
+    at every reached charge point, compared with independent normative expectations
+    and the general exact route. A semantic result-domain failure remains after arithmetic
+    charge and before result-retain, separately from generation-time native-capacity
+    failure.
+- id: spec/kani/matrix/TC-027-kani-execution-evidence.md#unit-1
+  path: spec/kani/matrix/TC-027-kani-execution-evidence.md
+  role: examined
+  excerpt: After reviewed [kernel FR-384](ix://agent-ix/quire-exact/FR-384) refinement
+    evidence, regenerate the authentic TC-027 healthy/bound-mutant controls, TC-025
+    arithmetic mutant, IR-917 clause implication and IR-948 V2 contract pre/post/invariant
+    profiles through the public generator under [AD-006](../../assurance/AD-006-admitted-native-integer-oracles.md).
+    Record the reviewed kernel identity and native-capability selection without copying
+    runtime source or mutating historical fixtures. Preserve original populations,
+    semantic bounds, clauses, independent oracle/expectation, compiled subject contro
+- id: spec/kani/matrix/TC-027-kani-execution-evidence.md#unit-2
+  path: spec/kani/matrix/TC-027-kani-execution-evidence.md
+  role: examined
+  excerpt: Run one backend job at a time with the original per-profile solver, unwind
+    and time settings and a measured 16 GiB memory envelope. Require healthy Verified
+    with cover satisfied and every specified mutant Falsified with concrete original-domain
+    native playback; a successful compiler or generation Boolean is insufficient.
+    Record actual terminal outcome, peak and confirmed cleanup per proof. Diagnostic
+    runs with larger authorized ceilings are attributed separately and cannot establish
+    16 GiB fit. Exercise real cumulative Meter exact/one-less limits, cancellation,
+    each named injected denial and d
+- id: spec/kani/matrix/TC-027-kani-execution-evidence.md#unit-3
+  path: spec/kani/matrix/TC-027-kani-execution-evidence.md
+  role: examined
+  excerpt: For IR-948, retain the authentic impossible-precondition package and require
+    CoverUnsatisfied at the same 16 GiB ceiling and original unwind8. This is an adverse
+    cover control rather than an arithmetic falsification witness. Healthy Verified
+    alone does not complete the profile pair.
+- id: src/oracle/boolean_v1.rs
+  path: src/oracle/boolean_v1.rs
+  role: context_only
+  excerpt: "//! Deterministic, fail-closed lowering for Boolean clauses over Boolean\
+    \ and integer values.\n\nuse std::collections::BTreeMap;\n\nuse crate::{\n   \
+    \ core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES},\n    core::canonical::artifact_json,\n\
+    \    core::diagnostic::{GenerationDiagnostic, GenerationErrorCode},\n    core::naming::{observation_name,\
+    \ oracle_symbol, reference_identifier},\n    core::source_map::{SourceProbe, SourceRegion},\n\
+    };\nuse quire_contract_model::{\n    BooleanOperator, ClauseId, ComparisonOperator,\
+    \ DefinednessObligationKind, DependencyIdentity,\n    DependencyKind, Expression,\
+    \ Expression"
+- id: src/kani/generate/clause.rs
+  path: src/kani/generate/clause.rs
+  role: context_only
+  excerpt: "//! The V1 clause lowering that the precondition and contract families\
+    \ share: the lowered clause\n//! form, the clause oracle, the subject ABI and\
+    \ its slots.\n\nuse std::collections::BTreeMap;\n\nuse quire_contract_model::{\n\
+    \    BoundClause, BoundPackage, ClauseKind, ClauseRef, DependencyIdentity, DependencyKind,\n\
+    \    ExecutionPoint, StateObservation,\n};\n\nuse crate::{\n    core::diagnostic::{GenerationDiagnostic,\
+    \ GenerationErrorCode},\n    core::naming::{oracle_symbol, reference_identifier},\n\
+    \    kani::abi::{\n        i64_literal, readable_component, KaniBindingRole, KaniIntegerBounds,\
+    \ KaniPrimitiveType,"
+- id: src/kani/generate/contract.rs
+  path: src/kani/generate/contract.rs
+  role: context_only
+  excerpt: "//! The contract family: rendering the Kani contract harness of a V1 postcondition\
+    \ or invariant\n//! clause (FR-015).\n\nuse crate::{\n    kani::abi::i64_literal,\n\
+    \    kani::generate::clause::{call, symbolic_arguments, Abi, LoweredClause, SlotContext},\n\
+    \    kani::identity::ObligationKind,\n};\n\n/// The non-vacuity cover every contract\
+    \ harness ends with. It is reachable only on a path where\n/// the IR argument\
+    \ bounds and every `requires` hold together, so an unsatisfied cover means the\n\
+    /// `ensures` was never checked.\nconst CONTRACT_COVER: &str = \"contract requires\
+    \ and IR bounds are jointly satisfiable"
+- id: src/oracle/scalar/mod.rs
+  path: src/oracle/scalar/mod.rs
+  role: context_only
+  excerpt: '//! Exact complete-V1 scalar oracle generation from CheckedPackage V2
+    (FR-014).
+
+    //!
+
+    //! The V2 transport names only an operator class (`binary`, `unary`,
+
+    //! `convert`) for a scalar expression, not the operation law. Each request
+
+    //! item therefore pairs a checked node with a typed [`ExactScalarOperation`]
+
+    //! built from Contract Runtime `exact` values, and this module cross-checks
+
+    //! that descriptor against the lowered node before emitting anything.
+
+    //!
+
+    //! Every parameter the node can carry is checked against the IR: the
+
+    //! descriptor''s integer, rational and decimal domains, IEEE rounding '
+findings: []
+bindings: []
+```
+
++++

@@ -1,0 +1,22 @@
+<!-- reviewer-dispositions repo=agent-ix/quire-contract-codegen visibility=public quoin=0.28.4 module=spec-artifacts-process@b82e42e893612b4b4ee94127714b4577ee893502 id=SR-15327 round=1 model=gpt-6.1-sol run=2cd63a51-54f0-4e4c-b4c4-c2b8832000bf -->
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | Moved unchanged into the main acceptance table; independently recomputed Test criterion. |
+
++++ [reviewer data]
+
+```yaml
+dispositions:
+- fnd: FND-001
+  outcome: fixed
+  after_excerpt: Authentic QSL-emitted, IR-admitted bounded integer scalar and clause
+    inputs generate kernel-owned native carriers and checked operation plans for all
+    intermediates, with original graph identities/domains retained. Reversed/oversized
+    capacities and operands outside a selected plan yield typed source-associated
+    refusal, never narrowed assumptions or a completed value. Native production and
+    proof artifacts use the same kernel implementation and real Meter; inspection
+    finds no copied arithmetic or verification-only evaluator.
+```
+
++++
