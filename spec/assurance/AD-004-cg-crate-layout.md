@@ -344,6 +344,29 @@ generation. `kani --> oracle` is the scalar family embedding the FR-014 oracle. 
 is the identity and binding types the witness decode and replay read. `routed --> ...` is the
 `BackendKind` match calling each generator.
 
+The planned FR-018 admitted-context migration preserves this internal graph:
+`oracle` accepts the external root `qsl_replay::AdmittedContext`, not CG's peer
+`replay::OriginalCompositeEqContext`. The existing source-retaining builder
+in `replay` authenticates the original source/lock, calls root
+`compile_admitted` under the admitted request limits, compares the complete
+original checked package, and retains the genuine compilation/context pair.
+A successful request exposes its immutable context to the caller, which
+passes it to generation. This adds no `oracle --> replay` or QSL
+implementation-layer edge and no second node inventory or identity issuer.
+
+Generated equality's prepared environment privately holds the facade context,
+QSV environment and complete enum index plus package/item binding. Exact
+kernel types/meters/outcomes come from `quire-exact`; QSV owns declaration,
+equality and enum APIs; Runtime imports name only its remaining functions.
+`core/profile` remains the sole emitted-manifest authority. Equality's
+manifest/scratch consumers add root `qsl-replay` when they name its context;
+ordinary scalar Boolean/integer proof manifests/body acquire no such leg.
+No emitted key constructor or backend decoder is permitted. The enum-only
+facade does not supply record/tuple keys; that precise owner-capability gap
+is separate unresolved migration work, preserving existing composite routes.
+These changes are planned until native generated ABI and owner dependency
+qualification passes; they are not evidence of TC025/TC027 proof success.
+
 Rules, each checkable:
 
 - A directory imports only the directories to its right. `strategy`, `evidence` and `kani` are peers

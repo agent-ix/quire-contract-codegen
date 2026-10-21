@@ -25,6 +25,11 @@ against independently constructed native runs whose descriptor comes from the
 request, so a generator change to an emitted operator, operand order or
 descriptor fails step 4. Determinism is checked by regeneration in step 2.
 
+The FR-018 admitted-context and direct-owner procedure amendments are
+PLANNED/UNRUN until CG implements them and qualifies the generated ABI.
+The existing full record/tuple/recursive/collection corpus remains required;
+the enum-only owner facade does not excuse dropping it.
+
 ## Test Procedure
 
 1. Build an admitted V2 package holding `binary` expression nodes over: record,
@@ -46,7 +51,8 @@ descriptor fails step 4. Determinism is checked by regeneration in step 2.
    id, operator rank, then each operand's source-type and conversion-target node
    ids, every node id compared in node-id order; the expression node
    id alone ties those two entries — reconstructed declaration keys against
-   `NodeKey::from_hex` of the V2 node ids, and `caller_declared` provenance.
+   the genuine owner-issued keys corresponding to exact V2 node identities,
+   without any backend key construction, and `caller_declared` provenance.
    Assert each entry's recorded descriptor is equal to the one the request
    supplied — operator, both operand source types, both conversion targets — and
    its recorded `EqualitySchedule` equal to `CheckedEquality::schedule()` of the
@@ -59,7 +65,8 @@ descriptor fails step 4. Determinism is checked by regeneration in step 2.
    the generated source contains no `unwrap`, `expect`, panicking index or
    charge or pair-count literal, and that the crate manifest declares
    `publish = false` and the runtime dependency (git source, `branch = "main"`, no pinned `rev`)
-   with the `exact` feature.
+   with the `exact` feature only for Runtime residue; direct exact/QSV and
+   equality's root replay dependency come from the same profile authority.
 4. Generate the corpus crate at test time, compile it with the agreement cases
    as its integration test, and execute it on the corpus vectors. For each vector compare the `Outcome<bool>`, the admitted
    charge sequence and the consumed counters against a direct call to
@@ -76,13 +83,14 @@ descriptor fails step 4. Determinism is checked by regeneration in step 2.
    `Outcome::Incomplete` naming that point and that the denied charge was not
    applied — every counter equal to those of the same run stopped immediately
    before that point, not to the counters at entry.
-6. Call each generated oracle whose operand types reach a declaration key with a
-   `TypeEnvironment` other than the one its environment constructor returns — an
+6. Call each generated oracle whose operand types reach a declaration key with
+   a genuine prepared wrapper whose environment is privately replaced by the
+   test fixture (no public raw wrapper/index constructor): an
    empty environment, and one omitting a key its operand types reach, and one
    declaring that closure under a different key; confirm `Outcome::Refused(Refusal::CheckedInvariant)`, no panic, and no charge
    admitted on the `Meter`. Assert that this is the emitted `check_type` calls
    deciding it, by confirming the same environments pass `check_equality`: that
-   call consults the environment only through `contains_ieee`, which returns
+   call uses the same genuine enum index and consults the environment through `contains_ieee`, which returns
    `false` for a composite key the environment does not hold, and
    `CheckedEquality::evaluate` takes no environment at all — so without
    `check_type` these vectors complete with a Boolean.
@@ -104,6 +112,36 @@ descriptor fails step 4. Determinism is checked by regeneration in step 2.
    declaration and over a record (each refused as unsupported `bounded_domain`).
    Name a `float_rounding` node over a `float64` scalar as a member: it reads as the
    float and the equality is refused as `OperatorIneligible`.
+
+   For FR-018-AC-14, separate bound reconstruction from intake and defensive
+   controls. First read valid `integer_range` and `collection_bounds` nodes
+   whose bodies contain exactly `min` then `max`, each a canonical integer
+   literal typed at the owning Integer node. Through normal lowering and
+   public generation, verify the exact original bound values and domains;
+   do not widen, reorder or substitute them. Keep the existing missing-bound
+   request/root-selection controls unchanged.
+
+   At Contract IR intake, independently reorder these bindings, replace one
+   with a bare literal, remove one, repeat one, and introduce an unlisted name.
+   Use an ungrouped bound node in otherwise valid wire. Refresh the
+   package-level canonical identity and matching identity-projection mirrors
+   while retaining the offending node key, so earlier identity checks do not
+   mask the derived closed-shape refusal. Do not ask a candidate-key helper
+   to manufacture a key for an invalid closed shape.
+   Require its `invalid_package` / `stale-node-key` refusal at the offending
+   node's `node_id`, with no admitted package. These rejected inputs never
+   call public CG generation and have no CG `UnreadableBound` disposition.
+   Do not attach an unrelated genuine context to claim a later refusal.
+
+   Retain private CG bound-parser/type-resolution tests with the same precise
+   malformed-bound assertions as defense against inconsistent internal input;
+   label them separately from the public valid-bound and IR-intake controls.
+   A private defense does not supply public-generator acceptance credit for
+   an input the reader rejects. This stage split applies only to
+   `integer_range` and `collection_bounds`. For `rational_range`,
+   `decimal_range` and `text_bounds`, preserve named lookup in any admitted
+   order and each genuinely reader-admitted unreadable-bound negative; do
+   not infer their admission or reader refusal from the two closed forms.
 
 9. Emitted-source scan (FR-018-AC-17). Read the `src/lib.rs` that
    `generate_composite_equality_oracles` returns for the step 1 package and assert
@@ -199,6 +237,11 @@ descriptor fails step 4. Determinism is checked by regeneration in step 2.
     non-sequence, remove or
     duplicate `min` or `max`, and make either bound non-integer; each affected item receives its
     typed malformed or bound refusal with no symbol while an unaffected sibling generates.
+    The `collection_bounds` malformed-name/order/shape controls at this private
+    seam are defensive parser evidence, not public-generator acceptance;
+    step 8 owns their separate IR-intake refusal and valid-bound controls.
+    This clarification does not reclassify the record optional-wrapper or
+    cycle controls.
     At the equality module's type-resolution seam, supply separate synthetic graphs with `Option`
     referring to itself and `Sequence` referring to itself, so earlier package admission cannot
     mask the resolver behavior. Assert each returns `TypeResolutionCycle` with the repeated node
@@ -257,6 +300,51 @@ descriptor fails step 4. Determinism is checked by regeneration in step 2.
     source bytes with a run without the refused request. As a separate
     control, request a temporal clause whose closure reaches a formula or
     fairness node and assert its existing QSL-121 blocker.
+
+### Package-bound enum migration controls
+
+Use authentic retained QSL source, original dependency provision and original
+request stage/replay limits. Call root `compile_admitted`, check the emitted
+and context package identities against the original checked-package identity,
+strictly re-read emitted bytes and compare the complete package with the
+original. Preserve original source-byte/owner and library-lock authentication;
+only a successfully authenticated request exposes `admitted_context()`.
+Exercise malformed source and dependency input (Package), QSL stage and
+above-reader resource refusal (Resource), a subsequent IR read stop
+(PackageReadLimit), and the typed internal Fault path;
+none exposes a partial successful context. Do not widen the current imported
+context guard without retaining its original admitted dependency packages.
+
+Run the real generated `environment_symbol(context)` and
+`oracle_symbol(prepared, left, right, meter)` ABI, with ordered and unordered
+enums including unused cases and a parameter without member literal nodes.
+Check canonical positions and original member identities against genuine
+facade/QSV values. Use same-spelled cases under distinct declarations to
+expose conflated identity. Reject a different package context before lookup;
+reject a different item/descriptor prepared wrapper before charging. Exercise
+Unknown declaration, Unknown case and Foreign direct/transitive dependency
+identities, preserving typed owning fields. A raw caller-built member index
+cannot satisfy the public ABI. Test-only inconsistent reconstruction must
+produce the specified typed error, never a default or empty index.
+
+Retain the empty/missing/wrong-key environment controls of step 6 and every
+charge-stop vector of step 5 with the same genuine index. Mutate generated
+operator, descriptor and case lookup independently so direct-vs-generated
+agreement fails. Check deterministic bytes and claim order after context
+threading, with no NodeKey constructor/decoder, generated nominal preimage,
+hash or ordinal-as-identity in emitted source. All helpers/modules receive
+the actual context; retaining one only on the planning side is a failing
+control. Source compilation occurs before oracle invocation, and the
+emitted oracle remains the implementation under test.
+
+The enum-only lookup cannot issue record/tuple keys. Record the missing
+owner lookup/preparation capability separately until it exists; preserve all
+original closure/cycle/bound/collection corpus requirements rather than
+accepting an Unsupported regression or synthetic key. Manifest/scratch checks
+cover equality's root replay dependency and scalar Boolean/integer proof
+bodies with a legitimate empty index and no added replay compile leg.
+Native enum results are not TC025/TC027 healthy/mutant proof receipts, and
+those original proof domains and controls remain unchanged.
 
 ## Expected Results
 
