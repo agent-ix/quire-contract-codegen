@@ -96,7 +96,7 @@ fn generate(
 ) -> CompositeEqualityOracles {
     let checked = checked(compiled, libraries);
     let items = enum_items(&checked, compiled.context());
-    generate_items(&checked, Some(compiled.context()), &items, &[]).expect("real enum generation")
+    generate_items_with_libraries(&checked, Some(compiled.context()), &items, &[], Default::default(), libraries).expect("real enum generation")
 }
 
 fn enum_items(
@@ -150,6 +150,25 @@ pub(super) fn generate_items_with_limits(
     extra_roots: &[CheckedNodeId],
     limits: quire_contract_codegen::CompositeEqualityLimits,
 ) -> Result<CompositeEqualityOracles, OracleGenerationError> {
+    generate_items_with_libraries(checked, context, items, extra_roots, limits, &[])
+}
+
+/// Retain real original library packages for the public IR read of a lowered import lock.
+/// This changes neither the source package nor the admitted context's ownership.
+pub(super) fn generate_items_with_libraries(
+    checked: &CheckedPackageV2,
+    context: Option<&qsl_replay::AdmittedContext>,
+    items: &[CompositeEqualityItem],
+    extra_roots: &[CheckedNodeId],
+    limits: quire_contract_codegen::CompositeEqualityLimits,
+    libraries: &[(String, qsl_replay::AdmittedCompilation)],
+) -> Result<CompositeEqualityOracles, OracleGenerationError> {
+    let retained = libraries.iter().enumerate().map(|(position, (identity, library))| {
+        (identity.as_str(), self::checked(library, &libraries[..position]))
+    }).collect::<Vec<_>>();
+    let dependencies = retained.iter().map(|(identity, package)| {
+        (*identity, quire_contract_model::ContractDependencyInput { identity: *identity, package })
+    }).collect::<ContractDependencies<'_>>();
     let mut roots = items
         .iter()
         .map(|item| item.node_id.clone())
@@ -197,7 +216,7 @@ pub(super) fn generate_items_with_limits(
             .canonical_bytes()
             .expect("actual lowered bytes"),
         CheckedPackageReadLimits::bounded(),
-        &ContractDependencies::new(),
+        &dependencies,
     ) {
         ContractPackageReadResult::Admitted(package) => package,
         other => panic!("lowered real source must admit: {other:?}"),

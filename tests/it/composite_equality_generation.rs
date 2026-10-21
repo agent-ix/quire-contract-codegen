@@ -296,6 +296,7 @@ fn generate_with_context(
 /// Each request retains its own original source and capability; no synthetic graph is
 /// attached to a context. The mixed case exercises ordering over distinct expression nodes.
 fn genuine_host_case(case: &str, reversed: bool) -> CompositeEqualityOracles {
+    eprintln!("genuine host fixture case={case}; reversed={reversed}");
     let compiled = if case == "mixed" {
         super::admitted_composite_fixture::compile(
             super::admitted_composite_fixture::SOURCE,

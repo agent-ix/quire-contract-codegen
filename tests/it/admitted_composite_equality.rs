@@ -2,7 +2,7 @@
 //! Authentic source-backed record/tuple generation and native owner agreement.
 use super::admitted_composite_fixture as fixture;
 use super::admitted_enum_equality::{
-    checked, direct_source_item, generate_items, generate_items_with_limits,
+    checked, direct_source_item, generate_items, generate_items_with_libraries,
 };
 use ix_trace_rs::trace;
 use quire_contract_codegen::{
@@ -42,7 +42,7 @@ fn genuine_record_tuple_closure_and_native_oracles_use_original_owner_keys() {
                 item
             })
             .collect::<Vec<_>>();
-        let generated = generate_items(&package, Some(compiled.context()), &items, &[])
+        let generated = generate_items_with_libraries(&package, Some(compiled.context()), &items, &[], Default::default(), &libraries)
             .expect("real complete composite closure");
         assert_eq!(generated.claim_map.items.len(), FUNCTIONS.len());
         let mut names = String::new();
@@ -72,7 +72,7 @@ fn genuine_record_tuple_closure_and_native_oracles_use_original_owner_keys() {
         let reverse = items.iter().rev().cloned().collect::<Vec<_>>();
         assert_eq!(
             generated,
-            generate_items(&package, Some(compiled.context()), &reverse, &[])
+            generate_items_with_libraries(&package, Some(compiled.context()), &reverse, &[], Default::default(), &libraries)
                 .expect("same canonical request")
         );
         super::exact_scalar_agreement::run_agreement_cases(
@@ -85,14 +85,14 @@ fn genuine_record_tuple_closure_and_native_oracles_use_original_owner_keys() {
             "tests/admitted_composite_support/agreement_cases.rs",
         );
         let selected = &items[0];
-        let absent = generate_items(&package, None, std::slice::from_ref(selected), &[])
+        let absent = generate_items_with_libraries(&package, None, std::slice::from_ref(selected), &[], Default::default(), &libraries)
             .expect("typed missing capability");
         assert!(
             matches!(&absent.claim_map.items[0].result, ClaimDisposition::Refused {
             refusal: CompositeEqualityRefusal::MissingAdmittedContext { type_node_id }
         } if type_node_id == &selected.left.source_type)
         );
-        let exhausted = generate_items_with_limits(
+        let exhausted = generate_items_with_libraries(
             &package,
             None,
             std::slice::from_ref(selected),
@@ -100,8 +100,7 @@ fn genuine_record_tuple_closure_and_native_oracles_use_original_owner_keys() {
             CompositeEqualityLimits {
                 type_resolution_work_units: 0,
                 ..Default::default()
-            },
-        )
+            }, &libraries)
         .expect("work refusal before capability lookup");
         assert!(matches!(
             &exhausted.claim_map.items[0].result,
@@ -119,7 +118,7 @@ fn genuine_record_tuple_closure_and_native_oracles_use_original_owner_keys() {
         );
         for requested in [Vec::new(), vec![selected.clone()]] {
             assert!(matches!(
-                generate_items(&package, Some(other.context()), &requested, &[]),
+                generate_items_with_libraries(&package, Some(other.context()), &requested, &[], Default::default(), &libraries),
                 Err(OracleGenerationError::ContextPackageMismatch { .. })
             ));
         }
@@ -274,7 +273,7 @@ fn genuine_composite_host_generation_preserves_closure_and_capability_ordering()
                 item
             })
             .collect::<Vec<_>>();
-        let generated = generate_items(&package, Some(compiled.context()), &items, &[])
+        let generated = generate_items_with_libraries(&package, Some(compiled.context()), &items, &[], Default::default(), &libraries)
             .expect("real complete composite closure");
         assert_eq!(generated.claim_map.items.len(), FUNCTIONS.len());
         for claim in &generated.claim_map.items {
@@ -295,18 +294,18 @@ fn genuine_composite_host_generation_preserves_closure_and_capability_ordering()
         let reverse = items.iter().rev().cloned().collect::<Vec<_>>();
         assert_eq!(
             generated,
-            generate_items(&package, Some(compiled.context()), &reverse, &[])
+            generate_items_with_libraries(&package, Some(compiled.context()), &reverse, &[], Default::default(), &libraries)
                 .expect("same canonical request")
         );
         let selected = &items[0];
-        let absent = generate_items(&package, None, std::slice::from_ref(selected), &[])
+        let absent = generate_items_with_libraries(&package, None, std::slice::from_ref(selected), &[], Default::default(), &libraries)
             .expect("typed missing capability");
         assert!(
             matches!(&absent.claim_map.items[0].result, ClaimDisposition::Refused {
             refusal: CompositeEqualityRefusal::MissingAdmittedContext { type_node_id }
         } if type_node_id == &selected.left.source_type)
         );
-        let exhausted = generate_items_with_limits(
+        let exhausted = generate_items_with_libraries(
             &package,
             None,
             std::slice::from_ref(selected),
@@ -314,8 +313,7 @@ fn genuine_composite_host_generation_preserves_closure_and_capability_ordering()
             CompositeEqualityLimits {
                 type_resolution_work_units: 0,
                 ..Default::default()
-            },
-        )
+            }, &libraries)
         .expect("work refusal before capability lookup");
         assert!(matches!(
             &exhausted.claim_map.items[0].result,
@@ -333,7 +331,7 @@ fn genuine_composite_host_generation_preserves_closure_and_capability_ordering()
         );
         for requested in [Vec::new(), vec![selected.clone()]] {
             assert!(matches!(
-                generate_items(&package, Some(other.context()), &requested, &[]),
+                generate_items_with_libraries(&package, Some(other.context()), &requested, &[], Default::default(), &libraries),
                 Err(OracleGenerationError::ContextPackageMismatch { .. })
             ));
         }
