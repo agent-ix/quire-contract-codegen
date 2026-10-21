@@ -304,7 +304,7 @@ mod tests {
         }
     }
 
-    #[trace("TC-023")]
+    #[trace("TC-023", "FR-015-AC-82")]
     #[test]
     fn supported_profile_keeps_unowned_and_mismatched_dispatch_refusals() {
         let (profile, _, input) = fixture(|module| CapabilityDisposition::Supported {
