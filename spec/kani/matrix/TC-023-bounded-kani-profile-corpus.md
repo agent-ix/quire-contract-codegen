@@ -26,8 +26,15 @@ A trace tag alone does not establish installed-backend proof evidence.
 
 ## Test Procedure
 
-Request supported, refused and inconclusive constructs from one selected
-profile in a reordered subset; submit empty, duplicate and unknown names.
+Request supported and refused constructs from one selected profile in a
+reordered subset; compare the returned modules and cause codes with the selected
+entries. Submit empty, duplicate and unknown names. For the planned IR-615
+cleanup, at Contract IR's owning
+profile reader, submit the removed `inconclusive` disposition with a cause code;
+require rejection before a profile can be classified or lowered. Inspect the
+retained profile classifier and lowerers to confirm that no profile disposition
+or profile-supplied code constructs an `Inconclusive` run outcome. This check
+does not replace installed-backend proof-vacuity classification.
 For each retained CG-owned semantic family, exercise the admitted boundary and each
 typed refusal of FR-015-AC-86 through FR-015-AC-89. Generate the oracle,
 finite strategy, Kani harness and proof graph from one validated Contract IR
@@ -67,7 +74,14 @@ real-Kani false graph and collection cases replay their actual playback against
 the selected source package and settle as reproduced typed violations;
 wrong-harness and wrong-package evidence is refused. This does not claim
 state/frame corpus coverage. Every profile request has one ordered disposition per construct, or one typed
-request refusal. Each successful lowering returns the exact family result and
+request refusal. The census preserves each admitted `Supported` module and
+`Refused` cause code exactly. The removed `inconclusive` profile disposition is
+rejected by the owning reader, with no admitted profile or manufactured run
+outcome. Full `unsupported` matrix entries, capability-kind warnings and
+no-artifact negotiation semantics remain planned under Contract IR FR-029-AC-2;
+this cleanup does not establish that coverage. The IR-615 cleanup remains
+planned until its producer and consumer changes are implemented. Each successful
+lowering returns the exact family result and
 each adverse case its original typed non-Boolean refusal, with no partial
 artifact or proof claim. One admitted corpus case has all generated artifacts and
 one generated case classification until AD-004 step 4g retires that path;
