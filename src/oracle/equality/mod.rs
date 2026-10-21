@@ -3424,7 +3424,7 @@ fn deep_matches_shallow() {{
     fn quantity() -> ValueType {
         ValueType::Quantity(
             quire_semantic_value::unit::compound_unit_id(
-                core::iter::empty::<([u8; 32], &Integer)>(),
+                core::iter::empty::<([u8; 32], &exact::Integer)>(),
                 quire_semantic_value::semantic_node::IDENTITY_LIMITS,
             )
             .expect("the actual owner's empty compound unit is dimensionless"),
