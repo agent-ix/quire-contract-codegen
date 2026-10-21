@@ -497,76 +497,96 @@ fn qsl_state_invariant_is_a_separate_v2_assertion_obligation() {
     assert!(harness.rust.contents.contains(&oracle.source));
 }
 
+fn run_real_v2_clause(twin: Twin, clause_name: &str) -> KaniRunOutcome {
+    let (package, clause) = twin.emitted_package(clause_name);
+    let item = ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+    };
+    let outcome = negotiate_kani_obligations(&KaniObligationRequest {
+        ceilings: crate::common::proof_ceilings::proof_ceilings(),
+        items: std::slice::from_ref(&item),
+        subject_path: REQUEST_SUBJECT,
+        unwind: 8,
+    })
+    .expect("valid V2 clause request");
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("the V2 clause is admitted");
+    };
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("one V2 clause harness");
+    };
+    let directory = scratch("v2-clause");
+    fs::write(directory.join("src/lib.rs"), &harness.rust.contents).expect("generated crate");
+    super::scratch_crate::write_manifest(
+            &directory,
+            &format!(
+                "[package]\nname = \"generated-v2-clause\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
+                super::scratch_crate::runtime_dependency(&["exact"])
+            ),
+        );
+    fs::write(
+        directory.join("build.rs"),
+        "fn main() { println!(\"cargo:rustc-check-cfg=cfg(kani)\"); }\n",
+    )
+    .expect("build script");
+    let target = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("v2-clause-kani");
+    let cancel = quire_exact::Cancel::new();
+    let installation = KaniInstallation::discover().expect("cargo-kani installed");
+    let evidence = execute_kani_obligation(&KaniExecutionRequest {
+        cancel: &cancel,
+        installation: &installation,
+        harness: harness.into(),
+        crate_directory: &directory,
+        target_directory: &target,
+        home_directory: None,
+    })
+    .expect("Kani launch");
+    let _ = fs::remove_dir_all(directory);
+    assert!(
+        !matches!(evidence.outcome, KaniRunOutcome::Inconclusive { .. }),
+        "Kani gave no verdict: outcome={:?}, peak={:?}, last_check={:?}, diagnostics={:?}",
+        evidence.outcome,
+        evidence.memory.peak_resident_bytes,
+        evidence.checks.last(),
+        evidence.diagnostics
+    );
+    evidence.outcome
+}
+
 /// Real Kani must satisfy the admitted QSL precondition. The impossible-condition cover
 /// remains separately blocked by IR-705 after exceeding the fixture's memory ceiling.
 #[trace("TC-025")]
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_025_real_kani_covers_v2_parameter_precondition() {
-    let run = |twin: Twin, clause_name: &str| {
-        let (package, clause) = twin.emitted_package(clause_name);
-        let item = ObligationItem::V2Clause {
-            package: &package,
-            clause: &clause,
-        };
-        let outcome = negotiate_kani_obligations(&KaniObligationRequest {
-            ceilings: crate::common::proof_ceilings::proof_ceilings(),
-            items: std::slice::from_ref(&item),
-            subject_path: REQUEST_SUBJECT,
-            unwind: 8,
-        })
-        .expect("valid precondition request");
-        let KaniObligationOutcome::Emitted {
-            v2_clause_harnesses,
-            ..
-        } = outcome
-        else {
-            panic!("the V2 precondition is admitted");
-        };
-        let [harness] = v2_clause_harnesses.as_slice() else {
-            panic!("one V2 precondition harness");
-        };
-        let directory = scratch("v2-precondition");
-        fs::write(directory.join("src/lib.rs"), &harness.rust.contents).expect("generated crate");
-        super::scratch_crate::write_manifest(
-            &directory,
-            &format!(
-                "[package]\nname = \"generated-v2-precondition\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
-                super::scratch_crate::runtime_dependency(&["exact"])
-            ),
-        );
-        fs::write(
-            directory.join("build.rs"),
-            "fn main() { println!(\"cargo:rustc-check-cfg=cfg(kani)\"); }\n",
-        )
-        .expect("build script");
-        let target = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("v2-precondition-kani");
-        let cancel = quire_exact::Cancel::new();
-        let installation = KaniInstallation::discover().expect("cargo-kani installed");
-        let evidence = execute_kani_obligation(&KaniExecutionRequest {
-            cancel: &cancel,
-            installation: &installation,
-            harness: harness.into(),
-            crate_directory: &directory,
-            target_directory: &target,
-            home_directory: None,
-        })
-        .expect("Kani launch");
-        let _ = fs::remove_dir_all(directory);
-        assert!(
-            !matches!(evidence.outcome, KaniRunOutcome::Inconclusive { .. }),
-            "Kani gave no verdict: outcome={:?}, peak={:?}, last_check={:?}, diagnostics={:?}",
-            evidence.outcome,
-            evidence.memory.peak_resident_bytes,
-            evidence.checks.last(),
-            evidence.diagnostics
-        );
-        evidence.outcome
-    };
     assert_eq!(
-        run(Twin::with_bounded_other_precondition(), "OtherBelowLimit"),
+        run_real_v2_clause(Twin::with_bounded_other_precondition(), "OtherBelowLimit"),
         KaniRunOutcome::Verified
     );
+}
+
+/// The healthy invariant verifies and the same checked model with a false-at-zero condition
+/// must produce a Kani counterexample rather than a successful cover.
+#[trace("TC-025")]
+#[test]
+#[ignore = "kani lane: run serially through `make kani`"]
+fn tc_025_real_kani_asserts_v2_state_invariant() {
+    assert_eq!(
+        run_real_v2_clause(Twin::with_balance_invariant(), "BalanceNonnegative"),
+        KaniRunOutcome::Verified
+    );
+    assert!(matches!(
+        run_real_v2_clause(
+            Twin::with_balance_invariant_condition("self.balance > 0"),
+            "BalanceNonnegative"
+        ),
+        KaniRunOutcome::Falsified { .. }
+    ));
 }
 
 #[trace("FR-014-AC-38")]
