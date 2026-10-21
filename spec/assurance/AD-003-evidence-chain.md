@@ -222,7 +222,11 @@ authored).
   `StepSimulationRecord` encoding. CG uses `quire-canonical` and QSV's owned
   type/encoder directly; it does not copy or reinterpret the record schema.
   The QSV record's `refinement`, `obligation` and supplied-order `hypotheses`
-  all participate. The O-07 occurrence key, source regions, `source_span`, CG
+  all participate. CG mints this identity only after the selected owner and
+  occurrence validate. Comparing different `refinement` values uses two
+  separately valid selected refinements, each with its matching record and
+  occurrence; a mismatch under one fixed selected owner refuses without an
+  identity. The O-07 occurrence key, source regions, `source_span`, CG
   proof kind, CG `ObligationKind`, and harness execution settings do not enter
   that content identity. The per-step `KaniObligationIdentity` is a distinct
   persisted *harness* identity record: its per-step subject carries the exact
