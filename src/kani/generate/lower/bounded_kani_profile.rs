@@ -21,22 +21,14 @@ impl BoundedKaniProfile {
 
     /// Returns the complete ordered disposition census for every encountered construct.
     ///
-    /// Every requested construct receives exactly one disposition -- `Supported`, `Refused`, or
-    /// `Inconclusive` -- as its own [`CapabilityEntry`]. The upstream profile
-    /// matrix already builds that complete per-construct census; this method returns it as-is
-    /// rather than walking it and bailing out with a single [`KaniOutcome`] on the first
-    /// `Refused` or `Inconclusive` entry, which discarded every disposition after it. A caller
-    /// that needs to know whether every entry was supported inspects the returned census
-    /// (the typed non-Boolean dispositions are the `Refused`/`Inconclusive` entries
-    /// inside it, not an early-exit error).
+    /// Every requested construct receives one admitted `Supported` or `Refused`
+    /// [`CapabilityEntry`], in request order. Refused entries do not stop the census.
+    /// The owning IR profile reader rejects legacy `inconclusive` dispositions before
+    /// this boundary receives a profile. Actual run-vacuity classification is separate.
     ///
-    /// `Err` is reserved for a request the upstream matrix cannot classify at all: an empty or
-    /// duplicated construct name (`kani_capability_request_invalid`), or a construct absent from
-    /// the profile's matrix entirely (`kani_capability_missing`). Both arrive with
-    /// `KaniOutcomeKind::Refused` -- the same `kind` a refused *construct* disposition used to
-    /// produce before this method stopped early-exiting on one. A caller cannot tell these two
-    /// `Err` cases apart by `kind` alone and must discriminate on `code`. Either way this is a
-    /// malformed request, not a disposition, so it is not part of the census.
+    /// `Err` denotes a malformed request: empty or duplicate construct names carry
+    /// `kani_capability_request_invalid`; absent constructs carry `kani_capability_missing`.
+    /// Both are typed refusals, distinct from refused entries in a successful census.
     pub fn classify(
         &self,
         constructs: &[String],
@@ -92,8 +84,8 @@ mod tests {
         vec![
             entry(
                 "collection.contains",
-                CapabilityDisposition::Inconclusive {
-                    code: std001_code!("unavailable"),
+                CapabilityDisposition::Refused {
+                    code: std001_code!("collection_not_qualified"),
                 },
             ),
             entry(
@@ -117,20 +109,9 @@ mod tests {
         ]
     }
 
-    ///
-    /// An early `Refused` disposition must not discard the dispositions of constructs
-    /// encountered after it, and a later `Inconclusive` disposition must not discard a
-    /// `Supported` one between it and the refusal: every selected construct receives one exact
-    /// disposition, not just the ones before the first non-supported entry.
-    ///
-    /// The matrix (`superset_matrix`) contains a fourth construct, `extra.unrequested`, that
-    /// this test's request never names, and lists its three requested constructs in a different
-    /// order than the request below. That makes this test catch a mutation that returns the
-    /// whole matrix verbatim (`Ok(self.profile.capabilities.clone())`), ignoring the request
-    /// entirely: such a mutation would return 4 entries in matrix order, not 3 in request order,
-    /// so it fails both the length assertion and the per-index assertions here. This was verified
-    /// by hand against that exact mutation.
-    #[trace("TC-023")]
+    /// A strict subset in a different order distinguishes the request census from the
+    /// entire matrix and checks entries after an early refusal, including distinct causes.
+    #[trace("TC-023", "FR-015-AC-82")]
     #[test]
     fn tc_023_census_reports_every_construct_including_ones_after_an_early_refusal() {
         let request = vec![
@@ -139,7 +120,10 @@ mod tests {
             "collection.contains".to_owned(),
         ];
 
-        let census = classify_bounded_kani_profile(profile(superset_matrix()), &request, "source")
+        let selected = profile(superset_matrix());
+        let selected: KaniProfile = serde_json::from_value(serde_json::to_value(&selected)
+            .expect("supported/refused profile serializes")).expect("supported/refused profile round-trips");
+        let census = classify_bounded_kani_profile(selected, &request, "source")
             .expect(
             "a structurally valid request yields the complete census, never an early-exit error",
         );
@@ -177,10 +161,10 @@ mod tests {
         );
         assert_eq!(
             census[2].disposition,
-            CapabilityDisposition::Inconclusive {
-                code: std001_code!("unavailable"),
+            CapabilityDisposition::Refused {
+                code: std001_code!("collection_not_qualified"),
             },
-            "an inconclusive construct after a refusal must not be discarded"
+            "a distinct refused construct after a refusal must not be discarded"
         );
     }
 
@@ -189,7 +173,7 @@ mod tests {
     /// a disposition: `classify` must reject it with `Err` carrying the `kani_capability_missing`
     /// code, rather than folding it into the returned census or reusing the
     /// `kani_capability_request_invalid` code reserved for an empty/duplicate construct name.
-    #[trace("TC-023")]
+    #[trace("TC-023", "FR-015-AC-83")]
     #[test]
     fn tc_023_missing_construct_is_rejected_with_kani_capability_missing() {
         let request = vec!["arithmetic.add".to_owned(), "no.such.construct".to_owned()];
@@ -203,4 +187,41 @@ mod tests {
         );
         assert_eq!(outcome.code, Std001Code::KANI_CAPABILITY_MISSING);
     }
+
+    #[trace("TC-023", "FR-015-AC-82")]
+    #[test]
+    fn profile_reader_rejects_legacy_inconclusive_before_census_admission() {
+        for code in ["profile_not_qualified", "kani_vacuous_proof"] {
+            let mut wire = serde_json::to_value(profile(vec![entry(
+                "collection.contains",
+                CapabilityDisposition::Refused { code: std001_code!("profile_not_qualified") },
+            )])).expect("otherwise valid profile serializes");
+            let positive: KaniProfile = serde_json::from_value(wire.clone())
+                .expect("valid refused profile is admitted");
+            let census = classify_bounded_kani_profile(positive, &["collection.contains".into()], "source")
+                .expect("valid refused profile classifies");
+            assert_eq!(census, vec![entry("collection.contains", CapabilityDisposition::Refused {
+                code: std001_code!("profile_not_qualified"),
+            })]);
+            wire["capabilities"][0]["disposition"] = serde_json::json!({"inconclusive": {"code": code}});
+            let error = serde_json::from_value::<KaniProfile>(wire)
+                .expect_err("legacy disposition cannot reach the census or lowerers");
+            assert!(error.to_string().contains("unknown variant `inconclusive`"));
+        }
+    }
+
+    #[trace("TC-023", "FR-015-AC-83")]
+    #[test]
+    fn empty_or_duplicate_construct_name_refuses_without_a_partial_census() {
+        for request in [vec![" ".into()], vec!["graph.reachable".into(), "graph.reachable".into()]] {
+            let failure = classify_bounded_kani_profile(profile(superset_matrix()), &request, "source:invalid")
+                .expect_err("invalid names cannot return a partial census");
+            assert_eq!(failure.kind, quire_contract_ir::kani::KaniOutcomeKind::Refused);
+            assert_eq!(failure.code, Std001Code::KANI_CAPABILITY_REQUEST_INVALID);
+            assert_eq!(failure.source_id, "source:invalid");
+            assert_eq!(failure.context, "profile-r1");
+            assert_eq!(failure.boolean_claim(), None);
+        }
+    }
+
 }
