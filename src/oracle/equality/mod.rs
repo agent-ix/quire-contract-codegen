@@ -2373,10 +2373,11 @@ mod tests {
 
     /// Start from genuine owner-admitted numeric members. Changes below exercise only
     /// the private parser/resolver, not package/source/context authentication.
-    fn numeric_tuple_component(base_members: bool, wrong_form: bool) -> (String, CheckedNodeId) {
+    fn numeric_tuple_component(base_members: bool, mutation: Option<&str>) -> (String, CheckedNodeId) {
         use quire_contract_model::{CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2ReadResult};
         let source = concat!(
             "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\n",
+            "enum Marker { UNUSED, ALSO_UNUSED }\nrecord Point { x: Boolean; }\n",
             "tuple Pair(Int[-100,100],Text[0,16;nfc],Decimal[-100,100;0,0;nearest-even],Rational[-10,10;1,1]);\n",
             "function f using v(a: Pair,b: Pair): Boolean pure { a = b }\n",
         );
@@ -2402,12 +2403,27 @@ mod tests {
         let tuple = nodes.iter_mut().find(|node| node.semantic_form.as_ref() == "tuple").expect("actual Pair");
         let root = tuple.node_id.clone();
         tuple.body["members"] = json!(members.iter().map(|id| json!({"term":"reference","target":id})).collect::<Vec<_>>());
-        if wrong_form { nodes.iter_mut().find(|node| node.node_id == integer.node_id).unwrap().semantic_form = "text_bounds".into(); }
+        if let Some(mutation) = mutation {
+            let base = match mutation {
+                "wrong_form" => None,
+                "boolean" => Some(nodes.iter().find(|node| node.semantic_form.as_ref() == "boolean").unwrap().node_id.clone()),
+                "enum" | "record" => Some(nodes.iter().find(|node| node.declaration.as_ref().is_some_and(|declaration| declaration.qualified_name.iter().map(|part| part.as_ref()).eq([if mutation == "enum" { "Marker" } else { "Point" }]))).unwrap().node_id.clone()),
+                _ => panic!("unknown private numeric member mutation"),
+            };
+            let bound = nodes.iter_mut().find(|node| node.node_id == integer.node_id).unwrap();
+            if let Some(base) = base { bound.semantic_type = base; }
+            else { bound.semantic_form = "text_bounds".into(); }
+        }
         let typed = EqualityOperandDescriptor::typed(root);
-        let (outcomes, source) = check_component_items_with_context(Some(compiled.context()), nodes, &[(typed.clone(), typed)], CompositeEqualityLimits { source_bytes: usize::MAX, ..Default::default() });
-        if wrong_form {
-            assert_eq!(outcomes, vec![Err(CompositeEqualityRefusal::MissingBound { bounded_type: integer.node_id.clone(), expected_form: "integer_range" })]);
-        } else { assert_eq!(outcomes, vec![Ok(())]); }
+        let healthy = EqualityOperandDescriptor::typed(nodes.iter().find(|node| node.semantic_form.as_ref() == "boolean").unwrap().node_id.clone());
+        let operands = vec![(typed.clone(), typed), (healthy.clone(), healthy)];
+        let (outcomes, source) = check_component_items_with_context(Some(compiled.context()), nodes, &operands, CompositeEqualityLimits { source_bytes: usize::MAX, ..Default::default() });
+        match mutation {
+            Some("wrong_form") => assert_eq!(outcomes[0], Err(CompositeEqualityRefusal::MissingBound { bounded_type: integer.node_id.clone(), expected_form: "integer_range" })),
+            Some(_) => assert_eq!(outcomes[0], Err(CompositeEqualityRefusal::Unsupported { unsupported_node_id: integer.node_id.clone(), node_tag: "bounded_domain" })),
+            None => assert_eq!(outcomes, vec![Ok(()), Ok(())]),
+        }
+        assert_eq!(outcomes[1], Ok(()));
         let artifacts = source.finish(usize::MAX).expect("private component source");
         let lib = artifacts.into_iter().find(|artifact| artifact.path == "src/lib.rs").unwrap().contents;
         (lib, integer.node_id)
@@ -2416,8 +2432,9 @@ mod tests {
     #[trace("FR-018-AC-16", "TC-029")]
     #[test]
     fn legacy_numeric_member_alias_equivalence_is_a_private_resolution_control() {
-        let (through_scalars, _) = numeric_tuple_component(true, false);
-        let (through_domains, _) = numeric_tuple_component(false, false);
+        let (through_scalars, _) = numeric_tuple_component(true, None);
+        let (through_domains, _) = numeric_tuple_component(false, None);
+        assert_eq!(through_scalars, through_domains, "both private numeric member forms reconstruct identical source");
         assert!(through_scalars.contains("exact::ValueType::Decimal(") && through_scalars.contains("exact::ValueType::Rational("));
         for reconstruction in [
             "exact::ValueType::Int(rebuild_interval(\"-100\", \"100\")?)",
@@ -2429,12 +2446,37 @@ mod tests {
         }
     }
 
+    fn assert_numeric_private_sibling_unchanged(actual: &str) {
+        let (baseline, _) = numeric_tuple_component(false, None);
+        for name in ["oracle_test1", "environment_test1"] {
+            let marker = format!("pub fn {name}");
+            let body = |source: &str| source.split_once(&marker).expect("healthy sibling function").1.split_once("\n}\n").expect("healthy sibling closes").0.to_owned();
+            assert_eq!(body(actual), body(&baseline), "{name}: independent sibling source remains identical");
+        }
+    }
+
     #[trace("FR-018-AC-16", "TC-029")]
     #[test]
     fn wrong_bound_form_private_defense_keeps_exact_missing_integer_range() {
-        let (lib, _) = numeric_tuple_component(false, true);
-        assert!(!lib.contains("pub fn oracle_"));
-        assert!(!lib.contains("pub fn environment_"));
+        let (lib, _) = numeric_tuple_component(false, Some("wrong_form"));
+        assert_numeric_private_sibling_unchanged(&lib);
+        assert!(!lib.contains("pub fn oracle_test0"));
+        assert!(!lib.contains("pub fn environment_test0"));
+        assert!(lib.contains("pub fn oracle_test1"));
+        assert!(lib.contains("pub fn environment_test1"));
+    }
+
+    #[trace("FR-018-AC-16", "TC-029")]
+    #[test]
+    fn unsupported_private_bound_bases_name_the_original_bound_and_preserve_sibling() {
+        for base in ["boolean", "enum", "record"] {
+            let (lib, _) = numeric_tuple_component(false, Some(base));
+            assert_numeric_private_sibling_unchanged(&lib);
+            assert!(!lib.contains("pub fn oracle_test0"), "{base}");
+            assert!(!lib.contains("pub fn environment_test0"), "{base}");
+            assert!(lib.contains("pub fn oracle_test1"), "{base}: healthy sibling");
+            assert!(lib.contains("pub fn environment_test1"), "{base}: healthy sibling");
+        }
     }
 
     /// A deliberately inconsistent private graph exercises declaration admission only;

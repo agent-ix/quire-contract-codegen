@@ -622,81 +622,55 @@ fn tc_029_public_qsl_recursive_items_generate_through_reader() {
     super::admitted_composite_equality::assert_authentic_recursive_item_generation();
 }
 
-fn assert_recursive_item_generation(
-    builder: PackageBuilder,
-    list: quire_contract_model::CheckedNodeId,
-    tree: quire_contract_model::CheckedNodeId,
-) {
-    fn emitted_key(node: &quire_contract_model::CheckedNodeId, name: &str) -> String {
-        format!("lookup_composite_key(_context, {:?}, &[{name:?}], qsl_replay::AdmittedCompositeForm::Record)?", node.digest)
+/// A raw external fixture proves strict-reader admission and original shape only.
+/// It is never rewritten into a package authenticated by a QSL context.
+fn assert_recursive_fixture_shapes(package: &CheckedPackageV2) {
+    use quire_contract_model::CheckedNodeId;
+    fn members(node: &CheckedSemanticNodeV2) -> &[serde_json::Value] {
+        assert_eq!(node.body["term"], "aggregate");
+        node.body["members"].as_array().expect("original aggregate members")
     }
-
-    fn composites_block<'a>(source: &'a str, oracle_symbol: &str) -> &'a str {
-        let stem = oracle_symbol
-            .strip_prefix("oracle_")
-            .expect("generated oracle symbol");
-        let marker = format!("fn composites_{stem}(");
-        let (_, block) = source
-            .split_once(&marker)
-            .expect("item's declaration block");
-        block.split_once("\n}\n").expect("declaration block end").0
+    fn reference(term: &serde_json::Value) -> CheckedNodeId {
+        assert_eq!(term["term"], "reference");
+        serde_json::from_value(term["target"].clone()).expect("reader-admitted wire reference")
     }
-
-    let package = admit(builder);
-    let items = [
-        CompositeEqualityItem {
-            node_id: code_id(E_QSPEC_LIST),
-            operator: EqualityOperatorKind::Equal,
-            left: EqualityOperandDescriptor::typed(list.clone()),
-            right: EqualityOperandDescriptor::typed(list.clone()),
-        },
-        CompositeEqualityItem {
-            node_id: code_id(E_QSPEC_TREE),
-            operator: EqualityOperatorKind::Equal,
-            left: EqualityOperandDescriptor::typed(tree.clone()),
-            right: EqualityOperandDescriptor::typed(tree.clone()),
-        },
-    ];
-    let oracles = generate(&package, &items);
-    let list_claim = generated(only_claim(&oracles, E_QSPEC_LIST));
-    let tree_claim = generated(only_claim(&oracles, E_QSPEC_TREE));
-    let list = package.ids.resolve(&list);
-    let tree = package.ids.resolve(&tree);
-    assert_eq!(list_claim.declaration_keys, vec![list.clone()]);
-    assert_eq!(tree_claim.declaration_keys, vec![tree.clone()]);
-    let lib = contents(&oracles, "src/lib.rs");
-    assert_eq!(lib.matches("pub fn oracle_").count(), 2);
-    assert_eq!(lib.matches("pub fn environment_").count(), 2);
-    let list_block = composites_block(lib, &list_claim.oracle_symbol);
-    let list_key = emitted_key(&list, "List");
-    assert!(
-        list_block.contains(&format!("sv::CompositeDeclaration::new({list_key}, ")),
-        "List declaration: {list_block}"
-    );
-    assert!(list_block.contains("sv::FieldDeclaration::new(\"next\", {"));
-    assert!(list_block.contains(&format!("exact::ValueType::Composite({list_key})")));
-    assert!(list_block.contains("exact::Presence::Optional)"));
-    let tree_block = composites_block(lib, &tree_claim.oracle_symbol);
-    let tree_key = emitted_key(&tree, "Tree");
-    assert!(
-        tree_block.contains(&format!("sv::CompositeDeclaration::new({tree_key}, ")),
-        "Tree declaration: {tree_block}"
-    );
-    assert!(tree_block.contains("sv::FieldDeclaration::new(\"kids\", {"));
-    assert!(tree_block.contains(&format!("exact::ValueType::Composite({tree_key})")));
-    assert!(tree_block.contains("exact::CollectionKind::Sequence"));
-    assert!(tree_block.contains("rebuild_cardinality(0, 3)?"));
-    assert!(tree_block.contains("exact::Presence::Required)"));
+    let nodes = &package.graph().nodes;
+    let lookup = |id: &CheckedNodeId| nodes.iter().find(|node| &node.node_id == id).expect("original referenced node");
+    let named = |name: &str| nodes.iter().find(|node| node.declaration.as_ref().is_some_and(|declaration| declaration.qualified_name.iter().map(|part| part.as_ref()).eq([name]))).expect("original record declaration");
+    let list = named("List"); let tree = named("Tree");
+    assert_eq!(list.semantic_form.as_ref(), "record");
+    assert_eq!(tree.semantic_form.as_ref(), "record");
+    let list_members = members(list); assert_eq!(list_members.len(), 1);
+    assert_eq!(list_members[0]["term"], "binding"); assert_eq!(list_members[0]["name"], "next");
+    let next = &list_members[0]["value"]; assert_eq!(next["term"], "aggregate");
+    let optional = next["members"].as_array().unwrap(); assert_eq!(optional.len(), 1);
+    assert_eq!(optional[0]["term"], "binding"); assert_eq!(optional[0]["name"], "optional");
+    let option = lookup(&reference(&optional[0]["value"])); assert_eq!(option.semantic_form.as_ref(), "option");
+    let payload = members(option); assert_eq!(payload.len(), 1); assert_eq!(reference(&payload[0]), list.node_id);
+    let tree_members = members(tree); assert_eq!(tree_members.len(), 1);
+    assert_eq!(tree_members[0]["term"], "binding"); assert_eq!(tree_members[0]["name"], "kids");
+    let bound = lookup(&reference(&tree_members[0]["value"]));
+    assert_eq!(bound.node_tag.as_ref(), "bounded_domain"); assert_eq!(bound.semantic_form.as_ref(), "collection_bounds");
+    let sequence = lookup(&bound.semantic_type); assert_eq!(sequence.semantic_form.as_ref(), "sequence");
+    let elements = members(sequence); assert_eq!(elements.len(), 1); assert_eq!(reference(&elements[0]), tree.node_id);
+    let bounds = members(bound); assert_eq!(bounds.len(), 2);
+    for (binding, (name, value)) in bounds.iter().zip([("min", "0"), ("max", "3")]) {
+        assert_eq!(binding["term"], "binding"); assert_eq!(binding["name"], name);
+        assert_eq!(binding["value"]["term"], "literal"); assert_eq!(binding["value"]["value_kind"], "integer");
+        assert_eq!(binding["value"]["value"], value);
+        let integer: CheckedNodeId = serde_json::from_value(binding["value"]["type"].clone()).unwrap();
+        assert_eq!(lookup(&integer).semantic_form.as_ref(), "integer");
+    }
 }
 
-/// Optional local conformance against the private QSpec fixture. The public
-/// QSL facade case above exercises the same reader-to-oracle path in CI.
+/// Optional external reader/shape conformance only. Genuine public generation is a
+/// separate source-backed control and receives no credit from an unavailable fixture.
 #[trace("FR-018-AC-24", "FR-018-AC-26", "FR-018-AC-27", "TC-029")]
 #[test]
 fn tc_029_authoritative_qspec_recursive_items_generate_through_reader() {
     const FIXTURE: &str = "proposals/checked-package-v2/fixtures/positive-recursive-records.json";
-    let Some(repo) = std::env::var_os("QSPEC_REPO") else {
-        println!("SKIP local QSpec conformance: QSPEC_REPO is unset; private fixture is not available in public CI");
+    let Some(repo) = std::env::var_os("QSPEC_REPO").or_else(|| std::env::var_os("QSPEC_DIR")) else {
+        println!("UNAVAILABLE QSpec reader/shape conformance: neither QSPEC_REPO nor QSPEC_DIR is set; no conformance or public-generation credit");
         return;
     };
     let output = Command::new("git")
@@ -725,8 +699,9 @@ fn tc_029_authoritative_qspec_recursive_items_generate_through_reader() {
         matches!(read, CheckedPackageV2ReadResult::Admitted(_)),
         "original QSpec fixture: {read:?}"
     );
-    let (builder, list, tree) = recursive_items_package_from_wire(wire);
-    assert_recursive_item_generation(builder, list, tree);
+    if let CheckedPackageV2ReadResult::Admitted(package) = &read {
+        assert_recursive_fixture_shapes(package);
+    }
 }
 
 fn refused(claim: &CompositeEqualityClaim) -> &CompositeEqualityRefusal {
@@ -1620,8 +1595,12 @@ fn tc_029_ac16_numeric_bounded_domain_members_read_as_their_bounded_scalars() {
         "exact::ValueType::Decimal(rebuild_decimal(\"-100\", \"100\", 0, 0, exact::RoundingMode::NearestEven)?)",
         "exact::ValueType::Rational(rebuild_rational(rebuild_interval(\"-10\", \"10\")?, rebuild_interval(\"1\", \"1\")?)?)",
     ] { assert!(lib.contains(reconstruction), "actual public member: {reconstruction}"); }
-    // The unchanged base-scalar versus bounded-domain alias assertions are retained at
-    // the explicitly private member-resolution seam, without claiming both source forms.
+    let tuple = lib.find("sv::CompositeShape::Tuple(vec![").expect("public tuple declaration");
+    let expected_order = ["exact::ValueType::Int(", "exact::ValueType::Text(", "exact::ValueType::Decimal(", "exact::ValueType::Rational("];
+    let positions = expected_order.map(|member| lib[tuple..].find(member).expect("actual public member"));
+    assert!(positions.windows(2).all(|pair| pair[0] < pair[1]), "all four original member positions remain ordered");
+    // Reviewed AC16 separately allocates both exact numeric forms to the private resolver
+    // control, without claiming public authentication for rewritten member references.
 }
 
 /// A `bounded_domain` member reads its own bound and never a sibling
