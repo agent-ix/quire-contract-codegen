@@ -49,11 +49,13 @@ the enum-only owner facade does not excuse dropping it.
    Exercise a duplicate record field in authentic source as a separate QSL
    admission control through root `compile_admitted`, with ordinary source and
    dependency provision. Retain `AdmittedRefusal::Package` and its real
-   `CompileRefusal` code/cause and available locus: `ambiguous_declaration` /
-   `ambiguous-name`. Use the root facade's public refusal accessors; do not
-   add a dependency on QSL assembly internals. The owner maps its duplicate
-   `InvalidTypeDeclaration` to those values; the precise duplicate name remains
-   asserted in the separate private declaration-defense control below.
+   `CompileRefusal` payload and available locus. Through the root facade's
+   public accessors assert `code() == Code::AmbiguousDeclaration` and
+   `cause() == None` for this Assembly refusal. Do not infer or synthesize an
+   `ambiguous-name` public cause from the internal assembly diagnosis, add a
+   dependency on QSL assembly internals, or require a new QSL API. The precise
+   duplicate name/cause remains asserted in the separate private
+   declaration-defense control below.
    No successful `AdmittedContext` or CG artifact is produced; do not attempt
    public CG generation with a fabricated or mismatched context for that source.
    Retain private CG declaration-admission checks of the precise
