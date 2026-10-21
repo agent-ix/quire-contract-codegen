@@ -1,0 +1,271 @@
+<!-- reviewer-dispositions repo=agent-ix/quire-contract-codegen visibility=public quoin=0.28.4 module=spec-artifacts-process@b82e42e893612b4b4ee94127714b4577ee893502 id=SR-15231 round=1 model=gpt-6.1-sol run=10c7d43d-bf7f-4b35-9617-f61d3d9975d8 -->
+
+Part 1/5. Existing inherited ownership only; all gaps remain open. The exact current311 subset is retained; no fresh waiver or fix is asserted.
+
++++ [reviewer data]
+
+```yaml
+dispositions:
+- fnd: FND-001
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-002
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-003
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-004
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-005
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-006
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-007
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-008
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-009
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-010
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-011
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-012
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-013
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-014
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-015
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-016
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-017
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-018
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-019
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-020
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-021
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-022
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-023
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-024
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-025
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-026
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-027
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-028
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-029
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-030
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-031
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-032
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-033
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-034
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-035
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-036
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-037
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-038
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-039
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-040
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-041
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-042
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-043
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-044
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-045
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-046
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-047
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-048
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-049
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-050
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-051
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-052
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-053
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-054
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-055
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-056
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-057
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-058
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-059
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-060
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-061
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-062
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-063
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-064
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+- fnd: FND-065
+  outcome: deferred
+  reason: Existing IR-878 3db226b2 explicit inventory ownership; unchanged baseline
+    obligation, remains open in its assigned lane.
+```
+
++++
