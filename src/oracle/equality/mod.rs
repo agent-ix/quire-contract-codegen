@@ -2371,6 +2371,72 @@ mod tests {
             .key()
     }
 
+    /// Start from genuine owner-admitted numeric members. Changes below exercise only
+    /// the private parser/resolver, not package/source/context authentication.
+    fn numeric_tuple_component(base_members: bool, wrong_form: bool) -> (String, CheckedNodeId) {
+        use quire_contract_model::{CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2ReadResult};
+        let source = concat!(
+            "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\n",
+            "tuple Pair(Int[-100,100],Text[0,16;nfc],Decimal[-100,100;0,0;nearest-even],Rational[-10,10;1,1]);\n",
+            "function f using v(a: Pair,b: Pair): Boolean pure { a = b }\n",
+        );
+        let compiled = qsl_replay::compile_admitted(
+            qsl_replay::SourceIdentity::new("test", "numeric-member.native", "git", "fixture"),
+            "numeric-member.native", source.as_bytes(), [], &qsl_replay::DependencyInput::default(),
+            qsl_replay::StageLimits::default(), qsl_replay::ReplayLimits::default(),
+        ).expect("the unchanged original numeric member source compiles");
+        let mut evidence = CheckedPackageEvidence::new(); evidence.support_feature("quire.value.complete/v1");
+        let CheckedPackageV2ReadResult::Admitted(package) = CheckedPackageV2::read(compiled.package().bytes(), CheckedPackageReadLimits::bounded(), &evidence) else {
+            panic!("the unmodified public tuple package must admit");
+        };
+        let mut nodes = package.graph().nodes.clone();
+        let bound = |form: &str| nodes.iter().find(|node| node.semantic_form.as_ref() == form).expect("original numeric/text bound").clone();
+        let integer = bound("integer_range"); let text = bound("text_bounds");
+        let decimal = bound("decimal_range"); let rational = bound("rational_range");
+        let members = [
+            if base_members { integer.semantic_type.clone() } else { integer.node_id.clone() },
+            text.node_id.clone(),
+            if base_members { decimal.semantic_type.clone() } else { decimal.node_id.clone() },
+            if base_members { rational.semantic_type.clone() } else { rational.node_id.clone() },
+        ];
+        let tuple = nodes.iter_mut().find(|node| node.semantic_form.as_ref() == "tuple").expect("actual Pair");
+        let root = tuple.node_id.clone();
+        tuple.body["members"] = json!(members.iter().map(|id| json!({"term":"reference","target":id})).collect::<Vec<_>>());
+        if wrong_form { nodes.iter_mut().find(|node| node.node_id == integer.node_id).unwrap().semantic_form = "text_bounds".into(); }
+        let typed = EqualityOperandDescriptor::typed(root);
+        let (outcomes, source) = check_component_items_with_context(Some(compiled.context()), nodes, &[(typed.clone(), typed)], CompositeEqualityLimits { source_bytes: usize::MAX, ..Default::default() });
+        if wrong_form {
+            assert_eq!(outcomes, vec![Err(CompositeEqualityRefusal::MissingBound { bounded_type: integer.node_id.clone(), expected_form: "integer_range" })]);
+        } else { assert_eq!(outcomes, vec![Ok(())]); }
+        let artifacts = source.finish(usize::MAX).expect("private component source");
+        let lib = artifacts.into_iter().find(|artifact| artifact.path == "src/lib.rs").unwrap().contents;
+        (lib, integer.node_id)
+    }
+
+    #[trace("FR-018-AC-16", "TC-029")]
+    #[test]
+    fn legacy_numeric_member_alias_equivalence_is_a_private_resolution_control() {
+        let (through_scalars, _) = numeric_tuple_component(true, false);
+        let (through_domains, _) = numeric_tuple_component(false, false);
+        assert!(through_scalars.contains("exact::ValueType::Decimal(") && through_scalars.contains("exact::ValueType::Rational("));
+        for reconstruction in [
+            "exact::ValueType::Int(rebuild_interval(\"-100\", \"100\")?)",
+            "exact::ValueType::Decimal(rebuild_decimal(\"-100\", \"100\", 0, 0, exact::RoundingMode::NearestEven)?)",
+            "exact::ValueType::Rational(rebuild_rational(rebuild_interval(\"-10\", \"10\")?, rebuild_interval(\"1\", \"1\")?)?)",
+        ] {
+            assert!(through_scalars.contains(reconstruction), "scalar member: {reconstruction}");
+            assert!(through_domains.contains(reconstruction), "domain member: {reconstruction}");
+        }
+    }
+
+    #[trace("FR-018-AC-16", "TC-029")]
+    #[test]
+    fn wrong_bound_form_private_defense_keeps_exact_missing_integer_range() {
+        let (lib, _) = numeric_tuple_component(false, true);
+        assert!(!lib.contains("pub fn oracle_"));
+        assert!(!lib.contains("pub fn environment_"));
+    }
+
     /// A deliberately inconsistent private graph exercises declaration admission only;
     /// it is not a successful source/context admission or public generator request.
     #[trace("FR-018-AC-1", "FR-018-AC-8", "TC-029")]

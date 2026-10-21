@@ -11,7 +11,7 @@ use ix_trace_rs::trace;
 use std::{collections::BTreeSet, fs, ops::Deref, path::PathBuf, process::Command};
 
 use crate::common::panic_scan::{non_test_code, panic_tokens_in};
-use crate::scratch_crate::{runtime_dependency, seed_lock, TemporaryDirectory};
+use crate::scratch_crate::{runtime_dependency, TemporaryDirectory};
 use quire_contract_codegen::{
     generate_composite_equality_oracles, ClaimDisposition, CompositeEqualityClaim,
     CompositeEqualityItem, CompositeEqualityLimits, CompositeEqualityOracles,
@@ -594,33 +594,25 @@ fn generated(
 #[trace("FR-018-AC-24", "TC-029")]
 #[test]
 fn tc_029_ac24_recursive_list_and_tree_items_emit_one_oracle_each() {
-    let list = generate(
-        &admit(corpus_package()),
-        &[item(
-            E_SELF,
-            EqualityOperatorKind::Equal,
-            typed(R_SELF),
-            typed(R_SELF),
-        )],
-    );
-    let tree = generate(
-        &admit(recursive_tree_package()),
-        &[item(
-            E_TREE_CYCLE,
-            EqualityOperatorKind::Equal,
-            typed(R_TREE_CYCLE),
-            typed(R_TREE_CYCLE),
-        )],
-    );
-    for (oracles, expression, record) in
-        [(&list, E_SELF, R_SELF), (&tree, E_TREE_CYCLE, R_TREE_CYCLE)]
-    {
-        let claim = generated(only_claim(oracles, expression));
-        assert_eq!(claim.declaration_keys, vec![oracles.key(record)]);
-        let lib = contents(oracles, "src/lib.rs");
+    for (declarations, name) in [
+        ("record SelfRecord { next: SelfRecord?; }\n", "SelfRecord"),
+        ("record Tree { children: Sequence<Tree>[0, 2]; }\n", "Tree"),
+    ] {
+        let source = format!("language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\n{declarations}function f using v(a: {name},b: {name}): Boolean pure {{ a = b }}\n");
+        let compiled = genuine_fixture::compile_source(&source);
+        let package = super::admitted_enum_equality::checked(&compiled, &[]);
+        let item = super::composite_equality_agreement::original_item(&package, false);
+        let oracles = super::admitted_enum_equality::generate_items(&package, Some(compiled.context()), std::slice::from_ref(&item), &[]).expect("original recursive shape");
+        assert_eq!(oracles.claim_map.items.len(), 1);
+        let claim = generated(&oracles.claim_map.items[0]);
+        assert_eq!(claim.declaration_keys, vec![item.left.source_type.clone()]);
+        let actual = compiled.context().composites().find(|actual| actual.qualified_name().iter().map(|part| part.as_str()).eq([name])).unwrap();
+        assert_eq!(claim.declaration_runtime_keys, vec![actual.key().to_string()]);
+        let lib = contents(&oracles, "src/lib.rs");
         assert_eq!(lib.matches("pub fn oracle_").count(), 1);
         assert_eq!(lib.matches("pub fn environment_").count(), 1);
         assert!(lib.contains(&claim.oracle_symbol));
+        if name == "Tree" { assert!(lib.contains("rebuild_cardinality(0, 2)?")); }
     }
 }
 
@@ -1339,13 +1331,6 @@ fn tc_029_ac10_claim_map_entries_ascend_by_the_descriptor_key() {
     }
 }
 
-/// Remaining legacy synthetic output used by the unported source-structure controls.
-/// Native agreement uses the separate genuine source/context cases.
-
-pub(super) fn corpus_oracles() -> FixtureOracles {
-    generate(&admit(corpus_package()), &golden_items())
-}
-
 /// Generating the corpus twice, each time from a freshly built and admitted
 /// package, yields equal output: every artifact's bytes and the claim map.
 #[trace("FR-018-AC-10", "TC-029", "TC-001", "NFR-002-AC-1", "NFR-002-AC-2")]
@@ -1472,7 +1457,7 @@ fn tc_029_ac12_integer_helper_omitted_when_unreached() {
 #[trace("FR-018-AC-12", "TC-029")]
 #[test]
 fn tc_029_ac12_manifest_is_unpublished_and_charge_free() {
-    let oracles = generate(&admit(corpus_package()), &golden_items());
+    let oracles = genuine_host_case("mixed", false);
     let manifest = contents(&oracles, "Cargo.toml");
     assert!(manifest.contains(&format!("name = \"{COMPOSITE_EQUALITY_CRATE_NAME}\"")));
     assert!(manifest.contains("publish = false"));
@@ -1526,9 +1511,13 @@ fn tc_029_ac12_manifest_is_unpublished_and_charge_free() {
     for artifact in &oracles.artifacts {
         fs::write(directory.path.join(&artifact.path), &artifact.contents).unwrap();
     }
-    seed_lock(&directory.path);
+    let resolved = Command::new(env!("CARGO"))
+        .arg("generate-lockfile")
+        .env("CARGO_TARGET_DIR", directory.path.join("target"))
+        .current_dir(&directory.path).output().unwrap();
+    assert!(resolved.status.success(), "independent generated manifest resolution failed: {}", String::from_utf8_lossy(&resolved.stderr));
     let output = Command::new(env!("CARGO"))
-        .args(["build", "--offline", "--quiet"])
+        .args(["build", "--locked", "--offline", "--quiet"])
         .env("CARGO_TARGET_DIR", directory.path.join("target"))
         .env("RUSTFLAGS", "-Dwarnings")
         .env_remove("CARGO_ENCODED_RUSTFLAGS")
@@ -1582,42 +1571,18 @@ fn tc_029_ac13_declaration_keys_are_the_reached_v2_node_ids() {
     }
 }
 
-/// The generated source of `E_TUPLE` over `TUP_PAIR` built from `extras` and `members`.
-fn tuple_source(extras: &[u32], members: &[u32]) -> (FixtureOracles, String) {
-    let package = admit(tuple_members_package(extras, members));
-    let items = vec![item(
-        E_TUPLE,
-        EqualityOperatorKind::Equal,
-        typed(TUP_PAIR),
-        typed(TUP_PAIR),
-    )];
-    // These two scalar members name their base type; their separate bounded
-    // domains are caller-authored context roots, not body dependencies.
-    let context = members
-        .iter()
-        .filter_map(|member| match *member {
-            T_DECIMAL_SMALL => Some(BD_DECIMAL),
-            T_RATIONAL_NARROW => Some(BD_RATIONAL_NARROW),
-            _ => None,
-        })
-        .map(|code| package.key(code))
-        .collect::<Vec<_>>();
-    let oracles = generate_with_context(&package, &items, &context);
-    let lib = contents(&oracles, "src/lib.rs").to_owned();
-    (oracles, lib)
-}
-
-/// The refusal `E_TUPLE` gets over `TUP_PAIR` built from `extras` and `members`.
-fn tuple_refusal(extras: &[u32], members: &[u32]) -> (CompositeEqualityRefusal, FixtureIds) {
-    let package = admit(tuple_members_package(extras, members));
-    let items = vec![item(
-        E_TUPLE,
-        EqualityOperatorKind::Equal,
-        typed(TUP_PAIR),
-        typed(TUP_PAIR),
-    )];
-    let oracles = generate(&package, &items);
-    (refused(only_claim(&oracles, E_TUPLE)).clone(), oracles.ids)
+/// Generate an unchanged genuine tuple source; extra declarations remain original context,
+/// never synthetic nodes or a context borrowed from an unrelated source.
+fn genuine_tuple_source(members: &str, extras: &str) -> (CompositeEqualityOracles, String) {
+    let source = format!("language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\ntuple Pair({members});\n{extras}function f using v(a: Pair,b: Pair): Boolean pure {{ a = b }}\n");
+    let compiled = genuine_fixture::compile_source(&source);
+    let package = super::admitted_enum_equality::checked(&compiled, &[]);
+    let item = super::composite_equality_agreement::original_item(&package, false);
+    let output = super::admitted_enum_equality::generate_items(&package, Some(compiled.context()), std::slice::from_ref(&item), &[]).expect("original genuine tuple");
+    assert_eq!(output.claim_map.items.len(), 1);
+    let _ = generated(&output.claim_map.items[0]);
+    let source = contents(&output, "src/lib.rs").to_owned();
+    (output, source)
 }
 
 /// The corpus tuple `(Int[-100, 100], Text[0, 16; nfc])` names the
@@ -1626,12 +1591,12 @@ fn tuple_refusal(extras: &[u32], members: &[u32]) -> (CompositeEqualityRefusal, 
 #[trace("FR-018-AC-16", "TC-029")]
 #[test]
 fn tc_029_ac16_a_text_bounds_member_reconstructs_its_own_text_type() {
-    let (oracles, lib) = tuple_source(&[], &[T_INTEGER_BOUNDED, BD_TEXT]);
-    let _ = generated(only_claim(&oracles, E_TUPLE));
-    let int = "rt::ValueType::Int(rebuild_interval(\"-100\", \"100\")?)";
-    let text = "rt::ValueType::Text(rebuild_text(0, 16, exact::TextProfile::Nfc)?)";
+    let (oracles, lib) = genuine_tuple_source("Int[-100, 100], Text[0, 16; nfc]", "");
+    let _ = generated(&oracles.claim_map.items[0]);
+    let int = "exact::ValueType::Int(rebuild_interval(\"-100\", \"100\")?)";
+    let text = "exact::ValueType::Text(rebuild_text(0, 16, exact::TextProfile::Nfc)?)";
     let tuple = lib
-        .find("rt::CompositeShape::Tuple(vec![")
+        .find("sv::CompositeShape::Tuple(vec![")
         .expect("tuple declaration");
     let int_position = lib[tuple..].find(int).expect("integer tuple member");
     let text_position = lib[tuple..].find(text).expect("text tuple member");
@@ -1647,29 +1612,16 @@ fn tc_029_ac16_a_text_bounds_member_reconstructs_its_own_text_type() {
 #[trace("FR-018-AC-16", "TC-029")]
 #[test]
 fn tc_029_ac16_numeric_bounded_domain_members_read_as_their_bounded_scalars() {
-    let (_, through_scalars) = tuple_source(
-        &[],
-        &[
-            T_INTEGER_BOUNDED,
-            BD_TEXT,
-            T_DECIMAL_SMALL,
-            T_RATIONAL_NARROW,
-        ],
-    );
-    let (_, through_domains) =
-        tuple_source(&[], &[BD_INTEGER, BD_TEXT, BD_DECIMAL, BD_RATIONAL_NARROW]);
-    assert!(
-        through_scalars.contains("rt::ValueType::Decimal(")
-            && through_scalars.contains("rt::ValueType::Rational(")
+    let (_, lib) = genuine_tuple_source(
+        "Int[-100, 100], Text[0, 16; nfc], Decimal[-100, 100; 0, 0; nearest-even], Rational[-10, 10; 1, 1]", "",
     );
     for reconstruction in [
-        "rt::ValueType::Int(rebuild_interval(\"-100\", \"100\")?)",
-        "rt::ValueType::Decimal(rebuild_decimal(\"-100\", \"100\", 0, 0, exact::RoundingMode::NearestEven)?)",
-        "rt::ValueType::Rational(rebuild_rational(rebuild_interval(\"-10\", \"10\")?, rebuild_interval(\"1\", \"1\")?)?)",
-    ] {
-        assert!(through_scalars.contains(reconstruction), "scalar member: {reconstruction}");
-        assert!(through_domains.contains(reconstruction), "domain member: {reconstruction}");
-    }
+        "exact::ValueType::Int(rebuild_interval(\"-100\", \"100\")?)",
+        "exact::ValueType::Decimal(rebuild_decimal(\"-100\", \"100\", 0, 0, exact::RoundingMode::NearestEven)?)",
+        "exact::ValueType::Rational(rebuild_rational(rebuild_interval(\"-10\", \"10\")?, rebuild_interval(\"1\", \"1\")?)?)",
+    ] { assert!(lib.contains(reconstruction), "actual public member: {reconstruction}"); }
+    // The unchanged base-scalar versus bounded-domain alias assertions are retained at
+    // the explicitly private member-resolution seam, without claiming both source forms.
 }
 
 /// A `bounded_domain` member reads its own bound and never a sibling
@@ -1678,14 +1630,15 @@ fn tc_029_ac16_numeric_bounded_domain_members_read_as_their_bounded_scalars() {
 #[trace("FR-018-AC-16", "TC-029")]
 #[test]
 fn tc_029_ac16_a_bounded_domain_member_never_reads_a_sibling_bound() {
-    let (oracles, lib) = tuple_source(&[BD_TEXT_SIBLING], &[T_INTEGER_BOUNDED, BD_TEXT_SIBLING]);
-    let _ = generated(only_claim(&oracles, E_TUPLE));
-    assert!(lib.contains("rebuild_text(1, 5, exact::TextProfile::Nfc)?"));
-    assert!(!lib.contains("rebuild_text(0, 16,"));
-    let (oracles, lib) = tuple_source(&[BD_TEXT_SIBLING], &[T_INTEGER_BOUNDED, BD_TEXT]);
-    let _ = generated(only_claim(&oracles, E_TUPLE));
-    assert!(lib.contains("rebuild_text(0, 16, exact::TextProfile::Nfc)?"));
-    assert!(!lib.contains("rebuild_text(1, 5,"));
+    for (selected, sibling, present, absent) in [
+        ("Text[1, 5; nfc]", "Text[0, 16; nfc]", "rebuild_text(1, 5, exact::TextProfile::Nfc)?", "rebuild_text(0, 16,"),
+        ("Text[0, 16; nfc]", "Text[1, 5; nfc]", "rebuild_text(0, 16, exact::TextProfile::Nfc)?", "rebuild_text(1, 5,"),
+    ] {
+        let extras = format!("function sibling using v(a: {sibling}): Boolean pure {{ true }}\n");
+        let (oracles, lib) = genuine_tuple_source(&format!("Int[-100, 100], {selected}"), &extras);
+        let _ = generated(&oracles.claim_map.items[0]);
+        assert!(lib.contains(present)); assert!(!lib.contains(absent));
+    }
 }
 
 /// A bound whose form is not the one its base scalar reads is
@@ -1693,17 +1646,20 @@ fn tc_029_ac16_a_bounded_domain_member_never_reads_a_sibling_bound() {
 #[trace("FR-018-AC-16", "TC-029")]
 #[test]
 fn tc_029_ac16_a_bound_form_that_does_not_fit_its_base_is_refused() {
-    let (refusal, ids) = tuple_refusal(&[BD_INTEGER_WRONG_FORM], &[BD_INTEGER_WRONG_FORM, BD_TEXT]);
-    match refusal {
-        CompositeEqualityRefusal::MissingBound {
-            bounded_type,
-            expected_form,
-        } => {
-            assert_eq!(bounded_type, ids.resolve(&code_id(BD_INTEGER_WRONG_FORM)));
-            assert_eq!(expected_form, "integer_range");
-        }
-        other => panic!("expected MissingBound, got {other:?}"),
-    }
+    let source = genuine_fixture::source("tuple");
+    let compiled = genuine_fixture::compile_source(&source);
+    let mut wire: serde_json::Value = serde_json::from_slice(compiled.package().bytes()).unwrap();
+    let nodes = wire["semantic_graph"]["nodes"].as_array_mut().unwrap();
+    let position = nodes.iter().position(|node| node["semantic_form"] == "integer_range").expect("genuine Int bound");
+    let id: quire_contract_model::CheckedNodeId = serde_json::from_value(nodes[position]["node_id"].clone()).unwrap();
+    nodes[position]["semantic_form"] = json!("text_bounds");
+    let result = read_mutated_wire(wire);
+    let CheckedPackageV2ReadResult::Refused(refusal) = result else { panic!("wrong-form source wire unexpectedly admitted: {result:?}") };
+    assert_eq!(refusal.code, CheckedPackageRefusalCode::InvalidPackage);
+    assert_eq!(refusal.cause, Some(CheckedPackageRefusalCause::StaleNodeKey));
+    assert_eq!(refusal.path.as_ref().map(|path| path.as_str().to_owned()), Some(format!("/semantic_graph/nodes/{position}/node_id")));
+    assert_eq!(refusal.locus, Some(id));
+    // Exact CG MissingBound(integer_range) remains a separate private defensive assertion.
 }
 
 /// A tuple containing IEEE is
@@ -1864,6 +1820,7 @@ fn returns_reconstruction(name: &str) -> bool {
     [
         "rebuild_",
         "lookup_enum_case",
+        "lookup_composite_key",
         "composites_",
         "left_source_",
         "left_target_",
@@ -2032,7 +1989,9 @@ fn emitted_enum<'l>(lib: &'l str, name: &str) -> &'l str {
 #[trace("FR-018-AC-17", "TC-029")]
 #[test]
 fn tc_029_ac17_emitted_source_has_no_panic_site_fallback_or_index_expression() {
-    let oracles = corpus_oracles();
+    for case in genuine_host_cases() {
+
+    let oracles = genuine_host_case(case, false);
     let lib = contents(&oracles, "src/lib.rs");
     assert!(
         lib.matches("pub fn oracle_").count() > 1,
@@ -2050,6 +2009,7 @@ fn tc_029_ac17_emitted_source_has_no_panic_site_fallback_or_index_expression() {
         Vec::<usize>::new(),
         "an index or slice expression in the emitted source"
     );
+    }
 }
 
 /// Numeric reconstruction retains its exact errors; context preparation preserves lookup and
@@ -2058,15 +2018,13 @@ fn tc_029_ac17_emitted_source_has_no_panic_site_fallback_or_index_expression() {
 #[trace("FR-018-AC-17", "TC-029")]
 #[test]
 fn tc_029_ac17_emitted_reconstruction_is_typed_and_refused_never_unwrapped() {
-    let oracles = corpus_oracles();
+    let mut exercised = BTreeSet::new();
+    for case in genuine_host_cases() {
+
+    let oracles = genuine_host_case(case, false);
     let lib = contents(&oracles, "src/lib.rs");
     let fns = emitted_fns(lib);
-    for helper in REBUILD_HELPERS {
-        assert!(
-            fns.iter().any(|function| function.name == helper),
-            "the corpus crate does not exercise `{helper}`"
-        );
-    }
+    exercised.extend(fns.iter().filter(|function| REBUILD_HELPERS.contains(&function.name)).map(|function| function.name.to_owned()));
     assert_eq!(structural_violations(lib), Vec::<String>::new());
     // The context ABI publishes only a private prepared capability after typed preparation.
     let environments: Vec<_> = fns
@@ -2142,10 +2100,15 @@ fn tc_029_ac17_emitted_reconstruction_is_typed_and_refused_never_unwrapped() {
             "Decimal,",
             "Text,",
             "Cardinality,",
-            "Enum,"
+            "Enum,",
+            "Composite,"
         ],
         "ReconstructionError must have exactly these unit variants"
     );
+    }
+    for helper in REBUILD_HELPERS {
+        assert!(exercised.contains(helper), "the genuine corpus union does not exercise {helper}");
+    }
 }
 
 /// The structural checker names each way a source can depart from
