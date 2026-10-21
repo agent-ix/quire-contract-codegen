@@ -10,8 +10,8 @@ use quire_contract_codegen::{
     decode_scalar_falsification, generate_routed, routed_contract_lowering_profile,
     BackendDescriptor, Candidate, ContractDriverResultSelection, ContractRequestPosition,
     DecodeFailure, GenerationContexts, KaniGenerationContext, KaniScalarObligationHarness,
-    KindOutput, ProviderOrigin, RoutedGenerationItem, ScalarObligationIdentity,
-    ScalarLimits, ScalarOriginalLimitsError,
+    KindOutput, ProviderOrigin, RoutedGenerationItem, ScalarLimits, ScalarObligationIdentity,
+    ScalarOriginalLimitsError,
 };
 use quire_contract_model::{
     CheckedOccurrenceRole, CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2,
