@@ -1,0 +1,685 @@
+<!-- reviewer repo=agent-ix/quire-contract-codegen visibility=public quoin=0.28.4 module=spec-artifacts-process@b82e42e893612b4b4ee94127714b4577ee893502 id=SR-15325 method=gap-analysis lang=spec pr=quire-contract-codegen#502 model=unavailable run=23ce763a-e82d-46ed-97f5-512b2a58c66f part=11 -->
+
+SR-15325 full repository gap review: FAIL (299 untagged criteria + four inherited annotation defects). Partition 11 of 12. Linear refused the complete 702123-character body: limit 100000 characters. This partition reports only the units and findings below; all partitions collectively equal the single unchanged validated SR. A clean partition does not change the overall FAIL. New four PLANNED Test criteria remain IR-641 coding work; inherited 295+four annotations are handed to IR-878 comment 93895fc0. No consumer implementation or passing committed-lock baseline is claimed.
+
++++ [reviewer data]
+
+```yaml
+clean: false
+scope:
+- id: FR-019-AC-10
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: Only an item settled `supported` routes.
+- id: FR-019-AC-45
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: 'A manifest with a second descriptor of one backend identity causes a whole-envelope `EnvelopeRefusal::ManifestRepeatsBackendIdentity
+    { identity: String }`, whether the descriptors are identical, differ in `ProviderOrigin` alone, or differ in
+    any other CG descriptor field, and whether adjacent or non-adjacent. The call returns no item settlements. The
+    variant has no string cause, manifest or digest payload; `negotiate_backend_provider` keeps its return signature.'
+- id: FR-019-AC-46
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: With several repeated identities, the refusal names the bytewise-first repeated identity independent
+    of manifest order; identities differing only in case are distinct. An invalid contract version or capability
+    vocabulary is refused as `EnvelopeRefusal::InvalidCapability` before repeat detection or any kind read.
+- id: FR-019-AC-47
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: QSL's registry snapshot holds each backend identity at most once (FR-290:258-265; FR-331:57), so no driver-built
+    FR-331 manifest repeats an identity.
+- id: FR-019-AC-48
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: 'A `Refused(refusal)` outcome from the current Kani oracle-function preflight read produces `Err(EnvelopeRefusal::ContractPackageReadRefused
+    { refusal: ContractPackageRefusalProjection })` for the whole request, with the reader''s `code`, `path`, `cause`,
+    `locus`, `contract_version`, `document_pointer`, `expected` and `actual` copied into the named CG projection;
+    the private `expected_node_id` is absent. No item settlement or artifact is returned.'
+- id: FR-019-AC-49
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: 'An `Incomplete(incomplete)` outcome from the current Kani oracle-function preflight read produces `Err(EnvelopeRefusal::ContractPackageReadIncomplete
+    { incomplete: ContractPackageIncompleteProjection })` for the whole request, with the reader''s `limit_kind`,
+    `limit`, `consumed` and `path` copied into the named CG projection. No item settlement or artifact is returned.'
+- id: FR-019-AC-50
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: An `Admitted` Kani function-application preflight read whose exact generator produces a claim for an
+    otherwise supported item retains the existing `supported` settlement.
+- id: FR-019-AC-51
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: Among several request items with non-`Admitted` preflight outcomes, the first failing item in manifest/item
+    request order determines the whole-request `ContractPackageReadRefused` or `ContractPackageReadIncomplete` variant
+    and projection, irrespective of outcome kind. Earlier successful items contribute no returned settlement or
+    artifact.
+- id: FR-019-AC-52
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: An `Admitted` Kani function-application read whose exact generator emits no claim, and a structural preflight
+    rejection before any read, each retain item-level `KaniFormRefused { OperationNotRendered }` without a reader
+    envelope refusal.
+- id: FR-019-AC-53
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: Given an admitted package with bound driver items at driver indexes 0 and 2 around an excluded accounting-only
+    position at index 1 whose accounting is `lowered` with a Kani-supported form, an FR-331 envelope with exactly
+    two items settles the bound items without an `EnvelopeItemCount` refusal. Both `ContractItemSettlement.request_index`
+    and its nested `ItemSettlement.request_index` equal 0 and 2 respectively, not envelope indexes 0 and 1. The
+    excluded position produces no settlement or claim, and its own classifier-call and Kani-preflight-read counts
+    are both zero. An envelope with fewer or mo
+- id: FR-019-AC-7
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: An envelope whose `capability_vocabulary` is not exactly `quire.capability-kind/v1`, or is absent, is
+    refused as `invalid_capability`/`unsupported-version` with none of its kinds read.
+- id: FR-019-AC-8
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: An item with an absent extent classification settles `invalid-request` with `invalid_capability`/`absent-extent`,
+    and an absent or unknown kind settles before the candidate table is consulted.
+- id: FR-019-AC-9
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: 'A backend kind added without a negotiation arm does not compile: the dispatch is an exhaustive `match`
+    over the closed kind with no catch-all arm.'
+- id: FR-019-AC-11
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: PLANNED (IR-629). `BackendKind` has `Process(id)` beside `Kani`; `ALL` lists finite built-in kinds only,
+    while CG enumerates process candidates from descriptors. CG's descriptor-to-kind conversion returns `Process(id)`
+    exactly when a descriptor has process origin, including identity text `kani`. A named, registered process backend
+    reaches that arm and receives one disposition; no process item disappears for being absent from `ALL`.
+- id: FR-019-AC-12
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: PLANNED (IR-629; non-empty bounded rows depend on QSL-654's producer and admit-side enforcement). A bounded
+    process item with an uncovered `extent.bounds[].kind` settles `unsupported`, warned, with `unsupported_projection`/`unsupported-requested-capability`
+    naming the offending domain kind and candidate (QSpec FR-290-AC-13). An item that passes the domain check, including
+    one with empty `bounds`, settles `supported` exactly when its descriptor advertises `bounded` for its kind;
+    otherwise it settles `unsupported`, warned, with `unsupported_projection`/`unsupported-requested-capability`.
+- id: FR-019-AC-16
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: PLANNED (IR-629). An unbounded process item settles `supported` when its descriptor advertises `unbounded`
+    for its kind, regardless of whether any `extent.domains[].kind` belongs to manifest `domains`.
+- id: FR-019-AC-17
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: PLANNED (IR-629). On a `bounded`-only process descriptor, an unbounded item settles `requires-bound`
+    exactly when `finite_bound_available` is true and every boundable `extent.domains[].kind` is in manifest `domains`
+    (QSpec FR-290-AC-13).
+- id: FR-019-AC-18
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: PLANNED (IR-629). Given the same process advertisements and item extent, changing only backend identity,
+    manifest position, manifest run-limit defaults or ambient state leaves the disposition and cause unchanged apart
+    from the backend named in the output.
+- id: FR-019-AC-19
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: PLANNED (IR-629; bounded row depends on QSL-654's producer). The process arm reads each explicit `extent.bounds[].kind`
+    and never derives a domain kind from `DomainKey`; two otherwise equal bounded items with the same `DomainKey`
+    and different explicit kinds can settle differently under one manifest `domains` set.
+- id: FR-019-AC-20
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: PLANNED (IR-629; driver projection remains paired work). CG's process descriptor retains the FR-331 manifest's
+    advertised (kind, mode) pairs, `domains` and optional `bounds` beside the IR-633 `id` and `origin` projection.
+- id: FR-019-AC-42
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: Two otherwise equal CG Process descriptors with absent and present-empty manifest `bounds` remain distinct
+    typed values. Changing only between those forms leaves process settlement's disposition and request-validation
+    precedence unchanged; run-limit defaults are not proof bounds.
+- id: FR-019-AC-21
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: PLANNED (IR-629). On a `bounded`-only process descriptor, an unbounded item with any unadvertised boundable
+    `extent.domains[].kind` settles `unsupported`, warned, with `unsupported_projection`/`unsupported-requested-capability`
+    naming the offending domain kind and candidate, regardless of `finite_bound_available`; non-boundable kinds
+    are not compared (QSpec FR-290-AC-13).
+- id: FR-019-AC-22
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: PLANNED (IR-629). On a `bounded`-only process descriptor, an unbounded item with every boundable `extent.domains[].kind`
+    advertised and the item's `finite_bound_available=false` settles `unsupported`, warned, with `unsupported_projection`/`unbounded-extent`.
+    CG reads that flag from the item and does not derive it from the domain kinds (QSpec FR-290-AC-13).
+- id: FR-019-AC-23
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: PLANNED (IR-629; bounded row depends on QSL-654). Changing only a bounded item's proof-bound numeric
+    maximum leaves its process-provider `supported` or `unsupported` disposition and cause unchanged.
+- id: FR-019-AC-13
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: 'Settling a process-provider item reaches no plugin: a descriptor whose identity names a non-existent
+    executable settles identically to one with an ordinary identity, apart from the backend each names, and starts
+    nothing, and a descriptor whose identity names an executable that records its own start leaves no record. A
+    mutant arm that starts or resolves the identity as a process either changes the first disposition or leaves
+    the record, and fails this.'
+- id: FR-019-AC-14
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: The process-provider arm's return type is `Disposition`, which has no terminal-value, verification-result
+    or artifact member, so settling returns none of them. A change that returns one does not compile against that
+    type.
+- id: FR-019-AC-15
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: PLANNED (IR-633). CG's `BackendDescriptor` has a typed `ProviderOrigin` projecting exactly QSL layer
+    R's `Linked` and `Process` meanings (QSL FR-288, ADR-029 PV-1); layer R owns that vocabulary. The driver projects
+    each descriptor from `Registry::descriptors()` once into CG's descriptor, copying `id` and advertised pairs
+    unchanged and mapping `origin()` exhaustively, `Linked` to `Linked` and `Process` to `Process`, with no wildcard
+    or origin inference from identity, manifest or provider bytes or a side map. Two registry descriptors identical
+    except for origin produce CG descriptors identical e
+- id: FR-019-AC-24
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: 'PLANNED (IR-338). Given QSL FR-335''s `value-validity` claim rooted at an unbounded `s: Set<Int[0,9999]>`,
+    an empty candidate registry settles `unsupported` with a warning naming `value-validity` and emits no artifact
+    or Kani outcome; one linked Kani candidate advertising (`value-validity`, `bounded`) with `finite_bound_available=true`
+    settles the unbounded item `requires-bound` without substituting a bound or emitting an artifact; a separately
+    requested bounded `ProofBound::Cardinality{maximum: 8}` item with that same sole candidate settles `supported`
+    under its own request index, while the un'
+- id: FR-019-AC-25
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: 'The normative Kani form set is the complete V1 proof set defined by IR-269 and FR-015: scalar families
+    Boolean, integer, rational, decimal, IEEE float, text, enum and quantity; record and tuple composite equality;
+    function application; precondition, postcondition and invariant `BoundClause` roles; and bounded collection
+    and graph forms. V1 `ClauseKind` has no frame variant. State before/after and frame obligations are typed V2
+    `StateFrame` items with the `contract` or `frame` role, included where FR-015 defines their typed lowering.
+    Each item is identified by its typed IR tag/form, family, ope'
+- id: FR-019-AC-26
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: For any form in FR-019-AC-25 with one validated Kani candidate, a bounded extent settles `supported`
+    exactly when the form's FR-015 lowering succeeds and the candidate advertises the bounded mode; negotiation
+    creates no artifact as part of settlement.
+- id: FR-019-AC-27
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: With one Kani candidate, a typed form outside the normative set in FR-019-AC-25 settles `unsupported`,
+    warned, with `unsupported_projection`/`unsupported-requested-capability` naming its typed tag/form and Kani;
+    no artifact is emitted and no generator is invoked. A malformed in-set form settles with the applicable typed
+    FR-015 validation refusal.
+- id: FR-019-AC-33
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: For a valid bounded typed form inside FR-019-AC-25 that matches one specific Planned subpath in TC-030's
+    status register and does not match an Implemented subpath, negotiation returns `unsupported` with that subpath's
+    single exact typed refusal cause, emits no artifact, and never settles `supported` before its renderer is implemented;
+    this refusal remains distinct from the out-of-V1 refusal in AC-27.
+- id: FR-019-AC-28
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: A form refusal under FR-019-AC-27 is distinct from an empty candidate set, which retains the missing-capability
+    cause, and from multiple candidates without a named backend, which retains `invalid_capability`/`ambiguous-backend`
+    naming each candidate in candidate order.
+- id: FR-019-AC-29
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: After request and candidate/manifest validation select one Kani candidate, Kani checks the typed IR form
+    before its extent and advertised-mode rules; if both the form and mode/extent are unsupported, the form refusal
+    of FR-019-AC-27 settles the item.
+- id: FR-019-AC-30
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: For the same typed IR tag/form, changing only its display or debug text leaves Kani's disposition, cause
+    and named form identity unchanged.
+- id: FR-019-AC-31
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: For a Kani-supported unbounded form against a `bounded`-only advertisement, `finite_bound_available=true`
+    settles `requires-bound`, with no substituted bound and no artifact.
+- id: FR-019-AC-32
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: When a caller supplies a finite bound in a new bounded request for a Kani-supported form, negotiation
+    settles `supported` and preserves the exact supplied proof-bound value, domain kind and domain identity.
+- id: FR-019-AC-34
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: PLANNED (IR-516). With one EN-1 candidate, an advertised admitted TP-1 through TP-4, TP-5, SG-1 through
+    SG-3, or HP-1 model/HP-2/HP-3/HP-6 form settles through its explicit-state arm with the recorded form and model-or-protocol
+    subject intact; an unadvertised form or HP-1 code claim does not settle `supported` through EN-1.
+- id: FR-019-AC-35
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: PLANNED (IR-516). With one SMT temporal candidate advertising the item's kind and form, TP-1 through
+    TP-4 route only to an EN-2 or EN-3 method ADR-018 assigns to that form and subject; TP-4 does not route to EN-3,
+    and a form absent from the candidate's advertised form set settles `unsupported` with no engine request.
+- id: FR-019-AC-36
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: PLANNED (IR-516). A TP-5 whole-refinement `temporal-satisfaction` item retains its safety and optional
+    liveness halves on the concrete subject through EN-1, and the same whole item reaches an advertising SMT arm
+    for RE-3 refutation; a separately requested RE-2 `operation-contract` item reaches the SMT arm for per-step
+    safety checking, but its disposition cannot substitute for the whole-refinement item. An arm lacking the required
+    TP-5 form settles the item `unsupported`.
+- id: FR-019-AC-37
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: PLANNED (IR-516). HP-1 model, HP-2, HP-3 and HP-6 reach an advertising EN-1 arm; only HP-2 reaches an
+    advertising SMT arm under its applicable EN-2 or EN-3 method. HP-4 and an unadvertised HP form settle unsupported
+    before an engine, HP-5 stays on its possible-property path, and an HP-1 code claim is not settled as an EN-1
+    model claim.
+- id: FR-019-AC-38
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: PLANNED (IR-516). An advertised SG-1, SG-2 or SG-3 item reaches EN-1 with its recorded form; only advertised
+    SG-1 reaches an SMT arm. SG-2 or SG-3 against an SMT-only candidate settles unsupported and reaches no SMT engine.
+- id: FR-019-AC-39
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: PLANNED (IR-516). A selected reduction reaches only a candidate advertising that exact reduction, with
+    the selection preserved in the routed request. Symmetry declarations and POR enter the obligation identity,
+    so their reduced and unreduced requests for one claim have distinct obligation identities; a state constraint
+    changes request identity but leaves obligation identity unchanged. An unadvertised selection or POR on a subject
+    with no footprints settles `unsupported` without an artifact, and no arm drops or adds a reduction.
+- id: FR-019-AC-40
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: PLANNED (IR-516). For an item over a weak `parallel`, a candidate advertising the subject's resolved
+    `tso` or `ra` model receives that exact model; a candidate lacking it settles `unsupported` with no artifact,
+    and no arm weakens the resolved model. An `sc` subject is a separate strong-model control and does not take
+    the weak-memory branch.
+- id: FR-019-AC-41
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: PLANNED (IR-516). With otherwise equal form and kind advertisement, model and protocol subject classes
+    are read separately; an arm that discharges only one class settles the other `unsupported`, while a supported
+    protocol item retains its protocol transition-system subject identity through routing.
+- id: FR-019-AC-43
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: Two driver items selecting distinct `expression` occurrences of one checked `integer.add` node and different
+    direct `numeric.narrow` occurrences in one admitted ContractPackage settle independently under the same Kani
+    descriptor. Each preflight result is classified from its own selected result context; changing the selected
+    narrow changes that item's typed result identity or refusal without changing the other. A node-only classifier
+    or package-wide choice of either bound fails this control.
+- id: FR-019-AC-44
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  role: examined
+  excerpt: For a V2 scalar claim, an absent `OwnResult`, an application occurrence absent from the admitted source,
+    a conversion occurrence from another source or unrelated to the application, a missing conversion context root,
+    or a ContractPackage source identity different from the checked source settles `invalid-request` with a typed
+    form/context cause and no artifact or harness. Request and candidate/manifest defects retain their earlier precedence;
+    for a valid candidate this selected-form refusal precedes extent and advertised-mode refusal. Neither a source
+    message nor a caller maximum repairs the se
+- id: FR-022-AC-1
+  path: spec/routed/functional/FR-022-routed-generation.md
+  role: examined
+  excerpt: Generation dispatches one arm per variant of the closed `BackendKind` through an exhaustive `match` with
+    no catch-all, and `GenerationContexts::has` handles each variant; adding a variant without either arm does not
+    compile. `Process` requires no context.
+- id: FR-022-AC-2
+  path: spec/routed/functional/FR-022-routed-generation.md
+  role: examined
+  excerpt: For a set of routed Kani items, each record and harness in the output equals what `negotiate_kani_obligations`
+    returns for the same items in ascending request-index order with the same context. The one difference is that
+    every index inside a record is the driver's request index, and each harness is paired with the record whose
+    `harness_symbol` names it.
+- id: FR-022-AC-3
+  path: spec/routed/functional/FR-022-routed-generation.md
+  role: examined
+  excerpt: The entry point accepts no backend registry, candidate set, extent or capability kind, and constructs
+    no FR-019 `Disposition`.
+- id: FR-022-AC-4
+  path: spec/routed/functional/FR-022-routed-generation.md
+  role: examined
+  excerpt: PLANNED (IR-629 internal-invariant test migration). A crate-internal malformed routed Kani item whose
+    private backend identity has no CG built-in kind, or converts to a kind other than Kani, refuses the whole call
+    as `BackendKindDisagrees`, naming the request index, backend, routed kind and converted kind or its absence,
+    with no artifact.
+- id: FR-022-AC-5
+  path: spec/routed/functional/FR-022-routed-generation.md
+  role: examined
+  excerpt: Two routed items with one request index refuse as `DuplicateRequestIndex` naming it. A routed Kani item
+    without Kani context refuses as `MissingKindContext` naming Kani. Each returns no artifact.
+- id: FR-022-AC-6
+  path: spec/routed/functional/FR-022-routed-generation.md
+  role: examined
+  excerpt: A Kani group-level refusal (for example an unwind outside `1..=1024`, or an unparsable subject path)
+    is returned as `Kani` carrying the unchanged `KaniObligationError`, with no artifact.
+- id: FR-022-AC-7
+  path: spec/routed/functional/FR-022-routed-generation.md
+  role: examined
+  excerpt: A Kani group containing an `invalid_request` item is listed in `rejected`, and every Kani item's record
+    is returned with no harness. A `DuplicateItem` reported by FR-015 has `first_index` rewritten to the driver's
+    request index of the first occurrence. On the FR-330 package path, an identical selected scalar occurrence pair
+    also retains FR-039's earlier typed `DuplicateRequest` claim refusal at both positions.
+- id: FR-022-AC-8
+  path: spec/routed/functional/FR-022-routed-generation.md
+  role: examined
+  excerpt: Every routed item appears exactly once in `items`, in ascending request index, under its routed backend
+    and the `KindOutput` variant of its routed kind. An item the arm refuses at lowering keeps its typed FR-015
+    refusal and no harness. An empty routed set returns an empty result.
+- id: FR-022-AC-9
+  path: spec/routed/functional/FR-022-routed-generation.md
+  role: examined
+  excerpt: Regeneration from equal inputs is byte-identical, and a permutation of the routed-item slice yields an
+    identical result. The same node routed at a different request index or under another candidate of the same backend
+    yields a byte-identical harness when the admitted FR-330 package and selected occurrence are the same.
+- id: FR-022-AC-10
+  path: spec/routed/functional/FR-022-routed-generation.md
+  role: examined
+  excerpt: The Kani arm derives each item's operation and domain from the package alone; the caller supplies no
+    claim map, and `x + 1` over a parameter `Int[0, 9]` routes to a supported `quire.op.integer.add` harness with
+    arguments `[0, 9]` and `[1, 1]` (the literal at its own value, FR-015-AC-16).
+- id: FR-022-AC-11
+  path: spec/routed/functional/FR-022-routed-generation.md
+  role: examined
+  excerpt: 'An item with no derivable descriptor keeps its typed refusal and no harness, and its siblings'' records
+    and harnesses are unaffected. On the FR-330 package path, an absent root retains its exact admitted `InvalidInput`
+    accounting and `PackageRefused` output before Kani. On a direct FR-015 request, a node absent from the graph
+    is `invalid_request` and rejects the group. A node that does not lower or has a refused bound keeps the FR-015
+    disposition it has when its claim is generated by FR-014 (`requires_bound`, `blocked_on_upstream`, `unsatisfiable_bound`).
+    A repeated selected pair on the FR-330 '
+- id: FR-022-AC-12
+  path: spec/routed/functional/FR-022-routed-generation.md
+  role: examined
+  excerpt: '`RoutedGeneration.claim_map` is `Some` after a Kani group and contains one claim per selected node/occurrence
+    admitted past FR-039 accounting, retaining any earlier typed `DuplicateRequest` refusal; an underivable node
+    has one refused claim of provenance `underived`, ordered by node id and then selected occurrence key.'
+- id: FR-022-AC-13
+  path: spec/routed/functional/FR-022-routed-generation.md
+  role: examined
+  excerpt: 'The Kani arm routes an integer node over bounded parameters to a supported harness whose arguments are
+    one range per operand and whose result assertion uses the result bound: `a + b` over `[0, 9]` and `[10, 20]`
+    with result `[0, 29]` has arguments `[0, 9]` and `[10, 20]`; `-e` over `[1, 9]` with result `[-9, -1]` and `e
+    * f` over `[1, 9]` and `[100, 200]` with result `[100, 1800]` are supported; a node with a plain-typed `reference`
+    operand beside bounded typing (FR-014-AC-25) settles `requires_bound` and has no harness.'
+- id: FR-022-AC-14
+  path: spec/routed/functional/FR-022-routed-generation.md
+  role: examined
+  excerpt: '`RoutedGeneration.oracle_artifacts` is `Some` after a Kani group and `None` when nothing is routed.
+    Its `claim-map.json` equals the complete package-derived claim map, including typed refused items; a group with
+    no generated claim still returns its crate. For `x + 1` over a parameter `Int[0, 9]`, each `Generated` claim''s
+    oracle symbol is defined in the returned `src/lib.rs` and appears in the supported harness''s Rust source.'
+- id: FR-022-AC-15
+  path: spec/routed/functional/FR-022-routed-generation.md
+  role: examined
+  excerpt: 'The Kani arm routes the packages QSL emits for `x + 1` over `x: Int[0, 9]` into `Int[0, 10]`, `x + y`
+    over `Int[0, 9]` and `Int[10, 20]` into `Int[10, 29]`, and `-z` over `Int[0, 9]` into `Int[-9, 0]` (a literal
+    as a reference to its own `value` node, the declared bound on a narrowing `conversion` consuming the plain-typed
+    arithmetic node) to supported harnesses with arguments `[0, 9]` and `[1, 1]`; `[0, 9]` and `[10, 20]`; and `[0,
+    9]`, each asserting the result against the conversion''s bound (`[0, 10]`, `[10, 29]`, `[-9, 0]`). In that shape
+    a plain-Integer parameter beside a bounded one, and'
+- id: FR-022-AC-16
+  path: spec/routed/functional/FR-022-routed-generation.md
+  role: examined
+  excerpt: Two Kani harnesses with one `harness_symbol` refuse the call as `DuplicateHarness` naming the second
+    harness's `module::harness` path, and no harness is overwritten or dropped.
+- id: FR-022-AC-17
+  path: spec/routed/functional/FR-022-routed-generation.md
+  role: examined
+  excerpt: PLANNED (IR-629). A routed `Process(id)` item appears exactly once with its own identity and empty `KindOutput::Process`,
+    without a generation context or membership in `BackendKind::ALL`.
+- id: FR-022-AC-18
+  path: spec/routed/functional/FR-022-routed-generation.md
+  role: examined
+  excerpt: PLANNED (IR-629). A crate-internal routed `Process(id)` item whose private backend and kind disagree
+    refuses the whole call as `BackendKindDisagrees` with `converted=Some(Process(item.backend.identity))` and no
+    generated output.
+- id: FR-022-AC-19
+  path: spec/routed/functional/FR-022-routed-generation.md
+  role: examined
+  excerpt: PLANNED (IR-629). Permuting a routed-item slice containing Kani and multiple process identities leaves
+    its request-index-ordered output unchanged.
+- id: FR-022-AC-20
+  path: spec/routed/functional/FR-022-routed-generation.md
+  role: examined
+  excerpt: PLANNED (IR-629). `RoutedGenerationItem.backend` and `.kind` are private while `request_index` and `node_id`
+    remain public; external callers cannot create an item with a hand-built `Process(id)` or reassign its backend
+    after `from_descriptor` construction.
+- id: FR-022-AC-21
+  path: spec/routed/functional/FR-022-routed-generation.md
+  role: examined
+  excerpt: PLANNED (IR-629). `from_descriptor` constructs Kani for a linked `kani` descriptor and `Process(id)`
+    for a process descriptor with the same identity text. An unknown linked identity never produces Process.
+- id: FR-022-AC-22
+  path: spec/routed/functional/FR-022-routed-generation.md
+  role: examined
+  excerpt: PLANNED (IR-629). `from_descriptor` rejects a backend identity different from the descriptor identity
+    as `DescriptorBackendMismatch`, naming both; it rejects an unknown linked identity as `UnknownLinkedBackend`,
+    naming the backend. Neither refusal produces a routed item.
+- id: FR-022-AC-23
+  path: spec/routed/functional/FR-022-routed-generation.md
+  role: examined
+  excerpt: After FR-019 authenticates two `integer.add` driver items on one admitted ContractPackage with distinct
+    selected application/direct-`numeric.narrow` pairs, routed generation retains the pair for each item in its
+    claim and harness identity and asserts against its own selected result bound. The two generated harnesses have
+    distinct identities and expected ranges; a fresh settlement of a changed selection changes or refuses only that
+    item, without borrowing the other bound.
+- id: FR-022-AC-24
+  path: spec/routed/functional/FR-022-routed-generation.md
+  role: examined
+  excerpt: A routed scalar item's retained authenticated selection and its driver lowering position must name the
+    same application/conversion pair in the same admitted ContractPackage. A changed pair, missing conversion context
+    root or occurrence absent from that package refuses the whole call with a typed selection error before any harness.
+    No package-wide bound search, source-text reparse or copied QSL context supplies a replacement.
+- id: FR-022-AC-25
+  path: spec/routed/functional/FR-022-routed-generation.md
+  role: examined
+  excerpt: The public CG API exposes the concrete `ContractScalarError` carried by `RoutedGenerationError::ContractScalar`,
+    so an external driver can match `ContractScalarError::Oracle(OracleGenerationError::SourceTooLarge { bytes,
+    limit, setting })` and distinguish the scalar source ceiling from request-accounting and other oracle failures
+    without parsing text or naming a private module.
+- id: FR-022-AC-26
+  path: spec/routed/functional/FR-022-routed-generation.md
+  role: examined
+  excerpt: Given the checked QSL RR-16 package with two `x + 1` occurrences of one application node, directly narrowed
+    to `Int[0, 10]` and `Int[0, 20]`, the driver supplies two distinct request indexes and occurrence keys. CG matches
+    each to its own requirement record and selected narrow; both supported scalar outputs use the shared application
+    operation and their respective result bounds, and their obligation and harness identities differ by application
+    occurrence. Reversing routed-item order leaves these pairings unchanged.
+- id: FR-022-AC-27
+  path: spec/routed/functional/FR-022-routed-generation.md
+  role: examined
+  excerpt: 'For `if p then x + 1 else x + 1`, each occurrence''s generated scalar claim is conditional on its own
+    QSL path guard: the same guard occurrence with `holds=true` for the then item and `holds=false` for the else
+    item. CG preserves the full outermost-first guard sequence and uses it when forming the proof obligation; a
+    result under `p=false` cannot prove the then claim and one under `p=true` cannot prove the else claim. An empty
+    path condition remains unguarded.'
+- id: FR-022-AC-28
+  path: spec/routed/functional/FR-022-routed-generation.md
+  role: examined
+  excerpt: If a routed scalar item's occurrence has no entry in the supplied requirement records, its key's node
+    disagrees with the authenticated application selection, or the keyed record disagrees with the item's result
+    bound, direct conversion occurrence or ordered path condition, CG returns a typed refusal identifying the request
+    index and occurrence before emitting an oracle, harness or obligation identity for that request; it does not
+    use another record with the same node or reconstruct missing values from the IR graph or source text.
+findings:
+- fnd: FND-267
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-019-AC-15
+  related_ids: []
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  lines: '547'
+  excerpt: PLANNED (IR-633). CG's `BackendDescriptor` has a typed `ProviderOrigin` projecting exactly QSL layer
+    R's `Linked` and `Process` meanings (QSL FR-288, ADR-029 PV-1); layer R owns that vocabulary. The driver projects
+    each descriptor from `Registry::descriptors()` once into CG's descriptor, copying `id` and advertised pairs
+    unchanged and mapping `origin()` exhaustively, `Linked` to `Linked` and `Process` to `Process`, with no wildcard
+    or origin inference from identity, manifest or provider bytes or a side map. Two registry descriptors identical
+    except for origin produce CG descriptors identical e
+  finding: 'FR-019-AC-15 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-268
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-019-AC-24
+  related_ids: []
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  lines: '548'
+  excerpt: 'PLANNED (IR-338). Given QSL FR-335''s `value-validity` claim rooted at an unbounded `s: Set<Int[0,9999]>`,
+    an empty candidate registry settles `unsupported` with a warning naming `value-validity` and emits no artifact
+    or Kani outcome; one linked Kani candidate advertising (`value-validity`, `bounded`) with `finite_bound_available=true`
+    settles the unbounded item `requires-bound` without substituting a bound or emitting an artifact; a separately
+    requested bounded `ProofBound::Cardinality{maximum: 8}` item with that same sole candidate settles `supported`
+    under its own request index, while the un'
+  finding: 'FR-019-AC-24 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-269
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-019-AC-34
+  related_ids: []
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  lines: '558'
+  excerpt: PLANNED (IR-516). With one EN-1 candidate, an advertised admitted TP-1 through TP-4, TP-5, SG-1 through
+    SG-3, or HP-1 model/HP-2/HP-3/HP-6 form settles through its explicit-state arm with the recorded form and model-or-protocol
+    subject intact; an unadvertised form or HP-1 code claim does not settle `supported` through EN-1.
+  finding: 'FR-019-AC-34 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-270
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-019-AC-35
+  related_ids: []
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  lines: '559'
+  excerpt: PLANNED (IR-516). With one SMT temporal candidate advertising the item's kind and form, TP-1 through
+    TP-4 route only to an EN-2 or EN-3 method ADR-018 assigns to that form and subject; TP-4 does not route to EN-3,
+    and a form absent from the candidate's advertised form set settles `unsupported` with no engine request.
+  finding: 'FR-019-AC-35 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-271
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-019-AC-36
+  related_ids: []
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  lines: '560'
+  excerpt: PLANNED (IR-516). A TP-5 whole-refinement `temporal-satisfaction` item retains its safety and optional
+    liveness halves on the concrete subject through EN-1, and the same whole item reaches an advertising SMT arm
+    for RE-3 refutation; a separately requested RE-2 `operation-contract` item reaches the SMT arm for per-step
+    safety checking, but its disposition cannot substitute for the whole-refinement item. An arm lacking the required
+    TP-5 form settles the item `unsupported`.
+  finding: 'FR-019-AC-36 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-272
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-019-AC-37
+  related_ids: []
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  lines: '561'
+  excerpt: PLANNED (IR-516). HP-1 model, HP-2, HP-3 and HP-6 reach an advertising EN-1 arm; only HP-2 reaches an
+    advertising SMT arm under its applicable EN-2 or EN-3 method. HP-4 and an unadvertised HP form settle unsupported
+    before an engine, HP-5 stays on its possible-property path, and an HP-1 code claim is not settled as an EN-1
+    model claim.
+  finding: 'FR-019-AC-37 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-273
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-019-AC-38
+  related_ids: []
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  lines: '562'
+  excerpt: PLANNED (IR-516). An advertised SG-1, SG-2 or SG-3 item reaches EN-1 with its recorded form; only advertised
+    SG-1 reaches an SMT arm. SG-2 or SG-3 against an SMT-only candidate settles unsupported and reaches no SMT engine.
+  finding: 'FR-019-AC-38 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-274
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-019-AC-39
+  related_ids: []
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  lines: '563'
+  excerpt: PLANNED (IR-516). A selected reduction reaches only a candidate advertising that exact reduction, with
+    the selection preserved in the routed request. Symmetry declarations and POR enter the obligation identity,
+    so their reduced and unreduced requests for one claim have distinct obligation identities; a state constraint
+    changes request identity but leaves obligation identity unchanged. An unadvertised selection or POR on a subject
+    with no footprints settles `unsupported` without an artifact, and no arm drops or adds a reduction.
+  finding: 'FR-019-AC-39 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-275
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-019-AC-40
+  related_ids: []
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  lines: '564'
+  excerpt: PLANNED (IR-516). For an item over a weak `parallel`, a candidate advertising the subject's resolved
+    `tso` or `ra` model receives that exact model; a candidate lacking it settles `unsupported` with no artifact,
+    and no arm weakens the resolved model. An `sc` subject is a separate strong-model control and does not take
+    the weak-memory branch.
+  finding: 'FR-019-AC-40 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-276
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-019-AC-41
+  related_ids: []
+  path: spec/routed/functional/FR-019-capability-settlement.md
+  lines: '565'
+  excerpt: PLANNED (IR-516). With otherwise equal form and kind advertisement, model and protocol subject classes
+    are read separately; an arm that discharges only one class settles the other `unsupported`, while a supported
+    protocol item retains its protocol transition-system subject identity through routing.
+  finding: 'FR-019-AC-41 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-277
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-022-AC-26
+  related_ids: []
+  path: spec/routed/functional/FR-022-routed-generation.md
+  lines: '361'
+  excerpt: Given the checked QSL RR-16 package with two `x + 1` occurrences of one application node, directly narrowed
+    to `Int[0, 10]` and `Int[0, 20]`, the driver supplies two distinct request indexes and occurrence keys. CG matches
+    each to its own requirement record and selected narrow; both supported scalar outputs use the shared application
+    operation and their respective result bounds, and their obligation and harness identities differ by application
+    occurrence. Reversing routed-item order leaves these pairings unchanged.
+  finding: 'FR-022-AC-26 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-278
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-022-AC-27
+  related_ids: []
+  path: spec/routed/functional/FR-022-routed-generation.md
+  lines: '362'
+  excerpt: 'For `if p then x + 1 else x + 1`, each occurrence''s generated scalar claim is conditional on its own
+    QSL path guard: the same guard occurrence with `holds=true` for the then item and `holds=false` for the else
+    item. CG preserves the full outermost-first guard sequence and uses it when forming the proof obligation; a
+    result under `p=false` cannot prove the then claim and one under `p=true` cannot prove the else claim. An empty
+    path condition remains unguarded.'
+  finding: 'FR-022-AC-27 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-279
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-022-AC-28
+  related_ids: []
+  path: spec/routed/functional/FR-022-routed-generation.md
+  lines: '363'
+  excerpt: If a routed scalar item's occurrence has no entry in the supplied requirement records, its key's node
+    disagrees with the authenticated application selection, or the keyed record disagrees with the item's result
+    bound, direct conversion occurrence or ordered path condition, CG returns a typed refusal identifying the request
+    index and occurrence before emitting an oracle, harness or obligation identity for that request; it does not
+    use another record with the same node or reconstruct missing values from the IR graph or source text.
+  finding: 'FR-022-AC-28 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+bindings: []
+```
+
++++

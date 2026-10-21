@@ -1,0 +1,802 @@
+<!-- reviewer repo=agent-ix/quire-contract-codegen visibility=public quoin=0.28.4 module=spec-artifacts-process@b82e42e893612b4b4ee94127714b4577ee893502 id=SR-15325 method=gap-analysis lang=spec pr=quire-contract-codegen#502 model=unavailable run=23ce763a-e82d-46ed-97f5-512b2a58c66f part=9 -->
+
+SR-15325 full repository gap review: FAIL (299 untagged criteria + four inherited annotation defects). Partition 9 of 12. Linear refused the complete 702123-character body: limit 100000 characters. This partition reports only the units and findings below; all partitions collectively equal the single unchanged validated SR. A clean partition does not change the overall FAIL. New four PLANNED Test criteria remain IR-641 coding work; inherited 295+four annotations are handed to IR-878 comment 93895fc0. No consumer implementation or passing committed-lock baseline is claimed.
+
++++ [reviewer data]
+
+```yaml
+clean: false
+scope:
+- id: FR-021-AC-16
+  path: spec/oracle/functional/FR-021-function-application-oracles.md
+  role: examined
+  excerpt: 'The schedule and its claim/location maps neither read nor depend on dynamic invocation `location` or
+    `losses` fields. No oracle makes a claim that those fields are populated: CG claims no QSL application API (IR-845).'
+- id: FR-021-AC-17
+  path: spec/oracle/functional/FR-021-function-application-oracles.md
+  role: examined
+  excerpt: 'Each location record uses the request function binding and function-body ordering for its origin; the
+    cross-check against an origin published by a QSL-owned checker is outside CG''s boundary (IR-845). The runtime
+    check is PLANNED, blocked on IR-853: once Contract Runtime FR-275 deletes the `exact` port, its target is decided
+    by IR-853.'
+- id: FR-021-AC-18
+  path: spec/oracle/functional/FR-021-function-application-oracles.md
+  role: examined
+  excerpt: No test name, trace tag, test output line or doc comment of the function-application corpus, no TC-031
+    step and no oracle-matrix row claims, or presents as evidence, agreement in outcome, refusal, charge order or
+    consumed counters with the QSL-owned application authority; text that states this boundary is permitted. That
+    agreement is not claimed by CG and is owned by quire-integration IR-842 (FR-014-AC-47).
+- id: FR-021-AC-19
+  path: spec/oracle/functional/FR-021-function-application-oracles.md
+  role: examined
+  excerpt: The emitted schedule crate for scalar, equality and nested-call corpus cases contains zero `.unwrap(`,
+    `.expect(`, `unreachable!`, `panic!`, `todo!` and `unimplemented!` tokens; no concrete owner-path oracle exists
+    to check (IR-845).
+- id: FR-021-AC-20
+  path: spec/oracle/functional/FR-021-function-application-oracles.md
+  role: examined
+  excerpt: For each scalar and equality instruction, the target-neutral schedule preserves completed, undefined,
+    refused, incomplete and checked-invariant result distinctions without folding one into another. Forwarding a
+    QSL application API's owner result variants is outside CG's boundary (IR-845).
+- id: FR-021-AC-21
+  path: spec/oracle/functional/FR-021-function-application-oracles.md
+  role: examined
+  excerpt: 'A scalar `Negate` body is refused as `UnsupportedOperator` with no schedule root, whether or not it
+    reaches a `quire.op.quantity.convert` node (a conversion is not refused by name, because FR-021 has no quantity
+    body, operand or argument support: the generator refuses a body that is one as `UnsupportedOperator` and the
+    schedules as `ScheduleRefusal::UnsupportedOperation`; an earlier check that fires first is the accepted result:
+    `Unsupported` for a direct unsupported form of the root, `NotExpression` and the other root checks, `UnsupportedOperandType`
+    for a quantity-typed parameter or result, '
+- id: FR-021-AC-22
+  path: spec/oracle/functional/FR-021-function-application-oracles.md
+  role: examined
+  excerpt: 'When two or more declarations share one declaring node id, none of them appears in the instruction table
+    or in `location-map.json`, and every item naming one of them is refused with `ExactFunctionRefusal::DuplicateDeclaringNode
+    { node_id }` (the shared node id; the smallest in node-id order when the item''s name is held by duplicate groups
+    on several node ids) before Stage 1 classification: never `UnknownFunction`, never `AmbiguousFunctionName` (the
+    node-id refusal takes precedence when the declarations also share a name), never `DuplicateRequest` (two items
+    on one `call` node naming different '
+- id: FR-021-AC-23
+  path: spec/oracle/functional/FR-021-function-application-oracles.md
+  role: examined
+  excerpt: For an admitted FR-330 package carrying a `Failed` feature-accounting record, a function item retains
+    that exact typed record, its `limit_kind`, `limit`, `consumed` and source occurrences in `PackageAccounting`,
+    without relabelling bytes as work exhaustion. Under a ceiling one byte below the shorter of the separately measured
+    body-root and call-root package lengths, Contract IR FR-038-AC-95 returns `Failed(Bytes)` for every root in
+    each request, one shared `consumed` per request above the ceiling, and neither request exposes canonical package
+    bytes or `wire()`. The two measured `consumed` valu
+- id: FR-021-AC-24
+  path: spec/oracle/functional/FR-021-function-application-oracles.md
+  role: examined
+  excerpt: 'Items on one `call` node, with equal argument operands, that name functions absent from the request''s
+    declarations each get their own claim-map entry. Requesting `zz_unknown` and `aa_unknown` on one node yields
+    two entries, in that order: `UnknownFunction { name: "aa_unknown" }`, then `UnknownFunction { name: "zz_unknown"
+    }` (function name compared byte-wise over its UTF-8 bytes, case-sensitively), and no `DuplicateRequest`; the
+    entries are identical under both request orders. Requesting `Zz_unknown` and `aa_unknown` yields `Zz_unknown`
+    first, because `Z` (0x5A) sorts before `a` (0x61). Reques'
+- id: FR-021-AC-25
+  path: spec/oracle/functional/FR-021-function-application-oracles.md
+  role: examined
+  excerpt: 'Across one body, the counter charges each node entry, child edge, emitted instruction and location record
+    once in source traversal order. A setting equal to the required units emits a complete schedule; one less refuses
+    that function as `GenerationWorkExhausted { limit, consumed: limit + 1 }` before the denied action, with no
+    partial root or location record and no change to an unrelated function. A failed Contract IR lowering record
+    keeps its lowering refusal and incurs no generation charge. PLANNED (IR-511).'
+- id: FR-021-AC-26
+  path: spec/oracle/functional/FR-021-function-application-oracles.md
+  role: examined
+  excerpt: The target-neutral schedule's branch/stop edges order a denied left-operand charge to stop before the
+    right operand charge, and, after the left completes, the right charge before the parent operation. Owner-path
+    execution matching an equivalent shallow body is outside CG's boundary (IR-845).
+- id: FR-021-AC-27
+  path: spec/oracle/functional/FR-021-function-application-oracles.md
+  role: examined
+  excerpt: An admitted nested body consists of separate V2 expression nodes connected only by `reference` leaves
+    under QSpec FR-322, with each expression node reached from one parent in this CG subset; callee argument 0 binds
+    an exact V2 function node, parameter references bind the declared parameter slots, and remaining arguments preserve
+    source order. Missing, cyclic, shared-expression, unbound-parameter, ill-typed or wrong-operation edges refuse
+    with a typed cause before schedule emission. PLANNED (IR-511).
+- id: FR-021-AC-28
+  path: spec/oracle/functional/FR-021-function-application-oracles.md
+  role: examined
+  excerpt: Under the default 1,048,576-byte source limit, a 100,000-instruction body that needs more bytes returns
+    `SourceTooLarge` naming the default; raising the caller limit to its measured flat source bytes emits a complete
+    compilable schedule crate, with deterministic ordinal-range modules if one artifact would exceed its publication
+    limit. One byte below the measured count refuses before append with no partial output. PLANNED (IR-511).
+- id: FR-021-AC-29
+  path: spec/oracle/functional/FR-021-function-application-oracles.md
+  role: examined
+  excerpt: A 100,000-call linear body produces 100,000 constant-size parent-linked location records; requesting
+    its deepest path under sufficient query limits returns exactly 100,000 child ordinals, and a one-unit-below
+    query limit refuses without a partial path. Generation does not materialize all paths. PLANNED (IR-511).
+- id: FR-021-AC-30
+  path: spec/oracle/functional/FR-021-function-application-oracles.md
+  role: examined
+  excerpt: A requested generation work limit of `u64::MAX` returns `InvalidGenerationWorkLimit` before lowering
+    or charging; at `u64::MAX - 1` the first denied count is representable in the `u64` refusal and never wraps
+    or panics. PLANNED (IR-511).
+- id: FR-021-AC-31
+  path: spec/oracle/functional/FR-021-function-application-oracles.md
+  role: examined
+  excerpt: No test name, trace tag, test output line or doc comment of the 100,000-node case, no TC-031 step and
+    no oracle-matrix row claims, or presents as evidence, that a generated oracle compiled, ran on a 512 KiB stack
+    or agreed with a shallow equivalent against a QSL application API; schedule-source compilation (AC-7) is not
+    execution evidence. CG claims no QSL application API (IR-845, FR-014-AC-47).
+- id: FR-021-AC-32
+  path: spec/oracle/functional/FR-021-function-application-oracles.md
+  role: examined
+  excerpt: 'Neither the schedule crate nor any concrete oracle requires `quire_contract_runtime::exact`, an alias,
+    wrapper or compatibility layer; CG emits no owner-path oracle (IR-845). PLANNED, blocked on IR-853: Contract
+    Runtime FR-275 expects the generator to name QSL''s evaluation leaf, which conflicts with IR-845 and QSL arch-lint
+    T12-A; IR-853 resolves that conflict and decides who closes this criterion once the `exact` port is deleted.'
+- id: FR-021-AC-33
+  path: spec/oracle/functional/FR-021-function-application-oracles.md
+  role: examined
+  excerpt: 'With an IR-admitted `temporal`/`formula`, `temporal`/`fairness` or `expression`/`case` node used directly
+    as an item''s call-node id, the claim-map entry retains that id and is `Refused { refusal: ExactFunctionRefusal::Unsupported
+    }`. For the separate declared-body-root case, an item names that function through a distinct, IR-admitted `expression`/`call`
+    node that lowers successfully and has no duplicate, capability, or earlier item refusal; its claim retains the
+    call-node id and carries the body''s `ExactFunctionRefusal::Unsupported`. For an IR `Unsupported` lowering record
+    the refusal''s `unsup'
+- id: FR-021-AC-34
+  path: spec/oracle/functional/FR-021-function-application-oracles.md
+  role: examined
+  excerpt: Given one authentic strict-reader-admitted `CheckedPackageV2` of less than 1,048,576 bytes containing
+    129 distinct functions with two bound Integer parameters each, 128 acyclic `quire.op.function.call` body-root
+    edges forming one chain and a terminating admitted Scalar body, the public function generator schedules all
+    129 functions and all 128 call edges from that same checked graph. Use the default 1,048,576-byte Contract IR
+    reader/lowering ceilings and default 1,048,576-byte generated-source ceiling; only the caller-selected generation
+    work limit may be raised to the measured required units.
+- id: FR-031-AC-1
+  path: spec/oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md
+  role: examined
+  excerpt: IMPLEMENTED (IR-596). For each of Add, Subtract and Multiply over a `reject` integer type, the generated
+    source of the native oracle calls `exact::evaluate_integer_arithmetic` with the matching `IntegerArithmetic`
+    variant and the type's interval as the bound, and the oracle's body holds no Rust arithmetic operator between
+    operand expressions and none of `checked_`, `wrapping_`, `saturating_` or `overflowing_` method calls.
+- id: FR-031-AC-2
+  path: spec/oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md
+  role: examined
+  excerpt: PLANNED (IR-602), GATED on the lock prerequisite. For Divide and Remainder over a `reject` integer type,
+    the generated source of the native oracle calls `exact::divide` with `DivisionProfile::Truncating`, with `DivisionMember::Quotient`
+    for a divide and `DivisionMember::Remainder` for a remainder, and with `IntegerDomain::Bounded` over the node's
+    interval as the domain, and the oracle's body holds no Rust `/` or `%` and none of `checked_div`, `checked_rem`,
+    `wrapping_rem`, `div_euclid`, `rem_euclid` or `modulo`, and no division of a quotient and remainder pair.
+- id: FR-031-AC-3
+  path: spec/oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md
+  role: examined
+  excerpt: IMPLEMENTED (IR-596). A native oracle with an arithmetic node returns `Outcome<bool>` and takes a trailing
+    `&mut Meter`; an oracle with none returns `bool` and takes no meter.
+- id: FR-031-AC-4
+  path: spec/oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md
+  role: examined
+  excerpt: IMPLEMENTED (IR-596). Each of the six comparisons over two arithmetic-free operands is emitted as the
+    one native operator the table names, and over the seven values `i64::MIN`, `i64::MIN + 1`, `-1`, `0`, `1`, `i64::MAX
+    - 1` and `i64::MAX`, with two interior values added, taken pairwise in both orders, agrees with the exact kernel's
+    own evaluation, as the test takes it from Contract Runtime today (`order_numbers` for the four orderings, `check_equality`
+    then `CheckedEquality::evaluate` for equal and not-equal; after the migration of FR-031-AC-22, `quire_exact`'s
+    `order_numbers` and `planned_equ
+- id: FR-031-AC-5
+  path: spec/oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md
+  role: examined
+  excerpt: 'IMPLEMENTED (IR-596). Under a `reject` integer type, an add, subtract or multiply result outside the
+    type''s interval evaluates to `Refused(IntegerOutOfDomain)`, and the oracle neither panics nor returns a wrapped,
+    saturated or clamped value. The cases are O-1 `i64::MAX + 1`, O-2 `i64::MIN - 1` as a subtract, and O-4 `i64::MIN
+    * 2`, each built as TC-044 step 4 gives. On the tree before the change each fails: a debug build panics with
+    an overflow message, a release build returns a wrapped value, and no case returns the refusal.'
+- id: FR-031-AC-6
+  path: spec/oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md
+  role: examined
+  excerpt: PLANNED (IR-602), GATED on the lock prerequisite. Under a `reject` integer type, a zero divisor evaluates
+    to `Undefined(DivisionByZero)` for both Divide and Remainder, for the cases Z-1 `x / 0`, Z-2 `0 / 0`, Z-3 `x
+    % 0` and Z-4 `0 % 0`, each built as TC-044 step 5 gives (Z-3 and Z-4 reach the zero through the add `y + 11`,
+    which completes with 0), and the oracle does not panic and does not return `Refused`. On the tree before the
+    change each case is refused at generation with the interim code, and a raw operator would panic with a division-by-zero
+    message.
+- id: FR-031-AC-7
+  path: spec/oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md
+  role: examined
+  excerpt: IMPLEMENTED (IR-596). An add, subtract or multiply over a `saturate` integer type is refused with `UnsupportedSaturatingArithmetic`
+    at the node's span, with no artifact, for the rows `x + 1` at `x = i64::MAX` and `x - 1` at `x = i64::MIN` over
+    an integer type of `i64::MIN..=i64::MAX`, and `x * 2` at `x = i64::MAX` over `0..=10` (where an in-domain `x
+    = 10` also gives the wrong value `20 <= 10` against the policy's `10 <= 10`); the refusal span is the first
+    such node in authored preorder when a negation also occurs later, and the diagnostic message names the missing
+    runtime saturating operation
+- id: FR-031-AC-8
+  path: spec/oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md
+  role: examined
+  excerpt: 'IMPLEMENTED (IR-596). In a generated crate compiled and executed against `quire-contract-runtime`, the
+    outcome of a native add, subtract or multiply oracle equals a plain-integer model of IR FR-015''s member-range
+    semantics, computed in the test with `i128` independently of the emitter and of any `exact::` call: `Completed`
+    with the exact result when it lies in the type''s interval and `Refused(IntegerOutOfDomain)` when it does not.
+    The grid covers operand values inside the declared domain, at its edges and outside it, and the outcome kind
+    is compared, so no vector returns `Completed` where the '
+- id: FR-031-AC-9
+  path: spec/oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md
+  role: examined
+  excerpt: 'IMPLEMENTED (IR-596). The first non-completed outcome in evaluation order is the oracle''s outcome:
+    an arithmetic stop in the left operand of a short-circuit connective is returned, a stop in a right operand
+    the left decided is never reached, a total connective returns the first stop of its two operands, and a stop
+    is never returned as `Completed(true)` or `Completed(false)`.'
+- id: FR-031-AC-10
+  path: spec/oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md
+  role: examined
+  excerpt: IMPLEMENTED (IR-596). The tri-state harness generator, the bound strategy generators and the Kani obligation
+    clause lowering each refuse a clause holding an arithmetic node with the refusal the Consumers section names
+    for it, emit no raw arithmetic operator, and never read an `Outcome<bool>` as `bool`.
+- id: FR-031-AC-11
+  path: spec/oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md
+  role: examined
+  excerpt: IMPLEMENTED IN CG (IR-596); THE QSL EXEMPLAR RUN IS PENDING. The clause that runs QSL's IT-011 and IT-010-SC-05
+    against this branch is pending the quire-integration run; CG's in-repo run of the same bundle shape under real
+    Kani is the closest equivalent and does not stand for it. `generate_kani_bundle` over the postcondition `amount
+    < 1000` implies `amount + 1 <= 1000`, with `amount` an integer of `0..=1000` under `reject`, generates a bundle
+    whose postcondition oracle returns `bool`, holds exactly one syntactic addition (`syn::ExprBinary` with `BinOp::Add`)
+    and no `exact::` call, and, run wit
+- id: FR-031-AC-12
+  path: spec/oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md
+  role: examined
+  excerpt: IMPLEMENTED (IR-596). Apart from the generated Rust header lines required by NFR-002, the oracle generated
+    for an expression with no arithmetic node is byte-identical to the oracle the generator produced for it before
+    this requirement. This criterion passes on the tree before the change and is a held agreement, not a defect
+    proof.
+- id: FR-031-AC-13
+  path: spec/oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md
+  role: examined
+  excerpt: IMPLEMENTED (IR-596). Generating the oracle of an expression with an arithmetic node twice, and from
+    a permuted request, yields identical bytes. This criterion passes on the tree before the change and is a held
+    agreement, not a defect proof.
+- id: FR-031-AC-14
+  path: spec/oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md
+  role: examined
+  excerpt: IMPLEMENTED (IR-596). The generated source of an oracle with an arithmetic node contains no `unwrap`,
+    `expect` or panic macro. This criterion passes on the tree before the change and is a held agreement, not a
+    defect proof.
+- id: FR-031-AC-15
+  path: spec/oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md
+  role: examined
+  excerpt: IMPLEMENTED (IR-596). In the native oracle, each of the six comparisons that has an arithmetic operand
+    is emitted as the exact-kernel call the table names (for Equal and NotEqual, until the migration of FR-031-AC-22,
+    the checked equality of Contract Runtime that the Comparison section records), with no Rust comparison operator
+    between its two operands.
+- id: FR-031-AC-16
+  path: spec/oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md
+  role: examined
+  excerpt: 'PLANNED (IR-602), GATED on the lock prerequisite. Under a `reject` integer type of `-5..=5`, the minimum
+    divided by negative one is out of domain and the minimum remainder negative one is not, and neither panics:
+    O-3 `i64::MIN / -1` evaluates to `Refused(DivisionOutOfDomain)` whose member is `Quotient` and whose domain
+    is `-5..=5`, with the refusal''s code `division_out_of_domain` and cause `quotient-outside-domain`; O-5 `i64::MIN
+    % -1` evaluates to `Completed(true)`, the remainder being the exact 0 and `0 <= 5` true. Each is built as TC-044
+    step 4 gives. On the tree before the change each cons'
+- id: FR-031-AC-17
+  path: spec/oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md
+  role: examined
+  excerpt: 'PLANNED (IR-602), GATED on the lock prerequisite. In a generated crate, the outcome of a divide or remainder
+    oracle equals a plain-integer model of IR''s member-only semantics under the truncating law, computed with `i128`
+    independently of the emitter and of any `exact::` call (zero divisor: `Undefined(DivisionByZero)`; the selected
+    member in the type''s interval: `Completed` with the comparison''s Boolean over that member; otherwise `Refused(DivisionOutOfDomain)`
+    with that member), on a grid of dividends and divisors inside the declared domain, at its edges and outside
+    it, that includes the two '
+- id: FR-031-AC-18
+  path: spec/oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md
+  role: examined
+  excerpt: PLANNED (IR-602). A divide or remainder node over a `saturate` integer type is refused with `UnsupportedSaturatingArithmetic`
+    at the node's span, with no artifact and no raw `/` or `%` in any output, for the `saturate` rows S-1 to S-4
+    of TC-044 step 11, in both consumers; the diagnostic message names the missing saturating operation and the
+    refusal has terminal state `unsupported`. On the tree before the change each row is refused with `UnsupportedIntegerDivision`
+    instead. This criterion calls no kernel and can land before the lock prerequisite, while the interim code still
+    exists for a divide
+- id: FR-031-AC-27
+  path: spec/oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md
+  role: examined
+  excerpt: 'PLANNED (IR-602), GATED on the lock prerequisite (it cannot land before the native division of AC-2
+    exists). The code `UnsupportedIntegerDivision` does not exist: the crate''s `GenerationErrorCode` has no such
+    variant, nothing under `src/`, `tests/` or `schemas/` spells it, no stable code string of that name is emitted,
+    and no diagnostic message that generation can emit names IR-601. On the tree before the change the variant exists
+    and a divide or remainder over `reject` is refused with it.'
+- id: FR-031-AC-28
+  path: spec/oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md
+  role: examined
+  excerpt: IMPLEMENTED (IR-664). The V1 Boolean oracle admits a typed IR integer domain or literal only when its
+    value and both inclusive domain endpoints fit i64. A minimum of `i64::MIN - 1` or `i128::MIN`, or a maximum
+    of `i64::MAX + 1` or `i128::MAX`, produces `UnsupportedExpression` at the first affected expression source span
+    and no generated source; the same rule applies to an out-of-range literal. Values are never narrowed, clamped
+    or wrapped to create an oracle.
+- id: FR-031-AC-19
+  path: spec/oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md
+  role: examined
+  excerpt: IMPLEMENTED (IR-596). The Kani bundle oracle of an expression whose arithmetic nodes are add, subtract
+    and multiply renders them as the infix `+`, `-` and `*` on `i64` with one binary operator per arithmetic node,
+    contains no `exact::` call and no `checked_`, `wrapping_`, `saturating_` or `overflowing_` method (a remainder
+    node's `wrapping_rem` is FR-031-AC-23's, not this criterion's), takes no meter, and its file states that its
+    arithmetic is checked by Kani and is not a native evaluator.
+- id: FR-031-AC-20
+  path: spec/oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md
+  role: examined
+  excerpt: 'IMPLEMENTED (IR-596). Under real Kani, a harness that calls a bundle oracle with unconstrained operands
+    at which IR''s discharge does not hold fails with Kani''s arithmetic-overflow check and a counterexample: the
+    oracle of `x < 5 && x * 2 <= 10` over `0..=10` under `reject`, called with `x` unconstrained, fails the "attempt
+    to multiply with overflow" check, and the counterexample''s playback value satisfies `x < 5` and overflows `x
+    * 2` (any such value is valid; the assertion does not name one); a hand-written probe harness that assumes the
+    declared domain on `x`, calls the same bundle oracle an'
+- id: FR-031-AC-21
+  path: spec/oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md
+  role: examined
+  excerpt: IMPLEMENTED (IR-596). For each of add, subtract and multiply, the bool the Kani bundle oracle returns
+    equals the `bool` inside `Completed` of the native oracle of the same typed expression, on every vector of a
+    grid inside the declared domain at which the expression's guards pass and IR's discharge holds, including the
+    domain's edges, with the bundle oracle compiled and run natively in a generated crate against `quire-contract-runtime`
+    in plain `cargo test`, with no Kani. This is the differential that holds the two implementations of the rule
+    in step.
+- id: FR-031-AC-22
+  path: spec/oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md
+  role: examined
+  excerpt: 'PLANNED (IR-602), CONTINGENT on OD-2 and on the lock prerequisite. The generated source of a native
+    oracle with an arithmetic node aliases `quire_exact` as `rt`, takes `&mut rt::Meter`, returns `rt::Outcome<bool>`,
+    and contains no `quire_contract_runtime::exact` path; a generated crate that compiles and runs it, with divide
+    and remainder nodes and with add, subtract and multiply nodes in the same oracle (the construction Z-3, `y <=
+    0 && x % (y + 11) <= 10`, is one such oracle), resolves one `quire-exact`; CG''s own `Cargo.toml` depends on
+    `quire-exact` directly from `agent-ix/quire-exact`, and '
+- id: FR-031-AC-26
+  path: spec/oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md
+  role: examined
+  excerpt: PLANNED (IR-602), CONTINGENT on OD-2 and on the lock prerequisite. The generated source of a native oracle
+    holds no `quire_contract_runtime::operators` path and no `and_short_circuit`, `or_short_circuit` or `implies_short_circuit`;
+    a short-circuit connective is an inline `match` over the left operand's `rt::Outcome` that returns the first
+    stop and does not evaluate the right operand when the left decides, and a total connective evaluates both operands
+    in order and returns the first stop, none charging any point and none calling `evaluate_boolean`; in a generated
+    crate the outcomes of FR-031-AC
+- id: FR-031-AC-23
+  path: spec/oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md
+  role: examined
+  excerpt: PLANNED (IR-602). The Kani bundle oracle renders Divide over a `reject` type as the infix `/` and Remainder
+    as `wrapping_rem` on `i64`, one operator or call per arithmetic node, contains no `exact::` call and no `modulo`,
+    `div_euclid`, `rem_euclid`, `checked_`, `saturating_` or `overflowing_` method, no `wrapping_` method other
+    than `wrapping_rem` on a remainder node, takes no meter, returns `bool`, and its file states that its arithmetic
+    is checked by Kani. `generate_kani_bundle` over a divide or a remainder over a `reject` type generates a bundle,
+    and over a `saturate` divide or remainder it
+- id: FR-031-AC-24
+  path: spec/oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md
+  role: examined
+  excerpt: 'PLANNED (IR-602). Under real Kani, a harness that calls the bundle oracle of the construction Z-1 (a
+    divide) with unconstrained operands fails the checks "attempt to divide by zero" and "attempt to divide with
+    overflow", each with a counterexample, and one that calls the bundle oracle of the construction Z-3 (a remainder)
+    with unconstrained operands fails the check "attempt to calculate the remainder with a divisor of zero" and
+    no other arithmetic check; a probe harness that assumes the declared domain and the guards, calls the same oracle
+    and discards its value verifies, for the divide `10 / '
+- id: FR-031-AC-25
+  path: spec/oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md
+  role: examined
+  excerpt: PLANNED (IR-602), GATED on the lock prerequisite (its native side calls the kernel). For divide and for
+    remainder, the bool the Kani bundle oracle returns equals the `bool` inside `Completed` of the native oracle
+    of the same typed expression, on every vector of a grid inside the declared domain at which the expression's
+    guards pass and the divisor is non-zero and IR's discharge holds, including the domain's edges and R-1 and R-2,
+    and including the remainder `y != 0 && x % y <= 0` over `i64::MIN..=i64::MAX` at `x = i64::MIN`, `y = -1` (native
+    `Completed(true)`, bundle `true`, where a raw `%` pa
+- id: FR-035-AC-1
+  path: spec/oracle/functional/FR-035-caller-text-admission.md
+  role: examined
+  excerpt: A generated caller-ingress oracle accepts `&TextPayload`, the declared `TextType` and `&mut Meter`, calls
+    `rt::admit_text` once, and returns the runtime outcome, retained text, original runtime provenance, charge sequence
+    and consumed counters unchanged for all six profiles over representative empty, ASCII, combining, composed and
+    supplementary payloads.
+- id: FR-035-AC-2
+  path: spec/oracle/functional/FR-035-caller-text-admission.md
+  role: examined
+  excerpt: Invalid UTF-8 bytes make `TextPayload::from_utf8` return `InvalidUtf8` before admission and leave the
+    admission meter unchanged; `admit_text` itself is never claimed to accept those bytes.
+- id: FR-035-AC-3
+  path: spec/oracle/functional/FR-035-caller-text-admission.md
+  role: examined
+  excerpt: For each profile, `Text[1,1]` admits or refuses according to the profile length of the retained sequence,
+    including `e` plus U+0301 under NFC and NFD; a length refusal occurs before `text.result-retain`, and denial
+    of each reached charge point yields the direct runtime stop, charges and consumed counters.
+- id: FR-035-AC-4
+  path: spec/oracle/functional/FR-035-caller-text-admission.md
+  role: examined
+  excerpt: For each of the six profiles and both `Text[0,8]` and `Text[1,1]`, a real Kani harness symbolically ranges
+    over all 21 sequences of zero to two scalars from the four-scalar alphabet, constructs each `TextPayload` by
+    `from_utf8`, compares the generated admission oracle with a separate direct runtime call including outcome and
+    metering, and ends with one satisfied cover after its assertions. The proof identity names this finite class
+    and its type.
+- id: FR-035-AC-5
+  path: spec/oracle/functional/FR-035-caller-text-admission.md
+  role: examined
+  excerpt: In a copy of the generated oracle with its admission call or declared `TextType` altered so the oracle
+    accepts a payload the direct runtime call refuses, real Kani falsifies the admission agreement assertion with
+    concrete playback; restoring the call verifies over the same symbolic class.
+- id: FR-035-AC-6
+  path: spec/oracle/functional/FR-035-caller-text-admission.md
+  role: examined
+  excerpt: A request outside the declared finite proof class has a typed unsupported or requires-bound disposition
+    and no harness, and no caller-ingress claim is marked `ir_confirmed` or assigned a checked-package node id.
+    The six attempted text-operand `numeric.convert` nodes remain Contract IR refusals and do not count as passing
+    caller-admission coverage.
+- id: FR-042-AC-1
+  path: spec/oracle/functional/FR-042-generated-checked-invariant-causes.md
+  role: examined
+  excerpt: CG's native Boolean, equality, function and pre-check placeholder constructors use the exact nine CG-owned
+    causes in the table, retaining `IllTypedCause` from `check_type` and `check_equality`; downstream replay consumers
+    preserve the typed payload or match it explicitly, retain charge/failure behavior, and accept neither the former
+    unit constructor nor an invented default.
+- id: FR-016-AC-1
+  path: spec/replay/functional/FR-016-witness-native-replay.md
+  role: examined
+  excerpt: Every retained witness decodes into typed values or is refused as malformed.
+- id: FR-016-AC-2
+  path: spec/replay/functional/FR-016-witness-native-replay.md
+  role: examined
+  excerpt: An out-of-domain witness is reported as such and never as a contract failure.
+- id: FR-016-AC-3
+  path: spec/replay/functional/FR-016-witness-native-replay.md
+  role: examined
+  excerpt: An in-domain witness is reported as a failure only when native replay reproduces the same typed outcome.
+- id: FR-016-AC-4
+  path: spec/replay/functional/FR-016-witness-native-replay.md
+  role: examined
+  excerpt: A native replay that runs and disagrees with the harness result yields a typed mismatch, and never a
+    failure or a replay error.
+- id: FR-016-AC-5
+  path: spec/replay/functional/FR-016-witness-native-replay.md
+  role: examined
+  excerpt: A witness bound to a different harness identity is reported as malformed and never replayed.
+- id: FR-016-AC-6
+  path: spec/replay/functional/FR-016-witness-native-replay.md
+  role: examined
+  excerpt: Every witness decode receives required caller-supplied byte and value-count bounds at its entry point;
+    replay inputs carry both as non-optional fields with no default, and an over-bound witness is reported malformed
+    without reading beyond either bound.
+- id: FR-016-AC-8
+  path: spec/replay/functional/FR-016-witness-native-replay.md
+  role: examined
+  excerpt: A witness schema binds the obligation's persisted argument bindings, in the order the obligation persists
+    them, position for position to the harness's symbolic arguments, and each decoded value is named by the binding
+    at its position; a binding that is not an argument is refused with a typed schema refusal that reports no failure
+    and is none of the replay results.
+- id: FR-016-AC-9
+  path: spec/replay/functional/FR-016-witness-native-replay.md
+  role: examined
+  excerpt: A decoded falsification whose witness makes the native function evaluate the clause to false settles
+    as `reproduced-with-evaluated-witness` with category `violation`; the verdict depends on the witness value,
+    so a witness at which the function holds does not settle so.
+- id: FR-016-AC-10
+  path: spec/replay/functional/FR-016-witness-native-replay.md
+  role: examined
+  excerpt: A decoded falsification at which the native function evaluates the clause to true settles `inconclusive`
+    with the proved violation and the replayed success both named.
+- id: FR-016-AC-11
+  path: spec/replay/functional/FR-016-witness-native-replay.md
+  role: examined
+  excerpt: The adapter refuses, with a distinct typed error each, a decoded value no replay parameter binds, a transcript
+    field holding a delimiter, a transcript QSL does not admit, a request QSL refuses with any `ReplayRefusal` other
+    than `Fault` (returned with its cause), and a witness-sourced request that settles on the input arm.
+- id: FR-016-AC-12
+  path: spec/replay/functional/FR-016-witness-native-replay.md
+  role: examined
+  excerpt: A `replay` call that returns `ReplayRefusal::Fault` is returned as `SpineReplayError::Refused` carrying
+    that fault.
+- id: FR-016-AC-13
+  path: spec/replay/functional/FR-016-witness-native-replay.md
+  role: examined
+  excerpt: A `Witness` arm that settles `reproduced-with-evaluated-witness` with a category other than `violation`
+    yields a typed mismatch, and never a reproduced failure.
+- id: FR-016-AC-14
+  path: spec/replay/functional/FR-016-witness-native-replay.md
+  role: examined
+  excerpt: A proved unit that imports a locked dependency is compiled by `qsl_replay::call_site` together with that
+    dependency's lock source, and `qsl_replay::replay` settles the unit's falsification through the imported function.
+- id: FR-016-AC-15
+  path: spec/replay/functional/FR-016-witness-native-replay.md
+  role: examined
+  excerpt: The replay request's `package.dependencies` carries one entry per lock dependency selection, in ascending
+    identity order, with the lock's recorded `package_id`.
+- id: FR-016-AC-16
+  path: spec/replay/functional/FR-016-witness-native-replay.md
+  role: examined
+  excerpt: A unit whose import no lock dependency selection supplies is refused at the call site.
+- id: FR-016-AC-17
+  path: spec/replay/functional/FR-016-witness-native-replay.md
+  role: examined
+  excerpt: A lock recording another `package_id` for a dependency the unit imports is refused by QSL as a dependency
+    identity mismatch.
+- id: FR-016-AC-18
+  path: spec/replay/functional/FR-016-witness-native-replay.md
+  role: examined
+  excerpt: A lock selecting a library the unit does not import is refused by QSL as unselected.
+- id: FR-016-AC-19
+  path: spec/replay/functional/FR-016-witness-native-replay.md
+  role: examined
+  excerpt: Lock libraries whose sources share a source owner are refused as no dependency input, before the call
+    site compiles anything.
+- id: FR-016-AC-20
+  path: spec/replay/functional/FR-016-witness-native-replay.md
+  role: examined
+  excerpt: A lock library whose source has the unit's own source owner is refused by the call site.
+- id: FR-016-AC-21
+  path: spec/replay/functional/FR-016-witness-native-replay.md
+  role: examined
+  excerpt: "The function path's request `obligation_identity` holds the function-contract obligation digest of quire-spec-language\
+    \ ADR-013 O-09: the digest of the RFC 8785 encoding, made by `quire-canonical` (ADR-013 \xA72's one encoder,\
+    \ AD-003 E-1), of the `FunctionSite`'s `function` node id, its `declaration` occurrence key, the `ObligationKind`\
+    \ of the harness being replayed and `arguments`, each a parameter node id with its declared domain, ordered\
+    \ ascending by identifier as O-09 fixes and not in the declared order of `FunctionSite.parameters`. It is never\
+    \ the digest of the transcript. The `arguments` are"
+- id: FR-016-AC-22
+  path: spec/replay/functional/FR-016-witness-native-replay.md
+  role: examined
+  excerpt: 'For two functions with the same parameters, the identities differ. The identity of one function is the
+    same across recompiles that only add comments or blank lines, and across a change of the harness''s source span.
+    It differs between two different `ObligationKind`s over the same function, and when any argument''s domain differs.
+    A function yields one identity per existing `ObligationKind` it requests, not one per conjunct of its body:
+    a function whose body has two conjuncts, replayed under one kind, has one identity.'
+findings:
+- fnd: FND-217
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-021-AC-30
+  related_ids: []
+  path: spec/oracle/functional/FR-021-function-application-oracles.md
+  lines: '277'
+  excerpt: A requested generation work limit of `u64::MAX` returns `InvalidGenerationWorkLimit` before lowering
+    or charging; at `u64::MAX - 1` the first denied count is representable in the `u64` refusal and never wraps
+    or panics. PLANNED (IR-511).
+  finding: 'FR-021-AC-30 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-218
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-031-AC-2
+  related_ids: []
+  path: spec/oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md
+  lines: '504'
+  excerpt: PLANNED (IR-602), GATED on the lock prerequisite. For Divide and Remainder over a `reject` integer type,
+    the generated source of the native oracle calls `exact::divide` with `DivisionProfile::Truncating`, with `DivisionMember::Quotient`
+    for a divide and `DivisionMember::Remainder` for a remainder, and with `IntegerDomain::Bounded` over the node's
+    interval as the domain, and the oracle's body holds no Rust `/` or `%` and none of `checked_div`, `checked_rem`,
+    `wrapping_rem`, `div_euclid`, `rem_euclid` or `modulo`, and no division of a quotient and remainder pair.
+  finding: 'FR-031-AC-2 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-219
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-031-AC-6
+  related_ids: []
+  path: spec/oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md
+  lines: '508'
+  excerpt: PLANNED (IR-602), GATED on the lock prerequisite. Under a `reject` integer type, a zero divisor evaluates
+    to `Undefined(DivisionByZero)` for both Divide and Remainder, for the cases Z-1 `x / 0`, Z-2 `0 / 0`, Z-3 `x
+    % 0` and Z-4 `0 % 0`, each built as TC-044 step 5 gives (Z-3 and Z-4 reach the zero through the add `y + 11`,
+    which completes with 0), and the oracle does not panic and does not return `Refused`. On the tree before the
+    change each case is refused at generation with the interim code, and a raw operator would panic with a division-by-zero
+    message.
+  finding: 'FR-031-AC-6 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-220
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-031-AC-16
+  related_ids: []
+  path: spec/oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md
+  lines: '518'
+  excerpt: 'PLANNED (IR-602), GATED on the lock prerequisite. Under a `reject` integer type of `-5..=5`, the minimum
+    divided by negative one is out of domain and the minimum remainder negative one is not, and neither panics:
+    O-3 `i64::MIN / -1` evaluates to `Refused(DivisionOutOfDomain)` whose member is `Quotient` and whose domain
+    is `-5..=5`, with the refusal''s code `division_out_of_domain` and cause `quotient-outside-domain`; O-5 `i64::MIN
+    % -1` evaluates to `Completed(true)`, the remainder being the exact 0 and `0 <= 5` true. Each is built as TC-044
+    step 4 gives. On the tree before the change each cons'
+  finding: 'FR-031-AC-16 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-221
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-031-AC-17
+  related_ids: []
+  path: spec/oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md
+  lines: '519'
+  excerpt: 'PLANNED (IR-602), GATED on the lock prerequisite. In a generated crate, the outcome of a divide or remainder
+    oracle equals a plain-integer model of IR''s member-only semantics under the truncating law, computed with `i128`
+    independently of the emitter and of any `exact::` call (zero divisor: `Undefined(DivisionByZero)`; the selected
+    member in the type''s interval: `Completed` with the comparison''s Boolean over that member; otherwise `Refused(DivisionOutOfDomain)`
+    with that member), on a grid of dividends and divisors inside the declared domain, at its edges and outside
+    it, that includes the two '
+  finding: 'FR-031-AC-17 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-222
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-031-AC-27
+  related_ids: []
+  path: spec/oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md
+  lines: '521'
+  excerpt: 'PLANNED (IR-602), GATED on the lock prerequisite (it cannot land before the native division of AC-2
+    exists). The code `UnsupportedIntegerDivision` does not exist: the crate''s `GenerationErrorCode` has no such
+    variant, nothing under `src/`, `tests/` or `schemas/` spells it, no stable code string of that name is emitted,
+    and no diagnostic message that generation can emit names IR-601. On the tree before the change the variant exists
+    and a divide or remainder over `reject` is refused with it.'
+  finding: 'FR-031-AC-27 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-223
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-031-AC-22
+  related_ids: []
+  path: spec/oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md
+  lines: '526'
+  excerpt: 'PLANNED (IR-602), CONTINGENT on OD-2 and on the lock prerequisite. The generated source of a native
+    oracle with an arithmetic node aliases `quire_exact` as `rt`, takes `&mut rt::Meter`, returns `rt::Outcome<bool>`,
+    and contains no `quire_contract_runtime::exact` path; a generated crate that compiles and runs it, with divide
+    and remainder nodes and with add, subtract and multiply nodes in the same oracle (the construction Z-3, `y <=
+    0 && x % (y + 11) <= 10`, is one such oracle), resolves one `quire-exact`; CG''s own `Cargo.toml` depends on
+    `quire-exact` directly from `agent-ix/quire-exact`, and '
+  finding: 'FR-031-AC-22 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-224
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-031-AC-26
+  related_ids: []
+  path: spec/oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md
+  lines: '527'
+  excerpt: PLANNED (IR-602), CONTINGENT on OD-2 and on the lock prerequisite. The generated source of a native oracle
+    holds no `quire_contract_runtime::operators` path and no `and_short_circuit`, `or_short_circuit` or `implies_short_circuit`;
+    a short-circuit connective is an inline `match` over the left operand's `rt::Outcome` that returns the first
+    stop and does not evaluate the right operand when the left decides, and a total connective evaluates both operands
+    in order and returns the first stop, none charging any point and none calling `evaluate_boolean`; in a generated
+    crate the outcomes of FR-031-AC
+  finding: 'FR-031-AC-26 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-225
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-031-AC-23
+  related_ids: []
+  path: spec/oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md
+  lines: '528'
+  excerpt: PLANNED (IR-602). The Kani bundle oracle renders Divide over a `reject` type as the infix `/` and Remainder
+    as `wrapping_rem` on `i64`, one operator or call per arithmetic node, contains no `exact::` call and no `modulo`,
+    `div_euclid`, `rem_euclid`, `checked_`, `saturating_` or `overflowing_` method, no `wrapping_` method other
+    than `wrapping_rem` on a remainder node, takes no meter, returns `bool`, and its file states that its arithmetic
+    is checked by Kani. `generate_kani_bundle` over a divide or a remainder over a `reject` type generates a bundle,
+    and over a `saturate` divide or remainder it
+  finding: 'FR-031-AC-23 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-226
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-031-AC-24
+  related_ids: []
+  path: spec/oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md
+  lines: '529'
+  excerpt: 'PLANNED (IR-602). Under real Kani, a harness that calls the bundle oracle of the construction Z-1 (a
+    divide) with unconstrained operands fails the checks "attempt to divide by zero" and "attempt to divide with
+    overflow", each with a counterexample, and one that calls the bundle oracle of the construction Z-3 (a remainder)
+    with unconstrained operands fails the check "attempt to calculate the remainder with a divisor of zero" and
+    no other arithmetic check; a probe harness that assumes the declared domain and the guards, calls the same oracle
+    and discards its value verifies, for the divide `10 / '
+  finding: 'FR-031-AC-24 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-227
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-031-AC-25
+  related_ids: []
+  path: spec/oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md
+  lines: '530'
+  excerpt: PLANNED (IR-602), GATED on the lock prerequisite (its native side calls the kernel). For divide and for
+    remainder, the bool the Kani bundle oracle returns equals the `bool` inside `Completed` of the native oracle
+    of the same typed expression, on every vector of a grid inside the declared domain at which the expression's
+    guards pass and the divisor is non-zero and IR's discharge holds, including the domain's edges and R-1 and R-2,
+    and including the remainder `y != 0 && x % y <= 0` over `i64::MIN..=i64::MAX` at `x = i64::MIN`, `y = -1` (native
+    `Completed(true)`, bundle `true`, where a raw `%` pa
+  finding: 'FR-031-AC-25 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-228
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-035-AC-1
+  related_ids: []
+  path: spec/oracle/functional/FR-035-caller-text-admission.md
+  lines: '107'
+  excerpt: A generated caller-ingress oracle accepts `&TextPayload`, the declared `TextType` and `&mut Meter`, calls
+    `rt::admit_text` once, and returns the runtime outcome, retained text, original runtime provenance, charge sequence
+    and consumed counters unchanged for all six profiles over representative empty, ASCII, combining, composed and
+    supplementary payloads.
+  finding: 'FR-035-AC-1 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-229
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-035-AC-2
+  related_ids: []
+  path: spec/oracle/functional/FR-035-caller-text-admission.md
+  lines: '108'
+  excerpt: Invalid UTF-8 bytes make `TextPayload::from_utf8` return `InvalidUtf8` before admission and leave the
+    admission meter unchanged; `admit_text` itself is never claimed to accept those bytes.
+  finding: 'FR-035-AC-2 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-230
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-035-AC-3
+  related_ids: []
+  path: spec/oracle/functional/FR-035-caller-text-admission.md
+  lines: '109'
+  excerpt: For each profile, `Text[1,1]` admits or refuses according to the profile length of the retained sequence,
+    including `e` plus U+0301 under NFC and NFD; a length refusal occurs before `text.result-retain`, and denial
+    of each reached charge point yields the direct runtime stop, charges and consumed counters.
+  finding: 'FR-035-AC-3 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-231
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-035-AC-4
+  related_ids: []
+  path: spec/oracle/functional/FR-035-caller-text-admission.md
+  lines: '110'
+  excerpt: For each of the six profiles and both `Text[0,8]` and `Text[1,1]`, a real Kani harness symbolically ranges
+    over all 21 sequences of zero to two scalars from the four-scalar alphabet, constructs each `TextPayload` by
+    `from_utf8`, compares the generated admission oracle with a separate direct runtime call including outcome and
+    metering, and ends with one satisfied cover after its assertions. The proof identity names this finite class
+    and its type.
+  finding: 'FR-035-AC-4 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-232
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-035-AC-5
+  related_ids: []
+  path: spec/oracle/functional/FR-035-caller-text-admission.md
+  lines: '111'
+  excerpt: In a copy of the generated oracle with its admission call or declared `TextType` altered so the oracle
+    accepts a payload the direct runtime call refuses, real Kani falsifies the admission agreement assertion with
+    concrete playback; restoring the call verifies over the same symbolic class.
+  finding: 'FR-035-AC-5 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-233
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-035-AC-6
+  related_ids: []
+  path: spec/oracle/functional/FR-035-caller-text-admission.md
+  lines: '112'
+  excerpt: A request outside the declared finite proof class has a typed unsupported or requires-bound disposition
+    and no harness, and no caller-ingress claim is marked `ir_confirmed` or assigned a checked-package node id.
+    The six attempted text-operand `numeric.convert` nodes remain Contract IR refusals and do not count as passing
+    caller-admission coverage.
+  finding: 'FR-035-AC-6 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-234
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-042-AC-1
+  related_ids: []
+  path: spec/oracle/functional/FR-042-generated-checked-invariant-causes.md
+  lines: '31'
+  excerpt: CG's native Boolean, equality, function and pre-check placeholder constructors use the exact nine CG-owned
+    causes in the table, retaining `IllTypedCause` from `check_type` and `check_equality`; downstream replay consumers
+    preserve the typed payload or match it explicitly, retain charge/failure behavior, and accept neither the former
+    unit constructor nor an invented default.
+  finding: 'FR-042-AC-1 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+bindings: []
+```
+
++++
