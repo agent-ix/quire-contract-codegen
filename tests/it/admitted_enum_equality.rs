@@ -25,7 +25,7 @@ const CASES: [(&str, &str, EqualityOperatorKind); 4] = [
     ("other_same", "Other", EqualityOperatorKind::Equal),
 ];
 
-fn checked(
+pub(super) fn checked(
     compiled: &qsl_replay::AdmittedCompilation,
     libraries: &[(String, qsl_replay::AdmittedCompilation)],
 ) -> CheckedPackageV2 {
@@ -48,7 +48,7 @@ fn checked(
     }
 }
 
-fn application(package: &CheckedPackageV2, function: &str) -> CheckedNodeId {
+pub(super) fn application(package: &CheckedPackageV2, function: &str) -> CheckedNodeId {
     let declaration = package
         .graph()
         .nodes
@@ -134,7 +134,7 @@ fn enum_items(
 
 /// Lower only the unchanged authentic package. Extra roots select genuine caller types;
 /// no graph or provenance fields are rewritten to manufacture negative inputs.
-fn generate_items(
+pub(super) fn generate_items(
     checked: &CheckedPackageV2,
     context: Option<&qsl_replay::AdmittedContext>,
     items: &[CompositeEqualityItem],
@@ -143,7 +143,7 @@ fn generate_items(
     generate_items_with_limits(checked, context, items, extra_roots, Default::default())
 }
 
-fn generate_items_with_limits(
+pub(super) fn generate_items_with_limits(
     checked: &CheckedPackageV2,
     context: Option<&qsl_replay::AdmittedContext>,
     items: &[CompositeEqualityItem],
@@ -467,7 +467,7 @@ fn public_generator_rejects_another_authentic_source_context() {
     }
 }
 
-fn direct_source_item(package: &CheckedPackageV2, function: &str) -> CompositeEqualityItem {
+pub(super) fn direct_source_item(package: &CheckedPackageV2, function: &str) -> CompositeEqualityItem {
     let node_id = application(package, function);
     let expression = package
         .graph()

@@ -1,7 +1,7 @@
 //! Bounded, iterative reconstruction of equality operand types.
 
 use super::{
-    aggregate_members, bound_members, is_option_node, literal_count, lookup, node_key,
+    aggregate_members, bound_members, is_option_node, literal_count, lookup,
     read_record_field, read_reference, resolve_scalar, CardinalityBound, CheckedNodeId,
     CheckedNodeTag, CheckedSemanticNodeV2, CollectionKind, CollectionType, CompositeDeclaration,
     CompositeEqualityRefusal, CompositeShape, FieldDeclaration, Graph, ItemCheckError, NodeKey,
@@ -216,9 +216,8 @@ pub(super) fn resolve_type(
                     }
                     Some(CheckedNodeTag::CompositeType) => match &*node.semantic_form {
                         "record" | "tuple" => {
-                            super::admitted::require_context(admitted, &id)?;
-                            // A present enum capability does not supply QSL937's composite owner lookup.
-                            let key = node_key(&id)?;
+                            let context = super::admitted::require_context(admitted, &id)?;
+                            let key = super::admitted::resolve_composite(context, closure, node)?;
                             if closure.composites.contains_key(&key)
                                 || closure.in_progress.contains(&key)
                             {
