@@ -39,6 +39,21 @@ byte-deterministic, and agree with direct runtime execution. Agreement with the 
    execution, including the outcome of denying each admitted charge in turn.
    No TC-187 vector is compared with the QSL value authority here (FR-014-AC-47).
    U06 and U11 are a Contract Runtime unit-graph admission check (Contract Runtime FR-012-AC-4, TC-033), not oracle agreement.
+   For quantity vectors, obtain every generated and direct operand through
+   actual QSV `UnitTable::resolve` or `UnitScope::resolve`. Compare generated
+   comparison calls with QSV `compare_quantity` and arithmetic calls with
+   QSV `evaluate_quantity_unit`, asserting the paired `IdentifiedUnit` on
+   both completed and stopped outcomes. Record the result unit with
+   `UnitScope::form` and resolve completed products, quotients and powers for
+   a subsequent operation; assert the exact id and metadata. Exercise the
+   owner's reachable result-unit identity-limit refusal and ill-typed
+   arithmetic controls, preserving the distinct typed
+   `QuantityRefusal::Identity` and `QuantityRefusal::IllTyped` causes in
+   `OracleStop` with unchanged charges and counters. Deny each admitted
+   charge in turn and assert that no stopped outcome becomes completion.
+   Inspect emitted source for actual owner calls and absence of CG-created
+   unit ids. These direct library tests do not claim source-authored QSL
+   grammar or table-lowering coverage (FR-014-AC-52).
 5. Compile the generated crate manifest.
 6. Derive an item for every node of the exact-scalar corpus with `derive_exact_scalar_items`
    and compare it with the descriptor the fixture declares (FR-014-AC-19);
@@ -47,13 +62,19 @@ byte-deterministic, and agree with direct runtime execution. Agreement with the 
    `numeric.convert_rounding`); derive every `quantity.convert` node of the corpus
    (each carries the `exact` mode its unit type pins) and check each derives an
    `ir_confirmed` descriptor and generates an oracle that calls `convert_quantity`
-   with `QuantityTarget::Exact` and returns a `Quantity` in the unit passed as the
-   call-time argument `unit: &QuantityUnit`, never a scalar and never checked
+   with `QuantityTarget::Exact`, a resolved QSV `UnitQuantity` operand and
+   `unit.unit()`, and returns a kernel `Quantity` with `unit.id()` and the
+   `ConvertedValue::Exact` magnitude in the unit passed as the
+   call-time argument `unit: &IdentifiedUnit`, never a scalar and never checked
    against the node's `type_argument` (FR-014-AC-48, FR-014-AC-50). Run the conversion vectors
    (U01, U04 `degC` to `K`, U09b, U10, U15, U22, U25's second step and U26) and the `ill_typed` vectors (`1 m` to `s`, U09, `1 N_m` to `J`, compound `4 m^2` to `m`),
    and check each outcome, admitted charges and consumed counters equal direct
    `convert_quantity` execution, with zero charges and no counter change for
-   `ill_typed` (FR-014-AC-49). Request the same nodes under caller-declared
+   `ill_typed` (FR-014-AC-49). Retain the target `IdentifiedUnit`, record it
+   with `UnitScope::form` and resolve the completed quantity for a subsequent
+   direct QSV comparison; assert its id and exact magnitude, and inspect the
+   generated handoff for absence of identity recomputation or an added
+   post-charge identity refusal (FR-014-AC-48). Request the same nodes under caller-declared
    descriptors, through `generate_routed` and through Kani obligation
    negotiation, and check capability settlement reports `OperationNotRendered`
    (Planned, IR-269) with no harness emitted (FR-014-AC-51). Check that the
