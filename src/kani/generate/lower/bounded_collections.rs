@@ -172,4 +172,39 @@ mod tests {
         assert_eq!(exhausted.kind, KaniOutcomeKind::ResourceExhausted);
         assert_eq!(exhausted.boolean_claim(), None);
     }
+
+    #[trace("TC-023", "FR-015-AC-88")]
+    #[test]
+    fn both_query_kinds_preserve_order_duplicates_and_exact_decision_counts() {
+        let (profile, dispatch, input) = fixture();
+        let cases = [
+            (QueryKind::ExistsEqual(7), vec![7, 2, 2], true, 1),
+            (QueryKind::ExistsEqual(7), vec![2, 7, 2], true, 2),
+            (QueryKind::ExistsEqual(7), vec![2, 2, 7], true, 3),
+            (QueryKind::ExistsEqual(7), vec![2, 2, 3], false, 3),
+            (QueryKind::ExistsEqual(7), vec![], false, 0),
+            (QueryKind::ForAllNonNegative, vec![-1, 2, 2], false, 1),
+            (QueryKind::ForAllNonNegative, vec![2, -1, 2], false, 2),
+            (QueryKind::ForAllNonNegative, vec![2, 2, -1], false, 3),
+            (QueryKind::ForAllNonNegative, vec![2, 2, 7], true, 3),
+            (QueryKind::ForAllNonNegative, vec![], true, 0),
+        ];
+        for (kind, values, expected_value, expected_examined) in cases {
+            let request = CollectionQuery {
+                source_id: "source:decisions".into(),
+                max_items: values.len(),
+                values,
+                kind,
+            };
+            let lowered =
+                prepare_bounded_collection_query(&profile, &dispatch, &input, request.clone())
+                    .expect("each complete bounded query is admitted");
+            assert_eq!(
+                lowered.query, request,
+                "the exact ordered duplicate-preserving request survives"
+            );
+            assert_eq!(lowered.value, expected_value, "query {request:?}");
+            assert_eq!(lowered.examined, expected_examined, "query {request:?}");
+        }
+    }
 }

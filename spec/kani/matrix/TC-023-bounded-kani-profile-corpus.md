@@ -28,7 +28,7 @@ A trace tag alone does not establish installed-backend proof evidence.
 
 Request supported and refused constructs from one selected profile in a
 reordered subset; compare the returned modules and cause codes with the selected
-entries. Submit empty, duplicate and unknown names. For the planned IR-615
+entries. Submit empty, duplicate and unknown names. For the IR-615
 cleanup, at Contract IR's owning
 profile reader, submit the removed `inconclusive` disposition with a cause code;
 require rejection before a profile can be classified or lowered. Inspect the
@@ -79,8 +79,11 @@ request refusal. The census preserves each admitted `Supported` module and
 rejected by the owning reader, with no admitted profile or manufactured run
 outcome. Full `unsupported` matrix entries, capability-kind warnings and
 no-artifact negotiation semantics remain planned under Contract IR FR-029-AC-2;
-this cleanup does not establish that coverage. The IR-615 cleanup remains
-planned until its producer and consumer changes are implemented. Each successful
+this cleanup does not establish that coverage. The IR-615 producer and consumer
+cleanup is implemented: native reader/census and both retained family preparation
+controls pass; the actual run classifier retains its zero-SUCCESS vacuity rule.
+This classification check includes a recorded real-Kani report, without invoking
+a backend as part of the profile cleanup. Each successful
 lowering returns the exact family result and
 each adverse case its original typed non-Boolean refusal, with no partial
 artifact or proof claim. One admitted corpus case has all generated artifacts and

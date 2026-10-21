@@ -1,0 +1,41 @@
+<!-- reviewer-dispositions repo=agent-ix/quire-contract-codegen visibility=public quoin=0.28.4 module=spec-artifacts-process@b82e42e893612b4b4ee94127714b4577ee893502 id=SR-15224 round=1 model=gpt-6 run=8bc5705e-9d63-41ae-8531-842cabddd391 -->
+
+Narrow disposition at CGPR485 a34058084047a0f92c3eb07cc394f67a97f76e01. Sole blank-line fix; source/tests/manifest/lock plus external reviewer report bytes unchanged. Actual current base880rows; repaired head883rows/312computed gaps (294untagged+18ignored-only). Existing309owned deferrals continue; three additional PLANNED rows now extracted and explicitly owned. Code/Rust and corrected base narrow PASS; full gap FAIL. Both new final gates PENDING, earlier passes historical only.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | deferred | FR-015-AC-120 is now extracted after the one-line table repair, but its unchanged current-base statement remains explicitly PLANNED with no test binder. Its implementation stays with IR942/program and existing IR878 Kani triage under titan:kani:plan, explicit current owner handoff04483a66-6049-4c81-99f7-4fd6563d9b26 and IR615decision5263af8a-404e-413a-b58e-8cc3ea9ca64c. Prior309individual owned deferrals remain unchanged. No proof credit or gate waiver. |
+| FND-002 | deferred | FR-015-AC-121 is now extracted after the one-line table repair, but its unchanged current-base statement remains explicitly PLANNED with no test binder. Its implementation stays with IR942/program and existing IR878 Kani triage under titan:kani:plan, explicit current owner handoff04483a66-6049-4c81-99f7-4fd6563d9b26 and IR615decision5263af8a-404e-413a-b58e-8cc3ea9ca64c. Prior309individual owned deferrals remain unchanged. No proof credit or gate waiver. |
+| FND-003 | deferred | FR-015-AC-122 is now extracted after the one-line table repair, but its unchanged current-base statement remains explicitly PLANNED with no test binder. Its implementation stays with IR942/program and existing IR878 Kani triage under titan:kani:plan, explicit current owner handoff04483a66-6049-4c81-99f7-4fd6563d9b26 and IR615decision5263af8a-404e-413a-b58e-8cc3ea9ca64c. Prior309individual owned deferrals remain unchanged. No proof credit or gate waiver. |
+
++++ [reviewer data]
+
+```yaml
+dispositions:
+- fnd: FND-001
+  outcome: deferred
+  reason: FR-015-AC-120 is now extracted after the one-line table repair, but its
+    unchanged current-base statement remains explicitly PLANNED with no test binder.
+    Its implementation stays with IR942/program and existing IR878 Kani triage under
+    titan:kani:plan, explicit current owner handoff04483a66-6049-4c81-99f7-4fd6563d9b26
+    and IR615decision5263af8a-404e-413a-b58e-8cc3ea9ca64c. Prior309individual owned
+    deferrals remain unchanged. No proof credit or gate waiver.
+- fnd: FND-002
+  outcome: deferred
+  reason: FR-015-AC-121 is now extracted after the one-line table repair, but its
+    unchanged current-base statement remains explicitly PLANNED with no test binder.
+    Its implementation stays with IR942/program and existing IR878 Kani triage under
+    titan:kani:plan, explicit current owner handoff04483a66-6049-4c81-99f7-4fd6563d9b26
+    and IR615decision5263af8a-404e-413a-b58e-8cc3ea9ca64c. Prior309individual owned
+    deferrals remain unchanged. No proof credit or gate waiver.
+- fnd: FND-003
+  outcome: deferred
+  reason: FR-015-AC-122 is now extracted after the one-line table repair, but its
+    unchanged current-base statement remains explicitly PLANNED with no test binder.
+    Its implementation stays with IR942/program and existing IR878 Kani triage under
+    titan:kani:plan, explicit current owner handoff04483a66-6049-4c81-99f7-4fd6563d9b26
+    and IR615decision5263af8a-404e-413a-b58e-8cc3ea9ca64c. Prior309individual owned
+    deferrals remain unchanged. No proof credit or gate waiver.
+```
+
++++

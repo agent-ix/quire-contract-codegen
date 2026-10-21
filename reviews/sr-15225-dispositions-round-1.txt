@@ -1,0 +1,26 @@
+<!-- reviewer-dispositions repo=agent-ix/quire-contract-codegen visibility=public quoin=0.28.4 module=spec-artifacts-process@b82e42e893612b4b4ee94127714b4577ee893502 id=SR-15225 round=1 model=gpt-6 run=8bc5705e-9d63-41ae-8531-842cabddd391 -->
+
+Narrow disposition at CGPR485 a34058084047a0f92c3eb07cc394f67a97f76e01. Sole blank-line fix; source/tests/manifest/lock plus external reviewer report bytes unchanged. Actual current base880rows; repaired head883rows/312computed gaps (294untagged+18ignored-only). Existing309owned deferrals continue; three additional PLANNED rows now extracted and explicitly owned. Code/Rust and corrected base narrow PASS; full gap FAIL. Both new final gates PENDING, earlier passes historical only.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | Verified a3405808 removes only the blank separator; all three criterion row bytes equal actual base942ece51. Fresh actual current matrix now mints all3IDs:883rows,521tagged/294untagged/18ignored-only/50method-without-symbol. This fixes table extraction, not planned implementations. Source/test/manifest/lock and external report bytes remain unchanged. |
+
++++ [reviewer data]
+
+```yaml
+dispositions:
+- fnd: FND-001
+  outcome: fixed
+  after_excerpt: 'ield range path and makes no claim that the separate IR-624 state-field
+    path is implemented. | Test (TC-025) |
+
+    | FR-015-AC-120 | PLANNED (IR-942; depends on QSL ADR-013 O-07/O-09 and QSV FR-123).
+    After the selected owner and occurrence validate under AC-122, CG forms the per-step
+    record content identity from an RFC 8785 object whose only members are `subject_kind:
+    "protocol-refinement-step"` and `record: StepSimulationRecord` encoded by QSV.
+    Two separately valid selected refinements with the same obligation and hypotheses
+    but different record `refinement` values, e'
+```
+
++++

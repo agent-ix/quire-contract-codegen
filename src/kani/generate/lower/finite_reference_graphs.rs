@@ -158,7 +158,7 @@ mod tests {
 
     use super::{prepare_finite_graph_reaches, GraphRequest};
 
-    #[trace("TC-023")]
+    #[trace("TC-023", "FR-015-AC-86")]
     #[test]
     fn branching_graph_uses_a_stable_bounded_discovery_order() {
         let selection = ProfileSelection {
@@ -190,7 +190,7 @@ mod tests {
             completeness: PopulationCompleteness::Complete,
             bounds: ResourceBounds {
                 max_objects: 5,
-                max_references: 4,
+                max_references: 5,
                 max_input_bytes: 1,
             },
             input_bytes: 0,
@@ -202,14 +202,20 @@ mod tests {
                     snapshot_id: "snapshot".to_owned(),
                 })
                 .collect(),
-            references: [("a", "c"), ("b", "d"), ("c", "target"), ("a", "b")]
-                .into_iter()
-                .map(|(source_id, target_id)| FiniteReference {
-                    source_id: source_id.to_owned(),
-                    field_id: "next".to_owned(),
-                    target_id: target_id.to_owned(),
-                })
-                .collect(),
+            references: [
+                ("a", "next", "c"),
+                ("b", "next", "d"),
+                ("c", "next", "target"),
+                ("a", "next", "b"),
+                ("a", "other", "target"),
+            ]
+            .into_iter()
+            .map(|(source_id, field_id, target_id)| FiniteReference {
+                source_id: source_id.to_owned(),
+                field_id: field_id.to_owned(),
+                target_id: target_id.to_owned(),
+            })
+            .collect(),
         }
         .validate()
         .expect("finite graph fixture");
@@ -224,6 +230,27 @@ mod tests {
             .expect("target is reached within four depth-first expansions");
         assert!(reached.reachable);
         assert_eq!(reached.expanded, ["a", "b", "d", "c"]);
+        assert!(
+            !reached.expanded.iter().any(|identity| identity == "target"),
+            "finding a target edge must not spend an expansion on its target"
+        );
+        let other = prepare_finite_graph_reaches(
+            &profile,
+            &dispatch,
+            &input,
+            GraphRequest {
+                field_id: "other".into(),
+                max_expansions: 1,
+                ..request.clone()
+            },
+        )
+        .expect("the selected other field has a direct target edge");
+        assert!(other.reachable);
+        assert_eq!(
+            other.expanded,
+            ["a"],
+            "the target edge needs only the source expansion"
+        );
 
         let exhausted = prepare_finite_graph_reaches(
             &profile,
