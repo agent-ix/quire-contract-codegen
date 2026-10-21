@@ -583,8 +583,8 @@ pub struct GeneratedCompositeEqualityClaim {
     /// Every V2 node id whose declaration entered the reconstructed closure,
     /// ascending by digest domain then digest.
     pub declaration_keys: Vec<CheckedNodeId>,
-    /// The runtime key of each declaration entry, ascending, equal to
-    /// Original owner-issued declaration keys, encoded as lowercase wire digests.
+    /// The original owner-issued kernel declaration keys, in the corresponding
+    /// `declaration_keys` order; these are distinct from the V2 composite node ids.
     pub declaration_runtime_keys: Vec<String>,
     /// The schedule `CheckedEquality::schedule()` selected.
     pub schedule: RecordedSchedule,
@@ -805,6 +805,15 @@ pub fn generate_composite_equality_oracles(
                     limits.type_resolution_work_units,
                 ) {
                     Ok(generated) => {
+                        let runtime_by_node = generated.composites.iter().map(|declaration| {
+                            let binding = generated.composite_bindings.get(&declaration.key())
+                                .ok_or(OracleGenerationError::InvalidPlanState)?;
+                            Ok((&binding.node, declaration.key()))
+                        }).collect::<Result<BTreeMap<_, _>, OracleGenerationError>>()?;
+                        let runtime_keys = generated.declaration_keys.iter().map(|id| {
+                            runtime_by_node.get(id).map(ToString::to_string)
+                                .ok_or(OracleGenerationError::InvalidPlanState)
+                        }).collect::<Result<Vec<_>, _>>()?;
                         let claim = ClaimDisposition::Generated(Box::new(
                             GeneratedCompositeEqualityClaim {
                                 environment_symbol: String::new(),
@@ -824,11 +833,7 @@ pub fn generate_composite_equality_oracles(
                                     .collect(),
                                 descriptor: recorded_descriptor(item),
                                 declaration_keys: generated.declaration_keys.clone(),
-                                declaration_runtime_keys: generated
-                                    .declaration_keys
-                                    .iter()
-                                    .map(|id| id.digest.to_lowercase())
-                                    .collect(),
+                                declaration_runtime_keys: runtime_keys,
                                 schedule: generated.checked.schedule().try_into()?,
                             },
                         ));
@@ -1091,7 +1096,8 @@ fn check_item(
         .map(|target| resolve_type(admitted, graph, bounds_by_type, &mut closure, target))
         .transpose()?;
 
-    let declaration_keys = closure.node_ids.clone();
+    let mut declaration_keys = closure.node_ids.clone();
+    declaration_keys.sort();
     let composites: Vec<CompositeDeclaration> = closure.composites.values().cloned().collect();
     let environment = match TypeEnvironment::new(composites.clone(), std::iter::empty()) {
         Ok(environment) => environment,
@@ -2365,6 +2371,33 @@ mod tests {
             .key()
     }
 
+    /// A deliberately inconsistent private graph exercises declaration admission only;
+    /// it is not a successful source/context admission or public generator request.
+    #[trace("FR-018-AC-1", "FR-018-AC-8", "TC-029")]
+    #[test]
+    fn duplicate_member_private_defense_retains_exact_cause_and_healthy_sibling() {
+        let mut nodes = recursive_shape_nodes();
+        nodes[0].body["members"][0]["name"] = json!("x");
+        let duplicate = nodes[0].body["members"][0].clone();
+        nodes[0].body["members"].as_array_mut().unwrap().push(duplicate);
+        let list = EqualityOperandDescriptor::typed(recursive_node_id('a'));
+        let tree = EqualityOperandDescriptor::typed(recursive_node_id('c'));
+        let (outcomes, source) = check_nominal_items_with_limits(
+            nodes, &[(list.clone(), list), (tree.clone(), tree)],
+            CompositeEqualityLimits { source_bytes: usize::MAX, ..Default::default() },
+        );
+        assert!(matches!(&outcomes[0], Err(CompositeEqualityRefusal::Declaration {
+            cause: DeclarationRefusalCause::DuplicateMember { name }, ..
+        }) if name == "x"));
+        assert_eq!(outcomes[1], Ok(()));
+        let artifacts = source.finish(usize::MAX).expect("healthy sibling source");
+        let lib = &artifacts.iter().find(|artifact| artifact.path == "src/lib.rs").unwrap().contents;
+        assert_eq!(lib.matches("pub fn oracle_").count(), 1, "refused item has no oracle");
+        assert_eq!(lib.matches("pub fn environment_").count(), 1, "refused item has no constructor");
+        assert!(!lib.contains("oracle_test0"));
+        assert!(lib.contains("oracle_test1"));
+    }
+
     #[trace("FR-018-AC-26", "FR-018-AC-27", "TC-029")]
     #[test]
     fn tc_029_qsl_recursive_package_uses_the_reader_shapes() {
@@ -2678,6 +2711,12 @@ mod tests {
             nodes.push(expression);
         }
         let graph: Graph<'_> = nodes.iter().map(|node| (&node.node_id, node)).collect();
+        let mut bounds = BTreeMap::new();
+        for node in &nodes {
+            if CheckedNodeTag::from_wire(&node.node_tag) == Some(CheckedNodeTag::BoundedDomain) {
+                bounds.entry(&node.semantic_type).or_insert_with(Vec::new).push(node);
+            }
+        }
         let mut source = SourceBuilder::new(limits.source_bytes).expect("synthetic source starts");
         // Private source-budget/component fixture, not an authentic source capability.
         source.expected_package = Some(match context {
@@ -2698,7 +2737,7 @@ mod tests {
                 match check_item(
                     context,
                     &graph,
-                    &BTreeMap::new(),
+                    &bounds,
                     graph.get(&item.node_id).copied().expect("synthetic node"),
                     item,
                     limits.type_resolution_work_units,
