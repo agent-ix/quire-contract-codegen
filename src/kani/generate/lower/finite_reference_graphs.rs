@@ -203,17 +203,19 @@ mod tests {
                 })
                 .collect(),
             references: [
-                ("a", "next", "c"), ("b", "next", "d"),
-                ("c", "next", "target"), ("a", "next", "b"),
+                ("a", "next", "c"),
+                ("b", "next", "d"),
+                ("c", "next", "target"),
+                ("a", "next", "b"),
                 ("a", "other", "target"),
             ]
-                .into_iter()
-                .map(|(source_id, field_id, target_id)| FiniteReference {
-                    source_id: source_id.to_owned(),
-                    field_id: field_id.to_owned(),
-                    target_id: target_id.to_owned(),
-                })
-                .collect(),
+            .into_iter()
+            .map(|(source_id, field_id, target_id)| FiniteReference {
+                source_id: source_id.to_owned(),
+                field_id: field_id.to_owned(),
+                target_id: target_id.to_owned(),
+            })
+            .collect(),
         }
         .validate()
         .expect("finite graph fixture");
@@ -228,14 +230,27 @@ mod tests {
             .expect("target is reached within four depth-first expansions");
         assert!(reached.reachable);
         assert_eq!(reached.expanded, ["a", "b", "d", "c"]);
-        assert!(!reached.expanded.iter().any(|identity| identity == "target"),
-            "finding a target edge must not spend an expansion on its target");
-        let other = prepare_finite_graph_reaches(&profile, &dispatch, &input, GraphRequest {
-            field_id: "other".into(), max_expansions: 1, ..request.clone()
-        }).expect("the selected other field has a direct target edge");
+        assert!(
+            !reached.expanded.iter().any(|identity| identity == "target"),
+            "finding a target edge must not spend an expansion on its target"
+        );
+        let other = prepare_finite_graph_reaches(
+            &profile,
+            &dispatch,
+            &input,
+            GraphRequest {
+                field_id: "other".into(),
+                max_expansions: 1,
+                ..request.clone()
+            },
+        )
+        .expect("the selected other field has a direct target edge");
         assert!(other.reachable);
-        assert_eq!(other.expanded, ["a"], "the target edge needs only the source expansion");
-
+        assert_eq!(
+            other.expanded,
+            ["a"],
+            "the target edge needs only the source expansion"
+        );
 
         let exhausted = prepare_finite_graph_reaches(
             &profile,

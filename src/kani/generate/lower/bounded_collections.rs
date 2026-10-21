@@ -191,14 +191,20 @@ mod tests {
         ];
         for (kind, values, expected_value, expected_examined) in cases {
             let request = CollectionQuery {
-                source_id: "source:decisions".into(), max_items: values.len(), values, kind,
+                source_id: "source:decisions".into(),
+                max_items: values.len(),
+                values,
+                kind,
             };
-            let lowered = prepare_bounded_collection_query(&profile, &dispatch, &input, request.clone())
-                .expect("each complete bounded query is admitted");
-            assert_eq!(lowered.query, request, "the exact ordered duplicate-preserving request survives");
+            let lowered =
+                prepare_bounded_collection_query(&profile, &dispatch, &input, request.clone())
+                    .expect("each complete bounded query is admitted");
+            assert_eq!(
+                lowered.query, request,
+                "the exact ordered duplicate-preserving request survives"
+            );
             assert_eq!(lowered.value, expected_value, "query {request:?}");
             assert_eq!(lowered.examined, expected_examined, "query {request:?}");
         }
     }
-
 }
