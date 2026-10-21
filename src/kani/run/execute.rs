@@ -259,6 +259,12 @@ pub struct KaniExecutionEvidence {
     /// Contract role of a contract harness; `None` for an exact-scalar harness, whose claim
     /// has no contract role.
     pub kind: Option<ObligationKind>,
+    /// Exact caller-ingress Text claim proved by FR-035, absent for other harness families.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub caller_text_claim: Option<crate::oracle::caller_text::CallerTextProofIdentity>,
+    /// The `module::harness` selector that ran for a caller Text claim.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub selected_harness_path: Option<String>,
     /// Generated harness path.
     pub harness_path: String,
     /// Invoked launcher path.
@@ -309,6 +315,8 @@ struct ReportedExecution {
     ceilings: crate::kani::identity::ProofCeilings,
     symbolic_arguments: Vec<crate::kani::identity::SymbolicArgumentBounds>,
     kind: Option<ObligationKind>,
+    caller_text_claim: Option<crate::oracle::caller_text::CallerTextProofIdentity>,
+    selected_harness_path: Option<String>,
     harness_path: String,
     launcher_path: String,
     arguments: Vec<String>,
@@ -330,6 +338,8 @@ impl ReportedExecution {
             ceilings: self.ceilings,
             symbolic_arguments: self.symbolic_arguments,
             kind: self.kind,
+            caller_text_claim: self.caller_text_claim,
+            selected_harness_path: self.selected_harness_path,
             harness_path: self.harness_path,
             launcher_path: self.launcher_path,
             arguments: self.arguments,
@@ -474,6 +484,11 @@ fn evidence_of(
         ceilings: harness.ceilings,
         symbolic_arguments: request.harness.symbolic_arguments(),
         kind: harness.kind,
+        caller_text_claim: harness.caller_text_claim.clone(),
+        selected_harness_path: harness
+            .caller_text_claim
+            .as_ref()
+            .map(|_| harness.selection.clone()),
         harness_path: harness.rust.path.clone(),
         launcher_path: request.installation.launcher.display().to_string(),
         arguments,
