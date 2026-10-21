@@ -13,7 +13,7 @@ Independent PR496 review of record admission/parser stage allocation. Exact revi
 
 ## Verdict
 
-**FAIL** — Disposition round 1 at 6a7d1eb643918110f48e51810b283a26844e70a8. All 314 gap findings explicitly deferred to their exact owners: 311 existing IR-878/program, 2 IR-621, 1 IR-17. Full repository gap verdict remains FAIL; no gap is fixed by this disposition.
+Full gap verdict remains FAIL. Of original 314 findings, FND076/077 (IR621 AC123/124) are now fixed by landed PR494; exact current open set is 312: 311 inherited IR878/program plus planned IR17 AC8 authentic-source stage evidence. Those remaining findings retain round1 explicit deferrals and actual owners.
 
 ## Examined scope
 
@@ -6638,3 +6638,16 @@ Exact disposition head 6a7d1eb643918110f48e51810b283a26844e70a8; reviewed origin
 | FND-312 | deferred | Existing IR-878/program triage owns this unchanged baseline gap under actual comments 3db226b2-9381-476f-a880-cf37f082ac9e and 04483a66-6049-4c81-99f7-4fd6563d9b26 (IR-942 where applicable). Exact 311-ID set independently matches current PR494 census; no native/proof gate waiver and no completion claimed. |
 | FND-313 | deferred | Existing IR-878/program triage owns this unchanged baseline gap under actual comments 3db226b2-9381-476f-a880-cf37f082ac9e and 04483a66-6049-4c81-99f7-4fd6563d9b26 (IR-942 where applicable). Exact 311-ID set independently matches current PR494 census; no native/proof gate waiver and no completion claimed. |
 | FND-314 | deferred | IR-17 owns the planned authentic compile_admitted duplicate-source control and retained separate private declaration-defense checks; explicit scope decision IR-17 comment 7e6d6fef-f764-4869-ae69-bebeb321e713. No implementation, genuine-source qualification, or waiver claimed. |
+
+### Dispositions round 2 (appended)
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-076 | fixed | Fixed by already-landed CG PR494, merge53fa532794b26f89d641f6d689b6230f140aa140, not by PR496. Actual external tests assert the three Result<Success,KaniOutcome> signatures, unchanged successes and exact failure kind/code/source/context, ordering and identity retry; private real artifact renderer control remains separately labelled. This reviewer inspected these source controls and current tagged bindings; no native rerun claimed. |
+| FND-077 | fixed | Fixed by already-landed CG PR494, merge53fa532794b26f89d641f6d689b6230f140aa140, not by PR496. Actual external tests assert the three Result<Success,KaniOutcome> signatures, unchanged successes and exact failure kind/code/source/context, ordering and identity retry; private real artifact renderer control remains separately labelled. This reviewer inspected these source controls and current tagged bindings; no native rerun claimed. |
+
+## Narrow rebase disposition round 2
+
+Exact current head 94e6294f2eb6b88564f487c0e5e42a9e26dc15fa, baseline 53fa532794b26f89d641f6d689b6230f140aa140 (landed IR621 PR494). Independent binary git diff comparison proves the full owned patch byte-identical before/after rebase; all three own commits range-diff equal. Two spec documents and all 17 inherited review custody files unchanged by the rebase. The actual public cause fix, precise private DuplicateMember/four MalformedComposite defenses, healthy sibling, genuine List/Tree keys/Presence/context and generated check_type/no-charge obligations remain intact; unrelated recursion controls remain unclassified. No source, manifest, lock, native or proof behavior changed by this spec PR.
+
+Current base/candidate computed matrices each contain 884 rows: 523 tagged, 293 untagged, 50 method-without-symbol, 18 ignored-only. All IDs, methods, statuses and binders agree between current base and candidate; only AC8/AC26 statement text differs. Exact prior baseline gap set minus current set is only AC123/124, with no additions. Actual source controls at tests/it/bounded_kani_corpus.rs:886,945,1072 and src/kani/generate/corpus/bounded_kani_corpus.rs:1037 independently inspected. Prior final gates for PR494 are inherited reports, not rerun or newly claimed here. All seven original Findings tables remain byte-exact. Spec-only Markdown change with no embedded consumer program; Cargo/native/proof gate is inapplicable and none ran.

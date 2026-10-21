@@ -13,7 +13,7 @@ Independent PR496 review of record admission/parser stage allocation. Exact revi
 
 ## Verdict
 
-**PASS** — Disposition round 1 at 6a7d1eb643918110f48e51810b283a26844e70a8. The public-cause defect is fixed at the frozen disposition head. code() remains Code::AmbiguousDeclaration; cause() is explicitly None for Assembly. No new defect found; all independent source/context/private defense and no-charge constraints remain intact.
+PASS — same-reviewer narrow disposition finds no semantic regression or new finding; previously fixed public-cause finding remains fixed.
 
 ## Examined scope
 
@@ -80,3 +80,9 @@ Exact disposition head 6a7d1eb643918110f48e51810b283a26844e70a8; reviewed origin
 | FND | outcome | reason |
 | --- | --- | --- |
 | FND-001 | fixed | Verified exact owning public accessor contract and corrected AC8/procedure/mutation text. |
+
+## Narrow rebase disposition round 2
+
+Exact current head 94e6294f2eb6b88564f487c0e5e42a9e26dc15fa, baseline 53fa532794b26f89d641f6d689b6230f140aa140 (landed IR621 PR494). Independent binary git diff comparison proves the full owned patch byte-identical before/after rebase; all three own commits range-diff equal. Two spec documents and all 17 inherited review custody files unchanged by the rebase. The actual public cause fix, precise private DuplicateMember/four MalformedComposite defenses, healthy sibling, genuine List/Tree keys/Presence/context and generated check_type/no-charge obligations remain intact; unrelated recursion controls remain unclassified. No source, manifest, lock, native or proof behavior changed by this spec PR.
+
+Current base/candidate computed matrices each contain 884 rows: 523 tagged, 293 untagged, 50 method-without-symbol, 18 ignored-only. All IDs, methods, statuses and binders agree between current base and candidate; only AC8/AC26 statement text differs. Exact prior baseline gap set minus current set is only AC123/124, with no additions. Actual source controls at tests/it/bounded_kani_corpus.rs:886,945,1072 and src/kani/generate/corpus/bounded_kani_corpus.rs:1037 independently inspected. Prior final gates for PR494 are inherited reports, not rerun or newly claimed here. All seven original Findings tables remain byte-exact. Spec-only Markdown change with no embedded consumer program; Cargo/native/proof gate is inapplicable and none ran.
