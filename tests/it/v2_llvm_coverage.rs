@@ -1,7 +1,9 @@
 //! V2 clause population and LLVM probe observations from admitted checked packages.
 
 use ix_trace_rs::trace;
-use quire_contract_codegen::{analyze_v2_llvm_coverage, V2ClauseCoverageInput};
+use quire_contract_codegen::{
+    analyze_v2_llvm_coverage, V2ClauseCoverageInput, V2_COVERAGE_FORMAT, V2_COVERAGE_SCHEMA,
+};
 use serde_json::{json, Value};
 
 use super::kani_obligations_state_frame::native_twin::Twin;
@@ -59,12 +61,24 @@ fn report(
     package: &quire_contract_model::CheckedPackageV2,
     inputs: &[V2ClauseCoverageInput<'_>],
 ) -> Value {
-    serde_json::from_slice(
+    let value: Value = serde_json::from_slice(
         &analyze_v2_llvm_coverage(package, inputs)
             .to_json_bytes()
             .unwrap(),
     )
-    .unwrap()
+    .unwrap();
+    let schema: Value = serde_json::from_str(V2_COVERAGE_SCHEMA).unwrap();
+    let validator = jsonschema::JSONSchema::options()
+        .with_draft(jsonschema::Draft::Draft202012)
+        .compile(&schema)
+        .unwrap();
+    let errors: Vec<_> = match validator.validate(&value) {
+        Ok(()) => Vec::new(),
+        Err(errors) => errors.map(|error| error.to_string()).collect(),
+    };
+    assert!(errors.is_empty(), "schema errors {errors:?}: {value}");
+    assert_eq!(value["format"], V2_COVERAGE_FORMAT);
+    value
 }
 
 fn set_counts(input: &mut V2ClauseCoverageInput<'_>, counts: &[u64]) {
