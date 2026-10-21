@@ -22,7 +22,7 @@ pub const BOUND_COVERAGE_SCHEMA: &str =
     include_str!("../../schemas/bound-coverage-observations-v1.schema.json");
 /// Maximum serialized analysis bytes, including explicit refusal outcomes.
 pub const MAX_ANALYSIS_BYTES: usize = 16 * 1024 * 1024;
-const MAX_SOURCE_ROOT_BYTES: usize = 4096;
+pub(crate) const MAX_SOURCE_ROOT_BYTES: usize = 4096;
 
 /// Borrowed untrusted artifact bytes. The analyzer compares them with the generation.
 pub struct ArtifactBytes<'a> {
@@ -514,7 +514,10 @@ impl Write for CountWriter {
         Ok(())
     }
 }
-fn check_output_size(body: &ObservationBody, limit: usize) -> Result<(), CoverageDiagnostic> {
+pub(crate) fn check_output_size<T: Serialize>(
+    body: &T,
+    limit: usize,
+) -> Result<(), CoverageDiagnostic> {
     serde_json::to_writer(CountWriter { bytes: 0, limit }, body).map_err(|_| {
         diag(
             CoverageErrorCode::ResourceLimitExceeded,

@@ -574,6 +574,45 @@ impl Twin {
         twin
     }
 
+    /// Four admitted postconditions with distinct implication counts for one coverage census.
+    pub fn with_mixed_coverage_clauses() -> Self {
+        let mut twin = Self::build(
+            &model::GRANTED,
+            &[
+                CLAUSES[0],
+                ("SpareA", "deposit", "balance"),
+                ("SpareB", "deposit", "balance"),
+                ("SpareC", "deposit", "balance"),
+            ],
+            0,
+        );
+        let mut source = String::from_utf8(twin.unit).expect("native unit");
+        for (name, condition) in [
+            (
+                "BalanceNeverDrops",
+                "self.balance >= 0 implies self.balance <= 1000",
+            ),
+            (
+                "SpareA",
+                "self.balance >= 0 implies (self.balance <= 1000 implies self.balance >= pre(self.balance))",
+            ),
+            ("SpareB", "self.balance < pre(self.balance)"),
+            ("SpareC", "self.balance <= pre(self.balance)"),
+        ] {
+            let original = format!(
+                "post {name} using v on Bank::Account::deposit {{ self.balance >= pre(self.balance) }}"
+            );
+            let changed = format!(
+                "post {name} using v on Bank::Account::deposit {{ {condition} }}"
+            );
+            let updated = source.replace(&original, &changed);
+            assert_ne!(updated, source, "{name} condition changed");
+            source = updated;
+        }
+        twin.unit = source.into_bytes();
+        twin
+    }
+
     /// One selected model whose two declared fields have deliberately different bounds.
     pub fn with_field_ranges(balance: (i64, i64), audit: (i64, i64)) -> Self {
         let mut twin = Self::build(&["balance"], &[CLAUSES[0]], 0);

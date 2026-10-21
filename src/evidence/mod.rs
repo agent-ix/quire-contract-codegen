@@ -9,3 +9,6 @@ pub(crate) mod bound_coverage;
 // Bounded LLVM observation primitives; no aggregate coverage verdict.
 // Implements: FR-004 (bounded observation primitives; no aggregate coverage verdict).
 pub(crate) mod vacuity;
+// Checked-package clause population and LLVM observations; no campaign qualification.
+// Implements: FR-004-AC-16 through FR-004-AC-24.
+pub(crate) mod v2_llvm;
