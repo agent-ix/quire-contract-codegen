@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use crate::oracle::operator_catalog::{OperandOrder, Operator, ScalarKaniOperator};
 
 /// The accounting limits supplied to every generated scalar harness meter.
-pub(crate) const SCALAR_HARNESS_LIMITS: quire_contract_runtime::exact::ScalarLimits =
-    quire_contract_runtime::exact::ScalarLimits {
+pub(crate) const SCALAR_HARNESS_LIMITS: quire_exact::ScalarLimits =
+    quire_exact::ScalarLimits {
         integer_bits: u64::MAX,
         decimal_digits: u64::MAX,
         scale_expansion: u64::MAX,

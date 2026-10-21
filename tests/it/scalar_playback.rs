@@ -11,7 +11,7 @@ use quire_contract_codegen::{
     BackendDescriptor, Candidate, ContractDriverResultSelection, ContractRequestPosition,
     DecodeFailure, GenerationContexts, KaniGenerationContext, KaniScalarObligationHarness,
     KindOutput, ProviderOrigin, RoutedGenerationItem, ScalarObligationIdentity,
-    ScalarOriginalLimitsError,
+    ScalarLimits, ScalarOriginalLimitsError,
 };
 use quire_contract_model::{
     CheckedOccurrenceRole, CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2,
@@ -485,7 +485,7 @@ fn original_renderer_limits_are_retained_with_genuine_routed_source() {
         .expect("generation retained its actual meter limits");
     assert_eq!(
         limits,
-        quire_contract_runtime::exact::ScalarLimits {
+        ScalarLimits {
             integer_bits: u64::MAX,
             decimal_digits: u64::MAX,
             scale_expansion: u64::MAX,
