@@ -2697,6 +2697,108 @@ exec sleep 45
         }
     }
 
+    #[cfg(target_os = "linux")]
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum ConfirmationObservation {
+        Unchanged,
+        OmitWithZero,
+        OmitWithPositiveCount,
+    }
+
+    #[cfg(target_os = "linux")]
+    #[derive(Debug, PartialEq, Eq)]
+    struct CapturedNamespaceIdentity {
+        init_pid: u32,
+        init_start_ticks: u64,
+        wrapper_pid: u32,
+    }
+
+    /// Observe the genuine bound root while the backend is alive, before cleanup signals.
+    #[cfg(target_os = "linux")]
+    #[derive(Debug)]
+    struct NamespaceIdentityObservation {
+        ready: PathBuf,
+        gate: std::sync::Arc<OwnerGate>,
+        captured: std::sync::Mutex<Option<CapturedNamespaceIdentity>>,
+    }
+
+    #[cfg(target_os = "linux")]
+    impl super::super::owners::MemorySampling for NamespaceIdentityObservation {
+        fn observe(
+            &self,
+            observer: &mut super::super::memory::MemoryObserver,
+            root: u32,
+        ) -> std::io::Result<u64> {
+            let measured = observer.observe(root)?;
+            if self.ready.is_file() && !self.gate.claimed.load(std::sync::atomic::Ordering::Acquire) {
+                let stat = fs::read_to_string(format!("/proc/{root}/stat"))?;
+                let fields: Vec<_> = stat
+                    .rsplit_once(')')
+                    .unwrap()
+                    .1
+                    .split_whitespace()
+                    .collect();
+                *self.captured.lock().unwrap() = Some(CapturedNamespaceIdentity {
+                    init_pid: root,
+                    init_start_ticks: fields[19].parse().unwrap(),
+                    wrapper_pid: fields[1].parse().unwrap(),
+                });
+                self.gate.enter();
+            }
+            Ok(measured)
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[derive(Debug)]
+    struct ConfirmationSample {
+        descriptor: i32,
+        count: usize,
+        revents: rustix::event::PollFlags,
+    }
+
+    /// Omit only an observation after the actual supplied pidfd has confirmed teardown.
+    #[cfg(target_os = "linux")]
+    #[derive(Debug)]
+    struct ObservationOmittingPoll {
+        gate: std::sync::Arc<OwnerGate>,
+        mode: ConfirmationObservation,
+        samples: std::sync::Mutex<Vec<ConfirmationSample>>,
+    }
+
+    #[cfg(target_os = "linux")]
+    impl super::super::owners::PollOperation for ObservationOmittingPoll {
+        fn poll(
+            &self,
+            fds: &mut [rustix::event::PollFd<'_>],
+            timeout: Option<&rustix::time::Timespec>,
+        ) -> Result<usize, rustix::io::Errno> {
+            use std::os::fd::{AsFd, AsRawFd};
+            let timeout = timeout.expect("owned cleanup always has its original timeout");
+            assert_eq!((timeout.tv_sec, timeout.tv_nsec), (5, 0));
+            assert_eq!(fds.len(), 1, "one claimed init pidfd per confirmation");
+            let count = rustix::event::poll(fds, Some(timeout))?;
+            let revents = fds[0].revents();
+            assert!(count > 0, "real owned init positively confirmed");
+            assert!(revents.contains(rustix::event::PollFlags::IN));
+            self.samples.lock().unwrap().push(ConfirmationSample {
+                descriptor: fds[0].as_fd().as_raw_fd(),
+                count,
+                revents,
+            });
+            if self.gate.enter() && self.mode != ConfirmationObservation::Unchanged {
+                fds[0].clear_revents();
+                self.gate.refuse();
+                return Ok(match self.mode {
+                    ConfirmationObservation::OmitWithZero => 0,
+                    ConfirmationObservation::OmitWithPositiveCount => count,
+                    ConfirmationObservation::Unchanged => unreachable!(),
+                });
+            }
+            Ok(count)
+        }
+    }
+
     /// A failed real RSS observation owns the public refusal even if a cause is already recorded.
     #[trace("FR-040-AC-4")]
     #[cfg(target_os = "linux")]
@@ -2899,6 +3001,136 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
             );
             assert_eq!(stand_in.calls().len(), 1);
             recorded_process_gone(&stand_in.directory.join("calls.child"));
+        }
+    }
+
+    /// Injected observation omissions retain the first diagnostic, not a kernel-timeout claim.
+    #[trace("FR-017-AC-54", "FR-017-AC-55", "FR-040-AC-4")]
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn cleanup_observation_omissions_retain_real_confirmation_and_refusal_precedence() {
+        use super::super::owners::{LaunchOwners, SystemPoll};
+        use std::sync::{atomic::Ordering, Arc, Mutex};
+        for (mode, cancel_before_cleanup) in [
+            (ConfirmationObservation::Unchanged, None),
+            (ConfirmationObservation::OmitWithZero, Some(true)),
+            (ConfirmationObservation::OmitWithZero, Some(false)),
+            (ConfirmationObservation::OmitWithPositiveCount, Some(true)),
+            (ConfirmationObservation::OmitWithPositiveCount, Some(false)),
+        ] {
+            let harness = member("cleanup_observation", "check", 4);
+            let body = format!(
+                r#"printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
+printf '%s' "$$" > "$CALLS.child"
+printf 'ready' > "$CALLS.ready"
+while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
+{VERIFY_EVERY_HARNESS}"#
+            );
+            let mut stand_in = StandIn::running("cleanup-observation-omission", &body);
+            stand_in.containing(&[&harness]);
+            let (memory_gate, memory_control) = OwnerGate::new();
+            let memory = Arc::new(NamespaceIdentityObservation {
+                ready: stand_in.directory.join("calls.ready"),
+                gate: memory_gate,
+                captured: Mutex::new(None),
+            });
+            let (cleanup, teardown) = OwnerGate::new();
+            let confirmation = Arc::new(ObservationOmittingPoll {
+                gate: cleanup.clone(),
+                mode,
+                samples: Mutex::new(Vec::new()),
+            });
+            stand_in.installation = KaniInstallation::with_owners(
+                stand_in.installation.launcher.clone(),
+                Arc::new(LaunchOwners {
+                    memory: memory.clone(),
+                    stdout: Arc::new(SystemPoll),
+                    stderr: Arc::new(SystemPoll),
+                    confirmation: confirmation.clone(),
+                }),
+            );
+            let result = std::thread::scope(|scope| {
+                let worker =
+                    scope.spawn(|| execute_kani_obligation(&stand_in.request(&harness, T)));
+                memory_control.entered();
+                assert!(memory.captured.lock().unwrap().is_some());
+                if cancel_before_cleanup == Some(true) {
+                    stand_in.cancel.cancel(quire_exact::CancelCause::Requested);
+                } else {
+                    fs::write(stand_in.directory.join("calls.finish"), b"finish").unwrap();
+                }
+                memory_control.release();
+                teardown.entered();
+                teardown.release();
+                if cancel_before_cleanup == Some(false) {
+                    cleanup.await_refusal();
+                    stand_in.cancel.cancel(quire_exact::CancelCause::Requested);
+                }
+                worker.join().unwrap()
+            });
+            let samples = confirmation.samples.lock().unwrap();
+            if mode == ConfirmationObservation::Unchanged {
+                let evidence = result.unwrap();
+                assert_eq!(evidence.outcome, KaniRunOutcome::Verified);
+                assert_eq!(samples.len(), 1);
+                assert!(!cleanup.failed.load(Ordering::Acquire));
+            } else {
+                let KaniExecutionRefusal::MemoryObservationFailed { detail } = result.unwrap_err()
+                else {
+                    panic!("unconfirmed observation must refuse public evidence");
+                };
+                let fields: std::collections::BTreeMap<_, _> = detail
+                    .strip_prefix(
+                        "namespace cleanup failed: namespace teardown was not confirmed: ",
+                    )
+                    .expect("existing outer and nested prefixes are retained")
+                    .split_whitespace()
+                    .map(|field| field.split_once('=').expect("labelled observation"))
+                    .collect();
+                let captured = memory.captured.lock().unwrap();
+                let captured = captured.as_ref().unwrap();
+                assert_eq!(
+                    fields["poll_count"].parse::<usize>().unwrap(),
+                    if mode == ConfirmationObservation::OmitWithZero {
+                        0
+                    } else {
+                        samples[0].count
+                    }
+                );
+                assert_eq!(fields["revents_bits"].parse::<u16>().unwrap(), 0);
+                let _measured_elapsed_ns = fields["poll_elapsed_ns"].parse::<u128>().unwrap();
+                assert_eq!(fields["init_pid"].parse::<u32>().unwrap(), captured.init_pid);
+                assert_eq!(
+                    fields["init_start_ticks"].parse::<u64>().unwrap(),
+                    captured.init_start_ticks
+                );
+                assert_eq!(
+                    fields["wrapper_pid"].parse::<u32>().unwrap(),
+                    captured.wrapper_pid
+                );
+                assert_eq!(fields["init_handle_present"], "true");
+                assert_eq!(
+                    fields["gate_present"], "false",
+                    "dispatch already consumed its gate"
+                );
+                assert_eq!(fields["cleaned"], "false");
+                assert_eq!(fields.len(), 9, "only observed fields from the failed attempt");
+                assert_eq!(samples.len(), 2, "Drop really confirmed the retained owner");
+                assert_eq!(samples[0].descriptor, samples[1].descriptor);
+                assert!(samples[1].count > 0);
+                assert!(samples[1].revents.contains(rustix::event::PollFlags::IN));
+                assert_eq!(cleanup.attempts.load(Ordering::Acquire), 2);
+            }
+            assert_eq!(stand_in.calls().len(), 1);
+            recorded_process_gone(&stand_in.directory.join("calls.child"));
+            let namespace = fs::read_to_string(stand_in.directory.join("calls.namespace")).unwrap();
+            assert!(
+                !fs::read_dir("/proc").unwrap().filter_map(Result::ok).any(|entry| {
+                    fs::read_link(entry.path().join("ns/pid"))
+                        .is_ok_and(|link| link.as_os_str() == namespace.as_str())
+                }),
+                "the actual backend namespace has no surviving processes"
+            );
         }
     }
 
