@@ -39,19 +39,20 @@ pub(in crate::kani::generate) fn lower(
         node_id: clause.clone(),
     };
     let oracle = generate_v2_clause_oracle(package, clause).map_err(|_| refusal())?;
-    let [input] = oracle.descriptor.inputs.as_slice() else {
+    if oracle.descriptor.inputs.is_empty() {
         return Err(refusal());
-    };
-    let supported_input = match kind {
-        ObligationKind::Precondition => input.name.starts_with("parameter_"),
-        ObligationKind::Invariant => input.name.starts_with("current_"),
-        ObligationKind::Postcondition | ObligationKind::Frame => false,
-    };
-    if !supported_input
-        || input.lower > input.upper
-        || i64::try_from(input.lower).is_err()
-        || i64::try_from(input.upper).is_err()
-    {
+    }
+    if oracle.descriptor.inputs.iter().any(|input| {
+        let supported_input = match kind {
+            ObligationKind::Precondition => input.name.starts_with("parameter_"),
+            ObligationKind::Invariant => input.name.starts_with("current_"),
+            ObligationKind::Postcondition | ObligationKind::Frame => false,
+        };
+        !supported_input
+            || input.lower > input.upper
+            || i64::try_from(input.lower).is_err()
+            || i64::try_from(input.upper).is_err()
+    }) {
         return Err(refusal());
     }
     // Kani includes the module in generated filenames. Use the full admitted pair so two
@@ -91,15 +92,15 @@ pub(in crate::kani::generate) fn render_clause(
     request: &KaniObligationRequest<'_>,
     lowered: &LoweredV2Clause,
 ) -> Result<KaniV2ClauseObligationHarness, UnsupportedObligation> {
-    let [input] = lowered.oracle.descriptor.inputs.as_slice() else {
-        return Err(UnsupportedObligation::V2ClauseConditionNotRendered {
-            node_id: lowered.node_id.clone(),
-        });
-    };
-    let minimum = i64::try_from(input.lower).map_err(|_| UnsupportedObligation::RenderFailed)?;
-    let maximum = i64::try_from(input.upper).map_err(|_| UnsupportedObligation::RenderFailed)?;
-    let mut body = vec![
-        Statement::Input {
+    let inputs = &lowered.oracle.descriptor.inputs;
+    let mut body = Vec::with_capacity(inputs.len() + 3);
+    let mut arguments = Vec::with_capacity(inputs.len());
+    for input in inputs {
+        let minimum =
+            i64::try_from(input.lower).map_err(|_| UnsupportedObligation::RenderFailed)?;
+        let maximum =
+            i64::try_from(input.upper).map_err(|_| UnsupportedObligation::RenderFailed)?;
+        body.push(Statement::Input {
             name: input.name.clone(),
             ty: KaniPrimitiveType::I64,
             domain: (input.lower, input.upper),
@@ -112,22 +113,28 @@ pub(in crate::kani::generate) fn render_clause(
                     input.name
                 ))?),
             }],
-        },
-        Statement::Let(LetBinding {
-            name: "meter".to_owned(),
-            ty: None,
-            mutable: true,
-            init: Init::ScalarMeter(crate::kani::abi::SCALAR_HARNESS_LIMITS),
-        }),
-        Statement::Call {
-            result: "outcome".to_owned(),
-            callee: "oracle_clause".to_owned(),
-            args: vec![
-                Argument::Borrow(input.name.clone()),
-                Argument::BorrowMut("meter".to_owned()),
-            ],
-        },
-    ];
+        });
+        arguments.push(ScalarObligationArgument {
+            identifier: input.name.clone(),
+            minimum,
+            maximum,
+        });
+    }
+    body.push(Statement::Let(LetBinding {
+        name: "meter".to_owned(),
+        ty: None,
+        mutable: true,
+        init: Init::ScalarMeter(crate::kani::abi::SCALAR_HARNESS_LIMITS),
+    }));
+    body.push(Statement::Call {
+        result: "outcome".to_owned(),
+        callee: "oracle_clause".to_owned(),
+        args: inputs
+            .iter()
+            .map(|input| Argument::Borrow(input.name.clone()))
+            .chain(std::iter::once(Argument::BorrowMut("meter".to_owned())))
+            .collect(),
+    });
     if lowered.kind == ObligationKind::Invariant {
         body.push(Statement::Assert {
             condition: ExprText::new("matches!(&outcome, Ok(rt::Outcome::Completed(true)))")?,
@@ -178,11 +185,7 @@ pub(in crate::kani::generate) fn render_clause(
         kind: lowered.kind,
         oracle_symbol: "oracle_clause".to_owned(),
         subject_path: request.subject_path.to_owned(),
-        arguments: vec![ScalarObligationArgument {
-            identifier: input.name.clone(),
-            minimum,
-            maximum,
-        }],
+        arguments,
         module_symbol: spec.path().module.clone(),
         harness_symbol: spec.path().harness.clone(),
         solver: spec.solver(),
