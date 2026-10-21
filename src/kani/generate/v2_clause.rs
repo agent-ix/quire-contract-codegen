@@ -27,6 +27,8 @@ pub(super) struct LoweredV2Clause {
     pub(super) kind: ObligationKind,
     oracle: V2ClauseOracle,
     native_expectation: String,
+    arithmetic: Vec<ArithmeticProbe>,
+    symbolic_name: String,
     pub(super) module_symbol: String,
     pub(super) harness_symbol: String,
 }
@@ -40,6 +42,12 @@ enum NativeTerm {
     Boolean(String),
 }
 
+struct ArithmeticProbe {
+    operation: &'static str,
+    operands: Vec<String>,
+    expected: String,
+}
+
 impl NativeTerm {
     fn boolean(self) -> Option<String> {
         match self {
@@ -49,7 +57,12 @@ impl NativeTerm {
     }
 }
 
-fn native_term(term: &ClauseTerm) -> Option<NativeTerm> {
+fn native_term(
+    term: &ClauseTerm,
+    input_name: &str,
+    symbolic_name: &str,
+    arithmetic: &mut Vec<ArithmeticProbe>,
+) -> Option<NativeTerm> {
     match term {
         ClauseTerm::Boolean(value) => Some(NativeTerm::Boolean(value.to_string())),
         ClauseTerm::Integer(value) => {
@@ -61,13 +74,13 @@ fn native_term(term: &ClauseTerm) -> Option<NativeTerm> {
             })
         }
         ClauseTerm::Input(input)
-            if input.name == "amount"
+            if input.name == input_name
                 && input.lower <= input.upper
                 && i64::try_from(input.lower).is_ok()
                 && i64::try_from(input.upper).is_ok() =>
         {
             Some(NativeTerm::Integer {
-                expression: "i128::from(amount_current)".to_owned(),
+                expression: format!("i128::from({symbolic_name})"),
                 lower: input.lower,
                 upper: input.upper,
             })
@@ -80,7 +93,7 @@ fn native_term(term: &ClauseTerm) -> Option<NativeTerm> {
         } => {
             let values = arguments
                 .iter()
-                .map(native_term)
+                .map(|argument| native_term(argument, input_name, symbolic_name, arithmetic))
                 .collect::<Option<Vec<_>>>()?;
             match (identity.as_str(), values.as_slice()) {
                 ("quire.op.boolean.not", [value]) => Some(NativeTerm::Boolean(format!(
@@ -104,8 +117,14 @@ fn native_term(term: &ClauseTerm) -> Option<NativeTerm> {
                 ))),
                 ("quire.op.integer.negate", [value]) => {
                     let (expression, lower, upper) = value.clone_integer()?;
+                    let expected = format!("(-{expression})");
+                    arithmetic.push(ArithmeticProbe {
+                        operation: "Negate",
+                        operands: vec![expression],
+                        expected: expected.clone(),
+                    });
                     Some(NativeTerm::Integer {
-                        expression: format!("(-{expression})"),
+                        expression: expected,
                         lower: upper.checked_neg()?,
                         upper: lower.checked_neg()?,
                     })
@@ -116,9 +135,13 @@ fn native_term(term: &ClauseTerm) -> Option<NativeTerm> {
                 ) => {
                     let (a, al, ah) = left.clone_integer()?;
                     let (b, bl, bh) = right.clone_integer()?;
-                    let (operator, bounds) = match identity.as_str() {
-                        "quire.op.integer.add" => ("+", (al.checked_add(bl)?, ah.checked_add(bh)?)),
-                        "quire.op.integer.sub" => ("-", (al.checked_sub(bh)?, ah.checked_sub(bl)?)),
+                    let (operator, operation, bounds) = match identity.as_str() {
+                        "quire.op.integer.add" => {
+                            ("+", "Add", (al.checked_add(bl)?, ah.checked_add(bh)?))
+                        }
+                        "quire.op.integer.sub" => {
+                            ("-", "Subtract", (al.checked_sub(bh)?, ah.checked_sub(bl)?))
+                        }
                         "quire.op.integer.mul" => {
                             let corners = [
                                 al.checked_mul(bl)?,
@@ -126,12 +149,22 @@ fn native_term(term: &ClauseTerm) -> Option<NativeTerm> {
                                 ah.checked_mul(bl)?,
                                 ah.checked_mul(bh)?,
                             ];
-                            ("*", (*corners.iter().min()?, *corners.iter().max()?))
+                            (
+                                "*",
+                                "Multiply",
+                                (*corners.iter().min()?, *corners.iter().max()?),
+                            )
                         }
                         _ => return None,
                     };
+                    let expected = format!("({a} {operator} {b})");
+                    arithmetic.push(ArithmeticProbe {
+                        operation,
+                        operands: vec![a, b],
+                        expected: expected.clone(),
+                    });
                     Some(NativeTerm::Integer {
-                        expression: format!("({a} {operator} {b})"),
+                        expression: expected,
                         lower: bounds.0,
                         upper: bounds.1,
                     })
@@ -199,22 +232,34 @@ pub(super) fn lower(
             node_id: clause.clone(),
         }
     })?;
-    if oracle.descriptor.inputs.len() != 1 || oracle.descriptor.inputs[0].name != "parameter_amount"
-    {
+    let [input] = oracle.descriptor.inputs.as_slice() else {
         return Err(UnsupportedObligation::V2ClauseConditionNotRendered {
             node_id: clause.clone(),
         });
-    }
+    };
+    let Some(input_name) = input.name.strip_prefix("parameter_") else {
+        return Err(UnsupportedObligation::V2ClauseConditionNotRendered {
+            node_id: clause.clone(),
+        });
+    };
+    let input_name = input_name.to_owned();
+    let symbolic_name = format!("{input_name}_current");
     let condition = read_clause(package, clause).ok_or_else(|| {
         UnsupportedObligation::V2ClauseConditionNotRendered {
             node_id: clause.clone(),
         }
     })?;
-    let native_expectation = native_term(&condition.term)
-        .and_then(NativeTerm::boolean)
-        .ok_or_else(|| UnsupportedObligation::V2ClauseConditionNotRendered {
-            node_id: clause.clone(),
-        })?;
+    let mut arithmetic = Vec::new();
+    let native_expectation = native_term(
+        &condition.term,
+        &input_name,
+        &symbolic_name,
+        &mut arithmetic,
+    )
+    .and_then(NativeTerm::boolean)
+    .ok_or_else(|| UnsupportedObligation::V2ClauseConditionNotRendered {
+        node_id: clause.clone(),
+    })?;
     let module_symbol = format!(
         "kob_v2_clause_{}_{}",
         package.package_id().digest,
@@ -225,6 +270,8 @@ pub(super) fn lower(
         kind: ObligationKind::Postcondition,
         oracle,
         native_expectation,
+        arithmetic,
+        symbolic_name,
         harness_symbol: "prove_clause".to_owned(),
         module_symbol,
     })
@@ -254,16 +301,19 @@ pub(super) fn render_clause(
             node_id: lowered.node_id.clone(),
         });
     };
-    let body = vec![
+    let mut body = vec![
         Statement::Input {
-            name: "amount_current".to_owned(),
+            name: lowered.symbolic_name.clone(),
             ty: KaniPrimitiveType::I64,
             domain: (input.lower, input.upper),
             then: vec![LetBinding {
-                name: "parameter_amount".to_owned(),
+                name: input.name.clone(),
                 ty: None,
                 mutable: false,
-                init: Init::Expression(expression("rt::Integer::from(amount_current)")?),
+                init: Init::Expression(expression(format!(
+                    "rt::Integer::from({})",
+                    lowered.symbolic_name
+                ))?),
             }],
         },
         let_binding(
@@ -276,14 +326,64 @@ pub(super) fn render_clause(
             result: "outcome".to_owned(),
             callee: "oracle_clause".to_owned(),
             args: vec![
-                Argument::Borrow("parameter_amount".to_owned()),
+                Argument::Borrow(input.name.clone()),
                 Argument::BorrowMut("meter".to_owned()),
             ],
         },
         Statement::ClauseSubjectCall {
             callee: request.subject_path.to_owned(),
-            argument: "amount_current".to_owned(),
+            argument: lowered.symbolic_name.clone(),
         },
+    ];
+    for (index, probe) in lowered.arithmetic.iter().enumerate() {
+        let operand_names = probe
+            .operands
+            .iter()
+            .enumerate()
+            .map(|(operand_index, operand)| {
+                let name = format!("arithmetic_operand_{index}_{operand_index}");
+                body.push(let_binding(
+                    &name,
+                    Init::Expression(expression(format!("rt::Integer::from({operand})"))?),
+                    false,
+                ));
+                Ok(name)
+            })
+            .collect::<Result<Vec<_>, UnsupportedObligation>>()?;
+        body.push(let_binding(
+            &format!("arithmetic_expected_{index}"),
+            Init::Expression(expression(format!(
+                "rt::Integer::from({})",
+                probe.expected
+            ))?),
+            false,
+        ));
+        body.push(let_binding(
+            &format!("arithmetic_meter_{index}"),
+            Init::UnlimitedMeter,
+            true,
+        ));
+        let operands = operand_names
+            .iter()
+            .map(|name| format!("&{name}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        body.push(let_binding(
+            &format!("arithmetic_outcome_{index}"),
+            Init::Expression(expression(format!(
+                "rt::evaluate_integer_arithmetic(rt::IntegerArithmetic::{}({operands}), None, &mut arithmetic_meter_{index})",
+                probe.operation
+            ))?),
+            false,
+        ));
+        body.push(Statement::Assert {
+            condition: expression(format!(
+                "arithmetic_outcome_{index} == rt::Outcome::Completed(arithmetic_expected_{index})"
+            ))?,
+            message: "arithmetic subterm agrees with native i128".to_owned(),
+        });
+    }
+    body.extend([
         Statement::Assert {
             condition: expression("matches!(&outcome, Ok(rt::Outcome::Completed(_)))")?,
             message: "the clause oracle completes within the admitted parameter domain".to_owned(),
@@ -300,7 +400,7 @@ pub(super) fn render_clause(
             message: "the compiled subject agrees with the independent clause expectation"
                 .to_owned(),
         },
-    ];
+    ]);
     let path = harness_path(&lowered.module_symbol, &lowered.harness_symbol)?;
     let spec = HarnessSpec::new(
         format!(
@@ -326,7 +426,7 @@ pub(super) fn render_clause(
         oracle_symbol: "oracle_clause".to_owned(),
         subject_path: request.subject_path.to_owned(),
         arguments: vec![ScalarObligationArgument {
-            identifier: "amount_current".to_owned(),
+            identifier: lowered.symbolic_name.clone(),
             minimum,
             maximum,
         }],

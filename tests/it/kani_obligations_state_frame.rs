@@ -291,10 +291,7 @@ fn v2_clause_checks_each_bounded_arithmetic_subterm_independently() {
     assert_eq!(v2_clause_harnesses.len(), 1, "{result:?}");
     let source = &v2_clause_harnesses[0].rust.contents;
     let proof = source.split("#[cfg(kani)]").last().unwrap();
-    assert_eq!(
-        proof.matches("rt::evaluate_integer_arithmetic(").count(),
-        2
-    );
+    assert_eq!(proof.matches("rt::evaluate_integer_arithmetic(").count(), 2);
     assert!(proof.contains("rt::IntegerArithmetic::Add("));
     assert_eq!(
         proof
@@ -310,7 +307,7 @@ fn v2_clause_checks_each_bounded_arithmetic_subterm_independently() {
 fn v2_clause_renders_boolean_connectives_and_comparisons_for_named_parameter() {
     let (package, clause) = Twin::with_bounded_parameter_condition(
         "budget",
-        "not (budget < 0) and (budget = 0 or budget != 0) and budget >= 0",
+        "not (budget < 0) and (budget < 500 or budget >= 500) and budget <= 1000",
     )
     .emitted_package("BalanceNeverDrops");
     let result = negotiate(&[ObligationItem::V2Clause {
@@ -329,9 +326,45 @@ fn v2_clause_renders_boolean_connectives_and_comparisons_for_named_parameter() {
     let source = &harness.rust.contents;
     assert_eq!(harness.identity.arguments[0].identifier, "budget_current");
     assert!(source.contains("let parameter_budget = rt::Integer::from(budget_current)"));
-    assert!(source.contains("i128::from(budget_current) == 0i128"));
-    assert!(source.contains("i128::from(budget_current) != 0i128"));
+    assert!(source.contains("i128::from(budget_current) < 500i128"));
+    assert!(source.contains("i128::from(budget_current) >= 500i128"));
     assert!(source.contains("let subject = "));
+}
+
+#[trace("FR-015-AC-40", "FR-015-AC-41", "TC-025")]
+#[test]
+fn v2_clause_checks_add_subtract_multiply_and_negate_subterms() {
+    let (package, clause) = Twin::with_bounded_amount_condition(
+        "amount + 1 <= 1001 and amount - 1 >= -1 and amount * 2 <= 2000 and -amount <= 0",
+    )
+    .emitted_package("BalanceNeverDrops");
+    let result = negotiate(&[ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+    }]);
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = &result
+    else {
+        panic!("admitted arithmetic clause must emit: {result:?}");
+    };
+    assert_eq!(v2_clause_harnesses.len(), 1, "{result:?}");
+    let proof = v2_clause_harnesses[0]
+        .rust
+        .contents
+        .split("#[cfg(kani)]")
+        .last()
+        .unwrap();
+    for operation in ["Add", "Subtract", "Multiply", "Negate"] {
+        assert!(proof.contains(&format!("rt::IntegerArithmetic::{operation}(")));
+    }
+    assert_eq!(
+        proof
+            .matches("arithmetic subterm agrees with native i128")
+            .count(),
+        5
+    );
 }
 
 #[trace("FR-015-AC-119", "TC-025")]
