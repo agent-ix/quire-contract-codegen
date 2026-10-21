@@ -424,6 +424,22 @@ impl Twin {
         twin
     }
 
+    /// A source-authored precondition over one bounded operation parameter and no state field.
+    pub fn with_bounded_other_precondition() -> Self {
+        let mut twin = Self::with_bounded_other_condition();
+        let source = String::from_utf8(twin.unit).expect("native unit");
+        let changed = source.replace(
+            "post BalanceNeverDrops using v on Bank::Account::deposit { self.balance >= other }",
+            "pre OtherBelowLimit using v on Bank::Account::deposit { other < 1000 }",
+        );
+        assert_ne!(
+            changed, source,
+            "the precondition replaced the postcondition"
+        );
+        twin.unit = changed.into_bytes();
+        twin
+    }
+
     /// QSL-emitted postcondition package whose operation declares a Boolean result.
     pub fn with_deposit_result() -> Self {
         Self::with_deposit_declaration(false, true)

@@ -354,6 +354,59 @@ fn qsl_bounded_operation_parameter_becomes_a_clause_input() {
     );
 }
 
+/// A V2 precondition is selected by its checked clause node, draws the operation parameter
+/// inside the model's bound, and emits its own cover-only harness with the exact clause oracle.
+#[trace(
+    "FR-015-AC-38",
+    "FR-015-AC-39",
+    "FR-015-AC-40",
+    "FR-015-AC-46",
+    "TC-025"
+)]
+#[test]
+fn qsl_parameter_precondition_is_a_separate_v2_cover_obligation() {
+    let (package, clause) =
+        Twin::with_bounded_other_precondition().emitted_package("OtherBelowLimit");
+    let oracle = generate_v2_clause_oracle(&package, &clause).expect("QSL precondition oracle");
+    assert_eq!(oracle.descriptor.inputs.len(), 1);
+    assert_eq!(oracle.descriptor.inputs[0].name, "parameter_other");
+    assert_eq!(
+        (
+            oracle.descriptor.inputs[0].lower,
+            oracle.descriptor.inputs[0].upper
+        ),
+        (0, 1000)
+    );
+
+    let outcome = negotiate(&[ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+    }]);
+    let [record] = outcome.records() else {
+        panic!("one selected precondition");
+    };
+    assert!(matches!(
+        record.disposition,
+        ObligationDisposition::Supported { .. }
+    ));
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("the precondition is admitted");
+    };
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("one precondition harness");
+    };
+    assert_eq!(harness.identity.kind, ObligationKind::Precondition);
+    assert_eq!(harness.rust.contents.matches("kani::cover!(").count(), 1);
+    assert!(!harness.rust.contents.contains("kani::assert!("));
+    assert!(harness.rust.contents.contains("parameter_other >= 0"));
+    assert!(harness.rust.contents.contains("parameter_other <= 1000"));
+    assert!(harness.rust.contents.contains(&oracle.source));
+}
+
 #[trace("FR-014-AC-38")]
 #[test]
 fn qsl_emitted_clause_composes_boolean_and_integer_operations() {
