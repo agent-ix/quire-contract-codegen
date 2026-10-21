@@ -1,3 +1,6 @@
+#[path = "caller_text_admission.rs"]
+mod caller_text_admission;
+
 use std::{fs, process::Command};
 
 use crate::scratch_crate::{runtime_dependency, write_manifest, TemporaryDirectory};

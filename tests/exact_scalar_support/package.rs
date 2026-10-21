@@ -1508,8 +1508,8 @@ pub struct Expression {
 /// The six `TextAdmission` codes ([`TEXT_ADMISSIONS`]): Contract IR refuses each
 /// `IllTyped`/`OperatorIneligible` at admission today, so they are outside [`corpus`] (one such
 /// node refuses the whole package). `quire.op.numeric.convert` over a text operand: no
-/// catalogued `convert` identity takes `text`, and QSL lowers no text admission. Unblocked by a
-/// catalogued text-admission operation (a spec change) or by dropping the operation.
+/// catalogued `convert` identity takes `text`, and QSL lowers no text admission. The caller
+/// ingress route is separate and does not change these checked-node negatives.
 /// `tc_024_text_admission_corpus_is_refused_by_ir_today` pins the exact refusal of each;
 /// FR-014-AC-2's text-admission case has no generated-crate evidence until then.
 pub fn refused_corpus() -> Vec<Expression> {

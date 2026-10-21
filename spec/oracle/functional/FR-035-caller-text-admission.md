@@ -46,11 +46,14 @@ records the architecture boundary.
   by that constructor before a `TextPayload` exists or admission is called.
 - For proof, a finite symbolic source class: zero, one or two Unicode scalars
   chosen independently from `e`, U+0301 COMBINING ACUTE ACCENT, U+00E9 LATIN
-  SMALL LETTER E WITH ACUTE, and U+1F600 GRINNING FACE. The harness encodes
-  the selected scalars as UTF-8 (at most eight bytes), calls the public
-  `from_utf8` constructor, then passes the resulting payload to the emitted
-  admission oracle. The two selected indices and the length are symbolic;
-  this is a 21-member class, not one fixed literal.
+  SMALL LETTER E WITH ACUTE, and U+1F600 GRINNING FACE. One symbolic selector
+  ranges over a table containing exactly the 21 valid UTF-8 strings in this
+  class: the empty string, four one-scalar strings, and all sixteen ordered
+  two-scalar strings. The harness passes the selected string's bytes through
+  the public `TextPayload::from_utf8` constructor, then passes that payload to
+  the emitted admission oracle. The selector remains symbolic, so the proof
+  must establish the agreement assertions for every table entry; the table is
+  an encoding of the same finite class, not a fixed-literal proof.
 
 ## Outputs
 
@@ -81,10 +84,11 @@ records the architecture boundary.
   its actual charge point; it shall not report completion or charge
   `text.result-retain`. An injected denial of each reached charge point shall
   preserve the runtime's stop and consumed counters.
-- When generating a Kani obligation, the generator shall draw a symbolic
-  length in `0..=2` and symbolic alphabet indices for both positions, encode
-  the selected scalars as UTF-8, and construct the payload through
-  `TextPayload::from_utf8`. It shall compare the emitted oracle with an
+- When generating a Kani obligation, the generator shall draw one symbolic
+  selector over a table bijective with the 21 members of the stated source
+  class: empty, each of the four scalars, and every ordered pair of scalars.
+  It shall select the corresponding valid UTF-8 string and construct the
+  payload through `TextPayload::from_utf8`. It shall compare the emitted oracle with an
   independent direct call to `rt::admit_text` on that payload and type,
   including completion/refusal, retained text and provenance on completion,
   admitted charges and consumed counters. It shall have exactly one cover
@@ -107,7 +111,7 @@ records the architecture boundary.
 | FR-035-AC-1 | A generated caller-ingress oracle accepts `&TextPayload`, the declared `TextType` and `&mut Meter`, calls `rt::admit_text` once, and returns the runtime outcome, retained text, original runtime provenance, charge sequence and consumed counters unchanged for all six profiles over representative empty, ASCII, combining, composed and supplementary payloads. | Test |
 | FR-035-AC-2 | Invalid UTF-8 bytes make `TextPayload::from_utf8` return `InvalidUtf8` before admission and leave the admission meter unchanged; `admit_text` itself is never claimed to accept those bytes. | Test |
 | FR-035-AC-3 | For each profile, `Text[1,1]` admits or refuses according to the profile length of the retained sequence, including `e` plus U+0301 under NFC and NFD; a length refusal occurs before `text.result-retain`, and denial of each reached charge point yields the direct runtime stop, charges and consumed counters. | Test |
-| FR-035-AC-4 | For each of the six profiles and both `Text[0,8]` and `Text[1,1]`, a real Kani harness symbolically ranges over all 21 sequences of zero to two scalars from the four-scalar alphabet, constructs each `TextPayload` by `from_utf8`, compares the generated admission oracle with a separate direct runtime call including outcome and metering, and ends with one satisfied cover after its assertions. The proof identity names this finite class and its type. | Test |
+| FR-035-AC-4 | For each of the six profiles and both `Text[0,8]` and `Text[1,1]`, a real Kani harness uses one symbolic selector over a table bijective with all 21 sequences of zero to two scalars from the four-scalar alphabet, constructs each selected `TextPayload` by `from_utf8`, compares the generated admission oracle with a separate direct runtime call including outcome and metering, and ends with one satisfied cover after its assertions. The proof identity names this finite class and its type. | Test |
 | FR-035-AC-5 | In a copy of the generated oracle with its admission call or declared `TextType` altered so the oracle accepts a payload the direct runtime call refuses, real Kani falsifies the admission agreement assertion with concrete playback; restoring the call verifies over the same symbolic class. | Test |
 | FR-035-AC-6 | A request outside the declared finite proof class has a typed unsupported or requires-bound disposition and no harness, and no caller-ingress claim is marked `ir_confirmed` or assigned a checked-package node id. The six attempted text-operand `numeric.convert` nodes remain Contract IR refusals and do not count as passing caller-admission coverage. | Test |
 
