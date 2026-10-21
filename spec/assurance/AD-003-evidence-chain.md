@@ -234,7 +234,7 @@ authored).
   its persisted harness-record digest covers every record member except
   `source_span`. This planned producer closes the current link-3 no-digest
   gap for per-step records. A CG kind needed by the harness remains a harness field,
-  never a second discriminator in the record content preimage. CG refuses
+  never a second discriminator in the record content preimage. QSpec FR-322-AC-88 through AC-91 permit generated owner occurrences only for proof-eligible refinements; an ineligible refinement carries its declaration occurrence alone and yields no per-step harness or proof credit. CG refuses
   before generating a harness when the record owner and selected refinement
   differ, a `StepRowRef` is out of range, the occurrence role or ordinal does
   not match the obligation, or a package repeats a `(refinement, obligation)`
