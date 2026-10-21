@@ -1377,63 +1377,6 @@ fn tc_029_ac10_claim_map_entries_ascend_by_the_descriptor_key() {
 /// `composite_equality_agreement` builds and executes.
 /// The `names.rs` the composite agreement cases `include!`: each executed oracle and environment
 /// under `{oracle,environment}_{code}_{operator}`, and the base package's enum declaration key.
-pub(super) fn agreement_names(oracles: &FixtureOracles) -> String {
-    let executed: &[(u32, &str, &str)] = &[
-        (E_RECORD, "equal", "e_record_equal"),
-        (E_TUPLE, "equal", "e_tuple_equal"),
-        (E_OPTION, "equal", "e_option_equal"),
-        (E_COLLECTION, "equal", "e_collection_equal"),
-        (E_SELF, "equal", "e_self_equal"),
-        (E_PAIR_OF_POINTS, "equal", "e_pair_of_points_equal"),
-        (E_RECORD, "not_equal", "e_record_not_equal"),
-        (E_TEXT, "equal", "e_text_equal"),
-        (E_ENUM, "equal", "e_enum_equal"),
-        (E_CONV, "equal", "e_conv_equal"),
-        (E_CONV_CHARGE, "equal", "e_conv_charge_equal"),
-        (E_CONV_RAT_RAT, "equal", "e_conv_rat_rat_equal"),
-        (E_CONV_RAT_INT, "equal", "e_conv_rat_int_equal"),
-        (E_CONV_DEC_RAT, "equal", "e_conv_dec_rat_equal"),
-        (E_CONV_DEC_DEC, "equal", "e_conv_dec_dec_equal"),
-        (E_CONV_DEC_INT, "equal", "e_conv_dec_int_equal"),
-    ];
-    let mut aliases = Vec::new();
-    for (code, operator, alias) in executed {
-        let identity = format!("equality.{operator}");
-        let generated = oracles
-            .claim_map
-            .items
-            .iter()
-            .find(|claim| {
-                claim.node_id == oracles.key(*code) && claim.operation.identity == identity
-            })
-            .and_then(|claim| match &claim.result {
-                ClaimDisposition::Generated(generated) => Some(generated),
-                ClaimDisposition::Refused { .. } => None,
-            })
-            .unwrap_or_else(|| panic!("node {code} {operator} is not generated"));
-        aliases.push((generated.oracle_symbol.clone(), format!("oracle_{alias}")));
-        aliases.push((
-            generated.environment_symbol.clone(),
-            format!("environment_{alias}"),
-        ));
-    }
-    super::exact_scalar_agreement::names_file(
-        quire_contract_codegen::COMPOSITE_EQUALITY_CRATE_NAME,
-        &aliases,
-        &format!(
-            "pub const ENUM_TYPE_DIGEST: &str = {:?};\n\
-             pub const R_POINT_DIGEST: &str = {:?};\n\
-             pub const TUP_PAIR_DIGEST: &str = {:?};\n\
-             pub const R_SELF_DIGEST: &str = {:?};\n\
-             pub const R_PAIR_OF_POINTS_DIGEST: &str = {:?};\n",
-            enum_type_digest(),
-            oracles.runtime_key(R_POINT),
-            oracles.runtime_key(TUP_PAIR),
-            oracles.runtime_key(R_SELF),
-            oracles.runtime_key(R_PAIR_OF_POINTS),
-        ),
-    )
-}
 
 pub(super) fn corpus_oracles() -> FixtureOracles {
     generate(&admit(corpus_package()), &golden_items())

@@ -125,7 +125,6 @@ pub(super) fn resolve_enum(
 #[derive(Clone)]
 pub(super) struct CompositeBinding {
     pub node: CheckedNodeId,
-    pub key: NodeKey,
     pub qualified: Vec<String>,
     pub form: AdmittedCompositeForm,
 }
@@ -171,12 +170,10 @@ pub(super) fn resolve_composite(
     {
         return Err(mismatch());
     }
-    if !closure.composite_bindings.iter().any(|binding| binding.node == node.node_id) {
-        closure.composite_bindings.push(CompositeBinding {
-            node: node.node_id.clone(), key: actual.key(), form: actual.form(),
-            qualified: actual.qualified_name().iter().map(|part| part.as_str().to_owned()).collect(),
-        });
-    }
+    closure.composite_bindings.entry(actual.key()).or_insert_with(|| CompositeBinding {
+        node: node.node_id.clone(), form: actual.form(),
+        qualified: actual.qualified_name().iter().map(|part| part.as_str().to_owned()).collect(),
+    });
     Ok(actual.key())
 }
 

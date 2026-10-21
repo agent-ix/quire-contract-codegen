@@ -995,7 +995,7 @@ struct CheckedItem {
     composites: Vec<CompositeDeclaration>,
     declaration_keys: Vec<CheckedNodeId>,
     enums: Vec<admitted::EnumBinding>,
-    composite_bindings: Vec<admitted::CompositeBinding>,
+    composite_bindings: BTreeMap<NodeKey, admitted::CompositeBinding>,
 }
 
 /// Why [`check_item`] produced no [`CheckedItem`]: a per-item refusal, or an
@@ -1249,7 +1249,7 @@ struct TypeClosure {
     work_limit: u64,
     enum_members: quire_semantic_value::enumeration::EnumMemberIndex,
     enums: Vec<admitted::EnumBinding>,
-    composite_bindings: Vec<admitted::CompositeBinding>,
+    composite_bindings: BTreeMap<NodeKey, admitted::CompositeBinding>,
     /// Every V2 node id whose declaration entered the closure, ascending.
     node_ids: Vec<CheckedNodeId>,
 }
@@ -1264,7 +1264,7 @@ impl Default for TypeClosure {
             node_ids: Vec::new(),
             enum_members: Default::default(),
             enums: Vec::new(),
-            composite_bindings: Vec::new(),
+            composite_bindings: BTreeMap::new(),
         }
     }
 }
@@ -1603,34 +1603,26 @@ impl RenderedItem {
 fn render_item(generated: &CheckedItem) -> Result<RenderedItem, RenderError> {
     // Every reachable record/tuple declaration, in the same `NodeKey`
     // order `TypeEnvironment::new` admitted at generation time.
-    let keys_by_runtime_key = generated
-        .composites
-        .iter()
-        .map(|declaration| {
-            let key = declaration.key();
-            let id = generated
-                .declaration_keys
-                .iter()
-                .find(|id| {
-                    id.domain.as_ref() == exact::NODE_KEY_DOMAIN
-                        && id.digest.as_ref() == key.to_string()
-                })
-                .ok_or(OracleGenerationError::InvalidPlanState)?;
-            Ok((key, id))
+    let declared = generated.declaration_keys.iter().collect::<BTreeSet<_>>();
+    if generated.composite_bindings.len() != generated.declaration_keys.len()
+        || generated.composites.len() != generated.composite_bindings.len()
+        || generated.composite_bindings.iter().any(|(key, binding)| {
+            binding.node.domain.as_ref() != exact::NODE_KEY_DOMAIN
+                || binding.node.digest.as_ref() != key.to_string()
+                || !declared.contains(&binding.node)
         })
-        .collect::<Result<BTreeMap<_, _>, OracleGenerationError>>()?;
-    if keys_by_runtime_key.len() != generated.declaration_keys.len() {
+    {
         return Err(OracleGenerationError::InvalidPlanState.into());
     }
     let composites = generated
         .composites
         .iter()
         .map(|declaration| {
-            let id = keys_by_runtime_key
+            let binding = generated.composite_bindings
                 .get(&declaration.key())
                 .ok_or(OracleGenerationError::InvalidPlanState)?;
             Ok((
-                (**id).clone(),
+                binding.node.clone(),
                 render_composite_declaration(declaration, &generated.enums, &generated.composite_bindings)?,
             ))
         })
@@ -1968,7 +1960,7 @@ fn source_too_large(limit: usize) -> OracleGenerationError {
 fn render_composite_declaration(
     declaration: &CompositeDeclaration,
     enums: &[admitted::EnumBinding],
-    composites: &[admitted::CompositeBinding],
+    composites: &BTreeMap<NodeKey, admitted::CompositeBinding>,
 ) -> Result<String, RenderError> {
     let shape = match declaration.shape() {
         CompositeShape::Record(fields) => {
@@ -2016,7 +2008,7 @@ fn presence_path(presence: Presence) -> &'static str {
 fn render_value_type(
     value_type: &ValueType,
     enums: &[admitted::EnumBinding],
-    composites: &[admitted::CompositeBinding],
+    composites: &BTreeMap<NodeKey, admitted::CompositeBinding>,
 ) -> Result<String, RenderError> {
     enum Task<'a> {
         Value(&'a ValueType),
@@ -2163,10 +2155,9 @@ fn render_decimal_type(decimal: &DecimalType) -> Result<String, OracleGeneration
 
 fn render_composite_key(
     key: NodeKey,
-    composites: &[admitted::CompositeBinding],
+    composites: &BTreeMap<NodeKey, admitted::CompositeBinding>,
 ) -> Result<String, RenderError> {
-    let binding = composites.iter().find(|binding| binding.key == key)
-        .ok_or(OracleGenerationError::InvalidPlanState)?;
+    let binding = composites.get(&key).ok_or(OracleGenerationError::InvalidPlanState)?;
     let qualified = binding.qualified.iter().map(|part| format!("{part:?}"))
         .collect::<Vec<_>>().join(", ");
     let form = match binding.form {
@@ -2223,74 +2214,42 @@ mod tests {
             .contents
     }
 
+    /// Genuine baseline nodes; private mutation tests alter bodies only after this admission.
     fn recursive_shape_nodes() -> Vec<CheckedSemanticNodeV2> {
-        let reference = |digit| json!({"term": "reference", "target": node_id(digit)});
-        let node = |digit: char, tag: &str, form: &str, semantic_type: char, body: Value| {
-            serde_json::from_value(json!({
-                "node_id": node_id(digit),
-                "schema_version": "quire.checked-semantic-graph/v2",
-                "node_tag": tag,
-                "semantic_form": form,
-                "semantic_type": node_id(semantic_type),
-                "dependencies": [],
-                "occurrences": [],
-                "body": body,
-            }))
-            .expect("synthetic shape")
+        let (package, _) = recursive_fixture();
+        let nodes = &package.graph().nodes;
+        let named = |name: &str| nodes.iter().find(|node| node.declaration.as_ref()
+            .is_some_and(|declaration| declaration.qualified_name.iter().map(|part| part.as_ref()).eq([name])))
+            .expect("actual recursive declaration");
+        let list = named("List");
+        let tree = named("Tree");
+        let references = |node: &CheckedSemanticNodeV2, target: &CheckedNodeId| {
+            aggregate_members(&node.body).is_some_and(|members| members.iter()
+                .any(|term| read_reference(term).as_ref() == Some(target)))
         };
-        vec![
-            node(
-                'a',
-                "composite_type",
-                "record",
-                'a',
-                json!({"term": "aggregate", "members": [{
-                    "term": "binding", "name": "next", "value": {"term": "aggregate", "members": [{
-                        "term": "binding", "name": "optional", "value": reference('b')
-                    }]}
-                }]}),
-            ),
-            node(
-                'b',
-                "composite_type",
-                "option",
-                'b',
-                json!({"term": "aggregate", "members": [reference('a')]}),
-            ),
-            node(
-                'c',
-                "composite_type",
-                "record",
-                'c',
-                json!({"term": "aggregate", "members": [{
-                    "term": "binding", "name": "kids", "value": reference('e')
-                }]}),
-            ),
-            node(
-                'd',
-                "composite_type",
-                "sequence",
-                'd',
-                json!({"term": "aggregate", "members": [reference('c')]}),
-            ),
-            node(
-                'e',
-                "bounded_domain",
-                "collection_bounds",
-                'd',
-                json!({"term": "aggregate", "members": [
-                    {"term": "binding", "name": "min", "value": {"term": "literal", "type": node_id('f'), "value_kind": "integer", "value": "0"}},
-                    {"term": "binding", "name": "max", "value": {"term": "literal", "type": node_id('f'), "value_kind": "integer", "value": "3"}}
-                ]}),
-            ),
-            node(
-                'f',
-                "scalar_type",
-                "integer",
-                'f',
-                json!({"term": "aggregate", "members": []}),
-            ),
-        ]
+        let option = nodes.iter().find(|node| node.semantic_form.as_ref() == "option"
+            && references(node, &list.node_id)).expect("actual optional List type");
+        let sequence = nodes.iter().find(|node| node.semantic_form.as_ref() == "sequence"
+            && references(node, &tree.node_id)).expect("actual Tree sequence type");
+        let bound = nodes.iter().find(|node| node.semantic_form.as_ref() == "collection_bounds"
+            && node.semantic_type == sequence.node_id).expect("actual Tree cardinality");
+        let integer = nodes.iter().find(|node| node.semantic_form.as_ref() == "integer")
+            .expect("actual source Integer type");
+        [list, option, tree, sequence, bound, integer].into_iter().cloned().collect()
+    }
+
+    fn recursive_node_id(code: char) -> CheckedNodeId {
+        let position = match code {
+            'a' => 0, 'b' => 1, 'c' => 2, 'd' => 3, 'e' => 4, 'f' => 5,
+            // Deliberately absent transport identities in private cycle/unknown-node controls.
+            other => return node_id(other),
+        };
+        recursive_shape_nodes()[position].node_id.clone()
+    }
+
+    fn recursive_fixture() -> &'static (CheckedPackageV2, qsl_replay::AdmittedContext) {
+        static FIXTURE: std::sync::OnceLock<(CheckedPackageV2, qsl_replay::AdmittedContext)> = std::sync::OnceLock::new();
+        FIXTURE.get_or_init(qsl_recursive_admission)
     }
 
     /// Compile the recursive QSpec forms through QSL's public facade and read its package.
@@ -2302,11 +2261,12 @@ mod tests {
             CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2ReadResult,
         };
 
-        let source = include_bytes!("../../../tests/composite_equality_support/recursive.native");
+        let source = concat!(include_str!("../../../tests/composite_equality_support/recursive.native"),
+            "\nfunction integer_same using v(a: Integer,b: Integer): Boolean pure { a = b }\n");
         let compiled = compile_admitted(
             SourceIdentity::new("a", "u", "git", "1"),
             "recursive.native",
-            source,
+            source.as_bytes(),
             [],
             &DependencyInput::default(),
             StageLimits::default(),
@@ -2326,9 +2286,6 @@ mod tests {
         (*package, compiled.into_parts().1)
     }
 
-    fn qsl_recursive_package() -> CheckedPackageV2 {
-        qsl_recursive_admission().0
-    }
 
     fn recursive_owner_key(name: &str) -> NodeKey {
         qsl_recursive_admission().1.composites()
@@ -2377,9 +2334,50 @@ mod tests {
             &ValueType::collection(CollectionType::new(
                 CollectionKind::Sequence,
                 ValueType::Composite(tree_key),
-                CardinalityBound::new(0, 3).unwrap(),
+                Some(CardinalityBound::new(0, 3).unwrap()),
             ))
         );
+    }
+
+    fn admitted_record_chain(records: usize, optional: bool) -> (
+        String, CheckedPackageV2, qsl_replay::AdmittedContext, Vec<CheckedNodeId>, CheckedNodeId,
+    ) {
+        use qsl_replay::{compile_admitted, DependencyInput, ReplayLimits, SourceIdentity, StageLimits};
+        use quire_contract_model::{CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2ReadResult};
+        let mut source = String::from("language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\n");
+        for index in 0..records {
+            let payload = if index + 1 == records { "Boolean".to_owned() } else { format!("Chain{}", index + 1) };
+            let suffix = if optional { "?" } else { "" };
+            source.push_str(&format!("record Chain{index} {{ next: {payload}{suffix}; }}\n"));
+        }
+        source.push_str("record Shallow { next: Boolean?; }\n");
+        let admitted = compile_admitted(
+            SourceIdentity::new("test", "deep.native", "git", "fixture"), "deep.native", source.as_bytes(), [],
+            &DependencyInput::default(), StageLimits::default(), ReplayLimits::default(),
+        ).expect("the unchanged large source must compile before its identities are used");
+        let bytes = admitted.package().bytes();
+        let count = u64::try_from(records).expect("fixture node count fits u64");
+        // Finite fixture-read budgets for the existing large record count and its fixed grammar.
+        let read_limits = CheckedPackageReadLimits {
+            bytes: u64::try_from(bytes.len()).expect("retained fixture bytes fit u64"),
+            nodes: count.checked_mul(8).and_then(|value| value.checked_add(32)).expect("finite node bound"),
+            edges: count.checked_mul(32).and_then(|value| value.checked_add(128)).expect("finite edge bound"),
+            occurrences: count.checked_mul(32).and_then(|value| value.checked_add(128)).expect("finite occurrence bound"),
+            diagnostics: count.checked_add(32).expect("finite diagnostic bound"),
+            work: count.checked_mul(1024).and_then(|value| value.checked_add(1024)).expect("finite read-work bound"),
+        };
+        let mut evidence = CheckedPackageEvidence::new(); evidence.support_feature("quire.value.complete/v1");
+        let package = match CheckedPackageV2::read(bytes, read_limits, &evidence) {
+            CheckedPackageV2ReadResult::Admitted(package) => *package,
+            other => panic!("large original source must pass the real IR reader: {other:?}"),
+        };
+        let by_name = package.graph().nodes.iter().filter_map(|node| node.declaration.as_ref().map(|declaration|
+            (declaration.qualified_name.iter().map(|part| part.as_ref()).collect::<Vec<_>>().join("."), node.node_id.clone())
+        )).collect::<BTreeMap<_,_>>();
+        let ids = (0..records).map(|index| by_name.get(&format!("Chain{index}")).expect("original chain record").clone()).collect();
+        let leaf = package.graph().nodes.iter().find(|node| node.semantic_form.as_ref() == "boolean")
+            .expect("original Boolean leaf").node_id.clone();
+        (source, package, admitted.into_parts().1, ids, leaf)
     }
 
     fn resolve_component(
@@ -2396,11 +2394,23 @@ mod tests {
         })
     }
 
+    fn resolve_nominal_component(
+        graph: &Graph<'_>,
+        bounds: &BTreeMap<&CheckedNodeId, Vec<&CheckedSemanticNodeV2>>,
+        closure: &mut TypeClosure,
+        root: &CheckedNodeId,
+    ) -> Result<ValueType, CompositeEqualityRefusal> {
+        resolve_type(Some(&recursive_fixture().1), graph, bounds, closure, root).map_err(|error| match error {
+            ItemCheckError::Refusal(refusal) => refusal,
+            ItemCheckError::Generation(error) => panic!("unexpected private component error: {error:?}"),
+        })
+    }
+
     fn resolve_shape(
         nodes: &[CheckedSemanticNodeV2],
         type_id: &CheckedNodeId,
     ) -> Result<TypeClosure, CompositeEqualityRefusal> {
-        resolve_shape_with_context(None, nodes, type_id)
+        resolve_shape_with_context(Some(&recursive_fixture().1), nodes, type_id)
     }
 
     fn resolve_shape_with_context(
@@ -2449,6 +2459,23 @@ mod tests {
     }
 
     fn check_synthetic_items_with_limits(
+        nodes: Vec<CheckedSemanticNodeV2>,
+        operands: &[(EqualityOperandDescriptor, EqualityOperandDescriptor)],
+        limits: CompositeEqualityLimits,
+    ) -> (Vec<Result<(), CompositeEqualityRefusal>>, SourceBuilder) {
+        check_component_items_with_context(None, nodes, operands, limits)
+    }
+
+    fn check_nominal_items_with_limits(
+        nodes: Vec<CheckedSemanticNodeV2>,
+        operands: &[(EqualityOperandDescriptor, EqualityOperandDescriptor)],
+        limits: CompositeEqualityLimits,
+    ) -> (Vec<Result<(), CompositeEqualityRefusal>>, SourceBuilder) {
+        check_component_items_with_context(Some(&recursive_fixture().1), nodes, operands, limits)
+    }
+
+    fn check_component_items_with_context(
+        context: Option<&qsl_replay::AdmittedContext>,
         mut nodes: Vec<CheckedSemanticNodeV2>,
         operands: &[(EqualityOperandDescriptor, EqualityOperandDescriptor)],
         limits: CompositeEqualityLimits,
@@ -2501,13 +2528,19 @@ mod tests {
         let graph: Graph<'_> = nodes.iter().map(|node| (&node.node_id, node)).collect();
         let mut source = SourceBuilder::new(limits.source_bytes).expect("synthetic source starts");
         // Private source-budget/component fixture, not an authentic source capability.
-        source.expected_package = Some(semantic_id('b'));
+        source.expected_package = Some(match context {
+            Some(context) => {
+                let record = context.package_id().record();
+                CheckedSemanticId { domain: record.domain().as_str().into(), algorithm: "sha256".into(), digest: record.hex().into() }
+            }
+            None => semantic_id('b'),
+        });
         let outcomes = items
             .iter()
             .enumerate()
             .map(|(index, item)| {
                 match check_item(
-                    None,
+                    context,
                     &graph,
                     &BTreeMap::new(),
                     graph.get(&item.node_id).copied().expect("synthetic node"),
@@ -2548,11 +2581,11 @@ mod tests {
             let form = form.to_str().expect("UTF-8 fixture form");
             let mut nodes = recursive_shape_nodes();
             let (root, repeated) = if form == "option" {
-                nodes[1].body["members"][0]["target"] = json!(node_id('b'));
-                (node_id('a'), node_id('b'))
+                nodes[1].body["members"][0]["target"] = json!(recursive_node_id('b'));
+                (recursive_node_id('a'), recursive_node_id('b'))
             } else {
-                nodes[3].body["members"][0]["target"] = json!(node_id('d'));
-                (node_id('c'), node_id('d'))
+                nodes[3].body["members"][0]["target"] = json!(recursive_node_id('d'));
+                (recursive_node_id('c'), recursive_node_id('d'))
             };
             assert_eq!(
                 resolve_shape(&nodes, &root).err(),
@@ -2569,13 +2602,13 @@ mod tests {
                 "{form} item refusal"
             );
             let sibling = if form == "option" {
-                node_id('c')
+                recursive_node_id('c')
             } else {
-                node_id('a')
+                recursive_node_id('a')
             };
             assert!(resolve_shape(&nodes, &sibling).is_ok(), "{form} sibling");
             assert!(
-                check_synthetic_item(nodes, node_id('f')).is_ok(),
+                check_synthetic_item(nodes, recursive_node_id('f')).is_ok(),
                 "{form} healthy item"
             );
             return;
@@ -2618,69 +2651,34 @@ mod tests {
         let graph: Graph<'_> = nodes.iter().map(|node| (&node.node_id, node)).collect();
         let bounds = BTreeMap::from([(&nodes[4].semantic_type, vec![&nodes[4]])]);
         let mut closure = TypeClosure::default();
-        resolve_component(&graph, &bounds, &mut closure, &node_id('a')).expect("List closes");
+        resolve_nominal_component(&graph, &bounds, &mut closure, &recursive_node_id('a')).expect("List closes");
         assert_eq!(closure.work_consumed, 3); // record, option, repeated record
-        resolve_component(&graph, &bounds, &mut closure, &node_id('c')).expect("Tree closes");
+        resolve_nominal_component(&graph, &bounds, &mut closure, &recursive_node_id('c')).expect("Tree closes");
         assert_eq!(closure.work_consumed, 7); // record, bound, sequence, repeated record
-        resolve_component(&graph, &bounds, &mut closure, &node_id('a')).expect("cached List");
+        resolve_nominal_component(&graph, &bounds, &mut closure, &recursive_node_id('a')).expect("cached List");
         assert_eq!(closure.work_consumed, 8); // the cached root still charges
 
         let count = usize::try_from(COMPOSITE_EQUALITY_TYPE_RESOLUTION_WORK_LIMIT).unwrap();
-        let ids: Vec<CheckedNodeId> = (0..=count)
-            .map(|index| CheckedNodeId {
-                domain: "quire.checked-semantic-node/v1".into(),
-                digest: format!("{:064x}", index + 1).into(),
-            })
-            .collect();
-        let chain: Vec<CheckedSemanticNodeV2> = (0..=count)
-            .map(|index| {
-                let (form, tag, body) = if index == count {
-                    (
-                        "boolean",
-                        "scalar_type",
-                        json!({"term": "aggregate", "members": []}),
-                    )
-                } else {
-                    (
-                        "record",
-                        "composite_type",
-                        json!({"term": "aggregate", "members": [{
-                            "term": "binding", "name": "next", "value": {
-                                "term": "reference", "target": ids[index + 1]
-                            }
-                        }]}),
-                    )
-                };
-                serde_json::from_value(json!({
-                    "node_id": ids[index],
-                    "schema_version": "quire.checked-semantic-graph/v2",
-                    "node_tag": tag,
-                    "semantic_form": form,
-                    "semantic_type": ids[index],
-                    "dependencies": [],
-                    "occurrences": [],
-                    "body": body,
-                }))
-                .expect("synthetic chain node")
-            })
-            .collect();
+        let (_, original, context, mut ids, leaf) = admitted_record_chain(count, false);
+        ids.push(leaf);
+        let chain = original.graph().nodes.clone();
         let graph: Graph<'_> = chain.iter().map(|node| (&node.node_id, node)).collect();
         let empty = BTreeMap::new();
         let mut over = TypeClosure::default();
         assert_eq!(
-            resolve_component(&graph, &empty, &mut over, &ids[0]).err(),
+            resolve_type(Some(&context), &graph, &empty, &mut over, &ids[0]).map_err(|error| match error { ItemCheckError::Refusal(cause) => cause, ItemCheckError::Generation(error) => panic!("{error:?}") }).err(),
             Some(CompositeEqualityRefusal::TypeResolutionWorkExhausted {
                 limit: COMPOSITE_EQUALITY_TYPE_RESOLUTION_WORK_LIMIT,
                 consumed: COMPOSITE_EQUALITY_TYPE_RESOLUTION_WORK_LIMIT + 1,
             })
         );
         let mut at_limit = TypeClosure::default();
-        assert!(resolve_component(&graph, &empty, &mut at_limit, &ids[2]).is_ok());
+        assert!(resolve_type(Some(&context), &graph, &empty, &mut at_limit, &ids[2]).is_ok());
         assert_eq!(
             at_limit.work_consumed,
             COMPOSITE_EQUALITY_TYPE_RESOLUTION_WORK_LIMIT - 1
         );
-        assert!(resolve_component(&graph, &empty, &mut at_limit, &ids[2]).is_ok());
+        assert!(resolve_type(Some(&context), &graph, &empty, &mut at_limit, &ids[2]).is_ok());
         assert_eq!(
             at_limit.work_consumed,
             COMPOSITE_EQUALITY_TYPE_RESOLUTION_WORK_LIMIT
@@ -2695,20 +2693,22 @@ mod tests {
         // consume exactly the limit: the first 65,533-node walk plus three
         // cached-root entries. The item must still be generated.
         let at_limit_operand = EqualityOperandDescriptor::converted(ids[4].clone(), ids[4].clone());
-        let (at_limit_outcomes, at_limit_source) = check_synthetic_items(
-            chain.clone(),
-            &[(at_limit_operand.clone(), at_limit_operand)],
+        let (at_limit_outcomes, at_limit_source) = check_component_items_with_context(
+            Some(&context), chain.clone(), &[(at_limit_operand.clone(), at_limit_operand)],
+            CompositeEqualityLimits { source_bytes: usize::MAX, ..Default::default() },
         );
+        let at_limit_source = test_source(at_limit_source);
         assert_eq!(at_limit_outcomes, vec![Ok(())]);
         assert!(at_limit_source.contains("pub fn oracle_test0"));
 
         // Both items share one synthetic lowered graph and emission pass.
         let exhausted = EqualityOperandDescriptor::typed(ids[0].clone());
         let healthy = EqualityOperandDescriptor::typed(ids[count].clone());
-        let (outcomes, emitted) = check_synthetic_items(
-            chain,
-            &[(exhausted.clone(), exhausted), (healthy.clone(), healthy)],
+        let (outcomes, emitted) = check_component_items_with_context(
+            Some(&context), chain, &[(exhausted.clone(), exhausted), (healthy.clone(), healthy)],
+            CompositeEqualityLimits { source_bytes: usize::MAX, ..Default::default() },
         );
+        let emitted = test_source(emitted);
         assert_eq!(
             outcomes[0],
             Err(CompositeEqualityRefusal::TypeResolutionWorkExhausted {
@@ -2767,7 +2767,7 @@ mod tests {
                 assert!(matches!(value_type, ValueType::Option(_)));
                 let copy = value_type.clone();
                 assert_eq!(copy, value_type);
-                let rendered = render_value_type(&value_type, &[], &[]).expect("deep Option renders");
+                let rendered = render_value_type(&value_type, &[], &BTreeMap::new()).expect("deep Option renders");
                 assert_eq!(rendered.matches("exact::ValueType::option(").count(), DEPTH);
                 assert!(rendered.contains("exact::ValueType::Boolean"));
                 assert!(rendered.len() < MAX_GENERATED_SOURCE_BYTES);
@@ -2783,16 +2783,16 @@ mod tests {
     #[test]
     fn cycle_refusal_follows_its_charged_entry_and_work_refusal_wins_at_the_boundary() {
         let mut nodes = recursive_shape_nodes();
-        nodes[1].body["members"][0]["target"] = json!(node_id('b'));
+        nodes[1].body["members"][0]["target"] = json!(recursive_node_id('b'));
         let graph: Graph<'_> = nodes.iter().map(|node| (&node.node_id, node)).collect();
         let mut cycle = TypeClosure {
             work_limit: 3,
             ..TypeClosure::default()
         };
         assert_eq!(
-            resolve_component(&graph, &BTreeMap::new(), &mut cycle, &node_id('b')),
+            resolve_nominal_component(&graph, &BTreeMap::new(), &mut cycle, &recursive_node_id('b')),
             Err(CompositeEqualityRefusal::TypeResolutionCycle {
-                repeated_type_node_id: node_id('b')
+                repeated_type_node_id: recursive_node_id('b')
             })
         );
         assert_eq!(cycle.work_consumed, 2);
@@ -2801,7 +2801,7 @@ mod tests {
             ..TypeClosure::default()
         };
         assert_eq!(
-            resolve_component(&graph, &BTreeMap::new(), &mut denied, &node_id('b')),
+            resolve_nominal_component(&graph, &BTreeMap::new(), &mut denied, &recursive_node_id('b')),
             Err(CompositeEqualityRefusal::TypeResolutionWorkExhausted {
                 limit: 1,
                 consumed: 2
@@ -2809,14 +2809,14 @@ mod tests {
         );
         let mut sibling = TypeClosure::default();
         assert_eq!(
-            resolve_component(&graph, &BTreeMap::new(), &mut sibling, &node_id('f')),
+            resolve_nominal_component(&graph, &BTreeMap::new(), &mut sibling, &recursive_node_id('f')),
             Ok(ValueType::Integer)
         );
 
-        let cyclic = EqualityOperandDescriptor::typed(node_id('b'));
-        let healthy = EqualityOperandDescriptor::typed(node_id('f'));
+        let cyclic = EqualityOperandDescriptor::typed(recursive_node_id('b'));
+        let healthy = EqualityOperandDescriptor::typed(recursive_node_id('f'));
         let requests = [(cyclic.clone(), cyclic), (healthy.clone(), healthy)];
-        let (cycle_items, cycle_source) = check_synthetic_items_with_limits(
+        let (cycle_items, cycle_source) = check_nominal_items_with_limits(
             nodes.clone(),
             &requests,
             CompositeEqualityLimits {
@@ -2828,7 +2828,7 @@ mod tests {
             cycle_items,
             vec![
                 Err(CompositeEqualityRefusal::TypeResolutionCycle {
-                    repeated_type_node_id: node_id('b'),
+                    repeated_type_node_id: recursive_node_id('b'),
                 }),
                 Ok(()),
             ]
@@ -2839,12 +2839,12 @@ mod tests {
 
         let mut denied_nodes = nodes;
         let mut extra = denied_nodes[1].clone();
-        extra.node_id = node_id('5');
-        extra.semantic_type = node_id('5');
-        extra.body["members"][0]["target"] = json!(node_id('b'));
-        denied_nodes[1].body["members"][0]["target"] = json!(node_id('5'));
+        extra.node_id = recursive_node_id('5');
+        extra.semantic_type = recursive_node_id('5');
+        extra.body["members"][0]["target"] = json!(recursive_node_id('b'));
+        denied_nodes[1].body["members"][0]["target"] = json!(recursive_node_id('5'));
         denied_nodes.push(extra);
-        let (denied_items, denied_source) = check_synthetic_items_with_limits(
+        let (denied_items, denied_source) = check_nominal_items_with_limits(
             denied_nodes,
             &requests,
             CompositeEqualityLimits {
@@ -2953,64 +2953,16 @@ mod tests {
     #[test]
     fn deep_acyclic_closure_generates_flat_compilable_source_on_a_small_stack() {
         const RECORDS: usize = 50_000;
-        let (artifacts, root) = std::thread::Builder::new()
+        let (original_source, original, context, ids, leaf) = admitted_record_chain(RECORDS, true);
+        let root = ids[0].clone();
+        let (artifacts, _root) = std::thread::Builder::new()
             .stack_size(512 * 1024)
-            .spawn(|| {
-                let id = |number: usize| CheckedNodeId {
-                    domain: "quire.checked-semantic-node/v1".into(),
-                    digest: format!("{number:064x}").into(),
-                };
-                let root = id(1);
-                let leaf = id(2 * RECORDS + 1);
-                let mut nodes: Vec<CheckedSemanticNodeV2> = Vec::with_capacity(2 * RECORDS + 1);
-                for index in 0..RECORDS {
-                    let record = id(index + 1);
-                    let option = id(RECORDS + index + 1);
-                    let payload = if index + 1 == RECORDS { leaf.clone() } else { id(index + 2) };
-                    nodes.push(serde_json::from_value(json!({
-                        "node_id": record,
-                        "schema_version": "quire.checked-semantic-graph/v2",
-                        "node_tag": "composite_type",
-                        "semantic_form": "record",
-                        "semantic_type": record,
-                        "dependencies": [],
-                        "occurrences": [],
-                        "body": {"term": "aggregate", "members": [{
-                            "term": "binding", "name": "next", "value": {
-                                "term": "aggregate", "members": [{
-                                    "term": "binding", "name": "optional", "value": {
-                                        "term": "reference", "target": option
-                                    }
-                                }]
-                            }
-                        }]}
-                    })).expect("record node"));
-                    nodes.push(serde_json::from_value(json!({
-                        "node_id": option,
-                        "schema_version": "quire.checked-semantic-graph/v2",
-                        "node_tag": "composite_type",
-                        "semantic_form": "option",
-                        "semantic_type": option,
-                        "dependencies": [],
-                        "occurrences": [],
-                        "body": {"term": "aggregate", "members": [{"term": "reference", "target": payload}]}
-                    })).expect("option node"));
-                }
-                nodes.push(serde_json::from_value(json!({
-                    "node_id": leaf,
-                    "schema_version": "quire.checked-semantic-graph/v2",
-                    "node_tag": "scalar_type",
-                    "semantic_form": "boolean",
-                    "semantic_type": leaf,
-                    "dependencies": [],
-                    "occurrences": [],
-                    "body": {"term": "aggregate", "members": []}
-                })).expect("leaf node"));
-
+            .spawn(move || {
+                let nodes = original.graph().nodes.clone();
                 let graph: Graph<'_> = nodes.iter().map(|node| (&node.node_id, node)).collect();
                 let mut default = TypeClosure::default();
                 assert_eq!(
-                    resolve_component(&graph, &BTreeMap::new(), &mut default, &root),
+                    resolve_type(Some(&context), &graph, &BTreeMap::new(), &mut default, &root).map_err(|error| match error { ItemCheckError::Refusal(cause) => cause, ItemCheckError::Generation(error) => panic!("{error:?}") }),
                     Err(CompositeEqualityRefusal::TypeResolutionWorkExhausted {
                         limit: COMPOSITE_EQUALITY_TYPE_RESOLUTION_WORK_LIMIT,
                         consumed: COMPOSITE_EQUALITY_TYPE_RESOLUTION_WORK_LIMIT + 1,
@@ -3022,7 +2974,7 @@ mod tests {
                     ..TypeClosure::default()
                 };
                 assert_eq!(
-                    resolve_component(&graph, &BTreeMap::new(), &mut one_below, &root),
+                    resolve_type(Some(&context), &graph, &BTreeMap::new(), &mut one_below, &root).map_err(|error| match error { ItemCheckError::Refusal(cause) => cause, ItemCheckError::Generation(error) => panic!("{error:?}") }),
                     Err(CompositeEqualityRefusal::TypeResolutionWorkExhausted {
                         limit: entry_count - 1,
                         consumed: entry_count,
@@ -3035,8 +2987,8 @@ mod tests {
                     COMPOSITE_EQUALITY_TYPE_RESOLUTION_WORK_LIMIT,
                     entry_count - 1,
                 ] {
-                    let (outcomes, source) = check_synthetic_items_with_limits(
-                        nodes.clone(),
+                    let (outcomes, source) = check_component_items_with_context(
+                        Some(&context), nodes.clone(),
                         &requests,
                         CompositeEqualityLimits {
                             type_resolution_work_units: limit,
@@ -3062,8 +3014,8 @@ mod tests {
                     assert!(lib.contents.contains("oracle_test1"));
                 }
                 let operand = EqualityOperandDescriptor::typed(root.clone());
-                let (outcomes, source) = check_synthetic_items_with_limits(
-                    nodes,
+                let (outcomes, source) = check_component_items_with_context(
+                    Some(&context), nodes,
                     &[(operand.clone(), operand)],
                     CompositeEqualityLimits {
                         type_resolution_work_units: entry_count + 1,
@@ -3114,58 +3066,56 @@ mod tests {
             equality_oracle_crate_manifest(COMPOSITE_EQUALITY_CRATE_NAME),
         )
         .expect("scratch manifest");
-        std::fs::copy(
-            concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.lock"),
-            scratch.join("Cargo.lock"),
-        )
-        .expect("scratch lock");
+        std::fs::write(scratch.join("deep.native"), &original_source).expect("retain exact original nominal source");
         for artifact in &artifacts {
             std::fs::write(scratch.join(&artifact.path), &artifact.contents)
                 .expect("generated source");
         }
-        let test = format!(
-            r#"
-use quire_composite_equality_oracles::{{environment_test0, oracle_test0}};
-use quire_semantic_value::declaration as sv;
-use quire_exact as exact;
-
+        let test = r#"
+mod generated {
+include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/lib.rs"));
 #[test]
-fn deep_matches_shallow() {{
-    std::thread::Builder::new().stack_size(512 * 1024).spawn(|| {{
-    let deep = environment_test0().expect("deep environment");
-    let deep_key = exact::NodeKey::from_hex("{}").expect("deep key");
-    let deep_value = deep.record(deep_key, vec![]).expect("absent optional field");
-    let shallow_key = exact::NodeKey::from_hex("{}").expect("shallow key");
-    let shallow = sv::TypeEnvironment::new(vec![sv::CompositeDeclaration::new(
-        shallow_key,
-        "shallow",
-        sv::CompositeShape::Record(vec![sv::FieldDeclaration::new(
-            "next", exact::ValueType::Boolean, exact::Presence::Optional,
-        )]),
-    )], core::iter::empty::<sv::ObjectTypeDeclaration>()).expect("shallow environment");
-    let shallow_value = shallow.record(shallow_key, vec![]).expect("absent optional field");
-    let limits = exact::ScalarLimits {{
-        integer_bits: u64::MAX, decimal_digits: u64::MAX,
-        scale_expansion: u64::MAX, text_input_bytes: u64::MAX,
-        text_scalars: u64::MAX, normalized_scalars: u64::MAX,
-        unit_edges: u64::MAX, value_occurrences: u64::MAX,
-        work_units: u64::MAX, result_units: u64::MAX,
-    }};
-    let actual = oracle_test0(&deep, &deep_value, &deep_value, &mut exact::Meter::new(limits));
-    let expected = shallow.check_equality(
-        sv::EqualityOperator::Equal,
-        sv::EqualityOperand::typed(exact::ValueType::Composite(shallow_key)),
-        sv::EqualityOperand::typed(exact::ValueType::Composite(shallow_key)),
-        &quire_semantic_value::enumeration::EnumMemberIndex::default(),
-    ).expect("shallow equality").evaluate(&shallow, &shallow_value, &shallow_value, &mut exact::Meter::new(limits));
-    assert_eq!(actual, expected);
-    assert_eq!(actual, exact::Outcome::Completed(true));
-    }}).expect("runtime worker starts").join().expect("runtime fits 512 KiB");
-}}
-"#,
-            root.digest,
-            "f".repeat(64)
-        );
+fn deep_matches_shallow() {
+    let source = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/deep.native"));
+    let admitted = qsl_replay::compile_admitted(
+        qsl_replay::SourceIdentity::new("test", "deep.native", "git", "fixture"),
+        "deep.native", source, [], &qsl_replay::DependencyInput::default(),
+        qsl_replay::StageLimits::default(), qsl_replay::ReplayLimits::default(),
+    ).expect("same retained source must admit independently");
+    std::thread::Builder::new().stack_size(512 * 1024).spawn(move || {
+        let context = admitted.context();
+        let key = |name: &str| context.composites().find(|declaration|
+            declaration.qualified_name().iter().map(|part| part.as_str()).eq([name])
+        ).expect("original source declaration").key();
+        let deep = environment_test0(Some(context)).expect("deep genuine prepared environment");
+        let deep_value = deep.environment.record(key("Chain0"), vec![]).expect("absent optional field");
+        let shallow_key = key("Shallow");
+        let shallow = sv::TypeEnvironment::new(vec![sv::CompositeDeclaration::new(
+            shallow_key, "Shallow", sv::CompositeShape::Record(vec![sv::FieldDeclaration::new(
+                "next", exact::ValueType::Boolean, exact::Presence::Optional,
+            )]),
+        )], core::iter::empty::<sv::ObjectTypeDeclaration>()).expect("shallow environment");
+        let shallow_value = shallow.record(shallow_key, vec![]).expect("absent optional field");
+        let limits = exact::ScalarLimits {
+            integer_bits: u64::MAX, decimal_digits: u64::MAX,
+            scale_expansion: u64::MAX, text_input_bytes: u64::MAX,
+            text_scalars: u64::MAX, normalized_scalars: u64::MAX,
+            unit_edges: u64::MAX, value_occurrences: u64::MAX,
+            work_units: u64::MAX, result_units: u64::MAX,
+        };
+        let actual = oracle_test0(&deep, &deep_value, &deep_value, &mut exact::Meter::new(limits));
+        let expected = shallow.check_equality(
+            sv::EqualityOperator::Equal,
+            sv::EqualityOperand::typed(exact::ValueType::Composite(shallow_key)),
+            sv::EqualityOperand::typed(exact::ValueType::Composite(shallow_key)),
+            &quire_semantic_value::enumeration::EnumMemberIndex::default(),
+        ).expect("shallow equality").evaluate(&shallow, &shallow_value, &shallow_value, &mut exact::Meter::new(limits));
+        assert_eq!(actual, expected);
+        assert_eq!(actual, exact::Outcome::Completed(true));
+    }).expect("runtime worker starts").join().expect("runtime fits 512 KiB");
+}
+}
+"#;
         std::fs::write(scratch.join("tests/deep.rs"), test).expect("deep agreement test");
         let output = std::process::Command::new(env!("CARGO"))
             .args([
@@ -3201,8 +3151,8 @@ fn deep_matches_shallow() {{
         // typed node, so giving it a second body reference would now be malformed first.
         nodes[3].semantic_form = "set".into();
         nodes[3].body = json!({"term": "aggregate", "members": [
-            {"term": "reference", "target": node_id('f')},
-            {"term": "reference", "target": node_id('7')}
+            {"term": "reference", "target": recursive_node_id('f')},
+            {"term": "reference", "target": recursive_node_id('7')}
         ]});
         let graph: Graph<'_> = nodes.iter().map(|node| (&node.node_id, node)).collect();
         let mut at_limit = TypeClosure {
@@ -3210,9 +3160,9 @@ fn deep_matches_shallow() {{
             ..TypeClosure::default()
         };
         assert_eq!(
-            resolve_component(&graph, &BTreeMap::new(), &mut at_limit, &node_id('d')),
+            resolve_nominal_component(&graph, &BTreeMap::new(), &mut at_limit, &recursive_node_id('d')),
             Err(CompositeEqualityRefusal::UnknownTypeNode {
-                type_node_id: node_id('7'),
+                type_node_id: recursive_node_id('7'),
             })
         );
         assert_eq!(
@@ -3224,7 +3174,7 @@ fn deep_matches_shallow() {{
             ..TypeClosure::default()
         };
         assert_eq!(
-            resolve_component(&graph, &BTreeMap::new(), &mut over_limit, &node_id('d')),
+            resolve_nominal_component(&graph, &BTreeMap::new(), &mut over_limit, &recursive_node_id('d')),
             Err(CompositeEqualityRefusal::TypeResolutionWorkExhausted {
                 limit: COMPOSITE_EQUALITY_TYPE_RESOLUTION_WORK_LIMIT,
                 consumed: COMPOSITE_EQUALITY_TYPE_RESOLUTION_WORK_LIMIT + 1,
@@ -3236,7 +3186,7 @@ fn deep_matches_shallow() {{
     #[test]
     fn tc_029_recursive_list_and_tree_shapes_close_at_record_keys() {
         let nodes = recursive_shape_nodes();
-        let list = resolve_shape(&nodes, &node_id('a')).expect("List closes");
+        let list = resolve_shape(&nodes, &recursive_node_id('a')).expect("List closes");
         let list_key = recursive_owner_key("List");
         let CompositeShape::Record(list_fields) = list.composites[&list_key].shape() else {
             panic!("List is a record")
@@ -3246,7 +3196,7 @@ fn deep_matches_shallow() {{
         assert_eq!(list_fields[0].presence(), Presence::Optional);
         assert_eq!(list_fields[0].value_type(), &ValueType::Composite(list_key));
 
-        let tree = resolve_shape(&nodes, &node_id('c')).expect("Tree closes");
+        let tree = resolve_shape(&nodes, &recursive_node_id('c')).expect("Tree closes");
         let tree_key = recursive_owner_key("Tree");
         let CompositeShape::Record(tree_fields) = tree.composites[&tree_key].shape() else {
             panic!("Tree is a record")
@@ -3259,7 +3209,7 @@ fn deep_matches_shallow() {{
             &ValueType::collection(CollectionType::new(
                 CollectionKind::Sequence,
                 ValueType::Composite(tree_key),
-                CardinalityBound::new(0, 3).unwrap(),
+                Some(CardinalityBound::new(0, 3).unwrap()),
             ))
         );
     }
@@ -3277,18 +3227,18 @@ fn deep_matches_shallow() {{
                     let duplicate = optional[0].clone();
                     optional.as_array_mut().unwrap().push(duplicate);
                 }
-                "non_option" => optional[0]["value"]["target"] = json!(node_id('f')),
+                "non_option" => optional[0]["value"]["target"] = json!(recursive_node_id('f')),
                 _ => unreachable!(),
             }
             assert_eq!(
-                resolve_shape(&nodes, &node_id('a')).err(),
+                resolve_shape(&nodes, &recursive_node_id('a')).err(),
                 Some(CompositeEqualityRefusal::MalformedComposite {
-                    composite: node_id('a')
+                    composite: recursive_node_id('a')
                 }),
                 "{mutation}"
             );
             assert!(
-                resolve_shape(&nodes, &node_id('c')).is_ok(),
+                resolve_shape(&nodes, &recursive_node_id('c')).is_ok(),
                 "{mutation}: healthy Tree"
             );
         }
@@ -3298,8 +3248,8 @@ fn deep_matches_shallow() {{
     #[test]
     fn tc_029_direct_option_field_is_required_not_silently_optional() {
         let mut nodes = recursive_shape_nodes();
-        nodes[0].body["members"][0]["value"] = json!({"term": "reference", "target": node_id('b')});
-        let closure = resolve_shape(&nodes, &node_id('a')).expect("direct option is valid");
+        nodes[0].body["members"][0]["value"] = json!({"term": "reference", "target": recursive_node_id('b')});
+        let closure = resolve_shape(&nodes, &recursive_node_id('a')).expect("direct option is valid");
         let key = recursive_owner_key("List");
         let CompositeShape::Record(fields) = closure.composites[&key].shape() else {
             panic!("List is a record")
@@ -3322,7 +3272,7 @@ fn deep_matches_shallow() {{
         ] {
             let mut nodes = recursive_shape_nodes();
             match mutation {
-                "non_sequence" => nodes[4].semantic_type = node_id('f'),
+                "non_sequence" => nodes[4].semantic_type = recursive_node_id('f'),
                 "missing_min" => {
                     nodes[4].body["members"].as_array_mut().unwrap().remove(0);
                 }
@@ -3338,21 +3288,21 @@ fn deep_matches_shallow() {{
             }
             let expected = if mutation == "non_sequence" {
                 CompositeEqualityRefusal::Unsupported {
-                    unsupported_node_id: node_id('e'),
+                    unsupported_node_id: recursive_node_id('e'),
                     node_tag: "bounded_domain",
                 }
             } else {
                 CompositeEqualityRefusal::UnreadableBound {
-                    bound: node_id('e'),
+                    bound: recursive_node_id('e'),
                 }
             };
             assert_eq!(
-                resolve_shape(&nodes, &node_id('c')).err(),
+                resolve_shape(&nodes, &recursive_node_id('c')).err(),
                 Some(expected),
                 "{mutation}"
             );
             assert!(
-                resolve_shape(&nodes, &node_id('a')).is_ok(),
+                resolve_shape(&nodes, &recursive_node_id('a')).is_ok(),
                 "{mutation}: healthy List"
             );
         }
@@ -3575,9 +3525,9 @@ fn deep_matches_shallow() {{
     fn tc_029_ac18_render_value_type_refuses_quantity_and_reference_with_a_typed_error() {
         for (value_type, family) in [(quantity(), "quantity"), (reference(), "reference")] {
             let expected = Err(RenderError::UnsupportedValueType { family });
-            assert_eq!(render_value_type(&value_type, &[], &[]), expected);
+            assert_eq!(render_value_type(&value_type, &[], &BTreeMap::new()), expected);
             assert_eq!(
-                render_value_type(&ValueType::option(value_type.clone()), &[], &[]),
+                render_value_type(&ValueType::option(value_type.clone()), &[], &BTreeMap::new()),
                 expected,
                 "{family} nested in an option"
             );
@@ -3587,7 +3537,7 @@ fn deep_matches_shallow() {{
                 CompositeShape::Tuple(vec![ValueType::Integer, value_type]),
             );
             assert_eq!(
-                render_composite_declaration(&declaration, &[], &[]),
+                render_composite_declaration(&declaration, &[], &BTreeMap::new()),
                 expected,
                 "{family} in a composite declaration"
             );

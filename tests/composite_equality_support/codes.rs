@@ -1,7 +1,7 @@
 //! The composite/structural corpus's fixture codes and readable node keys.
 //!
 //! Dependency-free on purpose: `package.rs` re-exports all of it, and the
-//! generated-crate agreement cases (`agreement_cases.rs`), which run in a
+//! generated-crate agreement cases (`cases/`), which run in a
 //! scratch crate that depends on Contract Runtime and the exact kernel, load this file as
 //! their `package` module so `agreement.rs` resolves the same keys there.
 

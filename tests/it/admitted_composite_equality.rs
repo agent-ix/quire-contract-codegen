@@ -119,3 +119,43 @@ pub(super) fn assert_authentic_recursive_item_generation() {
         assert!(!lib.contains("NodeKey::from_"));
     }
 }
+
+#[trace("FR-018-AC-2", "FR-018-AC-8", "FR-018-AC-39", "FR-018-AC-42", "TC-029")]
+#[test]
+fn genuine_composite_host_generation_preserves_closure_and_capability_ordering() {
+    for (mode, transitive) in [("direct", false), ("transitive", true)] {
+        let (compiled, libraries) = fixture::imported(transitive);
+        let package = checked(&compiled, &libraries);
+        let items = FUNCTIONS.iter().map(|name| {
+            let mut item = direct_source_item(&package, name);
+            if name.ends_with("different") { item.operator = EqualityOperatorKind::NotEqual; }
+            item
+        }).collect::<Vec<_>>();
+        let generated = generate_items(&package, Some(compiled.context()), &items, &[]).expect("real complete composite closure");
+        assert_eq!(generated.claim_map.items.len(), FUNCTIONS.len());
+        for claim in &generated.claim_map.items {
+            assert!(matches!(claim.result, ClaimDisposition::Generated(_)), "genuine closure refused: {:?}", claim.result);
+        }
+        for artifact in &generated.artifacts {
+            if artifact.path.ends_with(".rs") {
+                assert!(!artifact.contents.contains("NodeKey::from_"), "emitted keys must come from owner context");
+            }
+        }
+        let reverse = items.iter().rev().cloned().collect::<Vec<_>>();
+        assert_eq!(generated, generate_items(&package, Some(compiled.context()), &reverse, &[]).expect("same canonical request"));
+        let selected = &items[0];
+        let absent = generate_items(&package, None, std::slice::from_ref(selected), &[]).expect("typed missing capability");
+        assert!(matches!(&absent.claim_map.items[0].result, ClaimDisposition::Refused {
+            refusal: CompositeEqualityRefusal::MissingAdmittedContext { type_node_id }
+        } if type_node_id == &selected.left.source_type));
+        let exhausted = generate_items_with_limits(&package, None, std::slice::from_ref(selected), &[], CompositeEqualityLimits { type_resolution_work_units: 0, ..Default::default() }).expect("work refusal before capability lookup");
+        assert!(matches!(&exhausted.claim_map.items[0].result, ClaimDisposition::Refused {
+            refusal: CompositeEqualityRefusal::TypeResolutionWorkExhausted { limit: 0, consumed: 1 }
+        }));
+        let other = fixture::compile(fixture::SOURCE, &qsl_replay::DependencyInput::default());
+        assert_ne!(other.context().package_id(), compiled.context().package_id());
+        for requested in [Vec::new(), vec![selected.clone()]] {
+            assert!(matches!(generate_items(&package, Some(other.context()), &requested, &[]), Err(OracleGenerationError::ContextPackageMismatch { .. })));
+        }
+    }
+}

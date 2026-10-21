@@ -19,8 +19,8 @@ use std::{
 
 /// Development dependencies the agreement support modules use beyond the
 /// Contract Runtime the generated crate already depends on. Same exact
-/// versions as this repository's own manifest, so `--offline` resolves them
-/// from the lockfile copied alongside.
+/// versions as this repository's own manifest; each scratch crate resolves
+/// its own public dependency closure before the locked native test.
 const AGREEMENT_DEV_DEPENDENCIES: &str = concat!(
     "serde_json = \"=1.0.151\"\nsha2 = \"=0.10.9\"\n",
     "ix-trace-rs = { version = \"=0.1.0\", git = \"https://github.com/agent-ix/ix-trace-rs\", branch = \"main\" }\n",
@@ -86,11 +86,21 @@ fn run_agreement_cases_with_expectation<'a>(
     )
     .expect("write to String");
     fs::write(&manifest_path, manifest).expect("extend generated manifest");
-    fs::copy(repository.join("Cargo.lock"), root.join("Cargo.lock"))
-        .expect("seed the scratch crate's lockfile");
+    let resolution = Command::new(env!("CARGO"))
+        .args(["generate-lockfile"])
+        .env("CARGO_TARGET_DIR", scratch.join("agreement-target"))
+        .current_dir(&root)
+        .output()
+        .expect("resolve the independent scratch crate's public dependency closure");
+    assert!(
+        resolution.status.success(),
+        "{label}: fresh agreement resolution failed: {} {}",
+        String::from_utf8_lossy(&resolution.stdout),
+        String::from_utf8_lossy(&resolution.stderr),
+    );
 
     let output = Command::new(env!("CARGO"))
-        .args(["test", "--offline", "--test", "agreement"])
+        .args(["test", "--locked", "--offline", "--test", "agreement"])
         .env("CARGO_TARGET_DIR", scratch.join("agreement-target"))
         .env_remove("RUSTFLAGS")
         .env_remove("CARGO_ENCODED_RUSTFLAGS")
