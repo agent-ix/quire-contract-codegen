@@ -345,17 +345,28 @@ is the identity and binding types the witness decode and replay read. `routed --
 `BackendKind` match calling each generator.
 
 The planned FR-018 admitted-context migration preserves this internal graph:
-`oracle` accepts the external root `qsl_replay::AdmittedContext`, not CG's peer
+`oracle` accepts `Option<&qsl_replay::AdmittedContext>` from the external root,
+not CG's peer
 `replay::OriginalCompositeEqContext`. The existing source-retaining builder
 in `replay` authenticates the original source/lock, calls root
 `compile_admitted` under the admitted request limits, compares the complete
 original checked package, and retains the genuine compilation/context pair.
-A successful request exposes its immutable context to the caller, which
-passes it to generation. This adds no `oracle --> replay` or QSL
+A successful native request exposes its immutable context to the caller,
+which always passes Some to generation. Standalone None permits genuine
+context-free traversal and existing precise key-free refusals; Some with a
+wrong package still fails before classification, including for primitives.
+Every reached nominal identity requires genuine context and otherwise
+returns MissingAdmittedContext, without fallback keys or Unsupported. This adds no `oracle --> replay` or QSL
 implementation-layer edge and no second node inventory or identity issuer.
 
-Generated equality's prepared environment privately holds the facade context,
-QSV environment and complete enum index plus package/item binding. Exact
+Generated equality's prepared environment privately holds the optional
+facade context, QSV environment and complete enum index plus expected
+package/item/descriptor binding. None is not source authentication. An empty
+index is valid only after successfully resolving a zero-enum closure; it is
+never a lookup/capability failure fallback. Nominal recipes require Some,
+including through conversion targets and nested/recursive types. Every oracle
+checks its private binding, supplied context when present and both comparison
+types before same-index equality/evaluation, refusing faults without charge. Exact
 kernel types/meters/outcomes come from `quire-exact`; QSV owns declaration,
 equality and enum APIs; Runtime imports name only its remaining functions.
 `core/profile` remains the sole emitted-manifest authority. Equality's

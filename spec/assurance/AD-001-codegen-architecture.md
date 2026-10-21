@@ -126,15 +126,21 @@ oracle calls the owner of its operation and interprets no expression itself:
   scalar types.
 - FR-018 equality oracles call QSV `check_type`, `check_equality` with their
   complete genuine enum index, and `CheckedEquality::evaluate`. A generated
-  opaque prepared environment retains the immutable replay-root context,
-  environment, index, descriptors and original-package/item binding.
+  opaque prepared environment retains an optional immutable replay-root
+  context, environment, private index, descriptors and expected package/item
+  binding. Standalone None is valid only for context-free reconstruction;
+  every reached nominal identity requires genuine owner context.
 - FR-021 function-application oracles admit a `PackageDeclarations` through
   `PackageDeclarations::check` and apply one function through `CheckedPackage::call`.
 
 Only the source-retaining preparation boundary calls root `compile_admitted`,
 authenticates original source/lock, compares the complete recompiled package
-and retains its context. CG's oracle generator takes that root facade type,
-not a peer `replay` module type. Emitted code resolves `WireNodeId`/case
+and retains its context. That native route always supplies Some. Standalone
+CG generation takes `Option<&qsl_replay::AdmittedContext>`, not a peer
+`replay` module type: None does not authenticate source, and Some with a
+wrong original package fails before even primitive classification. Missing
+context at an actual nominal reconstruction is a typed refusal, not a key
+fallback or a reclassification as Unsupported. Emitted code resolves `WireNodeId`/case
 identifiers by genuine owner lookup and constructs no kernel key. The
 facade's enum-only inventory leaves record/tuple owner-key lookup as separate
 unresolved migration work; existing composite behavior remains required.

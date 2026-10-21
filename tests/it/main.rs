@@ -82,4 +82,5 @@ pub(crate) mod scratch_crate;
 mod skeleton_spine;
 mod strategy_generation;
 mod terminal_map;
+mod v2_llvm_coverage;
 mod vacuity_primitives;
