@@ -360,6 +360,32 @@ Text-admission identity rather than claiming a checked node or contract role.
   through verbatim as the counterexample, which FR-016 decodes. A playback printed for a cover is
   never the counterexample.
 
+### Owned namespace nonconfirmation observations
+
+When the existing confirmation poll on a claimed init pidfd succeeds but its returned readiness
+lacks `IN`, the namespace owner SHALL retain the observed return count, raw readiness bits and
+monotonic elapsed duration of that single poll in its cleanup error detail. The owner SHALL also
+retain its already captured init host PID and start ticks, captured wrapper PID or explicit absence,
+init-handle presence, gate presence and cleaned state at that failure. Field labels SHALL distinguish
+poll duration from the duration of the whole cleanup. These are observations of the failed attempt,
+not a diagnosis of why readiness was absent; later `Drop` cleanup cannot replace them.
+
+The diagnostic SHALL propagate through the existing `namespace cleanup failed:` detail of public
+`MemoryObservationFailed`, retaining the `namespace teardown was not confirmed` prefix of the
+nested cleanup error. It introduces no verdict, receipt field or new refusal discriminant. The
+owner SHALL derive identity and state fields only from its existing owned values, without reopening
+a PID, rescanning procfs/cgroups, replacing the claimed pidfd, or inventing wrapper start ticks,
+namespace identity or failure-time host state.
+
+The owner SHALL preserve the existing init-pidfd KILL then wrapper-group KILL order, the single
+confirmation poll with timeout `(5 seconds, 0 nanoseconds)` per cleanup invocation, and the existing
+signal-error, poll-error and missing-readiness precedence. A syscall error SHALL retain its existing
+error kind and errno. Only successful confirmed cleanup may close the gate and mark the owner
+cleaned; failure retains the existing state and `Drop` behavior, including its cleanup retry. Public
+refusal over competing cancellation remains as specified by
+[FR-040](./FR-040-cancellation-producer.md) AC-4. This diagnostic adds no wait, retry, skip or timeout
+adjustment, and does not deliver the caller-death supervisor or establish the cause of IR-877.
+
 ### NoVerdict diagnostics
 
 A `NoVerdict` run carries no report-derived fields that say why the backend gave no verdict, so
@@ -874,6 +900,9 @@ compile, sealed invocation, proof success, independent-resolution fix or IR-17 c
 | FR-017-AC-51 | A consumer compile test names and constructs `quire_contract_codegen::ScalarLimits` using only codegen crate paths, a typed accessor to `KaniScalarNativeRequest::scalar_limits` compiles with that same return type, and assignment to the owning `quire_exact::ScalarLimits` compiles without conversion, wrapper or compatibility shim. The CG public name and field shape remain unchanged. Planned with IR-17 kernel adoption. | Test |
 | FR-017-AC-52 | Production emitted bytes and feature-free exact dependency remain unchanged. The isolated private observer uses resolver 2 and its sole example compiles the single canonical adapter in place through `../src/bin/ir791_native.rs`, with runtime `exact` and kernel `test-support` exposed only by dev-dependencies; no wrapper, copied source, symlink, normal/build logging edge or CLI feature override is allowed. Native invocation explicitly names `observer/Cargo.toml` and the example; the real production proof retains its harness, ordered options, claims, covers, bounds and backend gates. A control removing the dev feature fails observer compilation; production library/proof target validation succeeds without it. Actual meter output supplies limits, counters and ordered charges. | Test |
 | FR-017-AC-53 | Both package locks are independently freshly resolved with the existing bounded offline generation/update workflow, without copying a parent/other lock or substituting a cached resolution. Each resolves both owning runtime and exact identities to the build's authoritative lock identities; the independent observer regression asserts both literal package names and repository identities independently of the renderer's list. Both manifests, locks and all other AC-46 entries are sealed and compared as a complete path/byte set before proof, after proof and after native execution; mutation/replacement or an extra file anywhere in either package yields a typed failure and no receipt. Snapshot cleanup retains all ten measured entries for byte-identical recomputation, including when cleanup reports a diagnostic. | Test |
+| FR-017-AC-54 | A successful claimed-init confirmation poll with no `IN` yields public `MemoryObservationFailed` with the existing outer and nested prefixes and labelled observations of that attempt: returned poll count, raw revents bits, monotonic poll elapsed duration with its unit, captured init PID/start ticks, captured wrapper PID or explicit absence, init-handle presence, gate presence and cleaned state. Test controls through the existing `PollOperation` seam delegate first to real poll on the real owned pidfd, record its positive count and `IN`, then clear revents and return either zero or that genuine positive count. For both controlled omissions the diagnostic matches the returned count and cleared bits, the captured identities and failure state; elapsed is measured without a timing lower-bound assertion. The original failed-attempt diagnostic survives a subsequent successful real `Drop` confirmation. These controls are labelled injected observation omissions, not naturally reproduced timeouts. | Test |
+| FR-017-AC-55 | Through the real public execution entry and real owned namespace, an unchanged real-poll control retains its original public result and confirmed cleanup; each AC-54 omission refuses even when cancellation is submitted before or after the cleanup barrier. The confirmation seam sees the same claimed pidfd and exactly one poll with timeout `(5, 0)` per cleanup invocation. Failure retains gate/cleaned state and the existing `Drop` retry, and actual backend processes/namespace are gone after return. The existing real-poll-delegating errno control retains its public refusal rather than cancellation evidence. | Test |
+| FR-017-AC-56 | Inspection of the cleanup change shows that init-pidfd KILL still precedes wrapper-group KILL, the single confirmation poll retains its `(5, 0)` timeout, signal-error/poll-error/missing-readiness precedence is unchanged, syscall errors retain their original kind and errno, and only successful cleanup closes the gate and marks cleaned. Existing `Drop` behavior is unchanged. Diagnostic observations come only from that poll and existing owned fields; no added wait, retry, skip, PID reopen, procfs/cgroup rescan or invented host-state field is introduced. | Inspection |
 
 ## Dependencies
 
