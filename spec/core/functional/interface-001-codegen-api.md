@@ -81,21 +81,23 @@ operations:
     inputs: [KaniProfile, requested constructs, source id]
     output: CapabilityEntry list | KaniOutcome
     semantics: classifies one request through the public bounded Kani profile with no reverse Contract IR dependency; a malformed request is a typed refusal, not a disposition
+  # IR-621 direct error signatures below are planned; success and refusal semantics stay live.
   - name: prepare_bounded_collection_query
     status: live finite-input auxiliary under FR-015-AC-88 and AC-89; deleted by the collection slice (FR-015-AC-110)
     inputs: [KaniProfile, DispatchIndex, ValidatedFiniteInput, CollectionQuery]
-    output: CollectionLowering | FamilyLoweringError (IR KaniOutcome or KaniOutcomeError)
+    output: Result<CollectionLowering, KaniOutcome>
     semantics: CG-owned bounded collection-query lowering; bound exhaustion and profile or dispatch refusal stay IR typed non-Boolean outcomes with no partial artifact
   - name: prepare_finite_graph_reaches
     status: live finite-input auxiliary under FR-015-AC-86 and AC-87; deleted by the graph slice (FR-015-AC-111)
     inputs: [KaniProfile, DispatchIndex, ValidatedFiniteInput, GraphRequest]
-    output: GraphLowering | FamilyLoweringError (IR KaniOutcome or KaniOutcomeError)
+    output: Result<GraphLowering, KaniOutcome>
     semantics: CG-owned positive-length finite reference-graph reachability over IR-validated objects and references, with sorted depth-first expansion and a bound before each new identity; malformed or exhausted requests stay IR typed non-Boolean outcomes
   - name: generate_bounded_kani_corpus_case
     status: live interim four-artifact corpus under FR-015-AC-51 to AC-58 and AC-90 to AC-94; native replay of corpus cases is dropped by the final slice (FR-015-AC-111), not planned; AD-004 step 4g retires the arms per family (arithmetic FR-015-AC-109, collection FR-015-AC-110, the latter also after step 4h) and the graph slice FR-015-AC-111 removes this public entry, the BoundedCorpus types, the corpus replay and its generation-time KaniOutcome, each slice only after IR-858 (step 4b) and after the one V2 generator serves that family's QSL-emitted, IR-admitted cases under FR-015-AC-95 to AC-102, the graph slice also after IR-805's typed graph population prerequisite
     inputs: [KaniProfile, DispatchIndex, ValidatedFiniteInput, BoundedCorpusRequest, proof dependency census, shared EmittedCorpusIdentities]
-    output: BoundedCorpusCase | BoundedCorpusError
-    semantics: one bounded Kani corpus case and its proof dependency graph; a refusal is a BoundedCorpusError whose Outcome variant carries the typed KaniOutcome (its code a quire_contract_model Std001Code) and whose OutcomeConstruction variant carries Contract IR's refusal to build a non-success outcome; an unencodable canonical case preimage refuses as InvalidInput kani_corpus_identity_unencodable before lowering or claiming identity; a case whose identity the shared registry already holds refuses as kani_corpus_identity_collision rather than overwriting earlier artifacts; a canonical serialization failure of the case's proof graph refuses as kani_corpus_serialization_failed (NFR-005)
+    output: Result<BoundedCorpusCase, KaniOutcome>
+    error_surface: planned IR-621 retirement of public FamilyLoweringError and BoundedCorpusError, their OutcomeConstruction variants, and replacement aliases or wrappers; terminal cancellation pairing is unchanged
+    semantics: one bounded Kani corpus case and its proof dependency graph; a refusal is the direct IR typed non-Boolean KaniOutcome (its code a quire_contract_model Std001Code), constructed by the matching infallible non-success constructor; an unencodable canonical case preimage refuses as InvalidInput kani_corpus_identity_unencodable before lowering or claiming identity; a case whose identity the shared registry already holds refuses as kani_corpus_identity_collision rather than overwriting earlier artifacts; a canonical serialization failure of the case's proof graph refuses as kani_corpus_serialization_failed (NFR-005)
   - name: generate_exact_scalar_oracles
     inputs: [admitted CheckedPackageV2, ExactScalarItem list]
     output: ExactScalarOracles | OracleGenerationError

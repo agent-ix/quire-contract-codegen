@@ -125,10 +125,17 @@ success.
   itself (`kani_corpus_dependency_invalid`, `kani_corpus_identity_collision`,
   `kani_corpus_serialization_failed`, `kani_profile_input_mismatch`) is built with the
   `std001_code!` macro, which checks the form at compile time; STD-001 does not list those, and
-  `Std001Code::is_registered` is false for them. `KaniOutcome::non_success` returns a `Result`
-  because it refuses a `proved` or `counterexample` kind; CG's corpus generator asks only for
-  `Refused` and `InvalidInput` and carries IR's refusal, should it ever occur, as the typed
-  `BoundedCorpusError::OutcomeConstruction`.
+  `Std001Code::is_registered` is false for them. Under the planned IR-621 CG adoption,
+  the retained family/corpus paths use IR's public infallible `KaniOutcome::refused`,
+  `invalid_input` and `resource_exhausted` constructors for their respective observed kinds.
+  They pass the original typed cause, source identity and selected profile/bound context;
+  CG remains responsible for selecting the actual refusal and does not infer a run result.
+  The three public operations in `interface-001` return `Result<Success, KaniOutcome>`
+  directly, without `FamilyLoweringError`, `BoundedCorpusError`, an `OutcomeConstruction`
+  branch, or a replacement alias or wrapper. IR retains its fallible `non_success` API
+  for callers holding a broad kind; IR's separate constructor validation and proof-count
+  criteria are not accepted by this consumer change. Terminal cancellation pairing is
+  outside this adoption, and AD-004's final corpus retirement remains separately gated.
 
 ## Decisions
 

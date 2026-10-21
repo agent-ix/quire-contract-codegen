@@ -1,0 +1,504 @@
+<!-- reviewer-dispositions repo=agent-ix/quire-contract-codegen visibility=public quoin=0.28.4 module=spec-artifacts-process@b82e42e893612b4b4ee94127714b4577ee893502 id=SR-14941 round=1 model=gpt-6.1-sol run=6d81775c-2286-4d07-aecc-71f7cd0b5b35 -->
+
+Part4/5. Repository gap verdict remains FAIL:314 current findings are explicitly DEFERRED, comprising312 inherited baseline gaps (309 exact IR878 inventory plus three IR942 obligations) and two new planned IR621 AC123/124 coding controls. No source implementation, runtime qualification, whole-repository acceptance or ignored proof execution is claimed.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-211 | deferred | NFR-006-M-1 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-212 | deferred | NFR-006-M-2 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-213 | deferred | NFR-006-M-3 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-214 | deferred | FR-018-AC-21 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-215 | deferred | FR-018-AC-22 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-216 | deferred | FR-018-AC-23 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-217 | deferred | FR-018-AC-33 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-218 | deferred | FR-018-AC-34 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-219 | deferred | FR-018-AC-35 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-220 | deferred | FR-018-AC-36 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-221 | deferred | FR-018-AC-37 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-222 | deferred | FR-018-AC-38 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-223 | deferred | FR-018-AC-39 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-224 | deferred | FR-018-AC-40 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-225 | deferred | FR-018-AC-41 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-226 | deferred | FR-018-AC-42 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-227 | deferred | FR-018-AC-43 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-228 | deferred | FR-021-AC-30 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-229 | deferred | FR-031-AC-2 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-230 | deferred | FR-031-AC-6 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-231 | deferred | FR-031-AC-16 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-232 | deferred | FR-031-AC-17 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-233 | deferred | FR-031-AC-27 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-234 | deferred | FR-031-AC-20 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-235 | deferred | FR-031-AC-22 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-236 | deferred | FR-031-AC-26 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-237 | deferred | FR-031-AC-23 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-238 | deferred | FR-031-AC-24 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-239 | deferred | FR-031-AC-25 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-240 | deferred | FR-035-AC-1 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-241 | deferred | FR-035-AC-2 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-242 | deferred | FR-035-AC-3 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-243 | deferred | FR-035-AC-4 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-244 | deferred | FR-035-AC-5 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-245 | deferred | FR-035-AC-6 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-246 | deferred | FR-042-AC-1 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-247 | deferred | FR-016-AC-7 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-248 | deferred | FR-024-AC-1 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-249 | deferred | FR-024-AC-7 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-250 | deferred | FR-024-AC-8 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-251 | deferred | FR-024-AC-18 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-252 | deferred | FR-024-AC-34 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-253 | deferred | FR-024-AC-35 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-254 | deferred | FR-024-AC-36 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-255 | deferred | FR-024-AC-37 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-256 | deferred | FR-024-AC-38 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-257 | deferred | FR-024-AC-39 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-258 | deferred | FR-024-AC-40 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-259 | deferred | FR-032-AC-1 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-260 | deferred | FR-032-AC-4 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-261 | deferred | FR-032-AC-5 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-262 | deferred | FR-032-AC-6 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-263 | deferred | FR-032-AC-7 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-264 | deferred | FR-032-AC-8 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-265 | deferred | FR-032-AC-9 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-266 | deferred | FR-032-AC-10 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-267 | deferred | FR-032-AC-11 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-268 | deferred | FR-032-AC-12 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-269 | deferred | FR-032-AC-13 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-270 | deferred | FR-032-AC-14 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-271 | deferred | FR-033-AC-2 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-272 | deferred | FR-033-AC-3 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-273 | deferred | FR-033-AC-4 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-274 | deferred | FR-033-AC-5 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-275 | deferred | FR-033-AC-6 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-276 | deferred | FR-033-AC-8 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-277 | deferred | FR-033-AC-10 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-278 | deferred | FR-033-AC-14 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-279 | deferred | FR-033-AC-15 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+| FND-280 | deferred | FR-033-AC-17 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or ignored controls are not called covered or executed. |
+
++++ [reviewer data]
+
+```yaml
+dispositions:
+- fnd: FND-211
+  outcome: deferred
+  reason: NFR-006-M-1 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e,
+    retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani
+    triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or
+    ignored controls are not called covered or executed.
+- fnd: FND-212
+  outcome: deferred
+  reason: NFR-006-M-2 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e,
+    retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani
+    triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or
+    ignored controls are not called covered or executed.
+- fnd: FND-213
+  outcome: deferred
+  reason: NFR-006-M-3 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e,
+    retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani
+    triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or
+    ignored controls are not called covered or executed.
+- fnd: FND-214
+  outcome: deferred
+  reason: FR-018-AC-21 belongs to the exact309-unit inherited inventory in actual
+    IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065.
+    Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan.
+    Missing or ignored controls are not called covered or executed.
+- fnd: FND-215
+  outcome: deferred
+  reason: FR-018-AC-22 belongs to the exact309-unit inherited inventory in actual
+    IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065.
+    Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan.
+    Missing or ignored controls are not called covered or executed.
+- fnd: FND-216
+  outcome: deferred
+  reason: FR-018-AC-23 belongs to the exact309-unit inherited inventory in actual
+    IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065.
+    Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan.
+    Missing or ignored controls are not called covered or executed.
+- fnd: FND-217
+  outcome: deferred
+  reason: FR-018-AC-33 belongs to the exact309-unit inherited inventory in actual
+    IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065.
+    Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan.
+    Missing or ignored controls are not called covered or executed.
+- fnd: FND-218
+  outcome: deferred
+  reason: FR-018-AC-34 belongs to the exact309-unit inherited inventory in actual
+    IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065.
+    Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan.
+    Missing or ignored controls are not called covered or executed.
+- fnd: FND-219
+  outcome: deferred
+  reason: FR-018-AC-35 belongs to the exact309-unit inherited inventory in actual
+    IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065.
+    Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan.
+    Missing or ignored controls are not called covered or executed.
+- fnd: FND-220
+  outcome: deferred
+  reason: FR-018-AC-36 belongs to the exact309-unit inherited inventory in actual
+    IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065.
+    Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan.
+    Missing or ignored controls are not called covered or executed.
+- fnd: FND-221
+  outcome: deferred
+  reason: FR-018-AC-37 belongs to the exact309-unit inherited inventory in actual
+    IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065.
+    Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan.
+    Missing or ignored controls are not called covered or executed.
+- fnd: FND-222
+  outcome: deferred
+  reason: FR-018-AC-38 belongs to the exact309-unit inherited inventory in actual
+    IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065.
+    Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan.
+    Missing or ignored controls are not called covered or executed.
+- fnd: FND-223
+  outcome: deferred
+  reason: FR-018-AC-39 belongs to the exact309-unit inherited inventory in actual
+    IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065.
+    Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan.
+    Missing or ignored controls are not called covered or executed.
+- fnd: FND-224
+  outcome: deferred
+  reason: FR-018-AC-40 belongs to the exact309-unit inherited inventory in actual
+    IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065.
+    Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan.
+    Missing or ignored controls are not called covered or executed.
+- fnd: FND-225
+  outcome: deferred
+  reason: FR-018-AC-41 belongs to the exact309-unit inherited inventory in actual
+    IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065.
+    Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan.
+    Missing or ignored controls are not called covered or executed.
+- fnd: FND-226
+  outcome: deferred
+  reason: FR-018-AC-42 belongs to the exact309-unit inherited inventory in actual
+    IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065.
+    Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan.
+    Missing or ignored controls are not called covered or executed.
+- fnd: FND-227
+  outcome: deferred
+  reason: FR-018-AC-43 belongs to the exact309-unit inherited inventory in actual
+    IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065.
+    Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan.
+    Missing or ignored controls are not called covered or executed.
+- fnd: FND-228
+  outcome: deferred
+  reason: FR-021-AC-30 belongs to the exact309-unit inherited inventory in actual
+    IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065.
+    Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan.
+    Missing or ignored controls are not called covered or executed.
+- fnd: FND-229
+  outcome: deferred
+  reason: FR-031-AC-2 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e,
+    retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani
+    triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or
+    ignored controls are not called covered or executed.
+- fnd: FND-230
+  outcome: deferred
+  reason: FR-031-AC-6 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e,
+    retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani
+    triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or
+    ignored controls are not called covered or executed.
+- fnd: FND-231
+  outcome: deferred
+  reason: FR-031-AC-16 belongs to the exact309-unit inherited inventory in actual
+    IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065.
+    Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan.
+    Missing or ignored controls are not called covered or executed.
+- fnd: FND-232
+  outcome: deferred
+  reason: FR-031-AC-17 belongs to the exact309-unit inherited inventory in actual
+    IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065.
+    Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan.
+    Missing or ignored controls are not called covered or executed.
+- fnd: FND-233
+  outcome: deferred
+  reason: FR-031-AC-27 belongs to the exact309-unit inherited inventory in actual
+    IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065.
+    Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan.
+    Missing or ignored controls are not called covered or executed.
+- fnd: FND-234
+  outcome: deferred
+  reason: FR-031-AC-20 belongs to the exact309-unit inherited inventory in actual
+    IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065.
+    Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan.
+    Missing or ignored controls are not called covered or executed.
+- fnd: FND-235
+  outcome: deferred
+  reason: FR-031-AC-22 belongs to the exact309-unit inherited inventory in actual
+    IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065.
+    Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan.
+    Missing or ignored controls are not called covered or executed.
+- fnd: FND-236
+  outcome: deferred
+  reason: FR-031-AC-26 belongs to the exact309-unit inherited inventory in actual
+    IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065.
+    Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan.
+    Missing or ignored controls are not called covered or executed.
+- fnd: FND-237
+  outcome: deferred
+  reason: FR-031-AC-23 belongs to the exact309-unit inherited inventory in actual
+    IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065.
+    Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan.
+    Missing or ignored controls are not called covered or executed.
+- fnd: FND-238
+  outcome: deferred
+  reason: FR-031-AC-24 belongs to the exact309-unit inherited inventory in actual
+    IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065.
+    Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan.
+    Missing or ignored controls are not called covered or executed.
+- fnd: FND-239
+  outcome: deferred
+  reason: FR-031-AC-25 belongs to the exact309-unit inherited inventory in actual
+    IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065.
+    Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan.
+    Missing or ignored controls are not called covered or executed.
+- fnd: FND-240
+  outcome: deferred
+  reason: FR-035-AC-1 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e,
+    retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani
+    triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or
+    ignored controls are not called covered or executed.
+- fnd: FND-241
+  outcome: deferred
+  reason: FR-035-AC-2 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e,
+    retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani
+    triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or
+    ignored controls are not called covered or executed.
+- fnd: FND-242
+  outcome: deferred
+  reason: FR-035-AC-3 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e,
+    retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani
+    triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or
+    ignored controls are not called covered or executed.
+- fnd: FND-243
+  outcome: deferred
+  reason: FR-035-AC-4 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e,
+    retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani
+    triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or
+    ignored controls are not called covered or executed.
+- fnd: FND-244
+  outcome: deferred
+  reason: FR-035-AC-5 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e,
+    retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani
+    triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or
+    ignored controls are not called covered or executed.
+- fnd: FND-245
+  outcome: deferred
+  reason: FR-035-AC-6 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e,
+    retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani
+    triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or
+    ignored controls are not called covered or executed.
+- fnd: FND-246
+  outcome: deferred
+  reason: FR-042-AC-1 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e,
+    retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani
+    triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or
+    ignored controls are not called covered or executed.
+- fnd: FND-247
+  outcome: deferred
+  reason: FR-016-AC-7 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e,
+    retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani
+    triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or
+    ignored controls are not called covered or executed.
+- fnd: FND-248
+  outcome: deferred
+  reason: FR-024-AC-1 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e,
+    retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani
+    triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or
+    ignored controls are not called covered or executed.
+- fnd: FND-249
+  outcome: deferred
+  reason: FR-024-AC-7 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e,
+    retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani
+    triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or
+    ignored controls are not called covered or executed.
+- fnd: FND-250
+  outcome: deferred
+  reason: FR-024-AC-8 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e,
+    retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani
+    triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or
+    ignored controls are not called covered or executed.
+- fnd: FND-251
+  outcome: deferred
+  reason: FR-024-AC-18 belongs to the exact309-unit inherited inventory in actual
+    IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065.
+    Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan.
+    Missing or ignored controls are not called covered or executed.
+- fnd: FND-252
+  outcome: deferred
+  reason: FR-024-AC-34 belongs to the exact309-unit inherited inventory in actual
+    IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065.
+    Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan.
+    Missing or ignored controls are not called covered or executed.
+- fnd: FND-253
+  outcome: deferred
+  reason: FR-024-AC-35 belongs to the exact309-unit inherited inventory in actual
+    IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065.
+    Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan.
+    Missing or ignored controls are not called covered or executed.
+- fnd: FND-254
+  outcome: deferred
+  reason: FR-024-AC-36 belongs to the exact309-unit inherited inventory in actual
+    IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065.
+    Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan.
+    Missing or ignored controls are not called covered or executed.
+- fnd: FND-255
+  outcome: deferred
+  reason: FR-024-AC-37 belongs to the exact309-unit inherited inventory in actual
+    IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065.
+    Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan.
+    Missing or ignored controls are not called covered or executed.
+- fnd: FND-256
+  outcome: deferred
+  reason: FR-024-AC-38 belongs to the exact309-unit inherited inventory in actual
+    IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065.
+    Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan.
+    Missing or ignored controls are not called covered or executed.
+- fnd: FND-257
+  outcome: deferred
+  reason: FR-024-AC-39 belongs to the exact309-unit inherited inventory in actual
+    IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065.
+    Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan.
+    Missing or ignored controls are not called covered or executed.
+- fnd: FND-258
+  outcome: deferred
+  reason: FR-024-AC-40 belongs to the exact309-unit inherited inventory in actual
+    IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065.
+    Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan.
+    Missing or ignored controls are not called covered or executed.
+- fnd: FND-259
+  outcome: deferred
+  reason: FR-032-AC-1 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e,
+    retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani
+    triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or
+    ignored controls are not called covered or executed.
+- fnd: FND-260
+  outcome: deferred
+  reason: FR-032-AC-4 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e,
+    retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani
+    triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or
+    ignored controls are not called covered or executed.
+- fnd: FND-261
+  outcome: deferred
+  reason: FR-032-AC-5 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e,
+    retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani
+    triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or
+    ignored controls are not called covered or executed.
+- fnd: FND-262
+  outcome: deferred
+  reason: FR-032-AC-6 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e,
+    retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani
+    triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or
+    ignored controls are not called covered or executed.
+- fnd: FND-263
+  outcome: deferred
+  reason: FR-032-AC-7 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e,
+    retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani
+    triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or
+    ignored controls are not called covered or executed.
+- fnd: FND-264
+  outcome: deferred
+  reason: FR-032-AC-8 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e,
+    retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani
+    triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or
+    ignored controls are not called covered or executed.
+- fnd: FND-265
+  outcome: deferred
+  reason: FR-032-AC-9 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e,
+    retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani
+    triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or
+    ignored controls are not called covered or executed.
+- fnd: FND-266
+  outcome: deferred
+  reason: FR-032-AC-10 belongs to the exact309-unit inherited inventory in actual
+    IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065.
+    Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan.
+    Missing or ignored controls are not called covered or executed.
+- fnd: FND-267
+  outcome: deferred
+  reason: FR-032-AC-11 belongs to the exact309-unit inherited inventory in actual
+    IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065.
+    Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan.
+    Missing or ignored controls are not called covered or executed.
+- fnd: FND-268
+  outcome: deferred
+  reason: FR-032-AC-12 belongs to the exact309-unit inherited inventory in actual
+    IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065.
+    Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan.
+    Missing or ignored controls are not called covered or executed.
+- fnd: FND-269
+  outcome: deferred
+  reason: FR-032-AC-13 belongs to the exact309-unit inherited inventory in actual
+    IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065.
+    Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan.
+    Missing or ignored controls are not called covered or executed.
+- fnd: FND-270
+  outcome: deferred
+  reason: FR-032-AC-14 belongs to the exact309-unit inherited inventory in actual
+    IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065.
+    Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan.
+    Missing or ignored controls are not called covered or executed.
+- fnd: FND-271
+  outcome: deferred
+  reason: FR-033-AC-2 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e,
+    retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani
+    triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or
+    ignored controls are not called covered or executed.
+- fnd: FND-272
+  outcome: deferred
+  reason: FR-033-AC-3 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e,
+    retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani
+    triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or
+    ignored controls are not called covered or executed.
+- fnd: FND-273
+  outcome: deferred
+  reason: FR-033-AC-4 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e,
+    retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani
+    triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or
+    ignored controls are not called covered or executed.
+- fnd: FND-274
+  outcome: deferred
+  reason: FR-033-AC-5 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e,
+    retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani
+    triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or
+    ignored controls are not called covered or executed.
+- fnd: FND-275
+  outcome: deferred
+  reason: FR-033-AC-6 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e,
+    retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani
+    triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or
+    ignored controls are not called covered or executed.
+- fnd: FND-276
+  outcome: deferred
+  reason: FR-033-AC-8 belongs to the exact309-unit inherited inventory in actual IR8783db226b2-9381-476f-a880-cf37f082ac9e,
+    retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065. Existing non-Kani
+    triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan. Missing or
+    ignored controls are not called covered or executed.
+- fnd: FND-277
+  outcome: deferred
+  reason: FR-033-AC-10 belongs to the exact309-unit inherited inventory in actual
+    IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065.
+    Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan.
+    Missing or ignored controls are not called covered or executed.
+- fnd: FND-278
+  outcome: deferred
+  reason: FR-033-AC-14 belongs to the exact309-unit inherited inventory in actual
+    IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065.
+    Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan.
+    Missing or ignored controls are not called covered or executed.
+- fnd: FND-279
+  outcome: deferred
+  reason: FR-033-AC-15 belongs to the exact309-unit inherited inventory in actual
+    IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065.
+    Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan.
+    Missing or ignored controls are not called covered or executed.
+- fnd: FND-280
+  outcome: deferred
+  reason: FR-033-AC-17 belongs to the exact309-unit inherited inventory in actual
+    IR8783db226b2-9381-476f-a880-cf37f082ac9e, retained by current IR621dc11e5c3-d77a-4471-be32-8c44f09a7065.
+    Existing non-Kani triage stays luna:IR:plan; assigned Kani rows stay titan:kani:plan.
+    Missing or ignored controls are not called covered or executed.
+```
+
++++

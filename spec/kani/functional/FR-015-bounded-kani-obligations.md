@@ -716,6 +716,20 @@ families it names, each of which is owed a shadow or a production harness of its
 | FR-015-CON-1 | Clause ABI construction SHALL check both endpoints of a bounded integer dependency before conversion to i64 and refuse one outside i64 as `UnsupportedDependency` in the clause-lowering detail, without producing a binding. | Integrity | Test (TC-025) |
 | FR-015-CON-2 | Subject binding SHALL check both endpoints of a bounded integer dependency before conversion to i64 and refuse one outside i64 as `UnsupportedBinding`, without producing a binding or harness. | Integrity | Test (TC-025) |
 
+### Direct family/corpus non-success outcomes (IR-621; planned)
+
+While the finite-input family/corpus APIs remain live, their non-success paths
+shall use the matching infallible IR `KaniOutcome::refused`, `invalid_input` or
+`resource_exhausted` constructor and return the direct `KaniOutcome` error side
+specified by `interface-001`. This adoption retires only the impossible public
+outcome-construction error surface. The existing profile census, family/corpus
+success, refusal ordering and identity contracts remain in force. Canonical
+proof-graph serialization failure remains `Refused` with the exact
+`kani_corpus_serialization_failed` cause under NFR-005. Terminal cancellation
+pairing and the independently gated AC-111 generator retirement are excluded.
+No new installed-backend evidence or IR constructor/proof-count acceptance is
+claimed by this consumer change.
+
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
@@ -842,6 +856,8 @@ families it names, each of which is owed a shadow or a production harness of its
 | FR-015-AC-120 | PLANNED (IR-942; depends on QSL ADR-013 O-07/O-09 and QSV FR-123). After the selected owner and occurrence validate under AC-122, CG forms the per-step record content identity from an RFC 8785 object whose only members are `subject_kind: "protocol-refinement-step"` and `record: StepSimulationRecord` encoded by QSV. Two separately valid selected refinements with the same obligation and hypotheses but different record `refinement` values, each with its own matching occurrence, yield different content identities; a record with a mismatched owner has no identity to compare. Within one admitted refinement, changing between two valid obligations with their matching occurrences, or replacing one hypothesis while retaining FR-146's ascending node-key digest order, changes the record content identity. A separate raw QSV encoder vector with two supplied hypotheses in opposite order changes the canonical bytes and digest; it does not represent a second admitted QSL emission. The O-07 occurrence and `source_span` are absent from its preimage; changing only source regions or span for a fixed admitted record and its valid occurrence leaves that identity unchanged. The test compares hand-built canonical byte vectors and digests with CG's results, rather than deriving expected digests through CG's encoder. | Test (TC-025) |
 | FR-015-AC-121 | PLANNED (IR-942). A per-step `KaniObligationIdentity` uses the QSV-owned `StepSimulationRecord` as a typed subject, carries its content identity and the owning refinement's O-07 `generated` occurrence key separately, and keeps any CG proof or obligation kind in the harness record rather than the record content preimage. CG publishes a persisted harness-record digest over every `KaniObligationIdentity` member except `source_span`; changing any included member changes this digest, while changing only `source_span` does not. This digest is distinct from the per-step record content identity. The record is not reconstructed from a V1 `ClauseRef` or a copied QSV schema. | Test (TC-025) and Inspection |
 | FR-015-AC-122 | PLANNED (IR-942). A selected proof-eligible refinement under QSpec FR-322-AC-88 through AC-90 with an `Initial` record and `Step { row: i }` records for its admitted FR-375 `steps` order yields generated occurrences on the owner node at ordinals 0 and `i + 1`, respectively. An ineligible refinement under FR-322-AC-91 (hidden field, history field, or `any` step target) carries only its `declaration` occurrence and yields no per-step record, harness, or proof credit; the IR reader refuses a generated occurrence on it as `invalid_package`/`invalid-value` before CG setup. Two step rows tied on node-key digest and member name use the FR-375-AC-19 alias-free class spelling order, unchanged by source permutation. A different record owner, out-of-range row, wrong occurrence role or ordinal, or a second record with the same `(refinement, obligation)` pair refuses with a typed setup cause and produces no harness or proof credit, including when only the duplicate's hypotheses differ. | Test (TC-025) |
+| FR-015-AC-123 | PLANNED (IR-621). External public-consumer calls to `prepare_bounded_collection_query`, `prepare_finite_graph_reaches` and `generate_bounded_kani_corpus_case` have the direct result signatures specified by `interface-001`, with `KaniOutcome` as their error type and no public `FamilyLoweringError`, `BoundedCorpusError`, `OutcomeConstruction` branch, or replacement alias or wrapper. | Test |
+| FR-015-AC-124 | PLANNED (IR-621). After infallible-constructor adoption, each retained family/corpus adverse control returns the original exact non-success kind, typed cause, source identity and selected profile/bound context, with no Boolean claim, partial artifact or premature identity claim; successful outputs and failure ordering remain unchanged. | Test |
 
 ### Mutations FR-015-AC-69 to FR-015-AC-76 detect
 
