@@ -166,8 +166,10 @@ failure is reported.
 FR-016-AC-7 was retired under IR-604. The installed Kani runner's
 `KaniExecutionEvidence` carries proof ceilings, an observed memory peak,
 backend checks and an outcome, but no admitted scalar charges or consumed
-counters. QSL's `WitnessArmResult` carries replay charges; `ReplayInputs` and
-`ReplayLimits` bound that replay, not the Kani run. Comparing these as if they
-were two observations of the same accounting fact would invent proof evidence.
+counters. QSL's `WitnessArmResult` carries replay charges;
+`ReplayInputs.accounting_limits` and `ReplayInputs.replay_limits` bound the QSL
+replay, while `ReplayInputs.decode_limits` bounds CG witness decoding. None
+reports Kani proof accounting. Comparing these as if they were two observations
+of the same accounting fact would invent proof evidence.
 The typed value/refusal and verdict comparisons remain required by AC-3, AC-4,
 AC-9, AC-10 and AC-13. AC-6 continues to bound witness decoding independently.
