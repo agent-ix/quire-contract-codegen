@@ -226,10 +226,11 @@ pub use kani::generate::outcome::{
 pub use kani::identity::{
     CollectionElementIdentity, CollectionKindIdentity, CollectionObligationIdentity,
     CollectionPredicateIdentity, EmbeddedOracle, KaniCollectionObligationHarness,
-    KaniObligationHarness, KaniObligationIdentity, KaniScalarObligationHarness, ObligationBinding,
-    ObligationKind, ScalarObligationArgument, ScalarObligationIdentity, ScalarOriginalLimitsError,
-    StateComparison, StateFieldDomain, StateFrameHarness, StateFrameIdentity, StateFrameProperty,
-    StateFrameRecordError, StateFrameScope, StateUnrangedField, StateUnrangedReason,
+    KaniObligationHarness, KaniObligationIdentity, KaniScalarObligationHarness,
+    KaniV2ClauseObligationHarness, ObligationBinding, ObligationKind, ScalarObligationArgument,
+    ScalarObligationIdentity, ScalarOriginalLimitsError, StateComparison, StateFieldDomain,
+    StateFrameHarness, StateFrameIdentity, StateFrameProperty, StateFrameRecordError,
+    StateFrameScope, StateUnrangedField, StateUnrangedReason, V2ClauseObligationIdentity,
 };
 pub use kani::output::playback::DecodeFailure;
 pub use publication::publish::{write_bundle_atomic, PublishedBundleIdentity};

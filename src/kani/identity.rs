@@ -7,7 +7,9 @@
 use std::{num::NonZeroU64, time::Duration};
 
 use quire_canonical::FixedShape;
-use quire_contract_model::{CheckedNodeId, ClauseRef, DependencyIdentity, SourceSpan};
+use quire_contract_model::{
+    CheckedNodeId, CheckedSemanticId, ClauseRef, DependencyIdentity, SourceSpan,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -151,6 +153,75 @@ pub struct KaniObligationHarness {
     /// JSON record of the identity and the Rust source path: the persisted obligation schema a
     /// witness is decoded against.
     pub record: Artifact,
+}
+
+/// One admitted V2 clause and the execution facts of its generated harness.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct V2ClauseObligationIdentity {
+    /// Backend resource ceilings.
+    pub ceilings: ProofCeilings,
+    /// Admitted package identity.
+    pub package: CheckedSemanticId,
+    /// Selected state-clause node.
+    pub clause: CheckedNodeId,
+    /// Contract role read from the checked node.
+    pub kind: ObligationKind,
+    /// Embedded oracle symbol.
+    pub oracle_symbol: String,
+    /// Caller-selected subject path recorded for harness identity even when this role has no call.
+    pub subject_path: String,
+    /// Symbolic parameter and admitted bounds.
+    pub arguments: Vec<ScalarObligationArgument>,
+    /// Generated Rust module.
+    pub module_symbol: ModuleSymbol,
+    /// Generated proof function.
+    pub harness_symbol: HarnessSymbol,
+    /// Backend solver.
+    pub solver: KaniSolver,
+    /// Loop unwind.
+    pub unwind: u32,
+    /// Exact backend options.
+    pub options: Vec<String>,
+}
+
+/// Generated V2 clause harness, sealed against caller edits before execution.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct KaniV2ClauseObligationHarness {
+    /// Execution identity.
+    pub identity: V2ClauseObligationIdentity,
+    /// Self-contained Rust source.
+    pub rust: Artifact,
+    /// Persisted identity record.
+    pub record: Artifact,
+    generated_identity: V2ClauseObligationIdentity,
+    generated_rust: Artifact,
+    generated_record: Artifact,
+}
+
+impl KaniV2ClauseObligationHarness {
+    /// Construct generator-owned sealed output.
+    pub(crate) fn generated(
+        identity: V2ClauseObligationIdentity,
+        rust: Artifact,
+        record: Artifact,
+    ) -> Self {
+        Self {
+            generated_identity: identity.clone(),
+            generated_rust: rust.clone(),
+            generated_record: record.clone(),
+            identity,
+            rust,
+            record,
+        }
+    }
+
+    /// Whether public fields retain their generator-owned values.
+    pub(crate) fn has_valid_provenance(&self) -> bool {
+        self.identity == self.generated_identity
+            && self.rust == self.generated_rust
+            && self.record == self.generated_record
+    }
 }
 
 /// One symbolic scalar argument of a rendered harness. Integer claims use checked `i64`

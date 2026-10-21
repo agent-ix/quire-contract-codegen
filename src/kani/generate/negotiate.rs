@@ -85,6 +85,9 @@ use crate::{
         derive_domain, lower_scalar_claim, render_scalar, scalar_stem, unsatisfiable,
         LoweredScalarClaim, ScalarLoweringRefusal,
     },
+    kani::generate::v2_clause::{
+        lower as lower_v2_clause, render_clause as render_v2_clause, LoweredV2Clause,
+    },
     kani::identity::{
         EmbeddedOracle, KaniObligationHarness, KaniObligationIdentity, ObligationKind,
         StateFrameHarness,
@@ -115,6 +118,7 @@ pub fn negotiate_kani_obligations(
     let mut state_frame_harnesses = Vec::new();
     let mut collection_harnesses: Vec<crate::kani::identity::KaniCollectionObligationHarness> =
         Vec::new();
+    let mut v2_clause_harnesses = Vec::new();
     for (index, state) in states.into_iter().enumerate() {
         let disposition = if rejected {
             state.outcome.disposition_without_harness(request)
@@ -134,6 +138,16 @@ pub fn negotiate_kani_obligations(
                     Ok(harness) => {
                         let symbol = harness.identity.harness_symbol.clone();
                         scalar_harnesses.push(harness);
+                        ObligationDisposition::Supported {
+                            harness_symbol: symbol,
+                        }
+                    }
+                    Err(reason) => ObligationDisposition::Unsupported { reason },
+                },
+                Outcome::LoweredV2Clause(lowered) => match render_v2_clause(request, &lowered) {
+                    Ok(harness) => {
+                        let symbol = harness.identity.harness_symbol.clone();
+                        v2_clause_harnesses.push(harness);
                         ObligationDisposition::Supported {
                             harness_symbol: symbol,
                         }
@@ -195,6 +209,7 @@ pub fn negotiate_kani_obligations(
             scalar_harnesses,
             state_frame_harnesses,
             collection_harnesses,
+            v2_clause_harnesses,
         }
     })
 }
@@ -252,12 +267,17 @@ enum ItemIdentity {
         function: CheckedNodeId,
         quantifier: CheckedNodeId,
     },
+    V2Clause {
+        package: String,
+        clause: CheckedNodeId,
+    },
 }
 
 enum Outcome<'a> {
     Lowered(Box<LoweredClause<'a>>),
     LoweredScalar(Box<LoweredScalarClaim>),
     LoweredCollection(Box<LoweredCollectionClaim>),
+    LoweredV2Clause(Box<LoweredV2Clause>),
     /// A `StateFrame` item that yielded its harness.
     StateFrame(Box<StateFrameHarness>),
     /// A `StateFrame` item the engine refused. The refusal is held, not its record, so the item
@@ -280,6 +300,7 @@ impl Outcome<'_> {
             Self::Lowered(_)
             | Self::LoweredScalar(_)
             | Self::LoweredCollection(_)
+            | Self::LoweredV2Clause(_)
             | Self::StateFrame(_)
             | Self::RequiresBound(_)
             | Self::Unsupported(_) => false,
@@ -295,6 +316,10 @@ impl Outcome<'_> {
             Self::Lowered(lowered) => supported_without_harness(&lowered.symbols.harness),
             Self::LoweredScalar(lowered) => supported_without_harness(&lowered.harness_symbol),
             Self::LoweredCollection(lowered) => match render_collection(request, &lowered) {
+                Ok(harness) => supported_without_harness(harness.identity.harness_symbol.as_str()),
+                Err(reason) => ObligationDisposition::Unsupported { reason },
+            },
+            Self::LoweredV2Clause(lowered) => match render_v2_clause(request, &lowered) {
                 Ok(harness) => supported_without_harness(harness.identity.harness_symbol.as_str()),
                 Err(reason) => ObligationDisposition::Unsupported { reason },
             },
@@ -331,6 +356,7 @@ fn classify<'a>(
     ceilings: crate::kani::identity::ProofCeilings,
 ) -> ItemState<'a> {
     match *item {
+        ObligationItem::V2Clause { package, clause } => classify_v2_clause(package, clause),
         ObligationItem::BoundClause { package, clause } => classify_clause(package, clause),
         ObligationItem::ScalarClaim {
             package,
@@ -363,6 +389,67 @@ fn classify<'a>(
             },
             role,
         ),
+    }
+}
+
+fn classify_v2_clause<'a>(
+    package: &'a CheckedPackageV2,
+    clause: &'a CheckedNodeId,
+) -> ItemState<'a> {
+    let graph_node = package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| &node.node_id == clause);
+    let kind = graph_node
+        .and_then(|node| {
+            node.body
+                .get("operation")?
+                .get("member")?
+                .get("clause")?
+                .as_str()
+        })
+        .and_then(|name| match name {
+            "precondition" => Some(ObligationKind::Precondition),
+            "postcondition" => Some(ObligationKind::Postcondition),
+            "invariant" => Some(ObligationKind::Invariant),
+            _ => None,
+        });
+    let outcome = match graph_node {
+        None => Outcome::Invalid(InvalidObligationItem::UnknownNode),
+        Some(node) if &*node.node_tag != "state" || &*node.semantic_form != "state_clause" => {
+            Outcome::Unsupported(UnsupportedObligation::UnknownNodeKind {
+                node_id: clause.clone(),
+                node_tag: node.node_tag.to_string(),
+                semantic_form: node.semantic_form.to_string(),
+            })
+        }
+        Some(_) if kind != Some(ObligationKind::Precondition) => {
+            Outcome::Unsupported(UnsupportedObligation::V2ClauseConditionNotRendered {
+                node_id: clause.clone(),
+            })
+        }
+        Some(_) => match lower_v2_clause(package, clause) {
+            Ok(lowered) => Outcome::LoweredV2Clause(Box::new(lowered)),
+            Err(reason) => Outcome::Unsupported(reason),
+        },
+    };
+    ItemState {
+        kind,
+        subject: ObligationSubject::CheckedNode {
+            node_id: clause.clone(),
+            source_map: package
+                .source_map()
+                .iter()
+                .filter(|entry| &entry.node_id == clause)
+                .cloned()
+                .collect(),
+        },
+        identity: Some(ItemIdentity::V2Clause {
+            package: package.package_id().digest.to_string(),
+            clause: clause.clone(),
+        }),
+        outcome,
     }
 }
 
@@ -755,6 +842,7 @@ pub(crate) fn classify_scalar_form(
         Outcome::Invalid(refusal) => ScalarFormAssessment::Invalid(refusal),
         Outcome::Lowered(_)
         | Outcome::LoweredCollection(_)
+        | Outcome::LoweredV2Clause(_)
         | Outcome::StateFrame(_)
         | Outcome::StateFrameRefused(_) => {
             ScalarFormAssessment::Invalid(InvalidObligationItem::UnknownNode)

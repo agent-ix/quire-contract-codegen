@@ -1479,6 +1479,7 @@ fn tc_025_a_quantity_conversion_claim_is_unrendered_with_no_harness() {
         scalar_harnesses,
         state_frame_harnesses,
         collection_harnesses,
+        v2_clause_harnesses,
     } = negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap()
     else {
         panic!("a refused claim settles per item");
@@ -1488,6 +1489,7 @@ fn tc_025_a_quantity_conversion_claim_is_unrendered_with_no_harness() {
     assert!(scalar_harnesses.is_empty(), "scalar harnesses");
     assert!(state_frame_harnesses.is_empty(), "state-frame harnesses");
     assert!(collection_harnesses.is_empty(), "collection harnesses");
+    assert!(v2_clause_harnesses.is_empty(), "V2 clause harnesses");
     // Control: the same negotiation over a supported claim does populate `scalar_harnesses`, so the
     // empty vectors above are a measured absence, not a vacuous one.
     let (control_package, control_claims, control_ids) = scalar_package();

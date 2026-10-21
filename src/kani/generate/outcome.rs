@@ -15,7 +15,7 @@ use crate::{
     core::identity::HarnessSymbol,
     kani::identity::{
         KaniCollectionObligationHarness, KaniObligationHarness, KaniScalarObligationHarness,
-        ObligationKind, StateFrameHarness,
+        KaniV2ClauseObligationHarness, ObligationKind, StateFrameHarness,
     },
     oracle::claim::{ClaimMap, UpstreamBlocker},
     oracle::scalar::{ClaimDerivationRefusal, ExactScalarClaim, ExactScalarRefusal},
@@ -51,6 +51,13 @@ impl StateFrameRole {
 /// One item to negotiate.
 #[derive(Clone, Copy, Debug)]
 pub enum ObligationItem<'a> {
+    /// One admitted V2 state clause, selected by its checked node identity.
+    V2Clause {
+        /// The admitted package.
+        package: &'a CheckedPackageV2,
+        /// The selected state clause.
+        clause: &'a CheckedNodeId,
+    },
     /// One role of one `postcondition` `state_clause` of an admitted package. The inputs are
     /// those of [`StateFrameRequest`](crate::kani::generate::frame::StateFrameRequest), and the
     /// request's unwind bound applies. The harness calls the item's own `subject_path`; the
@@ -179,6 +186,11 @@ pub enum DerivedDomain {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(tag = "code", rename_all = "snake_case")]
 pub enum UnsupportedObligation {
+    /// This V2 clause cannot be represented by the bounded clause renderer.
+    V2ClauseConditionNotRendered {
+        /// Selected clause node.
+        node_id: CheckedNodeId,
+    },
     /// Assertion and case clauses are not contract obligations.
     ClauseKindNotObligation {
         /// The clause kind.
@@ -518,6 +530,8 @@ pub enum KaniObligationOutcome {
         state_frame_harnesses: Vec<StateFrameHarness>,
         /// Admitted V2 collection claim harnesses, in request order.
         collection_harnesses: Vec<KaniCollectionObligationHarness>,
+        /// Admitted V2 clause harnesses in request order.
+        v2_clause_harnesses: Vec<KaniV2ClauseObligationHarness>,
     },
     /// At least one item was invalid; no harness bytes are returned.
     Rejected {
