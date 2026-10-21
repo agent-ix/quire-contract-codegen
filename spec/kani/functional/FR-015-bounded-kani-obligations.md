@@ -73,7 +73,14 @@ emitted text. When a family renders through `HarnessSpec`, its constructor refus
 Current interim ownership (IR-329): the bounded-profile classifier, the two
 retained finite-input semantic-family lowerers (collection and graph) and the
 bounded-corpus emitter are auxiliary operations of this Kani generator, governed
-today by FR-015-AC-82 to FR-015-AC-94. The arithmetic retirement slice
+today by FR-015-AC-82 to FR-015-AC-94. Planned (IR-615): remove the legacy
+profile `Inconclusive` disposition: profile selection cannot establish the run-only
+vacuity classification governed by
+[Contract IR FR-030](ix://agent-ix/quire-contract-ir/FR-030). This cleanup does
+not complete the `unsupported` matrix entry, capability-kind warning and
+no-artifact negotiation behavior required by
+[Contract IR FR-029](ix://agent-ix/quire-contract-ir/FR-029), AC-2;
+that integration remains planned. The arithmetic retirement slice
 FR-015-AC-109 is implemented; the remaining step 4g retirement slices
 FR-015-AC-110 (collection) and FR-015-AC-111 (graph and the whole corpus API)
 remain planned, with FR-015-AC-95 as their end state.
@@ -792,7 +799,7 @@ families it names, each of which is owed a shadow or a production harness of its
 | FR-015-AC-79 | PLANNED (IR-624), IR-628 accessor merged; CG dependency update and implementation pending. From the package QSL emits for the twin's unit, both roles of each clause (`BalanceNeverDrops`, `AuditNeverDrops`) are generated; each identity's `state_fields` equals the request's list in its order, its `domains` equal the accessor ranges of FR-015-AC-77, and its `scope.anchor` and `scope.frame` equal the ids `qsl_replay::call_site` names, asserted before replay. The accessor's ascending-name order does not reorder `state_fields`. A request naming a field absent from the accessor is refused; one omitting the clause's or a granted field is refused as FR-015-AC-29 states. | Test (TC-025) |
 | FR-015-AC-80 | PLANNED (IR-624), IR-628 accessor merged; CG dependency update and implementation pending. With the installed backend, the cases of FR-015-AC-30 and FR-015-AC-31 run over harnesses generated from the package QSL emits: the healthy subject verifies, the subject mutated to debit is falsified naming the postcondition, a granted write verifies and a write to an ungranted field is falsified naming that field. | Test (TC-025) |
 | FR-015-AC-81 | PLANNED (IR-624), IR-628 accessor merged; CG dependency update and implementation pending. A present listed model field with `member_type()` of `None`, a non-`IntRange` variant, or `IntRange` outside `i64` is recorded as unranged with `TypeNotRange` in `StateFrameIdentity` and its persisted record, even when no read names it; a present unread `IntRange` within `i64` is recorded in `domains` and is absent from the unranged list. Equal inputs produce byte-identical records; a record naming a field twice is invalid. The model declaration path records no `NoRead` reason. QSL-emission gaps for `None` and out-of-`i64` types are exercised by an admitted QSL-emitted graph with selected-model-document override and recomputed digests. | Test (TC-025) |
-| FR-015-AC-82 | Until FR-015-AC-111 deletes the bounded-profile classifier, a request for distinct named constructs returns one `CapabilityEntry` per requested construct in request order, preserving each selected profile disposition (`Supported`, `Refused` or `Inconclusive`). | Test (TC-023) |
+| FR-015-AC-82 | Until FR-015-AC-111 deletes the bounded-profile classifier, a request for distinct named constructs returns one `CapabilityEntry` per requested construct in request order, preserving each admitted `Supported` module or `Refused` cause code exactly. The Contract IR profile reader rejects the removed `inconclusive` disposition rather than admitting it; no profile disposition or profile-supplied code becomes an `Inconclusive` run outcome or asserts proof vacuity. | Test |
 | FR-015-AC-83 | Until FR-015-AC-111 deletes the bounded-profile classifier, an empty, duplicate or absent construct is a typed `KaniOutcome` refusal rather than a partial disposition census. | Test (TC-023) |
 | FR-015-AC-84 | Until the arithmetic slice (FR-015-AC-109) deletes the finite-input arithmetic lowerer, a profile/dispatch-admitted add, subtract, multiply, divide or remainder returns the exact checked `i128` result only inside the request's inclusive result range. | Test (TC-023) |
 | FR-015-AC-85 | Until the arithmetic slice (FR-015-AC-109) deletes the finite-input arithmetic lowerer, an inverted result range is `InvalidInput`; zero division, checked overflow and a result outside the range are typed refusals, with no arithmetic result or generated artifact. | Test (TC-023) |
