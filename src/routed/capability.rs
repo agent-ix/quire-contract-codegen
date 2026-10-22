@@ -35,6 +35,58 @@ pub(crate) fn take_package_classifier_indices() -> Vec<usize> {
     PACKAGE_CLASSIFIER_INDICES.with(|indices| std::mem::take(&mut *indices.borrow_mut()))
 }
 
+#[cfg(test)]
+#[allow(clippy::duplicate_mod)] // Reuse the admitted scalar corpus in this crate's unit test binary.
+#[path = "../../tests/exact_scalar_support/package.rs"]
+mod exact_scalar_fixture;
+
+#[cfg(test)]
+mod scalar_cache_tests {
+    use super::{exact_scalar_fixture, CapabilityLookups, KaniFormFamily};
+    use ix_trace_rs::trace;
+    use std::collections::{BTreeMap, BTreeSet};
+
+    /// Each distinct target keeps its own derived family, independent of lookup order.
+    #[trace("TC-030", "FR-019-AC-25")]
+    #[test]
+    fn two_scalar_families_share_one_package_walk_without_swapping_identity() {
+        use exact_scalar_fixture::{
+            code_id, derivation_package, DERIVE_BOOLEAN_AND, DERIVE_INTEGER_GT,
+        };
+
+        let (package, ids) = derivation_package().admit_resolved();
+        let boolean = ids.resolve(&code_id(DERIVE_BOOLEAN_AND));
+        let integer = ids.resolve(&code_id(DERIVE_INTEGER_GT));
+        let targets = BTreeSet::from([boolean.clone(), integer.clone()]);
+        for order in [
+            [
+                (&boolean, KaniFormFamily::Boolean),
+                (&integer, KaniFormFamily::Integer),
+            ],
+            [
+                (&integer, KaniFormFamily::Integer),
+                (&boolean, KaniFormFamily::Boolean),
+            ],
+        ] {
+            let mut lookups = CapabilityLookups {
+                scalar: crate::kani::generate::negotiate::ScalarFormLookups::new(),
+                scalar_targets: BTreeMap::from([(package.package_id().clone(), targets.clone())]),
+                scalar_families: BTreeMap::new(),
+                functions: BTreeMap::new(),
+            };
+            let _ = crate::oracle::scalar::take_scalar_derive_graph_visits();
+            for (node_id, expected) in order {
+                assert_eq!(lookups.scalar_family(&package, node_id), Some(expected));
+            }
+            assert_eq!(
+                crate::oracle::scalar::take_scalar_derive_graph_visits(),
+                package.graph().nodes.len(),
+                "both exact targets must share one scalar graph walk"
+            );
+        }
+    }
+}
+
 struct CapabilityLookups<'a> {
     scalar: crate::kani::generate::negotiate::ScalarFormLookups<'a>,
     scalar_targets: BTreeMap<CheckedSemanticId, BTreeSet<CheckedNodeId>>,
