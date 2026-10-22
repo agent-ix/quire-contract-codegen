@@ -85,7 +85,7 @@ impl<'a> CapabilityLookups<'a> {
                     .into_iter()
                     .flat_map(|targets| targets.iter().cloned())
                     .collect::<Vec<_>>();
-                crate::oracle::scalar::derive_exact_scalar_items(package, &node_ids)
+                crate::oracle::scalar::derive_exact_scalar_items_independent(package, &node_ids)
                     .into_iter()
                     .zip(node_ids)
                     .map(|(result, id)| (id, result.ok().map(scalar_family_from_item)))
