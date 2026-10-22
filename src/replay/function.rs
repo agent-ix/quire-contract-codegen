@@ -1373,8 +1373,9 @@ mod tests {
     #[test]
     fn only_a_reproduced_violation_reproduces() {
         use WitnessSettlement::{Inconclusive, ReproducedWithEvaluatedWitness as Reproduced};
+        let category: quire_semantic_value::catalog::Category = Category::Violation;
         assert_eq!(
-            verdict_of(Reproduced, Category::Violation, None),
+            verdict_of(Reproduced, category, None),
             ReplayVerdict::Reproduced
         );
         for (settlement, category) in [
