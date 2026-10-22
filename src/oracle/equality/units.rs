@@ -58,7 +58,7 @@ function keep using v(a: Quantity<m>): Boolean pure { true }
         assert_ne!(m.id(), km.id());
         assert!(m.converts_to(km));
         assert!(original.units().get(m.id()).is_none());
-        let metre = Quantity::new(Rational::from_integer(Integer::from(1)), m.id());
+        let metre = Quantity::new(Rational::from_integer(Integer::from(1_i64)), m.id());
         assert!(original.units().resolve(&metre).is_none());
 
         let prepared = attach_owner_units(original, Some(context));
@@ -69,7 +69,7 @@ function keep using v(a: Quantity<m>): Boolean pure { true }
                 .expect("lookup uses the owner's node, not a fabricated unit id");
             assert_eq!(looked_up.id(), unit.id());
             assert_eq!(prepared.units().get(unit.id()), Some(unit.quantity_unit()));
-            let quantity = Quantity::new(Rational::from_integer(Integer::from(1)), unit.id());
+            let quantity = Quantity::new(Rational::from_integer(Integer::from(1_i64)), unit.id());
             let resolved = prepared
                 .units()
                 .resolve(&quantity)
