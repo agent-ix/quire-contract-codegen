@@ -34,7 +34,7 @@ quire-contract-runtime = { version = "=0.1.0", git = "https://github.com/agent-i
 # qsl-replay is the only QSL crate this repository depends on (QSL arch-lint T12-A); the
 # replay adapter in src/replay/function.rs builds its requests from `call_site` and the crate's own
 # re-exports and goes through its `replay` entry. Cargo.lock records the selected public source.
-qsl-replay = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-spec-language", rev = "7d67b02141b2a4e1f9deeea60f6cce0502834c83" }
+qsl-replay = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-spec-language", branch = "main" }
 # The one RFC 8785 encoder (ADR-013 section 2) the obligation identity is encoded by. CG calls it
 # from `core::canonical` only (AD-004); it tracks `main` like the other first-party crates.
 quire-canonical = { version = "=0.3.0", git = "https://github.com/agent-ix/quire-canonical", branch = "main", features = ["serde_json"] }

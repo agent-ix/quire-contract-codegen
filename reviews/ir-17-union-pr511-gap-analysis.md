@@ -1,0 +1,977 @@
+---
+id: SR-15361
+title: IR-17 Union PR511 gap-analysis
+type: SpecReview
+analysis: gap-analysis
+scope: agent-ix/quire-contract-codegen; IR-17; spec/, src/, tests/
+review_set: subset
+---
+
+## Summary
+
+Frozen candidate d93e5189e2b8c78a0c63bb4754a2931f17a05cd3, PR511, ticket IR-17. Reviewed only the implementation delta from origin/code/ir17-qsl-current-migration. No source, test, specification, dependency, execution-owner or branch edit was made. No applicable AssuranceProfile exists under spec/. Specification review is already in PR510; no new spec diff exists here.
+
+No reviewer Cargo/build/test/backend/native-generated execution, namespace creation, probe, bwrap or unshare ran. Read-only quoin/quire computation, diff checks and the lockfile one-copy AWK check ran. Existing author logs were read as supplied evidence, with their limited host scope; they do not establish generated-crate or Kani acceptance. Aggregate gates are expressly forbidden in this phase, not silently omitted as passed.
+
+## Verdict
+
+FAIL for repository completeness; PASS for the incremental PR511 trace/gap comparison. The candidate has 897 criteria: 541 tagged, 288 untagged, 16 tagged-by-ignored-test and 52 method-without-symbol. The archived exact owned baseline has 540 tagged, 289 untagged, 16 ignored-only and 52 method-without-symbol. The only changed status is FR-018-AC-44: untagged -> tagged, with four real host controls. No new untagged criterion or source gap was introduced.
+
+## Findings
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-001 | high | FR-005-AC-3 remains untagged in the computed repository matrix (inherited SR-15352/FND-001; no PR511 regression). | spec/core/functional/FR-005-cli-conformance.md:49 |
+
+## Coverage
+
+FND-001 records the concrete inherited FR-005-AC-3 gap without creating a new remediation ticket. All 288 current untagged IDs are already present in the existing SR-15352 / reviews/ir-954-gap-analysis.md 320-finding inventory with explicit outcomes; matrix-comparison.json retains their exact list and comparison. That inventory remains the remediation/disposition owner. Its 16 current ignored-only rows are recorded as lane classification, not newly declared defects: dedicated Kani controls intentionally require their named lane, and this review claims no execution acceptance. Existing inventory outcomes are not rewritten by this pass. The lead must explicitly retain/disposition inherited scope before a scoped merge; repository FAIL is not a claim that this new Union slice failed.
+
+Full repository reverse inventory: 96 Rust source files and 90 Rust test files; public function/type/method surface retained in surface.txt, grouped against the master subsystem registry (core/publication, strategy/harness/bounds, oracle, Kani generation/run/output, routed/capability, replay and evidence) and its explicit interim-source ownership table. The incremental surface is existing FR018 equality generation plus private Union closure/reconstruction helpers, owned by AC44. Whole-tree TODO/todo!/unimplemented!/FIXME scan found no production stub; the 9 textual test hits are forbidden-token controls/parser adversaries. No new uncovered public entry point, placeholder implementation, test stub or coverage inflation found. This mechanical ownership/stub review does not claim full individual-symbol semantic correctness.
+
+Reconciliation: quoin matrix 0.28.4 / quire 0.36.2 (engine 0.50.2); baseline quire matrix from git archive of the exact base's spec/src/tests, never another branch's working state. All criterion IDs/statements were mechanically examined. All quoin rows report no run evidence, recorded once; no execution evidence requested or inferred. Coverage has 5 untracked test tags and 10 diagnostics; baseline comparison is retained in coverage-comparison.json. Uncatalogued verification-method and empty inspection-archetype diagnostics limit what the computed model can claim. No handwritten matrix/status row was treated as execution evidence. Deep semantic gap analysis skipped (not opted in); mandatory code-review oracle checks still ran by inspection. Plan completion: not assessed.
+
+## Examined scope
+
+```yaml
+clean: false
+scope:
+  - {id: FR-005-AC-1, path: &p0 "spec/core/functional/FR-005-cli-conformance.md", role: examined, excerpt: "Failed generation leaves no partial publ"}
+  - {id: FR-005-AC-2, path: *p0, role: examined, excerpt: "Supported platforms reproduce byte-ident"}
+  - {id: FR-005-AC-3, path: *p0, role: examined, excerpt: "For every shared-corpus case on which tw"}
+  - {id: FR-005-AC-4, path: *p0, role: examined, excerpt: "Executable, proptest, Kani, and coverage"}
+  - {id: FR-005-AC-5, path: *p0, role: examined, excerpt: "A bundle naming more than 4096 artifacts"}
+  - {id: FR-005-AC-6, path: *p0, role: examined, excerpt: "When an artifact path is absolute, or co"}
+  - {id: FR-005-AC-7, path: *p0, role: examined, excerpt: "When publication fails before the destin"}
+  - {id: FR-005-AC-8, path: *p0, role: examined, excerpt: "When removal of the replaced bundle's ba"}
+  - {id: FR-005-AC-9, path: *p0, role: examined, excerpt: "When replacement fails and restoring the"}
+  - {id: FR-005-AC-10, path: *p0, role: examined, excerpt: "When two artifacts of one bundle share t"}
+  - {id: FR-037-AC-1, path: &p1 "spec/core/functional/FR-037-fixture-identity.md", role: examined, excerpt: "Both `tests/exact_scalar_support/package"}
+  - {id: FR-037-AC-2, path: *p1, role: examined, excerpt: "A fixture containing an application in a"}
+  - {id: FR-037-AC-3, path: *p1, role: examined, excerpt: "A canonical enum-member fixture identity"}
+  - {id: FR-037-AC-4, path: *p1, role: examined, excerpt: "Positive exact-scalar and composite-equa"}
+  - {id: FR-037-AC-5, path: *p1, role: examined, excerpt: "The consumer change leaves deterministic"}
+  - {id: FR-038-AC-1, path: &p2 "spec/core/functional/FR-038-typed-operator-catalog.md", role: examined, excerpt: "A source inventory compares every identi"}
+  - {id: FR-038-AC-2, path: *p2, role: examined, excerpt: "The typed source distinguishes implement"}
+  - {id: FR-038-AC-3, path: *p2, role: examined, excerpt: "Focused V2 oracle, scalar Kani and state"}
+  - {id: FR-038-AC-4, path: *p2, role: examined, excerpt: "The four scalar Kani harnesses still com"}
+  - {id: FR-038-AC-5, path: *p2, role: examined, excerpt: "The V1 `strategy/bound` relation evaluat"}
+  - {id: FR-038-AC-6, path: *p2, role: examined, excerpt: "While the V1 `strategy/bound` relation e"}
+  - {id: FR-039-AC-1, path: &p3 "spec/core/functional/FR-039-contract-package-consumption.md", role: examined, excerpt: "Each of two genuine QSL-admitted source "}
+  - {id: FR-039-AC-2, path: *p3, role: examined, excerpt: "A mixed request with a representable cla"}
+  - {id: FR-039-AC-3, path: *p3, role: examined, excerpt: "A selected dependency function reference"}
+  - {id: FR-039-AC-4, path: *p3, role: examined, excerpt: "For a genuinely admitted FR-330 package,"}
+  - {id: FR-039-AC-5, path: *p3, role: examined, excerpt: "A malformed or noncanonical FR-330 wire,"}
+  - {id: FR-039-AC-6, path: *p3, role: examined, excerpt: "An item whose admitted package accountin"}
+  - {id: FR-039-AC-7, path: *p3, role: examined, excerpt: "Generated scalar, composite equality and"}
+  - {id: FR-039-AC-8, path: *p3, role: examined, excerpt: "For each admitted `lowered` bound driver"}
+  - {id: FR-039-AC-9, path: *p3, role: examined, excerpt: "In an admitted package with a bound driv"}
+  - {id: FR-039-AC-10, path: *p3, role: examined, excerpt: "Given a bound driver item followed by an"}
+  - {id: FR-043-AC-1, path: &p4 "spec/core/functional/FR-043-owned-lock-coherence-gate.md", role: examined, excerpt: "The normal `make deny` recipe invokes th"}
+  - {id: FR-043-AC-2, path: *p4, role: examined, excerpt: "Through the same normal `make deny` reci"}
+  - {id: FR-043-AC-3, path: *p4, role: examined, excerpt: "A missing checker executable, malformed "}
+  - {id: FR-043-AC-4, path: *p4, role: examined, excerpt: "The committed `scripts/check_one_copy.aw"}
+  - {id: FR-043-AC-5, path: *p4, role: examined, excerpt: "Adoption leaves the committed Cargo mani"}
+  - {id: NFR-001-AC-1, path: &p5 "spec/core/non-functional/NFR-001-reproducible-atomic.md", role: examined, excerpt: "Identical inputs and configuration produ"}
+  - {id: NFR-001-AC-2, path: *p5, role: examined, excerpt: "An injected generation failure leaves no"}
+  - {id: NFR-001-AC-3, path: *p5, role: examined, excerpt: "Generation does not modify developer-own"}
+  - {id: NFR-001-M-1, path: *p5, role: examined, excerpt: "Byte differences between repeated genera"}
+  - {id: NFR-001-M-2, path: *p5, role: examined, excerpt: "Partial published bundles after injected"}
+  - {id: NFR-001-M-3, path: *p5, role: examined, excerpt: "Developer-owned files modified"}
+  - {id: NFR-002-AC-1, path: &p6 "spec/core/non-functional/NFR-002-provenance-boundary.md", role: examined, excerpt: "Every generated Rust file in a family na"}
+  - {id: NFR-002-AC-2, path: *p6, role: examined, excerpt: "Every generated Rust file carries the `M"}
+  - {id: NFR-002-AC-3, path: *p6, role: examined, excerpt: "Unsupported and inconclusive states rema"}
+  - {id: NFR-002-AC-4, path: *p6, role: examined, excerpt: "Generated output makes no project-specif"}
+  - {id: NFR-002-M-1, path: *p6, role: examined, excerpt: "Generated Rust files missing generator o"}
+  - {id: NFR-002-M-2, path: *p6, role: examined, excerpt: "Generated files missing dual-license SPD"}
+  - {id: NFR-002-M-3, path: *p6, role: examined, excerpt: "Silent unsupported/inconclusive states"}
+  - {id: NFR-005-AC-1, path: &p7 "spec/core/non-functional/NFR-005-no-generation-panics.md", role: examined, excerpt: "Every `.rs` file under `src/`, except a "}
+  - {id: NFR-005-AC-2, path: *p7, role: examined, excerpt: "`lower_scalar_claim` returns `Err(Scalar"}
+  - {id: NFR-005-AC-3, path: *p7, role: examined, excerpt: "`ItemSettlement::warning` returns `None`"}
+  - {id: NFR-005-AC-4, path: *p7, role: examined, excerpt: "With a coverage export supplied, `observ"}
+  - {id: NFR-005-AC-5, path: *p7, role: examined, excerpt: "The step of `generate_kani` that pairs F"}
+  - {id: NFR-005-AC-6, path: *p7, role: examined, excerpt: "`rewrite_duplicate_position`, a function"}
+  - {id: NFR-005-AC-7, path: *p7, role: examined, excerpt: "`observe_clause`, given a map of zero re"}
+  - {id: NFR-005-AC-8, path: *p7, role: examined, excerpt: "The scan locates the body of `generate_k"}
+  - {id: NFR-005-M-1, path: *p7, role: examined, excerpt: "Panic tokens in the non-test, literal-fr"}
+  - {id: NFR-005-M-2, path: *p7, role: examined, excerpt: "Measured sites a test can reach that abo"}
+  - {id: NFR-005-M-3, path: *p7, role: examined, excerpt: "Index, slice and unchecked subtraction e"}
+  - {id: FR-004-AC-1, path: &p8 "spec/evidence/functional/FR-004-vacuity-evidence.md", role: examined, excerpt: "An evaluated implication whose consequen"}
+  - {id: FR-004-AC-2, path: *p8, role: examined, excerpt: "A clause whose oracle-evaluation region "}
+  - {id: FR-004-AC-3, path: *p8, role: examined, excerpt: "The four measured clause classifications"}
+  - {id: FR-004-AC-4, path: *p8, role: examined, excerpt: "Successful analysis verifies the bound p"}
+  - {id: FR-004-AC-5, path: *p8, role: examined, excerpt: "Malformed, summary-only, identity-mismat"}
+  - {id: FR-004-AC-6, path: *p8, role: examined, excerpt: "Campaign counts and test outcome remain "}
+  - {id: FR-004-AC-7, path: *p8, role: examined, excerpt: "Removing an expected clause, consequent,"}
+  - {id: FR-004-AC-8, path: *p8, role: examined, excerpt: "Adverse coverage and non-success native "}
+  - {id: FR-004-AC-9, path: *p8, role: examined, excerpt: "Complete bound observations without a na"}
+  - {id: FR-004-AC-10, path: *p8, role: examined, excerpt: "PLANNED. CG binds coverage inside the sa"}
+  - {id: FR-004-AC-11, path: *p8, role: examined, excerpt: "PLANNED. The consuming report retains va"}
+  - {id: FR-004-AC-12, path: *p8, role: examined, excerpt: "PLANNED. CG consumes QSL's typed strict-"}
+  - {id: FR-004-AC-13, path: *p8, role: examined, excerpt: "PLANNED. QSL `run_clause` success and a "}
+  - {id: FR-004-AC-14, path: *p8, role: examined, excerpt: "PLANNED. Only CG's campaign runner const"}
+  - {id: FR-004-AC-15, path: *p8, role: examined, excerpt: "PLANNED. A controlled attempt to replace"}
+  - {id: FR-004-AC-16, path: *p8, role: examined, excerpt: "PLANNED (IR-815). The expected clause po"}
+  - {id: FR-004-AC-17, path: *p8, role: examined, excerpt: "PLANNED (IR-815). Source inspection show"}
+  - {id: FR-004-AC-18, path: *p8, role: examined, excerpt: "PLANNED (IR-815). A V2 clause whose gene"}
+  - {id: FR-004-AC-19, path: *p8, role: examined, excerpt: "PLANNED (IR-815). Over a V2 clause popul"}
+  - {id: FR-004-AC-20, path: *p8, role: examined, excerpt: "PLANNED (IR-815). Over a V2 clause popul"}
+  - {id: FR-004-AC-21, path: *p8, role: examined, excerpt: "PLANNED (IR-815). Over a V2 clause popul"}
+  - {id: FR-004-AC-22, path: *p8, role: examined, excerpt: "PLANNED (IR-815). Over a V2 clause popul"}
+  - {id: FR-004-AC-23, path: *p8, role: examined, excerpt: "PLANNED (IR-815). Over a V2 clause popul"}
+  - {id: FR-004-AC-24, path: *p8, role: examined, excerpt: "PLANNED (IR-815). Over a V2 clause popul"}
+  - {id: FR-036-AC-1, path: &p9 "spec/evidence/functional/FR-036-source-obligation-census.md", role: examined, excerpt: "A genuine typed fixture with criteria C1"}
+  - {id: FR-036-AC-2, path: *p9, role: examined, excerpt: "For the unchanged AC-1 fixture, omitting"}
+  - {id: FR-036-AC-3, path: *p9, role: examined, excerpt: "Capability facts preserve unsupported ca"}
+  - {id: FR-036-AC-4, path: *p9, role: examined, excerpt: "A matching executed production fact reta"}
+  - {id: FR-036-AC-5, path: *p9, role: examined, excerpt: "Shadow-only evidence, a narrower effecti"}
+  - {id: FR-036-AC-6, path: *p9, role: examined, excerpt: "A downstream consumer above CG and IR bo"}
+  - {id: FR-036-AC-7, path: *p9, role: examined, excerpt: "Missing/incomplete authoritative inputs,"}
+  - {id: FR-015-AC-1, path: &p10 "spec/kani/functional/FR-015-bounded-kani-obligations.md", role: examined, excerpt: "Pre, post, invariant and frame obligatio"}
+  - {id: FR-015-AC-2, path: *p10, role: examined, excerpt: "Every harness identity records its model"}
+  - {id: FR-015-AC-3, path: *p10, role: examined, excerpt: "An unbounded or non-finite obligation is"}
+  - {id: FR-015-AC-4, path: *p10, role: examined, excerpt: "No harness assumption excludes an undefi"}
+  - {id: FR-015-AC-5, path: *p10, role: examined, excerpt: "An obligation whose bounds are unsatisfi"}
+  - {id: FR-015-AC-6, path: *p10, role: examined, excerpt: "An obligation over an oracle whose opera"}
+  - {id: FR-015-AC-7, path: *p10, role: examined, excerpt: "Every generated harness contains exactly"}
+  - {id: FR-015-AC-8, path: *p10, role: examined, excerpt: "A postcondition or invariant harness emi"}
+  - {id: FR-015-AC-9, path: *p10, role: examined, excerpt: "Every harness identity records solver `c"}
+  - {id: FR-015-AC-10, path: *p10, role: examined, excerpt: "Regeneration from equal inputs is byte-i"}
+  - {id: FR-015-AC-11, path: *p10, role: examined, excerpt: "Every symbolic argument carries an inclu"}
+  - {id: FR-015-AC-12, path: *p10, role: examined, excerpt: "A request naming no items, more than 256"}
+  - {id: FR-015-AC-13, path: *p10, role: examined, excerpt: "An otherwise-supported obligation whose "}
+  - {id: FR-015-AC-14, path: *p10, role: examined, excerpt: "A scalar-claim item whose graph node car"}
+  - {id: FR-015-AC-15, path: *p10, role: examined, excerpt: "A scalar-claim item whose claim is a `No"}
+  - {id: FR-015-AC-16, path: *p10, role: examined, excerpt: "A scalar harness constrains a literal op"}
+  - {id: FR-015-AC-17, path: *p10, role: examined, excerpt: "A scalar claim whose literal operand doe"}
+  - {id: FR-015-AC-18, path: *p10, role: examined, excerpt: "A scalar claim whose operation over its "}
+  - {id: FR-015-AC-19, path: *p10, role: examined, excerpt: "A zero-input transition over one bounded"}
+  - {id: FR-015-AC-20, path: *p10, role: examined, excerpt: "A harness for a Boolean-connective or bo"}
+  - {id: FR-015-AC-21, path: *p10, role: examined, excerpt: "A precondition that reads a post-state v"}
+  - {id: FR-015-AC-22, path: *p10, role: examined, excerpt: "A declared proof-dependency census with "}
+  - {id: FR-015-AC-23, path: *p10, role: examined, excerpt: "Every requested item receives exactly on"}
+  - {id: FR-015-AC-24, path: *p10, role: examined, excerpt: "A falsifying in-domain assignment of a p"}
+  - {id: FR-015-AC-25, path: *p10, role: examined, excerpt: "A valid declared census is folded into t"}
+  - {id: FR-015-AC-26, path: *p10, role: examined, excerpt: "One `postcondition` `state_clause` of an"}
+  - {id: FR-015-AC-27, path: *p10, role: examined, excerpt: "The operation-contract harness assumes e"}
+  - {id: FR-015-AC-28, path: *p10, role: examined, excerpt: "The frame-effect harness takes the grant"}
+  - {id: FR-015-AC-29, path: *p10, role: examined, excerpt: "A state clause that is not a postconditi"}
+  - {id: FR-015-AC-30, path: *p10, role: examined, excerpt: "With the installed backend, the operatio"}
+  - {id: FR-015-AC-31, path: *p10, role: examined, excerpt: "With the installed backend, a frame-allo"}
+  - {id: FR-015-AC-32, path: *p10, role: examined, excerpt: "The forbidden frame counterexample, exec"}
+  - {id: FR-015-AC-33, path: *p10, role: examined, excerpt: "The frame-replay payload's anchor, frame"}
+  - {id: FR-015-AC-34, path: *p10, role: examined, excerpt: "The frame-replay envelope's `clause_node"}
+  - {id: FR-015-AC-35, path: *p10, role: examined, excerpt: "An operation the unit names no frame for"}
+  - {id: FR-015-AC-36, path: *p10, role: examined, excerpt: "`FrameReplay::replay` returns QSL's `rep"}
+  - {id: FR-015-AC-37, path: *p10, role: examined, excerpt: "A scalar function-application harness as"}
+  - {id: FR-015-AC-38, path: *p10, role: examined, excerpt: "A V2 clause claim naming a `state`/`stat"}
+  - {id: FR-015-AC-39, path: *p10, role: examined, excerpt: "A V2 clause harness draws one nondetermi"}
+  - {id: FR-015-AC-40, path: *p10, role: examined, excerpt: "A harness for a V2 clause whose conditio"}
+  - {id: FR-015-AC-41, path: *p10, role: examined, excerpt: "A V2 clause whose body holds integer ari"}
+  - {id: FR-015-AC-42, path: *p10, role: examined, excerpt: "A V2 clause body holding an operator the"}
+  - {id: FR-015-AC-43, path: *p10, role: examined, excerpt: "A V2 postcondition harness emits every `"}
+  - {id: FR-015-AC-44, path: *p10, role: examined, excerpt: "A census declared on a V2 clause claim w"}
+  - {id: FR-015-AC-45, path: *p10, role: examined, excerpt: "A valid census declared on a V2 clause c"}
+  - {id: FR-015-AC-46, path: *p10, role: examined, excerpt: "Every V2 clause harness contains exactly"}
+  - {id: FR-015-AC-47, path: *p10, role: examined, excerpt: "Regeneration of a V2 clause harness from"}
+  - {id: FR-015-AC-48, path: *p10, role: examined, excerpt: "The obligation identity of a V2 clause c"}
+  - {id: FR-015-AC-49, path: *p10, role: examined, excerpt: "A V2 invariant claim yields a harness th"}
+  - {id: FR-015-AC-50, path: *p10, role: examined, excerpt: "`negotiate` reports an obligation whose "}
+  - {id: FR-015-AC-51, path: *p10, role: examined, excerpt: "Until the final retirement slice (FR-015"}
+  - {id: FR-015-AC-52, path: *p10, role: examined, excerpt: "Until the final retirement slice (FR-015"}
+  - {id: FR-015-AC-53, path: *p10, role: examined, excerpt: "Each of the seven harness kinds the gene"}
+  - {id: FR-015-AC-54, path: *p10, role: examined, excerpt: "A V1 bundle harness (`generate_kani_bund"}
+  - {id: FR-015-AC-55, path: *p10, role: examined, excerpt: "While a family's corpus arm remains (del"}
+  - {id: FR-015-AC-56, path: *p10, role: examined, excerpt: "With the installed backend, a V1 bundle "}
+  - {id: FR-015-AC-57, path: *p10, role: examined, excerpt: "While its arm remains (FR-015-AC-109 to "}
+  - {id: FR-015-AC-58, path: *p10, role: examined, excerpt: "A test generates a harness through every"}
+  - {id: FR-015-AC-59, path: *p10, role: examined, excerpt: "A request of `StateFrame` items in which"}
+  - {id: FR-015-AC-60, path: *p10, role: examined, excerpt: "A `StateFrame` item that yields is recor"}
+  - {id: FR-015-AC-61, path: *p10, role: examined, excerpt: "A `StateFrame` item whose lowering is a "}
+  - {id: FR-015-AC-62, path: *p10, role: examined, excerpt: "A `StateFrame` item whose lowering is an"}
+  - {id: FR-015-AC-63, path: *p10, role: examined, excerpt: "A `StateFrame` item whose condition is a"}
+  - {id: FR-015-AC-64, path: *p10, role: examined, excerpt: "A `StateFrame` item with an unparsable s"}
+  - {id: FR-015-AC-65, path: *p10, role: examined, excerpt: "A request holding `StateFrame` items and"}
+  - {id: FR-015-AC-66, path: *p10, role: examined, excerpt: "A test builds every retained `StateFrame"}
+  - {id: FR-015-AC-67, path: *p10, role: examined, excerpt: "`generate_state_frame_obligations` refus"}
+  - {id: FR-015-AC-68, path: *p10, role: examined, excerpt: "A `StateFrame` request whose frame grant"}
+  - {id: FR-015-AC-69, path: *p10, role: examined, excerpt: "A composite-equality claim over operands"}
+  - {id: FR-015-AC-70, path: *p10, role: examined, excerpt: "The harness draws one nondeterministic v"}
+  - {id: FR-015-AC-71, path: *p10, role: examined, excerpt: "Over every drawn pair the harness assert"}
+  - {id: FR-015-AC-72, path: *p10, role: examined, excerpt: "The emitted shadow and harness, parsed, "}
+  - {id: FR-015-AC-73, path: *p10, role: examined, excerpt: "Each row of the unsupported-shape table "}
+  - {id: FR-015-AC-74, path: *p10, role: examined, excerpt: "With the installed backend, the harness "}
+  - {id: FR-015-AC-75, path: *p10, role: examined, excerpt: "With the installed backend each seeded m"}
+  - {id: FR-015-AC-76, path: *p10, role: examined, excerpt: "The identity of a composite-equality har"}
+  - {id: FR-015-AC-77, path: *p10, role: examined, excerpt: "PLANNED (IR-624), IR-628 accessor merged"}
+  - {id: FR-015-AC-78, path: *p10, role: examined, excerpt: "PLANNED (IR-624), IR-628 accessor merged"}
+  - {id: FR-015-AC-79, path: *p10, role: examined, excerpt: "PLANNED (IR-624), IR-628 accessor merged"}
+  - {id: FR-015-AC-80, path: *p10, role: examined, excerpt: "PLANNED (IR-624), IR-628 accessor merged"}
+  - {id: FR-015-AC-81, path: *p10, role: examined, excerpt: "PLANNED (IR-624), IR-628 accessor merged"}
+  - {id: FR-015-AC-82, path: *p10, role: examined, excerpt: "Until FR-015-AC-111 deletes the bounded-"}
+  - {id: FR-015-AC-83, path: *p10, role: examined, excerpt: "Until FR-015-AC-111 deletes the bounded-"}
+  - {id: FR-015-AC-84, path: *p10, role: examined, excerpt: "Until the arithmetic slice (FR-015-AC-10"}
+  - {id: FR-015-AC-85, path: *p10, role: examined, excerpt: "Until the arithmetic slice (FR-015-AC-10"}
+  - {id: FR-015-AC-86, path: *p10, role: examined, excerpt: "Until the graph slice (FR-015-AC-111) de"}
+  - {id: FR-015-AC-87, path: *p10, role: examined, excerpt: "Until the graph slice (FR-015-AC-111) de"}
+  - {id: FR-015-AC-88, path: *p10, role: examined, excerpt: "Until the collection slice (FR-015-AC-11"}
+  - {id: FR-015-AC-89, path: *p10, role: examined, excerpt: "Until the collection slice (FR-015-AC-11"}
+  - {id: FR-015-AC-90, path: *p10, role: examined, excerpt: "Until FR-015-AC-111 deletes the bounded-"}
+  - {id: FR-015-AC-91, path: *p10, role: examined, excerpt: "Until the final retirement slice (FR-015"}
+  - {id: FR-015-AC-92, path: *p10, role: examined, excerpt: "Until FR-015-AC-111 deletes the bounded-"}
+  - {id: FR-015-AC-93, path: *p10, role: examined, excerpt: "Until the final retirement slice (FR-015"}
+  - {id: FR-015-AC-94, path: *p10, role: examined, excerpt: "Until FR-015-AC-111 deletes the bounded-"}
+  - {id: FR-015-AC-95, path: *p10, role: examined, excerpt: "AD-004 step 4g retires the hand-built bo"}
+  - {id: FR-015-AC-96, path: *p10, role: examined, excerpt: "An admitted QSL V2 clause/function body "}
+  - {id: FR-015-AC-97, path: *p10, role: examined, excerpt: "For an admitted collection claim whose s"}
+  - {id: FR-015-AC-98, path: *p10, role: examined, excerpt: "A graph claim (one reachability applicat"}
+  - {id: FR-015-AC-99, path: *p10, role: examined, excerpt: "The collection harness asserts the admit"}
+  - {id: FR-015-AC-100, path: *p10, role: examined, excerpt: "For the collection family, changing the "}
+  - {id: FR-015-AC-101, path: *p10, role: examined, excerpt: "A request whose symbolic collection doma"}
+  - {id: FR-015-AC-102, path: *p10, role: examined, excerpt: "An admitted collection body claim is set"}
+  - {id: FR-015-AC-103, path: *p10, role: examined, excerpt: "Through `generate_routed`, `(x + 1) + 1`"}
+  - {id: FR-015-AC-104, path: *p10, role: examined, excerpt: "A plain-Integer parameter as any nested "}
+  - {id: FR-015-AC-105, path: *p10, role: examined, excerpt: "For a graph claim the harness draws an o"}
+  - {id: FR-015-AC-106, path: *p10, role: examined, excerpt: "The independent native oracle replays th"}
+  - {id: FR-015-AC-107, path: *p10, role: examined, excerpt: "Graph claims are located by `state_claus"}
+  - {id: FR-015-AC-108, path: *p10, role: examined, excerpt: "A graph claim settles by the disposition"}
+  - {id: FR-015-AC-109, path: *p10, role: examined, excerpt: "Implemented (IR-598 arithmetic slice onl"}
+  - {id: FR-015-AC-110, path: *p10, role: examined, excerpt: "PLANNED (IR-598 collection slice; gated "}
+  - {id: FR-015-AC-111, path: *p10, role: examined, excerpt: "PLANNED (IR-598 graph and final slice; g"}
+  - {id: FR-015-AC-112, path: *p10, role: examined, excerpt: "Implemented (IR-858, AD-004 step 4b). `H"}
+  - {id: FR-015-AC-113, path: *p10, role: examined, excerpt: "Implemented (IR-858). For every spec tha"}
+  - {id: FR-015-AC-114, path: *p10, role: examined, excerpt: "Implemented (IR-858). `render` of one sp"}
+  - {id: FR-015-AC-115, path: *p10, role: examined, excerpt: "Implemented (IR-858). After the scalar p"}
+  - {id: FR-015-AC-116, path: *p10, role: examined, excerpt: "Implemented (IR-858). `render` holds no "}
+  - {id: FR-015-AC-117, path: *p10, role: examined, excerpt: "Implemented (IR-858). With the installed"}
+  - {id: FR-015-AC-118, path: *p10, role: examined, excerpt: "For an admitted V2 scalar `implies` clai"}
+  - {id: FR-015-AC-119, path: *p10, role: examined, excerpt: "PLANNED (IR-917; depends on FR-015-AC-40"}
+  - {id: FR-015-AC-120, path: *p10, role: examined, excerpt: "PLANNED (IR-942; depends on QSL ADR-013 "}
+  - {id: FR-015-AC-121, path: *p10, role: examined, excerpt: "PLANNED (IR-942). A per-step `KaniObliga"}
+  - {id: FR-015-AC-122, path: *p10, role: examined, excerpt: "PLANNED (IR-942). A selected proof-eligi"}
+  - {id: FR-015-AC-123, path: *p10, role: examined, excerpt: "External public-consumer calls to `prepa"}
+  - {id: FR-015-AC-124, path: *p10, role: examined, excerpt: "After infallible-constructor adoption, e"}
+  - {id: FR-015-AC-125, path: *p10, role: examined, excerpt: "Authentic QSL-emitted, IR-admitted bound"}
+  - {id: FR-015-AC-126, path: *p10, role: examined, excerpt: "Genuine TC-027 healthy and bound mutant,"}
+  - {id: FR-015-AC-127, path: *p10, role: examined, excerpt: "End-to-end denied/cancelled admitted-nat"}
+  - {id: FR-015-CON-1, path: *p10, role: examined, excerpt: "Clause ABI construction SHALL check both"}
+  - {id: FR-015-CON-2, path: *p10, role: examined, excerpt: "Subject binding SHALL check both endpoin"}
+  - {id: FR-017-AC-2, path: &p11 "spec/kani/functional/FR-017-kani-execution-evidence.md", role: examined, excerpt: "An absent launcher is refused with a typ"}
+  - {id: FR-017-AC-4, path: *p11, role: examined, excerpt: "A run is verified only when the process "}
+  - {id: FR-017-AC-5, path: *p11, role: examined, excerpt: "A failed non-unwinding check with a conc"}
+  - {id: FR-017-AC-6, path: *p11, role: examined, excerpt: "The execution evidence of a single run c"}
+  - {id: FR-017-AC-7, path: *p11, role: examined, excerpt: "A crate whose library source does not co"}
+  - {id: FR-017-AC-11, path: *p11, role: examined, excerpt: "A routed FR-022/FR-014 exact-scalar harn"}
+  - {id: FR-017-AC-12, path: *p11, role: examined, excerpt: "Real Kani captures of a verified run, a "}
+  - {id: FR-017-AC-13, path: *p11, role: examined, excerpt: "A run whose process exited successfully "}
+  - {id: FR-017-AC-14, path: *p11, role: examined, excerpt: "A launcher whose stdout or stderr carrie"}
+  - {id: FR-017-AC-15, path: *p11, role: examined, excerpt: "A timeout too large to add to the curren"}
+  - {id: FR-017-AC-16, path: *p11, role: examined, excerpt: "The launcher's capture threads are stopp"}
+  - {id: FR-017-AC-17, path: *p11, role: examined, excerpt: "A run that times out has the whole group"}
+  - {id: FR-017-AC-18, path: *p11, role: examined, excerpt: "A report that is malformed, of an unknow"}
+  - {id: FR-017-AC-19, path: *p11, role: examined, excerpt: "The generator appends `-Z unstable-optio"}
+  - {id: FR-017-AC-20, path: *p11, role: examined, excerpt: "The evidence and the classified run list"}
+  - {id: FR-017-AC-21, path: *p11, role: examined, excerpt: "N harnesses with equal option vectors (t"}
+  - {id: FR-017-AC-22, path: *p11, role: examined, excerpt: "Over a real or captured batch report, me"}
+  - {id: FR-017-AC-23, path: *p11, role: examined, excerpt: "A group's report that lacks a requested "}
+  - {id: FR-017-AC-24, path: *p11, role: examined, excerpt: "A launcher that exits on its own after l"}
+  - {id: FR-017-AC-25, path: *p11, role: examined, excerpt: "A capture thread that panics, or whose p"}
+  - {id: FR-017-AC-26, path: *p11, role: examined, excerpt: "A generated FR-035 caller Text-admission"}
+  - {id: FR-017-AC-27, path: *p11, role: examined, excerpt: "A genuine routed `x + 1` scalar harness "}
+  - {id: FR-017-AC-28, path: *p11, role: examined, excerpt: "Before either child starts, a package or"}
+  - {id: FR-017-AC-29, path: *p11, role: examined, excerpt: "The runner measures one canonical proof-"}
+  - {id: FR-017-AC-30, path: *p11, role: examined, excerpt: "The public receipt exposes the measured "}
+  - {id: FR-017-AC-31, path: *p11, role: examined, excerpt: "The paired runner executes an order-sens"}
+  - {id: FR-017-AC-32, path: *p11, role: examined, excerpt: "In the `make kani` lane, a crate whose l"}
+  - {id: FR-017-AC-33, path: *p11, role: examined, excerpt: "Over single-run launcher stand-ins that "}
+  - {id: FR-017-AC-34, path: *p11, role: examined, excerpt: "A redacted stream of exactly 8192 bytes "}
+  - {id: FR-017-AC-35, path: *p11, role: examined, excerpt: "With crate directory `/h/u/ws/crate`, ta"}
+  - {id: FR-017-AC-36, path: *p11, role: examined, excerpt: "The diagnostic record never feeds classi"}
+  - {id: FR-017-AC-37, path: *p11, role: examined, excerpt: "Over single-run launcher stand-ins that "}
+  - {id: FR-017-AC-38, path: *p11, role: examined, excerpt: "A single-run stand-in that exits 1 and e"}
+  - {id: FR-017-AC-39, path: *p11, role: examined, excerpt: "A batch stand-in of members `a::check`, "}
+  - {id: FR-017-AC-40, path: *p11, role: examined, excerpt: "The cause never feeds classification: th"}
+  - {id: FR-017-AC-41, path: *p11, role: examined, excerpt: "Every `KaniScalarNativeError` variant ha"}
+  - {id: FR-017-AC-42, path: *p11, role: examined, excerpt: "`class()` is `CompletionRefusal` for `in"}
+  - {id: FR-017-AC-43, path: *p11, role: examined, excerpt: "A canonical-identity encoding failure is"}
+  - {id: FR-017-AC-44, path: *p11, role: examined, excerpt: "The code table and the mapping to class "}
+  - {id: FR-017-AC-45, path: *p11, role: examined, excerpt: "The receipt exposes its proof-content id"}
+  - {id: FR-017-AC-46, path: *p11, role: examined, excerpt: "For a genuine routed `x + 1` package the"}
+  - {id: FR-017-AC-47, path: *p11, role: examined, excerpt: "Two receipts for the same package and ha"}
+  - {id: FR-017-AC-48, path: *p11, role: examined, excerpt: "The receipt exposes read-only the ordere"}
+  - {id: FR-017-AC-49, path: *p11, role: examined, excerpt: "A change to the preimage schema (artifac"}
+  - {id: FR-017-AC-50, path: *p11, role: examined, excerpt: "The `NativeMeterObservation` of a receip"}
+  - {id: FR-017-AC-51, path: *p11, role: examined, excerpt: "A consumer compile test names and constr"}
+  - {id: FR-017-AC-52, path: *p11, role: examined, excerpt: "Production emitted bytes and feature-fre"}
+  - {id: FR-017-AC-53, path: *p11, role: examined, excerpt: "Both package locks are independently fre"}
+  - {id: FR-017-AC-54, path: *p11, role: examined, excerpt: "A successful claimed-init confirmation p"}
+  - {id: FR-017-AC-55, path: *p11, role: examined, excerpt: "Through the real public execution entry "}
+  - {id: FR-017-AC-56, path: *p11, role: examined, excerpt: "Inspection of the cleanup change shows t"}
+  - {id: FR-017-CON-1, path: *p11, role: examined, excerpt: "The generator SHALL NOT convert a non-ve"}
+  - {id: FR-017-CON-2, path: *p11, role: examined, excerpt: "The generator SHALL NOT report a generat"}
+  - {id: FR-025-AC-1, path: &p12 "spec/kani/functional/FR-025-generated-subject-abi.md", role: examined, excerpt: "For every harness kind, the identifiers "}
+  - {id: FR-025-AC-2, path: *p12, role: examined, excerpt: "Every argument binding in a persisted id"}
+  - {id: FR-025-AC-3, path: *p12, role: examined, excerpt: "A Boolean argument is a `bool` that reac"}
+  - {id: FR-025-AC-4, path: *p12, role: examined, excerpt: "An argument whose domain has no declared"}
+  - {id: FR-025-AC-5, path: *p12, role: examined, excerpt: "A frame obligation is accounted `unsuppo"}
+  - {id: FR-025-AC-6, path: *p12, role: examined, excerpt: "A binding that names no parameter of the"}
+  - {id: FR-025-AC-7, path: *p12, role: examined, excerpt: "An argument of a family with no row in t"}
+  - {id: FR-025-AC-8, path: *p12, role: examined, excerpt: "A harness over a state-reading obligatio"}
+  - {id: FR-025-AC-9, path: *p12, role: examined, excerpt: "PLANNED (IR-806). Every emitted composit"}
+  - {id: FR-028-AC-1, path: &p13 "spec/kani/functional/FR-028-bounded-proof-ceilings.md", role: examined, excerpt: "Every harness identity records the reque"}
+  - {id: FR-028-AC-2, path: *p13, role: examined, excerpt: "A backend Kani run that exceeds its wall"}
+  - {id: FR-028-AC-3, path: *p13, role: examined, excerpt: "A backend Kani run that exceeds its memo"}
+  - {id: FR-028-AC-4, path: *p13, role: examined, excerpt: "Every execution evidence records the bou"}
+  - {id: FR-028-AC-5, path: *p13, role: examined, excerpt: "Every harness identity, generation refus"}
+  - {id: FR-028-AC-6, path: *p13, role: examined, excerpt: "A harness of a family with no supplied s"}
+  - {id: FR-028-AC-7, path: *p13, role: examined, excerpt: "A family with a supplied shadow yields a"}
+  - {id: FR-028-AC-8, path: *p13, role: examined, excerpt: "An argument narrowed inside its declared"}
+  - {id: FR-028-AC-9, path: *p13, role: examined, excerpt: "A narrowing outside the argument's decla"}
+  - {id: FR-028-AC-12, path: *p13, role: examined, excerpt: "In a group of N harnesses (one launcher "}
+  - {id: FR-028-AC-13, path: *p13, role: examined, excerpt: "The source of a `bounded_shadow` harness"}
+  - {id: FR-028-AC-14, path: *p13, role: examined, excerpt: "The result of a `bounded_shadow` family "}
+  - {id: FR-028-AC-15, path: *p13, role: examined, excerpt: "For every case the refinement run execut"}
+  - {id: FR-028-AC-16, path: *p13, role: examined, excerpt: "A refinement run over a domain of at mos"}
+  - {id: FR-028-AC-17, path: *p13, role: examined, excerpt: "A verified `production` harness reports "}
+  - {id: FR-028-AC-18, path: *p13, role: examined, excerpt: "A harness identity of a shadow family li"}
+  - {id: FR-028-AC-19, path: *p13, role: examined, excerpt: "A refinement domain that does not contai"}
+  - {id: FR-028-AC-20, path: *p13, role: examined, excerpt: "An item whose shape lies outside its fam"}
+  - {id: FR-028-AC-21, path: *p13, role: examined, excerpt: "The backend process tree of every run is"}
+  - {id: FR-028-AC-22, path: *p13, role: examined, excerpt: "A shadow family's machinery catches each"}
+  - {id: FR-028-AC-23, path: *p13, role: examined, excerpt: "Every execution evidence records the Kan"}
+  - {id: FR-028-AC-24, path: *p13, role: examined, excerpt: "The refinement run is a native process l"}
+  - {id: FR-029-AC-1, path: &p14 "spec/kani/functional/FR-029-run-outcome-terminal-record.md", role: examined, excerpt: "`verified` with three SUCCESS checks map"}
+  - {id: FR-029-AC-2, path: *p14, role: examined, excerpt: "`inconclusive` with the vacuous-proof re"}
+  - {id: FR-029-AC-3, path: *p14, role: examined, excerpt: "The timed-out reason maps to `Incomplete"}
+  - {id: FR-029-AC-4, path: *p14, role: examined, excerpt: "The no-verdict reason maps to `Failed`."}
+  - {id: FR-029-AC-5, path: *p14, role: examined, excerpt: "The missing-cover-summary reason maps to"}
+  - {id: FR-029-AC-6, path: *p14, role: examined, excerpt: "The ordinary production/source-predicate"}
+  - {id: FR-029-AC-8, path: *p14, role: examined, excerpt: "`falsified` with a replay disagreement o"}
+  - {id: FR-029-AC-9, path: *p14, role: examined, excerpt: "`falsified` with a non-fault `ReplayRefu"}
+  - {id: FR-029-AC-10, path: *p14, role: examined, excerpt: "`falsified` with a fault maps to `Failed"}
+  - {id: FR-029-AC-11, path: *p14, role: examined, excerpt: "`falsified` with each CG-raised failure "}
+  - {id: FR-029-AC-12, path: *p14, role: examined, excerpt: "Across every replay settlement other tha"}
+  - {id: FR-029-AC-13, path: *p14, role: examined, excerpt: "`falsified` with a non-fault `CallSiteRe"}
+  - {id: FR-029-AC-14, path: *p14, role: examined, excerpt: "`falsified` with a `DependencyLockError:"}
+  - {id: FR-029-AC-15, path: *p14, role: examined, excerpt: "For the ordinary source-predicate `Repla"}
+  - {id: FR-029-AC-16, path: *p14, role: examined, excerpt: "The state-clause replay path (FR-024) se"}
+  - {id: FR-029-AC-17, path: *p14, role: examined, excerpt: "PLANNED (IR-806). IR-635's Eq-only verif"}
+  - {id: FR-029-AC-18, path: *p14, role: examined, excerpt: "For the `falsified` state-clause run of "}
+  - {id: FR-029-AC-19, path: *p14, role: examined, excerpt: "PLANNED/GATED (IR-806/QSL-640). After th"}
+  - {id: FR-029-AC-20, path: *p14, role: examined, excerpt: "PARTIAL (IR-666 direct F-1 to F-7 report"}
+  - {id: FR-029-AC-21, path: *p14, role: examined, excerpt: "PLANNED (IR-806): `run_terminal_value` h"}
+  - {id: FR-029-AC-22, path: *p14, role: examined, excerpt: "PLANNED (IR-806). The strength set enume"}
+  - {id: FR-029-AC-23, path: *p14, role: examined, excerpt: "PLANNED/GATED (IR-806/QSL-640). A stoppe"}
+  - {id: FR-029-AC-24, path: *p14, role: examined, excerpt: "PLANNED/GATED (IR-806/QSL-640). After co"}
+  - {id: FR-029-AC-25, path: *p14, role: examined, excerpt: "PLANNED (IR-806). With no retained refin"}
+  - {id: FR-029-AC-26, path: *p14, role: examined, excerpt: "PLANNED/GATED (IR-806/QSL-640). The conv"}
+  - {id: FR-029-AC-27, path: *p14, role: examined, excerpt: "PLANNED/GATED (IR-806/QSL-640). The dist"}
+  - {id: FR-029-AC-28, path: *p14, role: examined, excerpt: "IR-666 public converter delivered. For a"}
+  - {id: FR-029-AC-29, path: *p14, role: examined, excerpt: "A direct `KaniRunOutcome::Cancelled { so"}
+  - {id: FR-029-AC-30, path: *p14, role: examined, excerpt: "PLANNED (IR-806). A `bounded_shadow` out"}
+  - {id: FR-029-AC-31, path: *p14, role: examined, excerpt: "PLANNED (IR-806). The parity route fabri"}
+  - {id: FR-029-AC-32, path: *p14, role: examined, excerpt: "PLANNED (IR-848). A `FailedWithoutCounte"}
+  - {id: FR-029-AC-33, path: *p14, role: examined, excerpt: "PLANNED (IR-848). A `FailedWithoutCounte"}
+  - {id: FR-029-AC-34, path: *p14, role: examined, excerpt: "PLANNED (IR-848). CG's own memory stop ("}
+  - {id: FR-029-AC-35, path: *p14, role: examined, excerpt: "PLANNED (IR-848). The cause never create"}
+  - {id: FR-029-AC-36, path: *p14, role: examined, excerpt: "PLANNED (IR-848). The rationale of this "}
+  - {id: FR-030-AC-1, path: &p15 "spec/kani/functional/FR-030-ir-outcome-terminal-map.md", role: examined, excerpt: "Every pair (`KaniOutcomeKind`, replay se"}
+  - {id: FR-030-AC-2, path: *p15, role: examined, excerpt: "`Refused`, `InvalidInput` and `Incomplet"}
+  - {id: FR-030-AC-3, path: *p15, role: examined, excerpt: "`TimedOut` and `ResourceExhausted` map t"}
+  - {id: FR-030-AC-4, path: *p15, role: examined, excerpt: "`Proved` with three SUCCESS checks maps "}
+  - {id: FR-030-AC-5, path: *p15, role: examined, excerpt: "`Inconclusive` with cause `kani_vacuous_"}
+  - {id: FR-030-AC-6, path: *p15, role: examined, excerpt: "No outcome maps to `Tested`."}
+  - {id: FR-030-AC-7, path: *p15, role: examined, excerpt: "The map is one `match` over the pair (`K"}
+  - {id: FR-030-AC-8, path: *p15, role: examined, excerpt: "`Unavailable` with cause `kani_checker_a"}
+  - {id: FR-030-AC-9, path: *p15, role: examined, excerpt: "`Counterexample` with a replay disagreem"}
+  - {id: FR-030-AC-10, path: *p15, role: examined, excerpt: "`Counterexample` with a fault, walked th"}
+  - {id: FR-030-AC-11, path: *p15, role: examined, excerpt: "Across every replay settlement other tha"}
+  - {id: FR-030-AC-12, path: *p15, role: examined, excerpt: "`Counterexample` with a non-fault `CallS"}
+  - {id: FR-030-AC-13, path: *p15, role: examined, excerpt: "`Counterexample` with a `DependencyLockE"}
+  - {id: FR-030-AC-14, path: *p15, role: examined, excerpt: "A `Counterexample` given no replay settl"}
+  - {id: FR-030-AC-15, path: *p15, role: examined, excerpt: "PARTIAL (IR-666 direct public report con"}
+  - {id: FR-030-AC-16, path: *p15, role: examined, excerpt: "PARTIAL (IR-666 direct public report con"}
+  - {id: FR-030-AC-17, path: *p15, role: examined, excerpt: "PARTIAL (IR-666 F-7 and binding controls"}
+  - {id: FR-030-AC-18, path: *p15, role: examined, excerpt: "Every Kani `Proved` row carries `ProofBa"}
+  - {id: FR-030-AC-19, path: *p15, role: examined, excerpt: "For both `BoundedComplete { depth }` and"}
+  - {id: FR-030-AC-20, path: *p15, role: examined, excerpt: "For either SMT basis, a foreign query, w"}
+  - {id: FR-030-AC-21, path: *p15, role: examined, excerpt: "SMT/cross-check disagreement without cer"}
+  - {id: FR-030-AC-22, path: *p15, role: examined, excerpt: "Every expressible accepted SMT backend/c"}
+  - {id: FR-034-AC-1, path: &p16 "spec/kani/functional/FR-034-caller-death-ownership.md", role: examined, excerpt: "Before the exclusive caller lease, match"}
+  - {id: FR-034-AC-2, path: *p16, role: examined, excerpt: "Before any M spawn, O is positively veri"}
+  - {id: FR-034-AC-3, path: *p16, role: examined, excerpt: "In ClaimedBootstrap, InitReady or Dispat"}
+  - {id: FR-034-AC-4, path: *p16, role: examined, excerpt: "Mutual authority is the specific anonymo"}
+  - {id: FR-034-AC-5, path: *p16, role: examined, excerpt: "C retains actual unreaped Child L; L/O/M"}
+  - {id: FR-034-AC-6, path: *p16, role: examined, excerpt: "The owned tree memory observer is ready "}
+  - {id: FR-034-AC-7, path: *p16, role: examined, excerpt: "Bounded inner startup/identity recovery "}
+  - {id: FR-034-AC-8, path: *p16, role: examined, excerpt: "After Dispatch, original-caller death ca"}
+  - {id: FR-034-AC-9, path: *p16, role: examined, excerpt: "Cancelling one owned namespace leaves co"}
+  - {id: FR-034-AC-10, path: *p16, role: examined, excerpt: "Normal backend completion, backend exec "}
+  - {id: FR-034-AC-11, path: *p16, role: examined, excerpt: "Guardian SIGKILL, abort or OOM-equivalen"}
+  - {id: FR-034-AC-12, path: *p16, role: examined, excerpt: "Every startup refusal, completion and ca"}
+  - {id: FR-034-AC-13, path: *p16, role: examined, excerpt: "The bounded executor requires an explici"}
+  - {id: FR-034-AC-14, path: *p16, role: examined, excerpt: "Setup docs require the matched package h"}
+  - {id: FR-034-AC-15, path: *p16, role: examined, excerpt: "Typed private controls reject malformed "}
+  - {id: FR-034-AC-16, path: *p16, role: examined, excerpt: "Only the original caller holds the pair'"}
+  - {id: FR-034-AC-17, path: *p16, role: examined, excerpt: "Backend receives unchanged raw argument "}
+  - {id: FR-034-AC-18, path: *p16, role: examined, excerpt: "Guardian diagnostics and control use sep"}
+  - {id: FR-034-AC-19, path: *p16, role: examined, excerpt: "Original identity ceilings and existing "}
+  - {id: FR-034-AC-20, path: *p16, role: examined, excerpt: "Guardian connection, startup, identity v"}
+  - {id: FR-034-AC-21, path: *p16, role: examined, excerpt: "Guardian connection and handshake have a"}
+  - {id: FR-034-AC-22, path: *p16, role: examined, excerpt: "Control/capture shutdown and cleanup obs"}
+  - {id: FR-034-AC-23, path: *p16, role: examined, excerpt: "Caller-death fixtures use the actual mat"}
+  - {id: FR-034-AC-24, path: *p16, role: examined, excerpt: "Actual lease-EOF cancellation passes ind"}
+  - {id: FR-034-AC-25, path: *p16, role: examined, excerpt: "Before backend Dispatch, the helper hand"}
+  - {id: FR-034-AC-26, path: *p16, role: examined, excerpt: "The guardian session/group is distinct f"}
+  - {id: FR-034-AC-27, path: *p16, role: examined, excerpt: "guardian-test-support is off by default,"}
+  - {id: FR-034-AC-28, path: *p16, role: examined, excerpt: "Fixture prefix selects unchanged product"}
+  - {id: FR-034-AC-29, path: *p16, role: examined, excerpt: "The packaged caller fixture and real hel"}
+  - {id: FR-034-AC-30, path: *p16, role: examined, excerpt: "CG publishes the test-only feature contr"}
+  - {id: FR-034-AC-31, path: *p16, role: examined, excerpt: "Real production fixtures fail the merged"}
+  - {id: FR-034-AC-32, path: *p16, role: examined, excerpt: "The bounded O event loop collects anonym"}
+  - {id: FR-034-AC-33, path: *p16, role: examined, excerpt: "Authenticated Completed precedes origina"}
+  - {id: FR-034-AC-34, path: *p16, role: examined, excerpt: "Live-C production close_lease_and_observ"}
+  - {id: FR-034-AC-35, path: *p16, role: examined, excerpt: "PLANNED/UNRUN. L creates private network"}
+  - {id: FR-034-AC-36, path: *p16, role: examined, excerpt: "PLANNED/UNRUN. C inventories actual back"}
+  - {id: FR-034-AC-37, path: *p16, role: examined, excerpt: "PLANNED/UNRUN. Trusted I retains its exc"}
+  - {id: FR-034-AC-38, path: *p16, role: examined, excerpt: "PLANNED/UNRUN. Named fixed SETTLE_RESERV"}
+  - {id: FR-034-AC-39, path: *p16, role: examined, excerpt: "PLANNED/UNRUN. Native guardian/backend-i"}
+  - {id: FR-034-AC-40, path: *p16, role: examined, excerpt: "PLANNED/UNRUN. Only declared trusted rol"}
+  - {id: FR-034-AC-41, path: *p16, role: examined, excerpt: "PLANNED/UNRUN (IR-682). For a named nati"}
+  - {id: FR-034-AC-42, path: *p16, role: examined, excerpt: "PLANNED/UNRUN (IR-682). The proof is der"}
+  - {id: FR-034-AC-43, path: *p16, role: examined, excerpt: "PLANNED/UNRUN (IR-682). Every named oper"}
+  - {id: FR-034-AC-44, path: *p16, role: examined, excerpt: "PLANNED/UNRUN (IR-682). A reachable recu"}
+  - {id: FR-034-AC-45, path: *p16, role: examined, excerpt: "PLANNED/UNRUN (IR-682). The native-stack"}
+  - {id: FR-034-AC-46, path: *p16, role: examined, excerpt: "PLANNED/UNRUN (IR-682). The analysis cov"}
+  - {id: FR-034-AC-47, path: *p16, role: examined, excerpt: "PLANNED/UNRUN (IR-682). Each relevant ex"}
+  - {id: FR-034-AC-48, path: *p16, role: examined, excerpt: "PLANNED/UNRUN (IR-682). The named heap i"}
+  - {id: FR-034-AC-49, path: *p16, role: examined, excerpt: "PLANNED/UNRUN (IR-682). A change to the "}
+  - {id: FR-034-AC-50, path: *p16, role: examined, excerpt: "PLANNED/UNRUN (IR-682). Missing or incom"}
+  - {id: FR-034-AC-51, path: *p16, role: examined, excerpt: "PLANNED/UNRUN. Given genuine live-I cons"}
+  - {id: FR-034-AC-52, path: *p16, role: examined, excerpt: "PLANNED/UNRUN. Actual retained-I pidfd t"}
+  - {id: FR-034-AC-53, path: *p16, role: examined, excerpt: "PLANNED/UNRUN. Actual retained M consumi"}
+  - {id: FR-034-AC-54, path: *p16, role: examined, excerpt: "PLANNED/UNRUN. On the independently grou"}
+  - {id: FR-034-AC-55, path: *p16, role: examined, excerpt: "PLANNED/UNRUN. Independently checked fin"}
+  - {id: FR-034-AC-56, path: *p16, role: examined, excerpt: "PLANNED/UNRUN. Published-source Analysis"}
+  - {id: FR-034-AC-57, path: *p16, role: examined, excerpt: "PLANNED/UNRUN (IR-687). When L awaits it"}
+  - {id: FR-034-AC-58, path: *p16, role: examined, excerpt: "PLANNED/UNRUN (IR-687). L accepts that n"}
+  - {id: FR-034-AC-59, path: *p16, role: examined, excerpt: "PLANNED/UNRUN (IR-687). For L\u2192C AwaitArm"}
+  - {id: FR-034-AC-60, path: *p16, role: examined, excerpt: "PLANNED/UNRUN (IR-687). The negative O p"}
+  - {id: FR-034-AC-61, path: *p16, role: examined, excerpt: "PLANNED/UNRUN (IR-687). Negative capabil"}
+  - {id: FR-034-AC-62, path: *p16, role: examined, excerpt: "PLANNED/UNRUN (IR-687). C adopts the aut"}
+  - {id: FR-034-AC-63, path: *p16, role: examined, excerpt: "PLANNED/UNRUN (IR-687). C exposes a nega"}
+  - {id: FR-034-AC-64, path: *p16, role: examined, excerpt: "PLANNED/UNRUN (IR-687). The new negative"}
+  - {id: FR-034-AC-65, path: *p16, role: examined, excerpt: "PLANNED/UNRUN (IR-687). Before first-byt"}
+  - {id: FR-034-AC-66, path: *p16, role: examined, excerpt: "PLANNED/UNRUN (IR-687). Only the allocat"}
+  - {id: FR-034-AC-67, path: *p16, role: examined, excerpt: "PLANNED/UNRUN (IR-687). C authenticates "}
+  - {id: FR-034-AC-68, path: *p16, role: examined, excerpt: "PLANNED/UNRUN (IR-687). C does not use t"}
+  - {id: FR-034-AC-69, path: *p16, role: examined, excerpt: "PLANNED/UNRUN (IR-687). Missing or abnor"}
+  - {id: FR-034-AC-70, path: *p16, role: examined, excerpt: "PLANNED/UNRUN (IR-687). The first emitte"}
+  - {id: FR-034-AC-71, path: *p16, role: examined, excerpt: "PLANNED/UNRUN (IR-687). O includes every"}
+  - {id: FR-034-AC-72, path: *p16, role: examined, excerpt: "PLANNED/UNRUN (IR-687). After COMMIT, la"}
+  - {id: FR-034-AC-73, path: *p16, role: examined, excerpt: "PLANNED/UNRUN (IR-687). A claimed-startu"}
+  - {id: FR-034-AC-74, path: *p16, role: examined, excerpt: "PLANNED/UNRUN (IR-687). The negative\u2019s a"}
+  - {id: FR-034-AC-75, path: *p16, role: examined, excerpt: "PLANNED/UNRUN (IR-687). A later genuine "}
+  - {id: FR-034-AC-76, path: *p16, role: examined, excerpt: "PLANNED/UNRUN (IR-687). A genuine admitt"}
+  - {id: FR-034-AC-77, path: *p16, role: examined, excerpt: "PLANNED/UNRUN (IR-687). On a fresh compl"}
+  - {id: FR-034-AC-78, path: *p16, role: examined, excerpt: "PLANNED/UNRUN. C admits actual original "}
+  - {id: FR-034-AC-79, path: *p16, role: examined, excerpt: "PLANNED/UNRUN. Actual production control"}
+  - {id: FR-034-AC-80, path: *p16, role: examined, excerpt: "PLANNED/UNRUN. Genuine original authenti"}
+  - {id: FR-034-AC-81, path: *p16, role: examined, excerpt: "PLANNED/UNRUN. Every surviving actual si"}
+  - {id: FR-034-AC-82, path: *p16, role: examined, excerpt: "PLANNED/UNRUN. Actual supported-source/a"}
+  - {id: FR-034-AC-83, path: *p16, role: examined, excerpt: "PLANNED/UNRUN. The original exclusive ca"}
+  - {id: FR-034-AC-84, path: *p16, role: examined, excerpt: "PLANNED/UNRUN. Every remaining fixture r"}
+  - {id: FR-034-AC-85, path: *p16, role: examined, excerpt: "PLANNED/UNRUN. Actual retained M consumi"}
+  - {id: FR-034-AC-86, path: *p16, role: examined, excerpt: "PLANNED/UNRUN. O establishes same-M pare"}
+  - {id: FR-034-AC-87, path: *p16, role: examined, excerpt: "PLANNED/UNRUN. Actual I confirmation/M c"}
+  - {id: FR-034-AC-88, path: *p16, role: examined, excerpt: "PLANNED/UNRUN. O preserves every due ord"}
+  - {id: FR-034-AC-89, path: *p16, role: examined, excerpt: "PLANNED/UNRUN. Genuine original I Comple"}
+  - {id: FR-034-AC-90, path: *p16, role: examined, excerpt: "PLANNED/UNRUN. Any remaining optional fi"}
+  - {id: FR-034-AC-91, path: *p16, role: examined, excerpt: "PLANNED/UNRUN. Ordinary feature-on execu"}
+  - {id: FR-034-AC-92, path: *p16, role: examined, excerpt: "PLANNED/UNRUN. Genuine adopted-orphan ac"}
+  - {id: FR-034-AC-93, path: *p16, role: examined, excerpt: "PLANNED/UNRUN. Every surviving feature-o"}
+  - {id: FR-034-AC-94, path: *p16, role: examined, excerpt: "PLANNED/UNRUN. C disposes the defined pe"}
+  - {id: FR-034-AC-95, path: *p16, role: examined, excerpt: "PLANNED/UNRUN. Actual O retains the orig"}
+  - {id: FR-034-AC-96, path: *p16, role: examined, excerpt: "PLANNED/UNRUN. Missing, malformed, wrong"}
+  - {id: FR-034-AC-97, path: *p16, role: examined, excerpt: "PLANNED/UNRUN. Retired observation-bindi"}
+  - {id: FR-034-AC-98, path: *p16, role: examined, excerpt: "PLANNED/UNRUN. Feature-off paired consum"}
+  - {id: FR-034-AC-99, path: *p16, role: examined, excerpt: "PLANNED/UNRUN. Any remaining optional O "}
+  - {id: FR-034-AC-100, path: *p16, role: examined, excerpt: "PLANNED/UNRUN. Unsupported, malformed, u"}
+  - {id: FR-040-AC-1, path: &p17 "spec/kani/functional/FR-040-cancellation-producer.md", role: examined, excerpt: "A caller retains a live `Cancel`, sends "}
+  - {id: FR-040-AC-2, path: *p17, role: examined, excerpt: "In two live single runs, issue `Requeste"}
+  - {id: FR-040-AC-3, path: *p17, role: examined, excerpt: "A run that reaches its execution ceiling"}
+  - {id: FR-040-AC-4, path: *p17, role: examined, excerpt: "Completion before observed cancellation "}
+  - {id: FR-040-AC-5, path: *p17, role: examined, excerpt: "A multi-member group sharing one handle "}
+  - {id: FR-040-AC-6, path: *p17, role: examined, excerpt: "The single-run producer constructs an IR"}
+  - {id: FR-040-AC-7, path: *p17, role: examined, excerpt: "The direct `quire-exact::CancelCause` co"}
+  - {id: FR-041-AC-1, path: &p18 "spec/kani/functional/FR-041-claimed-module-proof-gate.md", role: examined, excerpt: "A nonempty reviewed declaration is check"}
+  - {id: FR-041-AC-2, path: *p18, role: examined, excerpt: "With two claimed modules sharing one `sr"}
+  - {id: FR-041-AC-3, path: *p18, role: examined, excerpt: "The current build's transitive expectati"}
+  - {id: FR-041-AC-4, path: *p18, role: examined, excerpt: "Each claimed module and computed shared "}
+  - {id: FR-041-AC-5, path: *p18, role: examined, excerpt: "A stubbed executor, predetermined outcom"}
+  - {id: NFR-006-AC-1, path: &p19 "spec/kani/non-functional/NFR-006-real-kani-lane-gating.md", role: examined, excerpt: "`make kani-scope` prints `required` and "}
+  - {id: NFR-006-AC-2, path: *p19, role: examined, excerpt: "`make kani-scope` prints `not required` "}
+  - {id: NFR-006-AC-3, path: *p19, role: examined, excerpt: "A rename of `src/kani/old.rs` to `src/st"}
+  - {id: NFR-006-AC-4, path: *p19, role: examined, excerpt: "`make -n kani` and `make -n kani-gate` e"}
+  - {id: NFR-006-AC-5, path: *p19, role: examined, excerpt: "`make kani-gate` starts the lane's `carg"}
+  - {id: NFR-006-AC-6, path: *p19, role: examined, excerpt: "`make kani-gate` exits non-zero and prin"}
+  - {id: NFR-006-AC-7, path: *p19, role: examined, excerpt: "The passing run-result line has the fiel"}
+  - {id: NFR-006-AC-8, path: *p19, role: examined, excerpt: "When the tree state or the head commit r"}
+  - {id: NFR-006-AC-9, path: *p19, role: examined, excerpt: "With a dirty working tree `make kani-gat"}
+  - {id: NFR-006-AC-10, path: *p19, role: examined, excerpt: "With no `cargo-kani` launcher `make kani"}
+  - {id: NFR-006-AC-11, path: *p19, role: examined, excerpt: "The tests marked `#[ignore = \"kani lane:"}
+  - {id: NFR-006-AC-12, path: *p19, role: examined, excerpt: "`make -n ci` expands to no `kani` or `ka"}
+  - {id: NFR-006-AC-13, path: *p19, role: examined, excerpt: "For a Kani-touching pull request, the au"}
+  - {id: NFR-006-AC-14, path: *p19, role: examined, excerpt: "Given Kani-reaching paths changed on `or"}
+  - {id: NFR-006-AC-15, path: *p19, role: examined, excerpt: "A Kani-touching pull request whose requi"}
+  - {id: NFR-006-AC-16, path: *p19, role: examined, excerpt: "A pull request whose scope is `not requi"}
+  - {id: NFR-006-AC-17, path: *p19, role: examined, excerpt: "Before a version tag is pushed, the full"}
+  - {id: NFR-006-AC-18, path: *p19, role: examined, excerpt: "Every `include!`, `include_str!`, `inclu"}
+  - {id: NFR-006-AC-19, path: *p19, role: examined, excerpt: "On a clean current candidate, `make kani"}
+  - {id: NFR-006-M-1, path: *p19, role: examined, excerpt: "Merged pull requests touching the Kani-t"}
+  - {id: NFR-006-M-2, path: *p19, role: examined, excerpt: "Lane runs reported `passed` with `ran` d"}
+  - {id: NFR-006-M-3, path: *p19, role: examined, excerpt: "`#[ignore = \"kani lane: ...\"]` tests the"}
+  - {id: FR-014-AC-1, path: &p20 "spec/oracle/functional/FR-014-exact-scalar-oracles.md", role: examined, excerpt: "Every requested item receives exactly on"}
+  - {id: FR-014-AC-2, path: *p20, role: examined, excerpt: "Integer (add, subtract, multiply, negate"}
+  - {id: FR-014-AC-3, path: *p20, role: examined, excerpt: "A descriptor whose arity, result or oper"}
+  - {id: FR-014-AC-4, path: *p20, role: examined, excerpt: "Generated bytes are identical across rep"}
+  - {id: FR-014-AC-5, path: *p20, role: examined, excerpt: "Every claim-map entry carries the node i"}
+  - {id: FR-014-AC-6, path: *p20, role: examined, excerpt: "Executing generated oracles on the QSpec"}
+  - {id: FR-014-AC-7, path: *p20, role: examined, excerpt: "Composite, collection, function, model, "}
+  - {id: FR-014-AC-8, path: *p20, role: examined, excerpt: "The generated crate declares `publish = "}
+  - {id: FR-014-AC-9, path: *p20, role: examined, excerpt: "Generated oracle functions do not panic:"}
+  - {id: FR-014-AC-10, path: *p20, role: examined, excerpt: "A descriptor parameter whose admitted bo"}
+  - {id: FR-014-AC-11, path: *p20, role: examined, excerpt: "A claim whose descriptor passes every ch"}
+  - {id: FR-014-AC-12, path: *p20, role: examined, excerpt: "A descriptor naming a different catalogu"}
+  - {id: FR-014-AC-13, path: *p20, role: examined, excerpt: "A descriptor whose implied identity matc"}
+  - {id: FR-014-AC-14, path: *p20, role: examined, excerpt: "A claim whose node this generator never "}
+  - {id: FR-014-AC-15, path: *p20, role: examined, excerpt: "A requested item whose node closure exce"}
+  - {id: FR-014-AC-16, path: *p20, role: examined, excerpt: "A bound is read from `binding` members l"}
+  - {id: FR-014-AC-17, path: *p20, role: examined, excerpt: "A `reference` operand whose target is ty"}
+  - {id: FR-014-AC-18, path: *p20, role: examined, excerpt: "`derive_exact_scalar_items` returns, per"}
+  - {id: FR-014-AC-19, path: *p20, role: examined, excerpt: "A derived item generates an oracle whose"}
+  - {id: FR-014-AC-20, path: *p20, role: examined, excerpt: "An integer node over two distinct bounde"}
+  - {id: FR-014-AC-21, path: *p20, role: examined, excerpt: "A node whose result is typed by a scalar"}
+  - {id: FR-014-AC-22, path: *p20, role: examined, excerpt: "A node whose result is typed by a scalar"}
+  - {id: FR-014-AC-23, path: *p20, role: examined, excerpt: "An operand, or the result, typed by a `b"}
+  - {id: FR-014-AC-24, path: *p20, role: examined, excerpt: "An operand's own bound need not lie insi"}
+  - {id: FR-014-AC-25, path: *p20, role: examined, excerpt: "A `reference` operand to a plain scalar "}
+  - {id: FR-014-AC-26, path: *p20, role: examined, excerpt: "A `reference` operand whose target is a "}
+  - {id: FR-014-AC-27, path: *p20, role: examined, excerpt: "A node whose result is typed by a scalar"}
+  - {id: FR-014-AC-28, path: *p20, role: examined, excerpt: "The referenced node's body, not its form"}
+  - {id: FR-014-AC-29, path: *p20, role: examined, excerpt: "`x + p` narrowed to `Int[0, 29]`, where "}
+  - {id: FR-014-AC-30, path: *p20, role: examined, excerpt: "`q + q` narrowed to `Int[0, 29]`, where "}
+  - {id: FR-014-AC-31, path: *p20, role: examined, excerpt: "A literal operand of an integer operatio"}
+  - {id: FR-014-AC-32, path: *p20, role: examined, excerpt: "A node that narrowing conversions narrow"}
+  - {id: FR-014-AC-33, path: *p20, role: examined, excerpt: "A node narrowed to a `text_bounds` bound"}
+  - {id: FR-014-AC-34, path: *p20, role: examined, excerpt: "A node that a narrowing conversion and a"}
+  - {id: FR-014-AC-35, path: *p20, role: examined, excerpt: "Boolean `and`, `or`, `not`, `implies`, `"}
+  - {id: FR-014-AC-36, path: *p20, role: examined, excerpt: "Every oracle's source map declares the n"}
+  - {id: FR-014-AC-37, path: *p20, role: examined, excerpt: "A differential corpus covering every nod"}
+  - {id: FR-014-AC-38, path: *p20, role: examined, excerpt: "The Boolean condition in the third argum"}
+  - {id: FR-014-AC-39, path: *p20, role: examined, excerpt: "The generated `src/lib.rs` of every crat"}
+  - {id: FR-014-AC-40, path: *p20, role: examined, excerpt: "A package whose lowering returns `failed"}
+  - {id: FR-014-AC-41, path: *p20, role: examined, excerpt: "A `failed` record whose `limit_kind` is "}
+  - {id: FR-014-AC-42, path: *p20, role: examined, excerpt: "No `limit_kind` of a `failed` record is "}
+  - {id: FR-014-AC-44, path: *p20, role: examined, excerpt: "For each IR-admitted direct request nami"}
+  - {id: FR-014-AC-45, path: *p20, role: examined, excerpt: "For a QSL-shaped outer integer operation"}
+  - {id: FR-014-AC-46, path: *p20, role: examined, excerpt: "An inferred interval uses only the four "}
+  - {id: FR-014-AC-47, path: *p20, role: examined, excerpt: "No test name, trace tag, test output lin"}
+  - {id: FR-014-AC-48, path: *p20, role: examined, excerpt: "A `quire.op.quantity.convert` node whose"}
+  - {id: FR-014-AC-49, path: *p20, role: examined, excerpt: "When QSV refuses a `quire.op.quantity.co"}
+  - {id: FR-014-AC-50, path: *p20, role: examined, excerpt: "No oracle generated for `quire.op.quanti"}
+  - {id: FR-014-AC-51, path: *p20, role: examined, excerpt: "A selected `quire.op.quantity.convert` c"}
+  - {id: FR-014-AC-52, path: *p20, role: examined, excerpt: "Every generated quantity operand is a QS"}
+  - {id: FR-018-AC-1, path: &p21 "spec/oracle/functional/FR-018-composite-equality-oracles.md", role: examined, excerpt: "Every requested item receives exactly on"}
+  - {id: FR-018-AC-2, path: *p21, role: examined, excerpt: "On every vector of the composite-equalit"}
+  - {id: FR-018-AC-3, path: *p21, role: examined, excerpt: "Each generated item's claim-map entry re"}
+  - {id: FR-018-AC-4, path: *p21, role: examined, excerpt: "Each generated item's claim-map entry re"}
+  - {id: FR-018-AC-5, path: *p21, role: examined, excerpt: "A descriptor with a `convert<T>` operand"}
+  - {id: FR-018-AC-6, path: *p21, role: examined, excerpt: "An operand type bearing an IEEE value at"}
+  - {id: FR-018-AC-7, path: *p21, role: examined, excerpt: "On the FR-330 package path, model, funct"}
+  - {id: FR-018-AC-8, path: *p21, role: examined, excerpt: "A declaration closure `TypeEnvironment::"}
+  - {id: FR-018-AC-9, path: *p21, role: examined, excerpt: "Every generated oracle function returns "}
+  - {id: FR-018-AC-10, path: *p21, role: examined, excerpt: "Generated bytes are identical across rep"}
+  - {id: FR-018-AC-11, path: *p21, role: examined, excerpt: "Every claim marks its operation `caller_"}
+  - {id: FR-018-AC-12, path: *p21, role: examined, excerpt: "The generated crate declares `publish = "}
+  - {id: FR-018-AC-13, path: *p21, role: examined, excerpt: "Every claim-map entry carries the node i"}
+  - {id: FR-018-AC-14, path: *p21, role: examined, excerpt: "Admitted `bounded_domain` nodes an opera"}
+  - {id: FR-018-AC-15, path: *p21, role: examined, excerpt: "A `binary` node's operand is read throug"}
+  - {id: FR-018-AC-16, path: *p21, role: examined, excerpt: "Genuine public tuple members naming `int"}
+  - {id: FR-018-AC-17, path: *p21, role: examined, excerpt: "The `src/lib.rs` that `generate_composit"}
+  - {id: FR-018-AC-18, path: *p21, role: examined, excerpt: "`render_value_type` called with `ValueTy"}
+  - {id: FR-018-AC-19, path: *p21, role: examined, excerpt: "The non-test code of `src/oracle/equalit"}
+  - {id: FR-018-AC-20, path: *p21, role: examined, excerpt: "When an admitted FR-330 package contains"}
+  - {id: FR-018-AC-21, path: *p21, role: examined, excerpt: "Each generated item's claim-map entry re"}
+  - {id: FR-018-AC-22, path: *p21, role: examined, excerpt: "For every pair of operand values in the "}
+  - {id: FR-018-AC-23, path: *p21, role: examined, excerpt: "For every item of the TC-029 corpus whos"}
+  - {id: FR-018-AC-24, path: *p21, role: examined, excerpt: "The exact QSpec `positive-recursive-reco"}
+  - {id: FR-018-AC-25, path: *p21, role: examined, excerpt: "The per-item type-resolution counter cha"}
+  - {id: FR-018-AC-26, path: *p21, role: examined, excerpt: "Reading the QSpec List `next` field as `"}
+  - {id: FR-018-AC-27, path: *p21, role: examined, excerpt: "Reading the QSpec Tree `kids` field's di"}
+  - {id: FR-018-AC-28, path: *p21, role: examined, excerpt: "With a caller-selected type-resolution w"}
+  - {id: FR-018-AC-29, path: *p21, role: examined, excerpt: "A cycle detected after a charged repeate"}
+  - {id: FR-018-AC-30, path: *p21, role: examined, excerpt: "The 100,000-entry acyclic closure render"}
+  - {id: FR-018-AC-31, path: *p21, role: examined, excerpt: "A caller-selected type-resolution work l"}
+  - {id: FR-018-AC-32, path: *p21, role: examined, excerpt: "Each IR-admitted direct `temporal`/`form"}
+  - {id: FR-018-AC-33, path: *p21, role: examined, excerpt: "A genuine root-facade compilation of aut"}
+  - {id: FR-018-AC-34, path: *p21, role: examined, excerpt: "The actual generated ABI executes ordere"}
+  - {id: FR-018-AC-35, path: *p21, role: examined, excerpt: "Unknown declaration, unknown case and a "}
+  - {id: FR-018-AC-36, path: *p21, role: examined, excerpt: "Emitted source uses only WireNodeId and "}
+  - {id: FR-018-AC-37, path: *p21, role: examined, excerpt: "Equality's generated manifest and native"}
+  - {id: FR-018-AC-38, path: *p21, role: examined, excerpt: "With `None`, standalone generation and e"}
+  - {id: FR-018-AC-39, path: *p21, role: examined, excerpt: "`None` at the first reached nominal iden"}
+  - {id: FR-018-AC-40, path: *p21, role: examined, excerpt: "Some(wrong-package context) fails the wh"}
+  - {id: FR-018-AC-41, path: *p21, role: examined, excerpt: "A reached enum still reconstructs every "}
+  - {id: FR-018-AC-42, path: *p21, role: examined, excerpt: "Generated oracle invocations under Some "}
+  - {id: FR-018-AC-43, path: *p21, role: examined, excerpt: "For genuine source with a: Int[0,9] and "}
+  - {id: FR-018-AC-44, path: *p21, role: examined, excerpt: "Genuine Union equality generation preser"}
+  - {id: FR-021-AC-1, path: &p22 "spec/oracle/functional/FR-021-function-application-oracles.md", role: examined, excerpt: "Every requested `call` item receives exa"}
+  - {id: FR-021-AC-2, path: *p22, role: examined, excerpt: "For each function-application corpus vec"}
+  - {id: FR-021-AC-3, path: *p22, role: examined, excerpt: "Each scheduled item records the requeste"}
+  - {id: FR-021-AC-4, path: *p22, role: examined, excerpt: "The oracle returns the arity, wrong-valu"}
+  - {id: FR-021-AC-5, path: *p22, role: examined, excerpt: "The schedule orders arity validation bef"}
+  - {id: FR-021-AC-6, path: *p22, role: examined, excerpt: "A function whose declared operator requi"}
+  - {id: FR-021-AC-7, path: *p22, role: examined, excerpt: "A tree-shaped 100,000-node V2 `expressio"}
+  - {id: FR-021-AC-8, path: *p22, role: examined, excerpt: "The schedule marks only linked-package a"}
+  - {id: FR-021-AC-9, path: *p22, role: examined, excerpt: "The schedule preserves a `function.call`"}
+  - {id: FR-021-AC-10, path: *p22, role: examined, excerpt: "A declared parameter or result type reac"}
+  - {id: FR-021-AC-11, path: *p22, role: examined, excerpt: "Model and relation lowering records map "}
+  - {id: FR-021-AC-12, path: *p22, role: examined, excerpt: "A declared function whose own body fails"}
+  - {id: FR-021-AC-13, path: *p22, role: examined, excerpt: "Schedule source and claim-map bytes are "}
+  - {id: FR-021-AC-14, path: *p22, role: examined, excerpt: "The schedule crate declares `publish = f"}
+  - {id: FR-021-AC-15, path: *p22, role: examined, excerpt: "Each scheduled call point has one consta"}
+  - {id: FR-021-AC-16, path: *p22, role: examined, excerpt: "The schedule and its claim/location maps"}
+  - {id: FR-021-AC-17, path: *p22, role: examined, excerpt: "Each location record uses the request fu"}
+  - {id: FR-021-AC-18, path: *p22, role: examined, excerpt: "No test name, trace tag, test output lin"}
+  - {id: FR-021-AC-19, path: *p22, role: examined, excerpt: "The emitted schedule crate for scalar, e"}
+  - {id: FR-021-AC-20, path: *p22, role: examined, excerpt: "For each scalar and equality instruction"}
+  - {id: FR-021-AC-21, path: *p22, role: examined, excerpt: "A scalar `Negate` body is refused as `Un"}
+  - {id: FR-021-AC-22, path: *p22, role: examined, excerpt: "When two or more declarations share one "}
+  - {id: FR-021-AC-23, path: *p22, role: examined, excerpt: "For an admitted FR-330 package carrying "}
+  - {id: FR-021-AC-24, path: *p22, role: examined, excerpt: "Items on one `call` node, with equal arg"}
+  - {id: FR-021-AC-25, path: *p22, role: examined, excerpt: "Across one body, the counter charges eac"}
+  - {id: FR-021-AC-26, path: *p22, role: examined, excerpt: "The target-neutral schedule's branch/sto"}
+  - {id: FR-021-AC-27, path: *p22, role: examined, excerpt: "An admitted nested body consists of sepa"}
+  - {id: FR-021-AC-28, path: *p22, role: examined, excerpt: "Under the default 1,048,576-byte source "}
+  - {id: FR-021-AC-29, path: *p22, role: examined, excerpt: "A 100,000-call linear body produces 100,"}
+  - {id: FR-021-AC-30, path: *p22, role: examined, excerpt: "A requested generation work limit of `u6"}
+  - {id: FR-021-AC-31, path: *p22, role: examined, excerpt: "No test name, trace tag, test output lin"}
+  - {id: FR-021-AC-32, path: *p22, role: examined, excerpt: "Neither the schedule crate nor any concr"}
+  - {id: FR-021-AC-33, path: *p22, role: examined, excerpt: "With an IR-admitted `temporal`/`formula`"}
+  - {id: FR-021-AC-34, path: *p22, role: examined, excerpt: "Given one authentic strict-reader-admitt"}
+  - {id: FR-031-AC-1, path: &p23 "spec/oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md", role: examined, excerpt: "IMPLEMENTED (IR-596). For each of Add, S"}
+  - {id: FR-031-AC-2, path: *p23, role: examined, excerpt: "PLANNED (IR-602), GATED on the lock prer"}
+  - {id: FR-031-AC-3, path: *p23, role: examined, excerpt: "IMPLEMENTED (IR-596). A native oracle wi"}
+  - {id: FR-031-AC-4, path: *p23, role: examined, excerpt: "IMPLEMENTED (IR-596). Each of the six co"}
+  - {id: FR-031-AC-5, path: *p23, role: examined, excerpt: "IMPLEMENTED (IR-596). Under a `reject` i"}
+  - {id: FR-031-AC-6, path: *p23, role: examined, excerpt: "PLANNED (IR-602), GATED on the lock prer"}
+  - {id: FR-031-AC-7, path: *p23, role: examined, excerpt: "IMPLEMENTED (IR-596). An add, subtract o"}
+  - {id: FR-031-AC-8, path: *p23, role: examined, excerpt: "IMPLEMENTED (IR-596). In a generated cra"}
+  - {id: FR-031-AC-9, path: *p23, role: examined, excerpt: "IMPLEMENTED (IR-596). The first non-comp"}
+  - {id: FR-031-AC-10, path: *p23, role: examined, excerpt: "IMPLEMENTED (IR-596). The tri-state harn"}
+  - {id: FR-031-AC-11, path: *p23, role: examined, excerpt: "IMPLEMENTED IN CG (IR-596); THE QSL EXEM"}
+  - {id: FR-031-AC-12, path: *p23, role: examined, excerpt: "IMPLEMENTED (IR-596). Apart from the gen"}
+  - {id: FR-031-AC-13, path: *p23, role: examined, excerpt: "IMPLEMENTED (IR-596). Generating the ora"}
+  - {id: FR-031-AC-14, path: *p23, role: examined, excerpt: "IMPLEMENTED (IR-596). The generated sour"}
+  - {id: FR-031-AC-15, path: *p23, role: examined, excerpt: "IMPLEMENTED (IR-596). In the native orac"}
+  - {id: FR-031-AC-16, path: *p23, role: examined, excerpt: "PLANNED (IR-602), GATED on the lock prer"}
+  - {id: FR-031-AC-17, path: *p23, role: examined, excerpt: "PLANNED (IR-602), GATED on the lock prer"}
+  - {id: FR-031-AC-18, path: *p23, role: examined, excerpt: "PLANNED (IR-602). A divide or remainder "}
+  - {id: FR-031-AC-27, path: *p23, role: examined, excerpt: "PLANNED (IR-602), GATED on the lock prer"}
+  - {id: FR-031-AC-28, path: *p23, role: examined, excerpt: "IMPLEMENTED (IR-664). The V1 Boolean ora"}
+  - {id: FR-031-AC-19, path: *p23, role: examined, excerpt: "IMPLEMENTED (IR-596). The Kani bundle or"}
+  - {id: FR-031-AC-20, path: *p23, role: examined, excerpt: "IMPLEMENTED (IR-596). Under real Kani, a"}
+  - {id: FR-031-AC-21, path: *p23, role: examined, excerpt: "IMPLEMENTED (IR-596). For each of add, s"}
+  - {id: FR-031-AC-22, path: *p23, role: examined, excerpt: "PLANNED (IR-602), CONTINGENT on OD-2 and"}
+  - {id: FR-031-AC-26, path: *p23, role: examined, excerpt: "PLANNED (IR-602), CONTINGENT on OD-2 and"}
+  - {id: FR-031-AC-23, path: *p23, role: examined, excerpt: "PLANNED (IR-602). The Kani bundle oracle"}
+  - {id: FR-031-AC-24, path: *p23, role: examined, excerpt: "PLANNED (IR-602). Under real Kani, a har"}
+  - {id: FR-031-AC-25, path: *p23, role: examined, excerpt: "PLANNED (IR-602), GATED on the lock prer"}
+  - {id: FR-035-AC-1, path: &p24 "spec/oracle/functional/FR-035-caller-text-admission.md", role: examined, excerpt: "A generated caller-ingress oracle accept"}
+  - {id: FR-035-AC-2, path: *p24, role: examined, excerpt: "Invalid UTF-8 bytes make `TextPayload::f"}
+  - {id: FR-035-AC-3, path: *p24, role: examined, excerpt: "For each profile, `Text[1,1]` admits or "}
+  - {id: FR-035-AC-4, path: *p24, role: examined, excerpt: "For each of the six profiles and both `T"}
+  - {id: FR-035-AC-5, path: *p24, role: examined, excerpt: "In a copy of the generated oracle with i"}
+  - {id: FR-035-AC-6, path: *p24, role: examined, excerpt: "A request outside the declared finite pr"}
+  - {id: FR-042-AC-1, path: &p25 "spec/oracle/functional/FR-042-generated-checked-invariant-causes.md", role: examined, excerpt: "CG's native Boolean, equality, function "}
+  - {id: FR-016-AC-1, path: &p26 "spec/replay/functional/FR-016-witness-native-replay.md", role: examined, excerpt: "Every retained witness decodes into type"}
+  - {id: FR-016-AC-2, path: *p26, role: examined, excerpt: "An out-of-domain witness is reported as "}
+  - {id: FR-016-AC-3, path: *p26, role: examined, excerpt: "An in-domain witness is reported as a fa"}
+  - {id: FR-016-AC-4, path: *p26, role: examined, excerpt: "A native replay that runs and disagrees "}
+  - {id: FR-016-AC-5, path: *p26, role: examined, excerpt: "A witness bound to a different harness i"}
+  - {id: FR-016-AC-6, path: *p26, role: examined, excerpt: "Every witness decode receives required c"}
+  - {id: FR-016-AC-8, path: *p26, role: examined, excerpt: "A witness schema binds the obligation's "}
+  - {id: FR-016-AC-9, path: *p26, role: examined, excerpt: "A decoded falsification whose witness ma"}
+  - {id: FR-016-AC-10, path: *p26, role: examined, excerpt: "A decoded falsification at which the nat"}
+  - {id: FR-016-AC-11, path: *p26, role: examined, excerpt: "The adapter refuses, with a distinct typ"}
+  - {id: FR-016-AC-12, path: *p26, role: examined, excerpt: "A `replay` call that returns `ReplayRefu"}
+  - {id: FR-016-AC-13, path: *p26, role: examined, excerpt: "A `Witness` arm that settles `reproduced"}
+  - {id: FR-016-AC-14, path: *p26, role: examined, excerpt: "A proved unit that imports a locked depe"}
+  - {id: FR-016-AC-15, path: *p26, role: examined, excerpt: "The replay request's `package.dependenci"}
+  - {id: FR-016-AC-16, path: *p26, role: examined, excerpt: "A unit whose import no lock dependency s"}
+  - {id: FR-016-AC-17, path: *p26, role: examined, excerpt: "A lock recording another `package_id` fo"}
+  - {id: FR-016-AC-18, path: *p26, role: examined, excerpt: "A lock selecting a library the unit does"}
+  - {id: FR-016-AC-19, path: *p26, role: examined, excerpt: "Lock libraries whose sources share a sou"}
+  - {id: FR-016-AC-20, path: *p26, role: examined, excerpt: "A lock library whose source has the unit"}
+  - {id: FR-016-AC-21, path: *p26, role: examined, excerpt: "The function path's request `obligation_"}
+  - {id: FR-016-AC-22, path: *p26, role: examined, excerpt: "For two functions with the same paramete"}
+  - {id: FR-016-AC-23, path: *p26, role: examined, excerpt: "The function-contract identity function "}
+  - {id: FR-016-AC-24, path: *p26, role: examined, excerpt: "A lock whose only defect is one library "}
+  - {id: FR-024-AC-1, path: &p27 "spec/replay/functional/FR-024-counterexample-envelope-intake.md", role: examined, excerpt: "The envelope's obligation identity is QS"}
+  - {id: FR-024-AC-2, path: *p27, role: examined, excerpt: "Every backend-witness transcript the gen"}
+  - {id: FR-024-AC-3, path: *p27, role: examined, excerpt: "A counterexample with any value outside "}
+  - {id: FR-024-AC-4, path: *p27, role: examined, excerpt: "For each `WitnessPacket` member in turn,"}
+  - {id: FR-024-AC-6, path: *p27, role: examined, excerpt: "A frame counterexample is submitted as a"}
+  - {id: FR-024-AC-7, path: *p27, role: examined, excerpt: "A reduced `Witness`-arm candidate is ret"}
+  - {id: FR-024-AC-8, path: *p27, role: examined, excerpt: "A retained reduced `Witness`-arm envelop"}
+  - {id: FR-024-AC-10, path: *p27, role: examined, excerpt: "No type named `Witness`, `ReplaySource`,"}
+  - {id: FR-024-AC-11, path: *p27, role: examined, excerpt: "`StateClauseReplay::replay` returns exac"}
+  - {id: FR-024-AC-12, path: *p27, role: examined, excerpt: "The state-clause envelope's `clause_node"}
+  - {id: FR-024-AC-13, path: *p27, role: examined, excerpt: "The pre snapshot holds, for every declar"}
+  - {id: FR-024-AC-14, path: *p27, role: examined, excerpt: "For a document vector whose members are "}
+  - {id: FR-024-AC-15, path: *p27, role: examined, excerpt: "A playback that binds no value for a dec"}
+  - {id: FR-024-AC-16, path: *p27, role: examined, excerpt: "For a subject mutated to violate the pos"}
+  - {id: FR-024-AC-17, path: *p27, role: examined, excerpt: "A state field value outside its declared"}
+  - {id: FR-024-AC-18, path: *p27, role: examined, excerpt: "With the installed backend, the falsifie"}
+  - {id: FR-024-AC-19, path: *p27, role: examined, excerpt: "An operation that declares a parameter, "}
+  - {id: FR-024-AC-20, path: *p27, role: examined, excerpt: "One obligation-identity function in `src"}
+  - {id: FR-024-AC-21, path: *p27, role: examined, excerpt: "The identity changes when any one of the"}
+  - {id: FR-024-AC-22, path: *p27, role: examined, excerpt: "A frame obligation's identity takes `fun"}
+  - {id: FR-024-AC-23, path: *p27, role: examined, excerpt: "`StateFrameIdentity` and its persisted r"}
+  - {id: FR-024-AC-24, path: *p27, role: examined, excerpt: "`FrameReplayInputs` has no `obligation_i"}
+  - {id: FR-024-AC-25, path: *p27, role: examined, excerpt: "The frame witness is built from the real"}
+  - {id: FR-024-AC-26, path: *p27, role: examined, excerpt: "A decoded state-field value outside the "}
+  - {id: FR-024-AC-27, path: *p27, role: examined, excerpt: "The decoded pre-state is tied to the inv"}
+  - {id: FR-024-AC-28, path: *p27, role: examined, excerpt: "A harness whose `scope.operation` is not"}
+  - {id: FR-024-AC-29, path: *p27, role: examined, excerpt: "The frame envelope's `declared_domains` "}
+  - {id: FR-024-AC-30, path: *p27, role: examined, excerpt: "With the installed backend, the real pla"}
+  - {id: FR-024-AC-31, path: *p27, role: examined, excerpt: "PLANNED (IR-624), IR-628 accessor merged"}
+  - {id: FR-024-AC-32, path: *p27, role: examined, excerpt: "PLANNED (IR-624), IR-628 accessor merged"}
+  - {id: FR-024-AC-33, path: *p27, role: examined, excerpt: "PLANNED (IR-624), IR-628 accessor merged"}
+  - {id: FR-024-AC-34, path: *p27, role: examined, excerpt: "PLANNED (IR-624), IR-628 accessor merged"}
+  - {id: FR-024-AC-35, path: *p27, role: examined, excerpt: "PLANNED (IR-624), IR-628 accessor merged"}
+  - {id: FR-024-AC-36, path: *p27, role: examined, excerpt: "Two distinct test backend adapters each "}
+  - {id: FR-024-AC-37, path: *p27, role: examined, excerpt: "The common intake maps an adapter's deco"}
+  - {id: FR-024-AC-38, path: *p27, role: examined, excerpt: "Starting from one admitted original fail"}
+  - {id: FR-024-AC-39, path: *p27, role: examined, excerpt: "From a retained failure revision, an out"}
+  - {id: FR-024-AC-40, path: *p27, role: examined, excerpt: "A retained reduced `Witness` envelope ho"}
+  - {id: FR-032-AC-1, path: &p28 "spec/replay/functional/FR-032-routed-scalar-replay-binding.md", role: examined, excerpt: "PLANNED (IR-631) / CODE-GATED (CG retent"}
+  - {id: FR-032-AC-2, path: *p28, role: examined, excerpt: "PLANNED (IR-631). The builder decodes ac"}
+  - {id: FR-032-AC-3, path: *p28, role: examined, excerpt: "PLANNED (IR-631) / CODE-GATED (CG retent"}
+  - {id: FR-032-AC-4, path: *p28, role: examined, excerpt: "PLANNED (IR-631) / CODE-GATED (CG retent"}
+  - {id: FR-032-AC-5, path: *p28, role: examined, excerpt: "PLANNED (IR-631) / CODE-GATED (CG retent"}
+  - {id: FR-032-AC-6, path: *p28, role: examined, excerpt: "PLANNED (IR-631) / CODE-GATED (CG retent"}
+  - {id: FR-032-AC-7, path: *p28, role: examined, excerpt: "PLANNED (IR-631) / CODE-GATED (CG retent"}
+  - {id: FR-032-AC-8, path: *p28, role: examined, excerpt: "PLANNED (IR-631) / CODE-GATED (CG retent"}
+  - {id: FR-032-AC-9, path: *p28, role: examined, excerpt: "PLANNED (IR-631) / CODE-GATED (authorita"}
+  - {id: FR-032-AC-10, path: *p28, role: examined, excerpt: "PLANNED (IR-631) / CODE-GATED (typed sca"}
+  - {id: FR-032-AC-11, path: *p28, role: examined, excerpt: "PLANNED (IR-631) / CODE-GATED (typed sca"}
+  - {id: FR-032-AC-12, path: *p28, role: examined, excerpt: "PLANNED (IR-631) / CODE-GATED (typed sca"}
+  - {id: FR-032-AC-13, path: *p28, role: examined, excerpt: "PLANNED (IR-631) / CODE-GATED (typed sca"}
+  - {id: FR-032-AC-14, path: *p28, role: examined, excerpt: "PLANNED (IR-631) / CODE-GATED (actual CG"}
+  - {id: FR-033-AC-1, path: &p29 "spec/replay/functional/FR-033-composite-parity-replay-binding.md", role: examined, excerpt: "PARTIAL (IR-635 verified Eq graph-child "}
+  - {id: FR-033-AC-2, path: *p29, role: examined, excerpt: "PLANNED/GATED. Canonical round trips pre"}
+  - {id: FR-033-AC-3, path: *p29, role: examined, excerpt: "PLANNED/GATED. Noncanonical JCS/tag/scal"}
+  - {id: FR-033-AC-4, path: *p29, role: examined, excerpt: "PLANNED/GATED. Public caller input exact"}
+  - {id: FR-033-AC-5, path: *p29, role: examined, excerpt: "PLANNED/GATED. The retained actual asser"}
+  - {id: FR-033-AC-6, path: *p29, role: examined, excerpt: "PLANNED/GATED. For falsified replay the "}
+  - {id: FR-033-AC-7, path: *p29, role: examined, excerpt: "PARTIAL (IR-666 direct public F-7 conver"}
+  - {id: FR-033-AC-8, path: *p29, role: examined, excerpt: "PLANNED/GATED. CG submits the original c"}
+  - {id: FR-033-AC-9, path: *p29, role: examined, excerpt: "PARTIAL (IR-666 report binding covered; "}
+  - {id: FR-033-AC-10, path: *p29, role: examined, excerpt: "PLANNED/GATED. Each lawful generated fam"}
+  - {id: FR-033-AC-11, path: *p29, role: examined, excerpt: "PARTIAL (IR-635 Eq graph-child positiona"}
+  - {id: FR-033-AC-12, path: *p29, role: examined, excerpt: "PARTIAL (IR-666 direct QSL F-1 precedenc"}
+  - {id: FR-033-AC-13, path: *p29, role: examined, excerpt: "PARTIAL (IR-666 direct public F-2 to F-6"}
+  - {id: FR-033-AC-14, path: *p29, role: examined, excerpt: "PLANNED (IR-814; literal operands are ad"}
+  - {id: FR-033-AC-15, path: *p29, role: examined, excerpt: "PLANNED (IR-814). When the original appl"}
+  - {id: FR-033-AC-16, path: *p29, role: examined, excerpt: "PLANNED (IR-814; verified by Inspection "}
+  - {id: FR-033-AC-17, path: *p29, role: examined, excerpt: "PLANNED (IR-814). If the owning operand "}
+  - {id: FR-019-AC-1, path: &p30 "spec/routed/functional/FR-019-capability-settlement.md", role: examined, excerpt: "Settlement dispatches one arm per varian"}
+  - {id: FR-019-AC-2, path: *p30, role: examined, excerpt: "Every requested item receives exactly on"}
+  - {id: FR-019-AC-3, path: *p30, role: examined, excerpt: "On the Kani arm, an unbounded extent aga"}
+  - {id: FR-019-AC-4, path: *p30, role: examined, excerpt: "An item with more than one candidate and"}
+  - {id: FR-019-AC-10, path: *p30, role: examined, excerpt: "Only an item settled `supported` routes."}
+  - {id: FR-019-AC-45, path: *p30, role: examined, excerpt: "A manifest with a second descriptor of o"}
+  - {id: FR-019-AC-46, path: *p30, role: examined, excerpt: "With several repeated identities, the re"}
+  - {id: FR-019-AC-47, path: *p30, role: examined, excerpt: "QSL's registry snapshot holds each backe"}
+  - {id: FR-019-AC-48, path: *p30, role: examined, excerpt: "A `Refused(refusal)` outcome from the cu"}
+  - {id: FR-019-AC-49, path: *p30, role: examined, excerpt: "An `Incomplete(incomplete)` outcome from"}
+  - {id: FR-019-AC-50, path: *p30, role: examined, excerpt: "An `Admitted` Kani function-application "}
+  - {id: FR-019-AC-51, path: *p30, role: examined, excerpt: "Among several request items with non-`Ad"}
+  - {id: FR-019-AC-52, path: *p30, role: examined, excerpt: "An `Admitted` Kani function-application "}
+  - {id: FR-019-AC-53, path: *p30, role: examined, excerpt: "Given an admitted package with bound dri"}
+  - {id: FR-019-AC-7, path: *p30, role: examined, excerpt: "An envelope whose `capability_vocabulary"}
+  - {id: FR-019-AC-8, path: *p30, role: examined, excerpt: "An item with an absent extent classifica"}
+  - {id: FR-019-AC-9, path: *p30, role: examined, excerpt: "A backend kind added without a negotiati"}
+  - {id: FR-019-AC-11, path: *p30, role: examined, excerpt: "PLANNED (IR-629). `BackendKind` has `Pro"}
+  - {id: FR-019-AC-12, path: *p30, role: examined, excerpt: "PLANNED (IR-629; non-empty bounded rows "}
+  - {id: FR-019-AC-16, path: *p30, role: examined, excerpt: "PLANNED (IR-629). An unbounded process i"}
+  - {id: FR-019-AC-17, path: *p30, role: examined, excerpt: "PLANNED (IR-629). On a `bounded`-only pr"}
+  - {id: FR-019-AC-18, path: *p30, role: examined, excerpt: "PLANNED (IR-629). Given the same process"}
+  - {id: FR-019-AC-19, path: *p30, role: examined, excerpt: "PLANNED (IR-629; bounded row depends on "}
+  - {id: FR-019-AC-20, path: *p30, role: examined, excerpt: "PLANNED (IR-629; driver projection remai"}
+  - {id: FR-019-AC-42, path: *p30, role: examined, excerpt: "Two otherwise equal CG Process descripto"}
+  - {id: FR-019-AC-21, path: *p30, role: examined, excerpt: "PLANNED (IR-629). On a `bounded`-only pr"}
+  - {id: FR-019-AC-22, path: *p30, role: examined, excerpt: "PLANNED (IR-629). On a `bounded`-only pr"}
+  - {id: FR-019-AC-23, path: *p30, role: examined, excerpt: "PLANNED (IR-629; bounded row depends on "}
+  - {id: FR-019-AC-13, path: *p30, role: examined, excerpt: "Settling a process-provider item reaches"}
+  - {id: FR-019-AC-14, path: *p30, role: examined, excerpt: "The process-provider arm's return type i"}
+  - {id: FR-019-AC-15, path: *p30, role: examined, excerpt: "PLANNED (IR-633). CG's `BackendDescripto"}
+  - {id: FR-019-AC-24, path: *p30, role: examined, excerpt: "PLANNED (IR-338). Given QSL FR-335's `va"}
+  - {id: FR-019-AC-25, path: *p30, role: examined, excerpt: "The normative Kani form set is the compl"}
+  - {id: FR-019-AC-26, path: *p30, role: examined, excerpt: "For any form in FR-019-AC-25 with one va"}
+  - {id: FR-019-AC-27, path: *p30, role: examined, excerpt: "With one Kani candidate, a typed form ou"}
+  - {id: FR-019-AC-33, path: *p30, role: examined, excerpt: "For a valid bounded typed form inside FR"}
+  - {id: FR-019-AC-28, path: *p30, role: examined, excerpt: "A form refusal under FR-019-AC-27 is dis"}
+  - {id: FR-019-AC-29, path: *p30, role: examined, excerpt: "After request and candidate/manifest val"}
+  - {id: FR-019-AC-30, path: *p30, role: examined, excerpt: "For the same typed IR tag/form, changing"}
+  - {id: FR-019-AC-31, path: *p30, role: examined, excerpt: "For a Kani-supported unbounded form agai"}
+  - {id: FR-019-AC-32, path: *p30, role: examined, excerpt: "When a caller supplies a finite bound in"}
+  - {id: FR-019-AC-34, path: *p30, role: examined, excerpt: "PLANNED (IR-516). With one EN-1 candidat"}
+  - {id: FR-019-AC-35, path: *p30, role: examined, excerpt: "PLANNED (IR-516). With one SMT temporal "}
+  - {id: FR-019-AC-36, path: *p30, role: examined, excerpt: "PLANNED (IR-516). A TP-5 whole-refinemen"}
+  - {id: FR-019-AC-37, path: *p30, role: examined, excerpt: "PLANNED (IR-516). HP-1 model, HP-2, HP-3"}
+  - {id: FR-019-AC-38, path: *p30, role: examined, excerpt: "PLANNED (IR-516). An advertised SG-1, SG"}
+  - {id: FR-019-AC-39, path: *p30, role: examined, excerpt: "PLANNED (IR-516). A selected reduction r"}
+  - {id: FR-019-AC-40, path: *p30, role: examined, excerpt: "PLANNED (IR-516). For an item over a wea"}
+  - {id: FR-019-AC-41, path: *p30, role: examined, excerpt: "PLANNED (IR-516). With otherwise equal f"}
+  - {id: FR-019-AC-43, path: *p30, role: examined, excerpt: "Two driver items selecting distinct `exp"}
+  - {id: FR-019-AC-44, path: *p30, role: examined, excerpt: "For a V2 scalar claim, an absent `OwnRes"}
+  - {id: FR-022-AC-1, path: &p31 "spec/routed/functional/FR-022-routed-generation.md", role: examined, excerpt: "Generation dispatches one arm per varian"}
+  - {id: FR-022-AC-2, path: *p31, role: examined, excerpt: "For a set of routed Kani items, each rec"}
+  - {id: FR-022-AC-3, path: *p31, role: examined, excerpt: "The entry point accepts no backend regis"}
+  - {id: FR-022-AC-4, path: *p31, role: examined, excerpt: "PLANNED (IR-629 internal-invariant test "}
+  - {id: FR-022-AC-5, path: *p31, role: examined, excerpt: "Two routed items with one request index "}
+  - {id: FR-022-AC-6, path: *p31, role: examined, excerpt: "A Kani group-level refusal (for example "}
+  - {id: FR-022-AC-7, path: *p31, role: examined, excerpt: "A Kani group containing an `invalid_requ"}
+  - {id: FR-022-AC-8, path: *p31, role: examined, excerpt: "Every routed item appears exactly once i"}
+  - {id: FR-022-AC-9, path: *p31, role: examined, excerpt: "Regeneration from equal inputs is byte-i"}
+  - {id: FR-022-AC-10, path: *p31, role: examined, excerpt: "The Kani arm derives each item's operati"}
+  - {id: FR-022-AC-11, path: *p31, role: examined, excerpt: "An item with no derivable descriptor kee"}
+  - {id: FR-022-AC-12, path: *p31, role: examined, excerpt: "`RoutedGeneration.claim_map` is `Some` a"}
+  - {id: FR-022-AC-13, path: *p31, role: examined, excerpt: "The Kani arm routes an integer node over"}
+  - {id: FR-022-AC-14, path: *p31, role: examined, excerpt: "`RoutedGeneration.oracle_artifacts` is `"}
+  - {id: FR-022-AC-15, path: *p31, role: examined, excerpt: "The Kani arm routes the packages QSL emi"}
+  - {id: FR-022-AC-16, path: *p31, role: examined, excerpt: "Two Kani harnesses with one `harness_sym"}
+  - {id: FR-022-AC-17, path: *p31, role: examined, excerpt: "PLANNED (IR-629). A routed `Process(id)`"}
+  - {id: FR-022-AC-18, path: *p31, role: examined, excerpt: "PLANNED (IR-629). A crate-internal route"}
+  - {id: FR-022-AC-19, path: *p31, role: examined, excerpt: "PLANNED (IR-629). Permuting a routed-ite"}
+  - {id: FR-022-AC-20, path: *p31, role: examined, excerpt: "PLANNED (IR-629). `RoutedGenerationItem."}
+  - {id: FR-022-AC-21, path: *p31, role: examined, excerpt: "PLANNED (IR-629). `from_descriptor` cons"}
+  - {id: FR-022-AC-22, path: *p31, role: examined, excerpt: "PLANNED (IR-629). `from_descriptor` reje"}
+  - {id: FR-022-AC-23, path: *p31, role: examined, excerpt: "After FR-019 authenticates two `integer."}
+  - {id: FR-022-AC-24, path: *p31, role: examined, excerpt: "A routed scalar item's retained authenti"}
+  - {id: FR-022-AC-25, path: *p31, role: examined, excerpt: "The public CG API exposes the concrete `"}
+  - {id: FR-022-AC-26, path: *p31, role: examined, excerpt: "Given the checked QSL RR-16 package with"}
+  - {id: FR-022-AC-27, path: *p31, role: examined, excerpt: "For `if p then x + 1 else x + 1`, each o"}
+  - {id: FR-022-AC-28, path: *p31, role: examined, excerpt: "If a routed scalar item's occurrence has"}
+  - {id: FR-022-AC-29, path: *p31, role: examined, excerpt: "Given an admitted package whose complete"}
+  - {id: FR-026-AC-1, path: &p32 "spec/routed/functional/FR-026-backend-adapter-contract.md", role: examined, excerpt: "The Kani adapter implements the adapter "}
+  - {id: FR-026-AC-4, path: *p32, role: examined, excerpt: "The execution evidence type is an associ"}
+  - {id: FR-026-AC-5, path: *p32, role: examined, excerpt: "PLANNED (IR-629). `Process(id)` has no C"}
+  - {id: FR-002-AC-1, path: &p33 "spec/strategy/functional/FR-002-tristate-proptest.md", role: examined, excerpt: "Rejected inputs remain distinct from pas"}
+  - {id: FR-002-AC-2, path: *p33, role: examined, excerpt: "Boundary strategies exercise immediately"}
+  - {id: FR-002-AC-3, path: *p33, role: examined, excerpt: "Supported correlated constraints do not "}
+  - {id: FR-002-AC-4, path: *p33, role: examined, excerpt: "Shrinking preserves generated constraint"}
+  - {id: FR-002-AC-5, path: *p33, role: examined, excerpt: "The generated campaign runner owns execu"}
+  - {id: FR-002-AC-6, path: *p33, role: examined, excerpt: "Integer and generated Boolean harness ca"}
+  - {id: FR-002-AC-7, path: *p33, role: examined, excerpt: "PLANNED (IR-815). For one precondition a"}
+  - {id: FR-002-AC-8, path: *p33, role: examined, excerpt: "PLANNED (IR-815). In the V2 harness, an "}
+  - {id: FR-002-AC-9, path: *p33, role: examined, excerpt: "PLANNED (IR-815). Source inspection show"}
+  - {id: FR-002-AC-10, path: *p33, role: examined, excerpt: "PLANNED (IR-815). A selected clause iden"}
+  - {id: FR-002-AC-11, path: *p33, role: examined, excerpt: "PLANNED (IR-815). A selected clause body"}
+  - {id: FR-002-AC-12, path: *p33, role: examined, excerpt: "PLANNED (IR-815). Repeated V2 harness ge"}
+  - {id: FR-002-AC-13, path: *p33, role: examined, excerpt: "PLANNED (IR-815). A seeded V2 case on wh"}
+  - {id: FR-002-AC-14, path: *p33, role: examined, excerpt: "PLANNED (IR-815). A seeded V2 case on wh"}
+  - {id: FR-002-AC-15, path: *p33, role: examined, excerpt: "PLANNED (IR-815). A seeded V2 case on wh"}
+  - {id: FR-002-AC-16, path: *p33, role: examined, excerpt: "PLANNED (IR-815). A seeded V2 case on wh"}
+  - {id: FR-002-AC-17, path: *p33, role: examined, excerpt: "PLANNED (IR-815). A seeded V2 case on wh"}
+  - {id: FR-002-AC-18, path: *p33, role: examined, excerpt: "PLANNED (IR-815). A seeded V2 case on wh"}
+  - {id: FR-008-AC-1, path: &p34 "spec/strategy/functional/FR-008-bound-domain-strategy-admission.md", role: examined, excerpt: "A fresh QSL-produced, IR-admitted Config"}
+  - {id: FR-008-AC-2, path: *p34, role: examined, excerpt: "An IR-admitted V2 `amount < 7` invariant"}
+  - {id: FR-008-AC-3, path: *p34, role: examined, excerpt: "A valid selected comparison generates de"}
+  - {id: FR-008-AC-4, path: *p34, role: examined, excerpt: "Unknown clause, absent claim, unsupporte"}
+  - {id: FR-008-AC-5, path: *p34, role: examined, excerpt: "A request with several applicable defect"}
+  - {id: FR-008-AC-6, path: *p34, role: examined, excerpt: "Either read endpoint or a literal at i64"}
+  - {id: FR-008-AC-7, path: *p34, role: examined, excerpt: "PLANNED. Beyond the per-operator agreeme"}
+  - {id: FR-008-AC-8, path: *p34, role: examined, excerpt: "PLANNED. The V2 comparison oracle takes "}
+  - {id: FR-008-AC-9, path: *p34, role: examined, excerpt: "PLANNED. A CG integration test calls IR'"}
+  - {id: FR-008-AC-10, path: *p34, role: examined, excerpt: "PLANNED. Source inspection shows the gen"}
+  - {id: FR-008-CON-1, path: *p34, role: examined, excerpt: "The generator SHALL read V2 operand iden"}
+  - {id: FR-008-CON-2, path: *p34, role: examined, excerpt: "Admission SHALL finish before any strate"}
+  - {id: FR-008-CON-3, path: *p34, role: examined, excerpt: "The generator SHALL check each read endp"}
+  - {id: FR-008-CON-4, path: *p34, role: examined, excerpt: "The generator SHALL check each compariso"}
+  - {id: FR-009-AC-1, path: &p35 "spec/strategy/functional/FR-009-constructive-correlated-populations.md", role: examined, excerpt: "For the QSL-produced, IR-admitted V2 `Ve"}
+  - {id: FR-009-AC-2, path: *p35, role: examined, excerpt: "For every V2 comparison operator, every "}
+  - {id: FR-009-AC-3, path: *p35, role: examined, excerpt: "Generated population source contains no "}
+  - {id: FR-009-AC-4, path: *p35, role: examined, excerpt: "For `amount < 0` over 0..=1000, `Satisfy"}
+  - {id: FR-009-AC-5, path: *p35, role: examined, excerpt: "A domain of `i64::MIN..=i64::MAX` with `"}
+  - {id: FR-009-AC-6, path: *p35, role: examined, excerpt: "Repeated generation for the same `Checke"}
+  - {id: FR-009-AC-7, path: *p35, role: examined, excerpt: "PLANNED. For each noncommutative operato"}
+  - {id: FR-010-AC-1, path: &p36 "spec/strategy/functional/FR-010-domain-boundary-campaigns.md", role: examined, excerpt: "For `amount < 7` over 0..=1000, the in-d"}
+  - {id: FR-010-AC-2, path: *p36, role: examined, excerpt: "For the QSL-produced, IR-admitted V2 `Ve"}
+  - {id: FR-010-AC-3, path: *p36, role: examined, excerpt: "A selected claim whose accessor domain i"}
+  - {id: FR-010-AC-4, path: *p36, role: examined, excerpt: "`amount <= 1000` over 0..=1000 refuses `"}
+  - {id: FR-010-AC-5, path: *p36, role: examined, excerpt: "Every in-domain census tag equals an ind"}
+  - {id: FR-011-AC-1, path: &p37 "spec/strategy/functional/FR-011-numeric-harness-campaigns.md", role: examined, excerpt: "Over V2 selected claims, a QSL-produced "}
+  - {id: FR-011-AC-2, path: *p37, role: examined, excerpt: "A V2 comparison oracle deliberately swap"}
+  - {id: FR-011-AC-3, path: *p37, role: examined, excerpt: "The census runner evaluates each of the "}
+  - {id: FR-011-AC-4, path: *p37, role: examined, excerpt: "A campaign over a report seeded with fix"}
+  - {id: FR-011-AC-5, path: *p37, role: examined, excerpt: "A fresh 10,000-case `Broad` campaign for"}
+  - {id: FR-012-AC-1, path: &p38 "spec/strategy/functional/FR-012-constraint-preserving-shrinking.md", role: examined, excerpt: "For every V2 comparison operator and eve"}
+  - {id: FR-012-AC-2, path: *p38, role: examined, excerpt: "For 1,000 seeded `VersionUnchanged` valu"}
+  - {id: FR-012-AC-3, path: *p38, role: examined, excerpt: "A `Violating` V2 `VersionUnchanged` camp"}
+  - {id: FR-012-AC-4, path: *p38, role: examined, excerpt: "After a shrinking campaign, `attempted` "}
+  - {id: FR-013-AC-1, path: &p39 "spec/strategy/functional/FR-013-it010-consumable-output.md", role: examined, excerpt: "A consumer fixture crate that includes t"}
+  - {id: FR-013-AC-2, path: *p39, role: examined, excerpt: "The generated bundle contains no seriali"}
+  - {id: FR-013-AC-4, path: *p39, role: examined, excerpt: "The generated Rust header carries the se"}
+  - {id: FR-013-AC-5, path: *p39, role: examined, excerpt: "interface-001 `bound_strategy_slice.cons"}
+  - {id: NFR-004-AC-1, path: &p40 "spec/strategy/non-functional/NFR-004-constructive-generation-efficiency.md", role: examined, excerpt: "Fresh 10,000-case and 256-case campaigns"}
+  - {id: NFR-004-AC-2, path: *p40, role: examined, excerpt: "For every admitted fixture in TC-019, th"}
+  - {id: NFR-004-M-1, path: *p40, role: examined, excerpt: "Discarded / attempted on a fresh 10,000-"}
+  - {id: NFR-004-M-2, path: *p40, role: examined, excerpt: "Proptest global rejects on the same camp"}
+  - {id: NFR-004-M-3, path: *p40, role: examined, excerpt: "Campaigns ending `Exhausted` on the same"}
+  - {id: NFR-004-M-4, path: *p40, role: examined, excerpt: "In-domain plus out-of-domain census case"}
+findings:
+- fnd: FND-001
+  severity: high
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-005-AC-3
+  related_ids: []
+  path: spec/core/functional/FR-005-cli-conformance.md
+  lines: '49'
+  excerpt: For every shared-corpus case on which two backends' normalized outcomes
+    differ, the TC-007 Differential Disposition Register holds exactly one row naming
+    the case, the backends, and either a regression fixture that exists in the test
+    tree or a documented profile/backend distinction; a differing case with no row,
+    a row naming a fixture that does not exist, or a row with neither disposition
+    fails the check.
+  finding: FR-005-AC-3 remains untagged in the computed repository matrix (inherited
+    SR-15352/FND-001; no PR511 regression).
+bindings:
+- test_id: src/oracle/equality/union_tests.rs::union_closure_seals_owner_members_and_admits_each_nested_payload
+  ac_id: FR-018-AC-44
+  trace: correct
+- test_id: src/oracle/equality/union_tests.rs::union_lookup_and_seal_faults_keep_typed_causes_before_equality
+  ac_id: FR-018-AC-44
+  trace: correct
+- test_id: tests/it/admitted_composite_equality.rs::genuine_union_host_generation_closes_nested_owner_declarations
+  ac_id: FR-018-AC-44
+  trace: correct
+- test_id: tests/it/admitted_composite_equality.rs::genuine_union_capability_refusals_preserve_the_healthy_sibling
+  ac_id: FR-018-AC-44
+  trace: correct
+```
+
+## Dispositions
+
+Round 1: rechecked frozen head d93e5189, exact owned-base matrix comparison and SR-15352/FND-001 existing disposition. No product fix is owed by this review; original finding text is preserved.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | deferred | Baseline CLI owning-spec/plan obligation outside the authorized IR-17 Quantity/Union consumer migration and six host controls. Existing reviews/ir-954-gap-analysis.md (SR-15352/FND-001) retains the criterion, owner path and explicit deferred outcome; that inventory is already routed to the IR planner through IR-954/IR-17 comments. No new issue, fix or completion is claimed. Repository FAIL and incremental PASS remain unchanged. |
+
+Scoped mergeability: no open implementation finding remains for PR511 into the owned baseline after custody of the latest artifacts and the lead's safe confined final checks. No native, generated-crate or Kani acceptance.

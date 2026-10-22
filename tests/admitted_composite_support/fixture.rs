@@ -81,3 +81,16 @@ pub fn imported(transitive: bool) -> (AdmittedCompilation, Vec<(String, Admitted
         retained,
     )
 }
+
+pub const UNION_SOURCE: &str = r#"language "ix:native" edition "1-draft";
+profile v = "quire.value.complete/v1";
+record Payload { flag: Boolean; }
+union Shape { Empty, Flag(Boolean), Boxed(Payload) }
+union Other { Empty, Flag(Boolean), Boxed(Payload) }
+union Wrap { Plain, Nested(Shape), Both(Shape, Other) }
+enum Marker { ZERO, ONE }
+function shape_same using v(a: Shape,b: Shape): Boolean pure { a = b }
+function other_same using v(a: Other,b: Other): Boolean pure { a = b }
+function wrap_same using v(a: Wrap,b: Wrap): Boolean pure { a = b }
+function healthy using v(a: Boolean,b: Boolean): Boolean pure { a = b }
+"#;
