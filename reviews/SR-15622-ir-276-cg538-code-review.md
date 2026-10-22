@@ -59,5 +59,19 @@ Final disposition verdict: **PASS** for this preparatory API PR; no finding rema
 | FND | outcome | reason |
 | --- | --- | --- |
 | FND-001 | fixed | Removed post-hit `node_observed`; the new `CountedKey::cmp` counts comparisons made by the production `FirstMatchIndex::get`. A deliberately linear index failed at 384 comparisons for K=3, R=128; the BTreeMap implementation passed the below-128 bound. Focused 9/9 unit and 1/1 integration, clippy, fmt, and diff checks passed at the new head. |
+| FND-002 | still-open | The two new pure indexing tests at head f12b3a12 still carry FR-015-AC-96/97 and TC-025 tags without exercising collection claim semantics; a correction is pending in this PR. |
+| FND-002 | fixed | At head 872e685b, both pure index tests became private assertion helpers, invoked unconditionally by the existing `FR-015-AC-100`/`TC-025` collection harness-identity test. Their false FR-015-AC-96/97 tags are gone; the existing genuine admitted-collection integration tests remain unchanged. The focused combined test passed 1/1. |
 
 The fixed PR remains preparatory. The future `negotiate.rs` caller must construct one `CollectionGraph` for the same package passed to collection lowering, and a request-level counted test must fail if that caller rebuilds the view per item. The current internal lowerer constructs the view from its own package and cannot pair a view with another package.
+
+## New findings (disposition pass 2)
+
+At the later review head `f12b3a123c31318ba1e4eff52160e110da2c3535`, a scoped pre-gate trace check found a separate defect. The previous FND-001 disposition remains fixed.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-002 | medium | Both new indexing tests cite FR-015-AC-96/97 and TC-025, but one exercises only a generic `FirstMatchIndex` and the other only synthetic literal nodes in `CollectionGraph`. Neither admits a collection claim, emits its harness, or checks an unbounded/refused collection disposition, so these tags falsely credit collection behavior criteria. | src/kani/generate/collection.rs:926,950 |
+
+Current disposition verdict: **CONDITIONAL** pending correction of FND-002 on this PR. Existing genuine collection behavior tests in `tests/it/kani_obligations_symbolic_domains.rs` already bind FR-015-AC-96 and FR-015-AC-97; their trace credit must not be replaced by these pure index controls.
+
+Final exact head `872e685b9f991fb69f484c5f5a1ce2387f7c0c8f`: **PASS** for this preparatory collection API PR. FND-001 and FND-002 are fixed; no finding remains open. The caller slice and same-package view requirement remain separate.
