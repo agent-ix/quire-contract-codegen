@@ -398,11 +398,13 @@ fn genuine_composite_host_generation_preserves_closure_and_capability_ordering()
     }
 }
 
-
 #[trace("TC-029", "FR-018-AC-44")]
 #[test]
 fn genuine_union_host_generation_closes_nested_owner_declarations() {
-    let compiled = fixture::compile(fixture::UNION_SOURCE, &qsl_replay::DependencyInput::default());
+    let compiled = fixture::compile(
+        fixture::UNION_SOURCE,
+        &qsl_replay::DependencyInput::default(),
+    );
     let package = checked(&compiled, &[]);
     let items = ["shape_same", "other_same", "wrap_same", "healthy"]
         .map(|name| direct_source_item(&package, name));
@@ -433,27 +435,52 @@ fn genuine_union_capability_refusals_preserve_the_healthy_sibling() {
     let batch = [union.clone(), healthy.clone()];
     let alone = generate_items(&package, None, std::slice::from_ref(&healthy), &[]).unwrap();
     let absent = generate_items(&package, None, &batch, &[]).unwrap();
-    assert_eq!(absent.artifacts, alone.artifacts, "failed Union emits no symbols and preserves sibling bytes");
-    let refused = absent.claim_map.items.iter().find(|claim| claim.node_id == union.node_id).unwrap();
+    let code = |output: &quire_contract_codegen::CompositeEqualityOracles| {
+        output.artifacts.iter().filter(|artifact| artifact.path != "claim-map.json").cloned().collect::<Vec<_>>()
+    };
+    assert_eq!(code(&absent), code(&alone), "failed Union emits no symbols and preserves sibling bytes");
+    let refused = absent
+        .claim_map
+        .items
+        .iter()
+        .find(|claim| claim.node_id == union.node_id)
+        .unwrap();
     assert!(matches!(&refused.result, ClaimDisposition::Refused {
         refusal: CompositeEqualityRefusal::MissingAdmittedContext { type_node_id }
     } if type_node_id == &union.left.source_type));
     let other = fixture::compile(fixture::SOURCE, &Default::default());
-    assert!(matches!(generate_items(&package, Some(other.context()), &batch, &[]),
-        Err(OracleGenerationError::ContextPackageMismatch { .. })));
+    assert!(matches!(
+        generate_items(&package, Some(other.context()), &batch, &[]),
+        Err(OracleGenerationError::ContextPackageMismatch { .. })
+    ));
     let limited = super::admitted_enum_equality::generate_items_with_limits(
-        &package, None, &batch, &[], CompositeEqualityLimits {
-            type_resolution_work_units: 2, ..Default::default()
+        &package,
+        None,
+        &batch,
+        &[],
+        CompositeEqualityLimits {
+            type_resolution_work_units: 2,
+            ..Default::default()
         },
-    ).unwrap();
+    )
+    .unwrap();
     // Absence is discovered at the root before any child work is charged.
-    assert_eq!(limited.artifacts, alone.artifacts);
+    assert_eq!(code(&limited), code(&alone));
     let complete = generate_items(&package, Some(compiled.context()), &batch, &[]).unwrap();
-    let reversed = generate_items(&package, Some(compiled.context()), &[healthy, union], &[]).unwrap();
+    let reversed =
+        generate_items(&package, Some(compiled.context()), &[healthy, union], &[]).unwrap();
     assert_eq!(complete, reversed);
-    let lib = &complete.artifacts.iter().find(|artifact| artifact.path == "src/lib.rs").unwrap().contents;
+    let lib = &complete
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.path == "src/lib.rs")
+        .unwrap()
+        .contents;
     syn::parse_file(lib).expect("emitted Union preparation is valid Rust syntax");
     assert!(lib.contains("environment.seal_union_verified(key, declaration.node(), members.iter().map(|member| member.member().clone()).collect())"));
-    assert!(lib.contains("lookup_composite_key(_context,") && lib.contains("qsl_replay::AdmittedCompositeForm::Union"));
+    assert!(
+        lib.contains("lookup_composite_key(_context,")
+            && lib.contains("qsl_replay::AdmittedCompositeForm::Union")
+    );
     assert!(!lib.contains("NodeKey::from_"));
 }

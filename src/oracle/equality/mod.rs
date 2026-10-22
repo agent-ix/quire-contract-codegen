@@ -1155,8 +1155,8 @@ fn admit_environment(
     composites: Vec<CompositeDeclaration>,
     bindings: &BTreeMap<NodeKey, admitted::CompositeBinding>,
 ) -> Result<TypeEnvironment, ItemCheckError> {
-    let mut environment = TypeEnvironment::new(composites, std::iter::empty())
-        .map_err(environment_failure)?;
+    let mut environment =
+        TypeEnvironment::new(composites, std::iter::empty()).map_err(environment_failure)?;
     for (key, binding) in bindings {
         if let Some(members) = binding.declaration.union_members() {
             environment

@@ -93,4 +93,3 @@ function other_same using v(a: Other,b: Other): Boolean pure { a = b }
 function wrap_same using v(a: Wrap,b: Wrap): Boolean pure { a = b }
 function healthy using v(a: Boolean,b: Boolean): Boolean pure { a = b }
 "#;
-
