@@ -219,7 +219,7 @@ fn case_{index}() {{
     }
 }
 
-const NATIVE_SUPPORT: &str = r#"
+pub(super) const NATIVE_SUPPORT: &str = r#"
 use std::num::NonZeroU64;
 use quire_exact as rt;
 use quire_semantic_value::declaration as sv;
@@ -267,7 +267,7 @@ impl Expr {
         match self {
             // Every operand, including source-negative children and field inputs,
             // is prepared by the canonical parser, never the emitted fast path.
-            Self::Literal(spelling) => Ok(spelling.parse().expect("canonical literal")),
+            Self::Literal(spelling) => spelling.parse().map_err(|_| Observation::InvalidConstant),
             Self::Input => Ok(x.to_string().parse().expect("canonical field")),
             Self::Arithmetic(op, l, r) => {
                 let left = l.integer(x, meter)?;
