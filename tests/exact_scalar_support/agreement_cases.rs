@@ -42,9 +42,9 @@ use generated::{
 };
 use ix_trace_rs::trace;
 use quire_exact::Quantity;
-use quire_semantic_value::quantity::{IdentifiedUnit, QuantityRefusal, UnitQuantity};
-use quire_semantic_value::enumeration::EnumValue;
 use quire_exact::{IllTyped, Integer, Meter, Outcome, ScalarLimits, Text};
+use quire_semantic_value::enumeration::EnumValue;
+use quire_semantic_value::quantity::{IdentifiedUnit, QuantityRefusal, UnitQuantity};
 
 /// Generated oracles in `ComparisonOperator::ALL` order.
 type Compare<T> = fn(&T, &T, &mut Meter) -> Result<Outcome<bool>, OracleStop>;
@@ -64,7 +64,11 @@ const ENUM_COMPARISONS: [Compare<EnumValue>; 6] = [
     enum_greater,
     enum_at_least,
 ];
-type QuantityCompare = for<'a> fn(UnitQuantity<'a>, UnitQuantity<'a>, &mut Meter) -> Result<Outcome<bool>, OracleStop>;
+type QuantityCompare = for<'a, 'b> fn(
+    UnitQuantity<'a>,
+    UnitQuantity<'b>,
+    &mut Meter,
+) -> Result<Outcome<bool>, OracleStop>;
 const QUANTITY_COMPARISONS: [QuantityCompare; 6] = [
     quantity_equal,
     quantity_not_equal,
@@ -537,7 +541,10 @@ fn tc_024_tc187_quantity_oracles_agree() {
         (1, "cm"),
         (1, "in"),
     );
-    assert_eq!(*completed(&run, "U28").0.magnitude(), rt::ratio(127, 500_000));
+    assert_eq!(
+        *completed(&run, "U28").0.magnitude(),
+        rt::ratio(127, 500_000)
+    );
     for (bits, consumed, next) in [(13, 9, "14"), (19, 15, "20")] {
         let run = agree_arithmetic(
             rt::unit_tuple([bits, 0, 2, 2, 11, 1]),
@@ -658,7 +665,9 @@ fn agree_comparison(
     };
     let f = rt::fixture();
     let (a, b) = (f.qi(left.0, left.1), f.qi(right.0, right.1));
-    rt::metered(bounds, |m| rt::compare_quantity(operator, f.resolve(&a), f.resolve(&b), m))
+    rt::metered(bounds, |m| {
+        rt::compare_quantity(operator, f.resolve(&a), f.resolve(&b), m)
+    })
 }
 
 /// The run stopped incomplete with exactly QSpec's record.
@@ -706,7 +715,9 @@ type QuantityRun<T> = (Result<Outcome<T>, IllTyped>, Vec<rt::ChargePoint>, Vec<u
 type QuantityArithmetic = Result<(Outcome<Quantity>, IdentifiedUnit), QuantityRefusal>;
 type QuantityArithmeticRun = (QuantityArithmetic, Vec<rt::ChargePoint>, Vec<u64>);
 
-fn quantity_typed(result: Result<(Outcome<Quantity>, IdentifiedUnit), OracleStop>) -> QuantityArithmetic {
+fn quantity_typed(
+    result: Result<(Outcome<Quantity>, IdentifiedUnit), OracleStop>,
+) -> QuantityArithmetic {
     result.map_err(|stop| match stop {
         OracleStop::Quantity(cause) => cause,
         other => panic!("unexpected quantity stop: {other:?}"),
@@ -718,12 +729,15 @@ fn quantity_typed(result: Result<(Outcome<Quantity>, IdentifiedUnit), OracleStop
 fn arithmetic_outcome(run: &QuantityArithmeticRun) -> Result<Outcome<Quantity>, QuantityRefusal> {
     run.0.clone().map(|(outcome, unit)| {
         if let Outcome::Completed(value) = &outcome {
-            assert_eq!(value.unit(), unit.id(), "result carries its paired owner unit");
+            assert_eq!(
+                value.unit(),
+                unit.id(),
+                "result carries its paired owner unit"
+            );
         }
         outcome
     })
 }
-
 
 #[derive(Clone, Copy)]
 enum Arithmetic {
@@ -786,7 +800,9 @@ fn agree_arithmetic(
     };
     let f = rt::fixture();
     let (a, b) = (f.qi(left.0, left.1), f.qi(right.0, right.1));
-    let (outcome, charges, consumed) = rt::metered(bounds, |m| operation.direct(f.resolve(&a), f.resolve(&b), m));
+    let (outcome, charges, consumed) = rt::metered(bounds, |m| {
+        operation.direct(f.resolve(&a), f.resolve(&b), m)
+    });
     (outcome, charges, consumed)
 }
 
@@ -895,10 +911,8 @@ fn tc_024_tc187_u12_compound_unit_products_agree() {
 #[test]
 fn tc_024_tc187_u02_dimension_normalization_agrees() {
     let f = rt::fixture();
-    let (l, t) = (
-        f.graph.dimension(f.key("L")).expect("length dimension"),
-        f.graph.dimension(f.key("T")).expect("time dimension"),
-    );
+    let (l, t) = (f.unit("m"), f.unit("s"));
+    let (l, t) = (l.unit().dimension(), t.unit().dimension());
     let normalized = l.multiply(t).divide(t);
     assert_eq!(&normalized, l);
     assert_eq!(
@@ -945,12 +959,21 @@ fn tc_024_tc187_u02_dimension_normalization_agrees() {
     };
     let (a, b) = (f.qi(1, "m"), f.qi(1, "s"));
     let ((product, quotient), _, _) = rt::metered(rt::UNLIMITED, |m| {
-        let product = rt::evaluate_quantity_unit(rt::QuantityOperation::Multiply(f.resolve(&a), f.resolve(&b)), m);
+        let product = rt::evaluate_quantity_unit(
+            rt::QuantityOperation::Multiply(f.resolve(&a), f.resolve(&b)),
+            m,
+        );
         let quotient = match &product {
             Ok((Outcome::Completed(p), unit)) => {
                 let mut scope = rt::UnitScope::new(&f.units);
                 scope.form(unit.clone());
-                Some(rt::evaluate_quantity_unit(rt::QuantityOperation::Divide(scope.resolve(p).unwrap(), scope.resolve(&b).unwrap()), m))
+                Some(rt::evaluate_quantity_unit(
+                    rt::QuantityOperation::Divide(
+                        scope.resolve(p).unwrap(),
+                        scope.resolve(&b).unwrap(),
+                    ),
+                    m,
+                ))
             }
             _ => None,
         };
@@ -965,7 +988,7 @@ fn tc_024_tc187_u02_dimension_normalization_agrees() {
     assert_eq!(compound_terms(&unit), expected_terms(&f, &[("m", 1)]));
 
     let power = agree_power(rt::UNLIMITED, (1, "m"), "0");
-    let (quantity, unit) = completed(&power, "(1 m)^0");
+    let (_quantity, unit) = completed(&power, "(1 m)^0");
     assert!(unit.unit().dimension().is_dimensionless());
     assert_vectors_since("TC-187 U02 normalization", mark, 2);
 }
@@ -1121,7 +1144,9 @@ fn admission_refusal(
 }
 
 fn node(n: u8) -> rt::NodeKey {
-    rt::NodeKey::from_hex(&format!("{n:064x}")).expect("a 64-digit hex key")
+    let mut bytes = [0; 32];
+    bytes[31] = n;
+    rt::NodeKey::from_digest(bytes)
 }
 
 fn declaration(
@@ -1129,8 +1154,14 @@ fn declaration(
     target: Option<rt::NodeKey>,
     scale: rt::Rational,
 ) -> rt::UnitNode {
-    rt::UnitNode::checked(*dimension.as_bytes(), target.map(|key| *key.as_bytes()), scale,
-        rt::ratio(0, 1), rt::NominalDeclaration::default()).unwrap()
+    rt::UnitNode::checked(
+        *dimension.as_bytes(),
+        target.map(|key| *key.as_bytes()),
+        scale,
+        rt::ratio(0, 1),
+        rt::NominalDeclaration::default(),
+    )
+    .unwrap()
 }
 
 /// TC-187 U06 and U11: the generated oracles take an already admitted unit graph, so these rows
@@ -1161,10 +1192,18 @@ fn tc_024_tc187_u06_u11_unit_graph_admission_refuses_each_malformed_graph() {
     // omit a root that a target needs, or name a target that does not exist.
     let (length, time) = (node(1), node(2));
     let (a, b, root) = (node(10), node(11), node(12));
-    let dimensions = || std::collections::BTreeMap::from([
-        (length, rt::DimensionNode::checked(vec![], rt::NominalDeclaration::default()).unwrap()),
-        (time, rt::DimensionNode::checked(vec![], rt::NominalDeclaration::default()).unwrap()),
-    ]);
+    let dimensions = || {
+        std::collections::BTreeMap::from([
+            (
+                length,
+                rt::DimensionNode::checked(vec![], rt::NominalDeclaration::default()).unwrap(),
+            ),
+            (
+                time,
+                rt::DimensionNode::checked(vec![], rt::NominalDeclaration::default()).unwrap(),
+            ),
+        ])
+    };
     let one = || rt::ratio(1, 1);
 
     let cause = admission_refusal(rt::UnitGraph::from_checked_nodes(
@@ -1469,23 +1508,36 @@ fn direct_conversion(
             Outcome::Undefined(reason) => Outcome::Undefined(reason),
             Outcome::Refused(reason) => Outcome::Refused(reason),
             Outcome::Incomplete(reason) => Outcome::Incomplete(reason),
-            _ => panic!("unknown outcome"),
         }
     })
 }
 
 fn conversion_fixture() -> rt::Fixture {
-    rt::admit_graph(&support::GraphSpec::conversions()).expect("conversion graph")
+    static FIXTURE: std::sync::OnceLock<rt::Fixture> = std::sync::OnceLock::new();
+    FIXTURE
+        .get_or_init(|| rt::named_fixture(&support::GraphSpec::conversions()))
+        .clone()
 }
 
 fn compound_source(f: &mut rt::Fixture, magnitude: i64, terms: &[(&str, i64)]) -> Quantity {
-    let mut terms = terms
-        .iter()
-        .map(|(unit, exponent)| (f.key(unit), rt::int(i128::from(*exponent))))
-        .collect::<Vec<_>>();
-    terms.sort_by_key(|(key, _)| *key);
-    let unit = rt::QuantityUnit::Compound(f.graph.compound_unit(&terms).unwrap());
-    let id = f.units.insert(unit).expect("record owner-identified compound unit");
+    use quire_semantic_value::quantity::{result_unit, UnitOperation};
+    let root = f.unit("m");
+    let mut unit = result_unit(UnitOperation::Divide, root.unit(), root.unit()).unwrap();
+    for (name, exponent) in terms {
+        let operand = f.unit(name);
+        let operation = if *exponent < 0 {
+            UnitOperation::Divide
+        } else {
+            UnitOperation::Multiply
+        };
+        for _ in 0..exponent.unsigned_abs() {
+            unit = result_unit(operation, &unit, operand.unit()).unwrap();
+        }
+    }
+    let id = f
+        .units
+        .insert(unit)
+        .expect("record owner-identified compound unit");
     Quantity::new(rt::ratio(magnitude, 1), id)
 }
 
@@ -1674,10 +1726,17 @@ fn exact_quantity_conversion_vectors_agree() {
         },
     };
     let converted = quantity_convert(f.resolve(&source), &unit, &mut Meter::new(rt::UNLIMITED))
-        .unwrap().completed().unwrap();
+        .unwrap()
+        .completed()
+        .unwrap();
     let mut scope = rt::UnitScope::new(&f.units);
     scope.form(unit.clone());
-    let (sum, result_unit) = quantity_add(scope.resolve(&converted).unwrap(), scope.resolve(&one).unwrap(), &mut Meter::new(rt::UNLIMITED)).unwrap();
+    let (sum, result_unit) = quantity_add(
+        scope.resolve(&converted).unwrap(),
+        scope.resolve(&one).unwrap(),
+        &mut Meter::new(rt::UNLIMITED),
+    )
+    .unwrap();
     assert_eq!(sum, Outcome::Completed(f.q(rt::ratio(7, 2), "m")));
     assert_eq!(result_unit, unit);
     assert_ne!(
@@ -1725,7 +1784,11 @@ fn quantity_conversion_ill_typed_preserves_meter() {
         ("m to s", f.qi(1, "m"), "s"),
         ("U09", f.qi(1, "m_foreign"), "m"),
         ("U22 nominal", f.qi(1, "N_m"), "J"),
-        ("compound to m", compound_source(&mut f, 4, &[("m", 2)]), "m"),
+        (
+            "compound to m",
+            compound_source(&mut f, 4, &[("m", 2)]),
+            "m",
+        ),
     ] {
         let unit = f.unit(target);
         let run = agree_conversion(rt::UNLIMITED, f.resolve(&source), &unit);
@@ -1759,9 +1822,16 @@ fn quantity_conversion_ill_typed_preserves_meter() {
 }
 
 fn assert_ill_typed_without_charge(row: &str, run: &QuantityRun<Quantity>) {
-    assert!(matches!(run.0, Err(IllTyped { .. })), "{row}: expected typed refusal: {:?}", run.0);
+    assert!(
+        matches!(run.0, Err(IllTyped { .. })),
+        "{row}: expected typed refusal: {:?}",
+        run.0
+    );
     assert!(run.1.is_empty(), "{row}: no charge on refusal");
-    assert!(run.2.iter().all(|value| *value == 0), "{row}: unchanged counters");
+    assert!(
+        run.2.iter().all(|value| *value == 0),
+        "{row}: unchanged counters"
+    );
 }
 
 /// A test-only faulty adapter adds arithmetic charges after an incomplete conversion,
@@ -1781,7 +1851,9 @@ fn conversion_with_incomplete_meter_mutation(
                 Some(&zero),
                 meter,
             ),
-            Outcome::Refused(rt::Refusal::IntegerOutOfDomain { target: Box::new(zero.clone()) })
+            Outcome::Refused(rt::Refusal::IntegerOutOfDomain {
+                target: Box::new(zero.clone())
+            })
         );
     }
     outcome
@@ -1798,7 +1870,9 @@ fn denied_conversion_agreement_detects_non_result_meter_mutation() {
     let unit = f.unit("m");
     assert_eq!(
         rt::metered(rt::UNLIMITED, |meter| direct_conversion(
-            f.resolve(&source), &unit, meter
+            f.resolve(&source),
+            &unit,
+            meter
         )),
         rt::metered(rt::UNLIMITED, |meter| {
             conversion_with_incomplete_meter_mutation(f.resolve(&source), &unit, meter)
@@ -1859,37 +1933,84 @@ fn quantity_paired_result_units_survive_stops_and_feed_following_operations() {
     let a = f.qi(2, "m");
     let b = f.qi(3, "s");
     let mut stopped_meter = Meter::new(rt::unit_tuple([0; 6]));
-    let stopped = quantity_typed(quantity_multiply(f.resolve(&a), f.resolve(&b), &mut stopped_meter)).unwrap();
+    let stopped = quantity_typed(quantity_multiply(
+        f.resolve(&a),
+        f.resolve(&b),
+        &mut stopped_meter,
+    ))
+    .unwrap();
     let mut reference_meter = Meter::new(rt::unit_tuple([0; 6]));
-    let reference = rt::evaluate_quantity_unit(rt::QuantityOperation::Multiply(f.resolve(&a), f.resolve(&b)), &mut reference_meter).unwrap();
-    assert_eq!(stopped, reference, "stopped result retains the exact owner identified unit");
+    let reference = rt::evaluate_quantity_unit(
+        rt::QuantityOperation::Multiply(f.resolve(&a), f.resolve(&b)),
+        &mut reference_meter,
+    )
+    .unwrap();
+    assert_eq!(
+        stopped, reference,
+        "stopped result retains the exact owner identified unit"
+    );
     assert!(matches!(stopped.0, Outcome::Incomplete(_)));
-    assert_eq!(stopped_meter.admitted_charges(), reference_meter.admitted_charges());
+    assert_eq!(
+        stopped_meter.admitted_charges(),
+        reference_meter.admitted_charges()
+    );
     for kind in rt::LimitKind::ALL {
         assert_eq!(stopped_meter.consumed(kind), reference_meter.consumed(kind));
     }
 
     let mut scope = rt::UnitScope::new(&f.units);
     let mut meter = Meter::new(rt::UNLIMITED);
-    let (product, product_unit) = quantity_typed(quantity_multiply(scope.resolve(&a).unwrap(), scope.resolve(&b).unwrap(), &mut meter)).unwrap();
+    let (product, product_unit) = quantity_typed(quantity_multiply(
+        scope.resolve(&a).unwrap(),
+        scope.resolve(&b).unwrap(),
+        &mut meter,
+    ))
+    .unwrap();
     let product = product.completed().expect("genuine product completes");
     assert_eq!(product.unit(), product_unit.id());
-    assert!(scope.resolve(&product).is_none(), "the compound result needs its returned metadata");
+    assert!(
+        scope.resolve(&product).is_none(),
+        "the compound result needs its returned metadata"
+    );
     scope.form(product_unit);
-    let (quotient, quotient_unit) = quantity_typed(quantity_divide(scope.resolve(&product).unwrap(), scope.resolve(&b).unwrap(), &mut meter)).unwrap();
+    let (quotient, quotient_unit) = quantity_typed(quantity_divide(
+        scope.resolve(&product).unwrap(),
+        scope.resolve(&b).unwrap(),
+        &mut meter,
+    ))
+    .unwrap();
     let quotient = quotient.completed().unwrap();
     assert_eq!(*quotient.magnitude(), rt::ratio(2, 1));
     assert_eq!(quotient.unit(), quotient_unit.id());
     scope.form(quotient_unit);
-    let (square, square_unit) = quantity_typed(quantity_power(scope.resolve(&quotient).unwrap(), &rt::int(2), &mut meter)).unwrap();
+    let (square, square_unit) = quantity_typed(quantity_power(
+        scope.resolve(&quotient).unwrap(),
+        &rt::int(2),
+        &mut meter,
+    ))
+    .unwrap();
     let square = square.completed().unwrap();
     assert_eq!(*square.magnitude(), rt::ratio(4, 1));
     assert_eq!(square.unit(), square_unit.id());
     scope.form(square_unit);
     assert!(scope.resolve(&square).is_some());
 
-    let before = (meter.admitted_charges().to_vec(), rt::LimitKind::ALL.map(|kind| meter.consumed(kind)));
+    let before = (
+        meter.admitted_charges().to_vec(),
+        rt::LimitKind::ALL.map(|kind| meter.consumed(kind)),
+    );
     let cause = quantity_typed(quantity_add(f.resolve(&a), f.resolve(&b), &mut meter)).unwrap_err();
-    assert_eq!(cause, QuantityRefusal::IllTyped(IllTyped { cause: rt::IllTypedCause::IncompatibleDimensions }));
-    assert_eq!(before, (meter.admitted_charges().to_vec(), rt::LimitKind::ALL.map(|kind| meter.consumed(kind))));
+    assert_eq!(
+        cause,
+        QuantityRefusal::IllTyped(IllTyped {
+            cause: rt::IllTypedCause::IncompatibleDimensions
+        })
+    );
+    assert_eq!(
+        before,
+        (
+            meter.admitted_charges().to_vec(),
+            rt::LimitKind::ALL.map(|kind| meter.consumed(kind))
+        )
+    );
 }

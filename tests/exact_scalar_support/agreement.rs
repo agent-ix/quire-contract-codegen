@@ -18,27 +18,14 @@
 //! operators directly (`Meter`, `Integer`, `IeeeValue`, unit conversion,
 //! division profiles, ...).
 //!
-//! Node keys in this file are not compared to QSL's computation:
-//! [`GraphSpec::keys`] only has to be internally self-consistent within one
-//! process (the direct call and the generated oracle call always share one
-//! constructed [`Fixture`]), so it hashes its own JSON with `sha2`.
+//! Named unit and enum fixtures come from the public QSL admitted facade.
+//! Malformed graph controls separately use the public low-level QSV node boundary;
+//! those arbitrary node labels make no claim to compiler provenance.
 
 // Each helper is used by some vectors on one side only.
 #![allow(dead_code, unused_imports)]
 
 use std::collections::BTreeMap;
-
-use quire_exact::NODE_KEY_DOMAIN;
-use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
-
-/// A stable, process-internal digest for a fixture node's JSON. Not QSL's
-/// preimage hash (see the module doc): nothing here compares against QSL's
-/// computation anymore, so any deterministic function that gives every
-/// distinct fixture node a distinct key is sufficient.
-fn preimage_digest(document: &Value) -> String {
-    format!("{:x}", Sha256::digest(document.to_string().as_bytes()))
-}
 
 /// Direct runtime and generated oracle agree, including every charge and every
 /// single-charge denial.
@@ -178,7 +165,11 @@ macro_rules! shared_helpers {
                 .collect();
             (
                 outcome,
-                meter.admitted_charges().iter().map(|charge| charge.point).collect(),
+                meter
+                    .admitted_charges()
+                    .iter()
+                    .map(|charge| charge.point)
+                    .collect(),
                 consumed,
             )
         }
@@ -206,7 +197,11 @@ macro_rules! shared_helpers {
         ) -> Vec<DeniedRun<T>> {
             let mut meter = Meter::new(limits);
             let _ = run(&mut meter);
-            let charges = meter.admitted_charges().iter().map(|charge| charge.point).collect::<Vec<_>>();
+            let charges = meter
+                .admitted_charges()
+                .iter()
+                .map(|charge| charge.point)
+                .collect::<Vec<_>>();
             let mut seen: Vec<ChargePoint> = Vec::new();
             charges
                 .into_iter()
@@ -222,8 +217,15 @@ macro_rules! shared_helpers {
                         point,
                         occurrence,
                         outcome,
-                        admitted_charges: denied.admitted_charges().iter().map(|charge| charge.point).collect(),
-                        consumed: LimitKind::ALL.iter().map(|kind| denied.consumed(*kind)).collect(),
+                        admitted_charges: denied
+                            .admitted_charges()
+                            .iter()
+                            .map(|charge| charge.point)
+                            .collect(),
+                        consumed: LimitKind::ALL
+                            .iter()
+                            .map(|kind| denied.consumed(*kind))
+                            .collect(),
                     }
                 })
                 .collect()
@@ -251,11 +253,13 @@ macro_rules! shared_helpers {
             }
 
             pub fn unit(&self, name: &str) -> IdentifiedUnit {
-                IdentifiedUnit::new(QuantityUnit::Declared(Box::new(self.graph.unit(self.key(name)).unwrap().clone()))).unwrap()
+                self.named_units[name].clone()
             }
 
             pub fn resolve<'a>(&'a self, quantity: &'a Quantity) -> UnitQuantity<'a> {
-                self.units.resolve(quantity).expect("fixture quantity has its owner unit")
+                self.units
+                    .resolve(quantity)
+                    .expect("fixture quantity has its owner unit")
             }
 
             pub fn q(&self, value: Rational, name: &str) -> Quantity {
@@ -268,7 +272,10 @@ macro_rules! shared_helpers {
         }
 
         pub fn fixture() -> Fixture {
-            admit_graph(&super::GraphSpec::tc187()).unwrap()
+            static FIXTURE: std::sync::OnceLock<Fixture> = std::sync::OnceLock::new();
+            FIXTURE
+                .get_or_init(|| named_fixture(&super::GraphSpec::tc187()))
+                .clone()
         }
     };
 }
@@ -389,96 +396,6 @@ impl GraphSpec {
         ]);
         spec
     }
-
-    fn node_id(key: &str) -> Value {
-        json!({"domain": NODE_KEY_DOMAIN, "digest": key})
-    }
-
-    fn owner(identity: &str) -> Value {
-        json!({"kind": "definition", "authority": "agent-ix", "identity": identity})
-    }
-
-    pub fn dimension_json(dimension: &DimSpec, keys: &BTreeMap<&'static str, String>) -> Value {
-        let mut terms: Vec<(&String, i64)> = dimension
-            .terms
-            .iter()
-            .map(|(name, exponent)| (&keys[name], *exponent))
-            .collect();
-        terms.sort();
-        let terms: Vec<Value> = terms
-            .into_iter()
-            .map(|(key, exponent)| {
-                json!({"dimension_node_id": Self::node_id(key), "exponent": exponent.to_string()})
-            })
-            .collect();
-        json!({
-            "version": "quire.dimension-node/v1",
-            "owner": Self::owner(dimension.owner),
-            "qualified_declaration": ["Example", dimension.declaration],
-            "terms": terms,
-        })
-    }
-
-    pub fn unit_json(unit: &UnitSpec, keys: &BTreeMap<&'static str, String>) -> Value {
-        let rational =
-            |(n, d): (i64, i64)| json!({"numerator": n.to_string(), "denominator": d.to_string()});
-        json!({
-            "version": "quire.unit-node/v1",
-            "owner": Self::owner("example-model"),
-            "qualified_declaration": ["Example", unit.name],
-            "dimension_node_id": Self::node_id(&keys[unit.dimension]),
-            "target_unit_node_id": unit.target.map_or(Value::Null, |t| Self::node_id(&keys[t])),
-            "scale": rational(unit.scale),
-            "offset": rational(unit.offset),
-        })
-    }
-
-    /// Keys, self-consistently hashed within this process (see the module
-    /// doc: nothing compares these to QSL's own computation anymore).
-    pub fn keys(&self) -> BTreeMap<&'static str, String> {
-        let mut keys = BTreeMap::new();
-        for dimension in &self.dimensions {
-            let digest = preimage_digest(&Self::dimension_json(dimension, &keys));
-            keys.insert(dimension.name, digest);
-        }
-        for unit in &self.units {
-            let digest = preimage_digest(&Self::unit_json(unit, &keys));
-            assert!(
-                keys.insert(unit.name, digest).is_none(),
-                "duplicate fixture name {}",
-                unit.name
-            );
-        }
-        keys
-    }
-}
-
-pub fn enum_declaration_json(declaration: &str, ordered: bool, members: &[&str]) -> Value {
-    json!({
-        "version": "quire.enum-declaration-node/v1",
-        "owner": {"kind": "definition", "authority": "agent-ix", "identity": "example-model"},
-        "qualified_declaration": ["Example", declaration],
-        "ordered": ordered,
-        "members": members,
-    })
-}
-
-pub fn enum_member_json(declaration_key: &str, case: &str) -> Value {
-    json!({
-        "version": "quire.enum-member-node/v1",
-        "declaration_node_id": {"domain": NODE_KEY_DOMAIN, "digest": declaration_key},
-        "case": case,
-    })
-}
-
-/// Enum declaration key (see the module doc: self-consistent within this
-/// process, not QSL's own computation).
-pub fn enum_declaration_key(declaration: &str, ordered: bool, members: &[&str]) -> String {
-    preimage_digest(&enum_declaration_json(declaration, ordered, members))
-}
-
-pub fn enum_member_key(declaration_key: &str, case: &str) -> String {
-    preimage_digest(&enum_member_json(declaration_key, case))
 }
 
 // ---- the runtime side --------------------------------------------------------
@@ -486,10 +403,12 @@ pub fn enum_member_key(declaration_key: &str, case: &str) -> String {
 pub mod rt_side {
     use std::collections::BTreeMap;
 
+    pub use quire_contract_runtime::exact::{
+        evaluate_boolean_short_circuit, ShortCircuitConnective,
+    };
     pub use quire_exact::*;
-    pub use quire_contract_runtime::exact::{evaluate_boolean_short_circuit, ShortCircuitConnective};
     pub use quire_semantic_value::quantity::{
-        compare_quantity, convert_quantity, evaluate_quantity_unit, ConvertedValue, Conversion,
+        compare_quantity, convert_quantity, evaluate_quantity_unit, Conversion, ConvertedValue,
         IdentifiedUnit, QuantityOperation, QuantityRefusal, QuantityTarget, QuantityUnit,
         UnitQuantity, UnitScope, UnitTable,
     };
@@ -520,62 +439,227 @@ pub mod rt_side {
 
     shared_helpers!();
 
+    #[derive(Clone)]
     pub struct Fixture {
-        pub graph: UnitGraph,
         pub units: UnitTable,
         keys: BTreeMap<&'static str, NodeKey>,
+        named_units: BTreeMap<&'static str, IdentifiedUnit>,
+    }
+
+    pub struct LowLevelFixture {
+        pub graph: UnitGraph,
+    }
+
+    /// Compile each original owner independently, then retain every returned unit
+    /// and the complete owner tables. The foreign Length keeps its distinct owner.
+    pub fn named_fixture(spec: &super::GraphSpec) -> Fixture {
+        use std::fmt::Write;
+        let mut units = UnitTable::default();
+        let mut keys = BTreeMap::new();
+        let mut named_units = BTreeMap::new();
+        for owner in ["example-model", "other-model"] {
+            let dimensions = spec
+                .dimensions
+                .iter()
+                .filter(|d| d.owner == owner)
+                .collect::<Vec<_>>();
+            let mut source = String::from("language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\n");
+            for d in &dimensions {
+                if d.terms.is_empty() {
+                    writeln!(source, "dimension {};", d.declaration).unwrap();
+                } else {
+                    let terms = d
+                        .terms
+                        .iter()
+                        .map(|(name, exponent)| {
+                            let name = spec
+                                .dimensions
+                                .iter()
+                                .find(|d| d.name == *name)
+                                .unwrap()
+                                .declaration;
+                            format!("{name} ^ {exponent}")
+                        })
+                        .collect::<Vec<_>>()
+                        .join(" * ");
+                    writeln!(source, "dimension {} = {terms};", d.declaration).unwrap();
+                }
+            }
+            let owned = spec
+                .units
+                .iter()
+                .filter(|u| dimensions.iter().any(|d| d.name == u.dimension))
+                .collect::<Vec<_>>();
+            for u in &owned {
+                let dimension = dimensions
+                    .iter()
+                    .find(|d| d.name == u.dimension)
+                    .unwrap()
+                    .declaration;
+                write!(
+                    source,
+                    "unit {} : {dimension} = rational({}, {})",
+                    u.name, u.scale.0, u.scale.1
+                )
+                .unwrap();
+                if let Some(target) = u.target {
+                    write!(source, " * {target}").unwrap();
+                }
+                if u.offset.0 != 0 {
+                    write!(source, " + rational({}, {})", u.offset.0, u.offset.1).unwrap();
+                }
+                source.push_str(";\n");
+            }
+            source.push_str("function fixture using v(): Boolean pure { true }\n");
+            let compiled = qsl_replay::compile_admitted(
+                qsl_replay::SourceIdentity::new("agent-ix", owner, "git", "1"),
+                "fixture.native",
+                source.as_bytes(),
+                [],
+                &qsl_replay::DependencyInput::default(),
+                qsl_replay::StageLimits::default(),
+                qsl_replay::ReplayLimits::default(),
+            )
+            .unwrap_or_else(|error| panic!("named owner fixture failed: {error:?}\n{source}"));
+            let context = compiled.context();
+            for d in &dimensions {
+                let admitted = context
+                    .dimensions()
+                    .find(|a| a.qualified_name().last().unwrap().as_str() == d.declaration)
+                    .expect("owner dimension");
+                keys.insert(d.name, admitted.node());
+            }
+            for u in owned {
+                let admitted = context
+                    .units()
+                    .find(|a| a.qualified_name().last().unwrap().as_str() == u.name)
+                    .expect("owner unit");
+                let identified = IdentifiedUnit::new(admitted.quantity_unit().clone())
+                    .expect("admitted unit identity");
+                assert_eq!(identified.id(), admitted.id());
+                keys.insert(u.name, admitted.node());
+                named_units.insert(u.name, identified);
+            }
+            units.append(context.unit_table().clone());
+        }
+        Fixture {
+            units,
+            keys,
+            named_units,
+        }
     }
 
     fn rational((numerator, denominator): (i64, i64)) -> Rational {
         Rational::new(Integer::from(numerator), Integer::from(denominator)).unwrap()
     }
 
-    pub fn admit_graph(spec: &super::GraphSpec) -> Result<Fixture, InvalidSemanticGraph> {
-        let hex = spec.keys();
-        let key = |digest: &str| NodeKey::from_hex(digest).unwrap();
-        let dimensions = spec.dimensions.iter().map(|d| {
-            let mut terms = d.terms.iter().map(|(name, exponent)| {
-                (*key(&hex[name]).as_bytes(), Integer::from(*exponent))
-            }).collect::<Vec<_>>();
-            terms.sort_by_key(|(term, _)| *term);
-            let node = DimensionNode::checked(terms, NominalDeclaration::default())
-                .map_err(|cause| InvalidSemanticGraph { cause })?;
-            Ok((key(&hex[d.name]), node))
-        }).collect::<Result<BTreeMap<_, _>, InvalidSemanticGraph>>()?;
-        let units = spec.units.iter().map(|u| {
-            let node = UnitNode::checked(
-                *key(&hex[u.dimension]).as_bytes(), u.target.map(|target| *key(&hex[target]).as_bytes()),
-                rational(u.scale), rational(u.offset), NominalDeclaration::default(),
-            ).map_err(|cause| InvalidSemanticGraph { cause })?;
-            Ok((key(&hex[u.name]), node))
-        }).collect::<Result<BTreeMap<_, _>, InvalidSemanticGraph>>()?;
-        let graph = UnitGraph::from_checked_nodes(&dimensions, &units)?;
-        let units = UnitTable::declared(&graph);
-        let keys = hex
+    /// Low-level malformed-topology controls only: labels are arbitrary test bytes.
+    pub fn admit_graph(spec: &super::GraphSpec) -> Result<LowLevelFixture, InvalidSemanticGraph> {
+        let labels = spec
+            .dimensions
             .iter()
-            .map(|(name, digest)| (*name, key(digest)))
-            .collect();
-        Ok(Fixture { graph, units, keys })
+            .map(|d| d.name)
+            .chain(spec.units.iter().map(|u| u.name))
+            .enumerate()
+            .map(|(index, name)| {
+                let mut bytes = [0; 32];
+                bytes[31] = u8::try_from(index + 1).unwrap();
+                (name, NodeKey::from_digest(bytes))
+            })
+            .collect::<BTreeMap<_, _>>();
+        let key = |name: &str| labels[name];
+        let dimensions = spec
+            .dimensions
+            .iter()
+            .map(|d| {
+                let mut terms = d
+                    .terms
+                    .iter()
+                    .map(|(name, exponent)| (*key(name).as_bytes(), Integer::from(*exponent)))
+                    .collect::<Vec<_>>();
+                terms.sort_by_key(|(term, _)| *term);
+                let node = DimensionNode::checked(terms, NominalDeclaration::default())
+                    .map_err(|cause| InvalidSemanticGraph { cause })?;
+                Ok((key(d.name), node))
+            })
+            .collect::<Result<BTreeMap<_, _>, InvalidSemanticGraph>>()?;
+        let units = spec
+            .units
+            .iter()
+            .map(|u| {
+                let node = UnitNode::checked(
+                    *key(u.dimension).as_bytes(),
+                    u.target.map(|target| *key(target).as_bytes()),
+                    rational(u.scale),
+                    rational(u.offset),
+                    NominalDeclaration::default(),
+                )
+                .map_err(|cause| InvalidSemanticGraph { cause })?;
+                Ok((key(u.name), node))
+            })
+            .collect::<Result<BTreeMap<_, _>, InvalidSemanticGraph>>()?;
+        let graph = UnitGraph::from_checked_nodes(&dimensions, &units)?;
+        Ok(LowLevelFixture { graph })
     }
 
-    /// A compiler-admitted enum declaration under its self-consistently
-    /// hashed key (see the module doc).
-    pub struct Enum(EnumDeclaration);
+    /// A genuine compiler-admitted enum, retaining its member identities.
+    pub struct Enum {
+        declaration: EnumDeclaration,
+        cases: BTreeMap<String, NodeKey>,
+    }
 
     pub fn enum_declaration(
         declaration: &str,
         ordered: bool,
         members: &[&str],
     ) -> Result<Enum, InvalidSemanticGraph> {
-        let key = super::enum_declaration_key(declaration, ordered, members);
-        EnumDeclaration::new(NodeKey::from_hex(&key).unwrap(), ordered, members.iter().map(|member| (*member).to_owned()).collect()).map(Enum)
+        use std::sync::{Mutex, OnceLock};
+        static ENUMS: OnceLock<Mutex<BTreeMap<String, qsl_replay::AdmittedEnum>>> = OnceLock::new();
+        let source = format!(
+            "language \"ix:native\" edition \"1-draft\";\n{}enum {declaration} {{ {} }}\n",
+            if ordered { "ordered " } else { "" },
+            members.join(", ")
+        );
+        let mut enums = ENUMS.get_or_init(Mutex::default).lock().unwrap();
+        let admitted = enums.entry(source.clone()).or_insert_with(|| {
+            let compiled = qsl_replay::compile_admitted(
+                qsl_replay::SourceIdentity::new("agent-ix", "example-model", "git", "1"),
+                "enum.native",
+                source.as_bytes(),
+                [],
+                &qsl_replay::DependencyInput::default(),
+                qsl_replay::StageLimits::default(),
+                qsl_replay::ReplayLimits::default(),
+            )
+            .expect("genuine enum source");
+            let admitted = compiled
+                .context()
+                .enums()
+                .next()
+                .expect("owner enum")
+                .clone();
+            admitted
+        });
+        let declaration = EnumDeclaration::new(
+            admitted.key(),
+            admitted.is_ordered(),
+            admitted
+                .cases()
+                .iter()
+                .map(|case| case.case().as_str().to_owned())
+                .collect(),
+        )?;
+        let cases = admitted
+            .cases()
+            .iter()
+            .map(|case| (case.case().as_str().to_owned(), case.key()))
+            .collect();
+        Ok(Enum { declaration, cases })
     }
 
     impl Enum {
         pub fn value(&self, case: &str) -> Result<EnumValue, InvalidSemanticGraph> {
-            let declaration = self.0.key().to_string();
-            let key = super::enum_member_key(&declaration, case);
-            self.0.member(case, NodeKey::from_hex(&key).unwrap())
+            self.declaration.member(case, self.cases[case])
         }
     }
 }
