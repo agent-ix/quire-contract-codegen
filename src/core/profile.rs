@@ -55,6 +55,17 @@ mod tests {
     };
     use ix_trace_rs::trace;
 
+    #[trace("TC-024", "FR-014-AC-8")]
+    #[test]
+    fn generated_manifest_exposes_semantic_value_owner_source() {
+        let manifest = oracle_crate_manifest("owner-source-consumer");
+        let dependency = format!(
+            "quire-semantic-value = {{ {} }}",
+            crate::SEMANTIC_VALUE_DEPENDENCY_SOURCE
+        );
+        assert!(manifest.lines().any(|line| line == dependency));
+    }
+
     #[trace("FR-014-AC-8", "TC-024")]
     #[test]
     fn runtime_boolean_outcome_has_the_kernel_type() {
