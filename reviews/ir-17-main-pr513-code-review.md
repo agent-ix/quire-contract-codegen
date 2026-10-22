@@ -1235,3 +1235,147 @@ bindings:
   ac_id: FR-031-AC-26
   trace: correct
 ```
+
+## Round 2 source and evidence review
+
+Round 2 source review at cd202f1b8fda0c23428c19aa47c40ce3769ff76c covers the entire origin/main...HEAD landing by retaining the original whole-diff review and inspecting all post-64fabc7e changes. Read-only git ls-remote confirms remote main and local origin/main both 0d7813df955576edc867cfa90e2071bd56d844ff. The working tree is clean; no refs were changed. The eight original source/custody findings remain fixed; their original and round-1 disposition rows remain unchanged. Two new test-intent findings and one independently confirmed product finding require another fix round. Source mergeability: FAIL until FND009/FND010/FND011 are resolved, then conditional on final qualification and the independent non-authored review. No product source edits or Cargo/native/namespace/backend/gate execution ran in this reviewer pass.
+
+Production inspection: admit_environment attaches the owner's complete unit_table clone before Union seals, and the emitted recipe does the equivalent after context/package checks. None preserves construction. Direct/nested Quantity Unsupported remains unchanged. Genuine source helper checks owner node lookup versus owner-issued IDs, exact metadata, quantity resolution, unused km and None preservation. Those helper assertions are sound in isolation but do not exercise the production attachment boundary (FND009). The public integration currently checks typed direct/nested refusals, healthy Generated statuses, missing nominal context and wrong-package whole-request precedence, but omits the planned absent-symbol and isolated-source checks (FND010). No positive Quantity equality acceptance is claimed.
+
+QSL lock is 48b47ab99175a80f799b786d6feda1b1ad37cffb; read-only merge-base confirms descendant of required 0b839dd. Named scalar unit fixtures compile authentic public QSL source for the two original owners, preserve unit dimensions/scales/offsets/labels, retain owner-issued node/ID metadata and complete tables, and independently compile enum members. The reserved keyword in becomes source inch while vector label and 127/5000 scale remain unchanged. Arbitrary low-level labels are confined to explicit malformed-topology controls, not nominal fixtures. No private schema/hash recipe or compatible value implementation is introduced. Paired scalar results retain complete IdentifiedUnit across stops and chained operations, typed IllTyped/Identity and charge/counter/denial oracles. HRTB quantity comparison now supports independent operand lifetimes. The existing record/tuple fixture explicitly excludes Union. No native Union acceptance follows from host source tests.
+
+Evidence inspected from fix-round-2: focused-final-summary.json plus each referenced raw log and command JSON confirms the exact named outer native scalar test passed one test, whose runner requires every #[test] in the current source (20 cases), and the exact record/tuple native test passed one test (direct/transitive inside). Each six original host controls matched exactly one test; source iterates all original fifteen fixtures plus mixed. Union closure and public integration each passed two. Metadata helper one and integration two passed, with the coverage limits above. Quantity refusal, source panic scan, scalar-family generation and Boolean retention each passed one. fmt-check, clippy all-targets -D warnings, and spec validation exit zero; spec warnings remain visible. Earlier failed attempts remain in separate logs and are not counted as final PASS. These are author-run focused observations, not reviewer execution and not aggregate proof.
+
+resolved-all-cohorts.json and the three actual root/generated locks retain one-copy outcomes. QSL/QSV/Exact owner revisions align; root Runtime a60c508 and independently fresh generated Runtime 3d2d820 differ because fresh generated crates resolve their public branch constraints. The compatibility trace range permits root 0.1.0 and fresh 0.1.2; neither equality of those Runtime revisions nor a universal sealed cohort is claimed. No lock was seeded into generated scratch crates. Protected source-preservation assertions and unchanged original case declarations were inspected. Main's Quantity -> NonRangeType and equality AC18/38 refusal are unchanged.
+
+FND011 provenance: externally reported by codex2 through the user and parent, independently confirmed here from mark_arithmetic, outcome_bool, plain_node and outcome_short_connective. In a globally metered root, a false holds_arithmetic mark routes an entire Boolean-only subtree through unmetered plain_node, so nested Not/connectives miss the required completed result retain. The outer short-circuit connective then retains once and skips the arithmetic right branch, yielding the wrong stop boundary for result_units=1. Source proof only; no regression execution performed by this reviewer. Preserve original FR031 spec-fix disposition FND004; this is a distinct implementation defect under corrected AC26. The same coder owns the native regression and production fix in this PR.
+
+The AC45 specification lineage is independently reviewed in the nine retained SR15380..15388 artifacts; this pass checks consuming code and test intent, without rewriting their original verdicts. The initial Union amendment reviews SR15372..15377 and PR510 remain intact. Full aggregate make ci, Kani/CBMC/backend acceptance and final retained receipt remain pending. Source inspection/emission fragments never count as execution of the emitted metadata constructor. No new issue or host/security/account change is proposed.
+
+## New findings (disposition pass 2)
+
+| FND | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-009 | medium | The AC45 table-retention test calls attach_owner_units directly rather than the production admit_environment path; removing the production attachment leaves every new AC45 test green, contrary to the required attachment-deletion oracle. | src/oracle/equality/units.rs:64-65 |
+| FND-010 | medium | The AC45 mixed Quantity controls only assert a Generated sibling; they never compare its disposition/source to an isolated run or assert absent symbols for refused Quantity items, leaving the required no-symbol and unchanged-sibling branches untested. | tests/it/admitted_quantity_units.rs:73-79,95-133 |
+| FND-011 | high | In an arithmetic-containing native root, outcome_bool renders a Boolean-only connective subtree through plain_node inside Completed, bypassing required retains. And(Not(flag),Eq(Add(x,0),x)) with flag=true charges only the outer And; result_units=1 incorrectly completes false instead of stopping Incomplete at its denied second retain. | src/oracle/boolean_v1.rs:1183-1188 |
+
+FND009 failure scenario: delete only the units::attach_owner_units call at equality/mod.rs:1161 and construct TypeEnvironment directly. Quantity refusal occurs independently; supported equality has no quantity metadata dependency, and emitted recipe remains unchanged, so all new tests still satisfy their assertions. Exercise actual admit_environment with authentic context and inspect its retained complete table to close this gap. This scenario is source-reasoned, not an executed mutation.
+
+FND010 failure scenario: mixed generation may corrupt a healthy sibling body while leaving Generated, or emit a dangling oracle for a Refused Quantity item. Current status and generic source-fragment checks do not distinguish either regression. Compare the isolated supported sibling artifact/body and full disposition, and assert refused symbol absence for direct and nested mixed controls, retaining all genuine source identities and refusal precedence. Existing general sibling tests do not discriminate this new metadata/Quantity combination.
+
+## Dispositions round 2
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-009 | still-open | The AC45 table-retention test calls attach_owner_units directly rather than the production admit_environment path; removing the production attachment leaves every new AC45 test green, contrary to the required attachment-deletion oracle. |
+| FND-010 | still-open | The AC45 mixed Quantity controls only assert a Generated sibling; they never compare its disposition/source to an isolated run or assert absent symbols for refused Quantity items, leaving the required no-symbol and unchanged-sibling branches untested. |
+| FND-011 | still-open | In an arithmetic-containing native root, outcome_bool renders a Boolean-only connective subtree through plain_node inside Completed, bypassing required retains. And(Not(flag),Eq(Add(x,0),x)) with flag=true charges only the outer And; result_units=1 incorrectly completes false instead of stopping Incomplete at its denied second retain. |
+
+```yaml
+dispositions:
+- fnd: FND-009
+  outcome: still-open
+  reason: The AC45 table-retention test calls attach_owner_units directly rather than
+    the production admit_environment path; removing the production attachment leaves
+    every new AC45 test green, contrary to the required attachment-deletion oracle.
+- fnd: FND-010
+  outcome: still-open
+  reason: The AC45 mixed Quantity controls only assert a Generated sibling; they never
+    compare its disposition/source to an isolated run or assert absent symbols for
+    refused Quantity items, leaving the required no-symbol and unchanged-sibling branches
+    untested.
+- fnd: FND-011
+  outcome: still-open
+  reason: In an arithmetic-containing native root, outcome_bool renders a Boolean-only
+    connective subtree through plain_node inside Completed, bypassing required retains.
+    And(Not(flag),Eq(Add(x,0),x)) with flag=true charges only the outer And; result_units=1
+    incorrectly completes false instead of stopping Incomplete at its denied second
+    retain.
+review_head: cd202f1b8fda0c23428c19aa47c40ce3769ff76c
+scope:
+- id: FR-018-AC-45
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: After the existing setting/accounting and original-package context guards
+    succeed, generation-time construction and emitted preparation supplied Some(context)
+    attach a clone of that context's complete authoritative unit_table() to the constructed
+    TypeEnvironment, retaining declared but unused units without rebuilding a table,
+    deriving UnitId/NodeKey or substituting another package's table.
+- id: TC-029
+  path: spec/oracle/matrix/TC-029-composite-equality-oracles.md
+  role: examined
+  excerpt: Deleting either attachment must fail its corresponding check.
+- id: FR-031-AC-26
+  path: spec/oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md
+  role: examined
+  excerpt: Each completed connective, including unary BooleanNot, calls `quire_exact::retain_boolean`
+    exactly once and charges `boolean.result-retain` once, including a result decided
+    by the left; a child stop charges no connective result-retain point.
+prior_outcomes_confirmed:
+  FND-001: fixed
+  FND-002: fixed
+  FND-003: fixed
+  FND-004: fixed
+  FND-005: fixed
+  FND-006: fixed
+  FND-007: fixed
+  FND-008: fixed
+new_findings:
+- fnd: FND-009
+  severity: medium
+  confidence: high
+  method: code-review
+  check: test-intent
+  artifact_id: FR-018-AC-45
+  related_ids:
+  - TC-029
+  path: src/oracle/equality/units.rs
+  lines: 64-65
+  excerpt: After the existing setting/accounting and original-package context guards
+    succeed, generation-time construction and emitted preparation supplied Some(context)
+    attach a clone of that context's complete authoritative unit_table() to the constructed
+    TypeEnvironment, retaining declared but unused units without rebuilding a table,
+    deriving UnitId/NodeKey or substituting another package's table.
+  finding: The AC45 table-retention test calls attach_owner_units directly rather
+    than the production admit_environment path; removing the production attachment
+    leaves every new AC45 test green, contrary to the required attachment-deletion
+    oracle.
+- fnd: FND-010
+  severity: medium
+  confidence: high
+  method: code-review
+  check: test-intent
+  artifact_id: FR-018-AC-45
+  related_ids:
+  - TC-029
+  - FR-018-AC-18
+  - FR-018-AC-38
+  path: tests/it/admitted_quantity_units.rs
+  lines: 73-79,95-133
+  excerpt: Wrong-package refusal retains its whole-request precedence; direct and
+    nested Quantity items retain their existing typed Unsupported behavior and refusal
+    precedence, emit no symbols, and leave independent healthy siblings unchanged.
+  finding: The AC45 mixed Quantity controls only assert a Generated sibling; they
+    never compare its disposition/source to an isolated run or assert absent symbols
+    for refused Quantity items, leaving the required no-symbol and unchanged-sibling
+    branches untested.
+- fnd: FND-011
+  severity: high
+  confidence: high
+  method: code-review
+  check: code-bug
+  artifact_id: FR-031-AC-26
+  related_ids:
+  - TC-044
+  path: src/oracle/boolean_v1.rs
+  lines: 1183-1188
+  excerpt: Each completed connective, including unary BooleanNot, calls `quire_exact::retain_boolean`
+    exactly once and charges `boolean.result-retain` once, including a result decided
+    by the left; a child stop charges no connective result-retain point.
+  finding: In an arithmetic-containing native root, outcome_bool renders a Boolean-only
+    connective subtree through plain_node inside Completed, bypassing required retains.
+    And(Not(flag),Eq(Add(x,0),x)) with flag=true charges only the outer And; result_units=1
+    incorrectly completes false instead of stopping Incomplete at its denied second
+    retain.
+```

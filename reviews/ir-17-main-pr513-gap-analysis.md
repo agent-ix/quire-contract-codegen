@@ -1014,3 +1014,50 @@ dispositions:
     oracle; no duplicate ticket, fix, proof or completion claimed. Repository FAIL
     remains.
 ```
+
+## Round 2 source and evidence review
+
+Round 2 source review at cd202f1b8fda0c23428c19aa47c40ce3769ff76c covers the entire origin/main...HEAD landing by retaining the original whole-diff review and inspecting all post-64fabc7e changes. Read-only git ls-remote confirms remote main and local origin/main both 0d7813df955576edc867cfa90e2071bd56d844ff. The working tree is clean; no refs were changed. The eight original source/custody findings remain fixed; their original and round-1 disposition rows remain unchanged. Two new test-intent findings and one independently confirmed product finding require another fix round. Source mergeability: FAIL until FND009/FND010/FND011 are resolved, then conditional on final qualification and the independent non-authored review. No product source edits or Cargo/native/namespace/backend/gate execution ran in this reviewer pass.
+
+Production inspection: admit_environment attaches the owner's complete unit_table clone before Union seals, and the emitted recipe does the equivalent after context/package checks. None preserves construction. Direct/nested Quantity Unsupported remains unchanged. Genuine source helper checks owner node lookup versus owner-issued IDs, exact metadata, quantity resolution, unused km and None preservation. Those helper assertions are sound in isolation but do not exercise the production attachment boundary (FND009). The public integration currently checks typed direct/nested refusals, healthy Generated statuses, missing nominal context and wrong-package whole-request precedence, but omits the planned absent-symbol and isolated-source checks (FND010). No positive Quantity equality acceptance is claimed.
+
+QSL lock is 48b47ab99175a80f799b786d6feda1b1ad37cffb; read-only merge-base confirms descendant of required 0b839dd. Named scalar unit fixtures compile authentic public QSL source for the two original owners, preserve unit dimensions/scales/offsets/labels, retain owner-issued node/ID metadata and complete tables, and independently compile enum members. The reserved keyword in becomes source inch while vector label and 127/5000 scale remain unchanged. Arbitrary low-level labels are confined to explicit malformed-topology controls, not nominal fixtures. No private schema/hash recipe or compatible value implementation is introduced. Paired scalar results retain complete IdentifiedUnit across stops and chained operations, typed IllTyped/Identity and charge/counter/denial oracles. HRTB quantity comparison now supports independent operand lifetimes. The existing record/tuple fixture explicitly excludes Union. No native Union acceptance follows from host source tests.
+
+Evidence inspected from fix-round-2: focused-final-summary.json plus each referenced raw log and command JSON confirms the exact named outer native scalar test passed one test, whose runner requires every #[test] in the current source (20 cases), and the exact record/tuple native test passed one test (direct/transitive inside). Each six original host controls matched exactly one test; source iterates all original fifteen fixtures plus mixed. Union closure and public integration each passed two. Metadata helper one and integration two passed, with the coverage limits above. Quantity refusal, source panic scan, scalar-family generation and Boolean retention each passed one. fmt-check, clippy all-targets -D warnings, and spec validation exit zero; spec warnings remain visible. Earlier failed attempts remain in separate logs and are not counted as final PASS. These are author-run focused observations, not reviewer execution and not aggregate proof.
+
+resolved-all-cohorts.json and the three actual root/generated locks retain one-copy outcomes. QSL/QSV/Exact owner revisions align; root Runtime a60c508 and independently fresh generated Runtime 3d2d820 differ because fresh generated crates resolve their public branch constraints. The compatibility trace range permits root 0.1.0 and fresh 0.1.2; neither equality of those Runtime revisions nor a universal sealed cohort is claimed. No lock was seeded into generated scratch crates. Protected source-preservation assertions and unchanged original case declarations were inspected. Main's Quantity -> NonRangeType and equality AC18/38 refusal are unchanged.
+
+FND011 provenance: externally reported by codex2 through the user and parent, independently confirmed here from mark_arithmetic, outcome_bool, plain_node and outcome_short_connective. In a globally metered root, a false holds_arithmetic mark routes an entire Boolean-only subtree through unmetered plain_node, so nested Not/connectives miss the required completed result retain. The outer short-circuit connective then retains once and skips the arithmetic right branch, yielding the wrong stop boundary for result_units=1. Source proof only; no regression execution performed by this reviewer. Preserve original FR031 spec-fix disposition FND004; this is a distinct implementation defect under corrected AC26. The same coder owns the native regression and production fix in this PR.
+
+The AC45 specification lineage is independently reviewed in the nine retained SR15380..15388 artifacts; this pass checks consuming code and test intent, without rewriting their original verdicts. The initial Union amendment reviews SR15372..15377 and PR510 remain intact. Full aggregate make ci, Kani/CBMC/backend acceptance and final retained receipt remain pending. Source inspection/emission fragments never count as execution of the emitted metadata constructor. No new issue or host/security/account change is proposed.
+
+Fresh computed quoin matrix has 899 criteria: 543 tagged, 288 untagged, 16 tagged-by-ignored-test and 52 method-without-symbol. AC45 is the sole post-round1 new criterion, tagged to the helper and two integration tests; static tagging is not evidence discharge. All matrix evidence_status entries remain no run evidence. New FND009/FND010 in SR15370 record the AC45 assertion gaps, rather than duplicating them as new unowned remediation here. The complete source/requirement/test chain and coverage diagnostics were compared to the retained base inventory and the preceding computed comparison. Quire coverage still reports ten diagnostics and the same seven resemblance suspicions as the initial candidate; these are not newly invented or execution claims. Raw coverage traverses additional reviewed artifacts and must not be confused with the 899 acceptance-criterion matrix denominator.
+
+Both repository-level findings remain untagged: FR005AC3 is deferred to the existing SR15352/FND001 baseline CLI inventory, already routed via IR954/IR17 planner records; FR016AC25 is deferred to existing IR604/PR498 replay ownership. The explicit round1 reasons and rows are preserved. The original inventory of 320 findings and its explicit outcomes remain authoritative for inherited gaps. Of current 288 untagged criteria, 287 occur in that inventory and the remaining FR016AC25 has its existing owner. No new issue is allowed or needed. Repository completeness: FAIL; incremental static traceability: PASS; introduced test-intent coverage remains FAIL in SR15370 pending fixes. Dedicated ignored Kani controls are not called defects merely for their lane. Plan completion: not assessed. Optional semantic gap review was not opted in; mandatory code-review oracle checks ran and produced the two new findings. No source execution or aggregate acceptance is asserted.
+
+```yaml
+dispositions: []
+review_head: cd202f1b8fda0c23428c19aa47c40ce3769ff76c
+scope:
+- id: FR-018-AC-45
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: After the existing setting/accounting and original-package context guards
+    succeed, generation-time construction and emitted preparation supplied Some(context)
+    attach a clone of that context's complete authoritative unit_table() to the constructed
+    TypeEnvironment, retaining declared but unused units without rebuilding a table,
+    deriving UnitId/NodeKey or substituting another package's table.
+- id: TC-029
+  path: spec/oracle/matrix/TC-029-composite-equality-oracles.md
+  role: examined
+  excerpt: Deleting either attachment must fail its corresponding check.
+- id: FR-031-AC-26
+  path: spec/oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md
+  role: examined
+  excerpt: Each completed connective, including unary BooleanNot, calls `quire_exact::retain_boolean`
+    exactly once and charges `boolean.result-retain` once, including a result decided
+    by the left; a child stop charges no connective result-retain point.
+prior_outcomes_confirmed:
+  FND-001: deferred
+  FND-002: deferred
+```

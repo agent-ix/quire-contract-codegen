@@ -1179,10 +1179,15 @@ impl<'a> Renderer<'a> {
         }
     }
 
-    /// A Boolean node as an `rt::Outcome<bool>` expression, for the native oracle. A node with no
-    /// arithmetic below it is the plain `bool` it has always been, completed.
+    /// A Boolean node within a metered native oracle. Connectives retain their
+    /// completed results even when their own subtree has no arithmetic; pure
+    /// leaves keep their plain Boolean meaning without an extra retain.
     fn outcome_bool(&mut self, expression: &Expression) -> Rendered {
-        if !self.holds_arithmetic() {
+        let connective = matches!(
+            expression.kind(),
+            ExpressionKind::BooleanNot { .. } | ExpressionKind::Boolean { .. }
+        );
+        if !connective && !self.holds_arithmetic() {
             self.emit("rt::Outcome::Completed(")?;
             self.plain_node(expression)?;
             return self.emit(")");
@@ -1224,7 +1229,7 @@ impl<'a> Renderer<'a> {
         }
     }
 
-    /// A connective with arithmetic below it. Both shapes carry the first child stop and
+    /// A connective within a metered oracle. Both shapes carry the first child stop and
     /// retain exactly one completed Boolean result through the exact kernel.
     fn outcome_connective(
         &mut self,
