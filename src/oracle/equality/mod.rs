@@ -4266,7 +4266,7 @@ fn deep_matches_shallow() {
         let admitted = qsl_replay::compile_admitted(
             qsl_replay::SourceIdentity::new("test", "render-boundary.native", "git", "fixture"),
             "render-boundary.native",
-            b"language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\ndimension Length;\nunit m : Length = rational(1, 1);\n",
+            b"language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\ndimension Length;\nunit m : Length = rational(1, 1);\nfunction same using v(a: Quantity<m>, b: Quantity<m>): Boolean pure { a = b }\n",
             [], &qsl_replay::DependencyInput::default(), qsl_replay::StageLimits::default(),
             qsl_replay::ReplayLimits::default(),
         ).expect("the render boundary has a genuine owner-admitted quantity unit");
