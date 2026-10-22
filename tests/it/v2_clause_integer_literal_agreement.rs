@@ -253,6 +253,7 @@ fn completed<T>(outcome: rt::Outcome<T>) -> Result<T, Observation> {
 enum Expr {
     Literal(&'static str), Input,
     Arithmetic(&'static str, Box<Expr>, Option<Box<Expr>>),
+    BoundedArithmetic(&'static str, Box<Expr>, Box<Expr>, &'static str, &'static str),
     Compare(&'static str, Box<Expr>, Box<Expr>),
     BooleanOp(&'static str, Box<Expr>, Box<Expr>),
 }
@@ -260,6 +261,9 @@ fn lit(s: &'static str) -> Expr { Expr::Literal(s) }
 fn input() -> Expr { Expr::Input }
 fn a(op: &'static str, l: Expr, r: Expr) -> Expr { Expr::Arithmetic(op, Box::new(l), Some(Box::new(r))) }
 fn neg(v: Expr) -> Expr { Expr::Arithmetic("neg", Box::new(v), None) }
+fn ab(op: &'static str, l: Expr, r: Expr, lower: &'static str, upper: &'static str) -> Expr {
+    Expr::BoundedArithmetic(op, Box::new(l), Box::new(r), lower, upper)
+}
 fn c(op: &'static str, l: Expr, r: Expr) -> Expr { Expr::Compare(op, Box::new(l), Box::new(r)) }
 fn b(op: &'static str, l: Expr, r: Expr) -> Expr { Expr::BooleanOp(op, Box::new(l), Box::new(r)) }
 impl Expr {
@@ -280,6 +284,21 @@ impl Expr {
                     other => panic!("unknown reference arithmetic {other}"),
                 };
                 completed(rt::evaluate_integer_arithmetic(operation, None, meter))
+            }
+            Self::BoundedArithmetic(op, l, r, lower, upper) => {
+                let left = l.integer(x, meter)?;
+                let right = r.integer(x, meter)?;
+                let lower = lower.parse().map_err(|_| Observation::InvalidConstant)?;
+                let upper = upper.parse().map_err(|_| Observation::InvalidConstant)?;
+                let interval = rt::IntegerInterval::new(lower, upper)
+                    .map_err(|_| Observation::InvalidConstant)?;
+                let operation = match *op {
+                    "add" => rt::IntegerArithmetic::Add(&left, &right),
+                    "sub" => rt::IntegerArithmetic::Subtract(&left, &right),
+                    "mul" => rt::IntegerArithmetic::Multiply(&left, &right),
+                    other => panic!("unknown bounded reference arithmetic {other}"),
+                };
+                completed(rt::evaluate_integer_arithmetic(operation, Some(&interval), meter))
             }
             other => panic!("noninteger reference {other:?}"),
         }
@@ -396,11 +415,18 @@ fn exercise(label: &str, expression: &Expr, expected_value: impl Fn(u64) -> bool
                 assert_eq!(agree(label, expression, x, &generated, generous(), Some(skip)), baseline);
             }
         }
+        exercise_prefixes_and_limits(label, expression, x, &generated, &baseline);
+    }
+}
+// Shared by completed and refused public-oracle controls: denial must stop at
+// the exact admitted prefix, including when the unlimited run would refuse.
+fn exercise_prefixes_and_limits(label: &str, expression: &Expr, x: u64,
+    generated: &impl Fn(u64, &mut rt::Meter) -> Observation, baseline: &Snapshot) {
         // Deny EVERY ordered admitted occurrence, not only each distinct point.
         for (index, charge) in baseline.charges.iter().enumerate() {
             let occurrence = baseline.charges[..=index].iter().filter(|previous| previous.point == charge.point).count() as u64;
             let denial = rt::InjectedDenial { point: charge.point, occurrence: NonZeroU64::new(occurrence).unwrap() };
-            let denied = agree(label, expression, x, &generated, generous(), Some(denial));
+            let denied = agree(label, expression, x, generated, generous(), Some(denial));
             assert_eq!(denied.charges, baseline.charges[..index], "non-prefix/continued child: {label}, x={x}, index={index}");
             match denied.outcome {
                 Observation::Runtime(rt::Outcome::Incomplete(record)) => assert_eq!(record.charge_point, charge.point),
@@ -411,11 +437,38 @@ fn exercise(label: &str, expression: &Expr, expected_value: impl Fn(u64) -> bool
             for limit in [0, *consumed, consumed.saturating_sub(1)] {
                 let mut limits = generous();
                 set_limit(&mut limits, kind, limit);
-                let limited = agree(label, expression, x, &generated, limits, None);
-                if limit >= *consumed { assert_eq!(limited, baseline); }
+                let limited = agree(label, expression, x, generated, limits, None);
+                if limit >= *consumed { assert_eq!(&limited, baseline); }
                 else { assert!(matches!(limited.outcome, Observation::Runtime(rt::Outcome::Incomplete(_))), "shortage did not stop: {label}, {kind:?}"); }
             }
         }
+}
+
+// This driver is for the separately admitted public bounded-addition fixture,
+// not for QSL source arithmetic (whose result type is unbounded Integer).
+fn exercise_bounded(label: &str, expression: &Expr,
+    generated: impl Fn(u64, &mut rt::Meter) -> Observation) {
+    for x in 0..=1000 {
+        let baseline = agree(label, expression, x, &generated, generous(), None);
+        let expected = if x < 1000 {
+            rt::Outcome::Completed(false)
+        } else {
+            let target = rt::IntegerInterval::new(
+                "0".parse().expect("canonical lower bound"),
+                "1000".parse().expect("canonical upper bound"))
+                .expect("nonempty expected domain");
+            rt::Outcome::Refused(rt::Refusal::IntegerOutOfDomain { target: Box::new(target) })
+        };
+        assert_eq!(baseline.outcome, Observation::Runtime(expected), "bounded addition mathematical/typed result: {label}, x={x}");
+        if x == 1000 {
+            // The out-of-domain child stops before result retention and before
+            // its enclosing comparison, after these two genuine owner charges.
+            assert_eq!(baseline.charges.iter().map(|charge| charge.point).collect::<Vec<_>>(),
+                [rt::ChargePoint::IntegerArithmeticOperands,
+                 rt::ChargePoint::IntegerArithmeticArithmetic], "refusal prefix: {label}");
+        }
+        exercise_prefixes_and_limits(label, expression, x, &generated, &baseline);
     }
 }
+
 "#;
