@@ -3271,7 +3271,15 @@ mod tests {
                 ..Default::default()
             },
         );
-        let at_limit_source = test_source(at_limit_source);
+        // This work-accounting fixture already selected an unlimited source
+        // allowance above; do not reapply the unrelated default while inspecting it.
+        let at_limit_source = at_limit_source
+            .finish(usize::MAX)
+            .expect("the selected work fixture source allowance admits its output")
+            .into_iter()
+            .find(|artifact| artifact.path == "src/lib.rs")
+            .expect("the at-limit item emits a library")
+            .contents;
         assert_eq!(at_limit_outcomes, vec![Ok(())]);
         assert!(at_limit_source.contains("pub fn oracle_test0"));
 
