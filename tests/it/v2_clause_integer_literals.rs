@@ -248,7 +248,7 @@ fn noncanonical_literal_admission_and_runtime_fallback_remain_distinct() {
 
 // This is a separately labelled IR-reader control, not a QSL-emitted bounded
 // arithmetic claim. Its result type is an existing checked integer range.
-fn bounded_addition_reader_attempt() -> CheckedPackageV2ReadResult {
+fn bounded_addition_reader_attempt(coherent: bool) -> (CheckedPackageV2ReadResult, CheckedNodeId) {
     let (result, clause) = reader_variant("(self.balance + 1) > 1000", true, |wire| {
         let nodes = wire["semantic_graph"]["nodes"].as_array_mut().unwrap();
         let bound = nodes
@@ -262,19 +262,21 @@ fn bounded_addition_reader_attempt() -> CheckedPackageV2ReadResult {
         for node in nodes {
             if node["body"]["operation"]["identity"] == "quire.op.integer.add" {
                 node["semantic_type"] = bound.clone();
+                if coherent {
+                    node["body"]["result_type"] = bound.clone();
+                }
                 changed += 1;
             }
         }
         assert_eq!(changed, 1, "one arithmetic result type control");
     });
-    let _ = clause;
-    result
+    (result, clause)
 }
 
 #[trace("TC-024", "FR-014-AC-53")]
 #[test]
 fn bounded_arithmetic_control_retains_the_owner_type_refusal() {
-    let result = bounded_addition_reader_attempt();
+    let (result, _) = bounded_addition_reader_attempt(false);
     let CheckedPackageV2ReadResult::Refused(refusal) = result else {
         panic!("the existing bounded result type is not admitted for this Add")
     };
@@ -355,4 +357,25 @@ fn original_parameter_precondition_regenerates_with_unchanged_proof_semantics() 
         "PUBLIC_PARAMETER_RECORD_BEGIN\n{}\nPUBLIC_PARAMETER_RECORD_END",
         harness.record.contents
     );
+}
+
+#[trace("TC-024", "FR-014-AC-53")]
+#[test]
+fn coherent_bounded_arithmetic_control_is_decided_by_the_owner_reader() {
+    let (result, clause) = bounded_addition_reader_attempt(true);
+    let CheckedPackageV2ReadResult::Admitted(package) = result else {
+        panic!("coherent type positions reader result: {result:?}")
+    };
+    let generated = generate_v2_clause_oracle(&package, &clause).unwrap();
+    assert!(generated.source.contains("Some(&domain)"));
+    assert!(generated.source.contains("IntegerArithmetic::Add"));
+    assert_eq!(generated.descriptor.inputs.len(), 1);
+    assert_eq!(
+        (
+            generated.descriptor.inputs[0].lower,
+            generated.descriptor.inputs[0].upper
+        ),
+        (0, 1000)
+    );
+    eprintln!("coherent bounded-result fixture: node.semantic_type AND body.result_type use originalInt[0,1000]; owner-candidate/rekey/read Admitted; public bound oracle generated; native refusal assertion pending");
 }
