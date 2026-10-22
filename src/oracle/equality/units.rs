@@ -23,7 +23,7 @@ mod tests {
     use qsl_replay::{
         compile_admitted, DependencyInput, ReplayLimits, SourceIdentity, StageLimits, WireNodeId,
     };
-    use quire_exact::ValueType;
+    use quire_exact::{Integer, Quantity, Rational, ValueType};
     use quire_semantic_value::declaration::TypeEnvironment;
 
     #[trace("TC-029", "FR-018-AC-45")]
@@ -57,7 +57,9 @@ function keep using v(a: Quantity<m>): Boolean pure { true }
             .expect("the declared but unused kilometre unit");
         assert_ne!(m.id(), km.id());
         assert!(m.converts_to(km));
-        assert!(original.check_type(&ValueType::Quantity(m.id())).is_err());
+        assert!(original.units().get(m.id()).is_none());
+        let metre = Quantity::new(Rational::from_integer(Integer::from(1)), m.id());
+        assert!(original.units().resolve(&metre).is_none());
 
         let prepared = attach_owner_units(original, Some(context));
         assert_eq!(prepared.units(), context.unit_table());
@@ -67,9 +69,16 @@ function keep using v(a: Quantity<m>): Boolean pure { true }
                 .expect("lookup uses the owner's node, not a fabricated unit id");
             assert_eq!(looked_up.id(), unit.id());
             assert_eq!(prepared.units().get(unit.id()), Some(unit.quantity_unit()));
+            let quantity = Quantity::new(Rational::from_integer(Integer::from(1)), unit.id());
+            let resolved = prepared
+                .units()
+                .resolve(&quantity)
+                .expect("owner metadata resolves its quantity");
+            assert_eq!(resolved.quantity(), &quantity);
+            assert_eq!(resolved.unit(), unit.quantity_unit());
             prepared
                 .check_type(&ValueType::Quantity(unit.id()))
-                .expect("the full owner table admits each returned kernel unit id");
+                .expect("quantity remains a recognized type");
         }
         let preserved = attach_owner_units(prepared, None);
         assert_eq!(preserved.units(), context.unit_table());
