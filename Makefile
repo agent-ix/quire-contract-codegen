@@ -6,7 +6,6 @@
 # =============================================================================
 
 TRUSTED_HOME := $(shell /usr/bin/python3 -c 'import os,pwd; print(pwd.getpwuid(os.getuid()).pw_dir)')
-override BASH := /usr/bin/bash
 override CARGO := $(TRUSTED_HOME)/.cargo/bin/cargo
 override MSRV := 1.98.1
 QUIRE ?= quire
@@ -54,6 +53,11 @@ lint:
 
 export QSPEC_DIR
 QSPEC_FIXTURES := positive-union-nodes positive-clause-operations positive-all-families
+GATES_BIN := target/cg-gates
+
+$(GATES_BIN): scripts/cg_gates.rs
+	@mkdir -p target
+	CARGO_MANIFEST_DIR=$(CURDIR) rustup run $(MSRV) rustc --edition=2021 $< -o $@
 
 .PHONY: qspec-preflight
 qspec-preflight:
@@ -71,8 +75,8 @@ qspec-preflight:
 	done
 
 .PHONY: qspec-preflight-selftest
-qspec-preflight-selftest:
-	$(BASH) scripts/test_qspec_preflight.sh
+qspec-preflight-selftest: $(GATES_BIN)
+	$(GATES_BIN) qspec-selftest
 
 .PHONY: test
 test: qspec-preflight qspec-preflight-selftest
@@ -112,11 +116,11 @@ KANI_TEST := $(CARGO) +$(MSRV) test $(LOCKED) -j 4 --test it --target-dir target
 kani:
 	flock $(KANI_LOCK) $(KANI_TEST)
 
-kani-scope:
-	$(BASH) scripts/kani_scope.sh
+kani-scope: $(GATES_BIN)
+	$(GATES_BIN) kani-scope
 
-kani-gate:
-	$(BASH) scripts/kani_gate.sh $(KANI_LOCK) -- $(KANI_TEST)
+kani-gate: $(GATES_BIN)
+	$(GATES_BIN) kani-gate $(KANI_LOCK) -- $(KANI_TEST)
 
 .PHONY: build
 build:

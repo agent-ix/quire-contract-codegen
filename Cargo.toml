@@ -21,6 +21,10 @@ workspace = true
 name = "quire_contract_codegen"
 path = "src/lib.rs"
 
+[[bin]]
+name = "cg_gates"
+path = "scripts/cg_gates.rs"
+
 [dependencies]
 # Accept compatible branch releases; Cargo.lock records the selected revision.
 ix-trace-rs = { version = "0.1", git = "https://github.com/agent-ix/ix-trace-rs", branch = "main" }
