@@ -2843,14 +2843,21 @@ mod tests {
             ));
         }
         source.push_str("record Shallow { next: Boolean?; }\n");
+        // Only fixture intake grows with these unchanged source bytes. CG's
+        // resolution, emitted-source and traversal-stack limits stay independent.
+        let source_bytes = u64::try_from(source.len()).expect("finite fixture source byte count");
+        let stages = StageLimits::default()
+            .with_named("s1.input_bytes", source_bytes)
+            .expect("the public compiler recognizes its source-byte setting");
+        eprintln!("genuine large fixture records={records}; optional={optional}; source_bytes={source_bytes}");
         let admitted = compile_admitted(
             SourceIdentity::new("test", "deep.native", "git", "fixture"),
             "deep.native",
             source.as_bytes(),
             [],
             &DependencyInput::default(),
-            StageLimits::default(),
-            ReplayLimits::default(),
+            stages,
+            ReplayLimits::default().with_input_bytes(source_bytes),
         )
         .expect("the unchanged large source must compile before its identities are used");
         let bytes = admitted.package().bytes();
