@@ -1629,7 +1629,7 @@ fn scalar_profile() -> CompleteLoweringProfileV2 {
     }
 }
 
-type Graph<'a> = BTreeMap<&'a CheckedNodeId, &'a CheckedSemanticNodeV2>;
+pub(crate) type Graph<'a> = BTreeMap<&'a CheckedNodeId, &'a CheckedSemanticNodeV2>;
 
 /// The lowered node and the bounds its descriptor was checked against.
 type CheckedItem<'r> = (&'r CompleteContractNodeV2, Vec<CheckedNodeId>);
@@ -2073,17 +2073,7 @@ pub(crate) enum OperandRange {
 /// their positions, so the harness takes the positions from here and requires every id to appear
 /// in the claim's `checked_bounds` (`lower_scalar_claim`): the two sources cannot silently
 /// disagree.
-pub(crate) fn operand_ranges(
-    package: &ContractPackageV1,
-    node_id: &CheckedNodeId,
-) -> Vec<OperandRange> {
-    let graph = package
-        .wire()
-        .semantic_graph
-        .nodes
-        .iter()
-        .map(|node| (&node.node_id, node))
-        .collect::<BTreeMap<_, _>>();
+pub(crate) fn operand_ranges(graph: &Graph<'_>, node_id: &CheckedNodeId) -> Vec<OperandRange> {
     let Some(node) = graph.get(node_id) else {
         return Vec::new();
     };
@@ -2094,9 +2084,9 @@ pub(crate) fn operand_ranges(
         .flatten()
         .enumerate()
         .map(|(position, argument)| {
-            if let Some(bound) = operand_own_bound(&graph, argument) {
+            if let Some(bound) = operand_own_bound(graph, argument) {
                 OperandRange::Bound(bound.node_id.clone())
-            } else if let Some(literal) = operand_literal(&graph, argument) {
+            } else if let Some(literal) = operand_literal(graph, argument) {
                 OperandRange::Literal(
                     literal
                         .get("value")
@@ -2105,7 +2095,7 @@ pub(crate) fn operand_ranges(
                         .to_owned(),
                 )
             } else if let Some(source) = reference_target(argument) {
-                infer_integer_range(&graph, &source, position).ok().map_or(
+                infer_integer_range(graph, &source, position).ok().map_or(
                     OperandRange::Result,
                     |(lower, upper)| OperandRange::Inferred {
                         source,

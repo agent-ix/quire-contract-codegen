@@ -344,6 +344,27 @@ generation. `kani --> oracle` is the scalar family embedding the FR-014 oracle. 
 is the identity and binding types the witness decode and replay read. `routed --> ...` is the
 `BackendKind` match calling each generator.
 
+### External evaluation seam (IR-595)
+
+The internal arrows above do not grant an external evaluator import. `oracle`
+currently emits target-neutral function schedules under FR-021; a schedule is
+not an evaluated result. `replay` obtains witness settlements through the
+public `qsl_replay` facade, and `kani/terminal.rs` maps their typed results
+under FR-029. Neither module calls RT's `exact` port or QSL evaluator/checker
+internals as an alternate path. QSL FR-060 T12-A continues to constrain the
+CG replay adapter to the facade.
+
+IR-583's proposed shared `quire-eval` interface supplies an eventual boundary
+for evaluation, not a delivered CG consumer entry. Before a concrete
+function-application oracle can replace the historical RT-port witness,
+the interface must be merged, QSL must supply its std reference adapter, and
+QSL must publish the admitted checked-closure acquisition and callable
+application route permitted to CG. Only then may CG emit code against that
+interface with owner-provided values, outcomes and charges; it may not obtain
+those by importing RT or QSL implementation modules. FR-021 and IR-853 retain
+the concrete-oracle scope decision. FR-044's evaluator corpus is a separate
+case-record contract and does not itself deliver this consumer API.
+
 The planned FR-018 admitted-context migration preserves this internal graph:
 `oracle` accepts `Option<&qsl_replay::AdmittedContext>` from the external root,
 not CG's peer
