@@ -6,10 +6,11 @@
 //! records and not whatever `main` the machine's shared git cache last fetched.
 
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fs,
     io::ErrorKind,
     path::{Path, PathBuf},
+    process::Command,
     sync::Mutex,
     thread::ThreadId,
 };
@@ -36,6 +37,43 @@ pub(crate) fn seed_lock(directory: &Path) {
         directory.join("Cargo.lock"),
     )
     .expect("seed the scratch crate's lockfile");
+}
+
+/// Adapt the seeded lock to the scratch package offline, retaining the root's Git sources.
+/// The following build or test can then require `--locked --offline`.
+pub(crate) fn resolve_seeded_lock(directory: &Path) {
+    seed_lock(directory);
+    let output = Command::new(env!("CARGO"))
+        .args(["metadata", "--offline", "--format-version", "1"])
+        .env("CARGO_TARGET_DIR", directory.join("target"))
+        .current_dir(directory)
+        .output()
+        .expect("adapt the seeded scratch lock offline");
+    assert!(
+        output.status.success(),
+        "seeded scratch metadata failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let metadata: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("scratch metadata JSON");
+    let root_lock = fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.lock"))
+        .expect("read the root lock");
+    let locked_sources: BTreeSet<&str> = root_lock
+        .lines()
+        .filter_map(|line| line.strip_prefix("source = \"")?.strip_suffix('"'))
+        .collect();
+    for package in metadata["packages"].as_array().expect("metadata packages") {
+        if let Some(source) = package["source"]
+            .as_str()
+            .filter(|source| source.starts_with("git+"))
+        {
+            assert!(
+                locked_sources.contains(source),
+                "scratch package {} changed the root Git source: {source}",
+                package["name"]
+            );
+        }
+    }
 }
 
 /// Writes `manifest` as the `Cargo.toml` of `directory` and seeds the lock beside it.

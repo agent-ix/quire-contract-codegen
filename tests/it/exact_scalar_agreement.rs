@@ -19,8 +19,8 @@ use std::{
 
 /// Development dependencies the agreement support modules use beyond the
 /// Contract Runtime the generated crate already depends on. Matching
-/// constraints from this repository's manifest let each scratch crate resolve
-/// its own public dependency closure before the locked native test.
+/// constraints from this repository's manifest use its seeded dependency
+/// resolution before the locked native test.
 const AGREEMENT_DEV_DEPENDENCIES: &str = concat!(
     "qsl-replay = { version = \"=0.1.0\", git = \"https://github.com/agent-ix/quire-spec-language\", branch = \"main\" }\n",
     "serde_json = \"=1.0.151\"\nsha2 = \"=0.10.9\"\n",
@@ -87,18 +87,7 @@ fn run_agreement_cases_with_expectation<'a>(
     )
     .expect("write to String");
     fs::write(&manifest_path, manifest).expect("extend generated manifest");
-    let resolution = Command::new(env!("CARGO"))
-        .args(["generate-lockfile"])
-        .env("CARGO_TARGET_DIR", root.join("target"))
-        .current_dir(&root)
-        .output()
-        .expect("resolve the independent scratch crate's public dependency closure");
-    assert!(
-        resolution.status.success(),
-        "{label}: fresh agreement resolution failed: {} {}",
-        String::from_utf8_lossy(&resolution.stdout),
-        String::from_utf8_lossy(&resolution.stderr),
-    );
+    super::scratch_crate::resolve_seeded_lock(&root);
 
     let output = Command::new(env!("CARGO"))
         .args(["test", "--locked", "--offline", "--test", "agreement"])

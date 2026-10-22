@@ -1683,17 +1683,7 @@ fn tc_029_ac12_manifest_is_unpublished_and_charge_free() {
     for artifact in &oracles.artifacts {
         fs::write(directory.path.join(&artifact.path), &artifact.contents).unwrap();
     }
-    let resolved = Command::new(env!("CARGO"))
-        .arg("generate-lockfile")
-        .env("CARGO_TARGET_DIR", directory.path.join("target"))
-        .current_dir(&directory.path)
-        .output()
-        .unwrap();
-    assert!(
-        resolved.status.success(),
-        "independent generated manifest resolution failed: {}",
-        String::from_utf8_lossy(&resolved.stderr)
-    );
+    super::scratch_crate::resolve_seeded_lock(&directory.path);
     let output = Command::new(env!("CARGO"))
         .args(["build", "--locked", "--offline", "--quiet"])
         .env("CARGO_TARGET_DIR", directory.path.join("target"))
