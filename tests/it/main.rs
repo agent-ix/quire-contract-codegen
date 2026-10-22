@@ -78,6 +78,7 @@ mod kani_obligations;
 mod kani_obligations_state_clause_replay;
 mod kani_obligations_state_frame;
 mod kani_obligations_symbolic_domains;
+mod kani_stdout_capture;
 mod kani_witness_join;
 mod layout;
 mod no_generation_panics;

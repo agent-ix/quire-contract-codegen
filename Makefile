@@ -104,7 +104,8 @@ tools:
 	$(CARGO) kani setup
 
 KANI_LOCK ?= /tmp/agent-e-heavy-build.lock
-KANI_FILTERS := kani_obligations kani_obligations_symbolic_domains skeleton_spine kani_witness_join bounded_kani_corpus kani_generation kani_batching
+# Keep each ignored installed-Kani test module in this lane; kani-scope selects the gate by path.
+KANI_FILTERS := kani_obligations kani_obligations_symbolic_domains skeleton_spine kani_stdout_capture kani_witness_join bounded_kani_corpus kani_generation kani_batching
 KANI_TEST := $(CARGO) +$(MSRV) test $(LOCKED) -j 4 --test it --target-dir target-codex-backends -- --ignored --test-threads=1 $(KANI_FILTERS)
 
 .PHONY: kani kani-scope kani-gate
