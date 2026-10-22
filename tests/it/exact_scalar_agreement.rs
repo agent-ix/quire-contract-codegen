@@ -67,7 +67,7 @@ pub(super) fn run_agreement_cases<'a>(
     super::scratch_crate::resolve_seeded_lock(&root);
 
     let output = Command::new(env!("CARGO"))
-        .args(["test", "--offline", "--test", "agreement"])
+        .args(["test", "--locked", "--offline", "--test", "agreement"])
         .env("CARGO_TARGET_DIR", root.join("target"))
         .env_remove("RUSTFLAGS")
         .env_remove("CARGO_ENCODED_RUSTFLAGS")
