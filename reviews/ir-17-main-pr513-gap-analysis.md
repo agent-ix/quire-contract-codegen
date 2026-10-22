@@ -1518,3 +1518,84 @@ known_out_of_scope:
 qualification: source PASS; six exact combined controls PASS; conditional on final
   parent ci/Kani and separate lunar lock review
 ```
+
+## Narrow layout relocation readback (round 7)
+
+NARROW independent layout/source readback only. Exact proposed source head6ed2a0de36ffc4f560c13d5576970d5f1e9a331c is directly based on the published PR513 checkpoint0578e69ee3900b6b4fbf049ee6543fb234df7e6b. Parent513 worktree remains clean at0578; this branch is not integrated by the reviewer. Diff is exactly two files: remove the11-line public manifest regression from core/profile cfg(test), add the12-line equivalent to the existing external exact_function_generation integration module. No other product/full-PR rescan or acceptance is implied. Source relocation PASS; no finding remains open in this narrow patch. Parent may integrate the reviewed source, then retain custody and run the user-required new final ci and Kani gates. No reviewer Cargo/build/test/native/LLVM/backend/namespace/Kani execution, branch edit, source integration, push or lock mutation occurred.
+
+The prior source review missed the architecture interaction. This is recorded canonically as IR850 SR15393/FND002, not erased from the historical clean export review and not duplicated as a new unowned IR17 finding. Original FND001 in that artifact is only the clean-review placeholder; its number is preserved and not reused. The actual reported defect existed at the earlier accepted base and failed the aggregate; the new source head fixes it. AD004 L2 explicitly includes cfg(test), forbids imports through the crate root and upward dependency edges. core/profile's crate-root public alias access therefore violates both real guards even though the export itself is correct. A public API regression belongs outside the private core import graph.
+
+The relocated test calls existing main_oracles, which invokes the real public function-oracle generation over the unchanged admitted fixture. contents reads its actual Cargo.toml artifact, not a fabricated manifest or stub. The exact dependency line still compares against public quire_contract_codegen::SEMANTIC_VALUE_DEPENDENCY_SOURCE. TC024/FR014AC8 tags are retained, the module is already registered, and no new top-level test binary or internal import exception is created. An external Rust integration module verifies public visibility as well as binding existence; it does not need an internal core-to-root dependency. Both layout guards and their allowlists/source scanners are byte-identical. The separate internal Runtime/kernel type-identity test remains untouched.
+
+Read-only source comparison confirms src/lib.rs and its public export are unchanged, as are all non-test profile/manifest code, product/scalar/function output aliases, test fixtures, domains, outcome/charge assertions, layouts, Cargo.toml and Cargo.lock. Root lock remains the exact existing43dd9ef84f43ea430aa0e3408e5a77063a732adda9a3d294b903642b7a0f9582; existing SR15402 lock review is not changed or substituted by this readback. No source-owner workaround, RT exception, type bridge, synthetic nominal fixture, derived ID or dependency-resolution action is introduced. IR962's independently resolved scratch-cohort issue and its prior user scope disposition remain unchanged.
+
+Actual gate history is preserved: ci-20261022T075338Z.log atdb64 has library403 PASS, integration701 PASS/2 layout FAIL/39 ignored, make exit2. It is not a full passing aggregate. Latest exact-base0578 evidence lives at qualification-logs/ir850-type-unification/layout-fix/base0578. layout-red.log/.exit101 shows both original L2 guards failing before relocation. public-export-red.log/.exit101 shows E0425 at the NEW external test line3511 when the crate-root export is temporarily removed (and the existing external caller also fails); the export is restored byte-identical. focused-green.log/.exit0 names exactly both unchanged guards and the relocated public-source regression:3 PASS/0 FAIL. fmt.log/.exit0 and locked offline Clippy all-targets -D warnings log/.exit0 pass under the recorded16G/swap0,jobs2 author scopes. Reviewer inspected source/evidence only. These exact checks prove the repaired location and preserved public-export regression, not all gates or Kani acceptance.
+
+Incremental AC trace review recomputes quire coverage on an exact git archive of6ed. FR014AC8 remains tagged, now with exactly one generated_manifest_exposes_semantic_value_owner_source binder at tests/it/exact_function_generation.rs:3506, rather than the removed private unit test. No tag/criterion is dropped, fabricated, moved onto a non-test function or accepted based on prose. The exact manifest-line assertion and actual compiler-red export mutation are retained; public generation makes the new test's integration seam stronger. No new requirement or production behavior is added. This is deliberately a narrow AC/layout readback, not a new whole-repository assurance audit; inherited SR15352 repository gaps and existing dispositions remain unchanged. Plan completion:not assessed. Existing normative spec/assurance text is not edited, so no new spec-authoring review is claimed. No applicable AssuranceProfile or new profile exception is introduced.
+
+All prior IR17 twelve fixed findings, inherited deferred/remediated gap ownership, IR850 original clean review and six-control/failure history are preserved as exact prefixes. Current acceptance applies ONLY to this relocation at6ed against0578. It does not state that PR513 is already integrated, that the earlier aggregate is green, or that final receipt/proof/cohort qualification is complete. User requires a new combined final-head ci/Kani after review/custody; that requirement remains active.
+
+
+IR17 pointer: the complete canonical new finding and fixed outcome are in SR15393/FND002, reproduced in the machine data below so this comment stands alone. No duplicate finding id or original IR17 outcome is rewritten. The earlier repository-level gap verdict remains FAIL and incremental relocation gap verdict PASS.
+
+```yaml
+dispositions: []
+new_findings: []
+scope:
+- id: AD-004
+  path: spec/assurance/AD-004-cg-crate-layout.md
+  role: examined
+  excerpt: "- L-2. The import graph is acyclic and follows the dependency direction\
+    \ above, `#[cfg(test)]`\n  modules included, and no file imports an item through\
+    \ the crate root. Test: a layout test that\n  reads `use crate::` lines and flags\
+    \ a bare `crate::<Item>` path in code (inline types, calls;\n  not string literals\
+    \ or comments, so intra-doc links are rewritten by step 2g-0 but not checked).\
+    \ It lands at the end of step 2, after the edge-removal steps, so it can\n  pass\
+    \ when it lands."
+- id: FR-014-AC-8
+  path: spec/oracle/functional/FR-014-exact-scalar-oracles.md
+  role: examined
+  excerpt: The generated crate declares `publish = false`, names the direct exact/QSV
+    and Runtime residue dependencies from the one profile authority without a replay-context
+    dependency for Boolean/integer scalar proofs, contains no charge amount (every
+    charge comes from runtime metering), and compiles.
+- id: generated_manifest_exposes_semantic_value_owner_source
+  path: tests/it/exact_function_generation.rs
+  role: examined
+  excerpt: "#[trace(\"TC-024\", \"FR-014-AC-8\")]\n#[test]\nfn generated_manifest_exposes_semantic_value_owner_source()\
+    \ {\n    let oracles = main_oracles();\n    let manifest = contents(&oracles,\
+    \ \"Cargo.toml\");\n    let dependency = format!(\n        \"quire-semantic-value\
+    \ = {{ {} }}\",\n        quire_contract_codegen::SEMANTIC_VALUE_DEPENDENCY_SOURCE\n\
+    \    );\n    assert!(manifest.lines().any(|line| line == dependency));\n}"
+source_base: 0578e69ee3900b6b4fbf049ee6543fb234df7e6b
+source_head: 6ed2a0de36ffc4f560c13d5576970d5f1e9a331c
+integration_into_PR513: false
+acceptance: PASS narrow source relocation only; final combined ci/Kani required after
+  custody
+layout_finding:
+  artifact: SR-15393
+  finding: FND-002
+  severity: medium
+  outcome: fixed
+  original_path: src/core/profile.rs:64
+  scenario: At the previously accepted base, the public-source regression accesses
+    crate::SEMANTIC_VALUE_DEPENDENCY_SOURCE inside core/profile.rs. AD004 L2 includes
+    cfg(test) and forbids internal crate-root/upward accesses; both unchanged layout
+    guards fail, blocking the aggregate. Place this public-interface regression in
+    an external integration test while preserving its exact manifest oracle.
+  after_excerpt: "#[trace(\"TC-024\", \"FR-014-AC-8\")]\n#[test]\nfn generated_manifest_exposes_semantic_value_owner_source()\
+    \ {\n    let oracles = main_oracles();\n    let manifest = contents(&oracles,\
+    \ \"Cargo.toml\");\n    let dependency = format!(\n        \"quire-semantic-value\
+    \ = {{ {} }}\",\n        quire_contract_codegen::SEMANTIC_VALUE_DEPENDENCY_SOURCE\n\
+    \    );\n    assert!(manifest.lines().any(|line| line == dependency));\n}"
+evidence:
+  aggregate_history: library403 PASS; integration701 PASS,2 layout FAIL,39 ignored;
+    exit2
+  layout_before_exit: 101
+  removed_public_export_exit: 101
+  focused_after: 3 PASS/0 FAIL
+  fmt_exit: 0
+  clippy_exit: 0
+prior_history: all original findings and outcomes preserved; IR17 prior12 fixed; inherited
+  repository gaps retain existing owners
+```
