@@ -95,6 +95,10 @@ fn arguments(a: WitnessValue, b: WitnessValue) -> Vec<(String, WitnessValue)> {
     vec![("a".into(), a), ("b".into(), b)]
 }
 fn assert_evaluation(result: WitnessArmResult, expected: bool) {
+    assert_eq!(
+        result.value(),
+        Some(qsl_replay::EvaluatedValue::Boolean(expected))
+    );
     if expected {
         assert_eq!(result.settlement(), WitnessSettlement::Inconclusive);
         assert_eq!(
@@ -230,4 +234,247 @@ fn genuine_reversed_declaration_keeps_name_bound_values() {
     assert_evaluation(fixture.replay(&input).unwrap(), false);
     input.reverse();
     assert_evaluation(fixture.replay(&input).unwrap(), false);
+}
+
+fn owner_refusal(result: Result<WitnessArmResult, SpineReplayError>) -> qsl_replay::ReplayRefusal {
+    match result {
+        Err(SpineReplayError::Refused(refusal)) => *refusal,
+        other => panic!("expected the responsible typed owner refusal, got {other:?}"),
+    }
+}
+
+#[trace("TC-060", "FR-046-AC-9")]
+#[test]
+fn native_rational_adverse_inputs_retain_responsible_owner_refusals() {
+    use qsl_replay::{DecodeRefusal, EntryFault, ReplayRefusal, WireNodeId};
+    let fixture = Fixture::new(HEALTHY, "rational_commutative");
+    for argument in ["a", "b"] {
+        let node = WireNodeId::from_hex(
+            fixture
+                .package
+                .parameters()
+                .iter()
+                .find(|p| p.argument == argument)
+                .unwrap()
+                .node_id,
+        )
+        .unwrap();
+        for invalid in [value(-10, 1), value(10, 1), value(1, 10)] {
+            let mut input = arguments(value(1, 2), value(2, 3));
+            input
+                .iter_mut()
+                .find(|(name, _)| name == argument)
+                .unwrap()
+                .1 = invalid;
+            let observed = fixture.replay(&input);
+            eprintln!(
+                "domain candidate {argument} {:?}: {observed:?}",
+                input.iter().find(|(name, _)| name == argument).unwrap().1
+            );
+            let refusal = owner_refusal(observed);
+            let declared_position = fixture
+                .package
+                .parameters()
+                .iter()
+                .position(|p| p.argument == argument)
+                .unwrap();
+            assert!(
+                matches!(refusal, ReplayRefusal::Supplied(_)),
+                "{argument}: {refusal:?}"
+            );
+            assert!(
+                matches!(refusal.input_refusal(), Some(qsl_replay::InputRefusal::WrongValueKind { parameter }) if *parameter == declared_position)
+            );
+        }
+        let mut missing = arguments(value(1, 2), value(2, 3));
+        missing.retain(|(name, _)| name != argument);
+        assert!(
+            matches!(owner_refusal(fixture.replay(&missing)),ReplayRefusal::Witness{refusal:DecodeRefusal::Missing(actual),..} if actual==node)
+        );
+        let mut duplicate = arguments(value(1, 2), value(2, 3));
+        duplicate.push((argument.into(), value(1, 3)));
+        assert!(
+            matches!(owner_refusal(fixture.replay(&duplicate)),ReplayRefusal::Witness{refusal:DecodeRefusal::Duplicate(actual),..} if actual==node)
+        );
+        for (n, d) in [(0_i64, 2_i64), (2, 2), (1, 0), (1, -2)] {
+            // Deliberately raw typed input, NOT a canonical physical-backend witness.
+            // The owner text encoder serializes it; the owner's transcript decoder refuses it.
+            let raw = WitnessValue::Rational {
+                numerator: Integer::from(n),
+                denominator: Integer::from(d),
+            };
+            assert!(raw.to_value_text().is_ok());
+            let mut input = arguments(value(1, 2), value(2, 3));
+            input
+                .iter_mut()
+                .find(|(name, _)| name == argument)
+                .unwrap()
+                .1 = raw;
+            assert!(
+                matches!(owner_refusal(fixture.replay(&input)),ReplayRefusal::Witness{refusal:DecodeRefusal::Malformed{parameter,fault:EntryFault::Spelling,..},..} if parameter==node)
+            );
+        }
+    }
+    let mut unknown = arguments(value(1, 2), value(2, 3));
+    unknown.push(("foreign".into(), value(1, 2)));
+    assert!(
+        matches!(fixture.replay(&unknown),Err(SpineReplayError::UnboundArgument{argument}) if argument=="foreign")
+    );
+    // Changing only the function body retains parameter identities. Use an actual changed
+    // parameter declaration/domain so this is genuinely a foreign parameter control.
+    let foreign_source = HEALTHY.replacen("Rational[-9, 9; 1, 9]", "Rational[-8, 9; 1, 9]", 1);
+    let foreign = Fixture::new(&foreign_source, "rational_commutative");
+    let mut parameters = fixture.package.parameters();
+    let foreign_parameters = foreign.package.parameters();
+    let original_node = parameters[0].node_id;
+    parameters[0].node_id = foreign_parameters
+        .iter()
+        .find(|p| p.argument == parameters[0].argument)
+        .unwrap()
+        .node_id;
+    assert_ne!(parameters[0].node_id, original_node);
+    let invalid = replay_falsification(
+        "native_injected",
+        "predicate",
+        &arguments(value(1, 2), value(2, 3)),
+        &parameters,
+        |s| fixture.request(s),
+        ReplayLimits::default(),
+    );
+    assert!(matches!(
+        owner_refusal(invalid),
+        ReplayRefusal::Witness {
+            refusal: DecodeRefusal::Unbound(_),
+            ..
+        }
+    ));
+}
+
+#[trace("TC-060", "FR-046-AC-9")]
+#[test]
+fn genuine_wrong_selection_stale_package_and_limits_are_not_repaired() {
+    use qsl_replay::{ReplayRefusal, ReplayRequestRefusal};
+    let fixture = Fixture::new(HEALTHY, "rational_commutative");
+    let foreign = Fixture::new(MUTANT, "rational_commutative");
+    let renamed = Fixture::new(
+        &HEALTHY.replace("rational_commutative", "other_function"),
+        "other_function",
+    );
+    let input = arguments(value(1, 2), value(2, 3));
+    let wrong = replay_falsification(
+        "native_injected",
+        "predicate",
+        &input,
+        &fixture.package.parameters(),
+        |s| {
+            let mut request = fixture.request(s);
+            request.selected_function = renamed
+                .request(ReplaySource::Input(Vec::new()))
+                .selected_function;
+            request
+        },
+        ReplayLimits::default(),
+    );
+    assert!(matches!(
+        owner_refusal(wrong),
+        ReplayRefusal::UnknownFunction { .. }
+    ));
+    let stale = replay_falsification(
+        "native_injected",
+        "predicate",
+        &input,
+        &fixture.package.parameters(),
+        |s| {
+            let mut request = fixture.request(s);
+            request.package_id = foreign.request(ReplaySource::Input(Vec::new())).package_id;
+            request
+        },
+        ReplayLimits::default(),
+    );
+    assert!(matches!(
+        owner_refusal(stale),
+        ReplayRefusal::PackageIdMismatch { .. }
+    ));
+    let limited = replay_falsification(
+        "native_injected",
+        "predicate",
+        &input,
+        &fixture.package.parameters(),
+        |s| fixture.request(s),
+        ReplayLimits::default().with_input_bytes(1),
+    );
+    assert!(matches!(
+        owner_refusal(limited),
+        ReplayRefusal::Request(ReplayRequestRefusal::BoundExceeded(_))
+    ));
+    for argument in [
+        WitnessValue::Text("unsupported".into()),
+        WitnessValue::ExactInteger(Integer::from(1_i64)),
+        WitnessValue::Uuid("550e8400-e29b-41d4-a716-446655440000".into()),
+    ] {
+        assert!(
+            matches!(fixture.replay(&arguments(argument,value(1,2))),Err(SpineReplayError::UnsupportedWitnessValue{argument}) if argument=="a")
+        );
+    }
+    let delimiter = replay_falsification(
+        "bad|harness",
+        "predicate",
+        &input,
+        &fixture.package.parameters(),
+        |_| panic!("field delimiter must refuse before request construction"),
+        ReplayLimits::default(),
+    );
+    assert!(matches!(delimiter, Err(SpineReplayError::FieldDelimiter)));
+}
+
+#[trace("TC-060", "FR-046-AC-9")]
+#[test]
+fn supplied_order_does_not_change_the_canonical_request_or_value_text() {
+    use qsl_replay::{WireNodeId, Witness, WitnessBinding, WitnessValueType};
+    let fixture = Fixture::new(HEALTHY, "rational_commutative");
+    let mut input = arguments(value(1, 2), value(-2, 3));
+    let mut transcripts = Vec::new();
+    let mut identities = Vec::new();
+    for _ in 0..2 {
+        replay_falsification(
+            "native_injected",
+            "predicate",
+            &input,
+            &fixture.package.parameters(),
+            |s| {
+                let ReplaySource::Witness(witness) = &s else {
+                    panic!("native adapter must produce witness source")
+                };
+                transcripts.push(witness.transcript().to_owned());
+                let request = fixture.request(s);
+                identities.push(request.obligation_identity);
+                request
+            },
+            ReplayLimits::default(),
+        )
+        .unwrap();
+        input.reverse();
+    }
+    assert_eq!(transcripts[0], transcripts[1]);
+    assert_eq!(identities[0], identities[1]);
+    let witness = Witness::parse(transcripts.remove(0)).unwrap();
+    let parameters = fixture.package.parameters();
+    let bindings = parameters
+        .iter()
+        .map(|p| WitnessBinding {
+            parameter: WireNodeId::from_hex(p.node_id).unwrap(),
+            value_type: WitnessValueType::Canonical,
+        })
+        .collect::<Vec<_>>();
+    let decoded = witness.decode(&bindings).unwrap();
+    for (parameter, decoded) in parameters.iter().zip(decoded) {
+        assert_eq!(
+            &decoded,
+            &input
+                .iter()
+                .find(|(name, _)| name == parameter.argument)
+                .unwrap()
+                .1
+        );
+    }
 }
