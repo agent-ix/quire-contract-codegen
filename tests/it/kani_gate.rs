@@ -15,6 +15,16 @@ use std::{
 use syn::{visit::Visit, Expr, Item, Lit, Meta};
 
 static NEXT_SANDBOX: AtomicU64 = AtomicU64::new(0);
+const EXPECTED_KANI_FILTERS: [&str; 8] = [
+    "kani_obligations",
+    "kani_obligations_symbolic_domains",
+    "skeleton_spine",
+    "kani_stdout_capture",
+    "kani_witness_join",
+    "bounded_kani_corpus",
+    "kani_generation",
+    "kani_batching",
+];
 
 struct Sandbox {
     root: PathBuf,
@@ -182,7 +192,7 @@ fi
     }
 }
 
-#[trace("TC-045")]
+#[trace("NFR-006-AC-1", "TC-045")]
 #[test]
 fn rust_gate_rejects_a_kani_reaching_path_without_silently_skipping() {
     let sandbox = Sandbox::new();
@@ -577,17 +587,13 @@ fn make_targets_share_one_real_lane_and_ci_excludes_it() {
         })
         .expect("verified Kani command under the same lock");
     assert_eq!(gated, shared, "gate must run the identical full command");
-    for filter in [
-        "kani_obligations",
-        "skeleton_spine",
-        "kani_witness_join",
-        "bounded_kani_corpus",
-        "kani_generation",
-        "kani_batching",
-    ] {
-        assert!(shared.contains(filter));
-    }
     assert!(shared.contains("--ignored --test-threads=1"));
+    let filters = shared
+        .split_whitespace()
+        .skip_while(|arg| *arg != "--test-threads=1")
+        .skip(1)
+        .collect::<Vec<_>>();
+    assert_eq!(filters, EXPECTED_KANI_FILTERS);
     let ci = stdout(&dry("ci"));
     assert!(!ci.contains("cg_gates -- kani-gate"));
     assert!(!ci.contains("flock /tmp/agent-e-heavy-build.lock"));
@@ -655,14 +661,7 @@ fn tagged_ignore(item: &syn::ItemFn) -> (bool, bool) {
 fn ignored_lane_selection_and_transitive_include_targets_match_scope() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let sandbox = Sandbox::new();
-    let filters = [
-        "kani_obligations",
-        "skeleton_spine",
-        "kani_witness_join",
-        "bounded_kani_corpus",
-        "kani_generation",
-        "kani_batching",
-    ];
+    let filters = EXPECTED_KANI_FILTERS;
     let mut pending = Vec::new();
     let mut selected_count = 0;
     for entry in fs::read_dir(root.join("tests/it")).expect("read it modules") {
