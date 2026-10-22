@@ -212,8 +212,10 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     so CG records `TypeNotRange`, and whose `i64` playback lies outside the model range;
     read `Inconclusive` with `ReplayRefused`, not a violation or `Verified`. Replay inside the
     range is unaffected, and an unread present `IntRange` within `i64` is never called
-    unranged. Build the out-of-`i64` model type through a selected-model-document override
-    with recomputed digests on a QSL-emitted graph (FR-024-AC-35, IR-624).
+    unranged. Write the out-of-`i64` bounds as canonical decimal strings in the selected
+    domain document, and use that same document for QSL's emitted package, the invocation
+    and replay; a package-only model override does not establish this case
+    (FR-024-AC-35, IR-624).
 33. Both adapters use the same typed outcome boundary while their native text stays inside each
     adapter; QSL receives each successful submission's backend, obligation and source without
     reminting. The decode-refusal arm reaches common intake with the original typed cause and no

@@ -655,6 +655,31 @@ impl Twin {
         twin
     }
 
+    /// One source model with an unread audit range wider than `i64`; the unit selects this
+    /// exact document, so both the emitted package and QSL replay see the same bounds.
+    pub fn with_wide_audit_source_range() -> Self {
+        let mut twin = Self::build(&["balance"], &[CLAUSES[0]], 0);
+        let mut document: Value = serde_json::from_slice(&twin.domain).expect("domain document");
+        let audit = document["types"]
+            .as_array_mut()
+            .expect("types")
+            .iter_mut()
+            .find(|ty| ty["identity"] == range_type("audit"))
+            .expect("audit value type");
+        for (keyword, value) in [("min", i128::MIN.to_string()), ("max", "-1".to_owned())] {
+            let bound = audit["constraints"]
+                .as_array_mut()
+                .expect("constraints")
+                .iter_mut()
+                .find(|constraint| constraint["keyword"] == keyword)
+                .expect("bound");
+            bound["operands"]["value"] = json!(value);
+        }
+        twin.domain = document.to_string().into_bytes();
+        twin.unit = unit_source(&hex(&jcs_digest(&twin.domain)), &[CLAUSES[0]], 0).into_bytes();
+        twin
+    }
+
     /// Admit QSL's emitted graph against an unread model range outside `i64`. QSL itself
     /// refuses an integer operand past 2^53 before it can emit the package.
     pub fn emitted_package_with_wide_audit_range(
