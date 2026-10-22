@@ -86,3 +86,6 @@ mod strategy_generation;
 mod terminal_map;
 mod v2_llvm_coverage;
 mod vacuity_primitives;
+
+mod rational_predicate_generation;
+mod rational_predicate_support;

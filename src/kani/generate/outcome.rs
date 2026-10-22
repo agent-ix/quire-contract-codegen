@@ -1404,3 +1404,15 @@ mod tests {
         );
     }
 }
+
+/// One admitted whole-function predicate selected for leaf preparation.
+///
+/// This does not negotiate or execute a proof. The shared negotiator's dispatch and
+/// the lossless public replay prerequisite remain separate integration work.
+#[derive(Clone, Copy, Debug)]
+pub struct FunctionPredicateItem<'a> {
+    /// The one owner-admitted ContractPackage carrying the function and its closure.
+    pub package: &'a ContractPackageV1,
+    /// The real selected function node, never a scalar child or invented parameter.
+    pub function: &'a CheckedNodeId,
+}
