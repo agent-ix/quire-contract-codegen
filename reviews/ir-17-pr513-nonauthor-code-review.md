@@ -206,3 +206,42 @@ The prior eight source findings in SR-15370 have corresponding fixes: QSV paired
 }
 ```
 
+## Dispositions
+
+Round 1, independently inspected at published head 82051284537d9468f03b8a158a3e4f3605309a3f. Original findings and the original-head verdict above remain unchanged.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | Metered BooleanNot/connective subtrees no longer take the pure-leaf fast path. The original globally unmetered entry branch stays unchanged; seven native regression shapes check every budget from zero through the required retain count. |
+| FND-002 | fixed | Both module introduction and emitted header now identify QSV Quantity/enum ownership, with retained Runtime Boolean residue ownership. |
+
+### Narrow evidence readback
+
+Compared cd202f1b8fda0c23428c19aa47c40ce3769ff76c to 82051284537d9468f03b8a158a3e4f3605309a3f. The nonauthored product delta is the Boolean renderer guard and the two scalar ownership descriptions, plus the new native regression. No normative requirement changed. Unit-metadata files and integration coverage are excluded as before and remain with the official independent reviewer.
+
+Read the actual fix-round-3 handoff, pure-connective-red.log, pure-connective-green.log/JSON and focused-summary.json. The red run compiled old production and failed six of seven shapes at budget 1 with Completed(false); the pure comparison leaf passed. The restored green native wrapper passed and requires all generated checks. The new cases cover Not, short And/Or, total And/Or, implication and the comparison leaf; each checks every result budget through its required retain count, exact consumed/admitted charges and no unreachable arithmetic charge. Existing retention, first-stop, unmetered byte-identity and unmetered comparison controls have author-run zero-exit evidence, as do format/lint/spec. These are inspected author-run results; the reviewer ran no Cargo, tests, Kani or backend.
+
+The frozen branch's copied review artifacts matched the prior scratchpad versions before this append. The scratchpad copies additionally remove trailing presentation whitespace for final diff-check custody; findings, original structured data and original verdict text are preserved.
+
+**Current scoped verdict: PASS** for the two nonauthored product findings and the associated gap at this exact new head; no new finding from this narrow delta. This does not accept the excluded authored slice, inherited repository assurance gaps, or final make ci/Kani outcomes. Parent owns the final gates after all independent dispositions.
+
+```yaml
+{
+  "round": 1,
+  "head": "82051284537d9468f03b8a158a3e4f3605309a3f",
+  "dispositions": [
+    {
+      "fnd": "FND-001",
+      "outcome": "fixed",
+      "after_excerpt": "let connective = matches!(\n            expression.kind(),\n            ExpressionKind::BooleanNot { .. } | ExpressionKind::Boolean { .. }\n        );\n        if !connective && !self.holds_arithmetic() {",
+      "reason": "Metered BooleanNot/connective subtrees no longer take the pure-leaf fast path. The original globally unmetered entry branch stays unchanged; seven native regression shapes check every budget from zero through the required retain count."
+    },
+    {
+      "fnd": "FND-002",
+      "outcome": "fixed",
+      "after_excerpt": "// Each function calls its owning `quire-exact`, `quire-semantic-value` or Runtime\n// operator with the caller's `Meter`; no charge amount appears in this source.",
+      "reason": "Both module introduction and emitted header now identify QSV Quantity/enum ownership, with retained Runtime Boolean residue ownership."
+    }
+  ]
+}
+```

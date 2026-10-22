@@ -1061,3 +1061,48 @@ prior_outcomes_confirmed:
   FND-001: deferred
   FND-002: deferred
 ```
+
+## Round 3 source and evidence review
+
+Round 3 frozen source head 82051284537d9468f03b8a158a3e4f3605309a3f. Independent code/Rust disposition covers every cd202..820512 product/test/documentation/custody delta and retains the complete original whole-landing review scope above. Read-only git ls-remote confirms remote main equals unchanged local origin/main 0d7813df955576edc867cfa90e2071bd56d844ff. Tree is clean; no refs changed. No product edits, Cargo/tests/native execution, namespace/backend work or gates ran in this reviewer pass.
+
+The eight original findings remain fixed with their earlier immutable dispositions. FND009/FND010/FND011 are now fixed by the inspected source and discriminating author-run evidence. FND012 records the independently confirmed original low ownership-prose defect from external SR15389/FND002 at cd202 and its actual correction here; original external findings remain untouched. No additional current defect of any severity was found. All twelve code findings have explicit fixed outcomes; both inherited gap findings retain existing-owner deferred outcomes. Source readiness: PASS. Mergeability: CONDITIONAL on final make ci and canonical Kani/backend qualification, retained evidence/custody, and the external review's own final dispositions. Aggregate/Kani remain UNRUN, so no full product or proof PASS is asserted.
+
+FND009: the new test traverses actual admit_environment instead of directly calling only the attachment helper. It verifies complete original units including unused km, authentic public node lookup, owner-issued IDs, exact quantity metadata/resolution and production context-free None behavior. The retained helper check additionally preserves a populated table under None. The mutation script removes exactly the production attachment, compiles, fails the complete-table assertion with exit101, and restores source in finally; the restored exact one-test command passes. The red was assertion failure, not setup/compilation failure.
+
+FND010: mixed direct and nested Quantity requests retain all original source declarations and typed Unsupported/context precedence. Both call the new isolation helper. All code artifacts excluding claim-map.json equal their isolated surviving siblings byte-for-byte, so private helper/code leakage is also detected. Generated claim comparisons retain all fields except contract_package_identity: public lowering includes selected root sets in that identity, while source-owner identity, node/operation, descriptors, source map, dependencies, schedule and symbols remain equal. This is a justified request identity normalization, not relaxed nominal identity. Syn parses genuine emitted Rust; the exact public entrypoint census matches only surviving environment/oracle names. Both integration tests pass. Quantity remains Unsupported; metadata does not add positive Quantity equality/conversion or native Union acceptance.
+
+FND011: in a globally metered native root, the pure-child connective branch now takes a typed preorder index and recursively renders its child connectives, retaining each completed result. Pure leaves use plain_node with its own index consumption. Compare analysis accepts bounded integers only, so a pure comparison cannot conceal unvisited Boolean connective children. Globally arithmetic-free rendering and ABI stay on the existing path. New genuine generated-native checks exercise Not, short And/Or, total And/Or and implication plus a comparison-leaf control. Every budget zero through the independent expected retain count checks Completed(false) only at full budget and Incomplete(BooleanResultRetain) otherwise; counters and admitted charges equal the budget, and every charge is BooleanResultRetain, proving right arithmetic remains skipped. The old-code command compiled and produced six failing inner tests at budget1 plus one passing leaf control. The fixed exact outer test passes, and its runner invokes the entire freshly generated native crate with no test filter. Source generates seven distinct #[test] items. Existing native retention and first-stop controls pass, as do arithmetic-free byte identity and comparison shape controls. These are current focused observations; final backend proof is still pending.
+
+FND012: the module and generated comment now name the actual owning crates. No operator body changed in scalar/mod.rs. Existing scalar native twenty-case, record/tuple direct/transitive, six original host controls over fifteen authentic fixtures plus mixed, four Union host checks and scalar-family/Quantity refusal evidence in fix-round-2 remain valid focused observations for unchanged behavior; this round does not relabel them as final-head aggregate/Kani proof. Round3 focused-summary.json and individual command JSON/raw logs confirm exact matched tests and successful statuses: metadata1, Quantity integration2, retention1, first-stop1, unmetered bytes1, unmetered comparison1; pure-connective exact outer1 recorded separately. make fmt-check, locked Clippy all-targets -D warnings and make spec exit zero; existing spec warnings remain recorded. The final-head.json identifies this exact source checkpoint. No broad execution was repeated by this reviewer.
+
+Review custody: both committed official round2 artifacts are byte-identical to their validated reviewer-owned disposition2 files. All four committed external nonauthor reviews SR15389..15392 are byte-identical to their supplied originals. Earlier source/authentication/protected fixture evidence and the nine independent AC45 spec reviews SR15380..15388 remain intact. Branch changes since cd202 are confined to the five product/test paths plus six custody documents listed by git diff. Original domains, fifteen fixture sources, twenty protected qualification directories, native execution ownership and Quantity->NonRangeType are untouched. QSL 48b47ab9 cohort and current public UnitTable/QSV ownership remain unchanged. Final gates belong to the parent, with no extra permission required.
+
+Fresh read-only computed matrix remains 899 criteria: 543 tagged, 288 untagged, 16 ignored-only, 52 method-without-symbol. AC45 is still tagged to three test functions; AC26 now binds both the existing retention test and the added pure-connective-subtree regression. Computed evidence_status remains no run evidence because external author logs are not bound evidence records; this does not negate the independently inspected focused logs. This pass claims those separately. Full end-to-end ownership, tagged tests, actual assertions and production chain were inspected across the reviewed landing and final delta. No new static gap or unowned production addition was found.
+
+FR005AC3 remains untagged and deferred to the existing SR15352/FND001 CLI baseline inventory and IR954/IR17 planner disposition. FR016AC25 remains untagged and deferred to existing IR604/PR498 replay ownership. Their original findings and explicit round1 reasons stay immutable. The 320-row inherited inventory and existing dispositions are retained, with no duplicate issue or invented remediation. Repository completeness remains FAIL; incremental static gap verdict PASS; the introduced AC45 and Boolean assertion gaps identified by code review are now FIXED rather than excused. External SR15390/FND001 identifies the same Boolean gap as our FND011; new native pure-subtree regression closes its missing case by actual source and red/green evidence. External reviewer owns that original artifact's disposition. Ignored dedicated Kani controls are not defects merely for their lane. Plan completion: not assessed. Optional semantic gap review not opted in; required code-review oracle checks and focused evidence review performed. Full aggregate and canonical Kani acceptance remain pending.
+
+```yaml
+dispositions: []
+review_head: 82051284537d9468f03b8a158a3e4f3605309a3f
+scope:
+- id: FR-031-AC-26
+  path: spec/oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md
+  role: examined
+  excerpt: Each completed connective, including unary BooleanNot, calls `quire_exact::retain_boolean`
+    exactly once and charges `boolean.result-retain` once, including a result decided
+    by the left; a child stop charges no connective result-retain point.
+- id: TC-029
+  path: spec/oracle/matrix/TC-029-composite-equality-oracles.md
+  role: examined
+  excerpt: Deleting either attachment must fail its corresponding check.
+- id: SOURCE_HEADER
+  path: src/oracle/scalar/mod.rs
+  role: examined
+  excerpt: '// Each function calls its `quire-exact` operator or a runtime-owned residue
+
+    // operator with the caller''s `Meter`; no charge amount appears in this source.'
+prior_outcomes_confirmed:
+  FND-001: deferred
+  FND-002: deferred
+```

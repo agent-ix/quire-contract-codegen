@@ -100,3 +100,35 @@ Plan completion: not assessed
 }
 ```
 
+## Dispositions
+
+Round 1, independently inspected at published head 82051284537d9468f03b8a158a3e4f3605309a3f. Original findings and the original-head verdict above remain unchanged.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | The tagged native regression exercises the previously missing pure Boolean subtree inside a metered root. It checks all result budgets, exact retain-only charge counts and skipped arithmetic; old code fails six shapes and the fixed code passes the wrapper requiring all seven. |
+
+### Narrow evidence readback
+
+Compared cd202f1b8fda0c23428c19aa47c40ce3769ff76c to 82051284537d9468f03b8a158a3e4f3605309a3f. The nonauthored product delta is the Boolean renderer guard and the two scalar ownership descriptions, plus the new native regression. No normative requirement changed. Unit-metadata files and integration coverage are excluded as before and remain with the official independent reviewer.
+
+Read the actual fix-round-3 handoff, pure-connective-red.log, pure-connective-green.log/JSON and focused-summary.json. The red run compiled old production and failed six of seven shapes at budget 1 with Completed(false); the pure comparison leaf passed. The restored green native wrapper passed and requires all generated checks. The new cases cover Not, short And/Or, total And/Or, implication and the comparison leaf; each checks every result budget through its required retain count, exact consumed/admitted charges and no unreachable arithmetic charge. Existing retention, first-stop, unmetered byte-identity and unmetered comparison controls have author-run zero-exit evidence, as do format/lint/spec. These are inspected author-run results; the reviewer ran no Cargo, tests, Kani or backend.
+
+The frozen branch's copied review artifacts matched the prior scratchpad versions before this append. The scratchpad copies additionally remove trailing presentation whitespace for final diff-check custody; findings, original structured data and original verdict text are preserved.
+
+**Current scoped verdict: PASS** for the two nonauthored product findings and the associated gap at this exact new head; no new finding from this narrow delta. This does not accept the excluded authored slice, inherited repository assurance gaps, or final make ci/Kani outcomes. Parent owns the final gates after all independent dispositions.
+
+```yaml
+{
+  "round": 1,
+  "head": "82051284537d9468f03b8a158a3e4f3605309a3f",
+  "dispositions": [
+    {
+      "fnd": "FND-001",
+      "outcome": "fixed",
+      "after_excerpt": "fn tc_044_pure_connective_subtrees_retain_within_a_metered_root() {\n    let mut modules = Vec::new();\n    let mut checks = String::new();\n    for (index, (label, flag, expected_retains)) in [\n        (\"not\", true, 2_u64),\n        (\"short_and\", false, 2),\n        (\"short_or\", false, 2),\n        (\"total_and\", true, 3),\n        (\"total_or\", true, 4),\n        (\"implication\", true, 3),\n        (\"comparison_leaf\", true, 1),\n    ]",
+      "reason": "The tagged native regression exercises the previously missing pure Boolean subtree inside a metered root. It checks all result budgets, exact retain-only charge counts and skipped arithmetic; old code fails six shapes and the fixed code passes the wrapper requiring all seven."
+    }
+  ]
+}
+```

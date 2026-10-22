@@ -27,9 +27,9 @@ Applicable methods: Rust/code, computed matrix and reverse-gap checks, specifica
 
 ## Examined scope
 
-- FR-018-AC-44 (examined), spec/oracle/functional/FR-018-composite-equality-oracles.md: Genuine Union equality generation preserves the facade declaration key, settled node, authoritative member bindings and declared member/payload order across a nested Union closure, using the specified lookup and verified sealing in both generator and emitted preparation. In-process owner-API controls admit values of every member, including record and nested-Union payloads; distinct same-shaped unions retain incompatible identities. Missing/wrong capability, Unknown/Foreign/WrongKind lookup, name/form disagreement and seal faults retain their typed causes, no successful prepared wrapper and no 
+- FR-018-AC-44 (examined), spec/oracle/functional/FR-018-composite-equality-oracles.md: Genuine Union equality generation preserves the facade declaration key, settled node, authoritative member bindings and declared member/payload order across a nested Union closure, using the specified lookup and verified sealing in both generator and emitted preparation. In-process owner-API controls admit values of every member, including record and nested-Union payloads; distinct same-shaped unions retain incompatible identities. Missing/wrong capability, Unknown/Foreign/WrongKind lookup, name/form disagreement and seal faults retain their typed causes, no successful prepared wrapper and no
 
-- FR-031-AC-26 (examined), spec/oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md: PLANNED (IR-602). The generated source of a native oracle holds no `quire_contract_runtime::operators` path and no `and_short_circuit`, `or_short_circuit` or `implies_short_circuit`; a short-circuit connective is an inline `match` over the left operand's `rt::Outcome` that returns the first stop and does not evaluate the right operand when the left decides, and a total connective evaluates both operands in order and returns the first stop. Each completed connective, including unary BooleanNot, calls `quire_exact::retain_boolean` exactly once and charges `boolean.result-retain` once, including 
+- FR-031-AC-26 (examined), spec/oracle/functional/FR-031-boolean-oracle-integer-arithmetic.md: PLANNED (IR-602). The generated source of a native oracle holds no `quire_contract_runtime::operators` path and no `and_short_circuit`, `or_short_circuit` or `implies_short_circuit`; a short-circuit connective is an inline `match` over the left operand's `rt::Outcome` that returns the first stop and does not evaluate the right operand when the left decides, and a total connective evaluates both operands in order and returns the first stop. Each completed connective, including unary BooleanNot, calls `quire_exact::retain_boolean` exactly once and charges `boolean.result-retain` once, including
 
 ## Evidence and limits
 
@@ -66,3 +66,6 @@ The nonauthored FR-018/TC-029 Union and FR-031/TC-044 ownership/metering edits w
 }
 ```
 
+## Narrow readback
+
+Published head 82051284537d9468f03b8a158a3e4f3605309a3f was compared with cd202f1b8fda0c23428c19aa47c40ce3769ff76c. There is no normative spec delta; the original scoped PASS is carried forward. Source/gap dispositions are recorded separately in SR-15389/SR-15390. The excluded authored unit metadata slice remains with the official independent reviewer. No new findings, Cargo or backend execution. These scratchpad artifacts normalize trailing presentation whitespace before custody; original findings and structured review data remain unchanged.
