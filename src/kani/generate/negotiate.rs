@@ -63,6 +63,9 @@ use crate::{
     core::identity::HarnessSymbol,
     core::naming::unique_names,
     kani::abi::{adapter_options, KaniSolver},
+    kani::generate::clause::v2::{
+        lower as lower_v2_clause, render_clause as render_v2_clause, LoweredV2Clause,
+    },
     kani::generate::clause::{
         abi, clause_stem, contract_contexts, lower_clause, obligation_kind, symbols, LoweredClause,
         SlotContext,
@@ -84,9 +87,6 @@ use crate::{
     kani::generate::scalar::{
         derive_domain, lower_scalar_claim, render_scalar, scalar_stem, unsatisfiable,
         LoweredScalarClaim, ScalarLoweringRefusal,
-    },
-    kani::generate::v2_clause::{
-        lower as lower_v2_clause, render_clause as render_v2_clause, LoweredV2Clause,
     },
     kani::identity::{
         EmbeddedOracle, KaniObligationHarness, KaniObligationIdentity, ObligationKind,

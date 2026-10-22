@@ -21,7 +21,7 @@ use crate::{
     oracle::clause::{generate_v2_clause_oracle, V2ClauseOracle},
 };
 
-pub(super) struct LoweredV2Clause {
+pub(in crate::kani::generate) struct LoweredV2Clause {
     pub(super) package: CheckedSemanticId,
     pub(super) node_id: CheckedNodeId,
     oracle: V2ClauseOracle,
@@ -29,7 +29,7 @@ pub(super) struct LoweredV2Clause {
     pub(super) harness_symbol: String,
 }
 
-pub(super) fn lower(
+pub(in crate::kani::generate) fn lower(
     package: &CheckedPackageV2,
     clause: &CheckedNodeId,
 ) -> Result<LoweredV2Clause, UnsupportedObligation> {
@@ -69,7 +69,7 @@ pub(super) fn lower(
     })
 }
 
-pub(super) fn render_clause(
+pub(in crate::kani::generate) fn render_clause(
     request: &KaniObligationRequest<'_>,
     lowered: &LoweredV2Clause,
 ) -> Result<KaniV2ClauseObligationHarness, UnsupportedObligation> {
