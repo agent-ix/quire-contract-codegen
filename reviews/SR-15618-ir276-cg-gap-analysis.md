@@ -30,3 +30,9 @@ Plan completion: not assessed
 - The batch/singleton comparison is a useful refusal parity control. Every newly selected item is refused or requires bound, so this addition does not add a grouped supported-harness comparison. Existing tests exercise supported scalar generation on other paths.
 - The fixture builder appends one `source_map` entry with one region whenever it appends a node (`tests/exact_scalar_support/package.rs:622-631`). `scalar_package()` uses `scalar_package_with_occurrences(false)`; its selected four nodes therefore do not create two distinguishable occurrences for the same node. The test's expected list is derived by filtering that same admitted package, so it does compare against wire order once a nontrivial fixture exists.
 - This review did not opt into a repository-wide semantic sweep. The changed triple of requirement, test, and code was examined directly because the assignment specifically requests an acceptance-gap review.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | At 6ee41c76, `tc_025_scalar_source_lookup_preserves_multiple_occurrences_per_node` admits two source-backed nodes. For each, it asserts at least two distinct occurrences and exact vector equality with the admitted wire's ordered list. A reverse or truncation now fails. |

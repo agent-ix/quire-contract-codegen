@@ -33,3 +33,9 @@ The new pointer key has request-local lifetime, so no stale package reference es
 - Examined TC-025 and the changed `tc_025_unbounded_non_finite_and_blocked_items_are_refused_without_harnesses` test.
 - At `src/routed/capability.rs:792`, each `V2ScalarClaim` preflight invokes `classify_scalar_form`. That function constructs `ContractLookup::new(contract)` at line 864, scanning the entire graph and source map per call, then searches `package.graph().nodes.iter().find(...)` at lines 867-871. The new request-local cache in `negotiate_kani_obligations` does not cover this entry.
 - No full gate ran during this review; the author owns the final-head gate after fixes.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | At 6ee41c76, a request-local `ScalarFormLookups` is created once in backend-provider negotiation and passed through each scalar preflight. It caches both checked and contract graphs by admitted content identity. `classify_scalar_form` now uses both indexed lookups and has no direct graph/source-map scan. |
