@@ -10,37 +10,52 @@ relationships:
 
 ## Description
 
-Verify that CG publishes QSL-admitted generated-closure test inputs and their
-QSL std reference evaluations in a loadable generated bundle. The QSL-owned
-differential harness is responsible for running both evaluators and deciding
-agreement; this case verifies CG's export boundary.
+Verify that CG publishes QSL-admitted generated-closure source applications
+through the FR-402 `quire-eval-corpus` case format. QSL's harness runs both
+evaluators and decides agreement; this case verifies CG's export boundary and
+its later `quire-eval` expectation path.
 
 ## Test Procedure
 
-1. Admit one scalar, one equality and one nested generated-to-generated-to-
-   interpreted application through the QSL checked-closure interface. Export
-   with a caller-selected `EVALUATOR_CORPUS_DIR` and load `cases.jsonl` using
-   QSL's public corpus loader. Assert its format, case count, distinct stable
-   ids, checked application and registered-body identities, limits, complete
-   expected evaluations and ordered charges (FR-044-AC-1).
-2. Export twice from fresh admitted instances and compare bytes. Enumerate the
-   live admitted source applications independently of the JSONL loader and
-   compare their exact case-id set with the loaded record set. Independently
-   perturb one identity, location, limit, result distinction, refusal, loss,
-   consumed work or charge-order field and assert that the loader reports the
-   changed case or refuses invalid checked input under QSL STD-300's rules.
-   Remove one record and assert the independent source-case census fails
+1. Admit a scalar, an equality and a nested generated-to-generated-to-
+   interpreted source application through QSL. Enumerate their case ids from
+   the live source applications before loading the bundle. Run
+   `make evaluator-corpus EVALUATOR_CORPUS_DIR=<dir>` and load `cases.jsonl`
+   through `quire_eval_corpus::load` and QSL's FR-402 admission. Assert exact
+   `quire.evaluator-case/v1` fields, ascending case ids, four source labels,
+   dependency units, `package_id` from compilation, callable function,
+   arguments, decimal-string limits, `object_environment: null`, sorted
+   generated-body function names and `expected: null` while `quire-eval`
+   cannot yet execute registered bodies. Change authority, identity and
+   valid source text one at a time without recompiling `package_id` and assert
+   `package_mismatch`; change only revision labels and assert admission with
+   the same `package_id` (FR-044-AC-1).
+2. Export twice from the same admitted cases and compare exact bytes. Compare
+   the independently enumerated case ids with the loaded bundle, then remove
+   one record and assert a census failure. Perturb the callable, argument,
+   dependency, generated-body name and limit independently; assert the loaded
+   change or FR-402's stated load/admission refusal. Fail one producer-side
+   compile, case-construction, case-encoding or load check and assert no partial replacement:
+   the prior complete bundle is byte-identical, or the target remains absent
    (FR-044-AC-2).
-3. Make QSL reference evaluation unavailable or make one checked input
-   unencodable; assert the producer fails and a previous complete bundle
-   remains byte-identical, or the target is absent if it did not exist.
-   Inspect the producer for computation of expected outcomes from emitted
-   source or Contract Runtime `exact`, direct calls before QSL FR-060 T12-A
-   is amended, and local encodings/refusal rules (FR-044-AC-2, AC-3).
+3. Inspect CG's writer and dependencies for `quire-eval-corpus` use, and the
+   replay module for `qsl_replay::compile_package`. Confirm no CG-local case
+   or compared-record codec, loader refusal, `qsl-eval` dependency, direct QSL
+   evaluator call outside replay, or expectation computed from emitted source
+   or Contract Runtime `exact` (FR-044-AC-3).
+4. Once `quire-eval` runs registered generated bodies, use one real
+   `quire-eval` run per selected case to set its non-null `expected` record.
+   Run QSL FR-402's expected/std check over the bundle; assert exact result,
+   refusal, location, losses and ten consumed counters. Check Boolean and
+   Integer completed values, a non-Boolean/Integer `unencodable_value`, and
+   `charges` populated only with non-truncated FR-402 `charge-log` test support
+   and `null` otherwise (FR-044-AC-4).
 
 ## Expected Results
 
-The QSL loader admits all three intact records as the same checked
-applications and expected evaluations; byte identity, adverse changes and
-whole-bundle failure behave as specified. The QSL-owned IR-591 harness then
-uses this bundle for std/no_std comparison in its own CI.
+All intact cases load and admit as their authored applications. Case bytes,
+case census and adverse controls have the stated outcomes; a failed export
+never publishes a partial bundle. Before registered-body execution exists,
+`expected` is `null`; after it exists, non-null expectations pass QSL's
+expected/std check under the FR-402 encoding rules. QSL FR-402-AC-10 owns
+its differential harness run over CG's bundle.
