@@ -1106,3 +1106,87 @@ prior_outcomes_confirmed:
   FND-001: deferred
   FND-002: deferred
 ```
+
+## Round 4 partial source disposition
+
+PARTIAL round4 source review only, frozen head 730d9aba7a502e9f51f55a1c5c473818e9a83453. This is not the completed round4 or a final mergeable verdict. All original twelve code findings remain fixed, and both inherited gap findings retain their existing-owner deferred outcomes. No old finding is reopened or duplicate unowned finding invented for the already owned gate failures. The actual aggregate at 0c4a36b67bb932ade5cfc711146deb2ba23f1bcd failed: 398 library tests passed, four failed, five ignored, make exit2 before integration. That failed gate is retained at final-gates/ci-20261022T024344Z.log and is not replaced by these focused passes. No aggregate retry, Kani/CBMC or reviewer execution occurred here. Current PR acceptance remains pending.
+
+Only src/oracle/equality/mod.rs changed between failed head and this checkpoint. Independent byte comparison confirms everything before its single cfg(test) tests module is identical (SHA256 24b9ce063dd55aab90b5893a91bfaed389d2cef5c4a3fcd6e3e1c717553762c7). No production UnitTable, public API, manifest, lock, source/domain, work limit, stack size or test assertion was changed. No product edits, builds, namespaces, backend operations or git ref mutations were performed by the reviewer.
+
+Cycle fixture fix: the child diagnostic confirms an ordinary failed assertion, MissingAdmittedContext instead of expected TypeResolutionCycle, rather than evidence of a crash. The resolver helper already received the genuine recursive owner, but the item helper passed None. check_nominal_component_item now uses check_nominal_items_with_limits and the same genuine owner. Both Option and Sequence deliberate private graph mutations retain their exact repeated-node assertions, original sibling resolver checks and healthy Integer item assertions. The subprocess wrapper prints exit status, stdout and stderr. Removed unused context-free test helpers are replaced by this explicit nominal component helper, without suppressing warnings. This remains a private inconsistent-input defense, not a claim that malformed identities were publicly admitted. cycles-final.json/log records the exact outer test, one matched pass; source runs both children and requires each to succeed. No stack/shape/domain relaxation was introduced.
+
+Render fixture fix: emit_two now establishes SourceBuilder.expected_package using the genuine admitted source package identity, matching production's required preparation state. It compiles original public QSL source declaring Length/m and a Quantity<m> signature, retains the owner's actual UnitId and complete table, and prepares checked equality through QSV TypeEnvironment. The Quantity variant passes its actual CheckedItem to render_item; the UnsupportedValueType refusal is no longer merely injected. The owner-admitted plan succeeding does not enable public CG Quantity equality: the actual consumer still returns its unchanged Unsupported arm, and production source is byte-identical. No unit identity, compatibility schema or private API is copied. The whole-call generation error remains an explicitly deliberate boundary injection, not claimed public intake. Every original two-item symbol naming, no-code, per-item refusal, healthy sibling and whole-call abort assertion stays intact. render-isolation-owner-final.json/log records the exact one matched test passing. Synthetic transport labels retained in this explicitly private render seam do not acquire compiler provenance from the genuine metadata; no public request acceptance is claimed.
+
+This checkpoint adds no positive Quantity equality/conversion, native Union, or emitted constructor execution claim. The in-process QSV plan and actual renderer are the intended private seam under AC18. UnitTable is used exclusively to supply genuine owner metadata to that check; there is no UnitId derivation, table reconstruction, cross-owner substitution or production refusal change. The unrelated prior metadata and scalar functionality remains as reviewed in rounds1-3.
+
+Recorded author evidence in fix-round-4/partial-summary.json, exact command JSONs and raw logs confirms cycles1 and actual-render-isolation1 pass, make fmt-check zero and locked Clippy all-targets -D warnings zero. Parent-supplied Quire validation is exit0 with existing warnings; this reviewer independently validates the scratch artifacts. git diff --check also passes. No supplied focused result is treated as passing aggregate or as the two remaining large-source controls.
+
+PENDING unchanged controls: the 50,000-record source is 2,027,895 bytes and retains its 512KiB CG stack. The work-bound source is 2,599,335 bytes and retains its original entry, default limit, denied-count and healthy-sibling assertions. Both still fail at source intake under the current QSL public facade's default S1InputBytes1MiB; no successful rerun or acceptance is claimed. Existing QSL960 owns the public StageLimits configuration constructor/re-export. Wait for the real public API, adopt a final merged cohort, configure only finite fixture intake budgets with genuine unchanged sources, and then inspect the two exact passing regressions before a completed review/gate retry. No direct foundation dependency, fabricated wire, guessed API, inference/string escape hatch, or reduced fixture/profile/domain/stack/work target is approved by this partial review. No new issue was filed.
+
+Verdict for the two reviewed independent fixes: PARTIAL source PASS, no additional defect found. Overall source/qualification completion: PENDING on the two upstream-dependent controls and final integrated review. Mergeability is not granted by this partial checkpoint. The prior round3 conditional statement is historical and does not override the known failed aggregate or these explicit pending obligations.
+
+Fresh computed matrix remains 899 criteria, 543 tagged, 288 untagged, 16 ignored-only, 52 method-without-symbol. Trace attributes and tested obligations are unchanged; helper selection now reaches the intended private nominal/renderer seam. Repository gap verdict remains FAIL with existing SR15352/FND001 and IR604/PR498 owners; no new incremental static gap was found. This partial review does not waive failed or pending gates, invent duplicate remediation, or call ignored dedicated Kani controls defects. Plan completion: not assessed. Optional semantic gap review not opted in. All prior baseline inventory outcomes remain intact.
+
+```yaml
+dispositions: []
+phase: partial
+review_head: 730d9aba7a502e9f51f55a1c5c473818e9a83453
+scope:
+- id: FR-018-AC-18
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: '`render_value_type` called with `ValueType::Quantity` and with `ValueType::Reference`
+    returns `Err(RenderError::UnsupportedValueType { family })` with `family` equal
+    to `"quantity"` and `"reference"` respectively and does not panic, and the item-boundary
+    mapping turns `RenderError::UnsupportedValueType` into `CompositeEqualityRefusal::Unsupported`
+    with `node_tag` equal to `family` and `unsupported_node_id` equal to the item''s
+    expression node id, emitting no code for the item and leaving its siblings unchanged,
+    while `RenderError::Generation(OracleGenerationError::UnknownRuntimeVariant {
+    .. })`'
+- id: FR-018-AC-24
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: The exact QSpec `positive-recursive-records.json` retains strict-reader
+    and List/Tree shape assertions; independently authored genuine admitted source
+    with those List (`Option<List>`) and Tree (`Sequence<Tree>` bounded `[0,3]`) shapes
+    closes each back-edge at its own in-progress record key, generates equality items
+    over both record types, and terminates; a synthetic unclosed `Option` self-cycle
+    and a `Sequence` self-cycle each refuse as `TypeResolutionCycle` naming the repeated
+    type node, without a panic, stack overflow or generated symbol. PLANNED (IR-643).
+- id: FR-018-AC-25
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: context_only
+  excerpt: 'The per-item type-resolution counter charges one unit for each root type-node
+    entry or followed type-node reference or bounded-domain `semantic_type` edge,
+    including a repeated or memoized reference, across both operands and conversion
+    targets, independently of Contract IR lowering; with the default limit, an acyclic
+    chain reaches its 65,537th entry and refuses only its item as `TypeResolutionWorkExhausted
+    { limit: 65_536, consumed: 65_537 }` before further descent and without call-stack
+    exhaustion or generated symbols, while a sibling needing at most 65,536 entries
+    still generates. PLANNED (I'
+- id: FR-018-AC-28
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: context_only
+  excerpt: With a caller-selected type-resolution work limit of at least 100,000 and
+    `cg.equality.source_bytes` raised to the measured flat source size, an admitted
+    acyclic type chain of 100,000 entries reconstructs and generates an oracle with
+    the same result as an equivalent shallow type on a 512 KiB stack; with the same
+    raised source-byte limit, the default type-resolution work limit refuses it at
+    entry 65,537, and a selected work limit one below its entry count refuses it at
+    the first denied entry. No depth setting or fixed depth refusal participates in
+    these runs. PLANNED (IR-511).
+- id: FR-018-AC-30
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: context_only
+  excerpt: The 100,000-entry acyclic closure renders as flat source without a type-depth-sized
+    constructor expression; under the 1,048,576-byte default it returns `SourceTooLarge`
+    naming that limit when the source exceeds it, and under a caller limit equal to
+    its measured source bytes it emits a complete, compilable oracle within the publication
+    artifact and bundle byte limits. One byte less refuses before that byte is appended
+    and publishes no partial artifact. PLANNED (IR-511).
+prior_outcomes_confirmed:
+  FND-001: deferred
+  FND-002: deferred
+qualification: failed aggregate retained; two focused fixes PASS; two large-source
+  controls PENDING existing QSL960; no mergeability granted
+```
