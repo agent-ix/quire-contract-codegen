@@ -86,3 +86,5 @@ mod strategy_generation;
 mod terminal_map;
 mod v2_llvm_coverage;
 mod vacuity_primitives;
+
+mod checked_term_consumers;
