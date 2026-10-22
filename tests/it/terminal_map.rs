@@ -8,14 +8,14 @@
 
 use ix_trace_rs::trace;
 use qsl_replay::{
-    std001_code, AdmissionFailure, CallSiteRefusal, Category, Certification, ClauseName, Code,
-    DeclineCode, DependencyInput, DependencyInputRefusal, DigestDomain, DigestRecord,
-    DisagreementCause, FieldName, FrameCounterexample, Identifier, IncompleteCause,
-    InconclusiveCause, InternalFault, MalformedTranscript, OperationName, PopulationName,
-    ProofBasis, ProofRefusalCause, QualifiedName, ReplayLimits, ReplayRefusal,
-    ReportedInconclusiveCause, ScalarLimits, SourceIdentity, StateClauseCounterexample, Std001Code,
-    SuppliedLibrary, TerminalValue, UnavailabilityCause, Verdict, Witness, WitnessEnvelope,
-    WitnessFailure, WitnessPacket,
+    std001_code, AdmissionFailure, CallSiteRefusal, Certification, ClauseName, Code, DeclineCode,
+    DependencyInput, DependencyInputRefusal, DigestDomain, DigestRecord, DisagreementCause,
+    FieldName, FrameCounterexample, Identifier, IncompleteCause, InconclusiveCause,
+    MalformedTranscript, OperationName, PopulationName, ProofBasis, ProofRefusalCause,
+    QualifiedName, ReplayLimits, ReplayRefusal, ReplayTargetMembers, ReportedInconclusiveCause,
+    ScalarLimits, SourceIdentity, StateClauseCounterexample, Std001Code, SuppliedLibrary,
+    TerminalValue, UnavailabilityCause, Verdict, Witness, WitnessEnvelope, WitnessFailure,
+    WitnessPacket,
 };
 use quire_contract_codegen::{
     ir_outcome_terminal_value, run_terminal_value, DecodeFailure, DependencyLock,
@@ -28,6 +28,7 @@ use quire_contract_codegen::{
 };
 use quire_contract_ir::kani::{KaniCancellationSource, KaniOutcome, KaniOutcomeKind};
 use quire_exact::CancelCause;
+use quire_semantic_value::catalog::{Category, InternalFault};
 
 use crate::kani_obligations_state_frame::{emitted_fixture, native_twin::Twin};
 
@@ -405,7 +406,7 @@ fn for_each_cg_failure(check: impl Fn(ReplaySettlement<'_>)) {
             obligation_identity: None,
             occurrence_key: None,
             clause_node: None,
-            selected_function: None,
+            replay_target: ReplayTargetMembers::default(),
             package_id: None,
             source_digests: None,
             profile_selections: None,
@@ -773,7 +774,7 @@ fn tc_040_the_state_clause_replay_reads_as_fr029_ac16() {
         obligation_identity: None,
         occurrence_key: None,
         clause_node: None,
-        selected_function: None,
+        replay_target: ReplayTargetMembers::default(),
         package_id: None,
         source_digests: None,
         profile_selections: None,

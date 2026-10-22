@@ -11,13 +11,14 @@
 use std::{collections::BTreeMap, fmt};
 
 use qsl_replay::{
-    call_site, replay, ByteDigest, CallSite, CallSiteRefusal, Category, DeclaredDomain,
-    DependencyEntryWire, DependencyInput, DependencyInputRefusal, DigestDomain, DigestRecord,
-    DisagreementCause, FunctionSite, Identifier, MalformedTranscript, ObligationIdentity,
-    OccurrenceKey, QualifiedName, ReplayLimits, ReplayRefusal, ReplayRequestWire, ReplayResult,
-    ReplaySource, ScalarLimits, SourceIdentity, StateEnvironment, SuppliedLibrary, WireNodeId,
+    call_site, replay, ByteDigest, CallSite, CallSiteRefusal, DeclaredDomain, DependencyEntryWire,
+    DependencyInput, DependencyInputRefusal, DigestDomain, DigestRecord, DisagreementCause,
+    FunctionSite, Identifier, MalformedTranscript, ObligationIdentity, OccurrenceKey,
+    QualifiedName, ReplayLimits, ReplayRefusal, ReplayRequestWire, ReplayResult, ReplaySource,
+    RequestTargetWire, ScalarLimits, SourceIdentity, StateEnvironment, SuppliedLibrary, WireNodeId,
     Witness, WitnessArmResult, WitnessSettlement, WitnessValue,
 };
+use quire_semantic_value::catalog::Category;
 
 use crate::{
     kani::generate::corpus::bounded_kani_corpus::BoundedCorpusCase,
@@ -448,7 +449,7 @@ impl ReplayInputs {
     pub(crate) fn wire(
         &self,
         package_id: DigestRecord,
-        selected: QualifiedName,
+        replay_target: RequestTargetWire,
         source: ReplaySource,
         obligation_identity: [u8; 32],
         documents: &[(DigestRecord, &[u8])],
@@ -494,7 +495,7 @@ impl ReplayInputs {
             ),
             source_digests: vec![self.source.wire()],
             dependencies,
-            selected_function: selected,
+            replay_target,
             source,
             obligation_identity,
             backend: BACKEND_IDENTITY.to_owned(),
@@ -660,7 +661,7 @@ impl ReplayPackage {
     ) -> ReplayRequestWire {
         self.inputs.wire(
             self.site.package_id,
-            self.selection.clone(),
+            RequestTargetWire::function(self.selection.clone(), self.site.site.declaration.clone()),
             source,
             *obligation.as_bytes(),
             &[],

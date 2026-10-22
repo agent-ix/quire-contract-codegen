@@ -39,6 +39,8 @@ quire-contract-runtime = { version = "=0.1.0", git = "https://github.com/agent-i
 # replay adapter in src/replay/function.rs builds its requests from `call_site` and the crate's own
 # re-exports and goes through its `replay` entry. It tracks QSL `main`; Cargo.lock records the commit.
 qsl-replay = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-spec-language", branch = "main" }
+# Category is owned by the shared semantic-value crate, not the QSL replay facade.
+quire-semantic-value = { git = "https://github.com/agent-ix/quire-semantic-value", branch = "main" }
 # The one RFC 8785 encoder (ADR-013 section 2) the obligation identity is encoded by. CG calls it
 # from `core::canonical` only (AD-004); it tracks `main` like the other first-party crates.
 quire-canonical = { version = "=0.3.0", git = "https://github.com/agent-ix/quire-canonical", branch = "main", features = ["serde_json"] }
