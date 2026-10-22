@@ -1375,6 +1375,12 @@ fn tc_025_unbounded_non_finite_and_blocked_items_are_refused_without_harnesses()
     let records = scalar_records(&scalar, &claim_map, &ids, &[UNBOUNDED, MODEL, STATE, FRAME]);
     let admitted = admitted_scalar_claims(&scalar, &claim_map);
     for (record, code) in records.iter().zip([UNBOUNDED, MODEL, STATE, FRAME]) {
+        let mut singleton = scalar_records(&scalar, &claim_map, &ids, &[code]).remove(0);
+        singleton.request_index = record.request_index;
+        assert_eq!(
+            *record, singleton,
+            "batch classification must preserve each item"
+        );
         let node_id = ids.resolve(&code_id(code));
         let expected = admitted
             .wire()
