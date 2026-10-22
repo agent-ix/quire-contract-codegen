@@ -410,18 +410,30 @@ fn genuine_union_host_generation_closes_nested_owner_declarations() {
         .map(|name| direct_source_item(&package, name));
     let generated = generate_items(&package, Some(compiled.context()), &items, &[])
         .expect("genuine union batch");
-    for item in &items {
+    for (item, names) in items.iter().zip([
+        vec!["Payload", "Shape"], vec!["Payload", "Other"],
+        vec!["Payload", "Shape", "Other", "Wrap"], vec![],
+    ]) {
         let claim = generated
             .claim_map
             .items
             .iter()
             .find(|claim| claim.node_id == item.node_id)
             .expect("one disposition per requested equality");
-        assert!(
-            matches!(claim.result, ClaimDisposition::Generated(_)),
-            "genuine union equality must generate: {:?}",
-            claim.result
-        );
+        let ClaimDisposition::Generated(claim) = &claim.result else {
+            panic!("genuine union equality must generate: {:?}", claim.result);
+        };
+        let expected = names.into_iter().map(|name| {
+            let owner = compiled.context().composites().find(|owner| {
+                owner.qualified_name().iter().map(|part| part.as_str()).eq([name])
+            }).expect("original source declaration");
+            (owner.node().to_string(), owner.key().to_string())
+        }).collect::<std::collections::BTreeMap<_, _>>();
+        assert_eq!(claim.declaration_keys.len(), claim.declaration_runtime_keys.len());
+        let actual = claim.declaration_keys.iter().zip(&claim.declaration_runtime_keys)
+            .map(|(node, key)| (node.digest.to_string(), key.clone()))
+            .collect::<std::collections::BTreeMap<_, _>>();
+        assert_eq!(actual, expected, "returned nested declaration closure uses owner wire nodes and type handles");
     }
 }
 

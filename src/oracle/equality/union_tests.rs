@@ -276,8 +276,12 @@ fn union_lookup_and_seal_faults_keep_typed_causes_before_equality() {
         br#"language "ix:native" edition "1-draft"; profile v = "quire.value.complete/v1";
         import "test/union" as u;
         function healthy using v(a: Boolean,b: Boolean): Boolean pure { a = b }"#,
-        [], &dependencies, Default::default(), Default::default(),
-    ).expect("distinct authentic importer source");
+        [],
+        &dependencies,
+        Default::default(),
+        Default::default(),
+    )
+    .expect("distinct authentic importer source");
     let owner = context.package_id().record();
     assert_eq!(
         admitted::resolve_composite(importer.context(), &mut TypeClosure::default(), original),
