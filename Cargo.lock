@@ -1458,7 +1458,7 @@ dependencies = [
 [[package]]
 name = "quire-contract-ir"
 version = "0.1.0"
-source = "git+https://github.com/agent-ix/quire-contract-ir?branch=main#e32f3d3acb08259ba30c94b876a79e1bf0f4907d"
+source = "git+https://github.com/agent-ix/quire-contract-ir?branch=main#d0737774acfbe64b1019b265952dc4c9720c2f23"
 dependencies = [
  "quire-contract-model",
  "serde",
