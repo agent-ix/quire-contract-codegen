@@ -3124,12 +3124,19 @@ mod tests {
         (outcomes, source)
     }
 
-    fn check_synthetic_item(
+    fn check_nominal_component_item(
         nodes: Vec<CheckedSemanticNodeV2>,
         type_id: CheckedNodeId,
     ) -> Result<(), CompositeEqualityRefusal> {
         let typed = EqualityOperandDescriptor::typed(type_id);
-        let (mut outcomes, _) = check_synthetic_items(nodes, &[(typed.clone(), typed)]);
+        let (mut outcomes, _) = check_nominal_items_with_limits(
+            nodes,
+            &[(typed.clone(), typed)],
+            CompositeEqualityLimits {
+                source_bytes: usize::MAX,
+                ..Default::default()
+            },
+        );
         outcomes.remove(0)
     }
 
@@ -3155,7 +3162,7 @@ mod tests {
                 "{form} cycle"
             );
             assert_eq!(
-                check_synthetic_item(nodes.clone(), root).err(),
+                check_nominal_component_item(nodes.clone(), root).err(),
                 Some(CompositeEqualityRefusal::TypeResolutionCycle {
                     repeated_type_node_id: repeated,
                 }),
@@ -3168,7 +3175,7 @@ mod tests {
             };
             assert!(resolve_shape(&nodes, &sibling).is_ok(), "{form} sibling");
             assert!(
-                check_synthetic_item(nodes, recursive_node_id('f')).is_ok(),
+                check_nominal_component_item(nodes, recursive_node_id('f')).is_ok(),
                 "{form} healthy item"
             );
             return;
@@ -3182,7 +3189,9 @@ mod tests {
                 .expect("subprocess starts");
             assert!(
                 outcome.status.success(),
-                "{form} subprocess refused or crashed: {}",
+                "{form} subprocess refused or crashed ({}): {} {}",
+                outcome.status,
+                String::from_utf8_lossy(&outcome.stdout),
                 String::from_utf8_lossy(&outcome.stderr)
             );
         }
@@ -4290,7 +4299,15 @@ fn deep_matches_shallow() {
             .enumerate()
             .map(|(position, (item, fails))| (position, DescriptorKey::of(item), item, fails))
             .collect();
-        let mut source = SourceBuilder::default();
+        let ClaimDisposition::Generated(first) = &claims[0].result else {
+            panic!("the fixture starts with checked generated claims");
+        };
+        // The emitter's plan must carry the same package the checked fixture claims
+        // already name, so item rendering reaches the injected typed render error.
+        let mut source = SourceBuilder {
+            expected_package: Some(first.package_id.clone()),
+            ..SourceBuilder::default()
+        };
         let result = render_and_emit(&mut claims, &mut source, pending, |fails| {
             if *fails {
                 Err(error.clone())
