@@ -104,26 +104,26 @@ fn cases() -> Vec<Case> {
     }
     for (source, reference, expected, skipped_arithmetic) in [
         (
-            "false and ((self.balance + 5) > 0)",
-            "b(\"and\", boolean(false), c(\"gt\", a(\"add\", input(), lit(\"5\")), lit(\"0\")))",
+            "(self.balance < 0) and ((self.balance + 5) > 0)",
+            "b(\"and\", c(\"lt\", input(), lit(\"0\")), c(\"gt\", a(\"add\", input(), lit(\"5\")), lit(\"0\")))",
             "false",
             true,
         ),
         (
-            "true or ((self.balance * 5) > 0)",
-            "b(\"or\", boolean(true), c(\"gt\", a(\"mul\", input(), lit(\"5\")), lit(\"0\")))",
+            "(self.balance >= 0) or ((self.balance * 5) > 0)",
+            "b(\"or\", c(\"ge\", input(), lit(\"0\")), c(\"gt\", a(\"mul\", input(), lit(\"5\")), lit(\"0\")))",
             "true",
             true,
         ),
         (
-            "true and ((self.balance + 5) > 5)",
-            "b(\"and\", boolean(true), c(\"gt\", a(\"add\", input(), lit(\"5\")), lit(\"5\")))",
+            "(self.balance >= 0) and ((self.balance + 5) > 5)",
+            "b(\"and\", c(\"ge\", input(), lit(\"0\")), c(\"gt\", a(\"add\", input(), lit(\"5\")), lit(\"5\")))",
             "x > 0",
             false,
         ),
         (
-            "false or ((-self.balance) < 0)",
-            "b(\"or\", boolean(false), c(\"lt\", neg(input()), lit(\"0\")))",
+            "(self.balance < 0) or ((-self.balance) < 0)",
+            "b(\"or\", c(\"lt\", input(), lit(\"0\")), c(\"lt\", neg(input()), lit(\"0\")))",
             "x > 0",
             false,
         ),
@@ -251,14 +251,13 @@ fn completed<T>(outcome: rt::Outcome<T>) -> Result<T, Observation> {
 }
 #[derive(Debug)]
 enum Expr {
-    Literal(&'static str), Input, Boolean(bool),
+    Literal(&'static str), Input,
     Arithmetic(&'static str, Box<Expr>, Option<Box<Expr>>),
     Compare(&'static str, Box<Expr>, Box<Expr>),
     BooleanOp(&'static str, Box<Expr>, Box<Expr>),
 }
 fn lit(s: &'static str) -> Expr { Expr::Literal(s) }
 fn input() -> Expr { Expr::Input }
-fn boolean(v: bool) -> Expr { Expr::Boolean(v) }
 fn a(op: &'static str, l: Expr, r: Expr) -> Expr { Expr::Arithmetic(op, Box::new(l), Some(Box::new(r))) }
 fn neg(v: Expr) -> Expr { Expr::Arithmetic("neg", Box::new(v), None) }
 fn c(op: &'static str, l: Expr, r: Expr) -> Expr { Expr::Compare(op, Box::new(l), Box::new(r)) }
@@ -287,7 +286,6 @@ impl Expr {
     }
     fn boolean(&self, x: u64, meter: &mut rt::Meter) -> Result<bool, Observation> {
         match self {
-            Self::Boolean(value) => Ok(*value),
             Self::Compare(op, l, r) => {
                 let left = l.integer(x, meter)?;
                 let right = r.integer(x, meter)?;
@@ -379,13 +377,24 @@ fn exercise(label: &str, expression: &Expr, expected_value: impl Fn(u64) -> bool
         let baseline = agree(label, expression, x, &generated, generous(), None);
         assert_eq!(baseline.outcome, Observation::Runtime(rt::Outcome::Completed(expected_value(x))), "mathematics: {label}, x={x}");
         if skipped_arithmetic {
-            assert_eq!(baseline.charges.len(), 1, "skipped arithmetic charged: {label}");
-            assert_eq!(baseline.charges[0].point, rt::ChargePoint::BooleanResultRetain);
-            assert_eq!(baseline.counters[8], 1, "only Boolean retain work");
-            assert_eq!(baseline.counters[9], 1, "only Boolean retain result");
-            // A denial located solely in the skipped subtree cannot stop it.
-            let skip = rt::InjectedDenial { point: rt::ChargePoint::IntegerArithmeticOperands, occurrence: NonZeroU64::new(1).unwrap() };
-            assert_eq!(agree(label, expression, x, &generated, generous(), Some(skip)), baseline);
+            let Expr::BooleanOp(operator, left, _) = expression else {
+                panic!("skipped control must be a Boolean operation");
+            };
+            let mut prefix_meter = rt::Meter::new(generous());
+            let left_value = left.boolean(x, &mut prefix_meter).expect("left comparison completes");
+            assert!(matches!((*operator, left_value), ("and", false) | ("or", true)));
+            let prefix = prefix_meter.admitted_charges().to_vec();
+            assert_eq!(&baseline.charges[..prefix.len()], prefix.as_slice(), "left comparison prefix: {label}");
+            assert_eq!(rt::retain_boolean(expected_value(x), &mut prefix_meter), Ok(expected_value(x)));
+            assert_eq!(baseline, snapshot(Observation::Runtime(rt::Outcome::Completed(expected_value(x))), &prefix_meter), "comparison then connective retention only: {label}");
+            for point in [rt::ChargePoint::IntegerArithmeticOperands,
+                rt::ChargePoint::IntegerArithmeticArithmetic,
+                rt::ChargePoint::IntegerArithmeticResultRetain] {
+                assert!(!baseline.charges.iter().any(|charge| charge.point == point), "skipped arithmetic charged: {label}, {point:?}");
+                // A denial located solely in the skipped subtree cannot stop it.
+                let skip = rt::InjectedDenial { point, occurrence: NonZeroU64::new(1).unwrap() };
+                assert_eq!(agree(label, expression, x, &generated, generous(), Some(skip)), baseline);
+            }
         }
         // Deny EVERY ordered admitted occurrence, not only each distinct point.
         for (index, charge) in baseline.charges.iter().enumerate() {
