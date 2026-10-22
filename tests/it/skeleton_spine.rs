@@ -21,12 +21,12 @@ use std::{collections::BTreeMap, path::PathBuf};
 
 use qsl_replay::WitnessValue;
 use qsl_replay::{
-    call_site, ByteDigest, CallSiteRefusal, CanonicalAssignment, Category, Code, DeclaredDomain,
+    call_site, ByteDigest, CallSiteRefusal, CanonicalAssignment, Code, DeclaredDomain,
     DependencyInput, DependencyInputRefusal, DependencySelectionsCause, DigestDomain, DigestRecord,
-    DisagreementCause, DomainKey, DomainKind, FiniteBound, Identifier, Integer, InternalFault,
-    ObligationIdentity, ProofBound, QualifiedName, ReplayLimits, ReplayRefusal,
-    ReplayRequestRefusal, ReplaySource, ScalarLimits, SourceIdentity, Verdict, WireNodeId,
-    WitnessSettlement, DEFAULT_REPLAY_INPUT_BYTES,
+    DisagreementCause, DomainKey, DomainKind, FiniteBound, Identifier, Integer, ObligationIdentity,
+    ProofBound, QualifiedName, ReplayLimits, ReplayRefusal, ReplayRequestRefusal, ReplaySource,
+    ScalarLimits, SourceIdentity, Verdict, WireNodeId, WitnessSettlement,
+    DEFAULT_REPLAY_INPUT_BYTES,
 };
 use quire_contract_codegen::{
     decode_falsification, execute_kani_obligation, replay_counterexample,
@@ -35,6 +35,7 @@ use quire_contract_codegen::{
     KaniRunOutcome, LockedSource, ObligationKind, ReplayInputs, ReplayPackage, ReplayPackageError,
     ReplayParameter, ReplayVerdict, SpineReplayError, WitnessDecodeLimits,
 };
+use quire_semantic_value::catalog::{Category, InternalFault};
 
 use super::kani_obligations::{bound_package, supported_contract_harnesses, write_crate};
 

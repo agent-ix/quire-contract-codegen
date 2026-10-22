@@ -42,9 +42,9 @@ use package::{
     PackageBuilder, FUNCTION, NODE_DOMAIN, T_BOOLEAN, T_INTEGER, T_TEXT,
 };
 use qsl_replay::{
-    CallSiteRefusal, Category, DisagreementCause, FrameChange, FrameIdentityMismatch,
-    InconclusiveCause, OperationSite, ReplayRefusal, ReplayResult, ReplaySource, TerminalValue,
-    Verdict, WitnessSettlement,
+    CallSiteRefusal, DisagreementCause, FrameChange, FrameIdentityMismatch, InconclusiveCause,
+    OperationSite, ReplayRefusal, ReplayResult, ReplaySource, TerminalValue, Verdict,
+    WitnessSettlement,
 };
 use quire_contract_codegen::{
     derive_v2_clause_descriptor, generate_v2_clause_claim_map, generate_v2_clause_oracle,
@@ -64,6 +64,7 @@ use quire_contract_codegen::{HarnessSymbol, StateFrameRecordError};
 use quire_contract_model::{
     CheckedMemberType, CheckedNodeId, CheckedPackageReadLimits, CheckedPackageV2,
 };
+use quire_semantic_value::catalog::Category;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 

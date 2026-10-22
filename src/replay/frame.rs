@@ -22,10 +22,10 @@ use std::{collections::BTreeMap, fmt};
 
 use qsl_replay::{
     call_site, replay_frame, CallSiteRefusal, ClaimedChange, DigestDomain, DigestRecord,
-    DocumentRef, EmptyQualifiedName, FrameCounterexample, FrameOperation, FrameReplayResult,
-    MalformedTranscript, OperationName, OperationSite, QualifiedName, ReplayLimits, ReplayRefusal,
-    ReplayRequest, ReplayRequestWire, ReplaySource, WireNodeId, WitnessEnvelope, WitnessPacket,
-    WitnessRefusal, WitnessValue,
+    DocumentRef, EmptyQualifiedName, FrameCounterexample, FrameReplayResult, MalformedTranscript,
+    OperationName, OperationSite, ReplayLimits, ReplayRefusal, ReplayRequest, ReplayRequestWire,
+    ReplaySource, ReplayTargetMembers, RequestTargetWire, WireNodeId, WitnessEnvelope,
+    WitnessPacket, WitnessRefusal, WitnessValue,
 };
 use serde::Deserialize;
 
@@ -587,15 +587,12 @@ impl FrameReplay {
             .map_err(FrameReplayError::Identity)?
             .as_bytes();
         let OperationSite {
+            frame_operation,
             anchor,
             frame,
             frame_occurrence,
             ..
         } = site;
-        let object = QualifiedName::new(vec![operation.model.clone(), operation.object.clone()])
-            .map_err(FrameReplayError::Name)?;
-        let selected = QualifiedName::new(vec![operation.operation.clone()])
-            .map_err(FrameReplayError::Name)?;
         let bindings = values
             .iter()
             .map(|(field, value)| (field.as_str(), i128::from(*value)))
@@ -603,10 +600,6 @@ impl FrameReplay {
         let witness = render_witness(&harness.harness_path().to_string(), &check_text, &bindings)
             .map_err(FrameReplayError::Transcript)?;
         let payload = FrameCounterexample {
-            operation: FrameOperation {
-                object,
-                operation: operation.operation,
-            },
             anchor,
             frame,
             occurrence: frame_occurrence,
@@ -621,7 +614,7 @@ impl FrameReplay {
         let request = |source: ReplaySource| {
             run.wire(
                 located.package_id,
-                selected.clone(),
+                RequestTargetWire::frame_operation(frame_operation.clone()),
                 source,
                 obligation,
                 &documents,
@@ -646,7 +639,7 @@ impl FrameReplay {
             obligation_identity: Some(obligation),
             occurrence_key: Some(payload.occurrence.clone()),
             clause_node: Some(payload.frame),
-            selected_function: Some(selected),
+            replay_target: ReplayTargetMembers::frame_operation(frame_operation),
             package_id: Some(wire.package_id.clone()),
             source_digests: Some(wire.source_digests.clone()),
             profile_selections: Some(Vec::new()),

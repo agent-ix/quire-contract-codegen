@@ -7,12 +7,12 @@
 use crate::scratch_crate::{runtime_dependency, write_manifest, TemporaryDirectory};
 use ix_trace_rs::trace;
 use qsl_replay::{
-    call_site, object_reference_witness, replay, write_object_environment, ByteDigest, Category,
+    call_site, object_reference_witness, replay, write_object_environment, ByteDigest,
     DeclarationKey, DependencyInput, DigestDomain, DigestRecord, DomainPackageRef,
     EnvironmentLabels, EnvironmentModel, EnvironmentObject, EnvironmentPopulation, EvaluatedValue,
     Identifier, ModelNormalizationLimits, QualifiedName, ReplayLimits, ReplayRequestWire,
-    ReplayResult, ReplaySource, ScalarLimits, SelectedObject, SnapshotValue, SourceIdentity,
-    StateEnvironment, WitnessValue,
+    ReplayResult, ReplaySource, RequestTargetWire, ScalarLimits, SelectedObject, SnapshotValue,
+    SourceIdentity, StateEnvironment, WitnessValue,
 };
 use quire_contract_codegen::{
     execute_kani_obligation, negotiate_kani_obligations, CollectionElementIdentity,
@@ -25,6 +25,7 @@ use quire_contract_model::{
     CheckedMemberType, CheckedModelObjectFields, CheckedNodeId, CheckedPackageEvidence,
     CheckedPackageReadLimits, CheckedPackageV2, CheckedPackageV2ReadResult,
 };
+use quire_semantic_value::catalog::Category;
 use serde_json::{json, Value};
 use std::{collections::BTreeMap, env, fs, path::PathBuf, time::Duration};
 
@@ -551,7 +552,7 @@ fn replay_collection_function(fixture: &Emitted, values: &[i64]) -> ReplayResult
             source_digest.hex(),
         )],
         dependencies: Vec::new(),
-        selected_function: selection,
+        replay_target: RequestTargetWire::function(selection, site.site.declaration.clone()),
         source: ReplaySource::Input(vec![qsl_replay::CanonicalAssignment {
             parameter: site.site.parameters[0].1,
             value: reference,

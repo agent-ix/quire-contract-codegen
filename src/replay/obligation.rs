@@ -395,6 +395,14 @@ mod tests {
     fn frame_site(frame: u8, role: &str, ordinal: u64) -> OperationSite {
         let frame = node(frame);
         OperationSite {
+            frame_operation: qsl_replay::FrameOperation {
+                object: qsl_replay::QualifiedName::new(vec![
+                    Identifier::new("model").expect("model alias"),
+                    Identifier::new("Object").expect("object name"),
+                ])
+                .expect("qualified object name"),
+                operation: Identifier::new("operation").expect("operation name"),
+            },
             anchor: node(0xa0),
             frame,
             frame_occurrence: OccurrenceKey::new(frame, Origin::new(Role::new(role), ordinal)),
