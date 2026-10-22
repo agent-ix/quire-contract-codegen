@@ -23,6 +23,8 @@ relationships:
     type: references
   - target: ix://agent-ix/quire-spec-language/FR-396
     type: references
+  - target: ix://agent-ix/quire-spec-language/FR-398
+    type: references
   - target: ix://agent-ix/quire-spec-language/FR-087
     type: references
   - target: ix://agent-ix/quire-semantic-value/FR-060
@@ -387,6 +389,27 @@ healthy sibling unchanged; the existing whole-request context-mismatch guard
 and charged resolution precedence remain in force. This consumer amendment is
 PLANNED under AC-44; the existing Quantity refusals in AC-18 and AC-38 remain.
 
+### Admitted unit-table metadata retention
+
+When generation-time environment construction or emitted environment preparation
+receives `Some(context)` after the existing setting/accounting and
+original-package context guards succeed, CG SHALL attach a clone of that
+context's complete authoritative `unit_table()` to the constructed
+`TypeEnvironment`. The table and its unit identities are owned by
+[QSL FR-398](ix://agent-ix/quire-spec-language/FR-398); CG SHALL consume that
+original table without rebuilding it, deriving `UnitId` or `NodeKey`, or
+substituting another package's table. Declared but unused admitted units remain
+part of the retained table, even when absent from the emitted graph.
+
+For valid context-free `None`, CG SHALL preserve the existing construction
+behavior. Metadata attachment SHALL preserve the existing guard and refusal
+precedence, the direct and nested Quantity `Unsupported` behavior of AC-18 and
+AC-38, and unaffected sibling results. AC-45 is metadata retention only: it
+adds no positive Quantity equality or conversion acceptance. Its planned host
+checks distinguish in-process table retention from inspection of the emitted
+attachment recipe; neither establishes execution of the emitted crate or Kani
+acceptance.
+
 ### Existing equality behavior
 
 - When generation begins, the generator shall consume each requested node's
@@ -675,6 +698,7 @@ reaches it today, so the mapping is asserted where reachable.
 | FR-018-AC-42 | Generated oracle invocations under Some or valid context-free None preserve private package/item/descriptor/index binding, both check_type guards, same-index check_equality and evaluate. Private wrong-binding, present-context mismatch, missing nominal context and environment-only faults refuse without charge. The native OriginalCompositeEqContext route retains every mandatory authentic source/lock/package/whole-IR comparison and cannot use None to bypass them. No scalar proof manifest/body acquires replay compilation. | Test |
 | FR-018-AC-43 | For genuine source with a: Int[0,9] and b: Integer, the admitted left parameter names its integer_range and the right parameter names canonical base Integer. Direct source/target reconstruction preserves Int[0,9] versus unbounded Integer despite the sibling range: a caller descriptor converting the left to Integer compares with the unbounded right under the original equality rule, including right values outside [0,9]; an unbounded Integer source cannot acquire a narrowing conversion by borrowing that sibling interval. Claim/native descriptor checks remain independent of generated output. If source convert<Integer>(a) is erased in emission, no retained conversion-node branch is claimed. AC-16 member/base behavior and tests remain unchanged. | Test |
 | FR-018-AC-44 | Genuine Union equality generation preserves the facade declaration key, settled node, authoritative member bindings and declared member/payload order across a nested Union closure, using the specified lookup and verified sealing in both generator and emitted preparation. In-process owner-API controls admit values of every member, including record and nested-Union payloads; distinct same-shaped unions retain incompatible identities. Missing/wrong capability, Unknown/Foreign/WrongKind lookup, name/form disagreement and seal faults retain their typed causes, no successful prepared wrapper and no equality-meter charge; per-item refusals emit no symbols and leave a healthy sibling unchanged, while wrong-package context retains the whole-request guard. TC-029's planned host controls distinguish consumed identities and sealing from a mere Union rendering arm; they establish neither emitted-crate execution nor Kani acceptance. PLANNED (IR-17). | Test |
+| FR-018-AC-45 | After the existing setting/accounting and original-package context guards succeed, generation-time construction and emitted preparation supplied Some(context) attach a clone of that context's complete authoritative unit_table() to the constructed TypeEnvironment, retaining declared but unused units without rebuilding a table, deriving UnitId/NodeKey or substituting another package's table. Valid context-free None behavior remains unchanged. Wrong-package refusal retains its whole-request precedence; direct and nested Quantity items retain their existing typed Unsupported behavior and refusal precedence, emit no symbols, and leave independent healthy siblings unchanged. TC-029's planned host checks inspect consumed metadata and the emitted attachment recipe separately; they establish no positive Quantity equality, conversion, emitted-crate execution or Kani acceptance. PLANNED (IR-17). | Test |
 
 AC-5 requires each listed condition to be refused with its `IllTypedCause`, not
 that the six causes be distinct. Two of them are not: a `convert<T>` operand
@@ -733,6 +757,7 @@ without one is not written.
 | FR-018-AC-41 | Build only used enum literals or recover from a failed nominal lookup with an empty index. |
 | FR-018-AC-42 | Drop private binding/context checks for None, allow a nominal recipe without context, omit check_type, accept a caller index, or make native authentication optional. |
 | FR-018-AC-43 | Narrow a direct canonical Integer operand or target using an unrelated sibling integer_range, infer member ownership from the shared base key, or label an erased source conversion as a retained conversion-node control. |
+| FR-018-AC-45 | Drop the original unit table from either environment, filter out unused admitted units, rebuild unit identities from graph nodes, attach another package's table, move attachment ahead of the existing context guards, or change Quantity refusal/sibling behavior while adding metadata. |
 
 ## Dependencies
 
@@ -741,7 +766,8 @@ without one is not written.
   and equality families before their owner extraction), QSL
   [FR-394](ix://agent-ix/quire-spec-language/FR-394) and
   [FR-087](ix://agent-ix/quire-spec-language/FR-087) (genuine admitted context
-  and key lookup), and QSV [FR-060](ix://agent-ix/quire-semantic-value/FR-060)
+  and key lookup), [FR-398](ix://agent-ix/quire-spec-language/FR-398)
+  (authoritative admitted unit table), and QSV [FR-060](ix://agent-ix/quire-semantic-value/FR-060)
   (no identity minting). Direct owning imports follow the migration above.
 - **Downstream**: [TC-029](../matrix/TC-029-composite-equality-oracles.md);
   [FR-015](../../kani/functional/FR-015-bounded-kani-obligations.md), whose composite-equality
