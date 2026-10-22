@@ -275,10 +275,10 @@ fn bounded_addition_reader_attempt(coherent: bool) -> (CheckedPackageV2ReadResul
 
 #[trace("TC-024", "FR-014-AC-53")]
 #[test]
-fn bounded_arithmetic_control_retains_the_owner_type_refusal() {
+fn incoherent_arithmetic_result_types_keep_the_owner_type_refusal() {
     let (result, _) = bounded_addition_reader_attempt(false);
     let CheckedPackageV2ReadResult::Refused(refusal) = result else {
-        panic!("the existing bounded result type is not admitted for this Add")
+        panic!("incoherent node/body result types must not admit")
     };
     assert_eq!(
         refusal.code,
@@ -288,7 +288,7 @@ fn bounded_arithmetic_control_retains_the_owner_type_refusal() {
         refusal.cause,
         Some(quire_contract_model::CheckedPackageRefusalCause::TypeMismatch)
     );
-    eprintln!("bounded-result fixture: public owner-candidate/reader -> IllTyped/TypeMismatch; no public clause result-domain-refusal coverage claimed");
+    eprintln!("incoherent result-type control: public owner-candidate/reader -> IllTyped/TypeMismatch; coherent result types are tested separately");
 }
 
 #[trace("TC-024", "FR-014-AC-53")]
@@ -378,4 +378,174 @@ fn coherent_bounded_arithmetic_control_is_decided_by_the_owner_reader() {
         (0, 1000)
     );
     eprintln!("coherent bounded-result fixture: node.semantic_type AND body.result_type use originalInt[0,1000]; owner-candidate/rekey/read Admitted; public bound oracle generated; native refusal assertion pending");
+}
+
+#[trace("TC-024", "FR-014-AC-53")]
+#[test]
+fn reader_admitted_literal_fallbacks_and_bounded_stops_preserve_native_accounting() {
+    use std::{fmt::Write as _, fs, process::Command};
+
+    use quire_contract_codegen::{EXACT_DEPENDENCY_SOURCE, SEMANTIC_VALUE_DEPENDENCY_SOURCE};
+
+    use super::{scratch_crate, v2_clause_integer_literal_agreement::NATIVE_SUPPORT};
+
+    let scratch = scratch_crate::TemporaryDirectory::new("v2-controlled-literal-native");
+    let mut source = String::from(NATIVE_SUPPORT);
+    let cases = [
+        ("-9223372036854775808", Some("true")),
+        ("-9223372036854775807", Some("true")),
+        ("-42", Some("true")),
+        ("-1", Some("true")),
+        ("0", Some("true")),
+        ("1", Some("x >= 1")),
+        ("17", Some("x >= 17")),
+        ("42", Some("x >= 42")),
+        ("9223372036854775807", Some("false")),
+        ("-9223372036854775809", Some("true")),
+        ("9223372036854775808", Some("false")),
+        ("-170141183460469231731687303715884105728", Some("true")),
+        ("170141183460469231731687303715884105727", Some("false")),
+        ("-170141183460469231731687303715884105729", Some("true")),
+        ("170141183460469231731687303715884105728", Some("false")),
+        ("340282366920938463463374607431768211456", Some("false")),
+        ("+1", None),
+        ("01", None),
+        ("-0", None),
+        (" 1", None),
+        ("1 ", None),
+        ("1a", None),
+        ("", None),
+        ("--1", None),
+    ];
+    for (index, (spelling, expected)) in cases.iter().enumerate() {
+        let (CheckedPackageV2ReadResult::Admitted(package), clause) = reader_literal(spelling)
+        else {
+            panic!("reader-controlled literal was not admitted: {spelling:?}")
+        };
+        let generated = generate_v2_clause_oracle(&package, &clause).unwrap();
+        writeln!(
+            source,
+            "mod controlled_{index} {{\n{}\n}}",
+            generated.source
+        )
+        .unwrap();
+        append_native_observer(&mut source, index);
+        let check = if let Some(expected) = expected {
+            format!("exercise({spelling:?}, &expression, |x| {{ let _ = x; {expected} }}, false, invoke_{index});")
+        } else {
+            format!(
+                r#"
+    for x in [0, 1, 4, 5, 6, 1000] {{
+        let baseline = agree({spelling:?}, &expression, x, &invoke_{index}, generous(), None);
+        assert_eq!(baseline.outcome, Observation::InvalidConstant);
+        assert!(baseline.charges.is_empty());
+        assert_eq!(baseline.counters, [0; 10]);
+        for kind in rt::LimitKind::ALL {{
+            let mut limits = generous();
+            set_limit(&mut limits, kind, 0);
+            assert_eq!(agree({spelling:?}, &expression, x, &invoke_{index}, limits, None), baseline);
+        }}
+        let denial = rt::InjectedDenial {{ point: rt::ChargePoint::OrderingOperands, occurrence: NonZeroU64::new(1).unwrap() }};
+        assert_eq!(agree({spelling:?}, &expression, x, &invoke_{index}, generous(), Some(denial)), baseline);
+    }}
+"#
+            )
+        };
+        writeln!(
+            source,
+            r#"
+#[ix_trace_rs::trace("TC-024", "FR-014-AC-53")]
+#[test]
+fn controlled_{index}() {{
+    let expression = c("ge", input(), lit({spelling:?}));
+    {check}
+}}
+"#
+        )
+        .unwrap();
+    }
+    let index = cases.len();
+    let (CheckedPackageV2ReadResult::Admitted(package), clause) =
+        bounded_addition_reader_attempt(true)
+    else {
+        panic!("coherent bounded control is admitted by the owner")
+    };
+    let generated = generate_v2_clause_oracle(&package, &clause).unwrap();
+    writeln!(
+        source,
+        "mod controlled_{index} {{\n{}\n}}",
+        generated.source
+    )
+    .unwrap();
+    append_native_observer(&mut source, index);
+    writeln!(
+        source,
+        r#"
+#[ix_trace_rs::trace("TC-024", "FR-014-AC-53")]
+#[test]
+fn controlled_{index}() {{
+    let expression = c("gt", ab("add", input(), lit("1"), "0", "1000"), lit("1000"));
+    exercise_bounded("reader-admitted bounded Add", &expression, invoke_{index});
+}}
+"#
+    )
+    .unwrap();
+    let manifest = format!(
+        "[package]\nname = \"controlled-literal-native\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\nquire-exact = {{ {EXACT_DEPENDENCY_SOURCE}, features = [\"test-support\"] }}\nquire-semantic-value = {{ {SEMANTIC_VALUE_DEPENDENCY_SOURCE} }}\n{}\nix-trace-rs = {{ git = \"https://github.com/agent-ix/ix-trace-rs\", branch = \"main\" }}\n[workspace]\n",
+        scratch_crate::runtime_dependency(&["exact"]),
+    );
+    scratch_crate::write_manifest(&scratch.path, &manifest);
+    fs::write(scratch.path.join("src/lib.rs"), source).unwrap();
+    scratch_crate::resolve_seeded_lock(&scratch.path);
+    let output = Command::new(env!("CARGO"))
+        .args([
+            "test",
+            "--locked",
+            "--offline",
+            "-j2",
+            "--lib",
+            "--",
+            "--test-threads=1",
+            "--nocapture",
+        ])
+        .env("CARGO_TARGET_DIR", scratch.path.join("target"))
+        .env_remove("RUSTFLAGS")
+        .env_remove("CARGO_ENCODED_RUSTFLAGS")
+        .current_dir(&scratch.path)
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    println!("{stdout}\n{stderr}");
+    assert!(
+        output.status.success(),
+        "controlled native agreement failed: {stdout}\n{stderr}"
+    );
+    for index in 0..=cases.len() {
+        assert!(
+            stdout
+                .lines()
+                .any(|line| line == format!("test controlled_{index} ... ok")),
+            "missing native control_{index}"
+        );
+    }
+}
+
+fn append_native_observer(source: &mut String, index: usize) {
+    use std::fmt::Write as _;
+
+    writeln!(source, r#"
+fn invoke_{index}(x: u64, meter: &mut rt::Meter) -> Observation {{
+    let input: rt::Integer = x.to_string().parse().expect("canonical field input");
+    match controlled_{index}::oracle_clause(&input, meter) {{
+        Ok(outcome) | Err(controlled_{index}::ClauseStop::Runtime(outcome)) => Observation::Runtime(outcome),
+        Err(controlled_{index}::ClauseStop::InvalidConstant) => Observation::InvalidConstant,
+        Err(controlled_{index}::ClauseStop::Oracle(stop)) => match stop {{
+            controlled_{index}::OracleStop::IllTyped(cause) => Observation::IllTyped(cause),
+            controlled_{index}::OracleStop::InvalidConstant => Observation::InvalidConstant,
+            controlled_{index}::OracleStop::OperandWidth => Observation::OperandWidth,
+        }}
+    }}
+}}
+"#).unwrap();
 }
