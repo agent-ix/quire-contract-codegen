@@ -17,12 +17,14 @@ fn base() -> Association {
         depth: NonZeroU64::MIN,
         kind: "base",
         query_bytes: b"(check-sat)\n".to_vec(),
+        attempt: NonZeroU64::MIN,
     }
 }
 
 fn step() -> Association {
     QueryAssociation {
         kind: "step",
+        attempt: NonZeroU64::new(2).expect("two is nonzero"),
         ..base()
     }
 }
@@ -70,6 +72,10 @@ fn two_unsat_records_need_exact_base_and_step_association() {
         },
         QueryAssociation {
             query_bytes: b"(check-sat) \n".to_vec(),
+            ..base()
+        },
+        QueryAssociation {
+            attempt: NonZeroU64::new(3).expect("three is nonzero"),
             ..base()
         },
     ] {

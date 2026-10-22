@@ -40,6 +40,7 @@ pub enum SolverStatus {
 /// The caller supplies authoritative identity types for product, item,
 /// instance and query kind. CG retains them without deriving or hashing an
 /// identity, and this type requires the exact query bytes and nonzero depth.
+/// CG assigns a distinct attempt number before each process invocation.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct QueryAssociation<Product, Item, Instance, Kind> {
     /// The selected HP-2 product identity.
@@ -54,6 +55,8 @@ pub struct QueryAssociation<Product, Item, Instance, Kind> {
     pub kind: Kind,
     /// The exact QSL-authored query bytes sent to the solver.
     pub query_bytes: Vec<u8>,
+    /// CG's run-local identity for this distinct process invocation.
+    pub attempt: std::num::NonZeroU64,
 }
 
 /// One solver response paired with its QSL-supplied query association.
