@@ -447,7 +447,15 @@ impl Twin {
 
     /// A QSL invariant whose condition can be mutated while its declared field stays fixed.
     pub fn with_balance_invariant_condition(condition: &str) -> Self {
-        let mut twin = Self::build(&model::GRANTED, &[CLAUSES[0]], 0);
+        Self::invariant_from(Self::build(&model::GRANTED, &[CLAUSES[0]], 0), condition)
+    }
+
+    /// A QSL invariant whose read field is a selected but unbounded Integer.
+    pub fn with_unbounded_balance_invariant() -> Self {
+        Self::invariant_from(Self::without_balance_range(), "self.balance >= 0")
+    }
+
+    fn invariant_from(mut twin: Self, condition: &str) -> Self {
         let source = String::from_utf8(twin.unit).expect("native unit");
         let changed = source.replace(
             "post BalanceNeverDrops using v on Bank::Account::deposit { self.balance >= pre(self.balance) }",

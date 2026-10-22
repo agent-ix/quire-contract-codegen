@@ -444,7 +444,14 @@ fn qsl_v2_precondition_harness_identity_tracks_request_facts() {
 
 /// A QSL invariant is selected by its checked clause node and draws the object's field from
 /// the admitted selected-model range; its own oracle is asserted without a subject call.
-#[trace("TC-025")]
+#[trace(
+    "FR-015-AC-38",
+    "FR-015-AC-39",
+    "FR-015-AC-40",
+    "FR-015-AC-46",
+    "FR-015-AC-49",
+    "TC-025"
+)]
 #[test]
 fn qsl_state_invariant_is_a_separate_v2_assertion_obligation() {
     let (package, clause) = Twin::with_balance_invariant().emitted_package("BalanceNonnegative");
@@ -498,7 +505,7 @@ fn qsl_state_invariant_is_a_separate_v2_assertion_obligation() {
 }
 
 /// Each field read by an object invariant is a separate bounded symbolic argument.
-#[trace("TC-025")]
+#[trace("FR-015-AC-39", "TC-025")]
 #[test]
 fn qsl_invariant_draws_each_selected_model_field_it_reads() {
     let twin = Twin::with_balance_invariant_condition("self.balance <= self.audit");
@@ -534,6 +541,36 @@ fn qsl_invariant_draws_each_selected_model_field_it_reads() {
     assert!(harness.rust.contents.contains("current_audit >= 0"));
     assert!(harness.rust.contents.contains("current_audit <= 1000"));
     assert!(harness.rust.contents.contains(&oracle.source));
+}
+
+/// A selected field with no finite domain cannot become a symbolic invariant argument.
+#[trace("FR-015-AC-39", "TC-025")]
+#[test]
+fn qsl_invariant_unbounded_field_refuses_without_harness() {
+    let (package, clause) =
+        Twin::with_unbounded_balance_invariant().emitted_package("BalanceNonnegative");
+    let outcome = negotiate(&[ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+    }]);
+    let [record] = outcome.records() else {
+        panic!("one selected invariant record");
+    };
+    assert_eq!(record.kind, Some(ObligationKind::Invariant));
+    assert!(matches!(
+        &record.disposition,
+        ObligationDisposition::Unsupported {
+            reason: UnsupportedObligation::V2ClauseConditionNotRendered { node_id }
+        } if node_id == &clause
+    ));
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("a well-formed unbounded item is accounted individually");
+    };
+    assert!(v2_clause_harnesses.is_empty());
 }
 
 fn run_real_v2_clause(twin: Twin, clause_name: &str) -> KaniRunOutcome {
@@ -611,7 +648,7 @@ fn tc_025_real_kani_covers_v2_parameter_precondition() {
 
 /// The healthy invariant verifies and the same checked model with a false-at-zero condition
 /// must produce a Kani counterexample rather than a successful cover.
-#[trace("TC-025")]
+#[trace("FR-015-AC-49", "TC-025")]
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_025_real_kani_asserts_v2_state_invariant() {
