@@ -1111,17 +1111,16 @@ fn check_item(
     let mut declaration_keys = closure.node_ids.clone();
     declaration_keys.sort();
     let composites: Vec<CompositeDeclaration> = closure.composites.values().cloned().collect();
-    let environment = match TypeEnvironment::new(composites.clone(), std::iter::empty()) {
-        Ok(environment) => environment,
-        Err(sv::EnvironmentFailure::Refused(invalid)) => {
-            return Err(CompositeEqualityRefusal::Declaration {
-                declaration: invalid.declaration,
-                cause: invalid.cause.try_into()?,
-            }
-            .into())
+    let mut environment = TypeEnvironment::new(composites.clone(), std::iter::empty())
+        .map_err(environment_failure)?;
+    for (key, binding) in &closure.composite_bindings {
+        if let Some(members) = binding.declaration.union_members() {
+            environment.seal_union_verified(
+                *key, binding.declaration.node(),
+                members.iter().map(|member| member.member().clone()).collect(),
+            ).map_err(environment_failure)?;
         }
-        Err(failure) => return Err(OracleGenerationError::EnvironmentAdmission(failure).into()),
-    };
+    }
 
     let left_operand = match left_target.clone() {
         Some(target) => EqualityOperand::converted(left_source.clone(), target),
@@ -1157,6 +1156,18 @@ fn check_item(
         enums: closure.enums,
         composite_bindings: closure.composite_bindings,
     })
+}
+
+fn environment_failure(failure: sv::EnvironmentFailure) -> ItemCheckError {
+    match failure {
+        sv::EnvironmentFailure::Refused(invalid) => match invalid.cause.try_into() {
+            Ok(cause) => CompositeEqualityRefusal::Declaration {
+                declaration: invalid.declaration, cause,
+            }.into(),
+            Err(error) => ItemCheckError::Generation(error),
+        },
+        failure => OracleGenerationError::EnvironmentAdmission(failure).into(),
+    }
 }
 
 fn unsupported_family(node_id: &CheckedNodeId, tag: CheckedNodeTag) -> CompositeEqualityRefusal {
@@ -1482,6 +1493,16 @@ struct ReconstructionHelper {
 /// The reconstruction helpers, callees before callers.
 const RECONSTRUCTION_HELPERS: &[ReconstructionHelper] = &[
     ReconstructionHelper { name: "lookup_composite_key", source: "\nfn lookup_composite_key(\n    context: Option<&qsl_replay::AdmittedContext>,\n    digest: &str, qualified: &[&str], form: qsl_replay::AdmittedCompositeForm,\n) -> Result<exact::NodeKey, EnvironmentError> {\n    let wire = qsl_replay::WireNodeId::from_hex(digest).ok_or(ReconstructionError::Composite)?;\n    let context = context.ok_or(EnvironmentError::MissingAdmittedContext { declaration: wire })?;\n    let admitted = context.composite_declaration(wire).map_err(EnvironmentError::Lookup)?;\n    if admitted.form() != form || !admitted.qualified_name().iter()\n        .map(|part| part.as_str()).eq(qualified.iter().copied())\n    { return Err(ReconstructionError::Composite.into()); }\n    Ok(admitted.key())\n}\n", calls: &[] },
+    ReconstructionHelper {
+        name: "rebuild_union",
+        source: "\nfn rebuild_union(\n    context: Option<&qsl_replay::AdmittedContext>, digest: &str, qualified: &[&str],\n    payloads: Vec<Vec<exact::ValueType>>,\n) -> Result<sv::CompositeShape, EnvironmentError> {\n    let key = lookup_composite_key(context, digest, qualified, qsl_replay::AdmittedCompositeForm::Union)?;\n    let wire = qsl_replay::WireNodeId::from_hex(digest).ok_or(ReconstructionError::Composite)?;\n    let context = context.ok_or(EnvironmentError::MissingAdmittedContext { declaration: wire })?;\n    let declaration = context.composite_declaration(wire).map_err(EnvironmentError::Lookup)?;\n    if declaration.key() != key { return Err(ReconstructionError::Composite.into()); }\n    let members = declaration.union_members().ok_or(ReconstructionError::Composite)?;\n    if members.len() != payloads.len() { return Err(ReconstructionError::Composite.into()); }\n    let mut rebuilt = Vec::with_capacity(members.len());\n    for (member, payload) in members.iter().zip(payloads) {\n        if member.payload() != payload { return Err(ReconstructionError::Composite.into()); }\n        rebuilt.push(sv::UnionMemberDeclaration::resolved(member.identifier().clone(), payload));\n    }\n    Ok(sv::CompositeShape::Union(rebuilt))\n}\n",
+        calls: &["lookup_composite_key"],
+    },
+    ReconstructionHelper {
+        name: "seal_union",
+        source: "\nfn seal_union(\n    context: Option<&qsl_replay::AdmittedContext>, environment: &mut sv::TypeEnvironment,\n    key: exact::NodeKey, digest: &str,\n) -> Result<(), EnvironmentError> {\n    let wire = qsl_replay::WireNodeId::from_hex(digest).ok_or(ReconstructionError::Composite)?;\n    let context = context.ok_or(EnvironmentError::MissingAdmittedContext { declaration: wire })?;\n    let declaration = context.composite_declaration(wire).map_err(EnvironmentError::Lookup)?;\n    if declaration.key() != key { return Err(ReconstructionError::Composite.into()); }\n    let members = declaration.union_members().ok_or(ReconstructionError::Composite)?;\n    environment.seal_union_verified(key, declaration.node(), members.iter().map(|member| member.member().clone()).collect())\n        .map_err(EnvironmentError::Declaration)\n}\n",
+        calls: &[],
+    },
     ReconstructionHelper { name: "lookup_enum_case", source: "\nfn lookup_enum_case<'ctx>(\n    context: Option<&'ctx qsl_replay::AdmittedContext>,\n    declaration: qsl_replay::WireNodeId, case: &exact::Identifier,\n) -> Result<&'ctx qsl_replay::AdmittedEnumCase, EnvironmentError> {\n    let context = context.ok_or(EnvironmentError::MissingAdmittedContext { declaration })?;\n    context.enum_case(declaration, case).map_err(EnvironmentError::Lookup)\n}\n", calls: &[] },
     ReconstructionHelper { name: "rebuild_enum", source: "\nfn rebuild_enum(\n    context: Option<&qsl_replay::AdmittedContext>,\n    enum_members: &mut quire_semantic_value::enumeration::EnumMemberIndex,\n    digest: &str, qualified: &[&str], ordered: bool,\n) -> Result<exact::ValueType, EnvironmentError> {\n    let wire = qsl_replay::WireNodeId::from_hex(digest).ok_or(ReconstructionError::Enum)?;\n    let context = context.ok_or(EnvironmentError::MissingAdmittedContext { declaration: wire })?;\n    let admitted = context.enum_declaration(wire).map_err(EnvironmentError::Lookup)?;\n    if admitted.is_ordered() != ordered\n        || !admitted.qualified_name().iter().map(|part| part.as_str()).eq(qualified.iter().copied())\n    { return Err(ReconstructionError::Enum.into()); }\n    let declaration = quire_semantic_value::enumeration::EnumDeclaration::new(\n        admitted.key(), admitted.is_ordered(),\n        admitted.cases().iter().map(|case| case.case().as_str().to_owned()).collect(),\n    ).map_err(|_| ReconstructionError::Enum)?;\n    let mut variants = Vec::with_capacity(admitted.cases().len());\n    for case in admitted.cases() {\n        let selected = lookup_enum_case(Some(context), wire, case.case())?;\n        let value = declaration.member(selected.case().as_str(), selected.key())\n            .map_err(|_| ReconstructionError::Enum)?;\n        variants.push(value.variant());\n        enum_members.record(value);\n    }\n    Ok(exact::ValueType::Enum(exact::EnumShape::new(ordered, variants)))\n}\n", calls: &["lookup_enum_case"] },
     ReconstructionHelper {
@@ -1592,6 +1613,7 @@ impl From<OracleGenerationError> for RenderError {
 
 /// The rendered Rust expressions of one item, before it is named.
 struct RenderedItem {
+    union_seals: String,
     requires_context: bool,
     composites: Vec<(CheckedNodeId, String)>,
     left_source: String,
@@ -1606,6 +1628,7 @@ impl RenderedItem {
             .iter()
             .map(|(_, source)| source.len())
             .chain([
+                self.union_seals.len(),
                 self.left_source.len(),
                 self.left_target.as_ref().map_or(0, String::len),
                 self.right_source.len(),
@@ -1652,7 +1675,21 @@ fn render_item(generated: &CheckedItem) -> Result<RenderedItem, RenderError> {
             .map(|value| render_value_type(value, &generated.enums, &generated.composite_bindings))
             .transpose()
     };
+    let mut union_seals = String::new();
+    for (key, binding) in &generated.composite_bindings {
+        if binding.form == qsl_replay::AdmittedCompositeForm::Union {
+            let handle = render_composite_key(*key, &generated.composite_bindings)?;
+            union_seals.push_str(&format!(
+                "    seal_union(context, &mut environment, {handle}, {:?})?;\n",
+                binding.node.digest,
+            ));
+        }
+    }
+    if !union_seals.is_empty() {
+        union_seals.insert_str(0, "    let mut environment = environment;\n");
+    }
     Ok(RenderedItem {
+        union_seals,
         requires_context: !generated.enums.is_empty() || !generated.composites.is_empty(),
         composites,
         left_source: render_value_type(
@@ -1796,6 +1833,7 @@ impl SourceBuilder {
         rendered: &RenderedItem,
     ) -> Result<(), OracleGenerationError> {
         let RenderedItem {
+            union_seals,
             requires_context,
             composites,
             left_source,
@@ -1892,7 +1930,7 @@ impl SourceBuilder {
         let package_domain = package.domain.as_ref();
         let package_digest = package.digest.as_ref();
         self.append_function(format!(
-"\n/// Prepare this item's descriptors and environment from the original package context.\npub fn environment_{symbol}<'ctx>(context: Option<&'ctx qsl_replay::AdmittedContext>) -> Result<PreparedEqualityEnvironment<'ctx>, EnvironmentError> {{\n    if let Some(context) = context {{\n    let actual = context.package_id().record();\n    if actual.domain().as_str() != {package_domain:?} || actual.hex() != {package_digest:?} {{\n        return Err(EnvironmentError::ContextPackageMismatch {{\n            expected_domain: {package_domain:?}, expected_digest: {package_digest:?},\n            actual_domain: actual.domain().as_str().to_owned(), actual_digest: actual.hex(),\n        }});\n    }}\n    }}\n    let mut enum_members = quire_semantic_value::enumeration::EnumMemberIndex::default();\n    let composites = composites_{symbol}(context, &mut enum_members)?;\n    let environment = sv::TypeEnvironment::new(composites, core::iter::empty::<sv::ObjectTypeDeclaration>())\n        .map_err(EnvironmentError::Declaration)?;\n    let left_source = left_source_{symbol}(context, &mut enum_members)?;\n    let left_target = left_target_{symbol}(context, &mut enum_members)?;\n    let right_source = right_source_{symbol}(context, &mut enum_members)?;\n    let right_target = right_target_{symbol}(context, &mut enum_members)?;\n    Ok(PreparedEqualityEnvironment {{\n        context, expected_domain: {package_domain:?}, expected_digest: {package_digest:?},\n        binding: {symbol:?}, requires_context: {requires_context}, environment, enum_members,\n        left_source, left_target, right_source, right_target,\n    }})\n}}\n", package_domain = package_domain, package_digest = package_digest))?;
+"\n/// Prepare this item's descriptors and environment from the original package context.\npub fn environment_{symbol}<'ctx>(context: Option<&'ctx qsl_replay::AdmittedContext>) -> Result<PreparedEqualityEnvironment<'ctx>, EnvironmentError> {{\n    if let Some(context) = context {{\n    let actual = context.package_id().record();\n    if actual.domain().as_str() != {package_domain:?} || actual.hex() != {package_digest:?} {{\n        return Err(EnvironmentError::ContextPackageMismatch {{\n            expected_domain: {package_domain:?}, expected_digest: {package_digest:?},\n            actual_domain: actual.domain().as_str().to_owned(), actual_digest: actual.hex(),\n        }});\n    }}\n    }}\n    let mut enum_members = quire_semantic_value::enumeration::EnumMemberIndex::default();\n    let composites = composites_{symbol}(context, &mut enum_members)?;\n    let environment = sv::TypeEnvironment::new(composites, core::iter::empty::<sv::ObjectTypeDeclaration>())\n        .map_err(EnvironmentError::Declaration)?;\n    let _context = context;\n{union_seals}    let left_source = left_source_{symbol}(context, &mut enum_members)?;\n    let left_target = left_target_{symbol}(context, &mut enum_members)?;\n    let right_source = right_source_{symbol}(context, &mut enum_members)?;\n    let right_target = right_target_{symbol}(context, &mut enum_members)?;\n    Ok(PreparedEqualityEnvironment {{\n        context, expected_domain: {package_domain:?}, expected_digest: {package_digest:?},\n        binding: {symbol:?}, requires_context: {requires_context}, environment, enum_members,\n        left_source, left_target, right_source, right_target,\n    }})\n}}\n", package_domain = package_domain, package_digest = package_digest))?;
         self.append_function(format!(
 "\n/// Environment-checked oracle for `{operation}`.\npub fn oracle_{symbol}(\n    prepared: &PreparedEqualityEnvironment<'_>, left: &exact::Value,\n    right: &exact::Value, meter: &mut exact::Meter,\n) -> exact::Outcome<bool> {{\n    let context_mismatch = match prepared.context {{\n        Some(context) => {{ let actual = context.package_id().record();\n            actual.domain().as_str() != {package_domain:?} || actual.hex() != {package_digest:?} }},\n        None => prepared.requires_context,\n    }};\n    if prepared.binding != {symbol:?} || prepared.expected_domain != {package_domain:?}\n        || prepared.expected_digest != {package_digest:?}\n        || prepared.requires_context != {requires_context} || context_mismatch\n    {{\n        return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedDescriptorReconstructionFailed }});\n    }}\n    let environment = &prepared.environment;\n    let left_comparison = match &prepared.left_target {{ Some(target) => target, None => &prepared.left_source }};\n    let right_comparison = match &prepared.right_target {{ Some(target) => target, None => &prepared.right_source }};\n    if let Err(error) = environment.check_type(left_comparison) {{\n        return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedTypeCheckRejected {{ cause: error.cause }} }});\n    }}\n    if let Err(error) = environment.check_type(right_comparison) {{\n        return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedTypeCheckRejected {{ cause: error.cause }} }});\n    }}\n    let left_operand = match prepared.left_target.clone() {{\n        Some(target) => sv::EqualityOperand::converted(prepared.left_source.clone(), target),\n        None => sv::EqualityOperand::typed(prepared.left_source.clone()),\n    }};\n    let right_operand = match prepared.right_target.clone() {{\n        Some(target) => sv::EqualityOperand::converted(prepared.right_source.clone(), target),\n        None => sv::EqualityOperand::typed(prepared.right_source.clone()),\n    }};\n    let checked = match environment.check_equality({operator}, left_operand, right_operand, &prepared.enum_members) {{\n        Ok(checked) => checked,\n        Err(error) => return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedEqualityCheckRejected {{ cause: error.cause }} }}),\n    }};\n    checked.evaluate(environment, left, right, meter)\n}}\n", operation = item.operator.identity(), operator = item.operator.path(), package_domain = package_domain, package_digest = package_digest))?;
         Ok(())
@@ -2015,6 +2053,19 @@ fn render_composite_declaration(
                 })
                 .collect::<Result<_, RenderError>>()?;
             format!("sv::CompositeShape::Tuple(vec![{rendered}])")
+        }
+        CompositeShape::Union(members) => {
+            let binding = composites.get(&declaration.key())
+                .ok_or(OracleGenerationError::InvalidPlanState)?;
+            let qualified = binding.qualified.iter().map(|part| format!("{part:?}"))
+                .collect::<Vec<_>>().join(", ");
+            let payloads = members.iter().map(|member| {
+                let positions = member.positions().iter().map(|position| {
+                    render_value_type(position, enums, composites)
+                }).collect::<Result<Vec<_>, _>>()?.join(", ");
+                Ok(format!("vec![{positions}]"))
+            }).collect::<Result<Vec<_>, RenderError>>()?.join(", ");
+            format!("rebuild_union(_context, {:?}, &[{qualified}], vec![{payloads}])?", binding.node.digest)
         }
         &_ => return Err(OracleGenerationError::unknown_variant("CompositeShape").into()),
     };
@@ -4076,6 +4127,7 @@ fn deep_matches_shallow() {
 
     fn rendered_item() -> RenderedItem {
         RenderedItem {
+            union_seals: String::new(),
             requires_context: false,
             composites: Vec::new(),
             left_source: "exact::ValueType::Integer".to_owned(),

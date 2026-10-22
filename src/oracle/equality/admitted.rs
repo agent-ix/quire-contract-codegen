@@ -123,12 +123,13 @@ pub(super) fn resolve_enum(
     Ok(ValueType::Enum(shape))
 }
 
-/// An authenticated record/tuple lookup recipe, retained for emitted reconstruction.
+/// An authenticated composite lookup recipe, retained for emitted reconstruction.
 #[derive(Clone)]
 pub(super) struct CompositeBinding {
     pub node: CheckedNodeId,
     pub qualified: Vec<String>,
     pub form: AdmittedCompositeForm,
+    pub declaration: qsl_replay::AdmittedComposite,
 }
 
 pub(super) fn composite_lookup_refusal(cause: AdmittedLookupRefusal) -> CompositeEqualityRefusal {
@@ -173,6 +174,7 @@ pub(super) fn resolve_composite(
     let expected_form = match node.semantic_form.as_ref() {
         "record" => AdmittedCompositeForm::Record,
         "tuple" => AdmittedCompositeForm::Tuple,
+        "union" => AdmittedCompositeForm::Union,
         _ => return Err(mismatch()),
     };
     let expected_name = node.declaration.as_ref().ok_or_else(mismatch)?;
@@ -195,6 +197,7 @@ pub(super) fn resolve_composite(
         .or_insert_with(|| CompositeBinding {
             node: node.node_id.clone(),
             form: actual.form(),
+            declaration: actual.clone(),
             qualified: actual
                 .qualified_name()
                 .iter()
