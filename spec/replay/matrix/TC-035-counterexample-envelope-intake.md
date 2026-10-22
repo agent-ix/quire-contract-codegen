@@ -26,12 +26,21 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
    values and parameter bindings, and pass the rendered transcript to `qsl_replay::Witness::parse`.
 3. For a parameter with declared domain `[lo, hi]`, submit counterexamples with the value at `lo`,
    `hi`, `lo - 1` and `hi + 1`, and record whether `replay` was called.
-4. Build one `WitnessPacket` per member QSL defines, each missing only that member, and submit
-   each. Then submit a complete packet whose trace position is
-   present with the value none.
+4. Build one `WitnessPacket` per common required member QSL defines, excluding the two alternative
+   replay-target members, each missing only that common member, and submit each. Then submit a
+   complete packet whose trace position is present with the value none. With every common member
+   present, submit function/frame packets with neither `function` nor `frame_operation` and with
+   both; record the typed admission refusal and whether an envelope or replay executor is reached.
+   Inspect the packet type and construction path to confirm an empty name or old
+   `selected_function` placeholder cannot supply the absent selection.
 5. Retired (FR-024-AC-5, IR-890): no corpus `Input`-arm submission is tested.
-6. Submit a frame counterexample through `replay_frame`, and read back the clause, frame, anchor and
-   occurrence identities QSL reports.
+6. Submit a function counterexample and a frame counterexample through their respective QSL replay
+   paths. Read the function packet and admitted envelope's `function` selection and absent
+   `frame_operation`; read the frame packet and envelope's `frame_operation` (`object` and
+   `operation`) and absent `function`. Inspect that neither has a `selected_function` member or
+   alias. For the frame, confirm that `object` names the declaring object type, process or state
+   machine, the request carries no `arguments` or `occurrence_key`, and the packet and payload
+   retain the ADR-017 PF-4 clause, frame, anchor and generated-occurrence identities QSL reports.
 7. Reduce one `Witness`-arm counterexample with a candidate set that holds a
    failure-preserving candidate, an out-of-domain candidate and a verdict-changing candidate.
    Begin with an admitted original failure. Retain the valid equivalent reduction, then propose
@@ -111,10 +120,17 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
    values and parameter bindings, with no string of backend output (FR-024-AC-2).
 3. The values at `lo` and `hi` replay. The values at `lo - 1` and `hi + 1` are reported
    out-of-domain, and `replay` is not called for either (FR-024-AC-3).
-4. Each incomplete packet is refused by `WitnessEnvelope::reconstruct` with `MissingMember` naming
-   its member, and no replay runs. The packet with trace position none is admitted (FR-024-AC-4).
+4. Each packet missing one common required member is refused by `WitnessEnvelope::reconstruct`
+   with `MissingMember` naming it, and no replay runs. The packet with trace position none is
+   admitted (FR-024-AC-4). Neither selection and both selections produce distinguishable typed
+   packet-admission refusals, admit no envelope and call no replay executor. An empty name or old
+   `selected_function` placeholder cannot supply the absent selection (FR-024-AC-42).
 5. Retired (FR-024-AC-5, IR-890): this step asserts no result.
-6. Each identity QSL reports equals the one submitted (FR-024-AC-6).
+6. The function packet and envelope carry only `function`; the frame packet and envelope carry
+   only `frame_operation` with the declaring object's qualified name and operation identifier;
+   neither carries `selected_function` or an alias. The frame request has no `arguments` or
+   `occurrence_key`, while the packet and payload retain their PF-4 identity members and every
+   identity QSL reports equals the one submitted (FR-024-AC-6, FR-024-AC-41).
 7. Only valid failure-preserving candidates are retained (FR-024-AC-7). The root
    and both retained revisions refer to their exact QSL envelopes and unchanged obligation;
    each child names the actual retained parent. The invalid-domain and verdict-changing proposals
