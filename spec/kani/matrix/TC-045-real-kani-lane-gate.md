@@ -17,7 +17,7 @@ every real-Kani test (NFR-006). The pull-request and release criteria are inspec
 
 ## Test Procedure
 
-The targets call `scripts/kani_scope.sh` and `scripts/kani_gate.sh`, and the Makefile
+The targets call the `cg_gates` Rust binary, and the Makefile
 defines the `kani` recipe once, in a variable the gate calls. A test can hand them stand-in
 executables on `PATH` for `cargo`, `cargo-kani` and `git`, and a temporary lock file through
 `KANI_LOCK`, without installing Kani and without touching `/tmp/agent-e-heavy-build.lock`. The test is
@@ -30,25 +30,28 @@ test` and holds no host-wide lock.
    `not required`.
 3. Rename (NFR-006-AC-3): have the stand-in `git`, asked for names with rename detection off, report
    `src/kani/old.rs` and `src/strategy/new.rs`, then `src/strategy/old.rs` and `src/kani/new.rs`;
-   assert `required` for each. Assert the script's `git` argument vector turns rename detection off.
+   assert `required` for each. Assert the binary's `git` argument vector turns rename detection off.
 4. One recipe (NFR-006-AC-4): run `make -n kani` and `make -n kani-gate`; assert the same `cargo test`
-   command line in both and that it holds each of the six filters, `--ignored` and
+   command line in both and that it holds each of the eight current filters, `--ignored` and
    `--test-threads=1`.
 5. Lock and serial (NFR-006-AC-5): set `KANI_LOCK` to a temporary file. The stand-in `cargo` writes a
    marker file when it starts and records whether `flock -n` on `KANI_LOCK` fails (the gate holds it).
-   Assert one start, an argument list equal to the `cargo test` line of step 4 (all six filters,
-   `--ignored`, `--test-threads=1`) and a failed `flock -n`. Then hold the temporary lock from
+   Assert one start, the `--ignored` and `--test-threads=1` arguments, and a failed `flock -n`.
+   Step 4 checks that the Make caller passes all eight filters. Then hold the temporary lock from
    the test, start the gate, wait until a process whose command line names `flock` and the temporary
    lock path appears in the process table, assert the marker file is absent, release the lock and
    wait for the marker file. No wall-clock interval orders the steps.
-6. Counts (NFR-006-AC-6): the stand-in listing 27 tests and reporting 27 passed gives `result=passed`
-   and exit 0; reporting 26 passed gives `result=failed` and non-zero; listing 0 and reporting 0 gives
-   `result=failed expected=0` and non-zero; listing 27 and reporting one failure gives
-   `result=failed` and non-zero.
-7. Run result (NFR-006-AC-7): on the passing run, assert the field order `result`, `ran`,
-   `expected`, `elapsed`, `kani`, `tree`, with no commit token; assert `ran` equals `expected`,
-   `kani` equals the version the stand-in `cargo-kani --version` prints, and `tree=clean`.
-   With a stand-in `cargo-kani` that prints no version assert `result=failed` and non-zero.
+6. Counts (NFR-006-AC-6): with a stand-in, listing zero tests gives `result=failed expected=0`
+   and no test start; listing two but reporting one passed, or reporting a test failure, gives
+   `result=failed` and non-zero. A stand-in that reports all listed tests passed also gives
+   `result=failed`: only the trusted Cargo command can discharge the proof. Step 13 observes the
+   positive result with the installed Kani lane.
+7. Run result (NFR-006-AC-7): on a stand-in run that lists and reports the same nonzero count,
+   assert the field order `result`, `ran`, `expected`, `elapsed`, `kani`, `tree`, with no commit token;
+   assert `ran` equals `expected`, `kani` equals the stand-in `cargo-kani --version` output, and
+   `tree=clean`, while `result=failed` and exit non-zero preserve the trusted-Cargo refusal. With
+   a stand-in `cargo-kani` that prints no version, assert `result=failed` and non-zero. Step 13
+   checks the `result=passed` line from a successful trusted installed-Kani run.
 8. Re-read (NFR-006-AC-8): with a stateful stand-in `git` whose head is `A` before the build and `B`
    after, and one whose tree is clean before and dirty after, assert `result=failed` and non-zero
    for each.
@@ -63,13 +66,13 @@ test` and holds no host-wide lock.
     started, the line is `kani-gate: not run: launcher absent` and the exit is non-zero.
 11. Selection (NFR-006-AC-11), with no nested cargo: a `syn` walk of `tests/it` collects the module
     path and function name of every `#[ignore]`d test and notes which carry `#[ignore = "kani lane`.
-    Read the six filters from `make -n kani`. Apply libtest's rule (a filter selects a test whose full
+    Confirm the eight named filters in `make -n kani`. Apply libtest's rule (a filter selects a test whose full
     path contains it) and assert that the tagged tests and the `#[ignore]`d tests the filters select are
     the same set; a tagged test no filter selects, or a selected test without the tag, fails the step.
     Include closure (NFR-006-AC-18): in the same walk, read every `include!`, `include_str!`,
     `include_bytes!` and `#[path]` target from each `tests/it` file that holds a lane test, and from
     each file those name in turn, resolve it against the naming file's directory, and assert the
-    result matches a pattern of the Kani-touching set read from `scripts/kani_scope.sh`; the targets
+    result matches the Kani-touching set implemented by `cg_gates kani-scope`; the targets
     `tests/checked_package_support/base.rs`, `tests/checked_package_support/rekey.rs`,
     `tests/state_frame_support/subject.rs` and the three Kani
     schemas must be found.
@@ -96,6 +99,6 @@ gate passes on its current clean candidate; a copied status line is insufficient
 
 ## Implementation
 
-Implemented: `scripts/kani_scope.sh`, `scripts/kani_gate.sh`, the `kani-scope` and `kani-gate`
+Implemented: `scripts/cg_gates.rs`, the `kani-scope` and `kani-gate`
 targets and the shared `kani` recipe variable in `Makefile`, and `tests/it/kani_gate.rs`.
 Steps 1 to 12 are tests; step 13 is inspection. No CI workflow is part of this test case.
