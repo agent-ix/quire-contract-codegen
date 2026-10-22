@@ -29,3 +29,13 @@ Ticket: IR-974. Checked ownership, outcome completeness and TC-059 internal cons
 ## Verdict
 
 FAIL for integrity until TC-059's expected results include V-7 incomplete and encoding refusal as distinct outcomes. FR-045's outcome table and AC-2 preserve this distinction; the inconsistency is confined to the TC summary.
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | At PR #526 head `49a45c9cd983be42a11590625fc1f2d9b7b2efbb`, TC-059 Expected Results separately sends a base `sat` candidate to QSL replay, step `sat`/unknown/unusable results to inconclusive, resource stops to FR-182 V-7 incomplete, and encoding refusal to its original typed refusal. |
+
+## Current verdict
+
+PASS after disposition round 1. The original finding above remains as the review record; the changed TC-059 sentence resolves its contradiction without moving QSL encoding or settlement ownership to CG.
