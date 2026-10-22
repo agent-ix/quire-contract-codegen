@@ -22,6 +22,7 @@ name = "quire_contract_codegen"
 path = "src/lib.rs"
 
 [dependencies]
+# Accept compatible branch releases; Cargo.lock records the selected revision.
 ix-trace-rs = { version = "0.1", git = "https://github.com/agent-ix/ix-trace-rs", branch = "main" }
 quire-exact = { git = "https://github.com/agent-ix/quire-exact", branch = "main" }
 quire-semantic-value = { git = "https://github.com/agent-ix/quire-semantic-value", branch = "main" }
