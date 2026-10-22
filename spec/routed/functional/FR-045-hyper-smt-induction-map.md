@@ -101,10 +101,12 @@ rows. This contract sets no default Kani or SMT memory ceiling.
 ## Dependencies
 
 - QSL FR-176 owns the self-composition product and its `μ_U` semantics.
-- QSL-1010 must implement FR-315's `encode_hyper_query` before CG can run
-  the full producer; current QSL source has no exported encoder. Its
-  clause/subjects/instance/Meter signature is authoritative. CG does not
-  introduce a temporary hyper-product encoder or fallback.
+- QSL-661 must first implement FR-315's single-subject SMT encoder and its
+  public query vocabulary; QSL-1010 must then implement `encode_hyper_query`
+  before CG can run the full producer. Current QSL source has neither
+  exported encoder. FR-315's clause/subjects/instance/Meter signature is
+  authoritative. CG does not introduce a temporary hyper-product encoder
+  or fallback.
 - QSL FR-127, FR-182 and QSL-991 own outcome types and terminal mapping;
   QSL-908 owns certificate settlement. A CG run record is execution evidence.
 
