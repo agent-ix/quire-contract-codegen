@@ -50,6 +50,19 @@ pub enum ObligationIdentityError {
         /// The harness argument's identifier.
         argument: String,
     },
+    /// The admitted Rational function cannot be prepared.
+    RationalPreparation(Box<crate::oracle::rational_predicate::RationalPredicateRefusal>),
+    /// The admitted source package differs from the replay call site.
+    SourcePackage,
+    /// The admitted lock does not name exactly the replay's original source bytes.
+    SourceBytes,
+    /// The admitted selected function differs from the real replay call site.
+    FunctionSelection,
+    /// A logical parameter is repeated, missing or has a foreign name or node.
+    ParameterBinding {
+        /// The original parameter name at the mismatch.
+        parameter: String,
+    },
     /// The preimage has no RFC 8785 encoding.
     Digest(DigestError),
 }
@@ -75,6 +88,22 @@ impl fmt::Display for ObligationIdentityError {
                     "the Boolean harness argument `{argument}` carries integer bounds"
                 )
             }
+            Self::RationalPreparation(cause) => {
+                write!(f, "Rational predicate preparation refused: {cause:?}")
+            }
+            Self::SourcePackage => {
+                f.write_str("the admitted source package differs from the replay package")
+            }
+            Self::SourceBytes => {
+                f.write_str("the admitted source bytes differ from the replay source lock")
+            }
+            Self::FunctionSelection => {
+                f.write_str("the admitted function differs from the replay selection")
+            }
+            Self::ParameterBinding { parameter } => write!(
+                f,
+                "the logical Rational parameter `{parameter}` is missing, repeated or foreign"
+            ),
             Self::Digest(cause) => cause.fmt(f),
         }
     }
@@ -86,6 +115,18 @@ impl std::error::Error for ObligationIdentityError {}
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, FixedShape)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub(crate) enum ArgumentDomain {
+    /// Original inclusive component bounds of ONE logical Rational parameter.
+    #[serde(rename_all = "camelCase")]
+    RationalRange {
+        /// Exact canonical numerator lower endpoint.
+        numerator_minimum: String,
+        /// Exact canonical numerator upper endpoint.
+        numerator_maximum: String,
+        /// Exact canonical denominator lower endpoint.
+        denominator_minimum: String,
+        /// Exact canonical denominator upper endpoint.
+        denominator_maximum: String,
+    },
     /// A Boolean: both values.
     Boolean,
     /// An inclusive integer range. The bounds are decimal strings: RFC 8785 numbers carry no
@@ -173,6 +214,56 @@ pub(crate) fn contract_arguments(
         }),
         None => Ok(arguments),
     }
+}
+
+/// Join re-derived admitted logical Rational parameters to the real owner call site.
+/// No caller-supplied physical bindings or oracle metadata enter this path.
+pub(crate) fn rational_contract_arguments(
+    parameters: &[(Identifier, WireNodeId)],
+    admitted: &[crate::oracle::rational_predicate::RationalPredicateParameter],
+) -> Result<Vec<ContractArgument>, ObligationIdentityError> {
+    let mut names = std::collections::BTreeSet::new();
+    let mut nodes = std::collections::BTreeSet::new();
+    let mut arguments = Vec::with_capacity(parameters.len());
+    for (name, node) in parameters {
+        let matching: Vec<_> = admitted
+            .iter()
+            .filter(|p| p.name == name.as_str())
+            .collect();
+        let [parameter] = matching.as_slice() else {
+            return Err(ObligationIdentityError::ParameterBinding {
+                parameter: name.as_str().to_owned(),
+            });
+        };
+        if !names.insert(name.as_str())
+            || !nodes.insert(*node)
+            || parameter.node.digest.as_ref() != node.to_string()
+        {
+            return Err(ObligationIdentityError::ParameterBinding {
+                parameter: name.as_str().to_owned(),
+            });
+        }
+        let domain = &parameter.domain;
+        arguments.push(ContractArgument {
+            identifier: name.as_str().to_owned(),
+            parameter: *node,
+            domain: ArgumentDomain::RationalRange {
+                numerator_minimum: domain.numerator_minimum.to_string(),
+                numerator_maximum: domain.numerator_maximum.to_string(),
+                denominator_minimum: domain.denominator_minimum.to_string(),
+                denominator_maximum: domain.denominator_maximum.to_string(),
+            },
+        });
+    }
+    if admitted.len() != arguments.len() {
+        return Err(ObligationIdentityError::ParameterBinding {
+            parameter: admitted
+                .iter()
+                .find(|p| !names.contains(p.name.as_str()))
+                .map_or_else(String::new, |p| p.name.clone()),
+        });
+    }
+    Ok(arguments)
 }
 
 #[derive(Serialize, FixedShape)]

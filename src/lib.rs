@@ -251,6 +251,9 @@ pub use replay::function::{
     ReplayPackage, ReplayPackageError, ReplayParameter, ReplayVerdict, SpineReplayError,
 };
 pub use replay::obligation::ObligationIdentityError;
+pub use replay::rational_predicate::{
+    RationalPredicateCodec, RationalPredicateDecodeError, RationalPredicateDecodedInputs,
+};
 pub use replay::scalar::decode_scalar_falsification;
 pub use replay::state_clause::{
     DocumentError, DocumentLabel, ModelError, OperationDeclaration, StateClauseHarnessMember,
@@ -275,3 +278,15 @@ pub use kani::run::memory::{MemoryMechanism, MemoryObservation};
 
 /// QSL-owned canonical observation digest record.
 pub use qsl_replay::DigestRecord;
+
+// FR-046 native preparation; this is not a negotiated/executable proof family.
+pub use kani::generate::outcome::FunctionPredicateItem;
+pub use kani::generate::rational_predicate::{
+    canonical_rational_arguments, rational_predicate_bindings, RationalComponent,
+    RationalComponentBinding, RationalComponentRefusal, RationalDeclarationBinding,
+    RationalLogicalBinding, RationalPredicateSchema,
+};
+pub use oracle::rational_predicate::{
+    generate_rational_predicate_oracle, RationalPredicateDomain, RationalPredicateOracle,
+    RationalPredicateParameter, RationalPredicateRefusal,
+};

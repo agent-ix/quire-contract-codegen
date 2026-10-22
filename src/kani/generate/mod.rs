@@ -20,6 +20,8 @@ pub(crate) mod lower;
 pub(crate) mod negotiate;
 // The request and result vocabulary every family speaks.
 pub(crate) mod outcome;
+// Physical component bindings for prepared Rational predicates.
+pub(crate) mod rational_predicate;
 // The precondition family.
 pub(crate) mod precondition;
 // The validated harness path and the persisted per-harness record.

@@ -25,7 +25,10 @@ use crate::{
     kani::output::playback::DecodeFailure,
     kani::terminal::ReplaySettlement,
     replay::{
-        obligation::{contract_arguments, function_contract_identity, ObligationIdentityError},
+        obligation::{
+            contract_arguments, function_contract_identity, rational_contract_arguments,
+            ObligationIdentityError,
+        },
         witness::{
             decode_falsification, decode_playback, first_out_of_domain, WitnessDecodeLimits,
         },
@@ -70,6 +73,30 @@ impl ReplayHarnessIdentity {
     }
 }
 
+/// Immutable source/domain authority shared by Rational request construction and native decoding.
+/// No generated-harness or backend provenance is asserted by this context.
+#[derive(Clone, Debug)]
+pub(crate) struct ValidatedRationalPredicateContext {
+    oracle: crate::oracle::rational_predicate::RationalPredicateOracle,
+    source: quire_contract_model::ContractSourceV1,
+    declaration: OccurrenceKey,
+    obligation: ObligationIdentity,
+}
+impl ValidatedRationalPredicateContext {
+    pub(crate) fn oracle(&self) -> &crate::oracle::rational_predicate::RationalPredicateOracle {
+        &self.oracle
+    }
+    pub(crate) fn source(&self) -> &quire_contract_model::ContractSourceV1 {
+        &self.source
+    }
+    pub(crate) fn declaration(&self) -> &OccurrenceKey {
+        &self.declaration
+    }
+    pub(crate) fn obligation(&self) -> ObligationIdentity {
+        self.obligation
+    }
+}
+
 /// The request's `backend` member: the identity of the backend that found the counterexample.
 /// QSL records it and does not interpret it (AD-002); the only backend this crate runs is Kani.
 const BACKEND_IDENTITY: &str = "kani";
@@ -96,6 +123,13 @@ pub enum SpineReplayError {
     UnsupportedWitnessValue {
         /// The decoded argument's name.
         argument: String,
+    },
+    /// The owner's canonical value encoder refused the named argument.
+    WitnessValueText {
+        /// Original decoded argument name.
+        argument: String,
+        /// Exact owner serialization failure, without substituting a value.
+        cause: qsl_replay::ValueTextError,
     },
     /// The harness or check text would change the transcript's field boundaries.
     FieldDelimiter,
@@ -127,7 +161,13 @@ impl fmt::Display for SpineReplayError {
             Self::UnsupportedWitnessValue { argument } => {
                 write!(
                     f,
-                    "the harness argument `{argument}` is not an integer or Boolean"
+                    "the harness argument `{argument}` is not an integer, Boolean or Rational"
+                )
+            }
+            Self::WitnessValueText { argument, cause } => {
+                write!(
+                    f,
+                    "the harness argument `{argument}` did not encode: {cause}"
                 )
             }
             Self::FieldDelimiter => {
@@ -159,7 +199,7 @@ impl From<MalformedTranscript> for SpineReplayError {
 ///
 /// `harness` and `check_text` fill the transcript's harness and check fields; `values` are the
 /// decoded arguments, and `parameters` bind each argument name to its node id. A Boolean value
-/// is replayed as the integer `1` or `0`, the encoding QSL admits for a Boolean parameter.
+/// is replayed as the integer `1` or `0`; Rational values use the owner canonical value encoder.
 /// `request` receives the witness source and returns the complete request, whose package
 /// reference, selection and limits are the proving run's.
 ///
@@ -185,10 +225,9 @@ pub fn replay_falsification(
     )
 }
 
-/// The one function that renders a backend-witness transcript (FR-024-AC-2): the assertion block
-/// `qsl-replay` admits, built from decoded values only and never from backend-native text. Each
-/// binding is a name (a parameter node id, or a state field) and the integer decoded for it.
-/// Every transcript this crate passes to [`Witness::parse`] comes from here.
+/// The integer-facing witness renderer (FR-024-AC-2), preserving function/frame/state
+/// transcript bytes. Each binding is a parameter node id or state field and its decoded integer.
+/// All value kinds share the private envelope assembler below; backend-native text is never used.
 ///
 /// # Errors
 ///
@@ -199,9 +238,22 @@ pub(crate) fn render_witness(
     check_text: &str,
     bindings: &[(&str, i128)],
 ) -> Result<Witness, MalformedTranscript> {
+    let encoded = bindings
+        .iter()
+        .map(|(name, integer)| (*name, integer.to_string()))
+        .collect::<Vec<_>>();
+    render_witness_encoded(harness, check_text, &encoded)
+}
+
+/// The shared envelope assembly; canonical value text is already owner-encoded.
+fn render_witness_encoded(
+    harness: &str,
+    check_text: &str,
+    bindings: &[(&str, String)],
+) -> Result<Witness, MalformedTranscript> {
     let bindings = bindings
         .iter()
-        .map(|(name, integer)| format!("{name}={integer}"))
+        .map(|(name, text)| format!("{name}={text}"))
         .collect::<Vec<_>>();
     Witness::parse(format!(
         "<<<assertion|{harness}|{check_text}|{}>>>",
@@ -235,40 +287,46 @@ fn replay_falsification_through(
                 .ok_or_else(|| SpineReplayError::UnboundArgument {
                     argument: argument.clone(),
                 })?;
-            let integer = match value {
-                WitnessValue::Integer(integer) => *integer,
-                WitnessValue::Boolean(boolean) => i128::from(*boolean),
-                WitnessValue::ExactInteger(_)
-                | WitnessValue::Enum { .. }
-                | WitnessValue::Text(_)
-                | WitnessValue::String(_)
-                | WitnessValue::Uuid(_)
-                | WitnessValue::Timestamp(_)
-                | WitnessValue::Rational { .. }
-                | WitnessValue::Decimal { .. }
-                | WitnessValue::Float32(_)
-                | WitnessValue::Float64(_)
-                | WitnessValue::Quantity { .. }
-                | WitnessValue::Reference { .. }
-                | WitnessValue::Option(_)
-                | WitnessValue::Record { .. }
-                | WitnessValue::Tuple { .. }
-                | WitnessValue::Union { .. }
-                | WitnessValue::Sequence(_)
-                | WitnessValue::OrderedSet(_)
-                | WitnessValue::Set(_)
-                | WitnessValue::Bag(_) => {
-                    return Err(SpineReplayError::UnsupportedWitnessValue {
-                        argument: argument.clone(),
-                    })
-                }
-            };
-            Ok((parameter.node_id, integer))
+            let encoded =
+                match value {
+                    WitnessValue::Integer(integer) => integer.to_string(),
+                    WitnessValue::Boolean(boolean) => i128::from(*boolean).to_string(),
+                    WitnessValue::Rational { .. } => value.to_value_text().map_err(|cause| {
+                        SpineReplayError::WitnessValueText {
+                            argument: argument.clone(),
+                            cause,
+                        }
+                    })?,
+                    WitnessValue::ExactInteger(_)
+                    | WitnessValue::Enum { .. }
+                    | WitnessValue::Text(_)
+                    | WitnessValue::String(_)
+                    | WitnessValue::Uuid(_)
+                    | WitnessValue::Timestamp(_)
+                    | WitnessValue::Decimal { .. }
+                    | WitnessValue::Float32(_)
+                    | WitnessValue::Float64(_)
+                    | WitnessValue::Quantity { .. }
+                    | WitnessValue::Reference { .. }
+                    | WitnessValue::Option(_)
+                    | WitnessValue::Record { .. }
+                    | WitnessValue::Tuple { .. }
+                    | WitnessValue::Union { .. }
+                    | WitnessValue::Sequence(_)
+                    | WitnessValue::OrderedSet(_)
+                    | WitnessValue::Set(_)
+                    | WitnessValue::Bag(_) => {
+                        return Err(SpineReplayError::UnsupportedWitnessValue {
+                            argument: argument.clone(),
+                        })
+                    }
+                };
+            Ok((parameter.node_id, encoded))
         })
         .collect::<Result<Vec<_>, SpineReplayError>>()?;
     // QSL joins function witness entries by parameter node id and requires ascending id order.
     bindings.sort_unstable_by(|left, right| left.0.cmp(right.0));
-    let witness = render_witness(harness, check_text, &bindings)?;
+    let witness = render_witness_encoded(harness, check_text, &bindings)?;
     match execute(request(ReplaySource::Witness(witness))) {
         Ok(ReplayResult::Witness(result)) => Ok(result),
         Ok(ReplayResult::Input(_)) => Err(SpineReplayError::WrongArm),
@@ -633,6 +691,103 @@ impl ReplayPackage {
         }
     }
 
+    /// Bind a re-derived admitted Rational predicate to this package's real call site.
+    ///
+    /// The domains come from the admitted selected closure, never mutable oracle fields or
+    /// caller-provided physical bindings. This identity does not assert backend execution.
+    ///
+    /// # Errors
+    /// Refuses mismatched package, source lock, function or logical parameters, or a predicate
+    /// outside the supported Rational preparation slice.
+    pub fn rational_predicate_obligation_identity(
+        &self,
+        item: crate::kani::generate::outcome::FunctionPredicateItem<'_>,
+    ) -> Result<ObligationIdentity, ObligationIdentityError> {
+        Ok(self.rational_predicate_context(item)?.obligation())
+    }
+
+    /// Build the single immutable source/domain authority used by Rational consumers.
+    pub(crate) fn rational_predicate_context(
+        &self,
+        item: crate::kani::generate::outcome::FunctionPredicateItem<'_>,
+    ) -> Result<ValidatedRationalPredicateContext, ObligationIdentityError> {
+        let provenance = &item.package.wire().package.source;
+        if provenance.package_id.domain.as_ref() != self.site.package_id.domain().as_str()
+            || provenance.package_id.algorithm.as_ref() != "sha256"
+            || provenance.package_id.digest.as_ref() != self.site.package_id.hex()
+        {
+            return Err(ObligationIdentityError::SourcePackage);
+        }
+        let sources = std::iter::once(&self.inputs.source)
+            .chain(self.inputs.dependencies.iter().map(|d| &d.source))
+            .collect::<Vec<_>>();
+        if provenance.lock.sources.len() != sources.len()
+            || sources.iter().any(|source| {
+                !provenance.lock.sources.iter().any(|original| {
+                    original.authority.as_ref() == source.authority
+                        && original.identity.as_ref() == source.identity
+                        && original.digest_domain.as_ref() == source.digest().domain().as_str()
+                        && original.digest.as_ref() == source.digest().hex()
+                })
+            })
+        {
+            return Err(ObligationIdentityError::SourceBytes);
+        }
+        if item.function.digest.as_ref() != self.site.site.function.to_string() {
+            return Err(ObligationIdentityError::FunctionSelection);
+        }
+        let admitted = crate::oracle::rational_predicate::generate_rational_predicate_oracle(item)
+            .map_err(|cause| ObligationIdentityError::RationalPreparation(Box::new(cause)))?;
+        let arguments =
+            rational_contract_arguments(&self.site.site.parameters, admitted.parameters())?;
+        let obligation = function_contract_identity(
+            self.site.site.function,
+            &self.site.site.declaration,
+            crate::kani::identity::ObligationKind::Postcondition,
+            &arguments,
+        )?;
+        Ok(ValidatedRationalPredicateContext {
+            oracle: admitted,
+            source: provenance.clone(),
+            declaration: self.site.site.declaration.clone(),
+            obligation,
+        })
+    }
+
+    /// Build a request for this admitted Rational function and original inclusive domains.
+    ///
+    /// `source` may be a native-injected witness; this constructor supplies no backend or
+    /// solver provenance. Physical witness decoding and proof qualification are separate.
+    ///
+    /// # Errors
+    /// The same exact admission/binding refusals as [`Self::rational_predicate_obligation_identity`].
+    pub fn rational_predicate_request(
+        &self,
+        item: crate::kani::generate::outcome::FunctionPredicateItem<'_>,
+        source: ReplaySource,
+    ) -> Result<ReplayRequestWire, ObligationIdentityError> {
+        Ok(self.request_for(self.rational_predicate_obligation_identity(item)?, source))
+    }
+
+    /// Prepare a native physical-input codec for the admitted Rational selection.
+    ///
+    /// This seals only source/domain/ordering metadata, not an actual proof artifact or run.
+    /// The decoder accepts caller-selected assertion blocks without asserting solver origin.
+    ///
+    /// # Errors
+    /// Returns the same source/domain binding refusals as the Rational request constructor.
+    pub fn rational_predicate_codec(
+        &self,
+        item: crate::kani::generate::outcome::FunctionPredicateItem<'_>,
+    ) -> Result<crate::replay::rational_predicate::RationalPredicateCodec, ObligationIdentityError>
+    {
+        Ok(
+            crate::replay::rational_predicate::RationalPredicateCodec::from_context(
+                self.rational_predicate_context(item)?,
+            ),
+        )
+    }
+
     /// The complete replay request for `counterexample`, replaying `source`.
     ///
     /// The package reference's `dependencies` are the lock's dependency selections, one entry
@@ -971,6 +1126,7 @@ impl<'a> From<&'a SpineReplayError> for ReplaySettlement<'a> {
         match error {
             SpineReplayError::UnboundArgument { .. }
             | SpineReplayError::UnsupportedWitnessValue { .. }
+            | SpineReplayError::WitnessValueText { .. }
             | SpineReplayError::FieldDelimiter
             | SpineReplayError::Transcript(_)
             | SpineReplayError::WrongArm
@@ -1391,6 +1547,233 @@ mod tests {
                 }),
                 "{settlement:?} {category:?}"
             );
+        }
+    }
+
+    mod rational_requests {
+        use super::*;
+        use quire_contract_model::{
+            CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2,
+            CheckedPackageV2ReadResult,
+        };
+        const SOURCE: &str =
+            include_str!("../../tests/it/rational_predicate_support/fixtures/commutative.native");
+
+        fn admitted() -> (
+            ReplayPackage,
+            quire_contract_model::ContractPackageV1,
+            quire_contract_model::CheckedNodeId,
+        ) {
+            let source_identity = SourceIdentity::new("a", "u", "git", "1");
+            let checked = qsl_replay::compile_admitted(
+                source_identity,
+                "rational-predicate",
+                SOURCE.as_bytes(),
+                [],
+                &DependencyInput::default(),
+                qsl_replay::StageLimits::default(),
+                ReplayLimits::default(),
+            )
+            .unwrap();
+            let json: serde_json::Value =
+                serde_json::from_slice(checked.package().bytes()).unwrap();
+            let mut evidence = CheckedPackageEvidence::new();
+            for feature in json["lock"]["required_features"].as_array().unwrap() {
+                evidence.support_feature(feature.as_str().unwrap());
+            }
+            let CheckedPackageV2ReadResult::Admitted(package) = CheckedPackageV2::read(
+                checked.package().bytes(),
+                CheckedPackageReadLimits::bounded(),
+                &evidence,
+            ) else {
+                panic!("actual source output must strictly admit")
+            };
+            let function = package
+                .graph()
+                .nodes
+                .iter()
+                .find(|n| n.node_tag.as_ref() == "function")
+                .unwrap()
+                .node_id
+                .clone();
+            let lowered = package.lower(
+                std::slice::from_ref(&function),
+                &crate::routed_contract_lowering_profile(),
+            );
+            let contract = lowered.package.wire().unwrap().clone();
+            let package = ReplayPackage::new(
+                ReplayInputs {
+                    decode_limits: unbounded_decode_limits(),
+                    source: LockedSource {
+                        authority: "a".into(),
+                        identity: "u".into(),
+                        namespace: "git".into(),
+                        revision: "1".into(),
+                        bytes: SOURCE.as_bytes().to_vec(),
+                    },
+                    dependencies: Vec::new(),
+                    accounting_limits: unlimited(),
+                    stage_limits: BTreeMap::new(),
+                    declared_domains: Vec::new(),
+                    replay_limits: ReplayLimits::default(),
+                },
+                "rational_commutative",
+            )
+            .unwrap();
+            (package, contract, function)
+        }
+
+        #[trace("TC-060", "FR-046-AC-9")]
+        #[test]
+        fn rational_request_checks_source_and_complete_logical_bindings_before_hashing() {
+            let (package, contract, function) = admitted();
+            let item = || crate::FunctionPredicateItem {
+                package: &contract,
+                function: &function,
+            };
+            package
+                .rational_predicate_obligation_identity(item())
+                .unwrap();
+            let mut changed = package.clone();
+            changed.inputs.source.bytes.extend_from_slice(b"\n");
+            assert!(matches!(
+                changed.rational_predicate_obligation_identity(item()),
+                Err(ObligationIdentityError::SourceBytes)
+            ));
+            let mut changed = package.clone();
+            changed.inputs.source.identity.push_str("foreign");
+            assert!(matches!(
+                changed.rational_predicate_obligation_identity(item()),
+                Err(ObligationIdentityError::SourceBytes)
+            ));
+            let mut changed = package.clone();
+            changed.site.site.parameters.pop();
+            assert!(matches!(
+                changed.rational_predicate_obligation_identity(item()),
+                Err(ObligationIdentityError::ParameterBinding { .. })
+            ));
+            let mut changed = package.clone();
+            changed
+                .site
+                .site
+                .parameters
+                .push(changed.site.site.parameters[0].clone());
+            assert!(matches!(
+                changed.rational_predicate_obligation_identity(item()),
+                Err(ObligationIdentityError::ParameterBinding { .. })
+            ));
+            let mut changed = package.clone();
+            changed.site.site.parameters[0].1 = package.site.site.function;
+            assert!(matches!(
+                changed.rational_predicate_obligation_identity(item()),
+                Err(ObligationIdentityError::ParameterBinding { .. })
+            ));
+            let mut changed = package.clone();
+            changed.site.site.parameters[0].0 = Identifier::new("foreign").unwrap();
+            assert!(matches!(
+                changed.rational_predicate_obligation_identity(item()),
+                Err(ObligationIdentityError::ParameterBinding { .. })
+            ));
+            // Reordering actual call-site entries preserves the established logical-name ordering.
+            let mut changed = package.clone();
+            changed.site.site.parameters.reverse();
+            assert_eq!(
+                package
+                    .rational_predicate_obligation_identity(item())
+                    .unwrap(),
+                changed
+                    .rational_predicate_obligation_identity(item())
+                    .unwrap()
+            );
+        }
+
+        #[trace("TC-060", "FR-046-AC-9", "FR-025-AC-10")]
+        #[test]
+        fn rational_identity_has_one_real_parameter_and_all_four_exact_endpoints() {
+            let (package, contract, function) = admitted();
+            let oracle = crate::generate_rational_predicate_oracle(crate::FunctionPredicateItem {
+                package: &contract,
+                function: &function,
+            })
+            .unwrap();
+            let mut args =
+                rational_contract_arguments(&package.site.site.parameters, oracle.parameters())
+                    .unwrap();
+            assert_eq!(args.len(), 2);
+            for arg in &args {
+                let domain = serde_json::to_value(&arg.domain).unwrap();
+                assert_eq!(
+                    domain,
+                    serde_json::json!({"type":"rationalRange","numeratorMinimum":"-9","numeratorMaximum":"9","denominatorMinimum":"1","denominatorMaximum":"9"})
+                );
+            }
+            let identity = |args: &[crate::replay::obligation::ContractArgument]| {
+                function_contract_identity(
+                    package.site.site.function,
+                    &package.site.site.declaration,
+                    crate::ObligationKind::Postcondition,
+                    args,
+                )
+                .unwrap()
+            };
+            let original = identity(&args);
+            for field in 0..4 {
+                let saved = args[0].domain.clone();
+                let crate::replay::obligation::ArgumentDomain::RationalRange {
+                    numerator_minimum,
+                    numerator_maximum,
+                    denominator_minimum,
+                    denominator_maximum,
+                } = &mut args[0].domain
+                else {
+                    panic!("original Rational domain")
+                };
+                match field {
+                    0 => *numerator_minimum = "-8".into(),
+                    1 => *numerator_maximum = "8".into(),
+                    2 => *denominator_minimum = "2".into(),
+                    _ => *denominator_maximum = "8".into(),
+                };
+                assert_ne!(original, identity(&args));
+                args[0].domain = saved;
+            }
+            args.reverse();
+            assert_eq!(original, identity(&args));
+        }
+
+        #[trace("TC-026", "FR-016-AC-9")]
+        #[test]
+        fn legacy_integer_boolean_frame_and_state_transcript_bytes_are_unchanged() {
+            for bindings in [
+                vec![],
+                vec![("flag", 0), ("other", 1)],
+                vec![("amount", i128::MIN), ("balance", i128::MAX)],
+            ] {
+                let old = format!(
+                    "<<<assertion|module::proof|assertion|{}>>>",
+                    bindings
+                        .iter()
+                        .map(|(name, value)| format!("{name}={value}"))
+                        .collect::<Vec<_>>()
+                        .join(";")
+                );
+                assert_eq!(
+                    render_witness("module::proof", "assertion", &bindings)
+                        .unwrap()
+                        .transcript(),
+                    old
+                );
+                let encoded = bindings
+                    .iter()
+                    .map(|(name, value)| (*name, value.to_string()))
+                    .collect::<Vec<_>>();
+                assert_eq!(
+                    render_witness_encoded("module::proof", "assertion", &encoded)
+                        .unwrap()
+                        .transcript(),
+                    old
+                );
+            }
         }
     }
 }
