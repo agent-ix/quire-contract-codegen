@@ -526,3 +526,361 @@ dispositions:
     proof/playback and complete public witness roundtrip are absent. This repair is limited to native prerequisite
     quality; the full criterion remains OPEN. No scope waiver, proof credit or full-feature acceptance.'
 ```
+
+## Renewed expanded-source review (pass 2)
+
+Reviewed exact published db7806a5f0bab394b993ae47334620c6df1f8149 against actual main 7ea6a9988a4e6ecb5369c77a1941350bde52c4b2. Original findings, prior dispositions and review/custody history above remain unchanged. No new findings; no finding IDs allocated or renumbered. Existing code findings remain fixed and all eleven gap findings remain deferred to future IR-258 implementation, with their full criteria OPEN. No earlier deferred item is claimed fixed by this slice.
+
+### Current verdict and acceptance boundary
+
+**FAIL** — Full scoped feature assurance remains incomplete. The newly computed matrix is 8 tagged / 3 untagged / 0 ignored-only: FR-046-AC-9 now has meaningful partial native request/replay tests, while AC-5, AC-6 and AC-10 remain untagged. All eleven complete obligations remain OPEN, including physical decoding/grouping and actual proof/playback/run evidence. A relevant new tag is not full acceptance.
+
+### Expanded scope and fresh-base interactions
+
+Read both lead boundary decisions, the actual four-file phase diff (function.rs, obligation.rs, new rational_predicate_replay.rs and main registration), the complete retained native scope, and incoming main changes. History merge c381 preserves custody/native bytes; prior source, original SR prefixes and all protected paths remain unchanged by this phase. The fresh main adds Makefile/MSRV and assurance/spec/review changes without a production-code interaction with this seam. PR head and remote main matched the reviewed values. No spec or plan change occurs in the PR diff, so no spec-review/subanalysis applies; code review includes the Rust lane in this same SR.
+
+### Source and identity authority
+
+The new public factories take an admitted FunctionPredicateItem, not a mutable RationalPredicateOracle or caller domain/binding vector. They first compare checked source-package identity and exact source-lock authority/identity/digest facts, then the selected real function, then re-derive the bounded native Rational closure and its original domains. The private join checks complete logical parameter count, unique names and nodes, exact original name/node correspondence and no missing/foreign entry before identity hashing. ReplayPackage inputs/site are private; adverse private-state mutations test guard branches without changing production behavior. Original real function/declaration occurrence and parameter IDs come from owner call_site. No default occurrence or locally minted checked node is added.
+
+RationalRange is additive and contains four canonical decimal-string inclusive endpoints, one ContractArgument per real logical parameter. It does not pretend two physical components are two parameters or substitute fake I64 bounds. Existing function_contract_identity/content_digest remains the sole canonical preimage/digest implementation; logical identifier ordering remains the established O09 order. Independent per-endpoint mutations hold function/site facts constant while changing each serialized domain member, so source-identity changes alone cannot make that test vacuously pass. External actual-source domain/name changes independently change/refuse identities. Existing ArgumentDomain::of, Bool/I64 variants, contract_arguments, preimage construction and frame identity logic are byte-unchanged.
+
+### Adapter, outcomes and test meaning
+
+Integer decimal and Boolean 0/1 spellings remain exact. Rational alone uses the real owner WitnessValue::to_value_text with named typed ValueTextError propagation. All variants share one private encoded-text envelope helper; the integer render_witness API remains intact for function/frame/state callers. Field delimiter validation still precedes request construction. Parameters are joined by real names and transcript entries sorted by real node ID, preserving supplied-order independence. No backend text, copied Rational encoder or CG normalization is introduced. Unknown argument and unsupported legacy variants keep their typed errors; owner request/reader/replay limits and failures remain owner results. The factory re-renders/re-derives bounded preparation once per request, not once per argument, without recompiling source; owner replay recompilation remains the existing public boundary. Linear/quadratic joins are bounded by admitted package/preparation limits. No new unsafe, narrowing cast, async/lock or panic path was added to production.
+
+External tests admit the authentic original healthy and wrong-addend sources and call real public owner replay. They inspect evaluated Boolean and settlement, exercise negative/fraction/zero/endpoints, real reversed declarations and input permutation, each argument out of its original domain, missing/duplicate/foreign names/nodes, wrong selection/package, small input-byte limit, raw noncanonical Rational spellings, unsupported legacy families and delimiters. Raw 0/2, 2/2, zero/negative denominators reach owner spelling refusal; these controls are distinct from future strict physical-backend component validation. The witness inputs are native-injected, never solver-generated playback. Typed owner serialization-failure propagation is structurally reviewed; no realistic Rational encoder failure injection is claimed. Legacy transcript checks and existing independent canonical-preimage/digest tests cover Integer/Boolean/frame/state compatibility. No internal evaluator or private-owner execution seam is called.
+
+### Evidence and remaining gaps
+
+Read actual adapter-red.log: identity test passed and two compiled Rational adapter tests failed UnsupportedWitnessValue(a). Final logs show 13 Rational/native tests, 7 logical-identity tests, 6 function unit tests and 5 exact legacy controls passing (31 total outer tests), plus completed warnings-denied clippy; fmt/diff receipts report zero. Earlier compiler/type-intake errors and corrected owner-refusal expectations are not product RED. Original exhaustive native/Meter controls remain green.
+
+Independently checked recorded active-child cgroup paths and memory.max=17179869184/memory.swap.max=0 for all nine final scopes; terminal memory.events reports oom_kill=0 for each. These measurements concern those new author runs only and do not rewrite the older inactive-infinity limitation or establish proof fit. Source/diff/receipts/log inspection and computed matrix are reviewer checks; no reviewer Cargo, Kani, CBMC, aggregate, namespace or engine execution occurred. No full invocation-accounting, physical-width/comment/grouped-schema proof decoder, negotiated dispatch, one completion cover, actual solver proof/playback, report/version or final acceptance claim follows. Plan completion: not assessed.
+
+### Renewed machine record
+
+```yaml
+dispositions: []
+scope:
+- id: FR-046-AC-1
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: 'The genuine source function `rational_commutative(a: Rational[-9,9;1,9], b: Rational[-9,9;1,9]): Boolean`
+    with body `a + b = b + a` selects its whole declaration and complete body through the public QSL admission,
+    strict IR reader/lowering and CG route. Its artifact proves that predicate, not only validity or parity of either
+    addition. Replacing the body by `a + b = a + a` selects the same authored mutation with unchanged parameter
+    domains.'
+- id: FR-046-AC-2
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: Every accepted symbolic argument has canonical constructor/accessor roundtrip equality and lies in its
+    original inclusive component domains. Its two physical I64 bindings retain numerator/denominator roles, original
+    parameter identity and bounds in the FR-025 order. Every semantic value in those domains has exactly one accepted
+    representation. Zero is `0/1`; negative, fractional and boundary values remain reachable. For the original domain
+    there are 111 canonical values per argument and 12,321 argument tuples; admitting all 171 raw component pairs,
+    restricting denominators to one, or clipping an endpoint fails correspondence validation under QSpec FR-196-AC-5.
+- id: FR-046-AC-3
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: Generated evaluation preserves the authored full tree and declaration identity, exact owner arithmetic,
+    intermediate values outside the input domains, arbitrary-precision continuation, full typed outcomes and Meter
+    charge/stop order. Native comparison against an independent owner-operation reference checks those observations,
+    including each denied charge prefix and exact/short budgets; it does not calculate expectations by running the
+    generated oracle twice.
+- id: FR-046-AC-4
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: Generation introduces no assumption on completion, truth or an absence of undefined/refused/incomplete
+    results. Controls producing each reachable noncompletion retain that typed outcome and cannot become a successful
+    predicate proof; an outcome-based assume mutation is rejected. A completion assertion failure without a replayed
+    false value is not labelled a confirmed semantic false counterexample.
+- id: FR-046-AC-5
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: The healthy original function receives `Verified` only from an actual successful proof with all required
+    checks and its completion cover satisfied. The wrong-addend mutation produces a substantive failed predicate
+    assertion with actual solver playback of canonical in-domain arguments, and replay of that same authored function
+    completes with Boolean false. A hypothetical witness or cover witness is not substituted for that playback.
+- id: FR-046-AC-6
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: Each emitted predicate harness has exactly one final completion cover after all predicate assertions,
+    including harnesses with representation constraints. Unsatisfied or unreported completion cover, failed unwind,
+    timeout, memory exhaustion or missing verdict cannot yield `Verified`; classifications retain FR-017 and FR-029
+    distinctions.
+- id: FR-046-AC-7
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: A missing or unbounded Rational parameter domain yields source-associated `requires-bound` naming the
+    selected function, argument and missing domain, with no harness. A finite component endpoint outside this encoding's
+    signed-i64 capacity yields named `unsupported`, retaining the original endpoint and no harness; generation never
+    clips, casts away precision or substitutes a smaller domain.
+- id: FR-046-AC-8
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: An unavailable owner-lowered whole-function representation, absent one-to-one correspondence or unsupported
+    body operation yields named `unsupported` with its source-associated cause and no harness. Every requested item
+    has exactly one disposition under FR-039; a refused item does not remove or alter a supported sibling. Malformed
+    source or owner-refused packages remain upstream refusals, not fabricated CG claims.
+- id: FR-046-AC-9
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: Counterexample decoding validates the two physical I64 entries per original parameter, exact width/comment/order,
+    schema roles, required physical-entry and byte limits, canonical components, original domains and selected declaration/application
+    binding before public owner replay. Grouping yields one typed owner Rational value per parameter through the
+    existing canonical serialization seam; missing, duplicate, foreign, role-swapped, domain-conflicting and malformed
+    component schemas or entries retain typed refusals with no replayed failure. Out-of-domain, duplicate-zero,
+    noncanonical, wrong-declaration and stale-identity witnesses are rejected by the responsible boundary; CG neither
+    mints keys nor substitutes scalar application validity for the authored Boolean result. An unavailable replay
+    capability is reported without claiming replay acceptance.
+- id: FR-046-AC-10
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: Run evidence records the selected function and source association, inclusive component domains and correspondence,
+    ordered physical bindings and their logical parameter grouping, actual subject and full ordered backend arguments,
+    every unwind/loop bound and option, Kani/Rust/CBMC/solver versions, target, actual dependency cohort and execution
+    limits, raw checks/cover/playback, exit and typed terminal outcome. Replay uses the retained generated artifact
+    without hand editing. No-run, compile refusal, cover failure, resource exhaustion and semantic falsification
+    remain distinguishable; preparation alone earns no proof result.
+- id: FR-025-AC-10
+  path: spec/kani/functional/FR-025-generated-subject-abi.md
+  role: examined
+  excerpt: PLANNED (IR-258). Every supported FR-046 Rational argument has exactly two ordered I64 physical bindings
+    grouped to its one original parameter, complete domain and canonical value. Actual playback decodes losslessly
+    with existing I64 width/comment checks and physical byte/value-count caps, then reconstructs and submits exactly
+    one canonical owner Rational per parameter. Missing, duplicate, foreign, role-swapped or bound-conflicting schema,
+    malformed entries, noncanonical pairs and over-limit witnesses refuse at their responsible typed boundary; no
+    alternate normalized witness is replayed. Existing Boolean/integer controls remain unchanged.
+- id: src/kani/generate/mod.rs
+  path: src/kani/generate/mod.rs
+  role: examined
+  excerpt: '//! The one Kani generator: the request and result vocabulary, the negotiation entry and the'
+- id: src/kani/generate/outcome.rs
+  path: src/kani/generate/outcome.rs
+  role: examined
+  excerpt: '//! The request and result vocabulary of Kani obligation negotiation (FR-015): the items a'
+- id: src/kani/generate/rational_predicate.rs
+  path: src/kani/generate/rational_predicate.rs
+  role: examined
+  excerpt: //! Physical I64 positions for one prepared Rational predicate's logical arguments.
+- id: src/lib.rs
+  path: src/lib.rs
+  role: examined
+  excerpt: //! Deterministic Rust, property-test, proof, and evidence generation from Quire contracts.
+- id: src/oracle/mod.rs
+  path: src/oracle/mod.rs
+  role: examined
+  excerpt: '//! The oracle subsystem: generation of the Rust oracles (AD-004, FR-014, FR-018, FR-021).'
+- id: src/oracle/rational_predicate.rs
+  path: src/oracle/rational_predicate.rs
+  role: examined
+  excerpt: //! Whole-function Rational predicate native source preparation (FR-046).
+- id: tests/it/main.rs
+  path: tests/it/main.rs
+  role: examined
+  excerpt: '//! IR-237: the integration test crate. Cargo builds a `tests/<name>/main.rs` directory as one'
+- id: tests/it/rational_predicate_agreement.rs
+  path: tests/it/rational_predicate_agreement.rs
+  role: examined
+  excerpt: //! Native body agreement, distinct from public replay and generated-proof acceptance.
+- id: tests/it/rational_predicate_generation.rs
+  path: tests/it/rational_predicate_generation.rs
+  role: examined
+  excerpt: //! Leaf native-source preparation only; negotiated generation/replay are not yet integrated.
+- id: tests/it/rational_predicate_support/fixtures/commutative.native
+  path: tests/it/rational_predicate_support/fixtures/commutative.native
+  role: examined
+  excerpt: language "ix:native" edition "1-draft";
+- id: tests/it/rational_predicate_support/fixtures/large_intermediate.native
+  path: tests/it/rational_predicate_support/fixtures/large_intermediate.native
+  role: examined
+  excerpt: language "ix:native" edition "1-draft";
+- id: tests/it/rational_predicate_support/fixtures/wrong_addend.native
+  path: tests/it/rational_predicate_support/fixtures/wrong_addend.native
+  role: examined
+  excerpt: language "ix:native" edition "1-draft";
+- id: tests/it/rational_predicate_support/mod.rs
+  path: tests/it/rational_predicate_support/mod.rs
+  role: examined
+  excerpt: //! Authentic source admission helpers; no prebaked graph or minted node identities.
+- id: spec/kani/matrix/TC-060-rational-function-predicate-harnesses.md
+  path: spec/kani/matrix/TC-060-rational-function-predicate-harnesses.md
+  role: context_only
+  excerpt: '# TC-060: Verify finite rational whole-function predicates'
+- id: spec/kani/matrix/TC-036-generated-subject-abi.md
+  path: spec/kani/matrix/TC-036-generated-subject-abi.md
+  role: context_only
+  excerpt: '# TC-036: Verify the generated harness subject ABI'
+- id: spec/decisions/ADR-004-generated-subject-abi-open-decisions.md
+  path: spec/decisions/ADR-004-generated-subject-abi-open-decisions.md
+  role: context_only
+  excerpt: '# ADR-004: Decisions of the generated harness subject ABI'
+- id: src/replay/function.rs
+  path: src/replay/function.rs
+  role: examined
+  excerpt: '//! The replay adapter: a decoded Kani falsification goes to QSL''s layer-6 `replay` facade, and'
+- id: src/replay/obligation.rs
+  path: src/replay/obligation.rs
+  role: examined
+  excerpt: //! The obligation identity of the function path and of the frame path (ADR-013 O-09,
+- id: tests/it/rational_predicate_replay.rs
+  path: tests/it/rational_predicate_replay.rs
+  role: examined
+  excerpt: //! Native-injected witnesses exercise the public adapter; none is solver playback evidence.
+- id: src/replay/function.rs::rational_predicate_obligation_identity
+  path: src/replay/function.rs
+  role: examined
+  excerpt: pub fn rational_predicate_obligation_identity(
+- id: src/replay/function.rs::rational_predicate_request
+  path: src/replay/function.rs
+  role: examined
+  excerpt: pub fn rational_predicate_request(
+- id: src/replay/function.rs::rational_request_checks_source_and_complete_logical_bindings_before_hashing
+  path: src/replay/function.rs
+  role: examined
+  excerpt: fn rational_request_checks_source_and_complete_logical_bindings_before_hashing() {
+- id: src/replay/function.rs::rational_identity_has_one_real_parameter_and_all_four_exact_endpoints
+  path: src/replay/function.rs
+  role: examined
+  excerpt: fn rational_identity_has_one_real_parameter_and_all_four_exact_endpoints() {
+- id: src/replay/function.rs::legacy_integer_boolean_frame_and_state_transcript_bytes_are_unchanged
+  path: src/replay/function.rs
+  role: examined
+  excerpt: fn legacy_integer_boolean_frame_and_state_transcript_bytes_are_unchanged() {
+- id: src/replay/obligation.rs::rational_contract_arguments
+  path: src/replay/obligation.rs
+  role: examined
+  excerpt: pub(crate) fn rational_contract_arguments(
+- id: tests/it/rational_predicate_replay.rs::native_injected_rational_witnesses_reach_actual_whole_predicate_replay
+  path: tests/it/rational_predicate_replay.rs
+  role: examined
+  excerpt: fn native_injected_rational_witnesses_reach_actual_whole_predicate_replay() {
+- id: tests/it/rational_predicate_replay.rs::logical_domains_and_real_selected_site_bind_the_identity
+  path: tests/it/rational_predicate_replay.rs
+  role: examined
+  excerpt: fn logical_domains_and_real_selected_site_bind_the_identity() {
+- id: tests/it/rational_predicate_replay.rs::genuine_reversed_declaration_keeps_name_bound_values
+  path: tests/it/rational_predicate_replay.rs
+  role: examined
+  excerpt: fn genuine_reversed_declaration_keeps_name_bound_values() {
+- id: tests/it/rational_predicate_replay.rs::native_rational_adverse_inputs_retain_responsible_owner_refusals
+  path: tests/it/rational_predicate_replay.rs
+  role: examined
+  excerpt: fn native_rational_adverse_inputs_retain_responsible_owner_refusals() {
+- id: tests/it/rational_predicate_replay.rs::genuine_wrong_selection_stale_package_and_limits_are_not_repaired
+  path: tests/it/rational_predicate_replay.rs
+  role: examined
+  excerpt: fn genuine_wrong_selection_stale_package_and_limits_are_not_repaired() {
+- id: tests/it/rational_predicate_replay.rs::supplied_order_does_not_change_the_canonical_request_or_value_text
+  path: tests/it/rational_predicate_replay.rs
+  role: examined
+  excerpt: fn supplied_order_does_not_change_the_canonical_request_or_value_text() {
+new_findings: []
+bindings:
+- test_id: tests::rational_requests::rational_identity_has_one_real_parameter_and_all_four_exact_endpoints
+  ac_id: FR-025-AC-10
+  trace: correct
+- test_id: authentic_complete_predicate_prepares_native_source_and_grouped_arguments
+  ac_id: FR-025-AC-10
+  trace: correct
+- test_id: physical_component_admission_is_bijective_and_rejects_normalization_duplicates
+  ac_id: FR-025-AC-10
+  trace: correct
+- test_id: logical_domains_and_real_selected_site_bind_the_identity
+  ac_id: FR-025-AC-10
+  trace: correct
+- test_id: authentic_complete_predicate_prepares_native_source_and_grouped_arguments
+  ac_id: FR-046-AC-1
+  trace: correct
+- test_id: a_foreign_real_function_selection_cannot_replace_the_admitted_closure
+  ac_id: FR-046-AC-1
+  trace: correct
+- test_id: generated_native_bodies_preserve_exact_owner_results_and_all_charge_prefixes
+  ac_id: FR-046-AC-2
+  trace: correct
+- test_id: authentic_complete_predicate_prepares_native_source_and_grouped_arguments
+  ac_id: FR-046-AC-2
+  trace: correct
+- test_id: physical_component_admission_is_bijective_and_rejects_normalization_duplicates
+  ac_id: FR-046-AC-2
+  trace: correct
+- test_id: generated_native_bodies_preserve_exact_owner_results_and_all_charge_prefixes
+  ac_id: FR-046-AC-3
+  trace: correct
+- test_id: admitted_nested_addition_preserves_arbitrary_precision_and_stops
+  ac_id: FR-046-AC-3
+  trace: correct
+- test_id: generated_native_input_refusals_preserve_the_entire_meter
+  ac_id: FR-046-AC-3
+  trace: correct
+- test_id: generated_native_bodies_preserve_exact_owner_results_and_all_charge_prefixes
+  ac_id: FR-046-AC-4
+  trace: correct
+- test_id: admitted_nested_addition_preserves_arbitrary_precision_and_stops
+  ac_id: FR-046-AC-4
+  trace: correct
+- test_id: original_capacity_and_operation_refusals_preserve_the_owner_input
+  ac_id: FR-046-AC-7
+  trace: correct
+- test_id: original_capacity_and_operation_refusals_preserve_the_owner_input
+  ac_id: FR-046-AC-8
+  trace: correct
+- test_id: a_foreign_real_function_selection_cannot_replace_the_admitted_closure
+  ac_id: FR-046-AC-8
+  trace: correct
+- test_id: tests::rational_requests::rational_request_checks_source_and_complete_logical_bindings_before_hashing
+  ac_id: FR-046-AC-9
+  trace: correct
+- test_id: tests::rational_requests::rational_identity_has_one_real_parameter_and_all_four_exact_endpoints
+  ac_id: FR-046-AC-9
+  trace: correct
+- test_id: native_injected_rational_witnesses_reach_actual_whole_predicate_replay
+  ac_id: FR-046-AC-9
+  trace: correct
+- test_id: logical_domains_and_real_selected_site_bind_the_identity
+  ac_id: FR-046-AC-9
+  trace: correct
+- test_id: genuine_reversed_declaration_keeps_name_bound_values
+  ac_id: FR-046-AC-9
+  trace: correct
+- test_id: native_rational_adverse_inputs_retain_responsible_owner_refusals
+  ac_id: FR-046-AC-9
+  trace: correct
+- test_id: genuine_wrong_selection_stale_package_and_limits_are_not_repaired
+  ac_id: FR-046-AC-9
+  trace: correct
+- test_id: supplied_order_does_not_change_the_canonical_request_or_value_text
+  ac_id: FR-046-AC-9
+  trace: correct
+reviewed_head: db7806a5f0bab394b993ae47334620c6df1f8149
+reviewed_base: 7ea6a9988a4e6ecb5369c77a1941350bde52c4b2
+review_verdict: FAIL
+prior_code_findings:
+  FND-001: fixed
+  FND-002: fixed
+full_feature_obligations: all eleven OPEN
+scoped_matrix:
+  tagged: 8
+  untagged: 3
+  tagged_by_ignored_test: 0
+untagged_criteria:
+- FR-046-AC-5
+- FR-046-AC-6
+- FR-046-AC-10
+gap_findings:
+  FND-001: 'deferred: future IR-258 implementation; full criterion OPEN'
+  FND-002: 'deferred: future IR-258 implementation; full criterion OPEN'
+  FND-003: 'deferred: future IR-258 implementation; full criterion OPEN'
+  FND-004: 'deferred: future IR-258 implementation; full criterion OPEN'
+  FND-005: 'deferred: future IR-258 implementation; full criterion OPEN'
+  FND-006: 'deferred: future IR-258 implementation; full criterion OPEN'
+  FND-007: 'deferred: future IR-258 implementation; full criterion OPEN'
+  FND-008: 'deferred: future IR-258 implementation; full criterion OPEN'
+  FND-009: 'deferred: future IR-258 implementation; full criterion OPEN'
+  FND-010: 'deferred: future IR-258 implementation; full criterion OPEN'
+  FND-011: 'deferred: future IR-258 implementation; full criterion OPEN'
+live_caps_recorded_for_new_scopes_only: '9/9 child-active snapshots: memory.max=17179869184, memory.swap.max=0,
+  oom_kill=0; prior inactive-scope limitation unchanged'
+independence: source/diff/receipt/recorded-log and computed-matrix review; no reviewer Cargo/engine/aggregate/namespace
+  execution
+```
