@@ -522,9 +522,24 @@ fn render_step(
     source.push_str(");\n");
     match &step.term {
         StepTerm::Boolean(value) => source.push_str(&format!("    Ok({value})\n")),
-        StepTerm::Integer(value) => source.push_str(&format!(
-            "    \"{value}\".parse().map_err(|_| ClauseStop::InvalidConstant)\n"
-        )),
+        StepTerm::Integer(value) => {
+            if let Some(integer) = value
+                .parse::<i64>()
+                .ok()
+                .filter(|integer| integer.to_string() == *value)
+            {
+                let expression = if integer == i64::MIN {
+                    "i64::MIN".to_owned()
+                } else {
+                    format!("{integer}_i64")
+                };
+                source.push_str(&format!("    Ok(rt::Integer::from({expression}))\n"));
+            } else {
+                source.push_str(&format!(
+                    "    \"{value}\".parse().map_err(|_| ClauseStop::InvalidConstant)\n"
+                ));
+            }
+        }
         StepTerm::Input(input) => source.push_str(&format!(
             "    Ok({}.clone())\n",
             names.get(input).ok_or(V2ClauseRefusal::Render)?
