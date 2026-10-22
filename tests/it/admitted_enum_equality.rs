@@ -692,14 +692,6 @@ fn genuine_asymmetric_integer_equality() -> (
 ) {
     let compiled = fixture::compile("language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\nfunction f using v(a: Int[0, 9],b: Integer): Boolean pure { convert<Integer>(a) = b }\n");
     let package = checked(&compiled, &[]);
-    assert!(
-        !package
-            .graph()
-            .nodes
-            .iter()
-            .any(|node| node.semantic_form.as_ref() == "conversion"),
-        "this measured source grounds caller descriptors, not a conversion-reference path"
-    );
     let source = package
         .graph()
         .nodes
@@ -716,8 +708,51 @@ fn genuine_asymmetric_integer_equality() -> (
         .expect("real Integer type")
         .node_id
         .clone();
+    let conversions = package
+        .graph()
+        .nodes
+        .iter()
+        .filter(|node| node.semantic_form.as_ref() == "conversion")
+        .collect::<Vec<_>>();
+    assert_eq!(
+        conversions.len(),
+        1,
+        "the authored widening has one conversion"
+    );
+    let conversion = conversions[0];
+    assert_eq!(
+        conversion.semantic_type, integer,
+        "conversion target remains unbounded Integer"
+    );
+    let body = serde_json::to_value(&conversion.body).expect("checked conversion body");
+    assert_eq!(body["operation"]["identity"], "quire.op.numeric.convert");
+    let parameters = package
+        .graph()
+        .nodes
+        .iter()
+        .filter(|node| node.semantic_form.as_ref() == "parameter" && node.semantic_type == source)
+        .collect::<Vec<_>>();
+    assert_eq!(parameters.len(), 1, "exactly the bounded source parameter");
+    assert_eq!(
+        body["arguments"][0]["target"],
+        serde_json::to_value(&parameters[0].node_id).expect("bounded parameter identity"),
+        "the conversion consumes the original bounded parameter"
+    );
+    let equality = application(&package, "f");
+    let equality_node = package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| node.node_id == equality)
+        .expect("actual function equality");
+    let equality_body = serde_json::to_value(&equality_node.body).expect("checked equality body");
+    assert_eq!(
+        equality_body["arguments"][0]["target"],
+        serde_json::to_value(&conversion.node_id).expect("conversion identity"),
+        "the equality consumes the genuine converted operand"
+    );
     let item = CompositeEqualityItem {
-        node_id: application(&package, "f"),
+        node_id: equality,
         operator: EqualityOperatorKind::Equal,
         left: EqualityOperandDescriptor::converted(source, integer.clone()),
         right: EqualityOperandDescriptor::typed(integer),

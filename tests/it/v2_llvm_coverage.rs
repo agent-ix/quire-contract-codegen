@@ -415,8 +415,9 @@ fn admitted_v2_oracle_is_vacuous_under_real_llvm_when_consequent_is_skipped() {
     super::scratch_crate::write_manifest(
         &root,
         &format!(
-            "[package]\nname=\"v2-coverage-native\"\nversion=\"0.0.0\"\nedition=\"2021\"\n[dependencies]\n{}\n[workspace]\n",
-            super::scratch_crate::runtime_dependency(&["exact"])
+            "[package]\nname=\"v2-coverage-native\"\nversion=\"0.0.0\"\nedition=\"2021\"\n[dependencies]\n{}\nquire-exact = {{ {} }}\n[workspace]\n",
+            super::scratch_crate::runtime_dependency(&["exact"]),
+            quire_contract_codegen::EXACT_DEPENDENCY_SOURCE
         ),
     );
     let toolchain = format!("+{}", env!("CARGO_PKG_RUST_VERSION"));

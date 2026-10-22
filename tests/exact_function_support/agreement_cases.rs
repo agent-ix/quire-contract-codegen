@@ -338,10 +338,10 @@ fn tc_031_ac4_input_refusal_surfaces_unchanged_before_any_charge() {
     // `DanglingReference` itself is untested here.
     {
         let mut meter = exact::Meter::new(UNLIMITED);
-        let dangling = rt::ObjectReference::new(
+        let dangling = exact::ObjectReference::new(
             exact::UniverseId::from_digest([6; 32]),
-            rt::NodeKey::from_bytes([7; 32]),
-            rt::ObjectIdentity::new(b"object").expect("object identity"),
+            exact::EffectiveId::from_digest([7; 32]),
+            exact::ObjectId::new("object").expect("object identity"),
         );
         let result =
             generated::oracle_add_fn(

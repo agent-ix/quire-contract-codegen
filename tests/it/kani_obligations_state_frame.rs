@@ -126,9 +126,10 @@ fn qsl_emitted_state_clause_derives_a_confirmed_field_backed_oracle() {
     super::scratch_crate::write_manifest(
         &scratch.path,
         &format!(
-            "[package]\nname = \"generated-v2-clause\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\nquire-exact = {{ {} }}\n\n[workspace]\n",
+            "[package]\nname = \"generated-v2-clause\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\nquire-exact = {{ {} }}\nquire-semantic-value = {{ {} }}\n\n[workspace]\n",
             super::scratch_crate::runtime_dependency(&["exact"]),
-            quire_contract_codegen::EXACT_DEPENDENCY_SOURCE
+            quire_contract_codegen::EXACT_DEPENDENCY_SOURCE,
+            quire_contract_codegen::SEMANTIC_VALUE_DEPENDENCY_SOURCE
         ),
     );
     let output = std::process::Command::new(env!("CARGO"))
