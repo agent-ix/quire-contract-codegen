@@ -88,11 +88,12 @@ fn public_negated_positive_two_to_63_keeps_its_child_and_owner_call() {
 // controls vary an admitted source package's literal, then ask the owner's public
 // candidate/reader APIs for identities and admission. They are not QSL emission
 // claims for those values and never alter the actual proof fixture.
-fn reader_literal_with_identity_policy(
-    spelling: &str,
+fn reader_variant(
+    condition: &str,
     rekey_nodes: bool,
+    edit: impl FnOnce(&mut Value),
 ) -> (CheckedPackageV2ReadResult, CheckedNodeId) {
-    let twin = Twin::with_balance_condition("self.balance >= 17");
+    let twin = Twin::with_balance_condition(condition);
     let (package, clause) = twin.emitted_package("BalanceNeverDrops");
     let mut wire = json!({
         "contract_version": "quire.checked-package/v2",
@@ -104,30 +105,7 @@ fn reader_literal_with_identity_policy(
         "capability_report": package.capability_report(),
         "diagnostics": package.diagnostics(),
     });
-    let mut changed = 0;
-    fn replace(value: &mut Value, spelling: &str, changed: &mut usize) {
-        if value["term"] == "literal" && value["value_kind"] == "integer" && value["value"] == "17"
-        {
-            value["value"] = json!(spelling);
-            *changed += 1;
-        } else {
-            match value {
-                Value::Array(items) => {
-                    for value in items {
-                        replace(value, spelling, changed);
-                    }
-                }
-                Value::Object(items) => {
-                    for value in items.values_mut() {
-                        replace(value, spelling, changed);
-                    }
-                }
-                _ => (),
-            }
-        }
-    }
-    replace(&mut wire["semantic_graph"], spelling, &mut changed);
-    assert_eq!(changed, 1, "one literal control");
+    edit(&mut wire);
     let inputs = twin.state_clause_inputs(&package, &clause, "BalanceNeverDrops", (0, 0), (0, 0));
     let [document] = inputs.packages.as_slice() else {
         panic!("one original model document")
@@ -152,6 +130,38 @@ fn reader_literal_with_identity_policy(
     let resolved = rekey::resolve_wire(&wire, &evidence, CheckedPackageReadLimits::bounded());
     let clause = resolved.ids.resolve(&clause);
     (resolved.outcome, clause)
+}
+
+fn reader_literal_with_identity_policy(
+    spelling: &str,
+    rekey_nodes: bool,
+) -> (CheckedPackageV2ReadResult, CheckedNodeId) {
+    fn replace(value: &mut Value, spelling: &str, changed: &mut usize) {
+        if value["term"] == "literal" && value["value_kind"] == "integer" && value["value"] == "17"
+        {
+            value["value"] = json!(spelling);
+            *changed += 1;
+        } else {
+            match value {
+                Value::Array(items) => {
+                    for value in items {
+                        replace(value, spelling, changed);
+                    }
+                }
+                Value::Object(items) => {
+                    for value in items.values_mut() {
+                        replace(value, spelling, changed);
+                    }
+                }
+                _ => (),
+            }
+        }
+    }
+    reader_variant("self.balance >= 17", rekey_nodes, |wire| {
+        let mut changed = 0;
+        replace(&mut wire["semantic_graph"], spelling, &mut changed);
+        assert_eq!(changed, 1, "one literal control");
+    })
 }
 
 fn reader_literal(spelling: &str) -> (CheckedPackageV2ReadResult, CheckedNodeId) {
@@ -234,4 +244,48 @@ fn noncanonical_literal_admission_and_runtime_fallback_remain_distinct() {
         assert!(!generated.source.contains("Integer::from("));
         eprintln!("literal-reader {spelling:?}: stale identity -> StaleNodeKey; owner-rekeyed -> Admitted; generated -> original parse/InvalidConstant fallback");
     }
+}
+
+// This is a separately labelled IR-reader control, not a QSL-emitted bounded
+// arithmetic claim. Its result type is an existing checked integer range.
+pub(super) fn reader_admitted_bounded_addition() -> quire_contract_codegen::V2ClauseOracle {
+    let (result, clause) = reader_variant("(self.balance + 1) > 1000", true, |wire| {
+        let nodes = wire["semantic_graph"]["nodes"].as_array_mut().unwrap();
+        let bound = nodes
+            .iter()
+            .find(|node| {
+                node["node_tag"] == "bounded_domain" && node["semantic_form"] == "integer_range"
+            })
+            .expect("original declared range")["node_id"]
+            .clone();
+        let mut changed = 0;
+        for node in nodes {
+            if node["body"]["operation"]["identity"] == "quire.op.integer.add" {
+                node["semantic_type"] = bound.clone();
+                changed += 1;
+            }
+        }
+        assert_eq!(changed, 1, "one arithmetic result type control");
+    });
+    let CheckedPackageV2ReadResult::Admitted(package) = result else {
+        panic!("bounded addition reader result: {result:?}")
+    };
+    generate_v2_clause_oracle(&package, &clause).expect("public bounded-addition oracle")
+}
+
+#[trace("TC-024", "FR-014-AC-53")]
+#[test]
+fn bounded_arithmetic_control_is_reader_admitted_and_publicly_generated() {
+    let generated = reader_admitted_bounded_addition();
+    assert!(generated.source.contains("Some(&domain)"));
+    assert!(generated.source.contains("IntegerArithmetic::Add"));
+    assert_eq!(generated.descriptor.inputs.len(), 1);
+    assert_eq!(
+        (
+            generated.descriptor.inputs[0].lower,
+            generated.descriptor.inputs[0].upper
+        ),
+        (0, 1000)
+    );
+    eprintln!("bounded-result fixture: owner-candidate/reader Admitted -> public generate_v2_clause_oracle; genuine native result-domain refusal remains a separate assertion");
 }
