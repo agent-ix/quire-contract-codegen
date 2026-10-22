@@ -6,7 +6,9 @@ use quire_contract_model::{CheckedNodeId, CheckedPackageV2};
 use serde::{Deserialize, Serialize};
 
 use crate::core::artifact::MAX_GENERATED_SOURCE_BYTES;
-use crate::core::ir::clause::{read_clause, ClauseInput, ClauseInputSide, ClauseTerm};
+use crate::core::ir::clause::{
+    read_clause, ClauseGraphView, ClauseInput, ClauseInputSide, ClauseTerm,
+};
 use crate::core::source_map::SourceProbe;
 
 use super::claim::{ClaimDisposition, ClaimMap};
@@ -102,7 +104,16 @@ pub fn derive_v2_clause_descriptor(
     package: &CheckedPackageV2,
     node_id: &CheckedNodeId,
 ) -> Result<V2ClauseDescriptor, V2ClauseRefusal> {
-    Ok(plan_clause(package, node_id)?.descriptor)
+    let nodes = ClauseGraphView::new(package);
+    derive_v2_clause_descriptor_with_view(package, node_id, &nodes)
+}
+
+pub(crate) fn derive_v2_clause_descriptor_with_view(
+    package: &CheckedPackageV2,
+    node_id: &CheckedNodeId,
+    nodes: &ClauseGraphView<'_>,
+) -> Result<V2ClauseDescriptor, V2ClauseRefusal> {
+    Ok(plan_clause(package, node_id, nodes)?.descriptor)
 }
 
 /// Settle one selected clause as one typed claim-map entry.
@@ -134,17 +145,14 @@ struct PreparedClause {
 fn plan_clause(
     package: &CheckedPackageV2,
     node_id: &CheckedNodeId,
+    nodes: &ClauseGraphView<'_>,
 ) -> Result<PreparedClause, V2ClauseRefusal> {
-    let clause = package
-        .graph()
-        .nodes
-        .iter()
-        .find(|node| &node.node_id == node_id)
-        .ok_or(V2ClauseRefusal::NotClause)?;
+    let clause = nodes.node(node_id).ok_or(V2ClauseRefusal::NotClause)?;
     if &*clause.node_tag != "state" || &*clause.semantic_form != "state_clause" {
         return Err(V2ClauseRefusal::NotClause);
     }
-    let condition = read_clause(package, node_id).ok_or(V2ClauseRefusal::UnsupportedCondition)?;
+    let condition =
+        read_clause(package, node_id, nodes).ok_or(V2ClauseRefusal::UnsupportedCondition)?;
     let names = condition
         .inputs
         .iter()
@@ -207,12 +215,21 @@ pub fn generate_v2_clause_oracle(
     package: &CheckedPackageV2,
     node_id: &CheckedNodeId,
 ) -> Result<V2ClauseOracle, V2ClauseRefusal> {
+    let nodes = ClauseGraphView::new(package);
+    generate_v2_clause_oracle_with_view(package, node_id, &nodes)
+}
+
+pub(crate) fn generate_v2_clause_oracle_with_view(
+    package: &CheckedPackageV2,
+    node_id: &CheckedNodeId,
+    nodes: &ClauseGraphView<'_>,
+) -> Result<V2ClauseOracle, V2ClauseRefusal> {
     let PreparedClause {
         descriptor,
         names,
         plan,
         root,
-    } = plan_clause(package, node_id)?;
+    } = plan_clause(package, node_id, nodes)?;
     let operations = plan
         .iter()
         .enumerate()

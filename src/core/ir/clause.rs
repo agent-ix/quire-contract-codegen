@@ -60,9 +60,32 @@ fn arguments<'a>(value: &'a Value, operator: &str, identity: &str) -> Option<&'a
         .flatten()
 }
 
-struct Reader<'a> {
-    package: &'a CheckedPackageV2,
+/// Node lookup shared by planning and body reading for an admitted package.
+pub(crate) struct ClauseGraphView<'a> {
     nodes: BTreeMap<&'a CheckedNodeId, &'a CheckedSemanticNodeV2>,
+}
+
+impl<'a> ClauseGraphView<'a> {
+    pub(crate) fn new(package: &'a CheckedPackageV2) -> Self {
+        Self::from_nodes(package.graph().nodes.iter())
+    }
+
+    fn from_nodes(graph_nodes: impl IntoIterator<Item = &'a CheckedSemanticNodeV2>) -> Self {
+        let mut nodes = BTreeMap::new();
+        for node in graph_nodes {
+            nodes.entry(&node.node_id).or_insert(node);
+        }
+        Self { nodes }
+    }
+
+    pub(crate) fn node(&self, id: &CheckedNodeId) -> Option<&'a CheckedSemanticNodeV2> {
+        self.nodes.get(id).copied()
+    }
+}
+
+struct Reader<'a, 'view> {
+    package: &'a CheckedPackageV2,
+    nodes: &'view ClauseGraphView<'a>,
     self_id: CheckedNodeId,
     allowed_parameters: BTreeSet<CheckedNodeId>,
     inputs: BTreeSet<ClauseInput>,
@@ -70,9 +93,9 @@ struct Reader<'a> {
     visits: usize,
 }
 
-impl Reader<'_> {
+impl Reader<'_, '_> {
     fn node(&self, id: &CheckedNodeId) -> Option<&CheckedSemanticNodeV2> {
-        self.nodes.get(id).copied()
+        self.nodes.node(id)
     }
 
     fn term(&mut self, value: &Value, side: ClauseInputSide) -> Option<ClauseTerm> {
@@ -250,14 +273,9 @@ impl Reader<'_> {
 pub(crate) fn read_clause(
     package: &CheckedPackageV2,
     id: &CheckedNodeId,
+    nodes: &ClauseGraphView<'_>,
 ) -> Option<ClauseCondition> {
-    let nodes: BTreeMap<_, _> = package
-        .graph()
-        .nodes
-        .iter()
-        .map(|node| (&node.node_id, node))
-        .collect();
-    let clause = nodes.get(id)?;
+    let clause = nodes.node(id)?;
     if &*clause.node_tag != "state" || &*clause.semantic_form != "state_clause" {
         return None;
     }
@@ -291,4 +309,70 @@ pub(crate) fn read_clause(
         inputs: reader.inputs.into_iter().collect(),
         condition_node_id: reference(condition),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::cell::Cell;
+
+    use ix_trace_rs::trace;
+    use quire_contract_model::{CheckedNodeId, CheckedSemanticNodeV2};
+
+    use super::ClauseGraphView;
+
+    fn id(number: u8) -> CheckedNodeId {
+        CheckedNodeId {
+            domain: "quire.checked-semantic-node/v1".into(),
+            digest: format!("{number:064x}").into(),
+        }
+    }
+
+    fn node(number: u8, label: &str) -> CheckedSemanticNodeV2 {
+        CheckedSemanticNodeV2 {
+            node_id: id(number),
+            schema_version: "quire.checked-semantic-graph/v2".into(),
+            node_tag: "expression".into(),
+            semantic_form: "literal".into(),
+            semantic_type: id(0),
+            dependencies: Vec::new(),
+            occurrences: Vec::new(),
+            recursion_group: None,
+            nominal_identity_preimage: None,
+            declaration: None,
+            owner: None,
+            body: serde_json::json!({"label": label}),
+        }
+    }
+
+    #[trace("FR-014-AC-38")]
+    #[test]
+    fn clause_graph_view_preserves_first_node_and_reuses_one_walk() {
+        let graph = [node(1, "first"), node(2, "other"), node(1, "later")];
+        let visits = Cell::new(0);
+        let view = ClauseGraphView::from_nodes(graph.iter().inspect(|_| {
+            visits.set(visits.get() + 1);
+        }));
+        for _ in 0..3 {
+            assert_eq!(view.node(&id(1)).unwrap().body["label"], "first");
+            assert_eq!(view.node(&id(2)).unwrap().body["label"], "other");
+            assert!(view.node(&id(3)).is_none());
+        }
+        assert_eq!(visits.get(), graph.len());
+    }
+
+    #[trace("FR-014-AC-38")]
+    #[test]
+    fn clause_planning_and_reading_share_one_graph_walk() {
+        // A checked graph is a Vec, so the number of whole-graph accesses is not
+        // observable through the public package API. Guard the two call sites.
+        let source = concat!(
+            include_str!("../../oracle/clause.rs"),
+            include_str!("clause.rs")
+        );
+        assert_eq!(
+            source.matches(concat!(".gra", "ph()")).count(),
+            1,
+            "clause planning and reading must build one reusable graph view"
+        );
+    }
 }
