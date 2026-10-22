@@ -1,41 +1,53 @@
 ---
 id: TC-059
-title: "Map QSL-encoded HP-2 induction solver results"
+title: "Bind QSL-encoded HP-2 induction queries to solver-run evidence"
 type: TC
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-045
     type: verifies
 ---
-# TC-059: Map QSL-encoded HP-2 induction solver results
+# TC-059: Bind QSL-encoded HP-2 induction queries to solver-run evidence
 
 ## Description
 
-Verify CG's solver submission and typed method outcome over QSL-owned
-canonical HP-2 product queries, without implementing a second encoder.
+Verify CG's solver invocation, exact query association, bounded capture and
+typed non-success over QSL-owned canonical HP-2 queries. QSL owns the query
+encoder, method outcome and terminal settlement; this test does not build a
+second encoder or claim CG execution alone proves a hyperproperty.
 
 ## Test Procedure
 
-1. Supply one QSL-admitted HP-2 safety product with two ordered components,
-   a negated-body automaton state and a `μ_U`-admitted joint step. Ask QSL's
-   hyper query API for base and step bytes at depth 1. Capture the bytes at
-   the selected solver boundary and assert byte equality and exact
-   product/item/depth association (FR-045-AC-1).
-2. Return `unsat` for both queries; assert one `Inductive { depth: 1 }`
-   method outcome and QSL's FR-182-AC-7 settlement. Swap one query's
-   product identity or depth and assert no proof (FR-045-AC-1, AC-2).
-3. Drive base `sat` with a reconstructable product path, step `sat` after
-   base `unsat`, solver unknown, QSL encoding refusal, a governed resource
-   stop and a missing response. Assert the distinct candidate,
-   induction-not-closed, encoding-refused, resource-stopped or typed
-   inconclusive outcome; assert the resource stop maps to FR-182 V-7
-   incomplete. None claims a proof or terminal refutation before QSL replay
-   (FR-045-AC-2).
+1. Supply a QSL-admitted HP-2 safety clause, ordered subjects, one bound
+   instance and a Meter. At `k = 1`, obtain base and step bytes using
+   FR-315's `encode_hyper_query` call shape. Capture the bytes at CG's
+   selected solver stdin boundary and assert byte equality. Check the two
+   run records retain the product, item, instance, depth, query kind, exact
+   bytes, solver selection and distinct attempt identities (FR-045-AC-1,
+   AC-3). This step waits for QSL-1010's production encoder.
+2. Return one `Unsat` response from each of two bounded solver invocations.
+   Assert CG retains two matching completed query records and offers only
+   this pair for QSL-owned `Inductive { depth: 1 }` settlement; QSL's
+   FR-182-AC-7 test owns the `proved`, `decisive-witness`, `Uncertified`
+   assertion. Swap one record's product, item, instance, depth, kind or query
+   bytes and assert that the pair is ineligible (FR-045-AC-1, AC-2).
+3. Drive base `Sat` with raw emitted model bytes, base `Unsat` with step
+   `Sat`, solver `Unknown`, an original QSL encoding refusal, missing and
+   malformed responses, contradictory statuses, nonzero process exit and
+   stale response association. Assert distinct typed run evidence and no
+   CG terminal proof or refutation. QSL reconstruction/replay alone can
+   turn a base candidate into a decisive product path (FR-045-AC-2).
+4. Use a selected nonexistent executable and finite wall-clock, memory and
+   capture limits. Assert `MissingTool` before any answer and `Stopped`
+   with the reached limit for each limit case. Check that one process gets
+   only its own exact query on stdin, captures only its own stdout/stderr,
+   and retains the selected executable, arguments, limits, completion and
+   any emitted model/proof bytes. Neither refusal is `Unsat`; the reached
+   resource limit is handed to QSL FR-182 V-7 as incomplete
+   (FR-045-AC-2, AC-3).
 
 ## Expected Results
 
-Only the two matching `unsat` queries produce `Inductive`. A base `sat`
-candidate goes to QSL-owned replay; a step `sat`, unknown or unusable response
-remains inconclusive; a resource stop settles FR-182 V-7 incomplete; and an
-encoding refusal remains its original typed refusal for QSL to settle. Every
-branch retains its product, item and depth and claims no proof or terminal
-refutation before the owning checks.
+Only two completed, correctly associated `Unsat` records make QSL induction
+eligible. Every other response, encoding refusal, missing tool or reached
+limit remains typed non-proof evidence with the available identities and
+depth. CG does not mint QSL outcome types, certificates or terminal records.

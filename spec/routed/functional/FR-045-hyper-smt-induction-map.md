@@ -14,66 +14,103 @@ relationships:
 
 ## Description
 
-When QSL supplies canonical SMT queries for an admitted HP-2 safety item's
-`HyperProduct`, CG's SMT backend SHALL submit those queries to its selected
-solver and return a typed method outcome to QSL's hyper settlement. QSL
-FR-315 owns transition-relation encoding, bounded unrolling and induction
-base/step query construction. CG SHALL NOT independently encode the product,
-its `μ_U` joint-step guard, automaton, definedness or fairness semantics.
+When QSL supplies canonical SMT queries for an admitted HP-2 safety item,
+CG's SMT backend SHALL submit those bytes to the selected solver and retain
+a CG-owned run record for QSL's outcome and terminal settlement. QSL FR-315
+owns transition-relation encoding, bounded unrolling and induction base/step
+query construction. CG SHALL NOT independently encode the self-composition
+product, its `μ_U` joint-step guard, automaton, definedness or fairness
+semantics. QSL FR-182 and QSL-991 own the inductive outcome type and terminal
+settlement; a CG run record alone claims neither proof nor refutation.
 
 ## Inputs
 
-- One QSL-admitted HP-2 safety item and its exact FR-176 `HyperProduct`
-  selection: the ordered component states, negated-body automaton state,
-  initial tuples and joint transitions admitted by `μ_U`.
-- Caller-selected induction depth `k >= 1`, QSL-owned canonical base and
-  step SMT-LIB query bytes for that product and depth, and the caller's
-  solver and execution limits. Query construction uses the future QSL-owned
-  hyper form of FR-315's `InductionBase` and `InductionStep`; this contract
-  does not define that form.
+- The admitted HP-2 safety item's QSL-owned clause, ordered subjects,
+  object-parameter instance and Meter, passed to QSL's actual FR-315
+  `encode_hyper_query(HyperQueryRequest { clause, subjects, instance, meter },
+  SmtQueryKind)` API. QSL owns the resulting canonical base and step SMT-LIB
+  bytes. The caller retains the selected product identity, item identity and
+  instance identity for association; CG does not reconstruct the product.
+- One caller-selected induction depth `k >= 1`, the FR-315 base and step
+  query kinds for that same depth, and a selected solver executable with an
+  argument vector. The executable path and arguments are caller supplied;
+  CG invokes it directly, without a shell or command-string interpretation.
+- Finite caller-selected per-query wall-clock, memory and captured-output
+  byte limits. Each of the two queries gets its own limit accounting and
+  process. CG does not choose the program's trust or proof status.
 
 ## Outputs
 
-One typed HP-2 SMT method outcome retaining the selected product identity,
-item identity, depth and per-query solver dispositions:
+CG returns one run record with the selected product, item and instance
+identities, depth, solver selection and two separately identified query
+records. A query identity is the run-local tuple of product, item, instance,
+depth, query kind and the **exact retained query bytes**; a distinct attempt
+identity separates repeat invocations. No hash or file pin is introduced.
+Each query record retains the exact bytes sent to the solver, limits used,
+process completion and captured stdout/stderr within those limits, parsed
+`Sat`, `Unsat` or `Unknown` status when present, and any raw model or proof
+bytes the solver actually emitted. CG does not synthesize model or proof
+bytes or alter QSL's query to request them.
 
-| Outcome | Condition | QSL handoff |
-| --- | --- | --- |
-| `Inductive { depth: k }` | Both QSL-encoded base and step queries are `unsat` at `k` | Candidate for FR-182 V-3's `proved`, `decisive-witness`, `Uncertified` settlement; certificate checking remains QSL-owned |
-| `CandidateViolation { depth: k, witness }` | A base query is `sat` and a concrete product path is reconstructed | QSL replay decides whether the witness is decisive; solver satisfiability alone never settles `refuted` |
-| `InductionNotClosed { depth: k }` | Base is `unsat` and step is `sat`, with no decisive base witness | FR-182 V-6 inconclusive |
-| `Inconclusive { depth: k, cause }` | Solver says unknown or a result cannot be reconstructed | QSL receives the typed cause; no proof or counterexample is claimed |
-| `Stopped { depth: k, limit }` | The run reaches a governed execution limit | QSL FR-182 V-7 incomplete with that limit; no proof or counterexample is claimed |
-| `EncodingRefused { depth: k, cause }` | QSL refuses to encode this checked product or item | QSL receives the original typed refusal; CG invents no query or solver answer |
+The typed non-success dispositions are `EncodingRefused` (the original QSL
+refusal), `MissingTool`, `Stopped` (which limit was reached), `MissingResponse`,
+`MalformedResponse`, `ProcessFailed` and `AssociationMismatch`. They retain
+product, item, instance, depth and query kind where available. A process
+that produces no recognized `sat`, `unsat` or `unknown` response is never
+classified as `Unsat`. A resource stop is handed to QSL as incomplete,
+not as solver unknown or inconclusive.
+
+| CG run evidence | QSL-owned handoff |
+| --- | --- |
+| Matching base `Unsat` and step `Unsat` | Eligible for QSL's `Inductive { depth: k }` method outcome; QSL FR-182 decides any `proved` settlement and certification |
+| Base `Sat` with raw model bytes | Candidate only; QSL-owned reconstruction and replay decide whether a product path exists or refutes the item |
+| Base `Unsat`, step `Sat` | Induction is not closed at `k`; QSL settles inconclusive |
+| `Unknown`, missing or malformed response, process failure or association mismatch | Typed non-proof evidence; no inductive or terminal verdict |
+| `Stopped` or `MissingTool` | Typed incomplete or unavailable execution; no inductive or terminal verdict |
+| `EncodingRefused` | Original QSL refusal; no query is invented or submitted |
 
 ## Behavior
 
-CG SHALL preserve the QSL query bytes when submitting them and keep each
-solver response paired with its own query kind, product and depth. It SHALL
-report `Inductive` only after both required queries return `unsat`, with no
-solver unknown, resource stop or unexamined query. A `sat` base result SHALL
-not be a terminal violation without QSL's product-path replay. CG SHALL treat
-a `sat` step as no proof and hand QSL the method and depth with the outcome;
+CG SHALL invoke one process per QSL query, write exactly that query's bytes
+on stdin and capture only that process's response under its per-query limits.
+The selected executable, argument vector and limits are retained in the run
+record. A missing executable SHALL return `MissingTool` before claiming a
+solver response. When the process exceeds a time, memory or capture limit, CG SHALL
+stop it and retain the reached limit. A nonzero exit, absent status,
+additional contradictory status or malformed status SHALL not become a
+proof-bearing response. CG SHALL keep the response bound to the invocation's
+product, item, instance, depth, kind and exact bytes; a swapped, stale or
+missing response SHALL not satisfy the other query.
+
+CG SHALL offer the two associated run records to the QSL-owned outcome map
+only when both required queries completed. It SHALL report the `Unsat` pair
+as evidence eligible for QSL induction only when both required queries
+returned `Unsat` and neither has an unknown, stop or unexamined result. A
+base `Sat` is not a terminal violation without QSL product-path replay.
 QSL FR-127 and FR-182 own terminal settlement and QSL-908 owns certificate
-rows. This contract chooses no Kani or SMT memory ceiling.
+rows. This contract sets no default Kani or SMT memory ceiling.
 
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
 | --- | --- | --- |
-| FR-045-AC-1 | For an admitted HP-2 safety product and `k = 1`, CG requests QSL's base and step queries for the same product and depth, submits their canonical bytes unchanged to the selected solver, and maps `unsat`/`unsat` to `Inductive { depth: 1 }` with product and item identity retained. QSL FR-182-AC-7 then settles that outcome as `proved`, `decisive-witness`, `Uncertified`; CG does not construct the query or assign certification. | Test (TC-059) |
-| FR-045-AC-2 | With a base `sat` response, CG returns only a reconstructable product-path candidate for QSL replay; with base `unsat` and step `sat`, it returns `InductionNotClosed { depth: k }`; unknown, encoding refusal, resource stop, wrong-query association and missing response retain distinct typed outcomes and never produce `Inductive` or terminal `Refuted`. A resource stop maps to FR-182 V-7 incomplete, not inconclusive. The identities and `k` survive every branch. | Test (TC-059) |
+| FR-045-AC-1 | For an admitted HP-2 safety clause and `k = 1`, CG requests QSL's base and step queries using FR-315's clause, ordered subjects, instance and Meter shape, submits each canonical byte sequence unchanged to the selected solver, and retains the product, item, instance, depth, kind and exact bytes in each query record. Matching `Unsat`/`Unsat` records are eligible for QSL-owned `Inductive { depth: 1 }`; QSL FR-182-AC-7, rather than CG, settles that outcome as `proved`, `decisive-witness`, `Uncertified`. | Test (TC-059) |
+| FR-045-AC-2 | A base `Sat` response remains only a candidate for QSL reconstruction and replay; base `Unsat` with step `Sat` is not induction; solver `Unknown`, QSL encoding refusal, resource stop, missing or malformed response, process failure and a response paired with another product, item, instance, depth, kind or query bytes remain distinct typed non-proof evidence. A resource stop is handed to FR-182 V-7 as incomplete. Every branch retains its available identities and depth, and no CG branch claims terminal refutation or certification. | Test (TC-059) |
+| FR-045-AC-3 | CG invokes the selected solver executable directly, one process per QSL query, with exact query bytes on stdin and finite per-query wall-clock, memory and captured-output limits; it retains the executable, arguments, limits, completion, status, captured output and any emitted model/proof bytes in a CG-owned run record. A missing executable gives `MissingTool`, and a reached limit gives `Stopped` with that limit; neither becomes `Unsat` or a QSL outcome. Separate attempt and query identities prevent a stale or swapped response from satisfying the other query. | Test (TC-059) |
 
 ## Dependencies
 
 - QSL FR-176 owns the self-composition product and its `μ_U` semantics.
-- QSL FR-315 must gain a QSL-owned HP-2 product query form before this CG
-  producer can run; its current `ModelSubject`/temporal-item form does not
-  encode a hyper product.
-- QSL FR-127 and FR-182 own terminal mapping; QSL-991 consumes the
-  `Inductive { depth: 1 }` row. QSL-908 owns certificate settlement.
+- QSL-1010 must implement FR-315's `encode_hyper_query` before CG can run
+  the full producer; current QSL source has no exported encoder. Its
+  clause/subjects/instance/Meter signature is authoritative. CG does not
+  introduce a temporary hyper-product encoder or fallback.
+- QSL FR-127, FR-182 and QSL-991 own outcome types and terminal mapping;
+  QSL-908 owns certificate settlement. A CG run record is execution evidence.
 
 ## Status
 
-PLANNED (IR-974). No HP-2 SMT producer or QSL hyper-product query form exists
-in the current tree. This specification is the CG solver/map side only.
+PLANNED (IR-974). No HP-2 SMT producer or QSL hyper query encoder exists
+in the current source tree. CG-owned solver-run evidence and refusal logic
+can be built first; the QSL query call and outcome handoff wait on their
+owning APIs.
