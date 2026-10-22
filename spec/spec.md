@@ -158,5 +158,5 @@ Two recorded exceptions to the layout convention, both to be settled at the layo
 
 ## Developer Gate Adoption
 
-[FR-044](core/functional/FR-044-owned-lock-coherence-gate.md) defines planned consumption of the single owned CLI lock
+[FR-043](core/functional/FR-043-owned-lock-coherence-gate.md) defines planned consumption of the single owned CLI lock
 coherence gate under IR-641. It does not claim consumer implementation or qualification.
