@@ -42,9 +42,9 @@ use package::{
     PackageBuilder, FUNCTION, NODE_DOMAIN, T_BOOLEAN, T_INTEGER, T_TEXT,
 };
 use qsl_replay::{
-    CallSiteRefusal, Category, DisagreementCause, FrameChange, FrameIdentityMismatch,
-    InconclusiveCause, OperationSite, ReplayRefusal, ReplayResult, ReplaySource, TerminalValue,
-    Verdict, WitnessSettlement,
+    AdmissionFailure, CallSiteRefusal, Category, Code, DisagreementCause, FrameChange,
+    FrameIdentityMismatch, InconclusiveCause, OperationSite, ReplayRefusal, ReplayResult,
+    ReplaySource, TerminalValue, Verdict, WitnessSettlement,
 };
 use quire_contract_codegen::{
     derive_v2_clause_descriptor, generate_v2_clause_claim_map, generate_v2_clause_oracle,
@@ -3832,6 +3832,138 @@ fn tc_025_wide_model_override_preserves_unranged_context_without_a_replay_claim(
         )
         .expect("an in-range playback builds");
     replay.replay().expect("the in-range pre state is admitted");
+}
+
+/// The emitted package and replay use one wide source model: CG records the unread field as
+/// unranged, then QSL refuses an out-of-model playback rather than accepting a false proof.
+#[trace("FR-024-AC-35", "TC-035")]
+#[test]
+fn tc_035_same_model_wide_range_refuses_outside_playback() {
+    let twin = Twin::with_wide_audit_source_range();
+    let (package, clause) = twin.emitted_package("BalanceNeverDrops");
+    let object = package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| &*node.semantic_form == "object_type")
+        .expect("selected object declaration");
+    let fields = package
+        .model_object_fields(&object.node_id)
+        .expect("selected model fields");
+    assert_eq!(
+        fields.field("audit").expect("present audit").member_type(),
+        Some(&CheckedMemberType::IntRange {
+            lower: i128::MIN,
+            upper: -1,
+        })
+    );
+    assert_eq!(
+        fields
+            .field("balance")
+            .expect("present balance")
+            .member_type(),
+        Some(&CheckedMemberType::IntRange {
+            lower: 0,
+            upper: 1000,
+        })
+    );
+    let generated = generate_state_frame_obligations(&StateFrameRequest {
+        ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
+        package: &package,
+        clause: &clause,
+        state_path: STATE_PATH,
+        state_fields: &STATE_FIELDS,
+        subject_path: SUBJECT_PATH,
+        unwind: 4,
+    })
+    .expect("QSL-emitted wide source model generates");
+    let harness = StateFrameIdentity::from_record(&generated.frame.record.contents)
+        .expect("the persisted identity retains the unranged field");
+    assert_eq!(harness, generated.frame.identity);
+    assert_eq!(harness.state_fields, ["balance", "audit"]);
+    assert_eq!(harness.domains.len(), 1);
+    assert_eq!(harness.domains[0].field, "balance");
+    assert_eq!(harness.unranged.len(), 1);
+    assert_eq!(harness.unranged[0].field, "audit");
+    assert_eq!(
+        harness.unranged[0].reason,
+        quire_contract_codegen::StateUnrangedReason::TypeNotRange
+    );
+
+    let outside = 0_i64;
+    let invocation = twin.invocation("account", (5, outside), (5, outside));
+    let replay = twin
+        .try_frame_replay(
+            "deposit",
+            &invocation,
+            "account",
+            "audit",
+            &run_of(&harness, [5, outside]),
+        )
+        .expect("the unranged playback reaches QSL");
+    let error = replay
+        .replay()
+        .expect_err("QSL refuses the pre state outside its model");
+    let FrameReplayError::Refused { refusal, unranged } = &error else {
+        panic!("expected QSL refusal: {error}");
+    };
+    assert_eq!(unranged, &harness.unranged);
+    let ReplayRefusal::Admission(AdmissionFailure::Refused(record)) = refusal.as_ref() else {
+        panic!("expected an invalid pre-state value: {refusal}");
+    };
+    assert_eq!(record.code, Code::InvalidRuntimeInput);
+    assert_eq!(record.cause, "invalid-value");
+    assert_eq!(
+        record.fields.get("field").map(String::as_str),
+        Some("audit")
+    );
+    let terminal = quire_contract_codegen::run_terminal_value(
+        &crate::terminal_map::synthetic_evidence(
+            KaniRunOutcome::Falsified {
+                counterexample: "wide model field".to_owned(),
+            },
+            0,
+        ),
+        Some((&error).into()),
+    )
+    .expect("a falsified run has a settlement");
+    assert_eq!(
+        terminal,
+        TerminalValue::Inconclusive(InconclusiveCause::ReplayRefused(Code::InvalidRuntimeInput))
+    );
+
+    let inside = -1_i64;
+    let invocation = twin.invocation("account", (5, inside), (5, inside));
+    twin.try_frame_replay(
+        "deposit",
+        &invocation,
+        "account",
+        "audit",
+        &run_of(&harness, [5, inside]),
+    )
+    .expect("the in-range playback builds")
+    .replay()
+    .expect("QSL admits the in-range pre state");
+
+    let bounded = Twin::with_field_ranges((0, 1000), (0, 1000));
+    let (bounded_package, bounded_clause) = bounded.emitted_package("BalanceNeverDrops");
+    let bounded_harness = generate_state_frame_obligations(&StateFrameRequest {
+        ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
+        package: &bounded_package,
+        clause: &bounded_clause,
+        state_path: STATE_PATH,
+        state_fields: &STATE_FIELDS,
+        subject_path: SUBJECT_PATH,
+        unwind: 4,
+    })
+    .expect("the bounded unread field generates")
+    .frame
+    .identity;
+    assert!(bounded_harness.unranged.is_empty());
+    assert!(bounded_harness
+        .domains
+        .iter()
+        .any(|domain| domain.field == "audit"));
 }
 
 /// The transcript `Witness::parse` is given is the one rendering function's, over the decoded

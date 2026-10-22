@@ -472,15 +472,14 @@ bounded integer only, and composite equality has an oracle (FR-018) and a native
 (TC-029) but no Kani harness. The value of `SHADOW_PAIR_NODE_BUDGET` and the case cap's default are
 set by the code change's measurement and recorded here.
 
-## State field ranges from the package QSL emits (planned, IR-624)
+## State field ranges from the package QSL emits (IR-624)
 
 37. Call `model_object_fields(&object_id)` for the QSL-emitted twin's model declaration
     object and read both `balance` and unread `audit` as `IntRange { lower: 0, upper: 1000 }`;
     convert their `i128` endpoints to `i64`, and compare the resulting `domains` with the
     state-clause replay's declared ranges. Admit a second unit with the same declaration but
     no read of `audit` and observe its range unchanged; cite IR FR-038-AC-140 for the
-    independent post-admission body mutation (FR-015-AC-77; emitted path awaits CG's dependency
-    update and implementation).
+    independent post-admission body mutation (FR-015-AC-77).
 38. For a model declaration, request an accessor-absent field; exercise each accessor error
     (`UnknownNode`, `NotModelObjectType`, `AmbiguousField`) and check a typed refusal without
     falling back to a body or read. Exercise a present `None`, unread `Integer`,
@@ -493,8 +492,9 @@ set by the code change's measurement and recorded here.
     object and an admitted unselected model/object_type with a nonempty body, verify
     `NotModelObjectType` refuses without any assumption, `domains` entry or harness, even
     when the body contains an apparent range. Use an admitted QSL-emitted graph with
-    selected-model-document override and recomputed digests for `None` and out-of-`i64`
-    type cases QSL cannot emit directly. Separately submit a selected model/object_type
+    selected-model-document override and recomputed digests for `None` and other
+    non-range types QSL cannot emit directly; use one source model for the
+    out-of-`i64` integer case. Separately submit a selected model/object_type
     whose nonempty body is read by the state clause and verify IR admission refuses
     `StaleNodeKey` before CG receives a package; do not expect a CG `NotModelObjectType`
     result from that rejected input (FR-015-AC-78; IR TC-227).
@@ -509,13 +509,12 @@ set by the code change's measurement and recorded here.
     has no range assumption and records `TypeNotRange` in identity and persisted record.
     Regenerate for byte identity, and reject a record naming a field twice (FR-015-AC-81).
 
-Steps 37 to 41 are planned. The IR-628 accessor has merged; the QSL-emitted model declaration
-path awaits CG's dependency update and implementation. The hand-built non-declaration
-body-member range path is retired; an agreeing read does not make that body trusted. The code change
-replaces `tc_035_the_generator_reads_no_field_range_from_the_object_shape_qsl_emits`, updates
-the typed accessor refusal and AC-66 mapping tests, and edits or supersedes the test of
-FR-024-AC-30 that calls `Twin::aligned`; this PR restates AC-30 over the emitted-package
-harness, so its previous test evidence remains planned until that migration lands.
+Steps 37 to 41 are implemented. The QSL-emitted model declaration path uses
+IR-628's accessor. The hand-built non-declaration body-member range path is
+retired; an agreeing read does not make that body trusted. The tests cover
+typed accessor refusals, AC-66 mapping, and the emitted-package frame and
+postcondition harnesses without `Twin::aligned`. FR-024-AC-35 additionally
+exercises one out-of-`i64` source model through QSL emission and replay.
 
 ## One renderer and the scalar family port (implemented, IR-858)
 
