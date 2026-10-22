@@ -2846,10 +2846,17 @@ mod tests {
         // Only fixture intake grows with these unchanged source bytes. CG's
         // resolution, emitted-source and traversal-stack limits stay independent.
         let source_bytes = u64::try_from(source.len()).expect("finite fixture source byte count");
+        // Every token in this fixed ASCII grammar occupies at least one source
+        // byte; one additional token accommodates EOF. This bounds fixture intake
+        // without depending on the compiler's tokenization or changing CG work.
+        let token_bound = source_bytes
+            .checked_add(1)
+            .expect("finite fixture token bound");
         let stages = StageLimits::default()
             .with_named("s1.input_bytes", source_bytes)
-            .expect("the public compiler recognizes its source-byte setting");
-        eprintln!("genuine large fixture records={records}; optional={optional}; source_bytes={source_bytes}");
+            .and_then(|limits| limits.with_named("s1.tokens", token_bound))
+            .expect("the public compiler recognizes its fixture intake settings");
+        eprintln!("genuine large fixture records={records}; optional={optional}; source_bytes={source_bytes}; token_bound={token_bound}");
         let admitted = compile_admitted(
             SourceIdentity::new("test", "deep.native", "git", "fixture"),
             "deep.native",
