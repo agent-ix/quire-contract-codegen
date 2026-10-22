@@ -61,7 +61,12 @@ function keep using v(a: Quantity<m>): Boolean pure { true }
         let metre = Quantity::new(Rational::from_integer(Integer::from(1_i64)), m.id());
         assert!(original.units().resolve(&metre).is_none());
 
-        let prepared = attach_owner_units(original, Some(context));
+        let context_free = super::super::admit_environment(None, Vec::new(), &Default::default())
+            .expect("context-free production preparation");
+        assert_eq!(context_free.units(), original.units());
+        let prepared =
+            super::super::admit_environment(Some(context), Vec::new(), &Default::default())
+                .expect("production preparation retains the admitted owner's units");
         assert_eq!(prepared.units(), context.unit_table());
         for unit in [m, km] {
             let looked_up = context

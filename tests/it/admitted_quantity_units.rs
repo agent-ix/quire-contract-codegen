@@ -7,7 +7,10 @@ use qsl_replay::{
     compile_admitted, AdmittedCompilation, DependencyInput, ReplayLimits, SourceIdentity,
     StageLimits,
 };
-use quire_contract_codegen::{ClaimDisposition, CompositeEqualityRefusal, OracleGenerationError};
+use quire_contract_codegen::{
+    ClaimDisposition, CompositeEqualityOracles, CompositeEqualityRefusal, OracleGenerationError,
+};
+use std::collections::BTreeSet;
 
 const SOURCE: &str = r#"
 language "ix:native" edition "1-draft";
@@ -37,6 +40,65 @@ fn compile() -> AdmittedCompilation {
         ReplayLimits::default(),
     )
     .expect("genuine quantity and union source must compile without a quantity literal")
+}
+
+/// A refused request changes only its claim-map entry: all surviving output bytes,
+/// dispositions and public entry points stay exactly those of the isolated siblings.
+fn assert_sibling_isolation(mixed: &CompositeEqualityOracles, isolated: &CompositeEqualityOracles) {
+    let code = |output: &CompositeEqualityOracles| {
+        output
+            .artifacts
+            .iter()
+            .filter(|artifact| artifact.path != "claim-map.json")
+            .cloned()
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        code(mixed),
+        code(isolated),
+        "refused items must emit no artifacts or alter sibling bytes"
+    );
+    let mut expected_symbols = BTreeSet::new();
+    for sibling in &isolated.claim_map.items {
+        let in_mixed = mixed
+            .claim_map
+            .items
+            .iter()
+            .find(|claim| claim.node_id == sibling.node_id)
+            .expect("every isolated sibling remains in the mixed request");
+        assert_eq!(
+            in_mixed, sibling,
+            "a refused item must not alter a sibling's disposition or provenance"
+        );
+        let ClaimDisposition::Generated(claim) = &sibling.result else {
+            panic!("the isolated sibling must generate");
+        };
+        expected_symbols.insert(claim.environment_symbol.clone());
+        expected_symbols.insert(claim.oracle_symbol.clone());
+    }
+    let mut actual_symbols = BTreeSet::new();
+    for artifact in mixed
+        .artifacts
+        .iter()
+        .filter(|artifact| artifact.path.ends_with(".rs"))
+    {
+        let file =
+            syn::parse_file(&artifact.contents).expect("generated artifacts are genuine Rust");
+        for item in file.items {
+            if let syn::Item::Fn(function) = item {
+                if matches!(function.vis, syn::Visibility::Public(_)) {
+                    assert!(
+                        actual_symbols.insert(function.sig.ident.to_string()),
+                        "entry points are unique"
+                    );
+                }
+            }
+        }
+    }
+    assert_eq!(
+        actual_symbols, expected_symbols,
+        "only generated siblings may publish symbols; refused items publish none"
+    );
 }
 
 #[trace("TC-029", "FR-018-AC-18", "FR-018-AC-38", "FR-018-AC-45")]
@@ -70,6 +132,9 @@ fn genuine_quantity_items_keep_their_refusal_and_healthy_sibling() {
                 claim.result
             );
         }
+        let isolated = generate_items(&package, context, &items[2..], &[])
+            .expect("the healthy sibling generates on its own");
+        assert_sibling_isolation(&generated, &isolated);
         let healthy = generated
             .claim_map
             .items
@@ -123,6 +188,9 @@ fn nested_quantity_stays_unsupported_with_owner_metadata_and_healthy_unions() {
             );
         }
     }
+    let isolated = generate_items(&package, Some(compiled.context()), &items[1..], &[])
+        .expect("both genuine unions and the healthy scalar generate without the refused item");
+    assert_sibling_isolation(&generated, &isolated);
     let emitted = &generated
         .artifacts
         .iter()
