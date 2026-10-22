@@ -12,11 +12,9 @@
 //! This crate checks generated==direct owner execution only and claims no agreement with the QSL
 //! value authority (FR-014-AC-47); that comparison for the quantity vectors is
 //! owned by quire-integration IR-842.
-//! QSL arch-lint T12-A confines this
-//! crate to `qsl_replay`'s public API, and none of this file's vectors are
-//! shaped as compiled source plus a witness -- they call value-level
-//! operators directly (`Meter`, `Integer`, `IeeeValue`, unit conversion,
-//! division profiles, ...).
+//! QSL arch-lint T12-A confines this crate to `qsl_replay`'s public API.
+//! The admitted source supplies nominal metadata; comparisons still execute
+//! value-level operators directly, without replaying a QSL value witness.
 //!
 //! Named unit and enum fixtures come from the public QSL admitted facade.
 //! Malformed graph controls separately use the public low-level QSV node boundary;

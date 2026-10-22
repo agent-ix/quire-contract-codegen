@@ -1165,8 +1165,8 @@ fn declaration(
 }
 
 /// TC-187 U06 and U11: the generated oracles take an already admitted unit graph, so these rows
-/// have no generated oracle; they run against the same graph admission every agreement vector
-/// builds its fixture through. A zero scale and each broken topology of the `L` graph is refused
+/// have no generated oracle; they exercise QSV's public low-level graph boundary separately
+/// from the compiler-admitted named fixtures. A zero scale and each broken topology of the `L` graph is refused
 /// `invalid_semantic_graph`, with its typed cause, before a quantity can exist.
 #[trace("FR-014-AC-6", "TC-024")]
 #[test]
@@ -1188,7 +1188,7 @@ fn tc_024_tc187_u06_u11_unit_graph_admission_refuses_each_malformed_graph() {
     let cause = admission_refusal(rt::admit_graph(&two_roots).map(|fixture| fixture.graph));
     assert_eq!(cause, rt::SemanticGraphCause::DuplicateRoot);
 
-    // U11, built from raw node keys, because content-hashed fixture keys cannot form a cycle,
+    // U11 uses arbitrary test labels at the low-level boundary to form cycles,
     // omit a root that a target needs, or name a target that does not exist.
     let (length, time) = (node(1), node(2));
     let (a, b, root) = (node(10), node(11), node(12));
