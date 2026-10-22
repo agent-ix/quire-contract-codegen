@@ -1334,3 +1334,187 @@ current_baseline_owner_status:
   FND-002: FR-016-AC-25 tagged on both baseline and candidate through merged IR604/PR512;
     no native execution claim
 ```
+
+## Round 6 combined source disposition
+
+Complete official Round6 source review of the ONE combined PR513 candidate 9b2c69f22f8840930fde7a7a29abe1ff1859eab5 against current main724d6bfba77154dde44623655e57d3d7c92d8301. Fresh read-only remote main matches this baseline and it is retained by ancestry; tree is clean. Whole-PR source acceptance retains the complete prior review and inspects all later integration repairs, accepted IR850 source and selective Runtime adoption. Code/Rust PASS; no new current finding of any severity. All twelve earlier source findings remain FIXED. Historical failures, still-open rows, partial scopes and all explicit fixed/deferred outcomes are preserved above; no blanket baseline fixes or new issue is invented.
+
+Mergeability is CONDITIONAL on the parent final aggregate make ci, canonical Kani gate and the separately requested nonauthor lunar lock-hunk review. This official review does not substitute for that independent lock review. Runtimea60 is reviewed only together with its consumer migration in this combined PR; no standalone main Runtime bump is accepted. No reviewer Cargo/compiler/test/native/LLVM/backend/Kani/namespace execution, product/source/lock edits, branch integration, push or ref mutation occurred. Parent owns final custody and one final-head gate sequence. No permission request is introduced.
+
+The earlier def1f3f0 full batch remains failed historical evidence: library402 PASS, integration697 PASS/6 FAIL/39 ignored, before these repairs. It is retained at final-gates/ci-20261022T052217Z.log. The six failing controls shared five root fixture/expectation causes; the intermediate export E0425 and wrong-manifest preflight defect are also retained in their exact evidence/intake records. They are now corrected by inspected source and the actual combined-candidate focused logs, rather than waived or reported as defects still present. Current aggregate/Kani have not yet run, so a full product/qualification PASS is not claimed.
+
+Combined dependency review: versus the accepted source9b01, Cargo.lock changes ONLY the Runtime package entry: its branch-main source advances 3cc88c480d4efe5179fe91acf4634def5d2d82fd to a60c508f3a2af230aeb51af97bdf549cd5fffa01, plus that package's real quire-semantic-value edge. All other lock bytes remain unchanged. Independently parsed package comparison confirms Runtime is the sole changed named package; root lock measures the exact authorized43dd9ef84f43ea430aa0e3408e5a77063a732adda9a3d294b903642b7a0f9582. Against published main724 the additionally visible codegen->QSV root lock edge is already required by this migration's direct Cargo.toml dependency, not an owner revision adjustment or workaround. No broader resolver change, version pin, source patch, foundation dependency, RT exception or copied type bridge is introduced.
+
+The supported ROOT cohort has all eight QSL crates485ccaa3, shared kernel72b25421, QSV1a38c06f, Runtimea60c508f, quire-rsfd1cdd9d, and all three FCD packagesac62202a. Independent parsing verifies all FCD root sources match and there is one authoritative kernel/QSV identity. Actual locked and offline-locked metadata exit0; their full packages arrays and resolve graphs compare identical, independently rechecked. The supplied authoritative IR736 quire check-lock Cargo.lock exits0 with Git lock coherence checked; one-copy and allowlisted selective-lock checks pass. This is a root-cohort fact, not an assertion about any separately resolved generated workspace. The published owner route is unchanged except for the user's explicitly authorized combined Runtime selection.
+
+Known IR962 observation is retained honestly and NOT substituted for a root-cohort verdict. The independent shared agreement runner still resolves fresh public branch-main scratch closures. Captured bounded/function native locks select Runtime3d2d8201, QSL52620956, kernel72b25421 and split FCD extraction/semanticIRac62202a versus schema6e2c98fc. The actual bounded-native owner check-lock exits2 for that split; native test PASS is not evidence of lock coherence. The user's explicit lunar ruling excludes that generated-scratch issue from PR513 acceptance and CG supported ROOT-cohort validation and assigns existing IR962. This scope disposition is recorded rather than ignored, repaired, re-resolved, seeded or relabelled PASS. The runner and captured scratch locks were not changed. No claim is made that these generated native legs executed root Runtimea60/QSL485, or that IR962 is fixed. This is distinct from the canonical production/observer fresh-lock and receipt requirements, whose implementation and source constraints remain unchanged and whose final gate acceptance is still parent-owned.
+
+Six integration repairs independently inspected:
+
+1. Genuine bounded/asymmetric source stays byte-for-byte Int[0,9] versus unbounded Integer with convert<Integer>(a). The stale absence-of-conversion premise is replaced by positive checks of exactly one authentic conversion, target Integer, original bounded parameter node and equality's genuine converted argument. No source substitution, copied IDs or generated-oracle-derived expected bounds. Claim descriptors, source/target order, independent native values including right operands outside[0,9], domain/no-narrowing and charge assertions remain. This repairs both original bounded-native and claim-descriptor failures. Existing spec AC43's erased-conversion limitation is conditional and does not prohibit the genuinely retained path now observed; independent admitted-IR conversion-reference controls are preserved.
+2. Function native WrongValueKind Reference control now uses the real public kernel ObjectReference/UniverseId/EffectiveId/ObjectId, preserving opaque test values[6;32], [7;32] and authored object string. It still expects WrongValueKind(parameter0) and no charges, and expressly does not claim DanglingReference coverage. No nominal compiler provenance is invented for these original negative-control bytes.
+3. The ACTUAL generated-v2-clause-corpus manifest now names QSV using the shared public SEMANTIC_VALUE_DEPENDENCY_SOURCE. The earlier misplaced dependency in the unrelated order_numbers-only first control was removed, and preflight's sole missing-manifest finding was corrected at33440669. All15 clause expressions, native expected values, source-map/probe checks and bounded inputs remain. No renderer change or suppression replaces the real missing dependency.
+4. Routed scalar Quantity conversion expects the actual quantity_owner::convert_quantity call, retaining Generated dispositions, absent harness and OperationNotRendered reason. It is a structural/disposition control and supplies no positive Quantity native execution evidence. Separate scalar Quantity payload/converted-value work is not silently accepted by this check.
+5. The LLVM fixture now declares its actual Exact dependency and uses quire_exact as rt in its native test. Whole-file comparison at accepted9b01 showed that isolated import change preserves every input, limit, expected Completed(true), genuine LLVM coverage invocation and evaluation1/consequent0/classification=vacuous assertion. The fixed code does not bypass LLVM or weaken vacuity observations.
+6. IR850's existing profile constant is publicly re-exported, with a FR014AC8/TC024 regression asserting the emitted QSV dependency line through that public root binding. Compiler redE0425 before export and one-test green afterward are retained. The real external clause corpus also uses the public constant. No manifest source spelling/owner implementation is duplicated. Function output aliases rt=Runtime exact, exact=kernel and sv=QSV declaration remain; scalar output owner aliases are unchanged. This exact accepted source lineage is independently recorded in validated SR15393/15394 at ir850-export-review/final-readback, now retained by ancestry in this combined candidate.
+
+Actual combined-candidate evidence: final-summary.json and each exact JSON/raw log match bounded-parameter, claim-descriptor, function-native, clause-native, quantity-route and llvm-native; each runs one outer test with zero failures/ignored and exits0. Both native agreement runners require every declared inner assertion, the clause corpus retains its15 expressions, and LLVM executes instrumented native code. Bounded JSON wall158.29s includes build work; raw test80.48s, function native78.51s, clause5.60s, route0.94s and LLVM5.42s agree with the recorded test results. These are fresh combined-candidate author runs, not merely earlier local IR850 lock validation. Root fmt-check, locked all-target Clippy -D warnings, Quire/spec with existing warnings, diff, owner check-lock and metadata checks exit0. The earlier six-control failure remains visible alongside them. No aggregate, Kani/CBMC, proof receipt or all-native Quantity execution is inferred from these focused passes.
+
+The entire authored UnitTable slice remains independently covered by this reviewer: units.rs, real admit_environment wiring, emitted preparation, genuine unused unit/owner-ID assertions, direct/nested Quantity refusals, isolated sibling/source/symbol checks. These files and production equality logic are unchanged since the accepted prior round. Metadata attachment is still post-guard, clone-complete and before Union sealing; None behavior, typed refusal order, no equality charge on preparation failure, key-vs-node roles and owner member seals are unchanged. No positive equality Quantity/conversion, native Union or emitted metadata-constructor execution is claimed. Quantity Unsupported AC18/38 and frame Quantity->NonRangeType remain. Original fifteen genuine sources/domains, six host bodies, protected qualification files, work counts, deep source generator and512KiB stack controls are unchanged by this round. No compatibility layer, fake facade identity or copied owner implementation was added.
+
+Fresh main724 publishes the supported QSL/kernel/FCD cohort and its owner review; these are baseline context, not new consumer defect fixes. Makefile/scripts/workflows have zero incremental change against main. No normative CG spec/plan delta exists beyond the previously reviewed owning amendments, so existing spec/AC45/Union review lineage remains applicable. No applicable AssuranceProfile or new assurance exception is introduced. Optional semantic gap analysis was not opted in; mandatory code/Rust oracle checks and full mechanical repository requirement/test/source reconciliation were performed. Latest committed official code/gap documents match disposition5 byte-for-byte; append-only Round6 records preserve their entire history. Current final artifacts plus IR850 final-readback files must be retained before parent final gates.
+
+Fresh complete matrix: candidate899 criteria,544 tagged,287 untagged,16 ignored-only,52 method-without-symbol. Exact archived current-main724 baseline via quire coverage:897 criteria,525 tagged,302 untagged,18 ignored-only,52 method-without-symbol. The same19 incremental status/addition improvements remain, with no newly untagged criterion. New public-export regression is actually bound to FR014AC8; LLVM/other controls retain their proper trace tags. Static binding does not discharge compiled/native evidence, and the raw runs are documented separately above.
+
+All287 untagged criteria occur in the existing SR15352 inventory with preserved outcomes. Original gapFND001 FR005AC3 remains with that existing CLI/planner owner (IR954/IR17), outside this migration. Original gapFND002's static FR016AC25 gap remains remedied by existing baseline IR604/PR512, retaining its historical deferred disposition and not inventing an IR17 fix or claiming dedicated Kani controls executed here. Both baseline/candidate still report10 inherited coverage diagnostics and7 resemblance suspicions. Whole requirement/source/test ownership chain and current changed assertions were audited; no new static gap, stub, hollow API or unowned behavior was found. Repository completeness FAIL remains inherited; incremental gap PASS. IR962's real fresh-scratch coherence failure has its explicit existing owner and user scope ruling above; no duplicate unowned remediation or false completion is introduced. Plan completion:not assessed. No baseline requirement or gate is silently waived.
+
+```yaml
+dispositions: []
+new_findings: []
+review_head: 9b2c69f22f8840930fde7a7a29abe1ff1859eab5
+baseline_head: 724d6bfba77154dde44623655e57d3d7c92d8301
+scope:
+- id: FR-004-AC-16
+  path: spec/evidence/functional/FR-004-vacuity-evidence.md
+  role: examined
+  excerpt: PLANNED (IR-815). The expected clause population and implication counts
+    of the V2 analyzer equal those independently derived from the admitted `CheckedPackageV2`
+    clause bodies.
+- id: FR-004-AC-19
+  path: spec/evidence/functional/FR-004-vacuity-evidence.md
+  role: examined
+  excerpt: PLANNED (IR-815). Over a V2 clause population, a clause whose oracle evaluation
+    was observed, that has at least one implication and for which no expected consequent
+    probe was observed is `vacuous`.
+- id: FR-004-AC-24
+  path: spec/evidence/functional/FR-004-vacuity-evidence.md
+  role: examined
+  excerpt: PLANNED (IR-815). Over a V2 clause population, each malformed input class
+    of FR-004-AC-5 yields a non-success outcome with no invented classification.
+- id: FR-017-AC-53
+  path: spec/kani/functional/FR-017-kani-execution-evidence.md
+  role: examined
+  excerpt: Both package locks are independently freshly resolved with the existing
+    bounded offline generation/update workflow, without copying a parent/other lock
+    or substituting a cached resolution. Each resolves both owning runtime and exact
+    identities to the build's authoritative lock identities; the independent observer
+    regression asserts both literal package names and repository identities independently
+    of the renderer's list. Both manifests, locks and all other AC-46 entries are
+    sealed and compared as a complete path/byte set before proof, after proof and
+    after native execution; mutation/replacemen
+- id: FR-014-AC-8
+  path: spec/oracle/functional/FR-014-exact-scalar-oracles.md
+  role: examined
+  excerpt: The generated crate declares `publish = false`, names the direct exact/QSV
+    and Runtime residue dependencies from the one profile authority without a replay-context
+    dependency for Boolean/integer scalar proofs, contains no charge amount (every
+    charge comes from runtime metering), and compiles.
+- id: FR-014-AC-38
+  path: spec/oracle/functional/FR-014-exact-scalar-oracles.md
+  role: examined
+  excerpt: The Boolean condition in the third argument of a `state`/`state_clause`
+    node's `quire.op.state.clause` body, addressed by the clause node id, derives
+    a descriptor and generates an `ir_confirmed` oracle over its connectives, integer
+    comparisons and integer add, subtract, multiply and negate, returning `Outcome<bool>`.
+    When the condition is a reference to an admitted Boolean expression node, the
+    oracle uses that node's expression, not the reference as a Boolean variable; an
+    inline condition uses its own expression. In both cases the claim and generated
+    oracle retain the clause node identity, not
+- id: FR-014-AC-51
+  path: spec/oracle/functional/FR-014-exact-scalar-oracles.md
+  role: examined
+  excerpt: A selected `quire.op.quantity.convert` claim settles through capability
+    settlement like any other quantity operation, as `OperationNotRendered` (Planned,
+    IR-269), because the Kani scalar renderer builds no quantity harness; the conversion
+    is credited by its oracle only and is uncredited for Kani. The settlement is not
+    a refusal by name, and a quantity harness is IR-269's work, not this requirement's.
+    The owning settlement row is TC-030's Quantity scalar row, which names `quire.op.quantity.convert`
+    and cites this criterion.
+- id: FR-018-AC-3
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: "Each generated item's claim-map entry records the descriptor the request\
+    \ supplied \u2014 operator, both operand source types and both conversion targets\
+    \ \u2014 and it is equal to the request's, so the independent native run of AC-2\
+    \ is driven from the request and never read back out of the generated crate. An\
+    \ authentic asymmetric source control preserves the actual bounded-left/unbounded-Integer-right\
+    \ source IDs and independent caller target; a source conversion erased from the\
+    \ emitted graph is not evidence of a retained conversion-reference branch."
+- id: FR-018-AC-15
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: 'A `binary` node''s operand is read through its `reference`: a reference
+    to a `convert` expression node is read as the type of what it converts, following
+    nested conversions to the first node that is not a conversion, and a reference
+    to any other node, including a non-`convert` application, as that node''s own
+    `semantic_type`. A descriptor whose `source_type` is the read type generates,
+    and any other source is refused as an operand-type disagreement at that position,
+    reporting the read type as found. A genuine source fixture with no emitted convert
+    node exercises its actual parameter source types'
+- id: FR-018-AC-43
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: 'For genuine source with a: Int[0,9] and b: Integer, the admitted left
+    parameter names its integer_range and the right parameter names canonical base
+    Integer. Direct source/target reconstruction preserves Int[0,9] versus unbounded
+    Integer despite the sibling range: a caller descriptor converting the left to
+    Integer compares with the unbounded right under the original equality rule, including
+    right values outside [0,9]; an unbounded Integer source cannot acquire a narrowing
+    conversion by borrowing that sibling interval. Claim/native descriptor checks
+    remain independent of generated output. If so'
+- id: FR-018-AC-45
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: After the existing setting/accounting and original-package context guards
+    succeed, generation-time construction and emitted preparation supplied Some(context)
+    attach a clone of that context's complete authoritative unit_table() to the constructed
+    TypeEnvironment, retaining declared but unused units without rebuilding a table,
+    deriving UnitId/NodeKey or substituting another package's table. Valid context-free
+    None behavior remains unchanged. Wrong-package refusal retains its whole-request
+    precedence; direct and nested Quantity items retain their existing typed Unsupported
+    behavior and refusal p
+- id: FR-021-AC-4
+  path: spec/oracle/functional/FR-021-function-application-oracles.md
+  role: examined
+  excerpt: 'The oracle returns the arity, wrong-value-kind, dangling-reference and
+    unknown-function input refusals unchanged to the caller before any execution charge;
+    the schedule records ordered arguments without inventing a refusal result. That
+    the refusals equal QSL-owned ones is outside CG''s boundary (IR-842, FR-014-AC-47).
+    PLANNED, blocked on IR-853: once Contract Runtime FR-275 deletes the `exact` port,
+    the refusal comparison''s target is decided by IR-853.'
+prior_outcomes_confirmed:
+  FND-001: deferred existing SR15352/IR954 CLI owner
+  FND-002: historical IR604 deferral retained; current baseline trace gap remediated
+gate_issue_outcomes:
+- control: bounded parameter + claim descriptor
+  state: fixed and exact combined controls PASS
+  source: tests/it/admitted_enum_equality.rs genuine conversion provenance; original
+    source/domains retained
+- control: function native
+  state: fixed and exact combined control PASS
+  source: tests/exact_function_support/agreement_cases.rs public kernel reference
+    carriers; WrongValueKind/no charges retained
+- control: clause corpus
+  state: fixed and exact combined control PASS
+  source: tests/it/kani_obligations_state_frame.rs actual corpus QSV manifest; public
+    export available
+- control: Quantity route
+  state: fixed and exact combined control PASS
+  source: tests/it/routed_generation.rs owner-call assertion; no native Quantity execution
+    claim
+- control: LLVM vacuity
+  state: fixed and exact combined control PASS
+  source: tests/it/v2_llvm_coverage.rs Exact dependency and native import; vacuity
+    oracle unchanged
+included_review_lineage:
+- SR-15393
+- SR-15394
+known_out_of_scope:
+  issue: IR-962
+  actual_check_lock_exit: 2
+  scope: fresh native generated scratch FCD split; user/luna excludes from PR513/root
+    supported cohort acceptance
+  root_owner_check_lock_exit: 0
+qualification: source PASS; six exact combined controls PASS; conditional on final
+  parent ci/Kani and separate lunar lock review
+```
