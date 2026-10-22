@@ -1715,7 +1715,7 @@ pub(crate) fn take_function_preflight_indices() -> Vec<usize> {
 }
 
 #[cfg(test)]
-fn take_function_preflight_graph_visits() -> usize {
+pub(crate) fn take_function_preflight_graph_visits() -> usize {
     FUNCTION_PREFLIGHT_GRAPH_VISITS.with(|count| count.replace(0))
 }
 
