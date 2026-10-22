@@ -52,7 +52,10 @@ For function and frame counterexamples, the packet's replay target follows QSpec
 exactly one of `function` or `frame_operation`, with the other absent. `function` holds the selected function's
 `QualifiedName`. `frame_operation` holds `{object, operation}`: `object` is the
 `QualifiedName` of the object type, process or state machine that declares the
-operation, and `operation` is its `Identifier`. A frame packet carries
+operation, and `operation` is its `Identifier`. CG obtains that pair from QSL's
+typed call-site result after it resolves the operation against the checked package,
+including an inherited operation's declaring owner. The caller's `OperationName`
+selects the site but is not authority for the declaring owner. A frame packet carries
 `frame_operation` and no `function` or `selected_function`. The old
 `selected_function` member has no alias or fallback on those paths. The frame packet still
 carries the frame and generated-occurrence identities that ADR-017 PF-4 assigns
@@ -185,8 +188,10 @@ members against the operation's declaration in the domain package.
 - The generator shall fill every common required `WitnessPacket` member from the proving run's
   envelope members and the obligation identity, and shall invent none. For a function or frame
   packet it shall fill exactly one replay-target member: `function` on a function packet and
-  `frame_operation` on a frame packet, using the declaring object and operation returned for that
-  frame by QSL's typed call site.
+  `frame_operation` on a frame packet, using the validated declaring object and operation returned
+  for that frame by QSL's typed call-site result.
+- If QSL cannot return that validated pair, then the generator shall refuse packet construction
+  rather than derive the owner from the caller's selection.
 - For a function or frame packet, the generator shall refuse a packet with neither replay-target
   member or both members as distinct typed packet-admission failures before any replay. It shall
   admit neither an empty placeholder nor an old `selected_function` alias as a selection.
@@ -403,7 +408,7 @@ members against the operation's declaration in the domain package.
 | FR-024-AC-38 | Starting from one admitted original failure, one valid reduced candidate that preserves the failure becomes a new CG lineage revision referring to its exact admitted QSL envelope, its exact parent revision and the unchanged opaque obligation identity. After retention, the original QSL envelope compares equal to its pre-reduction clone by `WitnessEnvelope<P>: Eq`, and the original CG record's revision identity, parent, obligation and typed evidence fields read back equal to their captured values. No lineage member is added to QSL's envelope or packet. | Test (TC-035) |
 | FR-024-AC-39 | From a retained failure revision, an out-of-domain reduction and a domain-valid reduction that changes the native verdict each create no revision. After each rejection, every prior QSL envelope compares equal to its pre-proposal clone and every prior CG record's revision identity, parent, obligation and typed evidence fields equal their captured values; a later valid reduction names the actual retained parent, with no skipped or substituted parent. | Test (TC-035) |
 | FR-024-AC-40 | A retained reduced `Witness` envelope holds a transcript from its own backend re-run, bound to its own reduced assignments; it cannot reuse any ancestor's transcript. | Test (TC-035) |
-| FR-024-AC-41 | A function counterexample packet and its admitted `WitnessEnvelope` carry `function` as the selected function's `QualifiedName`, with no `frame_operation`; a frame counterexample packet and envelope carry `frame_operation` as `{object, operation}` from the frame's typed `OperationSite`, with `object` naming its declaring object type, process or state machine and `operation` its `Identifier`, and no `function`. Neither packet nor envelope contains a `selected_function` member or alias. For a frame, the replay request has no `arguments` or `occurrence_key`, while the packet's ADR-017 PF-4 frame and generated-occurrence identities remain unchanged. | Test (TC-035) |
+| FR-024-AC-41 | A function counterexample packet and its admitted `WitnessEnvelope` carry `function` as the selected function's `QualifiedName`, with no `frame_operation`; a frame counterexample packet and envelope carry `frame_operation` as `{object, operation}` from QSL's validated typed call-site result, with `object` naming the operation's declaring object type, process or state machine (also when the caller selected an inherited operation) and `operation` its `Identifier`, and no `function`. CG refuses packet construction if that validated pair is unavailable. Neither packet nor envelope contains a `selected_function` member or alias. For a frame, the replay request has no `arguments` or `occurrence_key`, while the packet's ADR-017 PF-4 frame and generated-occurrence identities remain unchanged. | Test (TC-035) |
 | FR-024-AC-42 | A function or frame packet with neither `function` nor `frame_operation` is refused as a missing replay target; one with both is refused as a conflicting replay target. Each refusal is typed and distinguishable, `WitnessEnvelope::reconstruct` admits no envelope, and no replay executor is called, even when every common member is present. An absent selection is not replaced by an empty name, an inferred payload operation or `selected_function`. | Test (TC-035) |
 
 ### Mutations FR-024-AC-31 to FR-024-AC-35 detect
@@ -512,6 +517,9 @@ FR-024-AC-11 to FR-024-AC-30 are met:
   `src/replay/frame.rs` and `src/replay/state_clause.rs` still construct the old
   `selected_function` member. This slice specifies only function and frame packet selection;
   QSL STD-245 owns the corresponding envelope admission and `replay_frame` consumer change.
+  The current QSL `OperationSite` returns frame identities but not the validated declaring owner
+  or operation identifier; QSL's call-site result must expose that pair before CG can build the
+  frame selection under FR-024-AC-41.
   The state-clause case remains the explicit Q-6 allocation question below.
 
 ## Open questions

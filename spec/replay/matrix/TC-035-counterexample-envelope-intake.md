@@ -38,8 +38,11 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
    paths. Read the function packet and admitted envelope's `function` selection and absent
    `frame_operation`; read the frame packet and envelope's `frame_operation` (`object` and
    `operation`) and absent `function`. Inspect that neither has a `selected_function` member or
-   alias. For the frame, confirm that `object` names the declaring object type, process or state
-   machine, the request carries no `arguments` or `occurrence_key`, and the packet and payload
+   alias. For the frame, compare the pair with QSL's validated call-site result, including an
+   inherited operation whose selected object differs from its declaring owner; confirm the packet
+   names the declaring owner. When QSL supplies no validated pair, confirm packet construction
+   refuses instead of using the caller's `OperationName`. Confirm the request carries no
+   `arguments` or `occurrence_key`, and the packet and payload
    retain the ADR-017 PF-4 clause, frame, anchor and generated-occurrence identities QSL reports.
 7. Reduce one `Witness`-arm counterexample with a candidate set that holds a
    failure-preserving candidate, an out-of-domain candidate and a verdict-changing candidate.
@@ -127,7 +130,9 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
    `selected_function` placeholder cannot supply the absent selection (FR-024-AC-42).
 5. Retired (FR-024-AC-5, IR-890): this step asserts no result.
 6. The function packet and envelope carry only `function`; the frame packet and envelope carry
-   only `frame_operation` with the declaring object's qualified name and operation identifier;
+   only `frame_operation` with QSL's validated declaring owner's qualified name and operation
+   identifier, including for an inherited operation. If QSL supplies no validated pair, CG
+   refuses packet construction instead of deriving an owner from the caller's selection;
    neither carries `selected_function` or an alias. The frame request has no `arguments` or
    `occurrence_key`, while the packet and payload retain their PF-4 identity members and every
    identity QSL reports equals the one submitted (FR-024-AC-6, FR-024-AC-41).
