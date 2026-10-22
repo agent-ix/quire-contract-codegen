@@ -88,7 +88,10 @@ fn public_negated_positive_two_to_63_keeps_its_child_and_owner_call() {
 // controls vary an admitted source package's literal, then ask the owner's public
 // candidate/reader APIs for identities and admission. They are not QSL emission
 // claims for those values and never alter the actual proof fixture.
-fn reader_literal(spelling: &str) -> (CheckedPackageV2ReadResult, CheckedNodeId) {
+fn reader_literal_with_identity_policy(
+    spelling: &str,
+    rekey_nodes: bool,
+) -> (CheckedPackageV2ReadResult, CheckedNodeId) {
     let twin = Twin::with_balance_condition("self.balance >= 17");
     let (package, clause) = twin.emitted_package("BalanceNeverDrops");
     let mut wire = json!({
@@ -138,9 +141,21 @@ fn reader_literal(spelling: &str) -> (CheckedPackageV2ReadResult, CheckedNodeId)
         .insert_domain_package_document(digest, document.bytes.clone())
         .unwrap();
     evidence.support_feature("quire.value.complete/v1");
+    if !rekey_nodes {
+        rekey::refresh_identity(&mut wire);
+        let bytes = serde_json::to_vec(&wire).unwrap();
+        return (
+            CheckedPackageV2::read(&bytes, CheckedPackageReadLimits::bounded(), &evidence),
+            clause,
+        );
+    }
     let resolved = rekey::resolve_wire(&wire, &evidence, CheckedPackageReadLimits::bounded());
     let clause = resolved.ids.resolve(&clause);
     (resolved.outcome, clause)
+}
+
+fn reader_literal(spelling: &str) -> (CheckedPackageV2ReadResult, CheckedNodeId) {
+    reader_literal_with_identity_policy(spelling, true)
 }
 
 #[trace("TC-024", "FR-014-AC-53")]
@@ -198,12 +213,25 @@ fn reader_admitted_large_values_keep_general_parse_without_narrowing() {
 
 #[trace("TC-024", "FR-014-AC-53")]
 #[test]
-fn noncanonical_literal_controls_remain_reader_refusals() {
+fn noncanonical_literal_admission_and_runtime_fallback_remain_distinct() {
     for spelling in ["+1", "01", "-0", " 1", "1 ", "1a", "", "--1"] {
-        let (result, _) = reader_literal(spelling);
-        assert!(
-            matches!(result, CheckedPackageV2ReadResult::Refused(_)),
-            "{spelling:?}: {result:?}"
+        let (stale, _) = reader_literal_with_identity_policy(spelling, false);
+        let CheckedPackageV2ReadResult::Refused(refusal) = stale else {
+            panic!("a changed literal under its old identity must refuse")
+        };
+        assert_eq!(
+            refusal.cause,
+            Some(quire_contract_model::CheckedPackageRefusalCause::StaleNodeKey)
         );
+        let (result, clause) = reader_literal(spelling);
+        let CheckedPackageV2ReadResult::Admitted(package) = result else {
+            panic!("the existing general literal reader admits this rekeyed spelling: {spelling:?}")
+        };
+        let generated = generate_v2_clause_oracle(&package, &clause).unwrap();
+        assert!(generated.source.contains(&format!(
+            "\"{spelling}\".parse().map_err(|_| ClauseStop::InvalidConstant)"
+        )));
+        assert!(!generated.source.contains("Integer::from("));
+        eprintln!("literal-reader {spelling:?}: stale identity -> StaleNodeKey; owner-rekeyed -> Admitted; generated -> original parse/InvalidConstant fallback");
     }
 }
