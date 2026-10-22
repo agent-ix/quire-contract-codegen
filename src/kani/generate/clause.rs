@@ -1,5 +1,7 @@
-//! The V1 clause lowering that the precondition and contract families share: the lowered clause
-//! form, the clause oracle, the subject ABI and its slots.
+//! Clause-family lowering: the shared V1 clause form, oracle, subject ABI and slots, with
+//! admitted V2 clause lowering in [`v2`].
+
+pub(super) mod v2;
 
 use std::collections::BTreeMap;
 
