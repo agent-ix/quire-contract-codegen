@@ -362,17 +362,33 @@ impl NamespaceOwner {
                 confirm_startup_group_dead(wrapper)?;
             }
         }
-        if let Some((_, _, handle)) = &self.init {
+        if let Some((init_pid, init_start_ticks, handle)) = &self.init {
             let mut ready = [PollFd::new(handle, PollFlags::IN)];
-            self.confirmation.poll(
+            let poll_started = Instant::now();
+            let poll_count = self.confirmation.poll(
                 &mut ready,
                 Some(&Timespec {
                     tv_sec: 5,
                     tv_nsec: 0,
                 }),
             )?;
+            let poll_elapsed = poll_started.elapsed();
             if !ready[0].revents().contains(PollFlags::IN) {
-                return Err(io::Error::other("namespace teardown was not confirmed"));
+                let wrapper_pid = self.wrapper.map_or_else(
+                    || "absent".to_owned(),
+                    |pid| pid.as_raw_nonzero().get().to_string(),
+                );
+                return Err(io::Error::other(format!(
+                    "namespace teardown was not confirmed: poll_count={poll_count} \
+                     revents_bits={} poll_elapsed_ns={} init_pid={init_pid} \
+                     init_start_ticks={init_start_ticks} wrapper_pid={wrapper_pid} \
+                     init_handle_present={} gate_present={} cleaned={}",
+                    ready[0].revents().bits(),
+                    poll_elapsed.as_nanos(),
+                    self.init.is_some(),
+                    self.gate.is_some(),
+                    self.cleaned,
+                )));
             }
         }
         if let Some(error) = failure {
