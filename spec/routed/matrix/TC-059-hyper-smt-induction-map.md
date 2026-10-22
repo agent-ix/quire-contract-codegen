@@ -33,6 +33,9 @@ canonical HP-2 product queries, without implementing a second encoder.
 
 ## Expected Results
 
-Only the two matching `unsat` queries produce `Inductive`. Every adverse
-branch retains its product, item and depth and remains eligible only for
-QSL-owned replay or inconclusive settlement.
+Only the two matching `unsat` queries produce `Inductive`. A base `sat`
+candidate goes to QSL-owned replay; a step `sat`, unknown or unusable response
+remains inconclusive; a resource stop settles FR-182 V-7 incomplete; and an
+encoding refusal remains its original typed refusal for QSL to settle. Every
+branch retains its product, item and depth and claims no proof or terminal
+refutation before the owning checks.
