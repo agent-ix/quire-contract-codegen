@@ -1690,6 +1690,93 @@ fn tc_044_native_connectives_retain_only_completed_results() {
     run_crate("retain", &modules, &checks);
 }
 
+/// Pure connective subtrees still retain when their enclosing oracle is metered.
+/// The arithmetic on the right is syntactically present but never evaluated.
+#[trace("TC-044", "FR-031-AC-26", "FR-031-AC-9")]
+#[test]
+fn tc_044_pure_connective_subtrees_retain_within_a_metered_root() {
+    let mut modules = Vec::new();
+    let mut checks = String::new();
+    for (index, (label, flag, expected_retains)) in [
+        ("not", true, 2_u64),
+        ("short_and", false, 2),
+        ("short_or", false, 2),
+        ("total_and", true, 3),
+        ("total_or", true, 4),
+        ("implication", true, 3),
+        ("comparison_leaf", true, 1),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let clause = Clause::new(0, 10, OverflowPolicy::Reject);
+        let not = || {
+            Expression::new(
+                ExpressionKind::BooleanNot {
+                    operand: Box::new(clause.flag("flag")),
+                },
+                clause.at(),
+            )
+        };
+        let left = match label {
+            "not" => not(),
+            "short_and" => clause.and(clause.flag("flag"), not()),
+            "short_or" => clause.connective(
+                BooleanOperator::ShortCircuitOr,
+                clause.flag("flag"),
+                clause.flag("flag"),
+            ),
+            "total_and" => clause.connective(BooleanOperator::TotalAnd, not(), clause.flag("flag")),
+            "total_or" => clause.connective(BooleanOperator::TotalOr, not(), not()),
+            "implication" => {
+                clause.connective(BooleanOperator::Implication, clause.flag("flag"), not())
+            }
+            "comparison_leaf" => clause.compare(
+                ComparisonOperator::Less,
+                clause.variable("x"),
+                clause.variable("x"),
+            ),
+            _ => unreachable!(),
+        };
+        let arithmetic = clause.numeric(
+            NumericOperator::Add,
+            clause.variable("x"),
+            clause.literal(0),
+        );
+        let right = clause.compare(ComparisonOperator::Equal, arithmetic, clause.variable("x"));
+        let expression = clause.and(left, right);
+        let built = Built {
+            environment: clause.environment(&["x"], &["flag"]),
+            node: expression.source().clone(),
+            expression,
+        };
+        let source = built.source();
+        let module = module_of(index, "pure_retain");
+        let arguments = [
+            ("flag_current", if flag { "true" } else { "false" }),
+            ("x_current", "i64::MIN"),
+        ];
+        let arguments = arguments
+            .iter()
+            .filter(|(name, _)| {
+                parameters(&source)
+                    .iter()
+                    .any(|parameter| parameter == name)
+            })
+            .copied()
+            .collect::<Vec<_>>();
+        let invocation = call(
+            &format!("crate::{module}"),
+            &source,
+            &arguments,
+            "&mut meter",
+        );
+        writeln!(checks, "#[test]\nfn pure_{label}() {{\n    for budget in 0..={expected_retains} {{\n        let mut meter = rt::Meter::new(rt::ScalarLimits {{ result_units: budget, ..UNLIMITED }});\n        let outcome = {invocation};\n        if budget == {expected_retains} {{\n            assert_eq!(outcome, rt::Outcome::Completed(false), \"{label}: all completed connectives retain\");\n        }} else {{\n            match outcome {{\n                rt::Outcome::Incomplete(stop) => assert_eq!(stop.charge_point, rt::ChargePoint::BooleanResultRetain),\n                other => panic!(\"{label}: budget {{budget}} must deny a connective retain: {{other:?}}\"),\n            }}\n        }}\n        assert_eq!(meter.consumed(rt::LimitKind::ResultUnits), budget, \"{label}: no retention after a child stop\");\n        assert_eq!(meter.admitted_charges().len() as u64, budget);\n        assert!(meter.admitted_charges().iter().all(|charge| charge.point == rt::ChargePoint::BooleanResultRetain), \"{label}: unreachable right arithmetic must charge nothing\");\n    }}\n}}\n").unwrap();
+        modules.push((module, source));
+    }
+    run_crate("pure-retain", &modules, &checks);
+}
+
 // ---------------------------------------------------------------------------------------------
 // Consumers that need a plain bool (AC-10)
 // ---------------------------------------------------------------------------------------------
