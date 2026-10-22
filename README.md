@@ -153,3 +153,5 @@ option) any later version (`AGPL-3.0-or-later`). See [LICENSE](LICENSE).
 Rust source that the generator emits carries its own
 `SPDX-License-Identifier: MIT OR Apache-2.0` header, so generated code can be
 used under those terms; the header applies to the output only.
+
+<!-- STD-30 language-boundary canary: inert README change. -->
