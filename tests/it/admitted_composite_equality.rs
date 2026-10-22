@@ -436,9 +436,18 @@ fn genuine_union_capability_refusals_preserve_the_healthy_sibling() {
     let alone = generate_items(&package, None, std::slice::from_ref(&healthy), &[]).unwrap();
     let absent = generate_items(&package, None, &batch, &[]).unwrap();
     let code = |output: &quire_contract_codegen::CompositeEqualityOracles| {
-        output.artifacts.iter().filter(|artifact| artifact.path != "claim-map.json").cloned().collect::<Vec<_>>()
+        output
+            .artifacts
+            .iter()
+            .filter(|artifact| artifact.path != "claim-map.json")
+            .cloned()
+            .collect::<Vec<_>>()
     };
-    assert_eq!(code(&absent), code(&alone), "failed Union emits no symbols and preserves sibling bytes");
+    assert_eq!(
+        code(&absent),
+        code(&alone),
+        "failed Union emits no symbols and preserves sibling bytes"
+    );
     let refused = absent
         .claim_map
         .items
@@ -466,6 +475,16 @@ fn genuine_union_capability_refusals_preserve_the_healthy_sibling() {
     .unwrap();
     // Absence is discovered at the root before any child work is charged.
     assert_eq!(code(&limited), code(&alone));
+    let exhausted = super::admitted_enum_equality::generate_items_with_limits(
+        &package, Some(compiled.context()), &batch, &[], CompositeEqualityLimits {
+            type_resolution_work_units: 2, ..Default::default()
+        },
+    ).unwrap();
+    assert_eq!(code(&exhausted), code(&alone));
+    let refused = exhausted.claim_map.items.iter().find(|claim| claim.node_id == union.node_id).unwrap();
+    assert!(matches!(&refused.result, ClaimDisposition::Refused {
+        refusal: CompositeEqualityRefusal::TypeResolutionWorkExhausted { limit: 2, consumed: 3 }
+    }));
     let complete = generate_items(&package, Some(compiled.context()), &batch, &[]).unwrap();
     let reversed =
         generate_items(&package, Some(compiled.context()), &[healthy, union], &[]).unwrap();

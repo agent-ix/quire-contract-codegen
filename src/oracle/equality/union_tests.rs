@@ -145,10 +145,7 @@ fn union_closure_seals_owner_members_and_admits_each_nested_payload() {
             let value = environment
                 .union(actual.key(), member.variant(), values.clone())
                 .expect("every member constructs");
-            let independent = exact::UnionValue::from_admitted(
-                member.member().clone(),
-                values,
-            );
+            let independent = exact::UnionValue::from_admitted(member.member().clone(), values);
             assert!(environment
                 .admits(&ValueType::Composite(actual.key()), &independent)
                 .expect("owner binding admitted"));
@@ -252,6 +249,26 @@ fn union_lookup_and_seal_faults_keep_typed_causes_before_equality() {
             declaration: "07".repeat(32)
         })
     );
+    let mut wrong_kind = original.clone();
+    let marker = context.enums().next().expect("genuine enum");
+    wrong_kind.node_id.digest = marker.key().to_string().into();
+    assert_eq!(admitted::resolve_composite(&context, &mut TypeClosure::default(), &wrong_kind),
+        Err(CompositeEqualityRefusal::WrongAdmittedKind { declaration: marker.key().to_string() }));
+    let library = qsl_replay::SuppliedLibrary {
+        identity: "test/union".to_owned(),
+        source: qsl_replay::SourceIdentity::new("test", "admitted-composites.native", "git", "fixture"),
+        path: "admitted-composites.native".to_owned(),
+        bytes: fixture::UNION_SOURCE.as_bytes().to_vec(),
+    };
+    let importer = fixture::compile(
+        "language \"ix:native\" edition \"1-draft\"; profile v = \"quire.value.complete/v1\"; import \"test/union\" as u; function healthy using v(a: Boolean,b: Boolean): Boolean pure { a = b }",
+        &qsl_replay::DependencyInput::new([library]).unwrap(),
+    );
+    let owner = context.package_id().record();
+    assert_eq!(admitted::resolve_composite(importer.context(), &mut TypeClosure::default(), original),
+        Err(CompositeEqualityRefusal::ForeignComposite {
+            declaration: shape.node().to_string(), package_domain: owner.domain().as_str().to_owned(), package_digest: owner.hex(),
+        }));
     // Swap a genuine owner declaration under a different handle: no forged member/key.
     let mut bindings = healthy.composite_bindings.clone();
     bindings.get_mut(&shape.key()).unwrap().declaration = declaration(&context, "Wrap").clone();
