@@ -60,16 +60,11 @@ fn arguments<'a>(value: &'a Value, operator: &str, identity: &str) -> Option<&'a
         .flatten()
 }
 
-/// Node lookup shared by planning and body reading for an admitted package.
-pub(crate) struct ClauseGraphView<'a> {
+struct ClauseNodeIndex<'a> {
     nodes: BTreeMap<&'a CheckedNodeId, &'a CheckedSemanticNodeV2>,
 }
 
-impl<'a> ClauseGraphView<'a> {
-    pub(crate) fn new(package: &'a CheckedPackageV2) -> Self {
-        Self::from_nodes(package.graph().nodes.iter())
-    }
-
+impl<'a> ClauseNodeIndex<'a> {
     fn from_nodes(graph_nodes: impl IntoIterator<Item = &'a CheckedSemanticNodeV2>) -> Self {
         let mut nodes = BTreeMap::new();
         for node in graph_nodes {
@@ -78,8 +73,31 @@ impl<'a> ClauseGraphView<'a> {
         Self { nodes }
     }
 
-    pub(crate) fn node(&self, id: &CheckedNodeId) -> Option<&'a CheckedSemanticNodeV2> {
+    fn node(&self, id: &CheckedNodeId) -> Option<&'a CheckedSemanticNodeV2> {
         self.nodes.get(id).copied()
+    }
+}
+
+/// One admitted package and its node lookup, shared by clause planning and body reading.
+pub(crate) struct ClauseGraphView<'a> {
+    package: &'a CheckedPackageV2,
+    index: ClauseNodeIndex<'a>,
+}
+
+impl<'a> ClauseGraphView<'a> {
+    pub(crate) fn new(package: &'a CheckedPackageV2) -> Self {
+        Self {
+            package,
+            index: ClauseNodeIndex::from_nodes(package.graph().nodes.iter()),
+        }
+    }
+
+    pub(crate) fn package(&self) -> &'a CheckedPackageV2 {
+        self.package
+    }
+
+    pub(crate) fn node(&self, id: &CheckedNodeId) -> Option<&'a CheckedSemanticNodeV2> {
+        self.index.node(id)
     }
 }
 
@@ -271,10 +289,10 @@ impl Reader<'_, '_> {
 }
 
 pub(crate) fn read_clause(
-    package: &CheckedPackageV2,
     id: &CheckedNodeId,
     nodes: &ClauseGraphView<'_>,
 ) -> Option<ClauseCondition> {
+    let package = nodes.package();
     let clause = nodes.node(id)?;
     if &*clause.node_tag != "state" || &*clause.semantic_form != "state_clause" {
         return None;
@@ -318,7 +336,7 @@ mod tests {
     use ix_trace_rs::trace;
     use quire_contract_model::{CheckedNodeId, CheckedSemanticNodeV2};
 
-    use super::ClauseGraphView;
+    use super::ClauseNodeIndex;
 
     fn id(number: u8) -> CheckedNodeId {
         CheckedNodeId {
@@ -344,23 +362,23 @@ mod tests {
         }
     }
 
-    #[trace("FR-014-AC-38")]
+    #[trace("IR-276-AC-5")]
     #[test]
-    fn clause_graph_view_preserves_first_node_and_reuses_one_walk() {
+    fn clause_node_index_preserves_first_node_and_reuses_one_walk() {
         let graph = [node(1, "first"), node(2, "other"), node(1, "later")];
         let visits = Cell::new(0);
-        let view = ClauseGraphView::from_nodes(graph.iter().inspect(|_| {
+        let index = ClauseNodeIndex::from_nodes(graph.iter().inspect(|_| {
             visits.set(visits.get() + 1);
         }));
         for _ in 0..3 {
-            assert_eq!(view.node(&id(1)).unwrap().body["label"], "first");
-            assert_eq!(view.node(&id(2)).unwrap().body["label"], "other");
-            assert!(view.node(&id(3)).is_none());
+            assert_eq!(index.node(&id(1)).unwrap().body["label"], "first");
+            assert_eq!(index.node(&id(2)).unwrap().body["label"], "other");
+            assert!(index.node(&id(3)).is_none());
         }
         assert_eq!(visits.get(), graph.len());
     }
 
-    #[trace("FR-014-AC-38")]
+    #[trace("IR-276-AC-5")]
     #[test]
     fn clause_planning_and_reading_share_one_graph_walk() {
         // A checked graph is a Vec, so the number of whole-graph accesses is not

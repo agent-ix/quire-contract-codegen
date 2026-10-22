@@ -105,15 +105,14 @@ pub fn derive_v2_clause_descriptor(
     node_id: &CheckedNodeId,
 ) -> Result<V2ClauseDescriptor, V2ClauseRefusal> {
     let nodes = ClauseGraphView::new(package);
-    derive_v2_clause_descriptor_with_view(package, node_id, &nodes)
+    derive_v2_clause_descriptor_with_view(node_id, &nodes)
 }
 
 pub(crate) fn derive_v2_clause_descriptor_with_view(
-    package: &CheckedPackageV2,
     node_id: &CheckedNodeId,
     nodes: &ClauseGraphView<'_>,
 ) -> Result<V2ClauseDescriptor, V2ClauseRefusal> {
-    Ok(plan_clause(package, node_id, nodes)?.descriptor)
+    Ok(plan_clause(node_id, nodes)?.descriptor)
 }
 
 /// Settle one selected clause as one typed claim-map entry.
@@ -143,7 +142,6 @@ struct PreparedClause {
 }
 
 fn plan_clause(
-    package: &CheckedPackageV2,
     node_id: &CheckedNodeId,
     nodes: &ClauseGraphView<'_>,
 ) -> Result<PreparedClause, V2ClauseRefusal> {
@@ -151,8 +149,7 @@ fn plan_clause(
     if &*clause.node_tag != "state" || &*clause.semantic_form != "state_clause" {
         return Err(V2ClauseRefusal::NotClause);
     }
-    let condition =
-        read_clause(package, node_id, nodes).ok_or(V2ClauseRefusal::UnsupportedCondition)?;
+    let condition = read_clause(node_id, nodes).ok_or(V2ClauseRefusal::UnsupportedCondition)?;
     let names = condition
         .inputs
         .iter()
@@ -216,11 +213,10 @@ pub fn generate_v2_clause_oracle(
     node_id: &CheckedNodeId,
 ) -> Result<V2ClauseOracle, V2ClauseRefusal> {
     let nodes = ClauseGraphView::new(package);
-    generate_v2_clause_oracle_with_view(package, node_id, &nodes)
+    generate_v2_clause_oracle_with_view(node_id, &nodes)
 }
 
 pub(crate) fn generate_v2_clause_oracle_with_view(
-    package: &CheckedPackageV2,
     node_id: &CheckedNodeId,
     nodes: &ClauseGraphView<'_>,
 ) -> Result<V2ClauseOracle, V2ClauseRefusal> {
@@ -229,7 +225,7 @@ pub(crate) fn generate_v2_clause_oracle_with_view(
         names,
         plan,
         root,
-    } = plan_clause(package, node_id, nodes)?;
+    } = plan_clause(node_id, nodes)?;
     let operations = plan
         .iter()
         .enumerate()
