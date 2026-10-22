@@ -10,6 +10,7 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 
 use crate::kani::generate::outcome::FunctionPredicateItem;
+use crate::oracle::scalar::RATIONAL_RANGE_MEMBERS;
 
 /// Original finite inclusive component domains for one Rational parameter.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -154,7 +155,7 @@ pub fn generate_rational_predicate_oracle(
             }
         })?;
         let mut endpoints = [0; 4];
-        for (index, (component, value)) in COMPONENT_NAMES.iter().zip(&bounds).enumerate() {
+        for (index, (component, value)) in RATIONAL_RANGE_MEMBERS.iter().zip(&bounds).enumerate() {
             endpoints[index] = value.parse::<i64>().map_err(|_| {
                 RationalPredicateRefusal::UnsupportedEndpoint {
                     parameter: id.clone(),
@@ -206,12 +207,6 @@ pub fn generate_rational_predicate_oracle(
     })
 }
 
-const COMPONENT_NAMES: [&str; 4] = [
-    "numerator_min",
-    "numerator_max",
-    "denominator_min",
-    "denominator_max",
-];
 type Graph<'a> = BTreeMap<&'a CheckedNodeId, &'a CheckedSemanticNodeV2>;
 
 fn shape(node: &CheckedNodeId) -> RationalPredicateRefusal {
@@ -270,7 +265,7 @@ fn domain(
     }
     let mut bounds = [String::new(), String::new(), String::new(), String::new()];
     let mut values = Vec::new();
-    for (index, name) in COMPONENT_NAMES.iter().enumerate() {
+    for (index, name) in RATIONAL_RANGE_MEMBERS.iter().enumerate() {
         let text = member(&ty.body, name)
             .and_then(|v| v.get("value"))
             .and_then(Value::as_str)

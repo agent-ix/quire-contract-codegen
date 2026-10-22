@@ -168,3 +168,68 @@ fn reference(a:&Rational,b:&Rational,meter:&mut Meter)->Outcome<bool> {
  println!("beyond-i128 intermediate, nested tree, all denial prefixes and budgets agree");
 }
 "#;
+
+#[trace("TC-060", "FR-046-AC-3")]
+#[test]
+fn generated_native_input_refusals_preserve_the_entire_meter() {
+    for source in [HEALTHY, MUTANT] {
+        let (package, function) = admit(source);
+        let oracle = generate_rational_predicate_oracle(FunctionPredicateItem {
+            package: &package,
+            function: &function,
+        })
+        .unwrap();
+        let original = source_parameters(source, "rational_commutative");
+        for (prepared, (name, node)) in oracle.parameters().iter().zip(&original) {
+            assert_eq!(&prepared.name, name);
+            assert_eq!(prepared.node.digest.as_ref(), node);
+        }
+        assert_eq!(original.len(), 2);
+        let prelude = NATIVE_REFERENCE.split("fn reference(").next().unwrap();
+        let stdout = run_native(
+            &[("subject", &oracle.source)],
+            &format!("{prelude}{INPUT_REFUSALS}"),
+        );
+        assert!(stdout.contains("18 typed input refusals preserve all Meter observations"));
+    }
+}
+
+const INPUT_REFUSALS: &str = r#"
+use super::subject::{predicate,PredicateInputRefusal};
+
+fn meter_snapshot(meter:&Meter)->(Vec<AdmittedCharge>,Vec<u64>,u64,bool) {
+ (meter.admitted_charges().to_vec(),LimitKind::ALL.iter().map(|k|meter.consumed(*k)).collect(),meter.admission_count(),meter.charge_log_truncated())
+}
+fn check(arguments:&[Rational],expected:PredicateInputRefusal,primed:bool) {
+ let mut meter=Meter::new(limits());
+ if primed {
+  let zero=Value::Rational(Rational::new(Integer::from(0_i64),Integer::from(1_i64)).unwrap());
+  assert_eq!(quire_exact::planned_equality(&zero,&zero,&mut meter),Outcome::Completed(true));
+  assert!(!meter.admitted_charges().is_empty());
+  assert!(meter.admission_count()>0);
+ }
+ let before=meter_snapshot(&meter);
+ assert_eq!(predicate(arguments,&mut meter),Err(expected));
+ assert_eq!(meter_snapshot(&meter),before);
+}
+#[test]fn argument_count_and_each_original_parameter_refuse_before_body_work() {
+ let rational=|n:i64,d:i64|Rational::new(Integer::from(n),Integer::from(d)).unwrap();
+ let valid=rational(1,1);
+ let mut checked=0;
+ for primed in [false,true] {
+  for count in [0,1,3] {
+   check(&vec![valid.clone();count],PredicateInputRefusal::ArgumentCount,primed);checked+=1;
+  }
+  // Each candidate is canonical but outside the original [-9,9;1,9] component domain.
+  // Only the selected original parameter is invalid; its exact ordered index must survive.
+  for index in 0..2 {
+   for invalid in [rational(-10,1),rational(10,1),rational(1,10)] {
+    let mut arguments=vec![valid.clone();2];arguments[index]=invalid;
+    check(&arguments,PredicateInputRefusal::ArgumentDomain{index},primed);checked+=1;
+   }
+  }
+ }
+ assert_eq!(checked,18);
+ println!("18 typed input refusals preserve all Meter observations");
+}
+"#;
