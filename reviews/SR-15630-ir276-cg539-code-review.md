@@ -89,3 +89,25 @@ bindings:
   - { test_id: clause_graph_view_preserves_first_node_and_reuses_one_walk, ac_id: FR-014-AC-38, trace: wrong }
   - { test_id: clause_planning_and_reading_share_one_graph_walk, ac_id: FR-014-AC-38, trace: wrong }
 ```
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | medium | The new `core/ir/clause.rs` test includes a replay fixture whose self-facade imports give `core` a test-time back-edge to `replay`, violating AD-004 L-2. | src/core/ir/clause.rs:11, tests/state_frame_support/native_twin.rs:21, spec/assurance/AD-004-cg-crate-layout.md:897 |
+
+The included `native_twin.rs` imports `quire_contract_codegen::{FrameReplay, FrameReplayInputs, ...}`. The crate aliases itself as `quire_contract_codegen` in `src/lib.rs:8`. AD-004 L-2 explicitly includes `#[cfg(test)]` modules and prohibits imports through the crate root. The new `#[allow(dead_code, clippy::duplicate_mod)]` has a reason and follows an existing fixture-reuse idiom, but does not address this added import edge.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | `ClauseGraphView` now holds the admitted package and index together; `*_with_view` takes only the node id and view, and the public foreign-clause test refuses `NotClause`. |
+| FND-002 | fixed | The first-entry control now checks a QSL-admitted clause oracle's identity and full output against the public API under FR-014-AC-38; the ticket-only trace was removed. |
+| FND-003 | fixed | The single-walk control now checks an admitted clause descriptor against the public API and a non-clause `NotClause` refusal under FR-014-AC-38; the ticket-only trace was removed. |
+| FND-004 | still-open | The test module still includes `native_twin.rs` beneath `core/ir`; move its behavioral test to a permitted layer or use a core-safe fixture. |
+| FND-004 | fixed | The core fixture includes and oracle imports were removed; both controls now live in the existing Kani role-parity test module, which already includes the Twin fixture. |
+
+## Final verdict (disposition pass 2)
+
+PASS at exact head 4020b52b3d1ad44f0de33960b619fc58bc048009. FND-001 through FND-004 have fixed latest dispositions. The changed core source no longer includes the replay fixture or imports a higher layer. The moved controls retain counted first-entry lookup, admitted clause oracle and descriptor parity, clause identity, and non-clause refusal. `quire matrix --scope . --format tsv` binds both moved controls at `src/kani/generate/role_parity_tests.rs:61,96` to FR-014-AC-38; no `IR-276-AC-5` source tags remain. `git diff --check` and `cargo fmt --check` passed. The author reported focused tests and AD-004 L-2 layout checks; the reviewer ran no full gate.
