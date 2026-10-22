@@ -81,6 +81,7 @@ scalar proof qualification are distinct, both still required.
 | No panic on a generation or analysis path | NFR-005 | TC-042 |
 | Bound numeric and state strategies | FR-008 to FR-013, NFR-004 | TC-017 to TC-022 |
 | Complete-V1 oracles | FR-014 scalar, FR-018 composite equality, FR-021 function application, [FR-042](oracle/functional/FR-042-generated-checked-invariant-causes.md) typed checked-invariant causes | TC-024, TC-029, TC-031 |
+| Generated-closure evaluator corpus | [FR-043](oracle/functional/FR-043-export-generated-closure-evaluation-corpus.md) planned loadable checked-input and QSL-reference export | [TC-058](oracle/matrix/TC-058-generated-closure-evaluation-corpus.md) planned |
 | Checked-package fixture identity ownership | [FR-037](core/functional/FR-037-fixture-identity.md) application and nominal fixture identities | [TC-052](core/matrix/TC-052-fixture-identity.md) planned consumer regression |
 | Typed V2 operator selection | [FR-038](core/functional/FR-038-typed-operator-catalog.md) internal CG catalog over IR-admitted identities | Criterion-tagged V2 oracle and Kani consumer tests planned |
 | Production ContractPackage consumption | [FR-039](core/functional/FR-039-contract-package-consumption.md) one admitted FR-330 package for negotiation and generation | [TC-053](core/matrix/TC-053-contract-package-consumption.md) planned production integration checks |
