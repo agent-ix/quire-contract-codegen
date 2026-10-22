@@ -332,28 +332,40 @@ This subsection verifies [FR-014](../functional/FR-014-exact-scalar-oracles.md)'
 FR-014-AC-53. These controls are planned until implemented; this spec change
 claims no executed coverage or Kani result.
 
-1. Through public CG generation over authentic strict-reader-admitted V2 clause
-   packages, exercise canonical integer leaves at signed-i64 MIN and MAX,
+1. Through public CG generation over strict-reader-admitted V2 clause packages,
+   exercise canonical integer leaves at signed-i64 MIN and MAX,
    -1, 0, 1, and multiple other ordinary positive and negative constants.
    Confirm that each generated leaf uses the public kernel `Integer::from(i64)`
    constructor with a compile-safe explicitly typed i64 value. Eligibility is
    exactly successful parsing of the complete spelling as i64 followed by an
    identical canonical display round trip; vary the supported clause and
    operation context without changing this decision. Private renderer checks
-   alone do not establish public-generation behavior.
+   alone do not establish public-generation behavior. Use authentic QSL-emitted
+   fixtures where its source checker admits the literal value and shape;
+   separately identify controls admitted through the owner's public candidate
+   and reader APIs after rekeying a general literal. The latter establish CG
+   behavior for reader-admitted inputs, not QSL source emission of those values.
 2. Exercise i64 MIN-1 and MAX+1, i128 MIN and MAX, and exact integers beyond i128.
-   Their leaves retain the original runtime arbitrary-precision canonical parse
+   A QSL source-checker refusal before CG does not test CG's fallback; use
+   separately identified candidate/reader-admitted general literal controls for
+   values outside that source route's frontier. Their leaves retain the original
+   runtime arbitrary-precision canonical parse
    and typed `InvalidConstant` mapping. Separately exercise an admitted canonical
    i64-MIN leaf and a negate application over the positive literal
    `9223372036854775808`: only the former uses the primitive constructor; the
    latter retains its positive parsed child and the same owner negate call.
    No expression folding or conversion of the child's domain is permitted.
-3. Submit noncanonical spellings such as `+1`, `01`, `-0`, surrounding whitespace
-   and invalid digits through the strict reader and retain its existing
-   refusals. Test the defensive private rendering seam separately: those
-   spellings remain on the original parse/failure route and never become
-   successfully constructed constants. Do not describe reader-rejected
-   spellings as admitted public fixtures.
+3. Keep owner-reader refusals, including malformed-bound and stale literal
+   identity controls, distinct from admitted general integer leaves. Preserve
+   each existing refusal without adding a new reader or CG refusal. For any
+   general leaf admitted with an ineligible spelling, including `+1`, `01`,
+   `-0`, surrounding whitespace or invalid digits where the owner reader
+   admits them, assert that public CG retains the original runtime canonical
+   parse and typed `InvalidConstant` failure mapping, never `Integer::from(i64)`
+   or spelling normalization. Exercise the defensive private rendering seam
+   separately with the same fallback expectation. Do not describe a
+   reader-refused package as admitted, or a candidate/reader-admitted general
+   literal control as a QSL source-emission fixture.
 4. Compare generated oracles with direct owner evaluation whose operands are
    independently prepared through public canonical parsing, without reusing
    the constructor-selection helper. Include all supported integer comparisons
