@@ -1445,6 +1445,7 @@ dependencies = [
  "quire-contract-model",
  "quire-contract-runtime",
  "quire-exact",
+ "quire-semantic-value",
  "quire-verification-contracts",
  "quote",
  "rustix",
