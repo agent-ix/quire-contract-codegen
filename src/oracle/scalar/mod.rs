@@ -4155,7 +4155,9 @@ impl OracleOutput {
     fn render(&self) -> String {
         match self {
             Self::Value(value) => format!("rt::Outcome<{value}>"),
-            Self::QuantityWithUnit => "(rt::Outcome<rt::Quantity>, quantity_owner::IdentifiedUnit)".to_owned(),
+            Self::QuantityWithUnit => {
+                "(rt::Outcome<rt::Quantity>, quantity_owner::IdentifiedUnit)".to_owned()
+            }
         }
     }
 }

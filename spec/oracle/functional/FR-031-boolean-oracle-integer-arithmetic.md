@@ -551,10 +551,10 @@ the pending implementation and proof gates are separate from those decisions.
   family and the generated crate dependency together. The coherent CG lock has landed;
   AC-22 and AC-26 still require their planned behavior and verification.
 - **OD-3, the equality route (closed by measurement).** `quire_exact` exports `planned_equality`
-  and no type environment or checked equality. For two integer operands, Contract Runtime's
+  and no type environment or checked equality. For two integer operands, QSV's
   `CheckedEquality::evaluate` takes `EqualitySchedule::Plan`, calls its `planned_equality` and
   returns `equal == (operator == Equal)`, that is negated for not-equal, with no further charge
-  (Contract Runtime `src/exact/equality.rs`). `quire_exact::planned_equality` over
+  (QSV declaration equality evaluation). `quire_exact::planned_equality` over
   `Value::Integer` operands, negated for not-equal, is therefore the same value and the same
   charges.
 - **OD-4, the Kani encoding of division.** The bundle takes fixed-width operators, with the

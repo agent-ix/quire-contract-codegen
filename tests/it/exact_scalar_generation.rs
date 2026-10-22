@@ -667,23 +667,28 @@ fn tc_024_every_scalar_family_generates_one_oracle_calling_its_runtime_operator(
         ),
         (
             1081,
-            "quantity_owner::evaluate_quantity_unit(quantity_owner::QuantityOperation::Add(".to_owned(),
+            "quantity_owner::evaluate_quantity_unit(quantity_owner::QuantityOperation::Add("
+                .to_owned(),
         ),
         (
             1082,
-            "quantity_owner::evaluate_quantity_unit(quantity_owner::QuantityOperation::Multiply(".to_owned(),
+            "quantity_owner::evaluate_quantity_unit(quantity_owner::QuantityOperation::Multiply("
+                .to_owned(),
         ),
         (
             1083,
-            "quantity_owner::evaluate_quantity_unit(quantity_owner::QuantityOperation::Power(".to_owned(),
+            "quantity_owner::evaluate_quantity_unit(quantity_owner::QuantityOperation::Power("
+                .to_owned(),
         ),
         (
             1088,
-            "quantity_owner::evaluate_quantity_unit(quantity_owner::QuantityOperation::Subtract(".to_owned(),
+            "quantity_owner::evaluate_quantity_unit(quantity_owner::QuantityOperation::Subtract("
+                .to_owned(),
         ),
         (
             1089,
-            "quantity_owner::evaluate_quantity_unit(quantity_owner::QuantityOperation::Divide(".to_owned(),
+            "quantity_owner::evaluate_quantity_unit(quantity_owner::QuantityOperation::Divide("
+                .to_owned(),
         ),
     ];
     for (index, operator) in ComparisonOperator::ALL.into_iter().enumerate() {

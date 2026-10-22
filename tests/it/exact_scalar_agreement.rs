@@ -18,12 +18,12 @@ use std::{
 };
 
 /// Development dependencies the agreement support modules use beyond the
-/// Contract Runtime the generated crate already depends on. Same exact
-/// versions as this repository's own manifest; each scratch crate resolves
+/// Contract Runtime the generated crate already depends on. Matching
+/// constraints from this repository's manifest let each scratch crate resolve
 /// its own public dependency closure before the locked native test.
 const AGREEMENT_DEV_DEPENDENCIES: &str = concat!(
     "serde_json = \"=1.0.151\"\nsha2 = \"=0.10.9\"\n",
-    "ix-trace-rs = { version = \"=0.1.0\", git = \"https://github.com/agent-ix/ix-trace-rs\", branch = \"main\" }\n",
+    "ix-trace-rs = { version = \"0.1\", git = \"https://github.com/agent-ix/ix-trace-rs\", branch = \"main\" }\n",
     "quire-exact = { git = \"https://github.com/agent-ix/quire-exact\", branch = \"main\", features = [\"test-support\"] }\n",
 );
 
