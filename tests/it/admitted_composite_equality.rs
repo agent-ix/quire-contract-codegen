@@ -397,3 +397,32 @@ fn genuine_composite_host_generation_preserves_closure_and_capability_ordering()
         }
     }
 }
+
+const UNION_SOURCE: &str = r#"language "ix:native" edition "1-draft";
+profile v = "quire.value.complete/v1";
+record Payload { flag: Boolean; }
+union Shape { Empty, Flag(Boolean), Boxed(Payload) }
+union Other { Empty, Flag(Boolean), Boxed(Payload) }
+union Wrap { Plain, Nested(Shape), Both(Shape, Other) }
+function shape_same using v(a: Shape,b: Shape): Boolean pure { a = b }
+function other_same using v(a: Other,b: Other): Boolean pure { a = b }
+function wrap_same using v(a: Wrap,b: Wrap): Boolean pure { a = b }
+function healthy using v(a: Boolean,b: Boolean): Boolean pure { a = b }
+"#;
+
+#[trace("TC-029", "FR-018-AC-44")]
+#[test]
+fn genuine_union_host_generation_closes_nested_owner_declarations() {
+    let compiled = fixture::compile(UNION_SOURCE, &qsl_replay::DependencyInput::default());
+    let package = checked(&compiled, &[]);
+    let items = ["shape_same", "other_same", "wrap_same", "healthy"]
+        .map(|name| direct_source_item(&package, name));
+    let generated = generate_items(&package, Some(compiled.context()), &items, &[])
+        .expect("genuine union batch");
+    for item in &items {
+        let claim = generated.claim_map.items.iter().find(|claim| claim.node_id == item.node_id)
+            .expect("one disposition per requested equality");
+        assert!(matches!(claim.result, ClaimDisposition::Generated(_)),
+            "genuine union equality must generate: {:?}", claim.result);
+    }
+}

@@ -2204,6 +2204,7 @@ fn render_composite_key(
     let form = match binding.form {
         qsl_replay::AdmittedCompositeForm::Record => "qsl_replay::AdmittedCompositeForm::Record",
         qsl_replay::AdmittedCompositeForm::Tuple => "qsl_replay::AdmittedCompositeForm::Tuple",
+        qsl_replay::AdmittedCompositeForm::Union => "qsl_replay::AdmittedCompositeForm::Union",
     };
     Ok(format!(
         "lookup_composite_key(_context, {:?}, &[{qualified}], {form})?",
