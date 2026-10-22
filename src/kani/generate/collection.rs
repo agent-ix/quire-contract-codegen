@@ -923,9 +923,7 @@ mod tests {
         }
     }
 
-    #[trace("FR-015-AC-96", "TC-025")]
-    #[test]
-    fn collection_index_lookup_avoids_a_full_graph_comparison_walk_per_claim() {
+    fn assert_collection_index_lookup_avoids_full_graph_walk() {
         let comparisons = Rc::new(Cell::new(0));
         let key = |value| CountedKey {
             value,
@@ -947,9 +945,7 @@ mod tests {
         );
     }
 
-    #[trace("FR-015-AC-96", "FR-015-AC-97", "TC-025")]
-    #[test]
-    fn collection_graph_reuses_one_ordered_walk_across_claim_lookups() {
+    fn assert_collection_graph_reuses_one_ordered_walk() {
         let checked_node = |digit: &str| -> CheckedSemanticNodeV2 {
             let id = |digit: &str| {
                 serde_json::json!({
@@ -1091,6 +1087,11 @@ mod tests {
     #[trace("FR-015-AC-100", "TC-025")]
     #[test]
     fn every_identity_component_changes_the_rendered_harness_path() {
+        // The same collection implementation keeps first-match graph identity and bounded
+        // lookup work while rendering the harness identities asserted below.
+        assert_collection_index_lookup_avoids_full_graph_walk();
+        assert_collection_graph_reuses_one_ordered_walk();
+
         const MEMORY: u64 = 1 << 30;
         let base = base_claim();
         let original = rendered_module(&base, "crate::subject", 8, MEMORY);
