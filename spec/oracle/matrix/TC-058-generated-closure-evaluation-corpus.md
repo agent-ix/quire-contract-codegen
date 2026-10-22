@@ -25,7 +25,7 @@ its later `quire-eval` expectation path.
    `quire.evaluator-case/v1` fields, ascending case ids, four source labels,
    dependency units, `package_id` from compilation, callable function,
    arguments, decimal-string limits, `object_environment: null`, sorted
-   generated-body function names and `expected: null` while `quire-eval`
+   `generated_bodies: []` and `expected: null` while `quire-eval`
    cannot yet execute registered bodies. Change authority, identity and
    valid source text one at a time without recompiling `package_id` and assert
    `package_mismatch`; change only revision labels and assert admission with
@@ -33,7 +33,7 @@ its later `quire-eval` expectation path.
 2. Export twice from the same admitted cases and compare exact bytes. Compare
    the independently enumerated case ids with the loaded bundle, then remove
    one record and assert a census failure. Perturb the callable, argument,
-   dependency, generated-body name and limit independently; assert the loaded
+   dependency and limit independently; assert the loaded
    change or FR-402's stated load/admission refusal. Fail one producer-side
    compile, case-construction, case-encoding or load check and assert no partial replacement:
    the prior complete bundle is byte-identical, or the target remains absent
@@ -45,6 +45,9 @@ its later `quire-eval` expectation path.
    or Contract Runtime `exact` (FR-044-AC-3).
 4. Once `quire-eval` runs registered generated bodies, use one real
    `quire-eval` run per selected case to set its non-null `expected` record.
+   Assert `generated_bodies` contains the sorted unique names of exactly the
+   bodies registered for that run; perturb one name and assert FR-402's
+   resulting loaded change or refusal.
    Run QSL FR-402's expected/std check over the bundle; assert exact result,
    refusal, location, losses and ten consumed counters. Check Boolean and
    Integer completed values, a non-Boolean/Integer `unencodable_value`, and
