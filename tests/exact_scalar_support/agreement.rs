@@ -619,7 +619,7 @@ pub mod rt_side {
         use std::sync::{Mutex, OnceLock};
         static ENUMS: OnceLock<Mutex<BTreeMap<String, qsl_replay::AdmittedEnum>>> = OnceLock::new();
         let source = format!(
-            "language \"ix:native\" edition \"1-draft\";\n{}enum {declaration} {{ {} }}\n",
+            "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\n{}enum {declaration} {{ {} }}\n",
             if ordered { "ordered " } else { "" },
             members.join(", ")
         );
