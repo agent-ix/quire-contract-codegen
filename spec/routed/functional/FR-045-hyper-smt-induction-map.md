@@ -35,8 +35,8 @@ settlement; a CG run record alone claims neither proof nor refutation.
   query kinds for that same depth, and a selected solver executable with an
   argument vector. The executable path and arguments are caller supplied;
   CG invokes it directly, without a shell or command-string interpretation.
-- Finite caller-selected per-query wall-clock, memory and captured-output
-  byte limits. Each of the two queries gets its own limit accounting and
+- Finite caller-selected per-query input-byte, wall-clock, memory and
+  captured-output byte limits. Each of the two queries gets its own limit accounting and
   process. CG does not choose the program's trust or proof status.
 
 ## Outputs
@@ -73,6 +73,8 @@ not as solver unknown or inconclusive.
 
 CG SHALL invoke one process per QSL query, write exactly that query's bytes
 on stdin and capture only that process's response under its per-query limits.
+When query bytes exceed the input limit, CG SHALL return `Stopped` with that
+limit before spawning a solver.
 The selected executable, argument vector and limits are retained in the run
 record. A missing executable SHALL return `MissingTool` before claiming a
 solver response. When the process exceeds a time, memory or capture limit, CG SHALL
@@ -96,7 +98,7 @@ rows. This contract sets no default Kani or SMT memory ceiling.
 | --- | --- | --- |
 | FR-045-AC-1 | For an admitted HP-2 safety clause and `k = 1`, CG requests QSL's base and step queries using FR-315's clause, ordered subjects, instance and Meter shape, submits each canonical byte sequence unchanged to the selected solver, and retains the product, item, instance, depth, kind and exact bytes in each query record. Matching `Unsat`/`Unsat` records are eligible for QSL-owned `Inductive { depth: 1 }`; QSL FR-182-AC-7, rather than CG, settles that outcome as `proved`, `decisive-witness`, `Uncertified`. | Test (TC-059) |
 | FR-045-AC-2 | A base `Sat` response remains only a candidate for QSL reconstruction and replay; base `Unsat` with step `Sat` is not induction; solver `Unknown`, QSL encoding refusal, resource stop, missing or malformed response, process failure and a response paired with another product, item, instance, depth, kind or query bytes remain distinct typed non-proof evidence. A resource stop is handed to FR-182 V-7 as incomplete. Every branch retains its available identities and depth, and no CG branch claims terminal refutation or certification. | Test (TC-059) |
-| FR-045-AC-3 | CG invokes the selected solver executable directly, one process per QSL query, with exact query bytes on stdin and finite per-query wall-clock, memory and captured-output limits; it retains the executable, arguments, limits, completion, status, captured output and any emitted model/proof bytes in a CG-owned run record. A missing executable gives `MissingTool`, and a reached limit gives `Stopped` with that limit; neither becomes `Unsat` or a QSL outcome. Separate attempt and query identities prevent a stale or swapped response from satisfying the other query. | Test (TC-059) |
+| FR-045-AC-3 | CG invokes the selected solver executable directly, one process per QSL query, with exact query bytes on stdin and finite per-query input-byte, wall-clock, memory and captured-output limits; it retains the executable, arguments, limits, completion, status, captured output and any emitted model/proof bytes in a CG-owned run record. An input-byte excess refuses before spawn, a missing executable gives `MissingTool`, and a reached limit gives `Stopped` with that limit; none becomes `Unsat` or a QSL outcome. Separate attempt and query identities prevent a stale or swapped response from satisfying the other query. | Test (TC-059) |
 
 ## Dependencies
 

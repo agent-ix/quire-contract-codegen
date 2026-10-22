@@ -36,8 +36,9 @@ second encoder or claim CG execution alone proves a hyperproperty.
    stale response association. Assert distinct typed run evidence and no
    CG terminal proof or refutation. QSL reconstruction/replay alone can
    turn a base candidate into a decisive product path (FR-045-AC-2).
-4. Use a selected nonexistent executable and finite wall-clock, memory and
-   capture limits. Assert `MissingTool` before any answer and `Stopped`
+4. Use a selected nonexistent executable and finite input-byte, wall-clock,
+   memory and capture limits. Assert `MissingTool` before any answer, an
+   input-byte refusal before spawn, and `Stopped`
    with the reached limit for each limit case. Check that one process gets
    only its own exact query on stdin, captures only its own stdout/stderr,
    and retains the selected executable, arguments, limits, completion and
