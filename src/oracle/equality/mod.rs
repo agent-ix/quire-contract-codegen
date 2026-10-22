@@ -3691,21 +3691,28 @@ mod tests {
                         module.path
                     );
                 }
-                let first_module = exact
+                // Genuine owner keys determine declaration order. Locate the module
+                // that actually reconstructs Chain0, rather than assuming its key sorts first.
+                let root_lookup = format!(
+                    "sv::CompositeDeclaration::new(lookup_composite_key(_context, {:?}, &[\"Chain0\"], qsl_replay::AdmittedCompositeForm::Record)?",
+                    root.digest,
+                );
+                let root_module = exact
                     .iter()
-                    .find(|artifact| artifact.path.starts_with("src/composites_"))
-                    .expect("deep closure has extra modules");
+                    .find(|artifact| artifact.path.starts_with("src/composites_")
+                        && artifact.contents.contains(&root_lookup))
+                    .expect("an extra module reconstructs the genuine root declaration");
                 let root_subject = format!(
                     "// Subject: {}",
                     crate::core::provenance::node_subject(&root)
                 );
                 assert!(
-                    first_module
+                    root_module
                         .contents
                         .lines()
                         .take_while(|line| !line.is_empty())
                         .any(|line| line == root_subject),
-                    "first extra module lacks the root composite node"
+                    "the root's reconstruction module lacks its composite subject"
                 );
                 (exact, root)
             })
@@ -3736,7 +3743,18 @@ fn deep_matches_shallow() {
     let admitted = qsl_replay::compile_admitted(
         qsl_replay::SourceIdentity::new("test", "deep.native", "git", "fixture"),
         "deep.native", source, [], &qsl_replay::DependencyInput::default(),
-        qsl_replay::StageLimits::default(), qsl_replay::ReplayLimits::default(),
+        {
+            let bytes = u64::try_from(source.len()).expect("finite retained source bytes");
+            let tokens = bytes.checked_add(1).expect("finite byte-derived token allowance plus EOF");
+            let nodes = (__RECORDS___u64).checked_mul(8).and_then(|n| n.checked_add(32))
+                .expect("finite fixed-record grammar node allowance");
+            qsl_replay::StageLimits::default()
+                .with_named("s1.input_bytes", bytes)
+                .and_then(|limits| limits.with_named("s1.tokens", tokens))
+                .and_then(|limits| limits.with_named("s1.nodes", nodes))
+                .expect("public fixed-fixture intake settings")
+        },
+        qsl_replay::ReplayLimits::default().with_input_bytes(u64::try_from(source.len()).unwrap()),
     ).expect("same retained source must admit independently");
     std::thread::Builder::new().stack_size(512 * 1024).spawn(move || {
         let context = admitted.context();
@@ -3772,7 +3790,15 @@ fn deep_matches_shallow() {
 }
 }
 "#;
+        let test = test.replace("__RECORDS__", &RECORDS.to_string());
         std::fs::write(scratch.join("tests/deep.rs"), test).expect("deep agreement test");
+        // Recompilation must use the same public owner cohort as generation. Cargo
+        // adapts the scratch package entry while retaining those resolved dependencies.
+        std::fs::copy(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.lock"),
+            scratch.join("Cargo.lock"),
+        )
+        .expect("seed the generated fixture with the executing owner's cohort");
         let output = std::process::Command::new(env!("CARGO"))
             .args([
                 "test",
