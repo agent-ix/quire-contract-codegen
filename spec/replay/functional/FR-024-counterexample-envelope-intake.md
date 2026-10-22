@@ -15,13 +15,21 @@ relationships:
     type: references
   - target: ix://agent-ix/quire-spec-language/ADR-015
     type: references
+  - target: ix://agent-ix/quire-spec-language/ADR-017
+    type: references
   - target: ix://agent-ix/quire-spec-language/FR-116
+    type: references
+  - target: ix://agent-ix/quire-spec-language/FR-071
+    type: references
+  - target: ix://agent-ix/quire-spec-language/FR-098
     type: references
   - target: ix://agent-ix/quire-spec-language/FR-122
     type: references
   - target: ix://agent-ix/quire-specification/FR-197
     type: references
   - target: ix://agent-ix/quire-specification/FR-312
+    type: references
+  - target: ix://agent-ix/quire-specification/FR-323
     type: references
 ---
 # FR-024: Submit every counterexample to QSL replay in QSL's counterexample envelope
@@ -43,6 +51,34 @@ records that still differ from it.
 This requirement states what the generator puts into those types, and does not restate their shape.
 [FR-016](./FR-016-witness-native-replay.md) owns decoding a Kani playback, the adapter refusals and
 the partition of replay outcomes. This requirement owns what reaches QSL.
+
+For every counterexample, the packet's replay target follows QSpec FR-323:
+exactly one of `function`, `frame_operation` or `state_clause`, with the other two absent.
+`function` holds the selected function's
+`QualifiedName`. `frame_operation` holds `{object, operation}`: `object` is the
+`QualifiedName` of the object type, process or state machine that declares the
+operation, and `operation` is its `Identifier`. CG obtains that pair from QSL's
+typed call-site result after it resolves the operation against the checked package,
+including an inherited operation's declaring owner. The caller's `OperationName`
+selects the site but is not authority for the declaring owner. A frame packet carries
+`frame_operation` and no `function` or `state_clause`. A state-clause packet carries
+`state_clause` as the clause's own declared `QualifiedName`, including for an operation's
+postcondition, and no `function` or `frame_operation`. Its payload carries the observation
+and no clause selection. The old `selected_function` member has no alias or fallback.
+The frame packet still
+carries the frame and generated-occurrence identities that ADR-017 PF-4 assigns
+to the envelope and payload; the *replay request* carries no `arguments` or
+`occurrence_key` for a frame.
+
+For a `function` replay request, CG carries the admitted packet's complete
+`occurrence_key` into the request unchanged. A function-contract predicate packet carries
+the selected function's `declaration` occurrence. An operator-parity packet carries its
+own scalar application's occurrence, while a value-parity packet carries its own
+function `declaration` occurrence. The key selects the claim under QSL FR-098; the
+`function` target selects its owner, and `obligation_identity` remains independent
+provenance. CG does not infer the key from the function name, node alone or obligation
+identity, and does not mint a substitute or default its role or ordinal. This rule adds
+no `occurrence_key` or `arguments` to a frame or state-clause replay request.
 
 The common intake takes a typed outcome from any backend adapter: a successful submission or a
 decode refusal. It owns admission and lineage across adapters; each adapter owns its backend-native
@@ -167,8 +203,20 @@ members against the operation's declaration in the domain package.
   `StaleNodeKey` before replay receives a package.
 - If a value lies outside its declared domain, then the generator shall report an out-of-domain
   counterexample and shall not call `replay`, `replay_frame` or `replay_state_clause`.
-- The generator shall fill every `WitnessPacket` member from the proving run's envelope members and
-  the obligation identity, and shall invent none.
+- The generator shall fill every common required `WitnessPacket` member from the proving run's
+  envelope members and the obligation identity, and shall invent none. It shall fill exactly one
+  replay-target member: `function` on a function packet, `frame_operation` on a frame packet,
+  using the validated declaring object and operation returned for that frame by QSL's typed
+  call-site result, or `state_clause` on a state-clause packet, using the clause's declared
+  `QualifiedName` after QSL's clause call-site validates that selection.
+- If QSL cannot return a frame operation's validated declaring owner and identifier, then the
+  generator shall refuse that frame packet rather than derive the owner from the caller's
+  selection. If QSL cannot validate a state clause's declared name, then the generator shall
+  refuse that state-clause packet rather than infer the name from its payload.
+- For every packet, the generator shall refuse a packet with none of the three replay-target
+  members or with more than one as distinct typed packet-admission failures before any replay.
+  It shall
+  admit neither an empty placeholder nor an old `selected_function` alias as a selection.
 - The generator shall admit the envelope only through `WitnessEnvelope::reconstruct`.
 - If `WitnessEnvelope::reconstruct` refuses the packet, then the generator shall return QSL's
   `WitnessRefusal` and shall not call `replay`, `replay_frame` or `replay_state_clause`.
@@ -176,6 +224,10 @@ members against the operation's declaration in the domain package.
   request members, and shall invent no request member. The state-clause path's invocation and
   snapshot documents are the one addition to the byte provision, built as the state-clause
   bullets below state, and no other document is added.
+- For a function-contract or parity replay request, the generator shall copy the admitted
+  packet's complete occurrence key into the request without changing its node, role or
+  ordinal. An absent key shall be refused by QSL's request reader at decode before replay;
+  the generator shall not supply a declaration key as a default for an absent or different key.
 - When a counterexample is a frame counterexample, the generator shall submit a
   `WitnessEnvelope<FrameCounterexample>` through `qsl_replay::replay_frame`.
 - The generator shall mint every obligation identity, for a function and for a state frame, by
@@ -239,7 +291,9 @@ members against the operation's declaration in the domain package.
   is `replay_through` with `qsl_replay::replay_state_clause` as the executor, as
   `replay_counterexample_through` does for the function path.
 - The generator shall return the executor's result unchanged.
-- The generator shall set the state-clause payload's `clause` to the clause's declared name.
+- The generator shall set the state-clause packet and request's `state_clause` replay target to
+  the clause's declared `QualifiedName` that QSL's `ClauseSite` validates. It shall set no
+  payload `clause` member or duplicate selection.
 - The generator shall set the payload's `observation` to `ClauseSelectionInput::Invocation`.
 - The generator shall submit the state-clause envelope on the `Witness` arm, with a transcript
   rendered by the one adapter rendering function (FR-024-AC-2) from the decoded playback values,
@@ -346,14 +400,14 @@ members against the operation's declaration in the domain package.
 |----|----------|--------------|
 | FR-024-AC-1 | The envelope's obligation identity is QSL's `ObligationIdentity` built as the ADR-013 O-09 digest by the one scheme of FR-024-AC-20: the subject node id (function or state frame; a clause or application subject is not yet built), its occurrence key, the obligation kind and the arguments, each a parameter node id with its declared domain (empty for a frame, which has no parameters), and no `source_span`. Changing `source_span` leaves it unchanged, and changing the obligation kind or any argument binding changes it. The scheme's spelling is CG's own and carries no digest label (AD-003 E-1, open question Q-3). | Test (TC-035) |
 | FR-024-AC-2 | Every backend-witness transcript the generator passes to `Witness::parse` is produced by the one adapter rendering function from decoded values, and that function takes no backend-native text as input. | Test (TC-035) |
-| FR-024-AC-3 | A counterexample with any value outside its declared domain is reported out-of-domain and neither `replay` nor `replay_frame` is called. The endpoints of each declared domain are admitted, and the values immediately outside it are not. | Test (TC-035) |
-| FR-024-AC-4 | For each `WitnessPacket` member in turn, a packet missing that member is refused by `WitnessEnvelope::reconstruct` with QSL's `MissingMember` naming it, and no replay runs. A packet whose trace position is present with the value none is admitted. | Test (TC-035) |
+| FR-024-AC-3 | A counterexample with any value outside its declared domain is reported out-of-domain and neither `replay`, `replay_frame` nor `replay_state_clause` is called. The endpoints of each declared domain are admitted, and the values immediately outside it are not. | Test (TC-035) |
+| FR-024-AC-4 | For each common required `WitnessPacket` member in turn, excluding the three alternative replay-target members of FR-024-AC-41, a packet missing that member is refused by `WitnessEnvelope::reconstruct` with QSL's `MissingMember` naming it, and no replay runs. A packet whose trace position is present with the value none is admitted. | Test (TC-035) |
 | FR-024-AC-6 | A frame counterexample is submitted as a `WitnessEnvelope<FrameCounterexample>` through `qsl_replay::replay_frame`, and its clause, frame, anchor and occurrence identities reach QSL unchanged. | Test (TC-035) |
 | FR-024-AC-7 | A reduced `Witness`-arm candidate is retained only when a backend re-run and native replay both preserve domain validity and the failure; a candidate that changes domain validity or the verdict is discarded. | Test (TC-035) |
 | FR-024-AC-8 | A retained reduced `Witness`-arm envelope carries its own backend re-run's transcript, never the original counterexample's. | Test (TC-035) |
 | FR-024-AC-10 | No type named `Witness`, `ReplaySource`, `WitnessEnvelope`, `TerminalRecord` or `ObligationIdentity` is defined under `src/`, and no source file under `src/` imports any of them from `quire_contract_ir`. | Test (TC-035) |
 | FR-024-AC-11 | `StateClauseReplay::replay` returns exactly the `StateClauseReplayResult` that `qsl_replay::replay_state_clause` returns when a test calls it directly with the same request and envelope, for a violating run and for a respecting run, and the two results differ from each other. `StateClauseReplay::replay_through` hands the executor the request and envelope it built and returns the executor's value as it is: an executor returning a sentinel result changes the returned result to that sentinel. | Test (TC-035) |
-| FR-024-AC-12 | The state-clause envelope's `clause_node` equals the `ClauseSite` node, and its `occurrence_key` the `ClauseSite` occurrence, that `qsl_replay::call_site` returns for the clause name, and the payload's `clause` is that name and its `observation` is the `Invocation` arm. For a unit with two postcondition clauses, each clause's envelope carries its own node and occurrence. A clause name the unit does not declare returns `StateClauseReplayError::CallSite` holding the call site's refusal when the request is built, and the executor is not called. | Test (TC-035) |
+| FR-024-AC-12 | The state-clause envelope's `clause_node` equals the `ClauseSite` node, and its `occurrence_key` the `ClauseSite` occurrence, that `qsl_replay::call_site` returns for the clause name. Its packet and request carry `state_clause` as that clause's declared `QualifiedName`, with neither other replay target; its payload has no `clause` selection and its `observation` is the `Invocation` arm. For a unit with two postcondition clauses, each clause's envelope carries its own node, occurrence and declared name. A clause name the unit does not declare returns `StateClauseReplayError::CallSite` holding the call site's refusal when the request is built, and the executor is not called. | Test (TC-035) |
 | FR-024-AC-13 | The pre snapshot holds, for every declared field of the state object, the value the Kani playback bound to that field, and the post snapshot holds the post-state value the caller supplied for it; each is one `complete` population holding one object with each field as an integer. The invocation document holds the members the Behavior bullets state, with `parameters` empty, `result` null and `created` and `deleted` empty, and its `pre` and `post` carry each snapshot's identity and `sha256-jcs` digest. Changing one playback value changes the pre snapshot's bytes and digest, and changing one post-state value changes the post snapshot's. | Test (TC-035) |
 | FR-024-AC-14 | For a document vector whose members are in non-sorted source order, whose text holds characters JSON escapes (a quote, a backslash, a control character, a non-ASCII letter) and whose numeric members include a large integer, a number with a fractional part and an exponent form, the bytes and the digest the state-clause builder returns equal what `core::canonical`'s bytes and digest functions return for the same value. The source of the new state-clause module names none of `quire_canonical`'s encoder functions, `sha2`, `ByteDigest::of`, a `sort` call over document members or a hand-written string-escaping routine, and `sha2` stays out of `[dependencies]`. | Test (TC-035) |
 | FR-024-AC-15 | A playback that binds no value for a declared state field returns `StateClauseReplayError::MissingField` naming that field, the executor is not called, and no snapshot holds a default for it. A playback or post-state name outside the path's declared field list returns `StateClauseReplayError::UndeclaredField` and a field bound twice returns `DuplicateField`, each naming the field, in the playback and in the post state alike. | Test (TC-035) |
@@ -382,6 +436,11 @@ members against the operation's declaration in the domain package.
 | FR-024-AC-38 | Starting from one admitted original failure, one valid reduced candidate that preserves the failure becomes a new CG lineage revision referring to its exact admitted QSL envelope, its exact parent revision and the unchanged opaque obligation identity. After retention, the original QSL envelope compares equal to its pre-reduction clone by `WitnessEnvelope<P>: Eq`, and the original CG record's revision identity, parent, obligation and typed evidence fields read back equal to their captured values. No lineage member is added to QSL's envelope or packet. | Test (TC-035) |
 | FR-024-AC-39 | From a retained failure revision, an out-of-domain reduction and a domain-valid reduction that changes the native verdict each create no revision. After each rejection, every prior QSL envelope compares equal to its pre-proposal clone and every prior CG record's revision identity, parent, obligation and typed evidence fields equal their captured values; a later valid reduction names the actual retained parent, with no skipped or substituted parent. | Test (TC-035) |
 | FR-024-AC-40 | A retained reduced `Witness` envelope holds a transcript from its own backend re-run, bound to its own reduced assignments; it cannot reuse any ancestor's transcript. | Test (TC-035) |
+| FR-024-AC-41 | A function counterexample packet and its admitted `WitnessEnvelope` carry `function` as the selected function's `QualifiedName`, with no `frame_operation` or `state_clause`; a frame counterexample packet and envelope carry `frame_operation` as `{object, operation}` from QSL's validated typed call-site result, with `object` naming the operation's declaring object type, process or state machine (also when the caller selected an inherited operation) and `operation` its `Identifier`, and no `function` or `state_clause`; a postcondition state-clause counterexample packet and envelope carry `state_clause` as the clause's own declared `QualifiedName` after QSL's `ClauseSite` validates that selection, and no `function` or `frame_operation`. CG refuses packet construction if the relevant validated selection is unavailable. None contains a `selected_function` member or alias. For a frame or state clause, the replay request has no `arguments` or `occurrence_key`; the frame packet's ADR-017 PF-4 frame and generated-occurrence identities remain unchanged, and a state-clause payload has no `clause` member. | Test (TC-035) |
+| FR-024-AC-42 | A function, frame or state-clause packet with none of `function`, `frame_operation` and `state_clause` is refused as a missing replay target; one with any two or all three is refused as a conflicting replay target. Each refusal is typed and distinguishable, `WitnessEnvelope::reconstruct` admits no envelope, and no replay executor is called, even when every common member is present. An absent selection is not replaced by an empty name, an inferred payload operation or clause, or `selected_function`. | Test (TC-035) |
+| FR-024-AC-43 | A function-contract replay request built from an admitted packet carries exactly that packet's function `declaration` occurrence key, including node, role and ordinal. Its `function` target and `obligation_identity` remain unchanged. CG obtains the key from the admitted packet, without minting or defaulting one or deriving it from `obligation_identity`. | Test (TC-035) |
+| FR-024-AC-44 | An operator-parity replay request carries its own packet's scalar application occurrence key, and a value-parity replay request carries its own packet's function `declaration` occurrence key. Typed request serialization and readback preserve each complete key, including distinct admitted occurrences of one node and an `expression` occurrence with a nonzero ordinal; neither key is replaced by a node-only identity or another claim's key. The packet's `obligation_identity` remains unchanged. | Test (TC-035) |
+| FR-024-AC-45 | A `function` replay request missing `occurrence_key` refuses through QSL's request reader as `invalid_runtime_input`/`missing-member` at `/replay/occurrence_key` before byte provision and recompile; the same request with a byte-provision entry also removed reports the same refusal. Neither refusal invokes replay or becomes a contract verdict. | Test (TC-035) |
 
 ### Mutations FR-024-AC-31 to FR-024-AC-35 detect
 
@@ -485,6 +544,18 @@ FR-024-AC-11 to FR-024-AC-30 are met:
   production implementation or tagged test yet.
 - The one adapter transcript rendering function is `render_witness` in `src/replay/function.rs`,
   used by the skeleton spine, the state-clause path and the frame path.
+- IR-958 and IR-965 selection is specified but not yet implemented: `src/replay/function.rs`,
+  `src/replay/frame.rs` and `src/replay/state_clause.rs` still construct the old
+  `selected_function` member. This slice specifies all three packet selections. QSL STD-245
+  and STD-261 specify the envelope admission and `replay_frame`/`replay_state_clause` consumer
+  changes; their code is pending. QSL's typed `OperationSite` must expose the validated declaring
+  owner and operation identifier before CG can consume that pair under FR-024-AC-41. The
+  state-clause path must take its validated
+  clause name from the `ClauseSite` and remove the old payload `clause` member.
+- IR-968's FR-024-AC-43 to FR-024-AC-45 are specified and planned: function-contract and
+  parity request construction does not yet forward the admitted packet's occurrence key.
+  Implementation follows QSL's replay-target code (QSL-973) and occurrence-key code
+  (STD-264); no tagged CG coverage is claimed for these new criteria.
 
 ## Open questions
 
@@ -526,5 +597,6 @@ no bound is refused under AD-016 arrow 5).
   parameter node id and declared domain; [FR-015](../../kani/functional/FR-015-bounded-kani-obligations.md), whose
   operation-contract harness (FR-015-AC-26) is the state-clause counterexample's source;
   [FR-029](../../kani/functional/FR-029-run-outcome-terminal-record.md), which reads the state-clause
-  result and errors (FR-029-AC-16); QSL's `qsl-replay` crate.
+  result and errors (FR-029-AC-16); QSpec FR-323's replay-target selection; QSL ADR-017 PF-4
+  and QSL's `qsl-replay` crate.
 - **Downstream**: [TC-035](../matrix/TC-035-counterexample-envelope-intake.md).
