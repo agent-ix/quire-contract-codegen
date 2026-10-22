@@ -248,7 +248,7 @@ fn noncanonical_literal_admission_and_runtime_fallback_remain_distinct() {
 
 // This is a separately labelled IR-reader control, not a QSL-emitted bounded
 // arithmetic claim. Its result type is an existing checked integer range.
-pub(super) fn reader_admitted_bounded_addition() -> quire_contract_codegen::V2ClauseOracle {
+fn bounded_addition_reader_attempt() -> CheckedPackageV2ReadResult {
     let (result, clause) = reader_variant("(self.balance + 1) > 1000", true, |wire| {
         let nodes = wire["semantic_graph"]["nodes"].as_array_mut().unwrap();
         let bound = nodes
@@ -267,25 +267,92 @@ pub(super) fn reader_admitted_bounded_addition() -> quire_contract_codegen::V2Cl
         }
         assert_eq!(changed, 1, "one arithmetic result type control");
     });
-    let CheckedPackageV2ReadResult::Admitted(package) = result else {
-        panic!("bounded addition reader result: {result:?}")
-    };
-    generate_v2_clause_oracle(&package, &clause).expect("public bounded-addition oracle")
+    let _ = clause;
+    result
 }
 
 #[trace("TC-024", "FR-014-AC-53")]
 #[test]
-fn bounded_arithmetic_control_is_reader_admitted_and_publicly_generated() {
-    let generated = reader_admitted_bounded_addition();
-    assert!(generated.source.contains("Some(&domain)"));
-    assert!(generated.source.contains("IntegerArithmetic::Add"));
-    assert_eq!(generated.descriptor.inputs.len(), 1);
+fn bounded_arithmetic_control_retains_the_owner_type_refusal() {
+    let result = bounded_addition_reader_attempt();
+    let CheckedPackageV2ReadResult::Refused(refusal) = result else {
+        panic!("the existing bounded result type is not admitted for this Add")
+    };
     assert_eq!(
-        (
-            generated.descriptor.inputs[0].lower,
-            generated.descriptor.inputs[0].upper
-        ),
-        (0, 1000)
+        refusal.code,
+        quire_contract_model::CheckedPackageRefusalCode::IllTyped
     );
-    eprintln!("bounded-result fixture: owner-candidate/reader Admitted -> public generate_v2_clause_oracle; genuine native result-domain refusal remains a separate assertion");
+    assert_eq!(
+        refusal.cause,
+        Some(quire_contract_model::CheckedPackageRefusalCause::TypeMismatch)
+    );
+    eprintln!("bounded-result fixture: public owner-candidate/reader -> IllTyped/TypeMismatch; no public clause result-domain-refusal coverage claimed");
+}
+
+#[trace("TC-024", "FR-014-AC-53")]
+#[test]
+fn original_parameter_precondition_regenerates_with_unchanged_proof_semantics() {
+    use quire_contract_codegen::{
+        negotiate_kani_obligations, KaniObligationOutcome, KaniObligationRequest, KaniSolver,
+        ObligationItem,
+    };
+    let (package, clause) =
+        Twin::with_bounded_other_precondition().emitted_package("OtherBelowLimit");
+    let oracle = generate_v2_clause_oracle(&package, &clause).unwrap();
+    assert_eq!(oracle.descriptor.node_id, clause);
+    assert_eq!(
+        oracle.descriptor.operation_identities,
+        ["quire.op.integer.lt"]
+    );
+    let item = ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+    };
+    let outcome = negotiate_kani_obligations(&KaniObligationRequest {
+        ceilings: crate::common::proof_ceilings::proof_ceilings(),
+        items: std::slice::from_ref(&item),
+        subject_path: "crate::request::unrelated",
+        unwind: 8,
+    })
+    .unwrap();
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("the original parameter precondition is emitted")
+    };
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("one original clause harness")
+    };
+    assert_eq!(harness.identity.package, *package.package_id());
+    assert_eq!(harness.identity.clause, clause);
+    assert_eq!(harness.identity.unwind, 8);
+    assert_eq!(harness.identity.solver, KaniSolver::Cadical);
+    assert_eq!(
+        harness.identity.ceilings.memory_bytes.get(),
+        16 * 1024 * 1024 * 1024
+    );
+    assert_eq!(harness.identity.ceilings.wall_clock.as_secs(), 600);
+    let [input] = harness.identity.arguments.as_slice() else {
+        panic!("one symbolic input")
+    };
+    assert_eq!(input.identifier, "parameter_other");
+    assert_eq!((input.minimum, input.maximum), (0, 1000));
+    let source = &harness.rust.contents;
+    assert!(source.contains(&oracle.source));
+    syn::parse_file(source).expect("the public proof is valid Rust syntax");
+    assert_eq!(source.matches("kani::any()").count(), 1);
+    assert_eq!(source.matches("kani::assume(").count(), 1);
+    assert!(source.contains("parameter_other >= 0_i64 && parameter_other <= 1000_i64"));
+    assert_eq!(source.matches("kani::cover!(").count(), 1);
+    assert!(source.contains("matches!(outcome, Ok(rt::Outcome::Completed(true)))"));
+    assert!(source
+        .contains("rt::OrderingOperator::Less, rt::OrderedOperands::Integers(left, right), meter"));
+    assert_eq!(source.matches(": u64::MAX,").count(), 10);
+    eprintln!("PUBLIC_PARAMETER_PROOF_BEGIN\n{source}PUBLIC_PARAMETER_PROOF_END");
+    eprintln!(
+        "PUBLIC_PARAMETER_RECORD_BEGIN\n{}\nPUBLIC_PARAMETER_RECORD_END",
+        harness.record.contents
+    );
 }
