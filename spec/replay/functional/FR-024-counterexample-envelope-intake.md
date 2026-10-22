@@ -19,6 +19,10 @@ relationships:
     type: references
   - target: ix://agent-ix/quire-spec-language/FR-116
     type: references
+  - target: ix://agent-ix/quire-spec-language/FR-071
+    type: references
+  - target: ix://agent-ix/quire-spec-language/FR-098
+    type: references
   - target: ix://agent-ix/quire-spec-language/FR-122
     type: references
   - target: ix://agent-ix/quire-specification/FR-197
@@ -65,6 +69,16 @@ The frame packet still
 carries the frame and generated-occurrence identities that ADR-017 PF-4 assigns
 to the envelope and payload; the *replay request* carries no `arguments` or
 `occurrence_key` for a frame.
+
+For a `function` replay request, CG carries the admitted packet's complete
+`occurrence_key` into the request unchanged. A function-contract predicate packet carries
+the selected function's `declaration` occurrence. An operator-parity packet carries its
+own scalar application's occurrence, while a value-parity packet carries its own
+function `declaration` occurrence. The key selects the claim under QSL FR-098; the
+`function` target selects its owner, and `obligation_identity` remains independent
+provenance. CG does not infer the key from the function name, node alone or obligation
+identity, and does not mint a substitute or default its role or ordinal. This rule adds
+no `occurrence_key` or `arguments` to a frame or state-clause replay request.
 
 The common intake takes a typed outcome from any backend adapter: a successful submission or a
 decode refusal. It owns admission and lineage across adapters; each adapter owns its backend-native
@@ -210,6 +224,10 @@ members against the operation's declaration in the domain package.
   request members, and shall invent no request member. The state-clause path's invocation and
   snapshot documents are the one addition to the byte provision, built as the state-clause
   bullets below state, and no other document is added.
+- For a function-contract or parity replay request, the generator shall copy the admitted
+  packet's complete occurrence key into the request without changing its node, role or
+  ordinal. An absent key shall be refused by QSL's request reader at decode before replay;
+  the generator shall not supply a declaration key as a default for an absent or different key.
 - When a counterexample is a frame counterexample, the generator shall submit a
   `WitnessEnvelope<FrameCounterexample>` through `qsl_replay::replay_frame`.
 - The generator shall mint every obligation identity, for a function and for a state frame, by
@@ -420,6 +438,9 @@ members against the operation's declaration in the domain package.
 | FR-024-AC-40 | A retained reduced `Witness` envelope holds a transcript from its own backend re-run, bound to its own reduced assignments; it cannot reuse any ancestor's transcript. | Test (TC-035) |
 | FR-024-AC-41 | A function counterexample packet and its admitted `WitnessEnvelope` carry `function` as the selected function's `QualifiedName`, with no `frame_operation` or `state_clause`; a frame counterexample packet and envelope carry `frame_operation` as `{object, operation}` from QSL's validated typed call-site result, with `object` naming the operation's declaring object type, process or state machine (also when the caller selected an inherited operation) and `operation` its `Identifier`, and no `function` or `state_clause`; a postcondition state-clause counterexample packet and envelope carry `state_clause` as the clause's own declared `QualifiedName` after QSL's `ClauseSite` validates that selection, and no `function` or `frame_operation`. CG refuses packet construction if the relevant validated selection is unavailable. None contains a `selected_function` member or alias. For a frame or state clause, the replay request has no `arguments` or `occurrence_key`; the frame packet's ADR-017 PF-4 frame and generated-occurrence identities remain unchanged, and a state-clause payload has no `clause` member. | Test (TC-035) |
 | FR-024-AC-42 | A function, frame or state-clause packet with none of `function`, `frame_operation` and `state_clause` is refused as a missing replay target; one with any two or all three is refused as a conflicting replay target. Each refusal is typed and distinguishable, `WitnessEnvelope::reconstruct` admits no envelope, and no replay executor is called, even when every common member is present. An absent selection is not replaced by an empty name, an inferred payload operation or clause, or `selected_function`. | Test (TC-035) |
+| FR-024-AC-43 | A function-contract replay request built from an admitted packet carries exactly that packet's function `declaration` occurrence key, including node, role and ordinal. Its `function` target and `obligation_identity` remain unchanged. CG obtains the key from the admitted packet, without minting or defaulting one or deriving it from `obligation_identity`. | Test (TC-035) |
+| FR-024-AC-44 | An operator-parity replay request carries its own packet's scalar application occurrence key, and a value-parity replay request carries its own packet's function `declaration` occurrence key. Typed request serialization and readback preserve each complete key, including distinct admitted occurrences of one node and an `expression` occurrence with a nonzero ordinal; neither key is replaced by a node-only identity or another claim's key. The packet's `obligation_identity` remains unchanged. | Test (TC-035) |
+| FR-024-AC-45 | A `function` replay request missing `occurrence_key` refuses through QSL's request reader as `invalid_runtime_input`/`missing-member` at `/replay/occurrence_key` before byte provision and recompile; the same request with a byte-provision entry also removed reports the same refusal. Neither refusal invokes replay or becomes a contract verdict. | Test (TC-035) |
 
 ### Mutations FR-024-AC-31 to FR-024-AC-35 detect
 
@@ -531,6 +552,10 @@ FR-024-AC-11 to FR-024-AC-30 are met:
   owner and operation identifier before CG can consume that pair under FR-024-AC-41. The
   state-clause path must take its validated
   clause name from the `ClauseSite` and remove the old payload `clause` member.
+- IR-968's FR-024-AC-43 to FR-024-AC-45 are specified and planned: function-contract and
+  parity request construction does not yet forward the admitted packet's occurrence key.
+  Implementation follows QSL's replay-target code (QSL-973) and occurrence-key code
+  (STD-264); no tagged CG coverage is claimed for these new criteria.
 
 ## Open questions
 

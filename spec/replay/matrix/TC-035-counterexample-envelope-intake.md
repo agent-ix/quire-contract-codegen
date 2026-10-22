@@ -118,6 +118,22 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     disagreement. Send the decode refusal through the adapter outcome's refusal arm, with its
     backend identity, obligation identity and typed cause but no assignments, packet or native
     text; record the common intake's typed result, contract settlement and whether replay ran.
+29. From an admitted function-contract counterexample packet, build a `function` replay request
+    using its genuine function `declaration` occurrence. Compare the complete packet and request
+    keys (node, role and ordinal), `function` target and `obligation_identity` before and after
+    typed request serialization and readback. Replay a falsified Boolean predicate through
+    QSL and record its reproduced violation. Inspect construction for a locally minted or
+    default key.
+30. Build operator-parity and value-parity requests from their admitted packets and compare each
+    request's complete key with its own packet's key after typed readback. Include an admitted
+    scalar `expression` occurrence with a nonzero ordinal and two authentic occurrences of one
+    node with different ordinals; check that the request retains the chosen occurrence and its
+    `obligation_identity`. The value-parity request uses its packet's function `declaration`
+    occurrence. Recheck that frame and state-clause requests from steps 6 and 10 have neither
+    `arguments` nor `occurrence_key` while their envelope and payload identities remain.
+31. Remove `occurrence_key` from an otherwise valid serialized `function` request, then also
+    remove one byte-provision entry. Decode both with QSL's public request reader and record
+    the code, path and phase of each refusal; confirm no replay executor is called.
 
 ## Expected Results
 
@@ -248,6 +264,18 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     never contract success or failure. Decode, domain and QSL admission refusals invoke no replay
     (FR-024-AC-36,
     FR-024-AC-37). Kani-specific refusal details follow FR-016.
+34. The function-contract request retains the admitted packet's full `declaration` key,
+    selected function and obligation identity through typed readback, with no locally
+    constructed key. QSL replay settles the falsified predicate as a reproduced violation
+    (FR-024-AC-43).
+35. The operator-parity request retains its own scalar application occurrence, including
+    the nonzero ordinal and the difference between occurrences of one node; the value-parity
+    request retains its own function `declaration` occurrence. Both retain their obligation
+    identity. Frame and state-clause requests retain their existing key-free shape
+    (FR-024-AC-44, FR-024-AC-41).
+36. Both missing-key requests refuse `invalid_runtime_input`/`missing-member` at
+    `/replay/occurrence_key` at decode before byte provision or recompile, and neither
+    invokes replay or produces a contract verdict (FR-024-AC-45).
 
 ## Status
 
@@ -284,3 +312,6 @@ last case (a clause added on an operation that sorts earlier) is measured on the
 `deposit` and `transfer`: a clause added on `deposit` changes the identity of `transfer`.
 FR-024-AC-36 to FR-024-AC-40, including common typed intake and CG lineage retention, are
 planned. No production minimizer or lineage record is claimed by this test case.
+Steps 29 to 31 and their results 34 to 36 are planned for IR-968. They require QSL's
+QSL-973 replay-target and STD-264 occurrence-key implementations and authentic admitted
+occurrence-bearing packets; no CG implementation or tagged test coverage is claimed yet.
