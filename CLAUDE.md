@@ -64,7 +64,7 @@ schemas/                   # domain output contracts included by their owning li
 spec/                      # spec.md (Subsystem Registry), tests.md (matrix index), <subsystem>/{stakeholder,functional,non-functional,matrix}/ per quire-contract-ir:ADR-0056; the suite registry is spec/core/matrix/suites.md
 reviews/                   # quire-validated SpecReview artifacts
 scripts/                   # dependency gate data and one-copy check
-src/bin/cg_gates.rs        # Rust Kani scope/gate and QSpec preflight selftest
+scripts/cg_gates.rs        # Rust Kani scope/gate and QSpec preflight selftest
 ```
 
 New integration tests go under `tests/it/` as a module of the single `it` binary (add the file plus a

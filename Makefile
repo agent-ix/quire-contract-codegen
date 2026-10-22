@@ -55,7 +55,7 @@ export QSPEC_DIR
 QSPEC_FIXTURES := positive-union-nodes positive-clause-operations positive-all-families
 GATES_BIN := target/cg-gates
 
-$(GATES_BIN): src/bin/cg_gates.rs
+$(GATES_BIN): scripts/cg_gates.rs
 	@mkdir -p target
 	CARGO_MANIFEST_DIR=$(CURDIR) rustup run $(MSRV) rustc --edition=2021 $< -o $@
 

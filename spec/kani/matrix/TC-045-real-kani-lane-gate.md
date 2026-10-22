@@ -99,6 +99,6 @@ gate passes on its current clean candidate; a copied status line is insufficient
 
 ## Implementation
 
-Implemented: `src/bin/cg_gates.rs`, the `kani-scope` and `kani-gate`
+Implemented: `scripts/cg_gates.rs`, the `kani-scope` and `kani-gate`
 targets and the shared `kani` recipe variable in `Makefile`, and `tests/it/kani_gate.rs`.
 Steps 1 to 12 are tests; step 13 is inspection. No CI workflow is part of this test case.
