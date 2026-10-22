@@ -455,6 +455,9 @@ pub mod rt_side {
         let mut units = UnitTable::default();
         let mut keys = BTreeMap::new();
         let mut named_units = BTreeMap::new();
+        // `in` is a language keyword. The source declares `inch`; vector labels
+        // and their exact 127/5000 scale remain unchanged.
+        let source_unit = |name| if name == "in" { "inch" } else { name };
         for owner in ["example-model", "other-model"] {
             let dimensions = spec
                 .dimensions
@@ -497,11 +500,13 @@ pub mod rt_side {
                 write!(
                     source,
                     "unit {} : {dimension} = rational({}, {})",
-                    u.name, u.scale.0, u.scale.1
+                    source_unit(u.name),
+                    u.scale.0,
+                    u.scale.1
                 )
                 .unwrap();
                 if let Some(target) = u.target {
-                    write!(source, " * {target}").unwrap();
+                    write!(source, " * {}", source_unit(target)).unwrap();
                 }
                 if u.offset.0 != 0 {
                     write!(source, " + rational({}, {})", u.offset.0, u.offset.1).unwrap();
@@ -530,7 +535,7 @@ pub mod rt_side {
             for u in owned {
                 let admitted = context
                     .units()
-                    .find(|a| a.qualified_name().last().unwrap().as_str() == u.name)
+                    .find(|a| a.qualified_name().last().unwrap().as_str() == source_unit(u.name))
                     .expect("owner unit");
                 let identified = IdentifiedUnit::new(admitted.quantity_unit().clone())
                     .expect("admitted unit identity");
