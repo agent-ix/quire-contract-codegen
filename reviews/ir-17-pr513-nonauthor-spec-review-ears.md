@@ -69,3 +69,7 @@ The nonauthored FR-018/TC-029 Union and FR-031/TC-044 ownership/metering edits w
 ## Narrow readback
 
 Published head 82051284537d9468f03b8a158a3e4f3605309a3f was compared with cd202f1b8fda0c23428c19aa47c40ce3769ff76c. There is no normative spec delta; the original scoped PASS is carried forward. Source/gap dispositions are recorded separately in SR-15389/SR-15390. The excluded authored unit metadata slice remains with the official independent reviewer. No new findings, Cargo or backend execution. These scratchpad artifacts normalize trailing presentation whitespace before custody; original findings and structured review data remain unchanged.
+
+## Round 5 merged-cohort readback
+
+Published head 3de23f5793b2cf4e301de1713cbc70a106bfa434 contains no normative spec delta from previously accepted 82051284537d9468f03b8a158a3e4f3605309a3f. Prior scoped PASS and original findings remain unchanged. The fixture/cohort readback and actual merged QSL-960 evidence are documented in SR-15389/SR-15390; they introduce no new requirement, criterion or EARS analysis obligation. The authored UnitTable slice remains excluded. **Current scoped verdict: PASS carried forward at this exact head.** No Cargo, Kani or branch edit; final gates remain parent-owned.

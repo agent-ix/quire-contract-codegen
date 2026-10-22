@@ -1190,3 +1190,147 @@ prior_outcomes_confirmed:
 qualification: failed aggregate retained; two focused fixes PASS; two large-source
   controls PENDING existing QSL960; no mergeability granted
 ```
+
+## Round 5 complete source disposition
+
+Complete Round5 source disposition at published clean head 3de23f5793b2cf4e301de1713cbc70a106bfa434, following the partial round4 record above. Code review including Rust and the full repository gap method completed. No new finding at any severity. All twelve original code findings remain FIXED. No source edits, Cargo/test/native execution, namespace/backend operations, aggregate/Kani gate, commit/push or ref mutation was performed by this reviewer. All earlier findings, still-open rows, fixes and partial verdicts above remain immutable history.
+
+Source verdict: PASS. Mergeability: CONDITIONAL on the parent-owned final make ci and canonical Kani qualification and retaining final official/external dispositions. The actual earlier aggregate failure at 0c4a36b6 remains retained (398 library PASS,4 FAIL,5 ignored; make exit2 before integration); this disposition verifies the source fixes and all four exact regressions on the merged owner cohort, not a passing aggregate rerun. No Kani/CBMC proof or receipt is claimed. The prior partial upstream-API condition is now satisfied; do not continue to call these four regressions unrun. Broader final gate acceptance is still pending.
+
+Baseline reconciliation: fresh remote main and local origin/main both 43d5a6fdc3743835f90b1d6b720cb9195a7db1dd; it is an ancestor of the candidate. The clean merge retains IR604/PR512's stdout-capture tests and Kani lane registration. Makefile/scripts/workflows have zero incremental delta against this current baseline; adding the inherited stdout test to its dedicated Kani lane is not a weakened or new IR17 gate. Current main already supplies FR016AC25 trace bindings, discussed below. Baseline code was not silently fixed or imported into the PR's defect count. Fresh-main ownership/context was inspected, and all migration source/spec/history plus current own authored UnitTable paths remain in the reviewed whole-landing scope.
+
+Merged owner cohort: QSL's eight crates select actual merged 485ccaa3bd289ae94baa74e96a976adce99fd0d8 (PR1197), exposing StageLimits::with_named and ReplayLimits::with_input_bytes through the qsl_replay root. The public implementation validates catalog names, excludes replay/format names from StageLimits, returns typed name refusal and changes no defaults; FR399AC4 explicitly covers real declaration sources requiring all three syntax allowances. No direct foundation dependency, copied wire/schema/private setting enum, guessed public API or string-to-private-type trick is used. Root manifest remains branch main with qsl-replay the sole direct QSL dependency.
+
+The resolved lock advances kernel to b692cc83d84eac33477a7d3d2770bc11f0e0350a and aligns both quire-contract-ir/model to d0737774acfbe64b1019b265952dc4c9720c2f23. QSV remains 1a38c06f39ece40e044a7bef5b868bd478b41c24 and Runtime a60c508f3a2af230aeb51af97bdf549cd5fffa01. Associated Quire/FCD dependency updates are ordinary transitive resolution of that merged owner cohort; no package override or PR pin is committed. Current root lock contains one of each first-party package; supplied one-copy check passes. Independent JSON comparison verifies metadata-before and metadata-after contain identical complete packages arrays AND identical resolve graphs (268 packages), not only selected names. Thus final ir-facade lock alignment changed no actual selected compiled source or feature graph, and the exact expensive checks validly apply across that metadata-only correction.
+
+Large fixture fixes: all changes since the partial checkpoint are private equality test support or dependency/baseline/custody. The production equality prefix before cfg(test) is byte-identical; original record-source generation bytes, 50,000-record/100,001-entry deep target, 65,536 work accounting, both 512KiB stack allocations, integer/domain and source-publication assertions are preserved. Source intake now uses finite actual source length for S1 input and replay bytes, source_bytes+1 for tokens (fixed ASCII grammar plus EOF), and 8*records+32 syntax nodes with checked arithmetic. These allowances configure only authentic fixture compilation; they do not widen CG work/source/depth/stack/proof profiles or production defaults. The independently compiled retained deep source uses the same public finite allowances outside its unchanged 512KiB CG/runtime thread. No synthetic replacement source, ID or result is introduced.
+
+The work fixture already selected an unlimited output allowance to isolate work accounting; its final inspection now calls finish(usize::MAX) instead of reapplying an unrelated default. Default/exact/one-byte-less source-limit checks remain in the separate deep control. The deep provenance assertion now locates the module actually reconstructing Chain0 via its genuine root node lookup, preserving authoritative key sorting instead of assuming that Chain0 sorts into the first module. Root module provenance and every module's item subject are still asserted.
+
+Seeded lock boundary was independently assessed against FR018AC28/30 and FR017AC53/TC027: copying the executing lock is confined to this private flat-compilation/reconstruction fixture, which must reconstruct the same owner-issued package identities. It does not claim independent fresh dependency resolution or the canonical production/observer paired receipt. The latter still requires two independently freshly resolved locks without copying a parent/cached resolution, and its production/observer implementation, literal-pin assertions and regression are unchanged. The local premerge captured fixture lock and root common first-party identities matched; this final merged deep run uses the same seeding recipe and passes real native compilation/reconstruction. No separate fresh-resolution claim is inferred for this seeded fixture. Parent final gates still own current production/observer resolution and receipt acceptance.
+
+The cycle and actual render-isolation fixes reviewed in partial4 remain unchanged. Cycle paths use the genuine recursive owner before the private repeated-node fault, retaining exact Option/Sequence cycle and healthy-sibling assertions; diagnostics retain both streams/status. Render isolation obtains genuine source package/unit metadata, owner-checks Integer/Quantity plans and actually calls render_item to obtain UnsupportedValueType. Whole-call generation failure remains a labelled private injection. This is defensive seam coverage under AC18, not public positive Quantity equality. No production behavior or nominal authorization is inferred from a privately constructed CheckedItem.
+
+Independently reviewed UnitTable scope includes units.rs, actual admit_environment wiring, emitted environment preparation and admitted_quantity_units.rs. All are unchanged from the reviewed fixed round3 source under the now merged owner cohort. Complete original unit_table cloning occurs after guards and before Union sealing; None preserves construction; complete unused metadata/owner identities are asserted through the production preparation path. Mixed direct and nested Quantity controls compare isolated sibling artifacts/dispositions and assert only surviving entrypoint symbols. Only legitimately root-dependent Contract IR request identity is normalized; original owner/descriptor/schedule/source fields are retained. The earlier compiled production-call removal fails the intended table assertion and restores to PASS. Quantity Unsupported AC18/38, frame Quantity->NonRangeType, typed lookup/declaration errors, no-equality-meter-charge failure ordering and owner-key-vs-node Union sealing remain unchanged. No positive Quantity equality/conversion, native Union or emitted metadata-constructor execution is claimed. The complete authored UnitTable slice was reviewed independently here, rather than excluded with the external review's authored slice.
+
+Actual merged-cohort evidence from fix-round-5-merged: work-bound-merged.log, deep-small-stack-merged.log, cycle-merged.log and render-merged.log each name the exact requested test, match one test and finish with one PASS. The deep test performs full generated native compilation plus independent source admission and runtime 512KiB work; the work control retains both default denied-entry and healthy boundary assertions. Earlier token/node allowance failures remain preserved separately. Final JSON durations include surrounding Cargo time; raw work test is 58.27s and deep test202.02s, consistent with observed commands. These are author executions, not reviewer executions. Current merged make fmt-check, locked all-target Clippy -D warnings, make spec and diff/one-copy checks pass; existing catalog/EARS warnings are retained. Older scalar20/native/host/metadata evidence remains provenance-limited to its earlier cohorts. It is neither discarded nor relabelled as execution of all current kernel/cohort paths; the parent aggregate provides that final check.
+
+Historical custody: committed official code/gap files exactly equal validated disposition4-partial copies. Original historical SR11690 FND004 source-literal pin disposition remains intact; all external SR15389..15392 and nine AC45 spec review artifacts remain preserved. No CG spec/plan text changed in this final fixture/dependency round, so previously completed spec lenses/lineage remain applicable without inventing new clean review artifacts. Optional semantic gap analysis remains not opted in; mandatory code/Rust test-oracle review was performed. All targets and evidence are retained; no new issue, host/security/account change or additional permission flow is introduced.
+
+External nonauthor final source review at the same 3de23f57 head now reports PASS with no new finding; its latest four exact reviewer-owned files remain in qualification-logs/review-cg513/reviews for final custody. Private IR17 code comment 2cd8663a-a83e-48cd-b80a-c8012cee52d5 and gap comment 0935e3fc-5b0e-4d76-9d40-746ecb9f1abe record that review. Official UnitTable review above independently covers the authored slice excluded there. Parent retains those validated latest artifacts before final gates.
+
+
+Fresh complete matrix on candidate: 899 criteria, 544 tagged, 287 untagged, 16 tagged-by-ignored-test and 52 method-without-symbol. Fresh baseline computed with quire coverage over an exact git archive of main43d5a6fd: 897 criteria,525 tagged,302 untagged,18 ignored-only,52 method-without-symbol. quoin matrix on an archive correctly refused absent HEAD; no fake HEAD/ref was manufactured. The equivalent static coverage matrix was used for the baseline, and quoin matrix on the real frozen candidate supplies its current evidence statuses. Nineteen status/addition changes are saved in baseline-comparison.json; no new criterion becomes untagged. Candidate-only AC44/45 are tagged; source-chain and assertion intent were independently inspected rather than inferred from binding counts.
+
+All 287 untagged current criteria occur in the existing SR15352 320-finding inventory, whose original outcomes remain retained. FR005AC3 is still untagged and remains explicitly deferred to SR15352/FND001 and the existing IR954/IR17 planner CLI owner; no new ticket or migration scope expansion. Original gap FND002 concerned untagged FR016AC25. Current merged main43d5a6fd now supplies four real trace binders through IR604/PR512: the ordinary launcher observation/selector tests and the dedicated installed-Kani controls. Thus that static trace gap is now removed by its existing owner in the BASELINE, not a new IR17 fix. Its prior deferred row remains immutable historical scope/disposition; current status is explicitly tagged/remediated-by-existing-owner. This does not claim that ignored installed-Kani assertions executed during this reviewer pass or this fixture qualification. Their dedicated lane is registered in inherited Makefile and remains for final parent qualification.
+
+The full repository requirement/test/production chain was reconciled using current computed matrix and coverage plus the inherited inventory. Both baseline and candidate coverage show ten existing diagnostics and seven resemblance suspicions; no new stub, hollow implementation, unowned production path or inflated acceptance from private fixtures was found in this final delta. Repository completeness remains FAIL because inherited gaps persist; incremental gap verdict PASS. All original code defects remain fixed. Historical deferred ownership is preserved without falsely claiming all baseline requirements complete, inventing duplicate remediation, or treating dedicated ignored Kani lanes as defects. Plan completion: not assessed. Aggregate at0c4 remains failed history; all four specific regressions now PASS on merged owner code; final aggregate/Kani acceptance remains pending.
+
+```yaml
+dispositions: []
+phase: complete-source-review
+review_head: 3de23f5793b2cf4e301de1713cbc70a106bfa434
+baseline_head: 43d5a6fdc3743835f90b1d6b720cb9195a7db1dd
+scope:
+- id: FR-018-AC-18
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: '`render_value_type` called with `ValueType::Quantity` and with `ValueType::Reference`
+    returns `Err(RenderError::UnsupportedValueType { family })` with `family` equal
+    to `"quantity"` and `"reference"` respectively and does not panic, and the item-boundary
+    mapping turns `RenderError::UnsupportedValueType` into `CompositeEqualityRefusal::Unsupported`
+    with `node_tag` equal to `family` and `unsupported_node_id` equal to the item''s
+    expression node id, emitting no code for the item and leaving its siblings unchanged,
+    while `RenderError::Generation(OracleGenerationError::UnknownRuntimeVariant {
+    .. })`'
+- id: FR-018-AC-24
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: The exact QSpec `positive-recursive-records.json` retains strict-reader
+    and List/Tree shape assertions; independently authored genuine admitted source
+    with those List (`Option<List>`) and Tree (`Sequence<Tree>` bounded `[0,3]`) shapes
+    closes each back-edge at its own in-progress record key, generates equality items
+    over both record types, and terminates; a synthetic unclosed `Option` self-cycle
+    and a `Sequence` self-cycle each refuse as `TypeResolutionCycle` naming the repeated
+    type node, without a panic, stack overflow or generated symbol. PLANNED (IR-643).
+- id: FR-018-AC-25
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: 'The per-item type-resolution counter charges one unit for each root type-node
+    entry or followed type-node reference or bounded-domain `semantic_type` edge,
+    including a repeated or memoized reference, across both operands and conversion
+    targets, independently of Contract IR lowering; with the default limit, an acyclic
+    chain reaches its 65,537th entry and refuses only its item as `TypeResolutionWorkExhausted
+    { limit: 65_536, consumed: 65_537 }` before further descent and without call-stack
+    exhaustion or generated symbols, while a sibling needing at most 65,536 entries
+    still generates. PLANNED (I'
+- id: FR-018-AC-28
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: With a caller-selected type-resolution work limit of at least 100,000 and
+    `cg.equality.source_bytes` raised to the measured flat source size, an admitted
+    acyclic type chain of 100,000 entries reconstructs and generates an oracle with
+    the same result as an equivalent shallow type on a 512 KiB stack; with the same
+    raised source-byte limit, the default type-resolution work limit refuses it at
+    entry 65,537, and a selected work limit one below its entry count refuses it at
+    the first denied entry. No depth setting or fixed depth refusal participates in
+    these runs. PLANNED (IR-511).
+- id: FR-018-AC-30
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: The 100,000-entry acyclic closure renders as flat source without a type-depth-sized
+    constructor expression; under the 1,048,576-byte default it returns `SourceTooLarge`
+    naming that limit when the source exceeds it, and under a caller limit equal to
+    its measured source bytes it emits a complete, compilable oracle within the publication
+    artifact and bundle byte limits. One byte less refuses before that byte is appended
+    and publishes no partial artifact. PLANNED (IR-511).
+- id: FR-018-AC-44
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: 'Genuine Union equality generation preserves the facade declaration key,
+    settled node, authoritative member bindings and declared member/payload order
+    across a nested Union closure, using the specified lookup and verified sealing
+    in both generator and emitted preparation. In-process owner-API controls admit
+    values of every member, including record and nested-Union payloads; distinct same-shaped
+    unions retain incompatible identities. Missing/wrong capability, Unknown/Foreign/WrongKind
+    lookup, name/form disagreement and seal faults retain their typed causes, no successful
+    prepared wrapper and no '
+- id: FR-018-AC-45
+  path: spec/oracle/functional/FR-018-composite-equality-oracles.md
+  role: examined
+  excerpt: After the existing setting/accounting and original-package context guards
+    succeed, generation-time construction and emitted preparation supplied Some(context)
+    attach a clone of that context's complete authoritative unit_table() to the constructed
+    TypeEnvironment, retaining declared but unused units without rebuilding a table,
+    deriving UnitId/NodeKey or substituting another package's table. Valid context-free
+    None behavior remains unchanged. Wrong-package refusal retains its whole-request
+    precedence; direct and nested Quantity items retain their existing typed Unsupported
+    behavior and refusal p
+- id: FR-017-AC-53
+  path: spec/kani/functional/FR-017-kani-execution-evidence.md
+  role: examined
+  excerpt: Both package locks are independently freshly resolved with the existing
+    bounded offline generation/update workflow, without copying a parent/other lock
+    or substituting a cached resolution. Each resolves both owning runtime and exact
+    identities to the build's authoritative lock identities; the independent observer
+    regression asserts both literal package names and repository identities independently
+    of the renderer's list. Both manifests, locks and all other AC-46 entries are
+    sealed and compared as a complete path/byte set before proof, after proof and
+    after native execution; mutation/replacemen
+- id: FR-399-AC-4
+  path: /home/peter/.cargo/git/checkouts/quire-spec-language-c986aa40394a5ad7/485ccaa/spec/functional/FR-399-set-a-named-stage-limit-through-the-replay-root.md
+  role: context_only
+  excerpt: A source of real declarations larger than 1 MiB, with `s1.input_bytes`
+    and the reader limit raised, is refused naming the `s1.tokens` ceiling; with `s1.tokens`
+    also raised, naming the `s1.nodes` ceiling; and it compiles only with `s1.input_bytes`,
+    `s1.tokens`, `s1.nodes` and the reader limit all raised.
+prior_outcomes_confirmed:
+  FND-001: deferred to existing SR15352 CLI owner
+  FND-002: historical deferral to IR604 retained; current baseline trace gap remediated
+new_findings: []
+qualification: source PASS; four actual merged-cohort regression PASS; parent aggregate
+  and canonical Kani pending
+current_baseline_owner_status:
+  FND-002: FR-016-AC-25 tagged on both baseline and candidate through merged IR604/PR512;
+    no native execution claim
+```
