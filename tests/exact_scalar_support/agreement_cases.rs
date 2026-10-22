@@ -608,7 +608,7 @@ fn tc_024_tc187_quantity_oracles_agree() {
         (2, "degC"),
     );
     assert_incomplete(
-        &arithmetic_outcome(&run),
+        &run.0,
         rt::LimitKind::WorkUnits,
         8,
         8,
@@ -1849,4 +1849,47 @@ fn denied_conversion_agreement_detects_non_result_meter_mutation() {
         direct: |meter| direct_conversion(f.resolve(&source), &unit, meter),
         generated: |meter| conversion_with_incomplete_meter_mutation(f.resolve(&source), &unit, meter),
     };
+}
+
+/// AC52's paired carrier is retained on stops and feeds later owner-resolved operations.
+#[trace("FR-014-AC-52", "TC-024")]
+#[test]
+fn quantity_paired_result_units_survive_stops_and_feed_following_operations() {
+    let f = rt::fixture();
+    let a = f.qi(2, "m");
+    let b = f.qi(3, "s");
+    let mut stopped_meter = Meter::new(rt::unit_tuple([0; 6]));
+    let stopped = quantity_typed(quantity_multiply(f.resolve(&a), f.resolve(&b), &mut stopped_meter)).unwrap();
+    let mut reference_meter = Meter::new(rt::unit_tuple([0; 6]));
+    let reference = rt::evaluate_quantity_unit(rt::QuantityOperation::Multiply(f.resolve(&a), f.resolve(&b)), &mut reference_meter).unwrap();
+    assert_eq!(stopped, reference, "stopped result retains the exact owner identified unit");
+    assert!(matches!(stopped.0, Outcome::Incomplete(_)));
+    assert_eq!(stopped_meter.admitted_charges(), reference_meter.admitted_charges());
+    for kind in rt::LimitKind::ALL {
+        assert_eq!(stopped_meter.consumed(kind), reference_meter.consumed(kind));
+    }
+
+    let mut scope = rt::UnitScope::new(&f.units);
+    let mut meter = Meter::new(rt::UNLIMITED);
+    let (product, product_unit) = quantity_typed(quantity_multiply(scope.resolve(&a).unwrap(), scope.resolve(&b).unwrap(), &mut meter)).unwrap();
+    let product = product.completed().expect("genuine product completes");
+    assert_eq!(product.unit(), product_unit.id());
+    assert!(scope.resolve(&product).is_none(), "the compound result needs its returned metadata");
+    scope.form(product_unit);
+    let (quotient, quotient_unit) = quantity_typed(quantity_divide(scope.resolve(&product).unwrap(), scope.resolve(&b).unwrap(), &mut meter)).unwrap();
+    let quotient = quotient.completed().unwrap();
+    assert_eq!(*quotient.magnitude(), rt::ratio(2, 1));
+    assert_eq!(quotient.unit(), quotient_unit.id());
+    scope.form(quotient_unit);
+    let (square, square_unit) = quantity_typed(quantity_power(scope.resolve(&quotient).unwrap(), &rt::int(2), &mut meter)).unwrap();
+    let square = square.completed().unwrap();
+    assert_eq!(*square.magnitude(), rt::ratio(4, 1));
+    assert_eq!(square.unit(), square_unit.id());
+    scope.form(square_unit);
+    assert!(scope.resolve(&square).is_some());
+
+    let before = (meter.admitted_charges().to_vec(), rt::LimitKind::ALL.map(|kind| meter.consumed(kind)));
+    let cause = quantity_typed(quantity_add(f.resolve(&a), f.resolve(&b), &mut meter)).unwrap_err();
+    assert_eq!(cause, QuantityRefusal::IllTyped(IllTyped { cause: rt::IllTypedCause::IncompatibleDimensions }));
+    assert_eq!(before, (meter.admitted_charges().to_vec(), rt::LimitKind::ALL.map(|kind| meter.consumed(kind))));
 }
