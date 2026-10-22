@@ -22,7 +22,8 @@ name = "quire_contract_codegen"
 path = "src/lib.rs"
 
 [dependencies]
-ix-trace-rs = { version = "=0.1.0", git = "https://github.com/agent-ix/ix-trace-rs", branch = "main" }
+# Accept compatible branch releases; Cargo.lock records the selected revision.
+ix-trace-rs = { version = "0.1", git = "https://github.com/agent-ix/ix-trace-rs", branch = "main" }
 quire-exact = { git = "https://github.com/agent-ix/quire-exact", branch = "main" }
 quire-contract-ir = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-ir", branch = "main" }
 # The model items (`CheckedPackageV2`, `RequirementRef`, ...) come from quire-contract-model, a crate in
