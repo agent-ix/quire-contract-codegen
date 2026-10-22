@@ -584,3 +584,80 @@ fn render_step(
     source.push_str("}\n");
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use ix_trace_rs::trace;
+
+    use super::*;
+
+    fn integer_leaf(spelling: &str) -> String {
+        let step = Step {
+            kind: ValueKind::Integer,
+            term: StepTerm::Integer(spelling.to_owned()),
+        };
+        let mut source = String::new();
+        render_step(&mut source, 0, &step, &BTreeMap::new(), "", "")
+            .expect("render a standalone integer step");
+        syn::parse_file(&source).expect("valid Rust leaf");
+        source
+    }
+
+    #[trace("TC-024", "FR-014-AC-53")]
+    #[test]
+    fn canonical_i64_leaves_use_the_public_primitive_constructor() {
+        let mut failures = Vec::new();
+        for (spelling, value) in [
+            ("-9223372036854775808", "i64::MIN"),
+            ("-9223372036854775807", "-9223372036854775807_i64"),
+            ("-17", "-17_i64"),
+            ("-1", "-1_i64"),
+            ("0", "0_i64"),
+            ("1", "1_i64"),
+            ("42", "42_i64"),
+            ("1000", "1000_i64"),
+            ("9223372036854775807", "9223372036854775807_i64"),
+        ] {
+            let source = integer_leaf(spelling);
+            if !source.contains(&format!("Ok(rt::Integer::from({value}))")) {
+                failures.push(spelling);
+            }
+            assert!(!source.contains("meter.charge"));
+        }
+        assert!(
+            failures.is_empty(),
+            "primitive constructor missing: {failures:?}"
+        );
+    }
+
+    #[trace("TC-024", "FR-014-AC-53")]
+    #[test]
+    fn every_ineligible_leaf_keeps_the_original_parse_and_typed_failure() {
+        for spelling in [
+            "-9223372036854775809",
+            "9223372036854775808",
+            "-170141183460469231731687303715884105728",
+            "170141183460469231731687303715884105727",
+            "-170141183460469231731687303715884105729",
+            "170141183460469231731687303715884105728",
+            "+1",
+            "01",
+            "-0",
+            " 1",
+            "1 ",
+            "1a",
+            "",
+            "--1",
+        ] {
+            let source = integer_leaf(spelling);
+            assert!(
+                source.contains(&format!(
+                    "\"{spelling}\".parse().map_err(|_| ClauseStop::InvalidConstant)"
+                )),
+                "original fallback changed for {spelling:?}: {source}"
+            );
+            assert!(!source.contains("Integer::from("));
+            assert!(!source.contains("meter.charge"));
+        }
+    }
+}
