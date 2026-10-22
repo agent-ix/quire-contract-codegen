@@ -115,3 +115,20 @@ These are not the full gate. Kani and the namespace tests were not run here.
 | FND-001 | fixed | f315205: the staged scalar manifest (`scalar_oracle_crate_manifest`, `src/core/profile.rs:31-49`) adds `[[example]] ir791_native` and `[dev-dependencies] quire-exact` with `features = ["test-support"]`. The normal dependency and the emitted `oracle_crate_manifest` carry no features: `tc_024_generated_crate_is_unpublished_charge_free_and_compiles` asserts no `test-support` and no `[[example]]`, and the emitted manifest must still equal `oracle_crate_manifest` (scalar.rs:402). The observer moved to `examples/ir791_native.rs` with `#[path = "../src/lib.rs"]` and is launched with `cargo run --locked --example ir791_native`. Its output format is byte-identical. Probe: the staged manifest plus runtime 288270a and quire-exact 37aa172 pinned gives `cargo build --offline --locked --example ir791_native` Finished. Dropping the dev-dependency feature gives E0599 again. `cargo tree -e features --edges normal` shows no `test-support` |
 | FND-002 | fixed | f315205: `generate_lockfile` loops `LOCKED_DEPENDENCIES` = [quire-contract-runtime, quire-exact] (scalar.rs:41,858). It reads each revision from `include_str!("../../../Cargo.lock")` at build time, not from a literal, then runs `cargo update --offline -p <pkg> --precise <rev>` and checks the result. `tc_027_staged_native_observer_compiles_with_locked_kernel_and_charge_log` asserts both pins in a staged lock |
 | FND-003 | fixed | f315205: `agreement_cases.rs:10-11` reads "an operand tuple and a limit tuple", line 217 "DIV-08 exact limits", line 414 "T11 NFC tuple" |
+| FND-004 | fixed | Historical round 2, private Linear comment 04e41ac8-b480-47f4-a973-73fe74bb760d, already records FND-004 fixed. Independently rechecked at landing head 5e60b358: src/kani/run/scalar.rs:1719-1741 names literal Runtime/Exact package and repository pairs, asserts each is present in production LOCKED_DEPENDENCIES, and checks each separately generated root/observer lock against the build-lock identity. Removing Exact from production now fails the independent membership assertion. This append reconciles the missing artifact custody; no new execution or qualification is claimed. |
+
+## Historical disposition custody reconciliation
+
+The original findings, pass-1 finding and three existing disposition rows above are preserved verbatim. The missing round-2 FND-004 outcome is appended from the existing private review record and independently rechecked against current source. This does not change the historical review verdict or claim fresh builds, proof, native execution or final merge readiness.
+
+```yaml
+dispositions:
+- fnd: FND-004
+  outcome: fixed
+  after_excerpt: "            for (package, repository) in [\n                (\n\
+    \                    \"quire-contract-runtime\",\n                    \"https://github.com/agent-ix/quire-contract-runtime\"\
+    ,\n                ),\n                (\"quire-exact\", \"https://github.com/agent-ix/quire-exact\"\
+    ),\n            ] {\n                assert!(LOCKED_DEPENDENCIES.contains(&(package,\
+    \ repository)));\n                let expected = lock_revision(cg_lock, package,\
+    \ repository).unwrap();"
+```

@@ -81,6 +81,7 @@ fn environment(context: &AdmittedContext) -> (TypeEnvironment, quire_semantic_va
     let declarations = ["Pair", "OtherPair", "Holder", "OtherHolder"].into_iter().map(|name| {
         let actual = declaration(context,name);
         let shape = match actual.form() {
+            AdmittedCompositeForm::Union => panic!("the independent record/tuple fixture cannot contain a Union"),
             AdmittedCompositeForm::Tuple => CompositeShape::Tuple(vec![ValueType::Boolean, ValueType::Boolean]),
             AdmittedCompositeForm::Record => CompositeShape::Record(vec![
                 FieldDeclaration::new("flag", ValueType::Boolean, Presence::Required),
@@ -95,6 +96,7 @@ fn values(environment: &TypeEnvironment, context: &AdmittedContext, name: &str) 
     let actual = declaration(context,name);
     let pairs = [false,true].into_iter().flat_map(|a| [false,true].into_iter().map(move |b| (a,b))).collect::<Vec<_>>();
     match actual.form() {
+        AdmittedCompositeForm::Union => panic!("the independent record/tuple value fixture cannot contain a Union"),
         AdmittedCompositeForm::Tuple => pairs.into_iter().map(|(a,b)| environment.tuple(actual.key(), vec![Value::Boolean(a),Value::Boolean(b)]).expect("genuine tuple value")).collect(),
         AdmittedCompositeForm::Record => pairs.into_iter().flat_map(|(a,b)| [false,true].into_iter().map(move |flag| (a,b,flag))).map(|(a,b,flag)| {
             let pair = environment.tuple(declaration(context,"Pair").key(), vec![Value::Boolean(a),Value::Boolean(b)]).expect("nested tuple");

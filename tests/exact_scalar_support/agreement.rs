@@ -1,15 +1,15 @@
-//! Agreement support: direct Contract Runtime execution and generated
+//! Agreement support: direct owning kernel/QSV execution and generated
 //! oracles.
 //!
 //! Adapted from the Contract Runtime agreement harness.
 //! A vector body is written once. [`agree2!`] evaluates the direct call with
-//! `quire_contract_runtime::exact` in scope and evaluates the generated
+//! owning kernel/QSV APIs in scope and evaluates the generated
 //! oracle with the runtime in scope. Every evaluation is run under the same
 //! limits and then re-run with each admitted charge denied in turn. The two
 //! `Debug` renderings, which include every value, typed refusal, incomplete
 //! record, admitted charge and consumed counter, must be identical.
 //!
-//! This crate checks generated==RT only and claims no agreement with the QSL
+//! This crate checks generated==direct owner execution only and claims no agreement with the QSL
 //! value authority (FR-014-AC-47); that comparison for the quantity vectors is
 //! owned by quire-integration IR-842.
 //! QSL arch-lint T12-A confines this
@@ -250,12 +250,16 @@ macro_rules! shared_helpers {
                 self.keys[name]
             }
 
-            pub fn unit(&self, name: &str) -> QuantityUnit {
-                QuantityUnit::Declared(Box::new(self.graph.unit(self.key(name)).unwrap().clone()))
+            pub fn unit(&self, name: &str) -> IdentifiedUnit {
+                IdentifiedUnit::new(QuantityUnit::Declared(Box::new(self.graph.unit(self.key(name)).unwrap().clone()))).unwrap()
+            }
+
+            pub fn resolve<'a>(&'a self, quantity: &'a Quantity) -> UnitQuantity<'a> {
+                self.units.resolve(quantity).expect("fixture quantity has its owner unit")
             }
 
             pub fn q(&self, value: Rational, name: &str) -> Quantity {
-                Quantity::new(value, self.unit(name))
+                Quantity::new(value, self.unit(name).id())
             }
 
             pub fn qi(&self, value: i64, name: &str) -> Quantity {
@@ -483,11 +487,14 @@ pub mod rt_side {
     use std::collections::BTreeMap;
 
     pub use quire_exact::*;
-    pub use quire_contract_runtime::exact::{
-        compare_quantity, convert_quantity, evaluate_quantity, CompoundUnit,
-        evaluate_boolean_short_circuit, ShortCircuitConnective, ConvertedValue,
-        Conversion, Quantity, QuantityOperation, QuantityTarget, QuantityUnit, Unit, UnitDeclaration,
-        UnitGraph,
+    pub use quire_contract_runtime::exact::{evaluate_boolean_short_circuit, ShortCircuitConnective};
+    pub use quire_semantic_value::quantity::{
+        compare_quantity, convert_quantity, evaluate_quantity_unit, ConvertedValue, Conversion,
+        IdentifiedUnit, QuantityOperation, QuantityRefusal, QuantityTarget, QuantityUnit,
+        UnitQuantity, UnitScope, UnitTable,
+    };
+    pub use quire_semantic_value::unit::{
+        CompoundUnit, DimensionNode, NominalDeclaration, Unit, UnitGraph, UnitNode,
     };
 
     pub use quire_semantic_value::enumeration::{compare_enum, EnumDeclaration, EnumValue};
@@ -515,6 +522,7 @@ pub mod rt_side {
 
     pub struct Fixture {
         pub graph: UnitGraph,
+        pub units: UnitTable,
         keys: BTreeMap<&'static str, NodeKey>,
     }
 
@@ -525,38 +533,29 @@ pub mod rt_side {
     pub fn admit_graph(spec: &super::GraphSpec) -> Result<Fixture, InvalidSemanticGraph> {
         let hex = spec.keys();
         let key = |digest: &str| NodeKey::from_hex(digest).unwrap();
-        let dimensions: Vec<_> = spec
-            .dimensions
-            .iter()
-            .map(|d| {
-                let mut terms: Vec<(NodeKey, Integer)> = d
-                    .terms
-                    .iter()
-                    .map(|(name, exponent)| (key(&hex[name]), Integer::from(*exponent)))
-                    .collect();
-                terms.sort_by_key(|(term, _)| *term);
-                (key(&hex[d.name]), terms)
-            })
-            .collect();
-        let units: Vec<_> = spec
-            .units
-            .iter()
-            .map(|u| {
-                let declaration = UnitDeclaration {
-                    dimension: key(&hex[u.dimension]),
-                    target: u.target.map(|target| key(&hex[target])),
-                    scale: rational(u.scale),
-                    offset: rational(u.offset),
-                };
-                (key(&hex[u.name]), declaration)
-            })
-            .collect();
-        let graph = UnitGraph::admit(dimensions, units)?;
+        let dimensions = spec.dimensions.iter().map(|d| {
+            let mut terms = d.terms.iter().map(|(name, exponent)| {
+                (*key(&hex[name]).as_bytes(), Integer::from(*exponent))
+            }).collect::<Vec<_>>();
+            terms.sort_by_key(|(term, _)| *term);
+            let node = DimensionNode::checked(terms, NominalDeclaration::default())
+                .map_err(|cause| InvalidSemanticGraph { cause })?;
+            Ok((key(&hex[d.name]), node))
+        }).collect::<Result<BTreeMap<_, _>, InvalidSemanticGraph>>()?;
+        let units = spec.units.iter().map(|u| {
+            let node = UnitNode::checked(
+                *key(&hex[u.dimension]).as_bytes(), u.target.map(|target| *key(&hex[target]).as_bytes()),
+                rational(u.scale), rational(u.offset), NominalDeclaration::default(),
+            ).map_err(|cause| InvalidSemanticGraph { cause })?;
+            Ok((key(&hex[u.name]), node))
+        }).collect::<Result<BTreeMap<_, _>, InvalidSemanticGraph>>()?;
+        let graph = UnitGraph::from_checked_nodes(&dimensions, &units)?;
+        let units = UnitTable::declared(&graph);
         let keys = hex
             .iter()
             .map(|(name, digest)| (*name, key(digest)))
             .collect();
-        Ok(Fixture { graph, keys })
+        Ok(Fixture { graph, units, keys })
     }
 
     /// A compiler-admitted enum declaration under its self-consistently

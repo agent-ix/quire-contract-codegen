@@ -3647,6 +3647,7 @@ pub enum OracleStop {
     InvalidConstant,
     /// An IEEE operand does not have the declared width.
     OperandWidth,
+    /* quantity refusal */
 }
 ";
 
@@ -3729,8 +3730,8 @@ impl SourceBuilder {
             .map(|(name, ty)| format!("{name}: {ty}, "))
             .collect::<String>();
         self.functions.push_str(&format!(
-            "\n/// `{}`.\npub fn {symbol}({parameters}meter: &mut rt::Meter) -> Result<rt::Outcome<{}>, OracleStop> {{\n",
-            identity, body.output
+            "\n/// `{}`.\npub fn {symbol}({parameters}meter: &mut rt::Meter) -> Result<{}, OracleStop> {{\n",
+            identity, body.output.render()
         ));
         for line in body.prelude {
             self.functions.push_str("    ");
@@ -3744,7 +3745,15 @@ impl SourceBuilder {
     }
 
     fn finish(self) -> String {
-        let mut source = SOURCE_HEADER.to_owned();
+        let quantity_refusal = if self.functions.contains("quantity_owner::") {
+            "/// QSV quantity type checking or result-unit identity refused before evaluation.\n    Quantity(quire_semantic_value::quantity::QuantityRefusal),"
+        } else {
+            ""
+        };
+        let mut source = SOURCE_HEADER.replace("/* quantity refusal */", quantity_refusal);
+        if self.functions.contains("quantity_owner::") {
+            source.push_str("use quire_semantic_value::quantity as quantity_owner;\n");
+        }
         if self.functions.contains("sv::") {
             source.push_str("use quire_semantic_value::declaration as sv;\n");
         }
@@ -3839,7 +3848,7 @@ impl SourceBuilder {
                 };
                 Body {
                     parameters,
-                    output: "bool",
+                    output: OracleOutput::Value("bool"),
                     prelude: Vec::new(),
                     call,
                 }
@@ -3859,7 +3868,7 @@ impl SourceBuilder {
                 };
                 Body {
                     parameters: binary(ty),
-                    output: "bool",
+                    output: OracleOutput::Value("bool"),
                     prelude: vec![format!(
                         "let environment = sv::TypeEnvironment::default();\n    let checked = environment.check_equality(sv::EqualityOperator::{operator}, sv::EqualityOperand::typed(rt::ValueType::{value_type}), sv::EqualityOperand::typed(rt::ValueType::{value_type}), &quire_semantic_value::enumeration::EnumMemberIndex::default()).map_err(OracleStop::IllTyped)?;"
                     )],
@@ -3876,7 +3885,7 @@ impl SourceBuilder {
                 };
                 Body {
                     parameters,
-                    output: "rt::Integer",
+                    output: OracleOutput::Value("rt::Integer"),
                     prelude,
                     call: format!(
                         "Ok(rt::evaluate_integer_arithmetic(rt::IntegerArithmetic::{operation}, {domain_argument}, meter))"
@@ -3892,7 +3901,7 @@ impl SourceBuilder {
                 };
                 Body {
                     parameters: binary("&rt::Integer"),
-                    output: "rt::Integer",
+                    output: OracleOutput::Value("rt::Integer"),
                     prelude: vec![format!("let domain = {domain};")],
                     call: format!(
                         "Ok(rt::divide(rt::DivisionProfile::{profile}, rt::DivisionMember::Quotient, left, right, &domain, meter))"
@@ -3903,7 +3912,7 @@ impl SourceBuilder {
                 let domain = self.integer_domain(domain)?;
                 Body {
                     parameters: binary("&rt::Integer"),
-                    output: "rt::Integer",
+                    output: OracleOutput::Value("rt::Integer"),
                     prelude: vec![format!("let domain = {domain};")],
                     call: "Ok(rt::modulo(left, right, &domain, meter))".to_owned(),
                 }
@@ -3962,7 +3971,7 @@ impl SourceBuilder {
                 prelude.extend(lift_prelude);
                 Body {
                     parameters,
-                    output: "rt::Rational",
+                    output: OracleOutput::Value("rt::Rational"),
                     prelude,
                     call: format!(
                         "Ok(rt::evaluate_rational_arithmetic(rt::RationalArithmetic::{operation}, {domain_argument}, meter))"
@@ -3983,7 +3992,7 @@ impl SourceBuilder {
                 };
                 Body {
                     parameters: binary(ty),
-                    output: "bool",
+                    output: OracleOutput::Value("bool"),
                     prelude: Vec::new(),
                     call: format!(
                         "Ok(rt::order_numbers(rt::OrderingOperator::{operator}, rt::OrderedOperands::{kind}(left, right), meter))"
@@ -4002,7 +4011,7 @@ impl SourceBuilder {
                 };
                 Body {
                     parameters,
-                    output: "rt::DecimalResult",
+                    output: OracleOutput::Value("rt::DecimalResult"),
                     prelude: vec![format!("let target = {target};")],
                     call: format!(
                         "Ok(rt::evaluate_decimal(rt::DecimalOperation::{operation}, &target, meter))"
@@ -4024,7 +4033,7 @@ impl SourceBuilder {
                 let width = width_path(*width)?;
                 Body {
                     parameters: binary("rt::IeeeValue"),
-                    output: "rt::IeeeResult",
+                    output: OracleOutput::Value("rt::IeeeResult"),
                     prelude: vec![
                         format!("let left = expect_width(left, {width})?;"),
                         format!("let right = expect_width(right, {width})?;"),
@@ -4045,7 +4054,7 @@ impl SourceBuilder {
                 let width = width_path(*width)?;
                 Body {
                     parameters: binary("rt::IeeeValue"),
-                    output: "bool",
+                    output: OracleOutput::Value("bool"),
                     prelude: vec![
                         format!("let left = expect_width(left, {width})?;"),
                         format!("let right = expect_width(right, {width})?;"),
@@ -4063,7 +4072,7 @@ impl SourceBuilder {
                 self.needs_width = true;
                 Body {
                     parameters: unary("rt::IeeeValue"),
-                    output: "rt::IeeeResult",
+                    output: OracleOutput::Value("rt::IeeeResult"),
                     prelude: vec![format!(
                         "let operand = expect_width(operand, {})?;",
                         width_path(*source)?
@@ -4077,7 +4086,7 @@ impl SourceBuilder {
             }
             ExactScalarOperation::TextAdmission { text_type } => Body {
                 parameters: unary("&rt::TextPayload"),
-                output: "rt::Text",
+                output: OracleOutput::Value("rt::Text"),
                 prelude: vec![format!(
                     "let text_type = rt::TextType::new({}, {}, {}).map_err(|_| OracleStop::InvalidConstant)?;",
                     text_type.min(),
@@ -4093,12 +4102,12 @@ impl SourceBuilder {
                 comparison_body("&enum_owner::EnumValue", "enum_owner::compare_enum", *operator)?
             }
             ExactScalarOperation::QuantityConversion => Body {
-                parameters: vec![("operand", "&residue::Quantity"), ("unit", "&residue::QuantityUnit")],
-                output: "residue::Quantity",
+                parameters: vec![("operand", "quantity_owner::UnitQuantity<'_>"), ("unit", "&quantity_owner::IdentifiedUnit")],
+                output: OracleOutput::Value("rt::Quantity"),
                 prelude: Vec::new(),
-                call: "match residue::convert_quantity(operand, unit, &residue::QuantityTarget::Exact, meter).map_err(OracleStop::IllTyped)? {
+                call: "match quantity_owner::convert_quantity(operand, unit.unit(), &quantity_owner::QuantityTarget::Exact, meter).map_err(OracleStop::IllTyped)? {
         rt::Outcome::Completed(conversion) => match conversion.value() {
-            residue::ConvertedValue::Exact(value) => Ok(rt::Outcome::Completed(residue::Quantity::new(value.clone(), conversion.unit().clone()))),
+            quantity_owner::ConvertedValue::Exact(value) => Ok(rt::Outcome::Completed(rt::Quantity::new(value.clone(), unit.id()))),
             _ => Err(OracleStop::InvalidConstant),
         },
         rt::Outcome::Undefined(reason) => Ok(rt::Outcome::Undefined(reason)),
@@ -4107,29 +4116,29 @@ impl SourceBuilder {
     }".to_owned(),
             },
             ExactScalarOperation::QuantityComparison { operator } => {
-                comparison_body("&residue::Quantity", "residue::compare_quantity", *operator)?
+                comparison_body("quantity_owner::UnitQuantity<'_>", "quantity_owner::compare_quantity", *operator)?
             }
             ExactScalarOperation::QuantityArithmetic { operator } => {
                 let (parameters, operation) = match operator {
-                    QuantityOperator::Add => (binary("&residue::Quantity"), "Add(left, right)"),
+                    QuantityOperator::Add => (binary("quantity_owner::UnitQuantity<'_>"), "Add(left, right)"),
                     QuantityOperator::Subtract => {
-                        (binary("&residue::Quantity"), "Subtract(left, right)")
+                        (binary("quantity_owner::UnitQuantity<'_>"), "Subtract(left, right)")
                     }
                     QuantityOperator::Multiply => {
-                        (binary("&residue::Quantity"), "Multiply(left, right)")
+                        (binary("quantity_owner::UnitQuantity<'_>"), "Multiply(left, right)")
                     }
-                    QuantityOperator::Divide => (binary("&residue::Quantity"), "Divide(left, right)"),
+                    QuantityOperator::Divide => (binary("quantity_owner::UnitQuantity<'_>"), "Divide(left, right)"),
                     QuantityOperator::Power => (
-                        vec![("left", "&residue::Quantity"), ("right", "&rt::Integer")],
+                        vec![("left", "quantity_owner::UnitQuantity<'_>"), ("right", "&rt::Integer")],
                         "Power(left, right)",
                     ),
                 };
                 Body {
                     parameters,
-                    output: "residue::Quantity",
+                    output: OracleOutput::QuantityWithUnit,
                     prelude: Vec::new(),
                     call: format!(
-                        "residue::evaluate_quantity(residue::QuantityOperation::{operation}, meter).map_err(OracleStop::IllTyped)"
+                        "quantity_owner::evaluate_quantity_unit(quantity_owner::QuantityOperation::{operation}, meter).map_err(OracleStop::Quantity)"
                     ),
                 }
             }
@@ -4137,9 +4146,23 @@ impl SourceBuilder {
     }
 }
 
+enum OracleOutput {
+    Value(&'static str),
+    QuantityWithUnit,
+}
+
+impl OracleOutput {
+    fn render(&self) -> String {
+        match self {
+            Self::Value(value) => format!("rt::Outcome<{value}>"),
+            Self::QuantityWithUnit => "(rt::Outcome<rt::Quantity>, quantity_owner::IdentifiedUnit)".to_owned(),
+        }
+    }
+}
+
 struct Body {
     parameters: Vec<(&'static str, &'static str)>,
-    output: &'static str,
+    output: OracleOutput,
     prelude: Vec<String>,
     call: String,
 }
@@ -4167,7 +4190,7 @@ fn comparison_body(
     };
     Ok(Body {
         parameters: binary(ty),
-        output: "bool",
+        output: OracleOutput::Value("bool"),
         prelude: Vec::new(),
         call: format!(
             "{function}(rt::ComparisonOperator::{operator}, left, right, meter).map_err(OracleStop::IllTyped)"

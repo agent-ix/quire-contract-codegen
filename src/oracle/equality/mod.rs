@@ -51,8 +51,8 @@
 //! `Outcome::Refused(Refusal::CheckedInvariant)`. A runtime that tightens a
 //! constructor therefore refuses; it never panics a generated oracle and never
 //! widens a type. `TypeEnvironment::new`'s own refusal is the constructor's
-//! `EnvironmentError::Declaration`; a bounded admission resource stop remains
-//! `EnvironmentError::Admission` and is never fabricated as a declaration cause.
+//! `EnvironmentError::Declaration`, which preserves the complete typed QSV
+//! `EnvironmentFailure`, including bounded admission stops without inventing a declaration cause.
 //!
 //! Model graph, identity and reachability oracles
 //! (agent-ix/quire-spec-language#120), function application oracles

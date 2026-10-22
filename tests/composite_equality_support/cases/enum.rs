@@ -17,9 +17,8 @@ use ix_trace_rs::trace;
 #[trace("FR-018-AC-2", "FR-018-AC-9", "FR-018-AC-10", "TC-029")]
 #[test]
 fn original_shape_vectors_enum_8() {
-    // Enum (E_ENUM, `equal`): equal and unequal members of the vendored
-    // `Example.Phase` declaration. Previously referenced by nothing (module
-    // doc gap).
+    // Enum (E_ENUM, `equal`): equal and unequal members of the original local
+    // `Phase` source declaration, using the independently compiled facade identities.
     for (l, r) in [("OPEN", "OPEN"), ("OPEN", "SHUT")] {
         agree2! {
             limits: UNLIMITED,

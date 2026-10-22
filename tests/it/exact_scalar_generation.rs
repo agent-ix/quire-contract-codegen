@@ -648,7 +648,7 @@ fn tc_024_every_scalar_family_generates_one_oracle_calling_its_runtime_operator(
             "rt::compare_ieee(rt::IeeeComparison::TotalOrder,".to_owned(),
         ),
         (1064, "rt::convert_ieee_width(".to_owned()),
-        (1140, "residue::convert_quantity(".to_owned()),
+        (1140, "quantity_owner::convert_quantity(".to_owned()),
         (
             1065,
             "rt::evaluate_ieee(rt::IeeeOperation::Subtract(".to_owned(),
@@ -667,23 +667,23 @@ fn tc_024_every_scalar_family_generates_one_oracle_calling_its_runtime_operator(
         ),
         (
             1081,
-            "residue::evaluate_quantity(residue::QuantityOperation::Add(".to_owned(),
+            "quantity_owner::evaluate_quantity_unit(quantity_owner::QuantityOperation::Add(".to_owned(),
         ),
         (
             1082,
-            "residue::evaluate_quantity(residue::QuantityOperation::Multiply(".to_owned(),
+            "quantity_owner::evaluate_quantity_unit(quantity_owner::QuantityOperation::Multiply(".to_owned(),
         ),
         (
             1083,
-            "residue::evaluate_quantity(residue::QuantityOperation::Power(".to_owned(),
+            "quantity_owner::evaluate_quantity_unit(quantity_owner::QuantityOperation::Power(".to_owned(),
         ),
         (
             1088,
-            "residue::evaluate_quantity(residue::QuantityOperation::Subtract(".to_owned(),
+            "quantity_owner::evaluate_quantity_unit(quantity_owner::QuantityOperation::Subtract(".to_owned(),
         ),
         (
             1089,
-            "residue::evaluate_quantity(residue::QuantityOperation::Divide(".to_owned(),
+            "quantity_owner::evaluate_quantity_unit(quantity_owner::QuantityOperation::Divide(".to_owned(),
         ),
     ];
     for (index, operator) in ComparisonOperator::ALL.into_iter().enumerate() {
@@ -693,11 +693,11 @@ fn tc_024_every_scalar_family_generates_one_oracle_calling_its_runtime_operator(
         ));
         calls.push((
             ENUM_COMPARISONS[index],
-            format!("residue::compare_enum(rt::ComparisonOperator::{operator:?},"),
+            format!("enum_owner::compare_enum(rt::ComparisonOperator::{operator:?},"),
         ));
         calls.push((
             QUANTITY_COMPARISONS[index],
-            format!("residue::compare_quantity(rt::ComparisonOperator::{operator:?},"),
+            format!("quantity_owner::compare_quantity(rt::ComparisonOperator::{operator:?},"),
         ));
     }
     calls.sort();
@@ -3793,9 +3793,9 @@ fn quantity_conversion_derives_and_preserves_target_provenance() {
         "distinct admitted target declarations remain distinct"
     );
     let source = contents(&generated, "src/lib.rs");
-    assert!(source.contains("unit: &residue::QuantityUnit"));
+    assert!(source.contains("unit: &quantity_owner::IdentifiedUnit"));
     assert!(source.contains(
-        "residue::convert_quantity(operand, unit, &residue::QuantityTarget::Exact, meter)"
+        "quantity_owner::convert_quantity(operand, unit.unit(), &quantity_owner::QuantityTarget::Exact, meter)"
     ));
 }
 
