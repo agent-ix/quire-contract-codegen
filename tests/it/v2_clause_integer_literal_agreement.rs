@@ -32,9 +32,23 @@ fn cases() -> Vec<Case> {
         (">", "gt", "x > 5"),
         (">=", "ge", "x >= 5"),
     ] {
+        // Equality against a bounded field narrows the inline literal upstream;
+        // use a genuine mathematical-Integer result instead. Its Add charges
+        // must also occur in the independently authored reference tree.
+        let (source, reference) = if matches!(owner, "eq" | "ne") {
+            (
+                format!("(self.balance + 0) {source} 5"),
+                format!("c(\"{owner}\", a(\"add\", input(), lit(\"0\")), lit(\"5\"))"),
+            )
+        } else {
+            (
+                format!("self.balance {source} 5"),
+                format!("c(\"{owner}\", input(), lit(\"5\"))"),
+            )
+        };
         cases.push(Case {
-            source: format!("self.balance {source} 5"),
-            reference: format!("c(\"{owner}\", input(), lit(\"5\"))"),
+            source,
+            reference,
             expected,
             skipped_arithmetic: false,
         });
