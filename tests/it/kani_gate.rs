@@ -117,8 +117,12 @@ fi
     }
 
     fn command(&self, script: &str) -> Command {
-        let mut command = Command::new("/usr/bin/bash");
-        command.arg(script);
+        let mut command = Command::new(env!("CARGO_BIN_EXE_cg_gates"));
+        command.arg(if script.contains("kani_scope") {
+            "kani-scope"
+        } else {
+            "kani-gate"
+        });
         command.current_dir(env!("CARGO_MANIFEST_DIR"));
         command.env("PATH", format!("{}:/usr/bin:/bin", self.bin.display()));
         command.env("FAKE_MARKER", self.root.join("run-marker"));
@@ -167,6 +171,46 @@ fi
     fn marker(&self) -> bool {
         self.root.join("run-marker").exists()
     }
+}
+
+#[trace("TC-045")]
+#[test]
+fn rust_gate_rejects_a_kani_reaching_path_without_silently_skipping() {
+    let sandbox = Sandbox::new();
+    let output = sandbox
+        .command("kani_scope")
+        .env("FAKE_BRANCH_PATHS", "src/kani/generate/negotiate.rs\n")
+        .output()
+        .expect("scope command");
+    assert_eq!(stdout(&output), "required\nsrc/kani/generate/negotiate.rs\n");
+}
+
+#[trace("NFR-006-AC-6", "TC-045")]
+#[test]
+fn rust_gate_refuses_an_empty_kani_test_list() {
+    let sandbox = Sandbox::new();
+    let output = sandbox
+        .gate()
+        .env("FAKE_LIST_COUNT", "0")
+        .output()
+        .expect("gate command");
+    assert!(!output.status.success());
+    assert!(stdout(&output).contains("result=failed"));
+    assert!(!sandbox.marker());
+}
+
+#[trace("TC-045")]
+#[test]
+fn rust_qspec_selftest_rejects_a_make_that_accepts_an_unset_root() {
+    let sandbox = Sandbox::new();
+    sandbox.write_executable("make", "#!/usr/bin/env bash\nexit 0\n");
+    let output = sandbox
+        .command("qspec-selftest")
+        .env("PATH", format!("{}:/usr/bin:/bin", sandbox.bin.display()))
+        .output()
+        .expect("selftest command");
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("QSPEC_DIR"));
 }
 
 impl Drop for Sandbox {
