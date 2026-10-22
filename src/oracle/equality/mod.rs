@@ -13,7 +13,7 @@
 //! The runtime carries no structural equality on `Value`; the FR-149 relation
 //! reached through `TypeEnvironment::check_equality` and
 //! `CheckedEquality::evaluate` is the only equality. This generator therefore
-//! never compares two values itself: it reconstructs the record/tuple
+//! never compares two values itself: it reconstructs the record/tuple/union
 //! declaration closure reachable from each operand's type, admits it through
 //! `TypeEnvironment::new` (refusing per [`CompositeEqualityRefusal::Declaration`] on failure),
 //! checks the descriptor through `TypeEnvironment::check_equality` (refusing
@@ -34,6 +34,7 @@
 //! |------|---------|
 //! | `record` | one `binding` per field in declaration order: its `name` is the field name; a direct reference is required, while an `aggregate` with one `binding(optional, reference Option)` is optional |
 //! | `tuple` | one `reference` per position, in declaration order |
+//! | `union` | owner-authenticated member `binding`s, each grouping its payload type references in declaration order |
 //! | `option` | one `reference` to the payload type node |
 //! | `sequence` | one element `reference`, with cardinality from a separate `collection_bounds` node |
 //! | `set`, `bag`, `ordered_set` | an element `reference`, then a bounds `reference` |
@@ -385,12 +386,12 @@ pub enum CompositeEqualityRefusal {
         /// The enum declaration whose name, ordering or cases disagree.
         declaration: CheckedNodeId,
     },
-    /// The owner cannot resolve the requested record or tuple declaration.
+    /// The owner cannot resolve the requested nominal composite declaration.
     UnknownComposite {
         /// Exact wire declaration identity requested.
         declaration: String,
     },
-    /// The requested record or tuple belongs to an imported package.
+    /// The requested nominal composite belongs to an imported package.
     ForeignComposite {
         /// Exact wire declaration identity requested.
         declaration: String,
@@ -399,7 +400,7 @@ pub enum CompositeEqualityRefusal {
         /// Owning package digest.
         package_digest: String,
     },
-    /// The owner admitted this node, but not as a record or tuple declaration.
+    /// The owner admitted this node as a different declaration kind.
     WrongAdmittedKind {
         /// Exact wire declaration identity requested.
         declaration: String,
@@ -1007,7 +1008,7 @@ struct CheckedItem {
     left_target: Option<ValueType>,
     right_source: ValueType,
     right_target: Option<ValueType>,
-    /// Every reachable record/tuple declaration, ascending by `NodeKey`, the
+    /// Every reachable nominal composite declaration, ascending by `NodeKey`, the
     /// same order `TypeEnvironment::new` admitted.
     composites: Vec<CompositeDeclaration>,
     declaration_keys: Vec<CheckedNodeId>,
@@ -1365,7 +1366,7 @@ fn is_option_node(node: &CheckedSemanticNodeV2) -> bool {
 }
 
 /// Resolve `type_id` to a `ValueType`, registering every reachable
-/// record/tuple declaration into `closure`.
+/// nominal composite declaration into `closure`.
 fn resolve_type(
     admitted: Option<&qsl_replay::AdmittedContext>,
     graph: &Graph<'_>,
@@ -1657,7 +1658,7 @@ impl RenderedItem {
 }
 
 fn render_item(generated: &CheckedItem) -> Result<RenderedItem, RenderError> {
-    // Every reachable record/tuple declaration, in the same `NodeKey`
+    // Every reachable nominal composite declaration, in the same `NodeKey`
     // order `TypeEnvironment::new` admitted at generation time.
     let declared = generated.declaration_keys.iter().collect::<BTreeSet<_>>();
     if generated.composite_bindings.len() != generated.declaration_keys.len()
@@ -1704,7 +1705,7 @@ fn render_item(generated: &CheckedItem) -> Result<RenderedItem, RenderError> {
         }
     }
     if !union_seals.is_empty() {
-        union_seals.insert_str(0, "    let mut environment = environment;\n");
+        union_seals.insert_str(0, "    let _context = context;\n    let mut environment = environment;\n");
     }
     Ok(RenderedItem {
         union_seals,
@@ -1948,7 +1949,7 @@ impl SourceBuilder {
         let package_domain = package.domain.as_ref();
         let package_digest = package.digest.as_ref();
         self.append_function(format!(
-"\n/// Prepare this item's descriptors and environment from the original package context.\npub fn environment_{symbol}<'ctx>(context: Option<&'ctx qsl_replay::AdmittedContext>) -> Result<PreparedEqualityEnvironment<'ctx>, EnvironmentError> {{\n    if let Some(context) = context {{\n    let actual = context.package_id().record();\n    if actual.domain().as_str() != {package_domain:?} || actual.hex() != {package_digest:?} {{\n        return Err(EnvironmentError::ContextPackageMismatch {{\n            expected_domain: {package_domain:?}, expected_digest: {package_digest:?},\n            actual_domain: actual.domain().as_str().to_owned(), actual_digest: actual.hex(),\n        }});\n    }}\n    }}\n    let mut enum_members = quire_semantic_value::enumeration::EnumMemberIndex::default();\n    let composites = composites_{symbol}(context, &mut enum_members)?;\n    let environment = sv::TypeEnvironment::new(composites, core::iter::empty::<sv::ObjectTypeDeclaration>())\n        .map_err(EnvironmentError::Declaration)?;\n    let _context = context;\n{union_seals}    let left_source = left_source_{symbol}(context, &mut enum_members)?;\n    let left_target = left_target_{symbol}(context, &mut enum_members)?;\n    let right_source = right_source_{symbol}(context, &mut enum_members)?;\n    let right_target = right_target_{symbol}(context, &mut enum_members)?;\n    Ok(PreparedEqualityEnvironment {{\n        context, expected_domain: {package_domain:?}, expected_digest: {package_digest:?},\n        binding: {symbol:?}, requires_context: {requires_context}, environment, enum_members,\n        left_source, left_target, right_source, right_target,\n    }})\n}}\n", package_domain = package_domain, package_digest = package_digest))?;
+"\n/// Prepare this item's descriptors and environment from the original package context.\npub fn environment_{symbol}<'ctx>(context: Option<&'ctx qsl_replay::AdmittedContext>) -> Result<PreparedEqualityEnvironment<'ctx>, EnvironmentError> {{\n    if let Some(context) = context {{\n    let actual = context.package_id().record();\n    if actual.domain().as_str() != {package_domain:?} || actual.hex() != {package_digest:?} {{\n        return Err(EnvironmentError::ContextPackageMismatch {{\n            expected_domain: {package_domain:?}, expected_digest: {package_digest:?},\n            actual_domain: actual.domain().as_str().to_owned(), actual_digest: actual.hex(),\n        }});\n    }}\n    }}\n    let mut enum_members = quire_semantic_value::enumeration::EnumMemberIndex::default();\n    let composites = composites_{symbol}(context, &mut enum_members)?;\n    let environment = sv::TypeEnvironment::new(composites, core::iter::empty::<sv::ObjectTypeDeclaration>())\n        .map_err(EnvironmentError::Declaration)?;\n{union_seals}    let left_source = left_source_{symbol}(context, &mut enum_members)?;\n    let left_target = left_target_{symbol}(context, &mut enum_members)?;\n    let right_source = right_source_{symbol}(context, &mut enum_members)?;\n    let right_target = right_target_{symbol}(context, &mut enum_members)?;\n    Ok(PreparedEqualityEnvironment {{\n        context, expected_domain: {package_domain:?}, expected_digest: {package_digest:?},\n        binding: {symbol:?}, requires_context: {requires_context}, environment, enum_members,\n        left_source, left_target, right_source, right_target,\n    }})\n}}\n", package_domain = package_domain, package_digest = package_digest))?;
         self.append_function(format!(
 "\n/// Environment-checked oracle for `{operation}`.\npub fn oracle_{symbol}(\n    prepared: &PreparedEqualityEnvironment<'_>, left: &exact::Value,\n    right: &exact::Value, meter: &mut exact::Meter,\n) -> exact::Outcome<bool> {{\n    let context_mismatch = match prepared.context {{\n        Some(context) => {{ let actual = context.package_id().record();\n            actual.domain().as_str() != {package_domain:?} || actual.hex() != {package_digest:?} }},\n        None => prepared.requires_context,\n    }};\n    if prepared.binding != {symbol:?} || prepared.expected_domain != {package_domain:?}\n        || prepared.expected_digest != {package_digest:?}\n        || prepared.requires_context != {requires_context} || context_mismatch\n    {{\n        return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedDescriptorReconstructionFailed }});\n    }}\n    let environment = &prepared.environment;\n    let left_comparison = match &prepared.left_target {{ Some(target) => target, None => &prepared.left_source }};\n    let right_comparison = match &prepared.right_target {{ Some(target) => target, None => &prepared.right_source }};\n    if let Err(error) = environment.check_type(left_comparison) {{\n        return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedTypeCheckRejected {{ cause: error.cause }} }});\n    }}\n    if let Err(error) = environment.check_type(right_comparison) {{\n        return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedTypeCheckRejected {{ cause: error.cause }} }});\n    }}\n    let left_operand = match prepared.left_target.clone() {{\n        Some(target) => sv::EqualityOperand::converted(prepared.left_source.clone(), target),\n        None => sv::EqualityOperand::typed(prepared.left_source.clone()),\n    }};\n    let right_operand = match prepared.right_target.clone() {{\n        Some(target) => sv::EqualityOperand::converted(prepared.right_source.clone(), target),\n        None => sv::EqualityOperand::typed(prepared.right_source.clone()),\n    }};\n    let checked = match environment.check_equality({operator}, left_operand, right_operand, &prepared.enum_members) {{\n        Ok(checked) => checked,\n        Err(error) => return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedEqualityCheckRejected {{ cause: error.cause }} }}),\n    }};\n    checked.evaluate(environment, left, right, meter)\n}}\n", operation = item.operator.identity(), operator = item.operator.path(), package_domain = package_domain, package_digest = package_digest))?;
         Ok(())
