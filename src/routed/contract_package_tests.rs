@@ -1077,7 +1077,7 @@ mod tests {
     }
 
     /// One envelope indexes each admitted function graph once, including cloned package values.
-    #[trace("FR-019-AC-25", "FR-019-AC-29", "TC-030")]
+    #[trace("FR-019-AC-25", "TC-030")]
     #[test]
     fn function_preflight_graph_index_is_shared_only_within_one_package_identity() {
         use exact_function_fixture::{
@@ -1109,6 +1109,7 @@ mod tests {
             Ok(false)
         ));
         let _ = crate::oracle::function::take_function_preflight_graph_visits();
+        let _ = crate::oracle::function::take_function_preflight_graph_lookups();
         let expected_visits = shared.graph().nodes.len() + different.graph().nodes.len();
         let first = RequestItem {
             kind: RequestedKind::Known(CapabilityKind::ValueValidity),
@@ -1183,6 +1184,11 @@ mod tests {
             crate::oracle::function::take_function_preflight_graph_visits(),
             expected_visits,
             "two cloned packages reuse one graph walk; a distinct identity gets its own"
+        );
+        assert_eq!(
+            crate::oracle::function::take_function_preflight_graph_lookups(),
+            49,
+            "each function item must resolve source nodes through the indexed view"
         );
     }
 

@@ -1595,6 +1595,8 @@ impl<'a> FunctionPreflightGraph<'a> {
 
     /// Resolve one node from the view's admitted package graph.
     pub(crate) fn get(&self, node_id: &CheckedNodeId) -> Option<&'a CheckedSemanticNodeV2> {
+        #[cfg(test)]
+        FUNCTION_PREFLIGHT_GRAPH_LOOKUPS.with(|count| count.set(count.get() + 1));
         self.nodes.get(node_id).copied()
     }
 }
@@ -1708,6 +1710,7 @@ thread_local! {
     static FUNCTION_PREFLIGHT_READS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     static FUNCTION_PREFLIGHT_INDICES: std::cell::RefCell<Vec<usize>> = const { std::cell::RefCell::new(Vec::new()) };
     static FUNCTION_PREFLIGHT_GRAPH_VISITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static FUNCTION_PREFLIGHT_GRAPH_LOOKUPS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 #[cfg(test)]
@@ -1723,6 +1726,11 @@ pub(crate) fn take_function_preflight_indices() -> Vec<usize> {
 #[cfg(test)]
 pub(crate) fn take_function_preflight_graph_visits() -> usize {
     FUNCTION_PREFLIGHT_GRAPH_VISITS.with(|count| count.replace(0))
+}
+
+#[cfg(test)]
+pub(crate) fn take_function_preflight_graph_lookups() -> usize {
+    FUNCTION_PREFLIGHT_GRAPH_LOOKUPS.with(|count| count.replace(0))
 }
 
 /// Non-admitted result of the internal function-package reader.
@@ -3126,7 +3134,7 @@ mod tests {
     use ix_trace_rs::trace;
     use quire_contract_model::CheckedPackageLimit;
 
-    #[trace("FR-039-AC-9", "TC-053")]
+    #[trace("TC-030")]
     #[test]
     fn function_preflight_reuses_one_graph_index_across_items() {
         let node = |ordinal: usize| {
@@ -3153,6 +3161,7 @@ mod tests {
         nodes[0].node_tag = "function".into();
         nodes[0].semantic_form = "pure_function".into();
         let _ = take_function_preflight_graph_visits();
+        let _ = take_function_preflight_graph_lookups();
         let graph = FunctionPreflightGraph::from_nodes(
             &nodes,
             CheckedSemanticId {
@@ -3194,6 +3203,7 @@ mod tests {
             &[nodes[31].node_id.clone(), nodes[15].node_id.clone()]
         ));
         assert_eq!(take_function_preflight_graph_visits(), nodes.len());
+        assert_eq!(take_function_preflight_graph_lookups(), 5);
     }
 
     #[trace("FR-021-AC-27", "TC-031")]
