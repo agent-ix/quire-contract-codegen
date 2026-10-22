@@ -66,13 +66,22 @@ fn assert_sibling_isolation(mixed: &CompositeEqualityOracles, isolated: &Composi
             .iter()
             .find(|claim| claim.node_id == sibling.node_id)
             .expect("every isolated sibling remains in the mixed request");
-        assert_eq!(
-            in_mixed, sibling,
-            "a refused item must not alter a sibling's disposition or provenance"
-        );
-        let ClaimDisposition::Generated(claim) = &sibling.result else {
-            panic!("the isolated sibling must generate");
+        assert_eq!(in_mixed.node_id, sibling.node_id);
+        assert_eq!(in_mixed.operation, sibling.operation);
+        let (ClaimDisposition::Generated(mixed_claim), ClaimDisposition::Generated(claim)) =
+            (&in_mixed.result, &sibling.result)
+        else {
+            panic!("both isolated and mixed siblings must generate");
         };
+        // The public lowering includes the selected request roots in the Contract IR
+        // package identity. Isolating siblings therefore changes that identity;
+        // every field about their source owner, descriptors and generated code stays equal.
+        let mut comparable = mixed_claim.clone();
+        comparable.contract_package_identity = claim.contract_package_identity.clone();
+        assert_eq!(
+            comparable, *claim,
+            "a refused item must not alter sibling generation"
+        );
         expected_symbols.insert(claim.environment_symbol.clone());
         expected_symbols.insert(claim.oracle_symbol.clone());
     }
