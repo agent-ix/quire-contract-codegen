@@ -4311,7 +4311,7 @@ fn deep_matches_shallow() {
                         item.operator.to_runtime(),
                         EqualityOperand::typed(value_type.clone()),
                         EqualityOperand::typed(value_type.clone()),
-                        &sv::EnumMemberIndex::default(),
+                        &quire_semantic_value::enumeration::EnumMemberIndex::default(),
                     )
                     .expect("the owner admits this equality plan before rendering");
                 let prepared = CheckedItem {
