@@ -25,7 +25,10 @@ use crate::{
     kani::output::playback::DecodeFailure,
     kani::terminal::ReplaySettlement,
     replay::{
-        obligation::{contract_arguments, function_contract_identity, ObligationIdentityError},
+        obligation::{
+            contract_arguments, function_contract_identity, rational_contract_arguments,
+            ObligationIdentityError,
+        },
         witness::{
             decode_falsification, decode_playback, first_out_of_domain, WitnessDecodeLimits,
         },
@@ -631,6 +634,70 @@ impl ReplayPackage {
             },
             ReplayResult::Witness(_) => Err(SpineReplayError::WrongArm),
         }
+    }
+
+    /// Bind a re-derived admitted Rational predicate to this package's real call site.
+    ///
+    /// The domains come from the admitted selected closure, never mutable oracle fields or
+    /// caller-provided physical bindings. This identity does not assert backend execution.
+    ///
+    /// # Errors
+    /// Refuses mismatched package, source lock, function or logical parameters, or a predicate
+    /// outside the supported Rational preparation slice.
+    pub fn rational_predicate_obligation_identity(
+        &self,
+        item: crate::kani::generate::outcome::FunctionPredicateItem<'_>,
+    ) -> Result<ObligationIdentity, ObligationIdentityError> {
+        let provenance = &item.package.wire().package.source;
+        if provenance.package_id.domain.as_ref() != self.site.package_id.domain().as_str()
+            || provenance.package_id.algorithm.as_ref() != "sha256"
+            || provenance.package_id.digest.as_ref() != self.site.package_id.hex()
+        {
+            return Err(ObligationIdentityError::SourcePackage);
+        }
+        let sources = std::iter::once(&self.inputs.source)
+            .chain(self.inputs.dependencies.iter().map(|d| &d.source))
+            .collect::<Vec<_>>();
+        if provenance.lock.sources.len() != sources.len()
+            || sources.iter().any(|source| {
+                !provenance.lock.sources.iter().any(|original| {
+                    original.authority.as_ref() == source.authority
+                        && original.identity.as_ref() == source.identity
+                        && original.digest_domain.as_ref() == source.digest().domain().as_str()
+                        && original.digest.as_ref() == source.digest().hex()
+                })
+            })
+        {
+            return Err(ObligationIdentityError::SourceBytes);
+        }
+        if item.function.digest.as_ref() != self.site.site.function.to_string() {
+            return Err(ObligationIdentityError::FunctionSelection);
+        }
+        let admitted = crate::oracle::rational_predicate::generate_rational_predicate_oracle(item)
+            .map_err(|cause| ObligationIdentityError::RationalPreparation(Box::new(cause)))?;
+        let arguments =
+            rational_contract_arguments(&self.site.site.parameters, admitted.parameters())?;
+        function_contract_identity(
+            self.site.site.function,
+            &self.site.site.declaration,
+            crate::kani::identity::ObligationKind::Postcondition,
+            &arguments,
+        )
+    }
+
+    /// Build a request for this admitted Rational function and original inclusive domains.
+    ///
+    /// `source` may be a native-injected witness; this constructor supplies no backend or
+    /// solver provenance. Physical witness decoding and proof qualification are separate.
+    ///
+    /// # Errors
+    /// The same exact admission/binding refusals as [`Self::rational_predicate_obligation_identity`].
+    pub fn rational_predicate_request(
+        &self,
+        item: crate::kani::generate::outcome::FunctionPredicateItem<'_>,
+        source: ReplaySource,
+    ) -> Result<ReplayRequestWire, ObligationIdentityError> {
+        Ok(self.request_for(self.rational_predicate_obligation_identity(item)?, source))
     }
 
     /// The complete replay request for `counterexample`, replaying `source`.

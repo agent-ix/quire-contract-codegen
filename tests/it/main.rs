@@ -89,4 +89,5 @@ mod vacuity_primitives;
 
 mod rational_predicate_agreement;
 mod rational_predicate_generation;
+mod rational_predicate_replay;
 mod rational_predicate_support;
