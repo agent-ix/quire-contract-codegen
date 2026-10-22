@@ -118,8 +118,10 @@ fi
 
     fn command(&self, script: &str) -> Command {
         let mut command = Command::new(env!("CARGO_BIN_EXE_cg_gates"));
-        command.arg(if script.contains("kani_scope") {
+        command.arg(if script.contains("kani-scope") {
             "kani-scope"
+        } else if script.contains("qspec") {
+            "qspec-selftest"
         } else {
             "kani-gate"
         });
@@ -138,15 +140,22 @@ fi
     }
 
     fn gate_with_cargo(&self, cargo: &str) -> Command {
-        let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/kani_gate.sh");
-        self.gate_script(&script, cargo)
+        let script = Path::new(env!("CARGO_BIN_EXE_cg_gates"));
+        self.gate_script(script, cargo)
     }
 
     fn gate_script(&self, script: &Path, cargo: &str) -> Command {
         // The gate clears and the stand-in cargo writes its claim evidence
         // relative to the working directory, so it runs inside the sandbox
         // rather than the shared checkout.
-        let mut command = self.command(script.to_str().expect("UTF-8 gate script path"));
+        let mut command = Command::new(script);
+        command.arg("kani-gate");
+        command.env("PATH", format!("{}:/usr/bin:/bin", self.bin.display()));
+        command.env("FAKE_MARKER", self.root.join("run-marker"));
+        command.env("FAKE_LOCK_MARKER", self.root.join("lock-marker"));
+        command.env("FAKE_LOCK", self.root.join("lane.lock"));
+        command.env("FAKE_HEAD_COUNT", self.root.join("head-count"));
+        command.env("FAKE_TREE_COUNT", self.root.join("tree-count"));
         command.current_dir(&self.root);
         command.args([
             self.root
@@ -178,11 +187,29 @@ fi
 fn rust_gate_rejects_a_kani_reaching_path_without_silently_skipping() {
     let sandbox = Sandbox::new();
     let output = sandbox
-        .command("kani_scope")
+        .command("kani-scope")
         .env("FAKE_BRANCH_PATHS", "src/kani/generate/negotiate.rs\n")
         .output()
         .expect("scope command");
-    assert_eq!(stdout(&output), "required\nsrc/kani/generate/negotiate.rs\n");
+    assert_eq!(
+        stdout(&output),
+        "required\nsrc/kani/generate/negotiate.rs\n"
+    );
+}
+
+#[trace("NFR-006-AC-14", "TC-045")]
+#[test]
+fn rust_scope_refuses_stale_main_when_kani_reaching_paths_changed() {
+    let sandbox = Sandbox::new();
+    let output = sandbox
+        .command("kani-scope")
+        .arg("--main-freshness")
+        .env("FAKE_MAIN_PATHS", "src/kani/generate/negotiate.rs\n")
+        .env("FAKE_MAIN_ANCESTOR", "no")
+        .output()
+        .expect("freshness command");
+    assert!(!output.status.success());
+    assert_eq!(stdout(&output), "stale\nsrc/kani/generate/negotiate.rs\n");
 }
 
 #[trace("NFR-006-AC-6", "TC-045")]
@@ -255,7 +282,7 @@ fn scope_classifies_changed_paths_and_both_rename_directions() {
     ];
     for path in required {
         let output = sandbox
-            .command("scripts/kani_scope.sh")
+            .command("kani-scope")
             .env("FAKE_BRANCH_PATHS", format!("{path}\n"))
             .output()
             .expect("scope command");
@@ -271,7 +298,7 @@ fn scope_classifies_changed_paths_and_both_rename_directions() {
         ".github/workflows/ci.yml",
     ] {
         let output = sandbox
-            .command("scripts/kani_scope.sh")
+            .command("kani-scope")
             .env("FAKE_BRANCH_PATHS", format!("{path}\n"))
             .output()
             .expect("scope command");
@@ -282,7 +309,7 @@ fn scope_classifies_changed_paths_and_both_rename_directions() {
         "src/strategy/old.rs\nsrc/kani/new.rs\n",
     ] {
         let output = sandbox
-            .command("scripts/kani_scope.sh")
+            .command("kani-scope")
             .env("FAKE_BRANCH_PATHS", paths)
             .output()
             .expect("rename scope");
@@ -382,18 +409,14 @@ fn gate_rejects_fake_cargo_and_kani_with_printed_proof_and_reports() {
     );
 }
 
-/// A gate reached through a symlink still finds its
-/// sibling scope script and proceeds to the run phase.
+/// The installed gate binary also works through a symlink.
 #[trace("TC-045")]
 #[test]
-fn gate_invoked_through_a_symlink_finds_its_scope_script() {
+fn gate_invoked_through_a_symlink_runs_its_scope_check() {
     let sandbox = Sandbox::new();
-    let link = sandbox.root.join("linked-gate.sh");
-    std::os::unix::fs::symlink(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/kani_gate.sh"),
-        &link,
-    )
-    .expect("gate symlink");
+    let link = sandbox.root.join("linked-gate");
+    std::os::unix::fs::symlink(Path::new(env!("CARGO_BIN_EXE_cg_gates")), &link)
+        .expect("gate symlink");
     let output = sandbox
         .gate_script(&link, "cargo")
         .output()
@@ -433,9 +456,9 @@ fn gate_waits_for_the_existing_lock_holder() {
         .spawn()
         .expect("start waiting gate");
     let needle = format!(
-        "flock -x {} /usr/bin/bash {}/scripts/kani_gate.sh",
+        "flock -x {} {} kani-gate --held",
         lock.display(),
-        env!("CARGO_MANIFEST_DIR")
+        env!("CARGO_BIN_EXE_cg_gates")
     );
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
@@ -548,9 +571,9 @@ fn make_targets_share_one_real_lane_and_ci_excludes_it() {
     let gated = gate
         .lines()
         .find_map(|line| {
-            line.strip_prefix(
-                "/usr/bin/bash scripts/kani_gate.sh /tmp/agent-e-heavy-build.lock -- ",
-            )
+            line.split_once("target/cg-gates kani-gate /tmp/agent-e-heavy-build.lock -- ")
+                .filter(|(prefix, _)| prefix.is_empty())
+                .map(|(_, command)| command)
         })
         .expect("verified Kani command under the same lock");
     assert_eq!(gated, shared, "gate must run the identical full command");
@@ -566,7 +589,7 @@ fn make_targets_share_one_real_lane_and_ci_excludes_it() {
     }
     assert!(shared.contains("--ignored --test-threads=1"));
     let ci = stdout(&dry("ci"));
-    assert!(!ci.contains("kani_gate.sh"));
+    assert!(!ci.contains("cg_gates -- kani-gate"));
     assert!(!ci.contains("flock /tmp/agent-e-heavy-build.lock"));
 }
 
@@ -697,7 +720,7 @@ fn ignored_lane_selection_and_transitive_include_targets_match_scope() {
                 .expect("UTF-8 target")
                 .replace('\\', "/");
             let output = sandbox
-                .command("scripts/kani_scope.sh")
+                .command("kani-scope")
                 .env("FAKE_BRANCH_PATHS", format!("{relative}\n"))
                 .output()
                 .expect("classify included target");

@@ -17,7 +17,7 @@ every real-Kani test (NFR-006). The pull-request and release criteria are inspec
 
 ## Test Procedure
 
-The targets call `scripts/kani_scope.sh` and `scripts/kani_gate.sh`, and the Makefile
+The targets call the `cg_gates` Rust binary, and the Makefile
 defines the `kani` recipe once, in a variable the gate calls. A test can hand them stand-in
 executables on `PATH` for `cargo`, `cargo-kani` and `git`, and a temporary lock file through
 `KANI_LOCK`, without installing Kani and without touching `/tmp/agent-e-heavy-build.lock`. The test is
@@ -30,7 +30,7 @@ test` and holds no host-wide lock.
    `not required`.
 3. Rename (NFR-006-AC-3): have the stand-in `git`, asked for names with rename detection off, report
    `src/kani/old.rs` and `src/strategy/new.rs`, then `src/strategy/old.rs` and `src/kani/new.rs`;
-   assert `required` for each. Assert the script's `git` argument vector turns rename detection off.
+   assert `required` for each. Assert the binary's `git` argument vector turns rename detection off.
 4. One recipe (NFR-006-AC-4): run `make -n kani` and `make -n kani-gate`; assert the same `cargo test`
    command line in both and that it holds each of the six filters, `--ignored` and
    `--test-threads=1`.
@@ -69,7 +69,7 @@ test` and holds no host-wide lock.
     Include closure (NFR-006-AC-18): in the same walk, read every `include!`, `include_str!`,
     `include_bytes!` and `#[path]` target from each `tests/it` file that holds a lane test, and from
     each file those name in turn, resolve it against the naming file's directory, and assert the
-    result matches a pattern of the Kani-touching set read from `scripts/kani_scope.sh`; the targets
+    result matches the Kani-touching set implemented by `cg_gates kani-scope`; the targets
     `tests/checked_package_support/base.rs`, `tests/checked_package_support/rekey.rs`,
     `tests/state_frame_support/subject.rs` and the three Kani
     schemas must be found.
@@ -96,6 +96,6 @@ gate passes on its current clean candidate; a copied status line is insufficient
 
 ## Implementation
 
-Implemented: `scripts/kani_scope.sh`, `scripts/kani_gate.sh`, the `kani-scope` and `kani-gate`
+Implemented: `src/bin/cg_gates.rs`, the `kani-scope` and `kani-gate`
 targets and the shared `kani` recipe variable in `Makefile`, and `tests/it/kani_gate.rs`.
 Steps 1 to 12 are tests; step 13 is inspection. No CI workflow is part of this test case.
