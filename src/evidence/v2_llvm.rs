@@ -475,6 +475,37 @@ mod request_view_tests {
         let expected = analyze_v2_llvm_coverage(&package, &inputs)
             .to_json_bytes()
             .unwrap();
+        if let Some(directory) = std::env::var_os("IR276_ARTIFACT_OUTPUT") {
+            let directory = std::path::PathBuf::from(directory);
+            std::fs::create_dir_all(&directory).unwrap();
+            for (position, input) in owned.iter().enumerate() {
+                std::fs::write(
+                    directory.join(format!("source-{position}.rs")),
+                    &input.source,
+                )
+                .unwrap();
+                std::fs::write(
+                    directory.join(format!("source-map-{position}.json")),
+                    &input.map,
+                )
+                .unwrap();
+            }
+            std::fs::write(directory.join("report.json"), &expected).unwrap();
+            let nodes = owned.iter().map(|input| &input.node).collect::<Vec<_>>();
+            std::fs::write(
+                directory.join("node-order.json"),
+                serde_json::to_vec(&nodes).unwrap(),
+            )
+            .unwrap();
+        }
+        println!(
+            "IR276_LLVM_ARTIFACTS R={} K={} source_bytes={} map_bytes={} report_bytes={}",
+            package.graph().nodes.len(),
+            owned.len(),
+            owned.iter().map(|input| input.source.len()).sum::<usize>(),
+            owned.iter().map(|input| input.map.len()).sum::<usize>(),
+            expected.len(),
+        );
         let row: Value = serde_json::from_slice(&expected).unwrap();
         assert_eq!(row["state"], "incomplete");
         assert_eq!(row["population"], "complete");
