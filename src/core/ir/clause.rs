@@ -7,6 +7,18 @@ use quire_contract_model::{
 };
 use serde_json::Value;
 
+// The clause controls load the existing state-frame fixture here too so they can exercise the
+// crate-private graph view; its other fixture APIs are unused in this module.
+#[cfg(test)]
+#[allow(dead_code, clippy::duplicate_mod)]
+#[path = "../../../tests/state_frame_support/model.rs"]
+mod model;
+// The QSL fixture is also loaded by state-frame tests; these controls need its admitted package.
+#[cfg(test)]
+#[allow(dead_code, clippy::duplicate_mod)]
+#[path = "../../../tests/state_frame_support/native_twin.rs"]
+mod native_twin;
+
 const MAX_CONDITION_TERMS: usize = 256;
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -336,7 +348,11 @@ mod tests {
     use ix_trace_rs::trace;
     use quire_contract_model::{CheckedNodeId, CheckedSemanticNodeV2};
 
-    use super::ClauseNodeIndex;
+    use super::{native_twin::Twin, ClauseGraphView, ClauseNodeIndex};
+    use crate::oracle::clause::{
+        derive_v2_clause_descriptor, derive_v2_clause_descriptor_with_view,
+        generate_v2_clause_oracle, generate_v2_clause_oracle_with_view, V2ClauseRefusal,
+    };
 
     fn id(number: u8) -> CheckedNodeId {
         CheckedNodeId {
@@ -362,7 +378,7 @@ mod tests {
         }
     }
 
-    #[trace("IR-276-AC-5")]
+    #[trace("FR-014-AC-38", "TC-024")]
     #[test]
     fn clause_node_index_preserves_first_node_and_reuses_one_walk() {
         let graph = [node(1, "first"), node(2, "other"), node(1, "later")];
@@ -376,21 +392,52 @@ mod tests {
             assert!(index.node(&id(3)).is_none());
         }
         assert_eq!(visits.get(), graph.len());
+
+        let (package, clause) = Twin::new().emitted_package("BalanceNeverDrops");
+        let view = ClauseGraphView::new(&package);
+        let generated = generate_v2_clause_oracle_with_view(&clause, &view).unwrap();
+        assert_eq!(generated.descriptor.node_id, clause);
+        assert_eq!(
+            generated,
+            generate_v2_clause_oracle(&package, &clause).unwrap()
+        );
     }
 
-    #[trace("IR-276-AC-5")]
+    #[trace("FR-014-AC-38", "TC-024")]
     #[test]
     fn clause_planning_and_reading_share_one_graph_walk() {
         // A checked graph is a Vec, so the number of whole-graph accesses is not
         // observable through the public package API. Guard the two call sites.
-        let source = concat!(
+        let reader = include_str!("clause.rs");
+        let production_reader = reader.split("\n#[cfg(test)]\nmod tests").next().unwrap();
+        let source = format!(
+            "{}{}",
             include_str!("../../oracle/clause.rs"),
-            include_str!("clause.rs")
+            production_reader
         );
         assert_eq!(
             source.matches(concat!(".gra", "ph()")).count(),
             1,
             "clause planning and reading must build one reusable graph view"
+        );
+
+        let (package, clause) = Twin::new().emitted_package("BalanceNeverDrops");
+        let view = ClauseGraphView::new(&package);
+        let descriptor = derive_v2_clause_descriptor_with_view(&clause, &view).unwrap();
+        assert_eq!(descriptor.node_id, clause);
+        assert_eq!(
+            descriptor,
+            derive_v2_clause_descriptor(&package, &clause).unwrap()
+        );
+        let non_clause = package
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.node_tag.as_ref() == "expression")
+            .unwrap();
+        assert_eq!(
+            generate_v2_clause_oracle_with_view(&non_clause.node_id, &view),
+            Err(V2ClauseRefusal::NotClause)
         );
     }
 }
