@@ -3501,6 +3501,18 @@ fn tc_031_ac13_generation_is_deterministic_across_runs_and_permutations() {
     }
 }
 
+#[trace("TC-024", "FR-014-AC-8")]
+#[test]
+fn generated_manifest_exposes_semantic_value_owner_source() {
+    let oracles = main_oracles();
+    let manifest = contents(&oracles, "Cargo.toml");
+    let dependency = format!(
+        "quire-semantic-value = {{ {} }}",
+        quire_contract_codegen::SEMANTIC_VALUE_DEPENDENCY_SOURCE
+    );
+    assert!(manifest.lines().any(|line| line == dependency));
+}
+
 /// The generated crate declares
 /// `publish = false`, names the runtime by branch with the `exact` feature,
 /// contains no charge amount and no literal `Outcome`/`Value` constant
