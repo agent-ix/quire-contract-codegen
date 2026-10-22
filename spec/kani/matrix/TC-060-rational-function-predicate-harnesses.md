@@ -44,6 +44,11 @@ runner and budget; a parked CG-self-proof gate is not feature evidence.
    Reject duplicate encodings such as `0/2` and `2/2`; include mutations accepting
    unrestricted normalization, dropping an endpoint or drawing only denominator
    one. Ensure these changes fail the correspondence check (AC-2).
+   Inspect the planned FR-025 Rational row: one real semantic parameter expands
+   into numerator then denominator I64 bindings, in ascending logical parameter
+   order. Compare the persisted physical schema with actual symbolic calls;
+   inspect both original domains, parameter/source identity, roles and positions.
+   Existing Boolean/integer controls must retain their original order and values.
 3. Generate the actual oracle and compare its full native observations with an
    independently constructed reference using public owner operations on the same
    admitted function. Preserve all typed outcomes and ordered Meter charges,
@@ -79,8 +84,27 @@ runner and budget; a parked CG-self-proof gate is not feature evidence.
    stale identity or bound to another declaration. Assert responsible-boundary
    rejection without minted keys or changing the application into scalar parity.
    Record absent public replay capabilities as open dependencies (AC-9).
+   Before reconstruction, independently decode the original physical playback
+   entries and compare each I64 byte width, little-endian value and comment with
+   the declared component. Exercise missing/repeated/foreign/role-swapped and
+   domain-conflicting schema, malformed width/comment, zero or negative denominator,
+   `0/2` and `2/2`. No failure control may be normalized into a different witness.
+   A schema with swapped component roles must refuse; a genuinely different
+   canonical in-domain pair remains a different valid input, not categorically
+   malformed. Compare retained playback to original process output to reject
+   substitution rather than guessing the intended values.
+   For two Rational parameters, set the physical value-count bound to four
+   (at-bound) and three (one-over). The latter must refuse before reading a
+   poisoned fourth entry, not group four entries into two to evade the cap.
+   Exercise at/one-over byte bounds independently, preserving existing Boolean/
+   I64 decode checks. Reconstruct one owner Rational per parameter, serialize it
+   using the existing owner typed witness's `to_value_text()` route, and ensure
+   public replay receives exactly one canonical value per original parameter.
+   Do not route Rational through an integer-only adapter or invent transcript
+   grammar, parameter ids or occurrence keys.
 8. Inspect the run record for complete function/source association, input-domain
-   correspondence, actual tool versions, target, dependency cohort, limits,
+   correspondence, ordered physical components and logical parameter grouping,
+   actual observed tool versions, target, dependency cohort, limits,
    harness selection and full ordered argv including unwind/loop options. Match
    checks, single cover, actual playback, exit and terminal classification to the
    raw run. Verify retained source is replayed unchanged and that all no-run or
@@ -96,3 +120,10 @@ noncomplete, inconclusive or unrun control retains its own classification and
 cannot receive proof or replay credit. Until the complete generated-proof and
 replay path runs successfully, IR-258 remains unaccepted regardless of historical
 source-admission or native agreement results.
+
+## Status
+
+PLANNED: all ten FR-046 criteria and the new Rational ABI/decoder/report controls
+remain unimplemented and untagged. The reviewed mathematical/source receipts are
+preparation, not executable binders, proof, fit or full-row acceptance. No missing
+owner capability, version observation or generated-proof result is waived.

@@ -11,6 +11,8 @@ relationships:
     type: depends_on
   - target: ix://agent-ix/quire-contract-codegen/FR-017
     type: depends_on
+  - target: ix://agent-ix/quire-contract-codegen/FR-025
+    type: depends_on
   - target: ix://agent-ix/quire-specification/FR-196
     type: references
 ---
@@ -20,7 +22,8 @@ relationships:
 
 When an admitted request selects a pure Boolean function whose parameters have
 finite Rational component domains and whose complete body consists of those
-parameters, exact rational addition and rational equality, CG SHALL generate a
+parameters, exact rational addition and rational equality, and the planned FR-025
+ABI and public replay prerequisites are available, CG SHALL generate a
 bounded proof of that authored Boolean predicate over every value in its declared
 domain. This is the IR-258 whole-function slice, distinct from proving an
 individual scalar operation valid or comparing two implementations.
@@ -85,20 +88,70 @@ function with an equal body, or a scalar child claim cannot replace this predica
 The owner-issued callable and replay identities remain the owner's contract;
 CG does not mint an occurrence key or introduce an alternative replay API.
 
+
+### Physical ABI and witness roundtrip (planned)
+
+When expanding a logical argument for this family, CG SHALL persist exactly two physical
+`i64` bindings in numerator-then-denominator order for its one real function parameter.
+Logical parameter order remains ascending by parameter identifier. The persisted description
+binds each unique physical identifier and position to the original parameter/source identity,
+its component role and original inclusive component bounds, together with that parameter's
+complete Rational domain and canonical correspondence. These are required conceptual binding
+facts, not a claim that a current Rust field or owner API already carries them. Existing
+Boolean/integer argument ordering and single primitive binding remain unchanged.
+
+When decoding retained playback, CG SHALL validate each physical entry in persisted call order
+using the existing I64 width, little-endian byte and decoded-comment checks before grouping.
+The existing Boolean one-byte and I64 eight-byte contracts remain unchanged. Required byte
+limits apply before transcript parsing, and required value-count limits count every physical
+entry before grouping: the original two-Rational function has four entries, not two. A missing,
+duplicate, foreign, role-swapped or domain-conflicting component schema refuses with a typed
+schema cause. Malformed entries retain typed decode causes. No fabricated parameter or omitted
+component is silently repaired.
+
+When reconstructing a decoded parameter, CG SHALL validate both components against the original
+domain and call owner `Rational::new` with exact widened integers, requiring accessor equality
+with both decoded components. A nonpositive denominator or a pair changed by normalization,
+including `0/2` and `2/2`, is malformed evidence, not a replacement canonical witness. A canonical
+pair outside its declared domain retains the out-of-domain cause. No native replay is attempted
+for these evidence failures. A different canonical in-domain pair is a different valid input;
+its values are not refused merely because swapping them could also yield another valid input.
+Role-swapped schema and substituted backend evidence are separate failure controls.
+
+When submitting a validated parameter to public replay, CG SHALL construct one existing
+`qsl_replay::WitnessValue::Rational` with owner Integer numerator/denominator and use its public
+`to_value_text()` canonical serialization for that one original parameter. The function
+adapter must admit this value instead of routing it through its integer-only transcript path.
+The retained physical values are decoded first under
+[FR-016](../../replay/functional/FR-016-witness-native-replay.md)'s positional contract; grouping
+then produces semantic values keyed by real parameter ids in the owner-required replay order.
+There is no new transcript grammar, owner constructor, declaration occurrence key or callable
+selection API. If the public owner route is unavailable, the item is unsupported with no harness,
+not an accepted replay of a fabricated application.
+
+When projecting this harness into execution evidence, CG SHALL retain both the ordered physical
+bindings and each logical Rational parameter's original identity, full domain, roles and
+canonical correspondence. The existing runner's harness/launcher selection, ordered options,
+proof ceilings and typed outcome rules remain authoritative. Required actual tool-version
+observations belong in this feature's run record; their absence is an undischarged acceptance
+obligation, not permission to infer versions or add a file/version tracking ledger. This planned
+contract does not assert that current symbolic-bound or execution-evidence types already carry
+Rational grouping or version observations.
+
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
 | --- | --- | --- |
 | FR-046-AC-1 | The genuine source function `rational_commutative(a: Rational[-9,9;1,9], b: Rational[-9,9;1,9]): Boolean` with body `a + b = b + a` selects its whole declaration and complete body through the public QSL admission, strict IR reader/lowering and CG route. Its artifact proves that predicate, not only validity or parity of either addition. Replacing the body by `a + b = a + a` selects the same authored mutation with unchanged parameter domains. | Test |
-| FR-046-AC-2 | Every accepted symbolic argument has canonical constructor/accessor roundtrip equality and lies in its original inclusive component domains. Every semantic value in those domains has exactly one accepted representation. Zero is `0/1`; negative, fractional and boundary values remain reachable. For the original domain there are 111 canonical values per argument and 12,321 argument tuples; admitting all 171 raw component pairs, restricting denominators to one, or clipping an endpoint fails correspondence validation under QSpec FR-196-AC-5. | Test |
+| FR-046-AC-2 | Every accepted symbolic argument has canonical constructor/accessor roundtrip equality and lies in its original inclusive component domains. Its two physical I64 bindings retain numerator/denominator roles, original parameter identity and bounds in the FR-025 order. Every semantic value in those domains has exactly one accepted representation. Zero is `0/1`; negative, fractional and boundary values remain reachable. For the original domain there are 111 canonical values per argument and 12,321 argument tuples; admitting all 171 raw component pairs, restricting denominators to one, or clipping an endpoint fails correspondence validation under QSpec FR-196-AC-5. | Test |
 | FR-046-AC-3 | Generated evaluation preserves the authored full tree and declaration identity, exact owner arithmetic, intermediate values outside the input domains, arbitrary-precision continuation, full typed outcomes and Meter charge/stop order. Native comparison against an independent owner-operation reference checks those observations, including each denied charge prefix and exact/short budgets; it does not calculate expectations by running the generated oracle twice. | Test |
 | FR-046-AC-4 | Generation introduces no assumption on completion, truth or an absence of undefined/refused/incomplete results. Controls producing each reachable noncompletion retain that typed outcome and cannot become a successful predicate proof; an outcome-based assume mutation is rejected. A completion assertion failure without a replayed false value is not labelled a confirmed semantic false counterexample. | Test |
 | FR-046-AC-5 | The healthy original function receives `Verified` only from an actual successful proof with all required checks and its completion cover satisfied. The wrong-addend mutation produces a substantive failed predicate assertion with actual solver playback of canonical in-domain arguments, and replay of that same authored function completes with Boolean false. A hypothetical witness or cover witness is not substituted for that playback. | Test |
 | FR-046-AC-6 | Each emitted predicate harness has exactly one final completion cover after all predicate assertions, including harnesses with representation constraints. Unsatisfied or unreported completion cover, failed unwind, timeout, memory exhaustion or missing verdict cannot yield `Verified`; classifications retain FR-017 and FR-029 distinctions. | Test |
 | FR-046-AC-7 | A missing or unbounded Rational parameter domain yields source-associated `requires-bound` naming the selected function, argument and missing domain, with no harness. A finite component endpoint outside this encoding's signed-i64 capacity yields named `unsupported`, retaining the original endpoint and no harness; generation never clips, casts away precision or substitutes a smaller domain. | Test |
 | FR-046-AC-8 | An unavailable owner-lowered whole-function representation, absent one-to-one correspondence or unsupported body operation yields named `unsupported` with its source-associated cause and no harness. Every requested item has exactly one disposition under FR-039; a refused item does not remove or alter a supported sibling. Malformed source or owner-refused packages remain upstream refusals, not fabricated CG claims. | Test |
-| FR-046-AC-9 | Counterexample decoding validates canonical components, original domains and the selected declaration/application binding through the public owner replay route. Out-of-domain, duplicate-zero, noncanonical, wrong-declaration and stale-identity witnesses are rejected by the responsible boundary; CG neither mints keys nor substitutes scalar application validity for the authored Boolean result. An unavailable replay capability is reported without claiming replay acceptance. | Test |
-| FR-046-AC-10 | Run evidence records the selected function and source association, inclusive component domains and correspondence, actual subject and full ordered backend arguments, every unwind/loop bound and option, Kani/Rust/CBMC/solver versions, target, actual dependency cohort and execution limits, raw checks/cover/playback, exit and typed terminal outcome. Replay uses the retained generated artifact without hand editing. No-run, compile refusal, cover failure, resource exhaustion and semantic falsification remain distinguishable; preparation alone earns no proof result. | Test |
+| FR-046-AC-9 | Counterexample decoding validates the two physical I64 entries per original parameter, exact width/comment/order, schema roles, required physical-entry and byte limits, canonical components, original domains and selected declaration/application binding before public owner replay. Grouping yields one typed owner Rational value per parameter through the existing canonical serialization seam; missing, duplicate, foreign, role-swapped, domain-conflicting and malformed component schemas or entries retain typed refusals with no replayed failure. Out-of-domain, duplicate-zero, noncanonical, wrong-declaration and stale-identity witnesses are rejected by the responsible boundary; CG neither mints keys nor substitutes scalar application validity for the authored Boolean result. An unavailable replay capability is reported without claiming replay acceptance. | Test |
+| FR-046-AC-10 | Run evidence records the selected function and source association, inclusive component domains and correspondence, ordered physical bindings and their logical parameter grouping, actual subject and full ordered backend arguments, every unwind/loop bound and option, Kani/Rust/CBMC/solver versions, target, actual dependency cohort and execution limits, raw checks/cover/playback, exit and typed terminal outcome. Replay uses the retained generated artifact without hand editing. No-run, compile refusal, cover failure, resource exhaustion and semantic falsification remain distinguishable; preparation alone earns no proof result. | Test |
 
 ## Dependencies
 
@@ -118,3 +171,9 @@ CG does not mint an occurrence key or introduce an alternative replay API.
 
 PLANNED (IR-258). This specification supplies no implementation, current-cohort
 source-admission, generated-proof, counterexample or end-to-end acceptance credit.
+All ten criteria (AC-1 through AC-10), including their ABI, decoder, runner/report and replay
+extensions, remain planned and untagged until actual implementation and verification. A TC
+procedure, host mathematical receipt or specification review does not discharge any criterion.
+The existing decoder accepts Boolean/I64 positions, but the Rational grouping and function
+adapter path are not implemented; the existing run record does not yet observe the required
+actual tool versions. These are open delivery obligations, not waived gaps.
