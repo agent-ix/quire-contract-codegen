@@ -504,6 +504,40 @@ execution of the emitted crate, native agreement or Kani. Existing AC-10,
 AC-11 and AC-17 host controls, AC-18/AC-38 Quantity negatives, and all original
 native and proof procedures remain unchanged.
 
+### Admitted unit-table metadata controls
+
+Planned host verification for FR-018-AC-45 (IR-17): compile genuine source
+through root `compile_admitted` declaring dimension `Length`, units `m` and
+`km` with `unit km : Length = rational(1000, 1) * m;`, an additional declared
+but unused unit, direct Quantity parameters, a nested Quantity member, and an
+independent supported Boolean or Union equality. Preserve the original source,
+package and genuine context. Read expected unit entries and their owner-issued
+identities independently from that original context's public facade; construct
+no replacement IDs or table. Include a unit absent from the emitted graph so
+reconstructing a table from reached graph nodes cannot satisfy this check.
+
+After the existing guards, inspect the generation-time environment's retained
+unit entries against the complete original context table, including the unused
+unit. Inspect emitted environment preparation for attachment of the original
+context's complete `unit_table().clone()` at the equivalent post-guard boundary.
+Deleting either attachment must fail its corresponding check. Source inspection
+is evidence of the emitted recipe only; do not report it as execution of that
+constructor. These controls do not repeat QSL's unit-conversion suite.
+
+Retain valid context-free `None` construction for non-nominal supported items
+and the existing wrong-package whole-request refusal before reconstruction or
+metadata attachment. Request both direct and nested Quantity items alongside
+the healthy sibling, with the genuine context and where the existing
+context-free negative path applies. Assert their unchanged typed
+`Unsupported("quantity")`, refusal precedence and absence of symbols; compare
+the supported sibling's disposition and generated source with its isolated
+run. Do not replace Quantity refusal with missing-context or package-mismatch
+errors, or accept a positive Quantity equality merely because metadata exists.
+Keep AC-18/AC-38 and all original native and proof procedures unchanged. Tests
+implementing these planned controls bind FR-018-AC-45 on `#[test]` items through
+the repository's trace attribute convention; no executed-test claim is made
+by this procedure amendment.
+
 ## Expected Results
 
 The source scans find zero panic sites, and the render function returns a typed
