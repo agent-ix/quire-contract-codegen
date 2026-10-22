@@ -1,41 +1,33 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::num::NonZeroU64;
+
 use ix_trace_rs::trace;
 
-use super::{classify_pair, PairEvidence, QueryRun, ReachedLimit, SolverStatus};
+use super::{classify_pair, PairEvidence, QueryAssociation, QueryRun, ReachedLimit, SolverStatus};
 
-type Association = (
-    &'static str,
-    &'static str,
-    &'static str,
-    u64,
-    &'static str,
-    &'static [u8],
-);
+type Association = QueryAssociation<&'static str, &'static str, &'static str, &'static str>;
+type Run = QueryRun<&'static str, &'static str, &'static str, &'static str>;
 
 fn base() -> Association {
-    (
-        "product-a",
-        "item-a",
-        "instance-v",
-        1,
-        "base",
-        b"(check-sat)\n",
-    )
+    QueryAssociation {
+        product: "product-a",
+        item: "item-a",
+        instance: "instance-v",
+        depth: NonZeroU64::MIN,
+        kind: "base",
+        query_bytes: b"(check-sat)\n".to_vec(),
+    }
 }
 
 fn step() -> Association {
-    (
-        "product-a",
-        "item-a",
-        "instance-v",
-        1,
-        "step",
-        b"(check-sat)\n",
-    )
+    QueryAssociation {
+        kind: "step",
+        ..base()
+    }
 }
 
-fn record(association: Association, status: SolverStatus) -> QueryRun<Association> {
+fn record(association: Association, status: SolverStatus) -> Run {
     QueryRun {
         association,
         status,
@@ -56,54 +48,30 @@ fn two_unsat_records_need_exact_base_and_step_association() {
         PairEvidence::AssociationMismatch
     );
     for changed_base in [
-        (
-            "product-b",
-            "item-a",
-            "instance-v",
-            1,
-            "base",
-            b"(check-sat)\n" as &[u8],
-        ),
-        (
-            "product-a",
-            "item-b",
-            "instance-v",
-            1,
-            "base",
-            b"(check-sat)\n",
-        ),
-        (
-            "product-a",
-            "item-a",
-            "instance-w",
-            1,
-            "base",
-            b"(check-sat)\n",
-        ),
-        (
-            "product-a",
-            "item-a",
-            "instance-v",
-            2,
-            "base",
-            b"(check-sat)\n",
-        ),
-        (
-            "product-a",
-            "item-a",
-            "instance-v",
-            1,
-            "step",
-            b"(check-sat)\n",
-        ),
-        (
-            "product-a",
-            "item-a",
-            "instance-v",
-            1,
-            "base",
-            b"(check-sat) \n",
-        ),
+        QueryAssociation {
+            product: "product-b",
+            ..base()
+        },
+        QueryAssociation {
+            item: "item-b",
+            ..base()
+        },
+        QueryAssociation {
+            instance: "instance-w",
+            ..base()
+        },
+        QueryAssociation {
+            depth: NonZeroU64::new(2).expect("two is nonzero"),
+            ..base()
+        },
+        QueryAssociation {
+            kind: "step",
+            ..base()
+        },
+        QueryAssociation {
+            query_bytes: b"(check-sat) \n".to_vec(),
+            ..base()
+        },
     ] {
         assert_eq!(
             classify_pair(

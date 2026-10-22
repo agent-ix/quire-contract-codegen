@@ -35,14 +35,32 @@ pub enum SolverStatus {
     ProcessFailed,
 }
 
-/// One solver response paired with its QSL-supplied query association.
+/// The exact QSL-owned selection and query bytes an invocation represents.
 ///
-/// `A` is the caller's authoritative product, item, instance, depth, kind and
-/// exact query bytes tuple. CG neither derives nor hashes an identity for it.
+/// The caller supplies authoritative identity types for product, item,
+/// instance and query kind. CG retains them without deriving or hashing an
+/// identity, and this type requires the exact query bytes and nonzero depth.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct QueryRun<A> {
+pub struct QueryAssociation<Product, Item, Instance, Kind> {
+    /// The selected HP-2 product identity.
+    pub product: Product,
+    /// The selected safety item identity.
+    pub item: Item,
+    /// The selected object-parameter instance identity.
+    pub instance: Instance,
+    /// Induction depth in joint steps.
+    pub depth: std::num::NonZeroU64,
+    /// QSL's base or step query kind.
+    pub kind: Kind,
+    /// The exact QSL-authored query bytes sent to the solver.
+    pub query_bytes: Vec<u8>,
+}
+
+/// One solver response paired with its QSL-supplied query association.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct QueryRun<Product, Item, Instance, Kind> {
     /// Exact association supplied for this invocation.
-    pub association: A,
+    pub association: QueryAssociation<Product, Item, Instance, Kind>,
     /// The solver response or typed non-success.
     pub status: SolverStatus,
 }
@@ -68,15 +86,15 @@ pub enum PairEvidence {
 
 /// Classify one base/step pair without manufacturing QSL-owned outcomes.
 ///
-/// The expected associations must include the exact bytes and the query kind;
-/// `A` is supplied by the QSL-facing caller. A response from another run
-/// cannot complete this pair, even if its solver status is `unsat`.
+/// The expected associations include the exact bytes and query kind. The
+/// QSL-facing caller supplies each identity type. A response from another
+/// run cannot complete this pair, even if its solver status is `unsat`.
 #[must_use]
-pub fn classify_pair<A: Eq>(
-    expected_base: &A,
-    expected_step: &A,
-    base: Option<&QueryRun<A>>,
-    step: Option<&QueryRun<A>>,
+pub fn classify_pair<Product: Eq, Item: Eq, Instance: Eq, Kind: Eq>(
+    expected_base: &QueryAssociation<Product, Item, Instance, Kind>,
+    expected_step: &QueryAssociation<Product, Item, Instance, Kind>,
+    base: Option<&QueryRun<Product, Item, Instance, Kind>>,
+    step: Option<&QueryRun<Product, Item, Instance, Kind>>,
 ) -> PairEvidence {
     let (Some(base), Some(step)) = (base, step) else {
         return PairEvidence::MissingResponse;
