@@ -41,9 +41,13 @@ Runtime [FR-275](ix://agent-ix/quire-contract-runtime/FR-275) deletes that port;
 QSL exports no callable application API through qsl-replay (IR-845), and QSL
 arch-lint T12-A bars CG from qsl-eval, so CG claims no QSL application API.
 Concrete Rust oracle emission, compilation and execution against a QSL
-application API are outside CG's boundary until a concrete need is filed and
-QSL specifies that API (IR-845; FR-014-AC-47). The generator shall
-not preserve the port through an alias, wrapper or compatibility layer.
+application API are outside CG's boundary until QSL delivers an admitted
+checked-closure acquisition and application entry through its permitted
+consumer surface, backed by the shared evaluation interface (IR-583, IR-595).
+The proposed `quire-eval` interface alone supplies neither that QSL reference
+adapter nor a CG-callable QSL application entry. CG shall not call RT's port or
+QSL evaluator internals to fill that gap (IR-845; FR-014-AC-47).
+The generator shall not preserve the port through an alias, wrapper or compatibility layer.
 
 This is the function-application slice of complete-V1 oracle generation.
 [FR-014](./FR-014-exact-scalar-oracles.md) supplies scalar forms and
@@ -276,7 +280,7 @@ no QSL application API (IR-845).
 | FR-021-AC-29 | A 100,000-call linear body produces 100,000 constant-size parent-linked location records; requesting its deepest path under sufficient query limits returns exactly 100,000 child ordinals, and a one-unit-below query limit refuses without a partial path. Generation does not materialize all paths. PLANNED (IR-511). | Test (TC-031) |
 | FR-021-AC-30 | A requested generation work limit of `u64::MAX` returns `InvalidGenerationWorkLimit` before lowering or charging; at `u64::MAX - 1` the first denied count is representable in the `u64` refusal and never wraps or panics. PLANNED (IR-511). | Test (TC-031) |
 | FR-021-AC-31 | No test name, trace tag, test output line or doc comment of the 100,000-node case, no TC-031 step and no oracle-matrix row claims, or presents as evidence, that a generated oracle compiled, ran on a 512 KiB stack or agreed with a shallow equivalent against a QSL application API; schedule-source compilation (AC-7) is not execution evidence. CG claims no QSL application API (IR-845, FR-014-AC-47). | Inspection (TC-031) |
-| FR-021-AC-32 | Neither the schedule crate nor any concrete oracle requires `quire_contract_runtime::exact`, an alias, wrapper or compatibility layer; CG emits no owner-path oracle (IR-845). PLANNED, blocked on IR-853: Contract Runtime FR-275 expects the generator to name QSL's evaluation leaf, which conflicts with IR-845 and QSL arch-lint T12-A; IR-853 resolves that conflict and decides who closes this criterion once the `exact` port is deleted. | Inspection (TC-031) |
+| FR-021-AC-32 | Neither the schedule crate nor any concrete oracle requires `quire_contract_runtime::exact`, an alias, wrapper or compatibility layer; CG emits no owner-path oracle (IR-845). PLANNED, blocked on IR-853: a future concrete oracle may use the shared evaluation interface only after QSL delivers a reference adapter and a permitted checked-closure acquisition/application entry. The proposed leaf interface by itself does not provide that CG consumer route; IR-853 resolves the target and decides who closes this criterion once the `exact` port is deleted. | Inspection (TC-031) |
 | FR-021-AC-33 | With an IR-admitted `temporal`/`formula`, `temporal`/`fairness` or `expression`/`case` node used directly as an item's call-node id, the claim-map entry retains that id and is `Refused { refusal: ExactFunctionRefusal::Unsupported }`. For the separate declared-body-root case, an item names that function through a distinct, IR-admitted `expression`/`call` node that lowers successfully and has no duplicate, capability, or earlier item refusal; its claim retains the call-node id and carries the body's `ExactFunctionRefusal::Unsupported`. For an IR `Unsupported` lowering record the refusal's `unsupported_node_id` and `node_tag` match its first unsupported reachable node and tag, which can differ from either request root; for a lowered `case` root they name that root and `"expression"`. No affected item is scheduled, given an oracle symbol or location entry, omitted, or panicked, and an unrelated healthy function/item's claim, schedule source and location map are byte-identical to a run without it. AC-11's temporal-clause blocker and existing duplicate/capability/lowering precedence remain unchanged. | Test (TC-031) |
 | FR-021-AC-34 | Given one authentic strict-reader-admitted `CheckedPackageV2` of less than 1,048,576 bytes containing 129 distinct functions with two bound Integer parameters each, 128 acyclic `quire.op.function.call` body-root edges forming one chain and a terminating admitted Scalar body, the public function generator schedules all 129 functions and all 128 call edges from that same checked graph. Use the default 1,048,576-byte Contract IR reader/lowering ceilings and default 1,048,576-byte generated-source ceiling; only the caller-selected generation work limit may be raised to the measured required units. The requested chain item has exactly one `Scheduled` claim naming its root instruction slot, the generated flat SSA schedule contains 128 call instructions with ordered two-argument operands and compiles within the default source limit, no item is refused with `LoweringByteLimitExceeded`, and no `SourceTooLarge` error occurs. Source, claims and location map are byte-identical under request permutation. AC-23's real Scalar/Equality and requested call-item `Failed` mappings, AC-12's isolation, call-node-first precedence and AC-27's source-binding refusals still apply. PLANNED (IR-768). | Test (TC-031) |
 
@@ -329,9 +333,13 @@ written.
   (admitted CheckedPackage V2 lowering), QSpec FR-322 (flat V2 body grammar)
   and FR-460 (no depth caps).
 - **No QSL application API**: QSL exports no callable application API through
-  qsl-replay (QSL decision, IR-845), so this requirement targets none. If a
-  concrete oracle later needs per-charge results, linked-mode admission, origin
-  or owner result variants, that need is filed and QSL specifies the API then.
+  qsl-replay (QSL decision, IR-845), so this requirement targets none. The
+  shared evaluation interface (IR-583) is a future implementation boundary,
+  not a CG entry: QSL must deliver a reference adapter and a permitted route
+  from admitted checked closures to its application entry before CG can emit
+  or execute a concrete owner-path oracle. If that route needs per-charge
+  results, linked-mode admission, origin or owner result variants, QSL must
+  specify those surfaces before CG adopts them.
 - **Downstream**: [TC-031](../matrix/TC-031-function-application-oracles.md).
 
 ## Status

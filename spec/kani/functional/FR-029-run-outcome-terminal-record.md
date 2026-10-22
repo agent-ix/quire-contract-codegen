@@ -31,6 +31,13 @@ falsified run's value is a function of both, because a counterexample is a refut
 replay reproduces it. Every pair maps to exactly one terminal value, so every run item has exactly
 one terminal record, as QSpec FR-331 requires.
 
+This terminal map consumes the public replay result and refusal types. IR-595's
+shared evaluation interface does not replace `qsl_replay::replay` or authorize
+CG to evaluate the witness through RT's `exact` port, `qsl-eval`, or QSL checker
+internals. The QSL reference adapter and any future evaluator implementation
+are QSL-owned; the map retains the result's typed settlement and its existing
+precedence.
+
 The replay settlement is the result of replaying the falsified run's counterexample through
 `qsl_replay::replay` (QSL ADR-013 C-09, ADR-011 T-13), read as one of:
 
