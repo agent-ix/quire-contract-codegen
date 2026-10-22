@@ -279,7 +279,8 @@ pub use qsl_replay::DigestRecord;
 // FR-046 native preparation; this is not a negotiated/executable proof family.
 pub use kani::generate::outcome::FunctionPredicateItem;
 pub use kani::generate::rational_predicate::{
-    rational_predicate_bindings, RationalComponent, RationalComponentBinding,
+    canonical_rational_arguments, rational_predicate_bindings, RationalComponent,
+    RationalComponentBinding, RationalComponentRefusal,
 };
 pub use oracle::rational_predicate::{
     generate_rational_predicate_oracle, RationalPredicateDomain, RationalPredicateOracle,
