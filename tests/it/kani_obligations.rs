@@ -1379,6 +1379,29 @@ fn tc_025_every_rendered_operation_states_its_own_native_relation() {
 fn tc_025_unbounded_non_finite_and_blocked_items_are_refused_without_harnesses() {
     let (scalar, claim_map, ids) = scalar_package();
     let records = scalar_records(&scalar, &claim_map, &ids, &[UNBOUNDED, MODEL, STATE, FRAME]);
+    let admitted = admitted_scalar_claims(&scalar, &claim_map);
+    for (record, code) in records.iter().zip([UNBOUNDED, MODEL, STATE, FRAME]) {
+        let mut singleton = scalar_records(&scalar, &claim_map, &ids, &[code]).remove(0);
+        singleton.request_index = record.request_index;
+        assert_eq!(
+            *record, singleton,
+            "batch classification must preserve each item"
+        );
+        let node_id = ids.resolve(&code_id(code));
+        let expected = admitted
+            .wire()
+            .source_map
+            .nodes
+            .iter()
+            .filter(|entry| entry.node_id == node_id)
+            .flat_map(|entry| entry.occurrences.iter().cloned())
+            .collect::<Vec<_>>();
+        assert!(matches!(
+            &record.subject,
+            ObligationSubject::CheckedNode { node_id: actual_id, source_map }
+                if actual_id == &node_id && source_map == &expected
+        ));
+    }
     assert_eq!(
         records[0].disposition,
         ObligationDisposition::RequiresBound {
@@ -1446,6 +1469,62 @@ fn tc_025_unbounded_non_finite_and_blocked_items_are_refused_without_harnesses()
             kind: ClauseKind::Assertion
         }
     );
+}
+
+/// A source-authored node can have several distinct occurrences. The indexed lookup must keep
+/// every occurrence in its admitted wire order, including when neighboring items share a graph.
+#[trace("FR-015-AC-3", "TC-025")]
+#[test]
+fn tc_025_scalar_source_lookup_preserves_multiple_occurrences_per_node() {
+    let (builder, _, _) = package::source_backed_byte_chain(2);
+    let (checked, ids) = builder.admit_resolved();
+    let nodes = (0..2)
+        .map(|offset| ids.resolve(&code_id(package::BYTE_CHAIN_BASE + offset)))
+        .collect::<Vec<_>>();
+    let claims = nodes
+        .iter()
+        .map(|node_id| ExactScalarItem {
+            node_id: node_id.clone(),
+            operation: integer_add(),
+        })
+        .collect::<Vec<_>>();
+    let claim_map = generate_exact_scalar_oracles(&checked, &claims)
+        .expect("source-backed scalar claims")
+        .claim_map;
+    let admitted = admitted_scalar_claims(&checked, &claim_map);
+    let items = nodes
+        .iter()
+        .map(|node_id| ObligationItem::ScalarClaim {
+            package: &admitted,
+            claim_map: &claim_map,
+            node_id,
+            claim_index: claim_index(&claim_map, node_id),
+            result_selection: &quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
+        })
+        .collect::<Vec<_>>();
+    let (records, _) =
+        emitted(negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap());
+    assert_eq!(records.len(), nodes.len());
+    for (record, node_id) in records.iter().zip(&nodes) {
+        let expected = admitted
+            .wire()
+            .source_map
+            .nodes
+            .iter()
+            .filter(|entry| &entry.node_id == node_id)
+            .flat_map(|entry| entry.occurrences.iter().cloned())
+            .collect::<Vec<_>>();
+        assert!(
+            expected.len() >= 2,
+            "fixture must distinguish occurrence order"
+        );
+        assert_ne!(expected[0], expected[1], "occurrences must be distinct");
+        assert!(matches!(
+            &record.subject,
+            ObligationSubject::CheckedNode { node_id: actual_id, source_map }
+                if actual_id == node_id && source_map == &expected
+        ));
+    }
 }
 
 /// A quantity conversion node declared by the caller reaches the Kani obligation engine only as

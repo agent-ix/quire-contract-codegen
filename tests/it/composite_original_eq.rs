@@ -498,6 +498,58 @@ fn original_operator_mismatch_refuses_with_typed_operators() {
     }
 }
 
+/// One retained context resolves distinct operation nodes across repeated requests.
+#[trace("FR-033-AC-1", "TC-048")]
+#[test]
+fn repeated_requests_keep_each_nodes_original_operation() {
+    let package = checked(SOURCE);
+    let (equal_node, equal_occurrence) = application(&package, "f");
+    let (not_equal_node, not_equal_occurrence) =
+        application_with_operator(&package, "n", "quire.op.structural.ne");
+    let context = context(package, "f");
+
+    let equal = context
+        .request(
+            &equal_node,
+            &equal_occurrence,
+            EqualityOperator::Equal,
+            &[],
+            100_000,
+        )
+        .unwrap();
+    let not_equal = context
+        .request(
+            &not_equal_node,
+            &not_equal_occurrence,
+            EqualityOperator::NotEqual,
+            &[],
+            100_000,
+        )
+        .unwrap();
+
+    assert_eq!(
+        equal.preimage().node,
+        WireNodeId::from_hex(&equal_node.digest).unwrap()
+    );
+    assert_eq!(
+        not_equal.preimage().node,
+        WireNodeId::from_hex(&not_equal_node.digest).unwrap()
+    );
+    assert!(matches!(
+        context.request(
+            &not_equal_node,
+            &not_equal_occurrence,
+            EqualityOperator::Equal,
+            &[],
+            100_000,
+        ),
+        Err(CompositeBuildError::OperatorMismatch {
+            requested: EqualityOperator::Equal,
+            actual: EqualityOperator::NotEqual,
+        })
+    ));
+}
+
 /// Repeated parameter positions remain distinct O-09 arguments.
 #[trace("FR-033-AC-11", "TC-048")]
 #[test]

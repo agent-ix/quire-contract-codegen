@@ -52,8 +52,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use quire_contract_model::{
-    BoundClause, BoundPackage, CheckedNodeId, CheckedNodeTag, CheckedPackageV2,
-    CheckedSemanticNodeV2, ClauseKind, ClauseRef, ContractPackageV1, ExecutionPoint,
+    BoundClause, BoundPackage, CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticId,
+    CheckedSemanticNodeV2, CheckedSourceMapEntry, ClauseKind, ClauseRef, ContractPackageV1,
+    ExecutionPoint,
 };
 
 use crate::{
@@ -97,16 +98,91 @@ use crate::{
     oracle::scalar::{operand_ranges, ExactScalarClaim, ExactScalarRefusal, OperationProvenance},
 };
 
+/// One admitted scalar package's node and source lookups, shared by its request items.
+/// A node's first graph entry and all source entries retain their original wire order.
+struct ContractLookup<'a> {
+    graph: crate::oracle::scalar::Graph<'a>,
+    sources: BTreeMap<&'a CheckedNodeId, Vec<&'a CheckedSourceMapEntry>>,
+}
+
+impl<'a> ContractLookup<'a> {
+    fn new(package: &'a ContractPackageV1) -> Self {
+        let mut graph = BTreeMap::new();
+        for node in &package.wire().semantic_graph.nodes {
+            graph.entry(&node.node_id).or_insert(node);
+        }
+        let mut sources = BTreeMap::<_, Vec<_>>::new();
+        for entry in &package.wire().source_map.nodes {
+            sources
+                .entry(&entry.node_id)
+                .or_default()
+                .extend(entry.occurrences.iter());
+        }
+        Self { graph, sources }
+    }
+
+    fn node(&self, id: &CheckedNodeId) -> Option<&'a CheckedSemanticNodeV2> {
+        self.graph.get(id).copied()
+    }
+
+    fn occurrences(&self, id: &CheckedNodeId) -> Vec<CheckedSourceMapEntry> {
+        self.sources.get(id).map_or_else(Vec::new, |entries| {
+            entries.iter().map(|entry| (*entry).clone()).collect()
+        })
+    }
+}
+
+/// Reuse admitted scalar graph lookups across capability items, whose boxed packages may be
+/// distinct allocations of the same admitted identity.
+pub(crate) struct ScalarFormLookups<'a> {
+    checked: BTreeMap<CheckedSemanticId, crate::oracle::scalar::Graph<'a>>,
+    contract: BTreeMap<CheckedSemanticId, ContractLookup<'a>>,
+}
+
+impl<'a> ScalarFormLookups<'a> {
+    pub(crate) fn new() -> Self {
+        Self {
+            checked: BTreeMap::new(),
+            contract: BTreeMap::new(),
+        }
+    }
+
+    fn checked_node(
+        &mut self,
+        package: &'a CheckedPackageV2,
+        node_id: &CheckedNodeId,
+    ) -> Option<&CheckedSemanticNodeV2> {
+        self.checked
+            .entry(package.package_id().clone())
+            .or_insert_with(|| {
+                let mut graph = BTreeMap::new();
+                for node in &package.graph().nodes {
+                    graph.entry(&node.node_id).or_insert(node);
+                }
+                graph
+            })
+            .get(node_id)
+            .copied()
+    }
+
+    fn contract(&mut self, package: &'a ContractPackageV1) -> &ContractLookup<'a> {
+        self.contract
+            .entry(package.identity().clone())
+            .or_insert_with(|| ContractLookup::new(package))
+    }
+}
+
 /// Negotiates every item and, when no item is invalid, emits one harness per supported item.
 // Implements: FR-015
 pub fn negotiate_kani_obligations(
     request: &KaniObligationRequest<'_>,
 ) -> Result<KaniObligationOutcome, KaniObligationError> {
     validate_request(request)?;
+    let mut scalar_lookups = BTreeMap::new();
     let mut states = request
         .items
         .iter()
-        .map(|item| classify(item, request.unwind, request.ceilings))
+        .map(|item| classify(item, request.unwind, request.ceilings, &mut scalar_lookups))
         .collect::<Vec<_>>();
     reject_duplicates_and_mixtures(request.items, &mut states);
     assign_names(request.items, &mut states);
@@ -354,6 +430,7 @@ fn classify<'a>(
     item: &ObligationItem<'a>,
     unwind: u32,
     ceilings: crate::kani::identity::ProofCeilings,
+    scalar_lookups: &mut BTreeMap<*const ContractPackageV1, ContractLookup<'a>>,
 ) -> ItemState<'a> {
     match *item {
         ObligationItem::V2Clause { package, clause } => classify_v2_clause(package, clause),
@@ -364,7 +441,19 @@ fn classify<'a>(
             node_id,
             claim_index,
             result_selection,
-        } => classify_node(package, claim_map, node_id, claim_index, result_selection),
+        } => {
+            let lookup = scalar_lookups
+                .entry(std::ptr::from_ref(package))
+                .or_insert_with(|| ContractLookup::new(package));
+            classify_node(
+                package,
+                lookup,
+                claim_map,
+                node_id,
+                claim_index,
+                result_selection,
+            )
+        }
         ObligationItem::CollectionClaim {
             package,
             function_id,
@@ -727,31 +816,20 @@ fn classify_clause<'a>(package: &'a BoundPackage, clause_ref: &ClauseRef) -> Ite
 
 fn classify_node<'a>(
     package: &ContractPackageV1,
+    lookup: &ContractLookup<'_>,
     claim_map: &ClaimMap<ExactScalarClaim>,
     node_id: &CheckedNodeId,
     claim_index: usize,
     result_selection: &ContractDriverResultSelection,
 ) -> ItemState<'a> {
-    let graph_node = package
-        .wire()
-        .semantic_graph
-        .nodes
-        .iter()
-        .find(|node| &node.node_id == node_id);
+    let graph_node = lookup.node(node_id);
     let kind = graph_node.and_then(|node| {
         (&*node.node_tag == "state" && &*node.semantic_form == "frame")
             .then_some(ObligationKind::Frame)
     });
     let subject = ObligationSubject::CheckedNode {
         node_id: node_id.clone(),
-        source_map: package
-            .wire()
-            .source_map
-            .nodes
-            .iter()
-            .filter(|entry| &entry.node_id == node_id)
-            .flat_map(|entry| entry.occurrences.iter().cloned())
-            .collect(),
+        source_map: lookup.occurrences(node_id),
     };
     let identity = Some(ItemIdentity::Node {
         package: package.identity().digest.to_string(),
@@ -767,7 +845,7 @@ fn classify_node<'a>(
             .filter(|claim| &claim.node_id == node_id)
         {
             None => Outcome::Invalid(InvalidObligationItem::UnknownNode),
-            Some(claim) => classify_claim(package, claim),
+            Some(claim) => classify_claim(lookup, claim),
         }
     };
     let outcome = refuse_unknown_node_kind(graph_node, kind, outcome);
@@ -784,12 +862,13 @@ fn classify_node<'a>(
 /// This deliberately runs the same typed lowering classifier that the Kani
 /// obligation engine uses, so settlement cannot accept an operation or domain
 /// that its generator refuses.
-pub(crate) fn classify_scalar_form(
-    package: &CheckedPackageV2,
-    contract: &ContractPackageV1,
+pub(crate) fn classify_scalar_form<'a>(
+    package: &'a CheckedPackageV2,
+    contract: &'a ContractPackageV1,
     positions: &[crate::core::contract_package::ContractRequestPosition],
     request_index: usize,
     node_id: &CheckedNodeId,
+    lookups: &mut ScalarFormLookups<'a>,
 ) -> ScalarFormAssessment {
     if contract.wire().package.source.package_id != *package.package_id() {
         return ScalarFormAssessment::Invalid(InvalidObligationItem::ScalarSourceMismatch);
@@ -823,14 +902,10 @@ pub(crate) fn classify_scalar_form(
         positions,
         request_index,
     ) {
-        Ok(claim) => classify_claim(contract, &claim),
+        Ok(claim) => classify_claim(lookups.contract(contract), &claim),
         Err(_) => Outcome::Invalid(InvalidObligationItem::ScalarDerivationFailed),
     };
-    let graph_node = package
-        .graph()
-        .nodes
-        .iter()
-        .find(|node| &node.node_id == node_id);
+    let graph_node = lookups.checked_node(package, node_id);
     let kind = graph_node.and_then(|node| {
         (&*node.node_tag == "state" && &*node.semantic_form == "frame")
             .then_some(ObligationKind::Frame)
@@ -903,15 +978,8 @@ fn refuse_unknown_node_kind<'a>(
     })
 }
 
-fn classify_claim<'a>(package: &ContractPackageV1, claim: &ExactScalarClaim) -> Outcome<'a> {
-    let graph = |id: &CheckedNodeId| {
-        package
-            .wire()
-            .semantic_graph
-            .nodes
-            .iter()
-            .find(|node| &node.node_id == id)
-    };
+fn classify_claim<'a>(lookup: &ContractLookup<'_>, claim: &ExactScalarClaim) -> Outcome<'a> {
+    let graph = |id: &CheckedNodeId| lookup.node(id);
     match &claim.result {
         ClaimDisposition::Generated(generated) => {
             let mut derived = Vec::new();
@@ -951,7 +1019,7 @@ fn classify_claim<'a>(package: &ContractPackageV1, claim: &ExactScalarClaim) -> 
                     })
                 }
                 OperationProvenance::IrConfirmed => {
-                    let operand_ranges = operand_ranges(package, &claim.node_id);
+                    let operand_ranges = operand_ranges(&lookup.graph, &claim.node_id);
                     match lower_scalar_claim(claim, generated, &derived, &operand_ranges) {
                         Ok(lowered) => Outcome::LoweredScalar(Box::new(lowered)),
                         Err(ScalarLoweringRefusal::NoRenderer) => {
@@ -1433,8 +1501,13 @@ mod tests {
     /// Real, legitimately-lowered `LoweredClause` for the probe package's one precondition, with
     /// its embedded oracle source intact for the caller to mutate.
     fn render_probe_lowered<'a>(item: &ObligationItem<'a>) -> Box<LoweredClause<'a>> {
-        let Outcome::Lowered(lowered) =
-            classify(item, 4, render_probe_request(&[]).ceilings).outcome
+        let Outcome::Lowered(lowered) = classify(
+            item,
+            4,
+            render_probe_request(&[]).ceilings,
+            &mut BTreeMap::new(),
+        )
+        .outcome
         else {
             panic!("render-probe precondition must lower to a harness");
         };

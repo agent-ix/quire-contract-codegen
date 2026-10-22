@@ -1,0 +1,1010 @@
+---
+id: SR-15612
+title: IR-258 PR531 integrity review
+type: SpecReview
+analysis: integrity
+scope: agent-ix/quire-contract-codegen; IR-258; spec/kani/functional/FR-046-rational-function-predicate-harnesses.md;
+  spec/kani/matrix/TC-060-rational-function-predicate-harnesses.md; spec/spec.md
+review_set: subset
+relationships:
+- target: ix://agent-ix/quire-contract-codegen/FR-046
+  type: references
+---
+
+## Summary
+
+Exact frozen head 73f1782c8c0482a7c9ec07462280a282fa94d961, base 3c045f06e412b20bd5c1d4048691a2f0ffa37f19, ticket IR-258, spec-only PR531. Two new artifacts and one registry row only. Author worktree is read-only; no Cargo, engine, namespace, aggregate or merge. #521 merge hold retained. Canonical domain, full authored predicate, independent reference, charge ordering, denial prefixes and distinction of noncompletion from Boolean false are explicit. One cross-requirement contradiction remains: the retained ABI explicitly refuses this family.
+
+## Verdict
+
+FAIL. Scoped review only; no whole-row implementation or proof acceptance.
+
+## Findings
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-001 | high | FR-046 requires emitting a Rational predicate harness while its normative FR-025/ADR-004 ABI still mandates unsupported and no harness for Rational because that family has no Rust-type/witness-decoding row. Coordinate the owner ABI extension or an explicit scoped authority change before claiming the new supported path. | spec/kani/functional/FR-046-rational-function-predicate-harnesses.md:92 |
+
+## Coverage
+
+Independent fractions.Fraction enumeration and constructor/accessor canonical-pair reasoning found 171 raw pairs, 111 accepted mathematical values, 12,321 argument tuples, zero healthy false tuples and 12,210 mutant false tuples. Owner RationalDomain bounds reduced numerator and positive denominator, so roundtrip restriction is a bijection for this exact domain; zero is 0/1. Owner public Rational::new/numerator/denominator exist; this is mathematical/static evidence, not current-cohort compilation or solver credit. Both retained original source fixtures were compared byte-for-byte against QSL db729fe811e3927d2ed45fe7a111dfe895cd939f, with only b+a to a+a changed.
+
+Plan completion: not assessed
+
+Only the changed planned feature is examined. Full repository reverse audit and optional whole-tree semantic audit are not claimed. No applicable AssuranceProfile exists in this spec tree. Object review is N/A: no new shared domain-object schema is introduced; existing Rational ownership stays in quire-exact. Criterion-strength/Jev is not invoked. Explicitly selected base/integrity/EARS/dependency/failure-domain methods ran; Rust review is N/A.
+
+## Examined scope
+
+```yaml
+scope:
+- id: FR-046-AC-1
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: 'The genuine source function `rational_commutative(a: Rational[-9,9;1,9],
+    b: Rational[-9,9;1,9]): Boolean` with body `a + b = b + a` selects its whole declaration
+    and complete body through the public QSL admission, strict IR reader/lowering
+    and CG route. Its artifact proves that predicate, not only validity or parity
+    of either addition. Replacing the body by `a + b = a + a` selects the same authored
+    mutation with unchanged parameter domains.'
+- id: FR-046-AC-2
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: Every accepted symbolic argument has canonical constructor/accessor roundtrip
+    equality and lies in its original inclusive component domains. Every semantic
+    value in those domains has exactly one accepted representation. Zero is `0/1`;
+    negative, fractional and boundary values remain reachable. For the original domain
+    there are 111 canonical values per argument and 12,321 argument tuples; admitting
+    all 171 raw component pairs, restricting denominators to one, or clipping an endpoint
+    fails correspondence validation under QSpec FR-196-AC-5.
+- id: FR-046-AC-3
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: Generated evaluation preserves the authored full tree and declaration identity,
+    exact owner arithmetic, intermediate values outside the input domains, arbitrary-precision
+    continuation, full typed outcomes and Meter charge/stop order. Native comparison
+    against an independent owner-operation reference checks those observations, including
+    each denied charge prefix and exact/short budgets; it does not calculate expectations
+    by running the generated oracle twice.
+- id: FR-046-AC-4
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: Generation introduces no assumption on completion, truth or an absence
+    of undefined/refused/incomplete results. Controls producing each reachable noncompletion
+    retain that typed outcome and cannot become a successful predicate proof; an outcome-based
+    assume mutation is rejected. A completion assertion failure without a replayed
+    false value is not labelled a confirmed semantic false counterexample.
+- id: FR-046-AC-5
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: The healthy original function receives `Verified` only from an actual successful
+    proof with all required checks and its completion cover satisfied. The wrong-addend
+    mutation produces a substantive failed predicate assertion with actual solver
+    playback of canonical in-domain arguments, and replay of that same authored function
+    completes with Boolean false. A hypothetical witness or cover witness is not substituted
+    for that playback.
+- id: FR-046-AC-6
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: Each emitted predicate harness has exactly one final completion cover after
+    all predicate assertions, including harnesses with representation constraints.
+    Unsatisfied or unreported completion cover, failed unwind, timeout, memory exhaustion
+    or missing verdict cannot yield `Verified`; classifications retain FR-017 and
+    FR-029 distinctions.
+- id: FR-046-AC-7
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: A missing or unbounded Rational parameter domain yields source-associated
+    `requires-bound` naming the selected function, argument and missing domain, with
+    no harness. A finite component endpoint outside this encoding's signed-i64 capacity
+    yields named `unsupported`, retaining the original endpoint and no harness; generation
+    never clips, casts away precision or substitutes a smaller domain.
+- id: FR-046-AC-8
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: An unavailable owner-lowered whole-function representation, absent one-to-one
+    correspondence or unsupported body operation yields named `unsupported` with its
+    source-associated cause and no harness. Every requested item has exactly one disposition
+    under FR-039; a refused item does not remove or alter a supported sibling. Malformed
+    source or owner-refused packages remain upstream refusals, not fabricated CG claims.
+- id: FR-046-AC-9
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: Counterexample decoding validates canonical components, original domains
+    and the selected declaration/application binding through the public owner replay
+    route. Out-of-domain, duplicate-zero, noncanonical, wrong-declaration and stale-identity
+    witnesses are rejected by the responsible boundary; CG neither mints keys nor
+    substitutes scalar application validity for the authored Boolean result. An unavailable
+    replay capability is reported without claiming replay acceptance.
+- id: FR-046-AC-10
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: Run evidence records the selected function and source association, inclusive
+    component domains and correspondence, actual subject and full ordered backend
+    arguments, every unwind/loop bound and option, Kani/Rust/CBMC/solver versions,
+    target, actual dependency cohort and execution limits, raw checks/cover/playback,
+    exit and typed terminal outcome. Replay uses the retained generated artifact without
+    hand editing. No-run, compile refusal, cover failure, resource exhaustion and
+    semantic falsification remain distinguishable; preparation alone earns no proof
+    result.
+- id: FR-046-statement-1
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: 'When an admitted request selects a pure Boolean function whose parameters
+    have
+
+    finite Rational component domains and whose complete body consists of those
+
+    parameters, exact rational addition and rational equality, CG SHALL generate a
+
+    bounded proof of that authored Boolean predicate over every value in its declared
+
+    domain. This is the IR-258 whole-function slice, distinct from proving an
+
+    individual scalar operation valid or comparing two implementations.'
+- id: FR-046-statement-2
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: 'When the function is representable, CG SHALL draw canonical numerator
+    and
+
+    positive-denominator components independently for each argument from the exact
+
+    inclusive domains in the admitted input. The first encoding represents finite
+
+    component endpoints that fit signed `i64`; it does not change the mathematical
+
+    Rational domain to a machine arithmetic domain.'
+- id: FR-046-statement-3
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: 'When constructing each drawn argument, the harness SHALL call the public
+    owner
+
+    `Rational::new(Integer::from(n), Integer::from(d))` and admit that representation
+
+    only when the returned Rational''s `numerator()` and `denominator()` equal the
+
+    original drawn components. This constructor/accessor roundtrip is the canonical
+
+    representation constraint: it excludes duplicate encodings, including zero with
+
+    denominator other than one, without excluding any declared mathematical value.
+
+    It introduces no kernel normalization API or copied GCD implementation.'
+- id: FR-046-statement-4
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: 'When evaluating the body, the generated oracle SHALL use the actual owner''s
+
+    exact operations and Meter with the original expression order, typed outcomes,
+
+    charge ordering, stops and laziness. Input-domain restrictions do not constrain
+
+    intermediate sums: for example, two permitted inputs equal to nine can sum to
+
+    eighteen. Owner arbitrary-precision continuation remains intact.'
+- id: FR-046-statement-5
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: 'When asserting the predicate, the harness SHALL require actual completion
+    with
+
+    Boolean true over every admitted argument tuple. A false, undefined, refused or
+
+    incomplete body is never an assumed-away input or a successful predicate result.
+
+    Representation constraints apply before body evaluation and do not depend on its
+
+    outcome. Raw backend failure is not by itself evidence of a semantic false
+
+    counterexample: native replay retains the actual typed outcome under FR-029.'
+- id: FR-046-statement-6
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: 'When the request selects a function, CG SHALL preserve that declaration
+    occurrence
+
+    through generation and playback. A successful operation application, a different
+
+    function with an equal body, or a scalar child claim cannot replace this predicate.
+
+    The owner-issued callable and replay identities remain the owner''s contract;
+
+    CG does not mint an occurrence key or introduce an alternative replay API.'
+- id: TC-060-step-1
+  path: spec/kani/matrix/TC-060-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: "Preserve the original healthy and wrong-addend source cases from the\n\
+    \   QSL-owned `rational_mvp_source` intake. Admit both unchanged through the public\n\
+    \   source route and strict reader, retaining original source association and\n\
+    \   owner-issued identities. The healthy case is:\n\n   ```text\n   language \"\
+    ix:native\" edition \"1-draft\";\n   profile v = \"quire.value.complete/v1\";\n\
+    \   function rational_commutative using v(a: Rational[-9, 9; 1, 9], b: Rational[-9,\
+    \ 9; 1, 9]): Boolean pure {\n       a + b = b + a\n   }\n   ```\n\n   The only\
+    \ source mutation replaces `a + b = b + a` with `a + b = a + a`.\n   Sele"
+- id: TC-060-step-2
+  path: spec/kani/matrix/TC-060-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: "Independently enumerate the semantic input domain using exact host rational\n\
+    \   arithmetic and compare it with the constructor/accessor roundtrip encoding.\n\
+    \   Check 111 unique canonical values per argument and all 12,321 tuples, including\n\
+    \   zero `0/1`, `-9/1`, `9/1`, `1/9`, negative fractions and noninteger values.\n\
+    \   Check soundness, injectivity and completeness rather than only these examples.\n\
+    \   Reject duplicate encodings such as `0/2` and `2/2`; include mutations accepting\n\
+    \   unrestricted normalization, dropping an endpoint or drawing only denominator\n\
+    \   one. Ensure these changes fail the "
+- id: TC-060-step-3
+  path: spec/kani/matrix/TC-060-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: "Generate the actual oracle and compare its full native observations with\
+    \ an\n   independently constructed reference using public owner operations on\
+    \ the same\n   admitted function. Preserve all typed outcomes and ordered Meter\
+    \ charges,\n   counters and stops at every occurrence-denial prefix and zero/exact/short\n\
+    \   budgets. Include `a = b = 9` to exercise a sum outside the input domain and\n\
+    \   owner continuation beyond a machine-sized intermediate in a separately\n \
+    \  admitted finite-domain case. Exercise reachable undefined/refused/incomplete\n\
+    \   outcomes without input filtering. Mark an unavailable"
+- id: TC-060-step-4
+  path: spec/kani/matrix/TC-060-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: "Run the healthy harness through the approved bounded production path with\
+    \ its\n   actual complete ordered options and no stubbing or fixture edits. Verify\
+    \ all\n   required checks and exactly one final completion cover. Run the wrong-addend\n\
+    \   mutation over the same entire domain. Retain its actual failed predicate check\n\
+    \   and solver playback; validate and replay its arguments through the owner route\n\
+    \   for that exact declaration and assert completed Boolean false. For comparison,\n\
+    \   `a = 1/2, b = 1/3` mathematically gives `5/6 != 1`, but this example is not\
+    \ a\n   solver counterexample until actu"
+- id: TC-060-step-5
+  path: spec/kani/matrix/TC-060-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: "Check separate adversarial controls for a missing/unsatisfied cover, failed\n\
+    \   unwind, missing verdict and execution-limit failure. Inspect the healthy and\n\
+    \   mutated harnesses for one cover after assertions and no outcome-based assumes.\n\
+    \   Preserve raw backend outcomes separately from semantic replay settlement;\n\
+    \   noncompletion must not be relabelled Boolean false (AC-4, AC-6)."
+- id: TC-060-step-6
+  path: spec/kani/matrix/TC-060-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: "Request an otherwise valid unbounded Rational argument and assert named\n\
+    \   `requires-bound` with no harness. Request an owner-admitted finite domain\
+    \ with\n   an endpoint beyond signed-i64 capacity and assert named `unsupported`\
+    \ with\n   the exact endpoint and no clipping. Exercise absent lowering, an unsupported\n\
+    \   body operation and unavailable correspondence, alongside a supported sibling;\n\
+    \   assert total per-item accounting and unchanged sibling output. An upstream\n\
+    \   source/reader refusal is recorded at that boundary, not counted as the\n \
+    \  corresponding CG refusal test (AC-7, AC-8)."
+- id: TC-060-step-7
+  path: spec/kani/matrix/TC-060-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: "Perturb a retained witness to be out of domain, noncanonical, duplicate\
+    \ zero,\n   stale identity or bound to another declaration. Assert responsible-boundary\n\
+    \   rejection without minted keys or changing the application into scalar parity.\n\
+    \   Record absent public replay capabilities as open dependencies (AC-9)."
+- id: TC-060-step-8
+  path: spec/kani/matrix/TC-060-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: "Inspect the run record for complete function/source association, input-domain\n\
+    \   correspondence, actual tool versions, target, dependency cohort, limits,\n\
+    \   harness selection and full ordered argv including unwind/loop options. Match\n\
+    \   checks, single cover, actual playback, exit and terminal classification to\
+    \ the\n   raw run. Verify retained source is replayed unchanged and that all no-run\
+    \ or\n   refused cases report their actual disposition (AC-10).\n"
+- id: FR-025-AC-7
+  path: spec/kani/functional/FR-025-generated-subject-abi.md
+  role: context_only
+  excerpt: An argument of a family with no row in the Rust-type table (rational, decimal,
+    IEEE, text, enum, composite, collection or function) is accounted `unsupported`
+    with a typed reason naming the family, and no harness is emitted.
+- id: FR-196-AC-5
+  path: /home/peter/dev/quire-specification/spec/functional/ir-proof/FR-196-generate-kani-contracts.md
+  role: context_only
+  excerpt: A finite encoding records its one-to-one semantic correspondence; absent
+    correspondence emits unsupported and no Rust item.
+```
+
+
+## Expanded-scope disposition pass 1
+
+Exact author head 4b0e3d7561e2a0a1af11339adc5c34f5ff1a062e; parent 73f1782c8c0482a7c9ec07462280a282fa94d961. Same independent reviewer. #521 merge hold is released by the owner; final fresh-base acceptance is a separate lead obligation. No rebase, Cargo, aggregate, engine, namespace or merge was performed.
+
+Reviewed all five changed author artifacts, with original seven SRs imported byte-exact. The explicit planned Rational ABI row and revised ADR-004 Q1 now agree with the guarded FR-046 generation contract: no harness without lossless physical decoding and public replay availability. Two I64 draws expand each logical parameter, with unique physical ids, numerator/denominator roles, original component domains and ordering; no fabricated owner parameter. Canonical owner roundtrip, rejection without normalization, typed schema/decode/domain boundaries, exactly four physical entries for two Rationals and transcript-byte/value caps are explicit. Existing Boolean/I64 width, comment agreement, ordering and limits are unchanged. Distinguishing role-swapped schema from another genuine canonical input avoids incorrectly rejecting valid values.
+
+Compatibility checked against actual FR-016 AC-6/8/21 and mandatory behavior, plus src/replay/witness.rs and src/replay/function.rs: the existing raw positional decoder remains the physical layer; its mandatory limits apply before parsing/grouping; the later adapter must construct one semantic value per real parameter. Existing decoder/adapter does not implement grouping or accept Rational there; the specification explicitly retains that dependency. Existing qsl_replay::WitnessValue::Rational contains owner Integer components and its public to_value_text() exists (owner source inspected); no serialization copy, new grammar or owner API is invented. FR-016/TC-026 need no normative exception because physical binding order and logical function identity remain distinct and both preserved. FR-024, FR-017 and FR-015 are unchanged. Current source inspection is not cohort compilation or execution evidence.
+
+Independent original full-domain/source math findings remain valid: the source fixtures and bounds are unchanged, including 111 canonical values per argument and 12,321 tuples. Complete authored body, real Meter/stops/denial-prefix tests, arbitrary-precision intermediate continuation, final completion cover, actual false replay and runner/version evidence remain mandatory. No current source admission, generation, native, solver, fit or whole-row proof credit. All affected author artifacts pass explicit scoped Quire validation; computed matrix still shows the ten FR-046 criteria and new FR-025-AC-10 untagged. No implementation is claimed.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Explicit planned ABI row, lossless witness prerequisites and FR-046 generation guard remove the original contradiction. |
+
+## Latest verdict
+
+PASS for the reviewed spec-only scope; no unresolved authoring finding remains.
+
+## Expanded examined scope
+
+```yaml
+scope:
+- id: FR-046-AC-1
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: 'The genuine source function `rational_commutative(a: Rational[-9,9;1,9],
+    b: Rational[-9,9;1,9]): Boolean` with body `a + b = b + a` selects its whole declaration
+    and complete body through the public QSL admission, strict IR reader/lowering
+    and CG route. Its artifact proves that predicate, not only validity or parity
+    of either addition. Replacing the body by `a + b = a + a` selects the same authored
+    mutation with unchanged parameter domains.'
+- id: FR-046-AC-2
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: 'Every accepted symbolic argument has canonical constructor/accessor roundtrip
+    equality and lies in its original inclusive component domains. Its two physical
+    I64 bindings retain numerator/denominator roles, original parameter identity and
+    bounds in the FR-025 order. Every semantic value in those domains has exactly
+    one accepted representation. Zero is `0/1`; negative, fractional and boundary
+    values remain reachable. For the original domain there are 111 canonical values
+    per argument and 12,321 argument tuples; admitting all 171 raw component pairs,
+    restricting denominators to one, or clipping '
+- id: FR-046-AC-3
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: Generated evaluation preserves the authored full tree and declaration identity,
+    exact owner arithmetic, intermediate values outside the input domains, arbitrary-precision
+    continuation, full typed outcomes and Meter charge/stop order. Native comparison
+    against an independent owner-operation reference checks those observations, including
+    each denied charge prefix and exact/short budgets; it does not calculate expectations
+    by running the generated oracle twice.
+- id: FR-046-AC-4
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: Generation introduces no assumption on completion, truth or an absence
+    of undefined/refused/incomplete results. Controls producing each reachable noncompletion
+    retain that typed outcome and cannot become a successful predicate proof; an outcome-based
+    assume mutation is rejected. A completion assertion failure without a replayed
+    false value is not labelled a confirmed semantic false counterexample.
+- id: FR-046-AC-5
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: The healthy original function receives `Verified` only from an actual successful
+    proof with all required checks and its completion cover satisfied. The wrong-addend
+    mutation produces a substantive failed predicate assertion with actual solver
+    playback of canonical in-domain arguments, and replay of that same authored function
+    completes with Boolean false. A hypothetical witness or cover witness is not substituted
+    for that playback.
+- id: FR-046-AC-6
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: Each emitted predicate harness has exactly one final completion cover after
+    all predicate assertions, including harnesses with representation constraints.
+    Unsatisfied or unreported completion cover, failed unwind, timeout, memory exhaustion
+    or missing verdict cannot yield `Verified`; classifications retain FR-017 and
+    FR-029 distinctions.
+- id: FR-046-AC-7
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: A missing or unbounded Rational parameter domain yields source-associated
+    `requires-bound` naming the selected function, argument and missing domain, with
+    no harness. A finite component endpoint outside this encoding's signed-i64 capacity
+    yields named `unsupported`, retaining the original endpoint and no harness; generation
+    never clips, casts away precision or substitutes a smaller domain.
+- id: FR-046-AC-8
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: An unavailable owner-lowered whole-function representation, absent one-to-one
+    correspondence or unsupported body operation yields named `unsupported` with its
+    source-associated cause and no harness. Every requested item has exactly one disposition
+    under FR-039; a refused item does not remove or alter a supported sibling. Malformed
+    source or owner-refused packages remain upstream refusals, not fabricated CG claims.
+- id: FR-046-AC-9
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: Counterexample decoding validates the two physical I64 entries per original
+    parameter, exact width/comment/order, schema roles, required physical-entry and
+    byte limits, canonical components, original domains and selected declaration/application
+    binding before public owner replay. Grouping yields one typed owner Rational value
+    per parameter through the existing canonical serialization seam; missing, duplicate,
+    foreign, role-swapped, domain-conflicting and malformed component schemas or entries
+    retain typed refusals with no replayed failure. Out-of-domain, duplicate-zero,
+    noncanonical, wrong-dec
+- id: FR-046-AC-10
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: Run evidence records the selected function and source association, inclusive
+    component domains and correspondence, ordered physical bindings and their logical
+    parameter grouping, actual subject and full ordered backend arguments, every unwind/loop
+    bound and option, Kani/Rust/CBMC/solver versions, target, actual dependency cohort
+    and execution limits, raw checks/cover/playback, exit and typed terminal outcome.
+    Replay uses the retained generated artifact without hand editing. No-run, compile
+    refusal, cover failure, resource exhaustion and semantic falsification remain
+    distinguishable; preparatio
+- id: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md#statement-2
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: 'When an admitted request selects a pure Boolean function whose parameters
+    have
+
+    finite Rational component domains and whose complete body consists of those
+
+    parameters, exact rational addition and rational equality, and the planned FR-025
+
+    ABI and public replay prerequisites are available, CG SHALL generate a
+
+    bounded proof of that authored Boolean predicate over every value in its declared
+
+    domain. This is the IR-258 whole-function slice, distinct from proving an
+
+    individual scalar operation valid or comparing two implementations.'
+- id: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md#statement-9
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: 'When the function is representable, CG SHALL draw canonical numerator
+    and
+
+    positive-denominator components independently for each argument from the exact
+
+    inclusive domains in the admitted input. The first encoding represents finite
+
+    component endpoints that fit signed `i64`; it does not change the mathematical
+
+    Rational domain to a machine arithmetic domain.'
+- id: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md#statement-10
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: 'When constructing each drawn argument, the harness SHALL call the public
+    owner
+
+    `Rational::new(Integer::from(n), Integer::from(d))` and admit that representation
+
+    only when the returned Rational''s `numerator()` and `denominator()` equal the
+
+    original drawn components. This constructor/accessor roundtrip is the canonical
+
+    representation constraint: it excludes duplicate encodings, including zero with
+
+    denominator other than one, without excluding any declared mathematical value.
+
+    It introduces no kernel normalization API or copied GCD implementation.'
+- id: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md#statement-11
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: 'When evaluating the body, the generated oracle SHALL use the actual owner''s
+
+    exact operations and Meter with the original expression order, typed outcomes,
+
+    charge ordering, stops and laziness. Input-domain restrictions do not constrain
+
+    intermediate sums: for example, two permitted inputs equal to nine can sum to
+
+    eighteen. Owner arbitrary-precision continuation remains intact.'
+- id: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md#statement-12
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: 'When asserting the predicate, the harness SHALL require actual completion
+    with
+
+    Boolean true over every admitted argument tuple. A false, undefined, refused or
+
+    incomplete body is never an assumed-away input or a successful predicate result.
+
+    Representation constraints apply before body evaluation and do not depend on its
+
+    outcome. Raw backend failure is not by itself evidence of a semantic false
+
+    counterexample: native replay retains the actual typed outcome under FR-029.'
+- id: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md#statement-13
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: 'When the request selects a function, CG SHALL preserve that declaration
+    occurrence
+
+    through generation and playback. A successful operation application, a different
+
+    function with an equal body, or a scalar child claim cannot replace this predicate.
+
+    The owner-issued callable and replay identities remain the owner''s contract;
+
+    CG does not mint an occurrence key or introduce an alternative replay API.'
+- id: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md#statement-15
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: 'When expanding a logical argument for this family, CG SHALL persist exactly
+    two physical
+
+    `i64` bindings in numerator-then-denominator order for its one real function parameter.
+
+    Logical parameter order remains ascending by parameter identifier. The persisted
+    description
+
+    binds each unique physical identifier and position to the original parameter/source
+    identity,
+
+    its component role and original inclusive component bounds, together with that
+    parameter''s
+
+    complete Rational domain and canonical correspondence. These are required conceptual
+    binding
+
+    facts, not a claim that a current Rust field or owne'
+- id: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md#statement-16
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: 'When decoding retained playback, CG SHALL validate each physical entry
+    in persisted call order
+
+    using the existing I64 width, little-endian byte and decoded-comment checks before
+    grouping.
+
+    The existing Boolean one-byte and I64 eight-byte contracts remain unchanged. Required
+    byte
+
+    limits apply before transcript parsing, and required value-count limits count
+    every physical
+
+    entry before grouping: the original two-Rational function has four entries, not
+    two. A missing,
+
+    duplicate, foreign, role-swapped or domain-conflicting component schema refuses
+    with a typed
+
+    schema cause. Malformed entries retain '
+- id: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md#statement-17
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: 'When reconstructing a decoded parameter, CG SHALL validate both components
+    against the original
+
+    domain and call owner `Rational::new` with exact widened integers, requiring accessor
+    equality
+
+    with both decoded components. A nonpositive denominator or a pair changed by normalization,
+
+    including `0/2` and `2/2`, is malformed evidence, not a replacement canonical
+    witness. A canonical
+
+    pair outside its declared domain retains the out-of-domain cause. No native replay
+    is attempted
+
+    for these evidence failures. A different canonical in-domain pair is a different
+    valid input;
+
+    its values are not refused m'
+- id: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md#statement-18
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: 'When submitting a validated parameter to public replay, CG SHALL construct
+    one existing
+
+    `qsl_replay::WitnessValue::Rational` with owner Integer numerator/denominator
+    and use its public
+
+    `to_value_text()` canonical serialization for that one original parameter. The
+    function
+
+    adapter must admit this value instead of routing it through its integer-only transcript
+    path.
+
+    The retained physical values are decoded first under
+
+    [FR-016](../../replay/functional/FR-016-witness-native-replay.md)''s positional
+    contract; grouping
+
+    then produces semantic values keyed by real parameter ids in the owner-required
+    re'
+- id: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md#statement-19
+  path: spec/kani/functional/FR-046-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: 'When projecting this harness into execution evidence, CG SHALL retain
+    both the ordered physical
+
+    bindings and each logical Rational parameter''s original identity, full domain,
+    roles and
+
+    canonical correspondence. The existing runner''s harness/launcher selection, ordered
+    options,
+
+    proof ceilings and typed outcome rules remain authoritative. Required actual tool-version
+
+    observations belong in this feature''s run record; their absence is an undischarged
+    acceptance
+
+    obligation, not permission to infer versions or add a file/version tracking ledger.
+    This planned
+
+    contract does not assert that current sym'
+- id: FR-025-AC-1
+  path: spec/kani/functional/FR-025-generated-subject-abi.md
+  role: examined
+  excerpt: For every harness kind, emitted `kani::any()` bindings in source order
+    equal the persisted physical schema obtained by row-specific expansion of the
+    identity's logical `arguments`, which ascend by parameter identifier. Existing
+    Boolean/integer one-binding expansion is unchanged; the planned Rational row expands
+    each original parameter as numerator then denominator.
+- id: FR-025-AC-2
+  path: spec/kani/functional/FR-025-generated-subject-abi.md
+  role: examined
+  excerpt: Every argument binding in a persisted identity names its original parameter
+    node id and declared domain. Each planned Rational component also retains its
+    role, position and own original bounds within that one parameter's complete Rational
+    domain.
+- id: FR-025-AC-3
+  path: spec/kani/functional/FR-025-generated-subject-abi.md
+  role: examined
+  excerpt: A Boolean argument is a `bool` that reaches the oracle unchanged, and a
+    bounded-integer argument is an `i64` that reaches the oracle as `rt::Integer::from`
+    of that value. The values `i64::MIN`, `-1`, `0`, `1` and `i64::MAX` each reach
+    the oracle equal to their mathematical value.
+- id: FR-025-AC-4
+  path: spec/kani/functional/FR-025-generated-subject-abi.md
+  role: examined
+  excerpt: An argument whose domain has no declared finite bound yields no harness
+    and is never narrowed to a machine range.
+- id: FR-025-AC-5
+  path: spec/kani/functional/FR-025-generated-subject-abi.md
+  role: examined
+  excerpt: A frame obligation is accounted `unsupported` with a typed reason and no
+    harness.
+- id: FR-025-AC-6
+  path: spec/kani/functional/FR-025-generated-subject-abi.md
+  role: examined
+  excerpt: A binding that names no parameter of the selected function, and a parameter
+    of that function with no binding, are each refused at generation with a typed
+    reason and no harness.
+- id: FR-025-AC-7
+  path: spec/kani/functional/FR-025-generated-subject-abi.md
+  role: examined
+  excerpt: An argument with no applicable row (decimal, IEEE, text, enum, composite,
+    collection, function, or Rational outside the planned FR-046 row) is accounted
+    `unsupported` with a typed reason naming its family/capability, and no harness
+    is emitted. The planned Rational row does not authorize a harness without its
+    lossless decoding and public replay prerequisites.
+- id: FR-025-AC-8
+  path: spec/kani/functional/FR-025-generated-subject-abi.md
+  role: examined
+  excerpt: A harness over a state-reading obligation passes each state value to the
+    subject as `&mut` to a harness-owned value and copies it before the call; the
+    pre-state the harness asserts over is the copy, and the post-state is the value
+    after the call.
+- id: FR-025-AC-9
+  path: spec/kani/functional/FR-025-generated-subject-abi.md
+  role: examined
+  excerpt: PLANNED (IR-806). Every emitted composite shadow leaf binding retains its
+    original operand/parameter node, typed path, declared domain and primitive draw
+    type in symbolic call order; controls distinguish absent/null/present slots and
+    option/union members. A missing, duplicate, unknown or domain/type-conflicting
+    leaf refuses with a typed reason and no harness; parameter/literal and literal/literal
+    operands retain their literal singleton identity/value with no unconstrained draw.
+    Public reconstruction preserves these facts through FR-033.
+- id: FR-025-AC-10
+  path: spec/kani/functional/FR-025-generated-subject-abi.md
+  role: examined
+  excerpt: PLANNED (IR-258). Every supported FR-046 Rational argument has exactly
+    two ordered I64 physical bindings grouped to its one original parameter, complete
+    domain and canonical value. Actual playback decodes losslessly with existing I64
+    width/comment checks and physical byte/value-count caps, then reconstructs and
+    submits exactly one canonical owner Rational per parameter. Missing, duplicate,
+    foreign, role-swapped or bound-conflicting schema, malformed entries, noncanonical
+    pairs and over-limit witnesses refuse at their responsible typed boundary; no
+    alternate normalized witness is replayed. Exis
+- id: spec/kani/functional/FR-025-generated-subject-abi.md#statement-2
+  path: spec/kani/functional/FR-025-generated-subject-abi.md
+  role: examined
+  excerpt: 'When the code generator emits an [FR-015](./FR-015-bounded-kani-obligations.md)
+    harness, it shall
+
+    emit the harness''s symbolic bindings by expanding the obligation identity''s
+    logical
+
+    `arguments`, which ascend by parameter identifier, according to each family''s
+    row below.
+
+    Each logical argument names its original parameter node id and declared domain.
+    Each physical
+
+    binding has the Rust type and component role its row states, and reconstruction
+    reaches the
+
+    complete-V1 oracle without loss. Boolean and bounded-integer arguments retain
+    their existing
+
+    one-argument/one-binding order; the planned bounde'
+- id: spec/kani/functional/FR-025-generated-subject-abi.md#statement-9
+  path: spec/kani/functional/FR-025-generated-subject-abi.md
+  role: examined
+  excerpt: "- The generator shall order an identity's logical `arguments` ascending\
+    \ by parameter identifier.\n- When emitting an argument, the generator shall emit\
+    \ the row's ordered primitive calls in that\n  argument's position: one call for\
+    \ Boolean or bounded integer; numerator then denominator for\n  the planned bounded-Rational\
+    \ row. Its persisted physical schema has exactly that call order.\n- Each argument\
+    \ binding shall name the node id of the parameter it binds and that parameter's\n\
+    \  declared domain.\n- If a binding names no parameter of the selected function,\
+    \ or a parameter of that function has no\n  bin"
+- id: spec/kani/functional/FR-025-generated-subject-abi.md#statement-11
+  path: spec/kani/functional/FR-025-generated-subject-abi.md
+  role: examined
+  excerpt: "- If an argument's family has no row in that table, then the generator\
+    \ shall account the\n  obligation `unsupported` with a typed reason naming the\
+    \ family and emit no harness.\n- When an obligation reads state, the generator\
+    \ shall pass each state value to the subject by\n  `&mut` reference to a value\
+    \ the harness owns, so that `kani::modifies` can name it, and shall\n  keep the\
+    \ pre-state by copying that value before the call.\n- The generator shall widen\
+    \ an `i64` argument into `rt::Integer` without narrowing, wrapping or\n  saturating,\
+    \ including at `i64::MIN` and `i64::MAX`.\n- If an argument's domain"
+- id: spec/kani/functional/FR-025-generated-subject-abi.md#statement-13
+  path: spec/kani/functional/FR-025-generated-subject-abi.md
+  role: examined
+  excerpt: 'For the FR-046 row, a logical Rational argument is one real admitted function
+    parameter,
+
+    not two invented integer parameters. When emitting this argument, the generator
+    SHALL persist
+
+    its original parameter/source identity, complete Rational domain and both physical
+    bindings,
+
+    with distinct identifiers, primitive `i64` types, original component bounds and
+    explicit
+
+    numerator/denominator roles and positions. Logical arguments retain ascending
+    parameter-id
+
+    order; expansion within each Rational argument is numerator then denominator.
+    Existing
+
+    Boolean and integer argument ordering, widths and values '
+- id: spec/kani/functional/FR-025-generated-subject-abi.md#statement-14
+  path: spec/kani/functional/FR-025-generated-subject-abi.md
+  role: examined
+  excerpt: 'When decoding this row, CG SHALL validate the physical schema and both
+    original I64 playback
+
+    entries before reconstructing one semantic Rational per parameter, as specified
+    in FR-046''s
+
+    physical ABI and witness contract. A missing, repeated, foreign, role-swapped
+    or domain-conflicting
+
+    component binding is a typed schema refusal with no replayed failure. A malformed
+    entry or
+
+    noncanonical pair is refused without normalization into a replacement witness.
+    Witness byte
+
+    limits apply to the retained transcript; value-count limits count the physical
+    entries before
+
+    reconstruction, including both entries'
+- id: spec/kani/functional/FR-025-generated-subject-abi.md#statement-15
+  path: spec/kani/functional/FR-025-generated-subject-abi.md
+  role: examined
+  excerpt: 'When this row''s complete generation, lossless decoding or public owner
+    replay capability is
+
+    unavailable, CG SHALL account that item as typed `unsupported` with no harness.
+    This planned
+
+    row is a required implementation contract, not evidence that these capabilities
+    already exist.
+
+    The row adds no support for other Rational body shapes, unbounded domains or finite
+    component
+
+    bounds outside signed-i64 capacity; missing bounds retain `requires-bound`.'
+- id: spec/kani/functional/FR-025-generated-subject-abi.md#statement-17
+  path: spec/kani/functional/FR-025-generated-subject-abi.md
+  role: examined
+  excerpt: 'For a composite shadow, the drawn primitive leaves are arguments; the
+    composite is not itself a
+
+    machine argument. This preserves AC-7 and FR-015 AC-70. When such a harness is
+    emitted, the
+
+    generator shall persist each drawn leaf''s original operand/parameter node identity,
+    typed path,
+
+    declared leaf domain and primitive draw type, together with the owning composite
+    declaration and
+
+    presence/member/slot controls needed to reconstruct it. Paths distinguish record
+    fields, tuple
+
+    positions, union members, option presence/payload and collection element occurrences.
+    Binding
+
+    order is original parameter no'
+- id: spec/kani/functional/FR-025-generated-subject-abi.md#statement-18
+  path: spec/kani/functional/FR-025-generated-subject-abi.md
+  role: examined
+  excerpt: 'If a path names no declared leaf, repeats a draw position, omits a required
+    drawn leaf or conflicts
+
+    with its original domain/type/presence control, then the generator shall refuse
+    with a distinct
+
+    typed reason and emit no harness. Reconstruction and canonical admission are owned
+    by
+
+    [FR-033](../../replay/functional/FR-033-composite-parity-replay-binding.md). This
+    binding contract
+
+    adds no unsupported-family machine ABI or implicit integer narrowing.'
+- id: spec/decisions/ADR-004-generated-subject-abi-open-decisions.md#unit-5
+  path: spec/decisions/ADR-004-generated-subject-abi-open-decisions.md
+  role: examined
+  excerpt: 'The originally unrepresented families are rational, decimal, IEEE, text,
+    enum,
+
+    composite, collection and function. FR-025 now specifies a planned bounded-Rational
+
+    row for the FR-046 whole-function predicate slice; all other family boundaries
+    remain.
+
+    For each one, the harness needs a symbolic argument type, and the IR node needs
+    a runtime
+
+    operation that the oracle calls. A copied argument cannot carry
+
+    `kani::modifies`.'
+- id: spec/decisions/ADR-004-generated-subject-abi-open-decisions.md#unit-8
+  path: spec/decisions/ADR-004-generated-subject-abi-open-decisions.md
+  role: examined
+  excerpt: '### Q1: a family gets a Rust type only when its witness decodes without
+    loss'
+- id: spec/decisions/ADR-004-generated-subject-abi-open-decisions.md#unit-10
+  path: spec/decisions/ADR-004-generated-subject-abi-open-decisions.md
+  role: examined
+  excerpt: 'The planned [FR-046](../kani/functional/FR-046-rational-function-predicate-harnesses.md)
+
+    row expands one logical Rational parameter into two physical `i64` bindings, numerator
+    then
+
+    denominator, in ascending logical parameter order. Both bindings retain their
+    original parameter,
+
+    component role and inclusive domain. Their canonical owner constructor/accessor
+    roundtrip gives
+
+    one-to-one mathematical representation; neither normalization duplicates nor extra
+    parameter ids
+
+    are admitted. Existing Boolean/integer expansion and order are unchanged.'
+- id: spec/decisions/ADR-004-generated-subject-abi-open-decisions.md#unit-11
+  path: spec/decisions/ADR-004-generated-subject-abi-open-decisions.md
+  role: examined
+  excerpt: 'Q1''s losslessness prerequisite applies to the entire roundtrip: physical
+    playback width/comment
+
+    and byte/value-count validation, canonical owner Rational reconstruction and one
+    typed value per
+
+    original parameter through the public owner replay route. Until that implementation
+    and owner
+
+    capability are available, the item remains `unsupported` with no harness. The
+    planned row is no
+
+    claim of a delivered ABI/decoder API and no authority to bypass Q1 or mint owner
+    identities.'
+- id: spec/decisions/ADR-004-generated-subject-abi-open-decisions.md#unit-17
+  path: spec/decisions/ADR-004-generated-subject-abi-open-decisions.md
+  role: examined
+  excerpt: "- FR-025 states the no-applicable-row refusal, planned Rational grouping/lossless\
+    \ witness contract\n  and the by-reference state argument as criteria.\n"
+- id: spec/kani/matrix/TC-036-generated-subject-abi.md#unit-2
+  path: spec/kani/matrix/TC-036-generated-subject-abi.md
+  role: examined
+  excerpt: 'Verify that a harness''s physical bindings follow row-specific expansion
+    of its identity''s
+
+    ascending logical `arguments` order, that
+
+    each binding names its parameter node id and declared domain, that each family''s
+    argument has its
+
+    stated Rust type and reaches the oracle without loss, and that unbounded and frame
+    obligations
+
+    yield no harness.'
+- id: spec/kani/matrix/TC-036-generated-subject-abi.md#unit-4
+  path: spec/kani/matrix/TC-036-generated-subject-abi.md
+  role: examined
+  excerpt: "1. For a precondition, a postcondition, an invariant and a scalar-claim\
+    \ harness, read the emitted\n   `kani::any()` bindings in source order with `syn`\
+    \ and compare them with the persisted\n   physical schema expanded from the identity's\
+    \ logical `arguments`. Boolean/integer expansion\n   remains one binding per argument.\n\
+    2. Read every binding of each identity.\n3. Generate a harness over one Boolean\
+    \ and one bounded-integer argument. Run its oracle with the\n   integer argument\
+    \ at `i64::MIN`, `-1`, `0`, `1` and `i64::MAX` through the generated widening.\n\
+    4. Request an obligation whose argument domain "
+- id: spec/kani/matrix/TC-036-generated-subject-abi.md#unit-6
+  path: spec/kani/matrix/TC-036-generated-subject-abi.md
+  role: examined
+  excerpt: "10. For the planned [FR-046](../functional/FR-046-rational-function-predicate-harnesses.md)\n\
+    \    Rational row, select two real function parameters whose declared order differs\
+    \ from ascending\n    parameter order. Inspect ascending logical argument order\
+    \ and exactly two physical I64 draws\n    per parameter, numerator then denominator,\
+    \ preserving original identities and component domains.\n    Reconstruct with\
+    \ owner `Rational::new` and exact accessor roundtrip, including zero `0/1`,\n\
+    \    negative and fractional values. Retain exact source domains, not a denominator-one\
+    \ subset.\n    Decode actual reta"
+- id: spec/kani/matrix/TC-036-generated-subject-abi.md#unit-8
+  path: spec/kani/matrix/TC-036-generated-subject-abi.md
+  role: examined
+  excerpt: "1. Physical binding order equals row-specific expansion of the identity's\
+    \ ascending logical\n   argument order. Boolean/integer binding order stays unchanged\
+    \ (FR-025-AC-1).\n2. Every binding carries a parameter node id and a declared\
+    \ domain (FR-025-AC-2).\n3. The Boolean argument is a `bool`, and the integer\
+    \ argument is an `i64`. Each integer value\n   reaches the oracle as an `rt::Integer`\
+    \ equal to its mathematical value (FR-025-AC-3).\n4. No harness is emitted, and\
+    \ no machine-range assumption appears (FR-025-AC-4).\n5. The frame obligation\
+    \ is accounted `unsupported` with a typed reason, and no har"
+- id: spec/kani/matrix/TC-036-generated-subject-abi.md#unit-10
+  path: spec/kani/matrix/TC-036-generated-subject-abi.md
+  role: examined
+  excerpt: "10. One original Rational parameter retains both uniquely identified physical\
+    \ bindings, original\n    bounds and explicit component roles. Lossless decoding\
+    \ respects the physical byte/value-count\n    limits before reconstructing one\
+    \ canonical owner Rational and submitting one typed witness\n    value per parameter.\
+    \ Malformed schema/entries and noncanonical pairs refuse with typed causes\n \
+    \   and no replayed failure; legacy values/order remain unchanged (FR-025-AC-10)."
+- id: spec/kani/matrix/TC-036-generated-subject-abi.md#unit-13
+  path: spec/kani/matrix/TC-036-generated-subject-abi.md
+  role: examined
+  excerpt: 'Step 10 and the Rational extensions of steps 1, 2 and 7 are planned (IR-258),
+    with
+
+    no executable binder, decoder/grouping implementation or actual backend/replay
+    credit yet.
+
+    The planned row does not retrospectively qualify the existing legacy ABI controls.
+
+    '
+- id: spec/kani/matrix/TC-060-rational-function-predicate-harnesses.md#unit-5
+  path: spec/kani/matrix/TC-060-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: "   ```text\n   language \"ix:native\" edition \"1-draft\";\n   profile\
+    \ v = \"quire.value.complete/v1\";\n   function rational_commutative using v(a:\
+    \ Rational[-9, 9; 1, 9], b: Rational[-9, 9; 1, 9]): Boolean pure {\n       a +\
+    \ b = b + a\n   }\n   ```"
+- id: spec/kani/matrix/TC-060-rational-function-predicate-harnesses.md#unit-6
+  path: spec/kani/matrix/TC-060-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: "   The only source mutation replaces `a + b = b + a` with `a + b = a +\
+    \ a`.\n   Select the entire function declaration, inspect its lowered Boolean\
+    \ body and\n   request its predicate harness. Retain an honest typed capability\
+    \ refusal if\n   that owner route is absent; do not build a synthetic substitute\
+    \ (AC-1, AC-8).\n2. Independently enumerate the semantic input domain using exact\
+    \ host rational\n   arithmetic and compare it with the constructor/accessor roundtrip\
+    \ encoding.\n   Check 111 unique canonical values per argument and all 12,321\
+    \ tuples, including\n   zero `0/1`, `-9/1`, `9/1`, `1/9`, negativ"
+- id: spec/kani/matrix/TC-060-rational-function-predicate-harnesses.md#unit-10
+  path: spec/kani/matrix/TC-060-rational-function-predicate-harnesses.md
+  role: examined
+  excerpt: 'PLANNED: all ten FR-046 criteria and the new Rational ABI/decoder/report
+    controls
+
+    remain unimplemented and untagged. The reviewed mathematical/source receipts are
+
+    preparation, not executable binders, proof, fit or full-row acceptance. No missing
+
+    owner capability, version observation or generated-proof result is waived.
+
+    '
+- id: FR-016-AC-6
+  path: spec/replay/functional/FR-016-witness-native-replay.md
+  role: context_only
+  excerpt: Every witness decode receives required caller-supplied byte and value-count
+    bounds at its entry point; replay inputs carry both as non-optional fields with
+    no default, and an over-bound witness is reported malformed without reading beyond
+    either bound.
+- id: FR-016-AC-8
+  path: spec/replay/functional/FR-016-witness-native-replay.md
+  role: context_only
+  excerpt: A witness schema binds the obligation's persisted argument bindings, in
+    the order the obligation persists them, position for position to the harness's
+    symbolic arguments, and each decoded value is named by the binding at its position;
+    a binding that is not an argument is refused with a typed schema refusal that
+    reports no failure and is none of the replay results.
+```
