@@ -12,7 +12,8 @@ relationships:
 
 ## Description
 
-When the shared QSL evaluation interface admits generated bodies, the code
+After QSL amends FR-060 T12-A to permit this direct shared-interface caller,
+and when the shared QSL evaluation interface admits generated bodies, the code
 generator SHALL make its generated-closure corpus loadable by the QSL-owned
 differential harness (IR-591). The export is test input and reference evidence,
 not a second evaluator or a claim that CG currently agrees with QSL. CG SHALL
@@ -40,17 +41,21 @@ and application, the generated-body registration identity, the limits, and the
 QSL std reference's complete expected evaluation and ordered charge log.
 The checked input and expected evaluation use the QSL-owned public corpus
 encoding; this requirement does not define a second encoding of checked
-authority or of `Evaluation`. QSL's loader rejects an unknown format or a
-record it cannot admit as the named checked closure.
+authority or of `Evaluation`. QSL STD-300 defines the loader's refusal for
+an unknown format or an input it cannot admit as the named checked closure.
 
 ## Behavior
 
 The producer SHALL emit only cases that QSL admitted before generation and
 preserve each case's checked closure, callable identity and source
-locations through export. It SHALL fail the bundle as a whole if an expected
+locations through export. Its case-id set SHALL equal the independently
+enumerated live admitted source-case set, so a missing record cannot pass as
+a smaller valid corpus. It SHALL fail the bundle as a whole if an expected
 reference evaluation or a checked-input encoding is unavailable. It SHALL
 publish the complete bundle atomically, in stable case-id order, with byte-
-identical output for the same admitted corpus and interface version. The QSL
+identical output for the same admitted corpus and interface version. A failed
+replacement SHALL leave the previous complete bundle byte-identical; if none
+existed, the target SHALL remain absent. The QSL
 differential harness loads the bundle from the named directory and runs those
 same checked applications through its std and no_std implementations; QSL owns
 the comparison and CI placement. CG's existing FR-021 target-neutral schedule
@@ -60,16 +65,19 @@ tests do not discharge that comparison.
 
 | ID | Criteria | Verification |
 | --- | --- | --- |
-| FR-044-AC-1 | Given an admitted scalar case, an equality case and a nested generated-to-generated-to-interpreted call case, `make evaluator-corpus` writes `cases.jsonl` at `EVALUATOR_CORPUS_DIR` with one stable, unique case id per application; every line is a complete `quire.generated-closure-evaluation/v1` record containing the QSL-owned checked input, exact registration and application identity, limits, complete QSL std expected `Evaluation` and ordered charge log. QSL's corpus loader admits all three records and selects the same checked applications. | Test (TC-058) |
-| FR-044-AC-2 | Repeated export of the same admitted cases is byte-identical. Removing a case, changing a selected callable, source location, limit, result arm, refusal, loss, consumed work or charge order changes or rejects the corresponding loaded record; an unavailable QSL reference or unencodable checked input produces no published partial bundle. No exported expectation is computed from CG's emitted source or from Contract Runtime `exact`. | Test (TC-058) |
+| FR-044-AC-1 | Given an admitted scalar case, an equality case and a nested generated-to-generated-to-interpreted call case, `make evaluator-corpus` writes `cases.jsonl` at `EVALUATOR_CORPUS_DIR` with one stable, unique case id per application; every line is a complete `quire.generated-closure-evaluation/v1` record containing the QSL-owned checked input, exact registration and application identity, limits, complete QSL std expected `Evaluation` and ordered charge log. QSL's corpus loader admits all three records and selects the same checked applications. | Test |
+| FR-044-AC-2 | Repeated export of the same admitted cases is byte-identical. Loaded case ids equal an independent enumeration of the live QSL-admitted source applications; deleting a record fails that census. Changing a selected callable, source location, limit, result arm, refusal, loss, consumed work or charge order changes or rejects the corresponding loaded record. An unavailable QSL reference or unencodable checked input leaves the previous complete bundle byte-identical, or leaves the target absent if none existed. | Test |
+| FR-044-AC-3 | Inspection finds no exported expectation computed from CG's emitted source or Contract Runtime `exact`, no direct shared-interface call before the QSL FR-060 T12-A amendment, and no CG-defined checked-input or `Evaluation` encoding or loader refusal. | Inspection |
 
 ## Dependencies
 
 - QSL FR-262 and IR-583 provide the shared checked-closure interface; IR-590
   supplies the no_std implementation and IR-591 owns differential comparison.
 - QSL STD-300 must define the public checked-input and `Evaluation` corpus
-  encoding and loader. IR-853 must settle CG's concrete interface adoption
-  without violating FR-021's current no-owner-path boundary.
+  encoding and loader. QSL FR-060 T12-A must be amended to allow CG's direct
+  shared-interface call before this producer may be implemented. IR-853's
+  completed decision does not itself amend that architecture rule or close
+  FR-021's current no-owner-path boundary.
 
 ## Status
 
