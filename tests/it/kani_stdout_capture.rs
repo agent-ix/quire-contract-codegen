@@ -69,9 +69,75 @@ pub(crate) fn assertion_playback<'a>(stdout: &'a str, harness: &str) -> &'a str 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::kani_obligations::{bound_package, supported_contract_harnesses, write_crate};
     use crate::scratch_crate::TemporaryDirectory;
     use ix_trace_rs::trace;
-    use std::process::Command;
+    use qsl_replay::{ReplayLimits, ScalarLimits, WitnessValue, DEFAULT_REPLAY_INPUT_BYTES};
+    use quire_contract_codegen::{
+        decode_falsification, execute_kani_obligation, replay_counterexample, KaniExecutionRequest,
+        KaniRunOutcome, LockedSource, ReplayInputs, ReplayPackage, ReplayVerdict,
+    };
+    use std::{collections::BTreeMap, process::Command};
+
+    fn synthetic_playback(harness: &str, amount: i64, balance: i64) -> String {
+        let values = [amount, balance]
+            .map(|value| {
+                let bytes = value.to_le_bytes().map(|byte| byte.to_string()).join(", ");
+                format!("        // {value}\n        vec![{bytes}],\n")
+            })
+            .concat();
+        format!(
+            "/// Test generated for harness `{harness}`\n\
+             /// Check for `assertion`: \"synthetic assertion\"\n\
+             #[test]\n\
+             fn kani_concrete_playback_synthetic() {{\n\
+                 let concrete_vals: Vec<Vec<u8>> = vec![\n{values}    ];\n\
+                 kani::concrete_playback_run(concrete_vals, synthetic);\n\
+             }}\n"
+        )
+    }
+
+    fn native_twin() -> ReplayPackage {
+        let source = "language \"ix:native\" edition \"1-draft\";\n\
+                      profile v = \"quire.value.complete/v1\";\n\
+                      function balance_never_grows using v(amount_current: Int[0, 1000], \
+                      balance_pre: Int[0, 1000]): Boolean pure { balance_pre + amount_current \
+                      <= balance_pre }\n";
+        let limits = ScalarLimits {
+            integer_bits: u64::MAX,
+            decimal_digits: u64::MAX,
+            scale_expansion: u64::MAX,
+            text_input_bytes: u64::MAX,
+            text_scalars: u64::MAX,
+            normalized_scalars: u64::MAX,
+            unit_edges: u64::MAX,
+            value_occurrences: u64::MAX,
+            work_units: u64::MAX,
+            result_units: u64::MAX,
+        };
+        ReplayPackage::new(
+            ReplayInputs {
+                decode_limits: crate::unbounded_decode_limits(),
+                source: LockedSource {
+                    authority: "agent-ix".to_owned(),
+                    identity: "test:kani-stdout-binding".to_owned(),
+                    namespace: "git".to_owned(),
+                    revision: "r1".to_owned(),
+                    bytes: source.as_bytes().to_vec(),
+                },
+                dependencies: Vec::new(),
+                accounting_limits: limits,
+                stage_limits: BTreeMap::from([(
+                    "s1.input_bytes".to_owned(),
+                    DEFAULT_REPLAY_INPUT_BYTES,
+                )]),
+                declared_domains: Vec::new(),
+                replay_limits: ReplayLimits::default(),
+            },
+            "balance_never_grows",
+        )
+        .expect("native twin compiles")
+    }
 
     /// The observer passes through the launcher's stdout and exit status while retaining its
     /// own byte-identical copy, including a nonzero exit as Kani uses for falsification.
@@ -115,6 +181,87 @@ mod tests {
         assert_eq!(capture.stdout().as_bytes(), expected.stdout);
     }
 
+    /// A classified falsification must retain the first assertion playback printed by the same
+    /// installed Kani process. A valid substitute chosen after classification must disagree with
+    /// that independent stdout observation before any decoding or replay can accept it.
+    #[trace("FR-016-AC-25", "TC-026")]
+    #[test]
+    #[ignore = "kani lane: run serially through `make kani`"]
+    fn tc_026_installed_kani_falsification_is_bound_to_process_stdout() {
+        const HEALTHY: &str = "pub fn withdraw(amount_current: i64, balance_pre: i64) -> i64 {\n    balance_pre - amount_current\n}\n";
+        const VIOLATING: &str = "pub fn withdraw(amount_current: i64, balance_pre: i64) -> i64 {\n    balance_pre + amount_current\n}\n";
+        let package = bound_package(1000);
+        let harness = supported_contract_harnesses(&package, "crate::withdraw").remove(1);
+        let real = KaniInstallation::discover().expect("cargo-kani is installed");
+        let prove = |subject| {
+            let scratch = write_crate(&harness, subject);
+            let capture = KaniStdoutCapture::new(&scratch.path, &real);
+            let cancel = quire_exact::Cancel::new();
+            let evidence = execute_kani_obligation(&KaniExecutionRequest {
+                cancel: &cancel,
+                installation: &capture.installation,
+                harness: (&harness).into(),
+                crate_directory: &scratch.path,
+                target_directory: &PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+                    .join("kani-stdout-binding"),
+                home_directory: None,
+            })
+            .expect("installed Kani executes the generated obligation");
+            (evidence.outcome, capture.stdout())
+        };
+        let (healthy, _) = prove(HEALTHY);
+        assert_eq!(healthy, KaniRunOutcome::Verified);
+        let (falsified, stdout) = prove(VIOLATING);
+        let KaniRunOutcome::Falsified { counterexample } = falsified else {
+            panic!("injected violation must falsify: {falsified:?}");
+        };
+        let harness_path = format!(
+            "{}::{}",
+            harness.identity.module_symbol, harness.identity.harness_symbol
+        );
+        let observed = assertion_playback(&stdout, &harness_path);
+        let bound_to_stdout = |candidate: &str| observed.as_bytes() == candidate.as_bytes();
+        assert!(bound_to_stdout(&counterexample));
+
+        // This fixed, in-domain transcript is substituted after classification. Its own comment,
+        // bytes, decode and native replay agree, but the stdout binding must reject its bytes.
+        let replacement = synthetic_playback(&harness_path, 1, 5);
+        assert!(!bound_to_stdout(&replacement));
+
+        let decoded = decode_falsification(
+            harness.identity.harness_symbol.as_str(),
+            harness.identity.module_symbol.as_str(),
+            &harness.identity.arguments,
+            &counterexample,
+            crate::unbounded_decode_limits(),
+        )
+        .expect("the retained playback decodes");
+        assert_eq!(decoded.len(), harness.identity.arguments.len());
+        assert!(decoded
+            .iter()
+            .all(|(_, value)| matches!(value, WitnessValue::Integer(_))));
+        let twin = native_twin();
+        assert_eq!(
+            replay_counterexample(&harness.identity, &counterexample, &twin)
+                .expect("native replay settles"),
+            ReplayVerdict::Reproduced
+        );
+
+        decode_falsification(
+            harness.identity.harness_symbol.as_str(),
+            harness.identity.module_symbol.as_str(),
+            &harness.identity.arguments,
+            &replacement,
+            crate::unbounded_decode_limits(),
+        )
+        .expect("the substituted playback is valid and decodes");
+        assert_eq!(
+            replay_counterexample(&harness.identity, &replacement, &twin)
+                .expect("substituted native replay settles"),
+            ReplayVerdict::Reproduced
+        );
+    }
+
     /// Selection reads the first eligible block for this harness and preserves its test text.
     #[trace("FR-016-AC-25", "TC-026")]
     #[test]
@@ -123,9 +270,13 @@ mod tests {
                       Concrete playback unit test for `other`:\n```\n/// Check for `assertion`\nkani::concrete_playback_run(other);\n```\n\
                       Concrete playback unit test for `h`:\n```\n/// Check for `assertion`\nkani::concrete_playback_run(first);\n```\n\
                       Concrete playback unit test for `h`:\n```\n/// Check for `assertion`\nkani::concrete_playback_run(second);\n```\n";
-        assert_eq!(
-            assertion_playback(stdout, "h"),
-            "/// Check for `assertion`\nkani::concrete_playback_run(first);"
+        let first = "/// Check for `assertion`\nkani::concrete_playback_run(first);";
+        let second = "/// Check for `assertion`\nkani::concrete_playback_run(second);";
+        let selected = assertion_playback(stdout, "h");
+        assert_eq!(selected, first);
+        assert_ne!(
+            selected, second,
+            "the later target block cannot replace the first"
         );
     }
 }
