@@ -73,6 +73,30 @@ impl ReplayHarnessIdentity {
     }
 }
 
+/// Immutable source/domain authority shared by Rational request construction and native decoding.
+/// No generated-harness or backend provenance is asserted by this context.
+#[derive(Clone, Debug)]
+pub(crate) struct ValidatedRationalPredicateContext {
+    oracle: crate::oracle::rational_predicate::RationalPredicateOracle,
+    source: quire_contract_model::ContractSourceV1,
+    declaration: OccurrenceKey,
+    obligation: ObligationIdentity,
+}
+impl ValidatedRationalPredicateContext {
+    pub(crate) fn oracle(&self) -> &crate::oracle::rational_predicate::RationalPredicateOracle {
+        &self.oracle
+    }
+    pub(crate) fn source(&self) -> &quire_contract_model::ContractSourceV1 {
+        &self.source
+    }
+    pub(crate) fn declaration(&self) -> &OccurrenceKey {
+        &self.declaration
+    }
+    pub(crate) fn obligation(&self) -> ObligationIdentity {
+        self.obligation
+    }
+}
+
 /// The request's `backend` member: the identity of the backend that found the counterexample.
 /// QSL records it and does not interpret it (AD-002); the only backend this crate runs is Kani.
 const BACKEND_IDENTITY: &str = "kani";
@@ -679,6 +703,14 @@ impl ReplayPackage {
         &self,
         item: crate::kani::generate::outcome::FunctionPredicateItem<'_>,
     ) -> Result<ObligationIdentity, ObligationIdentityError> {
+        Ok(self.rational_predicate_context(item)?.obligation())
+    }
+
+    /// Build the single immutable source/domain authority used by Rational consumers.
+    pub(crate) fn rational_predicate_context(
+        &self,
+        item: crate::kani::generate::outcome::FunctionPredicateItem<'_>,
+    ) -> Result<ValidatedRationalPredicateContext, ObligationIdentityError> {
         let provenance = &item.package.wire().package.source;
         if provenance.package_id.domain.as_ref() != self.site.package_id.domain().as_str()
             || provenance.package_id.algorithm.as_ref() != "sha256"
@@ -708,12 +740,18 @@ impl ReplayPackage {
             .map_err(|cause| ObligationIdentityError::RationalPreparation(Box::new(cause)))?;
         let arguments =
             rational_contract_arguments(&self.site.site.parameters, admitted.parameters())?;
-        function_contract_identity(
+        let obligation = function_contract_identity(
             self.site.site.function,
             &self.site.site.declaration,
             crate::kani::identity::ObligationKind::Postcondition,
             &arguments,
-        )
+        )?;
+        Ok(ValidatedRationalPredicateContext {
+            oracle: admitted,
+            source: provenance.clone(),
+            declaration: self.site.site.declaration.clone(),
+            obligation,
+        })
     }
 
     /// Build a request for this admitted Rational function and original inclusive domains.
@@ -729,6 +767,25 @@ impl ReplayPackage {
         source: ReplaySource,
     ) -> Result<ReplayRequestWire, ObligationIdentityError> {
         Ok(self.request_for(self.rational_predicate_obligation_identity(item)?, source))
+    }
+
+    /// Prepare a native physical-input codec for the admitted Rational selection.
+    ///
+    /// This seals only source/domain/ordering metadata, not an actual proof artifact or run.
+    /// The decoder accepts caller-selected assertion blocks without asserting solver origin.
+    ///
+    /// # Errors
+    /// Returns the same source/domain binding refusals as the Rational request constructor.
+    pub fn rational_predicate_codec(
+        &self,
+        item: crate::kani::generate::outcome::FunctionPredicateItem<'_>,
+    ) -> Result<crate::replay::rational_predicate::RationalPredicateCodec, ObligationIdentityError>
+    {
+        Ok(
+            crate::replay::rational_predicate::RationalPredicateCodec::from_context(
+                self.rational_predicate_context(item)?,
+            ),
+        )
     }
 
     /// The complete replay request for `counterexample`, replaying `source`.
