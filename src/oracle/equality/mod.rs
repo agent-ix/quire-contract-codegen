@@ -2852,11 +2852,20 @@ mod tests {
         let token_bound = source_bytes
             .checked_add(1)
             .expect("finite fixture token bound");
+        // A one-field record has at most Declaration, RecordDeclaration, Field,
+        // TypeReference and QualifiedName nodes. Eight slots per original record
+        // plus 32 for the header/root/Shallow declaration bound this fixed grammar.
+        let count = u64::try_from(records).expect("fixture node count fits u64");
+        let syntax_nodes = count
+            .checked_mul(8)
+            .and_then(|n| n.checked_add(32))
+            .expect("finite fixture syntax node bound");
         let stages = StageLimits::default()
             .with_named("s1.input_bytes", source_bytes)
             .and_then(|limits| limits.with_named("s1.tokens", token_bound))
+            .and_then(|limits| limits.with_named("s1.nodes", syntax_nodes))
             .expect("the public compiler recognizes its fixture intake settings");
-        eprintln!("genuine large fixture records={records}; optional={optional}; source_bytes={source_bytes}; token_bound={token_bound}");
+        eprintln!("genuine large fixture records={records}; optional={optional}; source_bytes={source_bytes}; token_bound={token_bound}; syntax_nodes={syntax_nodes}");
         let admitted = compile_admitted(
             SourceIdentity::new("test", "deep.native", "git", "fixture"),
             "deep.native",
@@ -2868,7 +2877,6 @@ mod tests {
         )
         .expect("the unchanged large source must compile before its identities are used");
         let bytes = admitted.package().bytes();
-        let count = u64::try_from(records).expect("fixture node count fits u64");
         // Finite fixture-read budgets for the existing large record count and its fixed grammar.
         let read_limits = CheckedPackageReadLimits {
             bytes: u64::try_from(bytes.len()).expect("retained fixture bytes fit u64"),
