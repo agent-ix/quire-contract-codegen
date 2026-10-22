@@ -279,3 +279,36 @@ bindings:
   ac_id: FR-046-AC-8
   trace: correct
 ```
+
+## Dispositions
+
+Disposition pass 1, exact frozen b41bb3e50a7403dd0f27f2f90d0bb6d865a181d3 on actual main 59d89b64e90d68f4b19d1233ed1a48d91af1c69c. Original findings and earlier review text above remain unchanged.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Independently inspected actual repair; exact after_excerpt recorded below. |
+| FND-002 | fixed | Independently inspected actual repair; exact after_excerpt recorded below. |
+
+### Disposition pass 1 evidence and current verdict
+
+**PASS for the bounded native prerequisite code/Rust milestone.** Both original code findings are fixed; no new findings. This is not negotiated generation, an executable harness, playback/replay, proof or final-gate acceptance.
+
+Reviewed the complete current 15-path PR diff and the fresh-base interactions. Original two authored commits retain equality in range-diff. Incoming main changes only scalar lookup reuse/classification paths and their tests/reviews; all six incoming paths match actual main, including negotiate.rs and scalar/mod.rs. The native leaf still consumes the owner reached closure, independently of those shared scalar negotiation caches. The pre-existing pub(crate) Rational member constant remains present and unchanged; both new uses reuse it. No FunctionPredicate negotiator arm, manifest/lock, ABI/identity/serde, replay, runner or proof change was introduced. Original native implementation/tests/fixtures outside the constant repair and appended adverse test remain byte-identical. Exact source fixtures, full-domain reference comparisons, repeated-expression/BigInt and all Meter denial/budget controls retain their original semantics.
+
+The new generated-native test runs both authentic predicates and checks 0/1/3 arguments plus canonical -10/1, 10/1 and 1/10 at each of two real parameter positions on fresh and genuinely pre-used Meters. This is 18 cases per predicate, 36 total. The pre-used Meter is charged via actual owner planned_equality, not fabricated counters. Exact typed error/index and the unchanged ordered charges, all ten counters, admissions and truncation state are asserted. It exercises actual compiled generated source; the historical behavior was already correct, so this is coverage repair, not a claimed old product RED.
+
+Read raw pr535-fix1/native.log: seven focused outer tests pass, including two independently compiled adverse child suites reporting 18 cases each; original 111/12321 healthy/mutant and beyond-i128 controls pass. Read clippy.log: lib/it check completes; check-exits.json records exit0 for clippy, native, fmt, diff and Quire. No independent Cargo/proof/aggregate/namespace rerun was needed. These remain author execution logs; this reviewer independently inspected source, diffs, lineage/custody, actual PR head/current remote main, diff-check and computed matrix. The retained native-scope.txt reports an inactive unit with MemoryMax=infinity and MemorySwapMax=infinity, so that file does not independently establish the live execution caps claimed by the handoff. No new RAM policy or execution authorization is inferred.
+
+Fresh computed matrix remains 7 tagged / 4 untagged for the eleven scoped criteria. Full feature gaps are unchanged. Plan completion: not assessed. Spec/plan methods remain N/A because this PR changes neither. Original SR imports matched the prior exact source bytes before this append. Updated scratch copies must replace the committed originals before custody is complete; reviewer does not edit or push the author branch.
+
+```yaml
+dispositions:
+- fnd: FND-001
+  outcome: fixed
+  after_excerpt: "use crate::oracle::scalar::RATIONAL_RANGE_MEMBERS;\n        for (index, (component, value)) in\
+    \ RATIONAL_RANGE_MEMBERS.iter().zip(&bounds).enumerate() {\n    for (index, name) in RATIONAL_RANGE_MEMBERS.iter().enumerate()\
+    \ {"
+- fnd: FND-002
+  outcome: fixed
+  after_excerpt: "assert_eq!(predicate(arguments,&mut meter),Err(expected));\n assert_eq!(meter_snapshot(&meter),before);"
+```
