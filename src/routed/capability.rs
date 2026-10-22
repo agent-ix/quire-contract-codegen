@@ -750,10 +750,11 @@ impl KaniForm {
         }
     }
 
-    fn preflight(
-        &self,
+    fn preflight<'a>(
+        &'a self,
         backend: &BackendDescriptor,
         admitted: Option<(&ContractPackageV1, &[ContractRequestPosition], usize)>,
+        scalar_lookups: &mut crate::kani::generate::negotiate::ScalarFormLookups<'a>,
     ) -> Result<KaniFormPreflightOutcome, Box<Cause>> {
         #[cfg(test)]
         if let Some((_, _, request_index)) = admitted {
@@ -795,6 +796,7 @@ impl KaniForm {
                     positions,
                     *request_index,
                     node_id,
+                    scalar_lookups,
                 ) {
                     ScalarFormAssessment::Supported => Ok(KaniFormPreflightOutcome::Ready),
                     ScalarFormAssessment::RequiresBound => {
@@ -1436,6 +1438,7 @@ fn negotiate_backend_provider_with_package(
     admitted: Option<(&ContractPackageV1, &[ContractRequestPosition], &[usize])>,
 ) -> Result<Vec<ItemSettlement>, EnvelopeRefusal> {
     validate_backend_provider_envelope(envelope)?;
+    let mut scalar_lookups = crate::kani::generate::negotiate::ScalarFormLookups::new();
     let request_indices = match admitted {
         Some((_, _, indices)) => indices.to_vec(),
         None => (0..envelope.items.len()).collect(),
@@ -1455,6 +1458,7 @@ fn negotiate_backend_provider_with_package(
                     &envelope.manifest,
                     item,
                     admitted.map(|(package, positions, _)| (package, positions, request_index)),
+                    &mut scalar_lookups,
                 )?,
             })
         })
@@ -1584,10 +1588,11 @@ pub fn negotiate_contract_package(
 /// Settle one item, evaluating FR-290's rules in order; the first match settles.
 // FR-019 requires the typed projection by value in the public refusal.
 #[allow(clippy::result_large_err)]
-fn negotiate_item(
+fn negotiate_item<'a>(
     manifest: &[BackendDescriptor],
-    item: &RequestItem,
+    item: &'a RequestItem,
     admitted: Option<(&ContractPackageV1, &[ContractRequestPosition], usize)>,
+    scalar_lookups: &mut crate::kani::generate::negotiate::ScalarFormLookups<'a>,
 ) -> Result<Disposition, EnvelopeRefusal> {
     let kind = match &item.kind {
         RequestedKind::Absent => {
@@ -1639,9 +1644,15 @@ fn negotiate_item(
                 backend: item.named_backend.clone(),
             },
         }),
-        [single] => {
-            negotiate_single_candidate(manifest, single, kind, extent, &item.kani_form, admitted)
-        }
+        [single] => negotiate_single_candidate(
+            manifest,
+            single,
+            kind,
+            extent,
+            &item.kani_form,
+            admitted,
+            scalar_lookups,
+        ),
         many if item.named_backend.is_none() => Ok(Disposition::InvalidRequest {
             cause: Cause::AmbiguousBackend {
                 candidates: many.to_vec(),
@@ -1717,13 +1728,14 @@ fn descriptor<'a>(
 /// Every function that constructs a [`Disposition`] is named `negotiate_*`.
 // FR-019 requires the typed projection by value in the public refusal.
 #[allow(clippy::result_large_err)]
-fn negotiate_single_candidate(
+fn negotiate_single_candidate<'a>(
     manifest: &[BackendDescriptor],
     candidate: &Candidate,
     kind: CapabilityKind,
     extent: &ExtentClassification,
-    kani_form: &KaniForm,
+    kani_form: &'a KaniForm,
     admitted: Option<(&ContractPackageV1, &[ContractRequestPosition], usize)>,
+    scalar_lookups: &mut crate::kani::generate::negotiate::ScalarFormLookups<'a>,
 ) -> Result<Disposition, EnvelopeRefusal> {
     let Some(backend) = descriptor(manifest, candidate) else {
         return Ok(Disposition::InvalidRequest {
@@ -1739,7 +1751,15 @@ fn negotiate_single_candidate(
             },
         });
     };
-    negotiate_arm(routed, backend, kind, extent, kani_form, admitted)
+    negotiate_arm(
+        routed,
+        backend,
+        kind,
+        extent,
+        kani_form,
+        admitted,
+        scalar_lookups,
+    )
 }
 
 /// Dispatch one arm per backend kind.
@@ -1748,16 +1768,19 @@ fn negotiate_single_candidate(
 // Implements: FR-019
 // FR-019 requires the typed projection by value in the public refusal.
 #[allow(clippy::result_large_err)]
-fn negotiate_arm(
+fn negotiate_arm<'a>(
     routed: BackendKind,
     backend: &BackendDescriptor,
     kind: CapabilityKind,
     extent: &ExtentClassification,
-    kani_form: &KaniForm,
+    kani_form: &'a KaniForm,
     admitted: Option<(&ContractPackageV1, &[ContractRequestPosition], usize)>,
+    scalar_lookups: &mut crate::kani::generate::negotiate::ScalarFormLookups<'a>,
 ) -> Result<Disposition, EnvelopeRefusal> {
     match routed {
-        BackendKind::Kani => negotiate_kani(backend, kind, extent, kani_form, admitted),
+        BackendKind::Kani => {
+            negotiate_kani(backend, kind, extent, kani_form, admitted, scalar_lookups)
+        }
         BackendKind::Process(_) => Ok(negotiate_process(backend, kind, extent)),
     }
 }
@@ -1769,14 +1792,15 @@ fn negotiate_arm(
 /// disposition.
 // FR-019 requires the typed projection by value in the public refusal.
 #[allow(clippy::result_large_err)]
-fn negotiate_kani(
+fn negotiate_kani<'a>(
     backend: &BackendDescriptor,
     kind: CapabilityKind,
     extent: &ExtentClassification,
-    kani_form: &KaniForm,
+    kani_form: &'a KaniForm,
     admitted: Option<(&ContractPackageV1, &[ContractRequestPosition], usize)>,
+    scalar_lookups: &mut crate::kani::generate::negotiate::ScalarFormLookups<'a>,
 ) -> Result<Disposition, EnvelopeRefusal> {
-    let readiness = match kani_form.preflight(backend, admitted) {
+    let readiness = match kani_form.preflight(backend, admitted, scalar_lookups) {
         Ok(readiness) => readiness,
         Err(cause) => match *cause {
             cause @ Cause::KaniFormInvalid { .. } => {
