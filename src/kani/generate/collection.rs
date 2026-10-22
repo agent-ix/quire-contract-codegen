@@ -9,7 +9,7 @@ use quire_contract_model::{
     CheckedSemanticNodeV2,
 };
 use serde_json::Value;
-use std::collections::BTreeMap;
+use std::{borrow::Borrow, collections::BTreeMap};
 
 use crate::{
     core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES},
@@ -87,8 +87,31 @@ pub(super) struct LoweredCollectionClaim {
 
 /// First admitted graph entries, retained in source order for collection lowering.
 pub(super) struct CollectionGraph<'a> {
-    by_id: BTreeMap<&'a CheckedNodeId, &'a CheckedSemanticNodeV2>,
-    by_digest: BTreeMap<&'a str, &'a CheckedSemanticNodeV2>,
+    by_id: FirstMatchIndex<&'a CheckedNodeId, &'a CheckedSemanticNodeV2>,
+    by_digest: FirstMatchIndex<&'a str, &'a CheckedSemanticNodeV2>,
+}
+
+struct FirstMatchIndex<K, V> {
+    entries: BTreeMap<K, V>,
+}
+
+impl<K: Ord, V> FirstMatchIndex<K, V> {
+    fn new() -> Self {
+        Self {
+            entries: BTreeMap::new(),
+        }
+    }
+
+    fn insert_first(&mut self, key: K, value: V) {
+        self.entries.entry(key).or_insert(value);
+    }
+
+    fn get<Q: Ord + ?Sized>(&self, key: &Q) -> Option<&V>
+    where
+        K: Borrow<Q>,
+    {
+        self.entries.get(key)
+    }
 }
 
 impl<'a> CollectionGraph<'a> {
@@ -97,31 +120,17 @@ impl<'a> CollectionGraph<'a> {
     }
 
     fn from_nodes(nodes: impl IntoIterator<Item = &'a CheckedSemanticNodeV2>) -> Self {
-        let mut by_id = BTreeMap::new();
-        let mut by_digest = BTreeMap::new();
+        let mut by_id = FirstMatchIndex::new();
+        let mut by_digest = FirstMatchIndex::new();
         for node in nodes {
-            by_id.entry(&node.node_id).or_insert(node);
-            by_digest
-                .entry(node.node_id.digest.as_ref())
-                .or_insert(node);
+            by_id.insert_first(&node.node_id, node);
+            by_digest.insert_first(node.node_id.digest.as_ref(), node);
         }
         Self { by_id, by_digest }
     }
 
     fn node(&self, id: &CheckedNodeId) -> Option<&'a CheckedSemanticNodeV2> {
-        self.node_observed(id, || {})
-    }
-
-    fn node_observed(
-        &self,
-        id: &CheckedNodeId,
-        mut visit: impl FnMut(),
-    ) -> Option<&'a CheckedSemanticNodeV2> {
-        let node = self.by_id.get(id).copied();
-        if node.is_some() {
-            visit();
-        }
-        node
+        self.by_id.get(id).copied()
     }
 
     fn declaration(&self, digest: &str) -> Option<&'a CheckedSemanticNodeV2> {
@@ -885,7 +894,58 @@ fn term_target(term: &Value) -> Option<CheckedNodeId> {
 mod tests {
     use super::*;
     use ix_trace_rs::trace;
-    use std::cell::Cell;
+    use std::{cell::Cell, cmp::Ordering, rc::Rc};
+
+    #[derive(Clone)]
+    struct CountedKey {
+        value: usize,
+        comparisons: Rc<Cell<usize>>,
+    }
+
+    impl PartialEq for CountedKey {
+        fn eq(&self, other: &Self) -> bool {
+            self.cmp(other) == Ordering::Equal
+        }
+    }
+
+    impl Eq for CountedKey {}
+
+    impl PartialOrd for CountedKey {
+        fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+            Some(self.cmp(other))
+        }
+    }
+
+    impl Ord for CountedKey {
+        fn cmp(&self, other: &Self) -> Ordering {
+            self.comparisons.set(self.comparisons.get() + 1);
+            self.value.cmp(&other.value)
+        }
+    }
+
+    #[trace("FR-015-AC-96", "TC-025")]
+    #[test]
+    fn collection_index_lookup_avoids_a_full_graph_comparison_walk_per_claim() {
+        let comparisons = Rc::new(Cell::new(0));
+        let key = |value| CountedKey {
+            value,
+            comparisons: Rc::clone(&comparisons),
+        };
+        let mut index = FirstMatchIndex::new();
+        for value in 0..128 {
+            index.insert_first(key(value), value);
+        }
+        index.insert_first(key(127), 999);
+        comparisons.set(0);
+        for _ in 0..3 {
+            assert_eq!(index.get(&key(127)), Some(&127), "first entry wins");
+        }
+        assert!(
+            comparisons.get() < 128,
+            "three lookups must avoid K*R comparisons; saw {} for K=3 R=128",
+            comparisons.get(),
+        );
+    }
 
     #[trace("FR-015-AC-96", "FR-015-AC-97", "TC-025")]
     #[test]
@@ -911,9 +971,8 @@ mod tests {
         let visited = Cell::new(0usize);
         let nodes = std::iter::repeat_n(&preceding, 126).chain([&selected, &duplicate]);
         let graph = CollectionGraph::from_nodes(nodes.inspect(|_| visited.set(visited.get() + 1)));
-        let mut lookup_visits = 0;
         for _ in 0..3 {
-            let found = graph.node_observed(&selected.node_id, || lookup_visits += 1);
+            let found = graph.node(&selected.node_id);
             assert!(std::ptr::eq(found.expect("selected node"), &selected));
         }
         assert_eq!(visited.get(), 128, "one request graph construction");
@@ -929,10 +988,6 @@ mod tests {
         assert!(
             graph.node(&node("absent")).is_none(),
             "missing node remains missing"
-        );
-        assert!(
-            lookup_visits <= 128,
-            "three claims must not each scan 128 graph entries: {lookup_visits}"
         );
     }
 
