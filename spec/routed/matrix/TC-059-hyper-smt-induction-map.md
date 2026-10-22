@@ -26,8 +26,10 @@ canonical HP-2 product queries, without implementing a second encoder.
 3. Drive base `sat` with a reconstructable product path, step `sat` after
    base `unsat`, solver unknown, QSL encoding refusal, a governed resource
    stop and a missing response. Assert the distinct candidate,
-   induction-not-closed or typed inconclusive outcome; none claims a proof
-   or terminal refutation before QSL replay (FR-045-AC-2).
+   induction-not-closed, encoding-refused, resource-stopped or typed
+   inconclusive outcome; assert the resource stop maps to FR-182 V-7
+   incomplete. None claims a proof or terminal refutation before QSL replay
+   (FR-045-AC-2).
 
 ## Expected Results
 
