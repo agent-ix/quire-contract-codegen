@@ -504,24 +504,24 @@ fn classify_v2_clause<'a>(
             "invariant" => Some(ObligationKind::Invariant),
             _ => None,
         });
-    let outcome = match graph_node {
-        None => Outcome::Invalid(InvalidObligationItem::UnknownNode),
-        Some(node) if &*node.node_tag != "state" || &*node.semantic_form != "state_clause" => {
+    let outcome = match (graph_node, kind) {
+        (None, _) => Outcome::Invalid(InvalidObligationItem::UnknownNode),
+        (Some(node), _) if &*node.node_tag != "state" || &*node.semantic_form != "state_clause" => {
             Outcome::Unsupported(UnsupportedObligation::UnknownNodeKind {
                 node_id: clause.clone(),
                 node_tag: node.node_tag.to_string(),
                 semantic_form: node.semantic_form.to_string(),
             })
         }
-        Some(_) if kind != Some(ObligationKind::Precondition) => {
-            Outcome::Unsupported(UnsupportedObligation::V2ClauseConditionNotRendered {
-                node_id: clause.clone(),
-            })
+        (Some(_), Some(kind @ (ObligationKind::Precondition | ObligationKind::Invariant))) => {
+            match lower_v2_clause(package, clause, kind) {
+                Ok(lowered) => Outcome::LoweredV2Clause(Box::new(lowered)),
+                Err(reason) => Outcome::Unsupported(reason),
+            }
         }
-        Some(_) => match lower_v2_clause(package, clause) {
-            Ok(lowered) => Outcome::LoweredV2Clause(Box::new(lowered)),
-            Err(reason) => Outcome::Unsupported(reason),
-        },
+        (Some(_), _) => Outcome::Unsupported(UnsupportedObligation::V2ClauseConditionNotRendered {
+            node_id: clause.clone(),
+        }),
     };
     ItemState {
         kind,

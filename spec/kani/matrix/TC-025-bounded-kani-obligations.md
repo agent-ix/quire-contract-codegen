@@ -295,7 +295,13 @@ unsatisfiable requires as `cover_unsatisfied`.
     operation parameters, bounded by their declared domains; the postcondition's result
     and post-state come from the subject call and their domain is asserted), and none takes a
     bound from a caller (FR-015-AC-38, FR-015-AC-39). The invariant harness asserts the
-    clause with no subject call (FR-015-AC-49).
+    clause with no subject call (FR-015-AC-49). The generated-harness and QSL-boundary
+    checks back that assertion's construction; the installed-Kani invariant proof is
+    **open under IR-705 and uncredited**. On the unchanged `Int[0, 1000]` domain,
+    unwind 8 and 16 GiB ceiling, it returned `Inconclusive(MemoryExhausted)` at
+    17,193,668,608 B peak with no last check. Its authored ignored test remains
+    excluded from the real-Kani gate until it produces an actual verdict under
+    those same bounds and ceiling; neither verification nor falsification is claimed.
 11. Generate a clause of connectives and comparisons and compare the embedded oracle with
     the FR-014 crate's function byte for byte (needs FR-014-AC-38); generate the
     arithmetic postcondition `amount < 1000` implies `amount + 1 <= 1000`, check the
