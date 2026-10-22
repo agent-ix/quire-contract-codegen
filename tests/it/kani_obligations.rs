@@ -1373,6 +1373,23 @@ fn tc_025_every_rendered_operation_states_its_own_native_relation() {
 fn tc_025_unbounded_non_finite_and_blocked_items_are_refused_without_harnesses() {
     let (scalar, claim_map, ids) = scalar_package();
     let records = scalar_records(&scalar, &claim_map, &ids, &[UNBOUNDED, MODEL, STATE, FRAME]);
+    let admitted = admitted_scalar_claims(&scalar, &claim_map);
+    for (record, code) in records.iter().zip([UNBOUNDED, MODEL, STATE, FRAME]) {
+        let node_id = ids.resolve(&code_id(code));
+        let expected = admitted
+            .wire()
+            .source_map
+            .nodes
+            .iter()
+            .filter(|entry| entry.node_id == node_id)
+            .flat_map(|entry| entry.occurrences.iter().cloned())
+            .collect::<Vec<_>>();
+        assert!(matches!(
+            &record.subject,
+            ObligationSubject::CheckedNode { node_id: actual_id, source_map }
+                if actual_id == &node_id && source_map == &expected
+        ));
+    }
     assert_eq!(
         records[0].disposition,
         ObligationDisposition::RequiresBound {
