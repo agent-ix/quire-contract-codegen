@@ -128,7 +128,7 @@ build:
 
 .PHONY: msrv
 msrv:
-	$(CARGO) +$(MSRV) test $(LOCKED)
+	$(CARGO) +$(MSRV) check $(LOCKED) --all-targets
 
 .PHONY: spec
 spec:
