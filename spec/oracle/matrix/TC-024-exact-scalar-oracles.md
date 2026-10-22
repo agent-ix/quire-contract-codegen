@@ -325,3 +325,62 @@ by quire-integration IR-842.
    anywhere but as a method call. Run the scan over hand-written snippets of each spelling to show it
    names each, and over a source with an earlier mention of the attribute to show it cuts
    nothing early.
+
+## V2 clause integer literal construction
+
+This subsection verifies [FR-014](../functional/FR-014-exact-scalar-oracles.md)'s
+FR-014-AC-53. These controls are planned until implemented; this spec change
+claims no executed coverage or Kani result.
+
+1. Through public CG generation over authentic strict-reader-admitted V2 clause
+   packages, exercise canonical integer leaves at signed-i64 MIN and MAX,
+   -1, 0, 1, and multiple other ordinary positive and negative constants.
+   Confirm that each generated leaf uses the public kernel `Integer::from(i64)`
+   constructor with a compile-safe explicitly typed i64 value. Eligibility is
+   exactly successful parsing of the complete spelling as i64 followed by an
+   identical canonical display round trip; vary the supported clause and
+   operation context without changing this decision. Private renderer checks
+   alone do not establish public-generation behavior.
+2. Exercise i64 MIN-1 and MAX+1, i128 MIN and MAX, and exact integers beyond i128.
+   Their leaves retain the original runtime arbitrary-precision canonical parse
+   and typed `InvalidConstant` mapping. Separately exercise an admitted canonical
+   i64-MIN leaf and a negate application over the positive literal
+   `9223372036854775808`: only the former uses the primitive constructor; the
+   latter retains its positive parsed child and the same owner negate call.
+   No expression folding or conversion of the child's domain is permitted.
+3. Submit noncanonical spellings such as `+1`, `01`, `-0`, surrounding whitespace
+   and invalid digits through the strict reader and retain its existing
+   refusals. Test the defensive private rendering seam separately: those
+   spellings remain on the original parse/failure route and never become
+   successfully constructed constants. Do not describe reader-rejected
+   spellings as admitted public fixtures.
+4. Compare generated oracles with direct owner evaluation whose operands are
+   independently prepared through public canonical parsing, without reusing
+   the constructor-selection helper. Include all supported integer comparisons
+   with true and false results, strict-LT boundary and reversed-operand cases,
+   and add, subtract, multiply and negate. Include result-domain refusal and
+   genuine arithmetic beyond i128, without clipping the values or declared
+   domains to i64. Compare complete outcomes and typed stops, ordered admitted
+   charges and every consumed counter. Deny every charge in turn at its exact
+   boundary and compare the full incomplete record, admitted prefix and
+   counters, including zero limits and integer-bit, work and result-retain
+   denials. Preserve stopped-child propagation and skipped-branch laziness.
+5. Reuse this test case's existing determinism, provenance and source-map
+   checks for the new output, preserving checked clause/node identities,
+   mathematical values, expression structure and owner calls. Regenerate the
+   original V2 parameter-precondition control through public CG under
+   [TC-025](../../kani/matrix/TC-025-bounded-kani-obligations.md): its full 0..1000
+   domain, single symbolic draw, strict comparison, assertions, completion
+   cover, solver, unwind 8, time limit and 16 GiB ceiling remain unchanged.
+   The embedded oracle equals the newly emitted public clause oracle under
+   the existing FR-015-AC-20/40 contract. New generated coordinates and artifact
+   identities use their existing owners; do not assert unchanged source bytes.
+   Run the unchanged real proof and
+   required controls only under their separately authorized qualification;
+   frontend compilation and native agreement are not Kani verification.
+
+Expected result: constructor choice changes only the eligible literal's
+construction route. Mathematical values, identities, tree structure, owner
+operations, domains, metering at every prefix, typed stops, evaluation order,
+laziness and full arbitrary-precision fallback remain as specified. The separate
+scalar-bound emitter and kernel canonical parsing are outside this change.
