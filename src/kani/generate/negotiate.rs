@@ -1476,6 +1476,90 @@ mod tests {
     use super::*;
     use quire_contract_model::{ClauseId, RequirementRef, EXECUTABLE_PROJECTION_FORMAT};
 
+    #[trace("TC-025")]
+    #[test]
+    fn request_clause_view_preserves_supported_bytes_and_typed_refusals() {
+        let (package, clause) =
+            native_twin::Twin::with_bounded_other_precondition().emitted_package("OtherBelowLimit");
+        let non_clause = &package
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| &*node.node_tag != "state")
+            .expect("real admitted non-clause")
+            .node_id;
+        let good = ObligationItem::V2Clause {
+            package: &package,
+            clause: &clause,
+        };
+        let refused = ObligationItem::V2Clause {
+            package: &package,
+            clause: non_clause,
+        };
+        let evaluate = |items: &[ObligationItem<'_>]| {
+            negotiate_kani_obligations(&KaniObligationRequest {
+                ceilings: crate::kani::test_support::proof_ceilings::proof_ceilings(),
+                items,
+                subject_path: "crate::subject::deposit",
+                unwind: 8,
+            })
+            .unwrap()
+        };
+        let supported = evaluate(&[good]);
+        let refusal = evaluate(&[refused]);
+        assert!(matches!(
+            supported.records()[0].disposition,
+            ObligationDisposition::Supported { .. }
+        ));
+        assert!(matches!(
+            refusal.records()[0].disposition,
+            ObligationDisposition::Unsupported {
+                reason: UnsupportedObligation::UnknownNodeKind { .. }
+            }
+        ));
+        let KaniObligationOutcome::Emitted {
+            v2_clause_harnesses: expected,
+            ..
+        } = &supported
+        else {
+            panic!("supported precondition")
+        };
+        let oracle = crate::oracle::clause::generate_v2_clause_oracle(&package, &clause).unwrap();
+        assert_eq!(expected.len(), 1);
+        assert!(expected[0].rust.contents.contains(&oracle.source));
+        for items in [[good, refused], [refused, good]] {
+            let actual = evaluate(&items);
+            for (index, item) in items.iter().enumerate() {
+                let mut record = evaluate(&[*item]).records()[0].clone();
+                record.request_index = index;
+                assert_eq!(
+                    actual.records()[index],
+                    record,
+                    "exact record and source occurrence order"
+                );
+            }
+            let KaniObligationOutcome::Emitted {
+                v2_clause_harnesses,
+                ..
+            } = actual
+            else {
+                panic!("unsupported item does not reject supported sibling")
+            };
+            assert_eq!(
+                &v2_clause_harnesses, expected,
+                "identity, complete Rust and record bytes"
+            );
+        }
+        let duplicates = evaluate(&[good, good]);
+        assert!(matches!(duplicates, KaniObligationOutcome::Rejected { .. }));
+        assert!(matches!(
+            duplicates.records()[1].disposition,
+            ObligationDisposition::InvalidRequest {
+                reason: InvalidObligationItem::DuplicateItem { first_index: 0 }
+            }
+        ));
+    }
+
     // IR-276 AC-5 work measurement, not an unrelated FR behavior trace claim.
     #[test]
     fn request_v2_clause_lookups_share_graph_and_source_work() {
@@ -1488,8 +1572,54 @@ mod tests {
                 .iter()
                 .map(|name| (name.as_str(), "deposit", "balance"))
                 .collect::<Vec<_>>();
-            let (package, _) = native_twin::Twin::build(&model::GRANTED, &declarations, 0)
-                .emitted_package(&names[0]);
+            let twin = native_twin::Twin::build(&model::GRANTED, &declarations, 0);
+            let (seed_package, seed_clause) = twin.emitted_package(&names[0]);
+            let inputs =
+                twin.state_clause_inputs(&seed_package, &seed_clause, &names[0], (0, 0), (0, 0));
+            let mut source = String::from_utf8(inputs.run.source.bytes.clone()).unwrap();
+            for (index, name) in names.iter().enumerate() {
+                let original = format!("post {name} using v on Bank::Account::deposit {{ self.balance >= pre(self.balance) }}");
+                let distinct = format!(
+                    "post {name} using v on Bank::Account::deposit {{ self.balance >= {index} }}"
+                );
+                assert!(source.contains(&original));
+                source = source.replace(&original, &distinct);
+            }
+            let locked = &inputs.run.source;
+            let located = qsl_replay::call_site(
+                qsl_replay::SourceIdentity::new(
+                    &locked.authority,
+                    &locked.identity,
+                    &locked.namespace,
+                    &locked.revision,
+                ),
+                &locked.identity,
+                source.as_bytes(),
+                inputs
+                    .packages
+                    .iter()
+                    .map(|document| document.bytes.as_slice()),
+                &qsl_replay::DependencyInput::default(),
+                &qsl_replay::ClauseName(qsl_replay::Identifier::new(&names[0]).unwrap()),
+            )
+            .expect("distinct authored QSL clauses compile through the owner");
+            let wire: serde_json::Value = serde_json::from_slice(&located.package).unwrap();
+            let digest = wire["lock"]["model_selections"][0]["digest"]
+                .as_str()
+                .unwrap();
+            let mut evidence = quire_contract_model::CheckedPackageEvidence::new();
+            evidence
+                .insert_domain_package_document(digest.to_owned(), inputs.packages[0].bytes.clone())
+                .unwrap();
+            evidence.support_feature("quire.value.complete/v1");
+            let package = match CheckedPackageV2::read(
+                &located.package,
+                quire_contract_model::CheckedPackageReadLimits::bounded(),
+                &evidence,
+            ) {
+                quire_contract_model::CheckedPackageV2ReadResult::Admitted(package) => *package,
+                other => panic!("owner source is admitted: {other:?}"),
+            };
             let clauses = package
                 .graph()
                 .nodes
@@ -1527,7 +1657,7 @@ mod tests {
                 println!("IR276_WORK K={count} R={graph_size} S={source_size} graph_visits={graph_visits} source_visits={source_visits}");
                 assert_eq!(outcome.records().len(), count);
                 for (index, item) in items.iter().enumerate() {
-                    let single_items = [item.clone()];
+                    let single_items = [*item];
                     let single = negotiate_kani_obligations(&KaniObligationRequest {
                         items: &single_items,
                         ..request
