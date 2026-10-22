@@ -1705,7 +1705,10 @@ fn render_item(generated: &CheckedItem) -> Result<RenderedItem, RenderError> {
         }
     }
     if !union_seals.is_empty() {
-        union_seals.insert_str(0, "    let _context = context;\n    let mut environment = environment;\n");
+        union_seals.insert_str(
+            0,
+            "    let _context = context;\n    let mut environment = environment;\n",
+        );
     }
     Ok(RenderedItem {
         union_seals,

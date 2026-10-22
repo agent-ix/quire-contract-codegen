@@ -252,23 +252,41 @@ fn union_lookup_and_seal_faults_keep_typed_causes_before_equality() {
     let mut wrong_kind = original.clone();
     let marker = context.enums().next().expect("genuine enum");
     wrong_kind.node_id.digest = marker.key().to_string().into();
-    assert_eq!(admitted::resolve_composite(&context, &mut TypeClosure::default(), &wrong_kind),
-        Err(CompositeEqualityRefusal::WrongAdmittedKind { declaration: marker.key().to_string() }));
+    assert_eq!(
+        admitted::resolve_composite(&context, &mut TypeClosure::default(), &wrong_kind),
+        Err(CompositeEqualityRefusal::WrongAdmittedKind {
+            declaration: marker.key().to_string()
+        })
+    );
     let library = qsl_replay::SuppliedLibrary {
         identity: "test/union".to_owned(),
-        source: qsl_replay::SourceIdentity::new("test", "admitted-composites.native", "git", "fixture"),
+        source: qsl_replay::SourceIdentity::new(
+            "test",
+            "admitted-composites.native",
+            "git",
+            "fixture",
+        ),
         path: "admitted-composites.native".to_owned(),
         bytes: fixture::UNION_SOURCE.as_bytes().to_vec(),
     };
-    let importer = fixture::compile(
-        "language \"ix:native\" edition \"1-draft\"; profile v = \"quire.value.complete/v1\"; import \"test/union\" as u; function healthy using v(a: Boolean,b: Boolean): Boolean pure { a = b }",
-        &qsl_replay::DependencyInput::new([library]).unwrap(),
-    );
+    let dependencies = qsl_replay::DependencyInput::new([library]).unwrap();
+    let importer = qsl_replay::compile_admitted(
+        qsl_replay::SourceIdentity::new("test", "union-importer.native", "git", "fixture"),
+        "union-importer.native",
+        br#"language "ix:native" edition "1-draft"; profile v = "quire.value.complete/v1";
+        import "test/union" as u;
+        function healthy using v(a: Boolean,b: Boolean): Boolean pure { a = b }"#,
+        [], &dependencies, Default::default(), Default::default(),
+    ).expect("distinct authentic importer source");
     let owner = context.package_id().record();
-    assert_eq!(admitted::resolve_composite(importer.context(), &mut TypeClosure::default(), original),
+    assert_eq!(
+        admitted::resolve_composite(importer.context(), &mut TypeClosure::default(), original),
         Err(CompositeEqualityRefusal::ForeignComposite {
-            declaration: shape.node().to_string(), package_domain: owner.domain().as_str().to_owned(), package_digest: owner.hex(),
-        }));
+            declaration: shape.node().to_string(),
+            package_domain: owner.domain().as_str().to_owned(),
+            package_digest: owner.hex(),
+        })
+    );
     // Swap a genuine owner declaration under a different handle: no forged member/key.
     let mut bindings = healthy.composite_bindings.clone();
     bindings.get_mut(&shape.key()).unwrap().declaration = declaration(&context, "Wrap").clone();

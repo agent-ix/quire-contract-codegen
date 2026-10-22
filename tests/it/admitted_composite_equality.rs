@@ -476,15 +476,32 @@ fn genuine_union_capability_refusals_preserve_the_healthy_sibling() {
     // Absence is discovered at the root before any child work is charged.
     assert_eq!(code(&limited), code(&alone));
     let exhausted = super::admitted_enum_equality::generate_items_with_limits(
-        &package, Some(compiled.context()), &batch, &[], CompositeEqualityLimits {
-            type_resolution_work_units: 2, ..Default::default()
+        &package,
+        Some(compiled.context()),
+        &batch,
+        &[],
+        CompositeEqualityLimits {
+            type_resolution_work_units: 2,
+            ..Default::default()
         },
-    ).unwrap();
+    )
+    .unwrap();
     assert_eq!(code(&exhausted), code(&alone));
-    let refused = exhausted.claim_map.items.iter().find(|claim| claim.node_id == union.node_id).unwrap();
-    assert!(matches!(&refused.result, ClaimDisposition::Refused {
-        refusal: CompositeEqualityRefusal::TypeResolutionWorkExhausted { limit: 2, consumed: 3 }
-    }));
+    let refused = exhausted
+        .claim_map
+        .items
+        .iter()
+        .find(|claim| claim.node_id == union.node_id)
+        .unwrap();
+    assert!(matches!(
+        &refused.result,
+        ClaimDisposition::Refused {
+            refusal: CompositeEqualityRefusal::TypeResolutionWorkExhausted {
+                limit: 2,
+                consumed: 3
+            }
+        }
+    ));
     let complete = generate_items(&package, Some(compiled.context()), &batch, &[]).unwrap();
     let reversed =
         generate_items(&package, Some(compiled.context()), &[healthy, union], &[]).unwrap();
