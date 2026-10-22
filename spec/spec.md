@@ -154,3 +154,8 @@ Two recorded exceptions to the layout convention, both to be settled at the layo
 - [Evidence chain across IR, CG and QSL](assurance/AD-003-evidence-chain.md).
 - [CG crate layout](assurance/AD-004-cg-crate-layout.md).
 - ISO/IEC/IEEE 29148 (requirements engineering), per `standards_alignment`.
+
+## Developer Gate Adoption
+
+[FR-043](core/functional/FR-043-owned-lock-coherence-gate.md) defines planned consumption of the single owned CLI lock
+coherence gate under IR-641. It does not claim consumer implementation or qualification.

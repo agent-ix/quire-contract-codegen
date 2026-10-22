@@ -33,8 +33,8 @@ const AGREEMENT_DEV_DEPENDENCIES: &str = concat!(
 /// offline, and asserts that it succeeded and that every `#[test]` in `cases`
 /// ran and passed.
 ///
-/// The scratch crates share one target directory under this build's own
-/// `target/`, so the Contract Runtime is compiled once, not per run.
+/// Each scratch crate has its own target directory: different generated corpora can have the
+/// same package name and version, so sharing artifacts can link a sibling corpus's library.
 pub(super) fn run_agreement_cases<'a>(
     label: &str,
     artifacts: impl IntoIterator<Item = (&'a str, &'a str)>,
@@ -88,7 +88,7 @@ fn run_agreement_cases_with_expectation<'a>(
     fs::write(&manifest_path, manifest).expect("extend generated manifest");
     let resolution = Command::new(env!("CARGO"))
         .args(["generate-lockfile"])
-        .env("CARGO_TARGET_DIR", scratch.join("agreement-target"))
+        .env("CARGO_TARGET_DIR", root.join("target"))
         .current_dir(&root)
         .output()
         .expect("resolve the independent scratch crate's public dependency closure");
@@ -101,7 +101,7 @@ fn run_agreement_cases_with_expectation<'a>(
 
     let output = Command::new(env!("CARGO"))
         .args(["test", "--locked", "--offline", "--test", "agreement"])
-        .env("CARGO_TARGET_DIR", scratch.join("agreement-target"))
+        .env("CARGO_TARGET_DIR", root.join("target"))
         .env_remove("RUSTFLAGS")
         .env_remove("CARGO_ENCODED_RUSTFLAGS")
         .current_dir(&root)

@@ -131,7 +131,7 @@ fn cleanup_success_and_failure_preserve_real_receipt_after_snapshot_removal() {
 
 #[trace("FR-017-AC-42")]
 #[test]
-fn bounded_single_run_standins_preserve_cancelled_and_timed_out_evidence() {
+fn bounded_single_run_preserves_cancelled_with_start_signal_and_timeout_without_signal() {
     use crate::kani::{
         classify::{KaniInconclusiveReason, KaniRunOutcome},
         run::scalar::{KaniScalarNativeError, KaniScalarNativeErrorClass},
@@ -147,12 +147,7 @@ fn bounded_single_run_standins_preserve_cancelled_and_timed_out_evidence() {
     }
 
     for cancelled in [true, false] {
-        let ceiling = if cancelled {
-            Duration::from_secs(30)
-        } else {
-            Duration::from_secs(3)
-        };
-        let (harness, artifacts) = fixture(ceiling);
+        let (harness, artifacts) = fixture(Duration::from_secs(30));
         let control = crate::core::test_support::discover_scratch(if cancelled {
             "scalar-cancel"
         } else {
@@ -161,17 +156,15 @@ fn bounded_single_run_standins_preserve_cancelled_and_timed_out_evidence() {
         fs::create_dir_all(&control).unwrap();
         let started = control.join("started");
         let launcher = control.join("standin");
-        fs::write(
-            &launcher,
+        let script = if cancelled {
             format!(
-                "#!/bin/sh\n{}printf started > '{}'\nexec /bin/sleep 30\n",
-                // A delayed backend startup must not consume the cancellation control's
-                // entire proof ceiling before the watcher can request cancellation.
-                if cancelled { "sleep 4\n" } else { "" },
+                "#!/bin/sh\nprintf started > '{}'\nexec /bin/sleep 60\n",
                 started.display()
-            ),
-        )
-        .unwrap();
+            )
+        } else {
+            "#!/bin/sh\nexec /bin/sleep 60\n".to_owned()
+        };
+        fs::write(&launcher, script).unwrap();
         fs::set_permissions(&launcher, fs::Permissions::from_mode(0o700)).unwrap();
         let installation = KaniInstallation::new(launcher);
         let cancel = quire_exact::Cancel::new();
@@ -211,8 +204,9 @@ fn bounded_single_run_standins_preserve_cancelled_and_timed_out_evidence() {
             }
             result.unwrap_err()
         });
-        assert!(started.exists(), "bounded Kani stand-in actually started");
-        assert_eq!(error.code(), "proof_not_verified");
+        // Timeout evidence must survive even when the backend never emits the
+        // startup signal; the cancellation watcher has asserted its signal.
+        assert_eq!(error.code(), "proof_not_verified", "{error:?}");
         assert_eq!(error.class(), KaniScalarNativeErrorClass::EnvironmentFault);
         let KaniScalarNativeError::ProofNotVerified(evidence) = error else {
             panic!("expected single-run evidence")

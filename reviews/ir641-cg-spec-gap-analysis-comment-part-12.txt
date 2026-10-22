@@ -1,0 +1,703 @@
+<!-- reviewer repo=agent-ix/quire-contract-codegen visibility=public quoin=0.28.4 module=spec-artifacts-process@b82e42e893612b4b4ee94127714b4577ee893502 id=SR-15325 method=gap-analysis lang=spec pr=quire-contract-codegen#502 model=unavailable run=23ce763a-e82d-46ed-97f5-512b2a58c66f part=12 -->
+
+SR-15325 full repository gap review: FAIL (299 untagged criteria + four inherited annotation defects). Partition 12 of 12. Linear refused the complete 702123-character body: limit 100000 characters. This partition reports only the units and findings below; all partitions collectively equal the single unchanged validated SR. A clean partition does not change the overall FAIL. New four PLANNED Test criteria remain IR-641 coding work; inherited 295+four annotations are handed to IR-878 comment 93895fc0. No consumer implementation or passing committed-lock baseline is claimed.
+
++++ [reviewer data]
+
+```yaml
+clean: false
+scope:
+- id: FR-022-AC-29
+  path: spec/routed/functional/FR-022-routed-generation.md
+  role: examined
+  excerpt: 'Given an admitted package whose complete lowering sequence has bound driver items at indexes 0 and 2
+    and an excluded accounting-only position at index 1, a routed item with `request_index` 1 and the excluded position''s
+    exact `node_id` refuses the whole call as `ExcludedDriverIndex { request_index: 1, node_id }` before any generation
+    arm, oracle or harness. The same routed backend and descriptor at indexes 0 and 2 remain valid controls, and
+    CG never substitutes an envelope position or the next bound item''s selection for index 1.'
+- id: FR-026-AC-1
+  path: spec/routed/functional/FR-026-backend-adapter-contract.md
+  role: examined
+  excerpt: The Kani adapter implements the adapter trait, and a function generic over that trait reaches the Kani
+    adapter's generation arm, execution, transcript parser and witness renderer through it.
+- id: FR-026-AC-4
+  path: spec/routed/functional/FR-026-backend-adapter-contract.md
+  role: examined
+  excerpt: The execution evidence type is an associated type of the adapter trait, and the Kani adapter's is `KaniExecutionEvidence`.
+- id: FR-026-AC-5
+  path: spec/routed/functional/FR-026-backend-adapter-contract.md
+  role: examined
+  excerpt: PLANNED (IR-629). `Process(id)` has no CG adapter trait implementation or CG execution path; an inspection
+    of all adapter implementations and execution dispatch arms finds no process arm.
+- id: FR-002-AC-1
+  path: spec/strategy/functional/FR-002-tristate-proptest.md
+  role: examined
+  excerpt: Rejected inputs remain distinct from passing cases in generated reports.
+- id: FR-002-AC-2
+  path: spec/strategy/functional/FR-002-tristate-proptest.md
+  role: examined
+  excerpt: Boundary strategies exercise immediately inside and outside supported constraints.
+- id: FR-002-AC-3
+  path: spec/strategy/functional/FR-002-tristate-proptest.md
+  role: examined
+  excerpt: Supported correlated constraints do not rely on improbable filtering.
+- id: FR-002-AC-4
+  path: spec/strategy/functional/FR-002-tristate-proptest.md
+  role: examined
+  excerpt: Shrinking preserves generated constraints or records a residual rejection.
+- id: FR-002-AC-5
+  path: spec/strategy/functional/FR-002-tristate-proptest.md
+  role: examined
+  excerpt: The generated campaign runner owns execution, explicit-discard accounting, and conclusion, returns a
+    typed terminal result, and rejects campaigns below either configured coverage floor or above the explicit-discard
+    ceiling; exhausted searches retain their reason and any missed floor without becoming a completed floor failure.
+- id: FR-002-AC-6
+  path: spec/strategy/functional/FR-002-tristate-proptest.md
+  role: examined
+  excerpt: Integer and generated Boolean harness campaign cases bind exact values to executable accepted/rejected
+    expectations; enum cases execute an all-admitted membership expectation.
+- id: FR-002-AC-7
+  path: spec/strategy/functional/FR-002-tristate-proptest.md
+  role: examined
+  excerpt: PLANNED (IR-815). For one precondition and one postcondition selected from an admitted `CheckedPackageV2`,
+    the generated harness embeds each selected clause's FR-014 V2 clause oracle.
+- id: FR-002-AC-8
+  path: spec/strategy/functional/FR-002-tristate-proptest.md
+  role: examined
+  excerpt: PLANNED (IR-815). In the V2 harness, an instrumented snapshot, precondition oracle, subject and postcondition
+    oracle record that the snapshot precedes precondition evaluation, which precedes subject invocation, which precedes
+    postcondition evaluation, for every case.
+- id: FR-002-AC-9
+  path: spec/strategy/functional/FR-002-tristate-proptest.md
+  role: examined
+  excerpt: PLANNED (IR-815). Source inspection shows the V2 harness generator opens a `CheckedPackageV2` body only
+    through the `core/ir/` layer of AD-004, and names no `BoundPackage`, `ClauseRef`, `quire_contract_model::TypedExpression`
+    or `oracle::boolean_v1` item, each of which today's V1 harness names or uses.
+- id: FR-002-AC-10
+  path: spec/strategy/functional/FR-002-tristate-proptest.md
+  role: examined
+  excerpt: PLANNED (IR-815). A selected clause identity that is unknown, of the wrong clause kind, or the same for
+    both selections yields a typed, located diagnostic naming the selection and no artifact.
+- id: FR-002-AC-11
+  path: spec/strategy/functional/FR-002-tristate-proptest.md
+  role: examined
+  excerpt: PLANNED (IR-815). A selected clause body outside the FR-014-AC-38 shape yields a structured unsupported
+    diagnostic and no artifact, and the generator emits no filtering strategy for it.
+- id: FR-002-AC-12
+  path: spec/strategy/functional/FR-002-tristate-proptest.md
+  role: examined
+  excerpt: PLANNED (IR-815). Repeated V2 harness generation for the same admitted package, selected clause identities
+    and campaign policy is byte-identical. The requirement and revision identity that the generated header, `RequirementId`
+    and symbols carry is not an input here and waits on OQ-1.
+- id: FR-002-AC-13
+  path: spec/strategy/functional/FR-002-tristate-proptest.md
+  role: examined
+  excerpt: PLANNED (IR-815). A seeded V2 case on which both oracles complete true runs the subject once and is a
+    pass.
+- id: FR-002-AC-14
+  path: spec/strategy/functional/FR-002-tristate-proptest.md
+  role: examined
+  excerpt: PLANNED (IR-815). A seeded V2 case on which the precondition oracle completes false is a rejected precondition
+    and the subject is not invoked.
+- id: FR-002-AC-15
+  path: spec/strategy/functional/FR-002-tristate-proptest.md
+  role: examined
+  excerpt: PLANNED (IR-815). A seeded V2 case on which the precondition oracle completes true and the postcondition
+    oracle completes false is a failed postcondition.
+- id: FR-002-AC-16
+  path: spec/strategy/functional/FR-002-tristate-proptest.md
+  role: examined
+  excerpt: PLANNED (IR-815). A seeded V2 case on which the precondition or postcondition oracle returns an outcome
+    that does not complete (stopped or undefined) is reported as a non-completed case retaining the oracle's cause,
+    is not counted as a pass.
+- id: FR-002-AC-17
+  path: spec/strategy/functional/FR-002-tristate-proptest.md
+  role: examined
+  excerpt: PLANNED (IR-815). A seeded V2 case on which the precondition oracle returns an outcome that does not
+    complete does not invoke the subject.
+- id: FR-002-AC-18
+  path: spec/strategy/functional/FR-002-tristate-proptest.md
+  role: examined
+  excerpt: PLANNED (IR-815). A seeded V2 case on which the precondition oracle returns an outcome that does not
+    complete does not evaluate the postcondition oracle.
+- id: FR-008-AC-1
+  path: spec/strategy/functional/FR-008-bound-domain-strategy-admission.md
+  role: examined
+  excerpt: A fresh QSL-produced, IR-admitted ConfigVersion V2 postcondition with direct `self.versionNumber = pre(self.versionNumber)`
+    yields two `State` census entries in authored order, `Post` then `Pre`, each 0..=1000, with the same project
+    id, `quire.op.integer.eq`, and the selected clause and authentic claim retained. The let-bound alias form yields
+    a typed operand refusal and no bundle.
+- id: FR-008-AC-2
+  path: spec/strategy/functional/FR-008-bound-domain-strategy-admission.md
+  role: examined
+  excerpt: An IR-admitted V2 `amount < 7` invariant with a typed current read of range 0..=1000 yields operator
+    `Less`, primary `amount`, literal 7 and that inclusive census domain. Reversing the two authored operands preserves
+    the reversed positions and corresponding operator semantics.
+- id: FR-008-AC-3
+  path: spec/strategy/functional/FR-008-bound-domain-strategy-admission.md
+  role: examined
+  excerpt: A valid selected comparison generates despite a comparison-oracle-refused sibling claim in the same package;
+    requesting the refused claim returns its typed selected-claim cause and locus with no bundle. An oracle-construction
+    failure for the selected claim returns no bundle. Each of integer.eq/ne/lt/le/gt/ge has an executable selected-claim
+    comparison oracle whose result agrees with the ordered relation and generated tags. Arithmetic, alias, Boolean
+    and literal-only shapes refuse at their own structural loci.
+- id: FR-008-AC-4
+  path: spec/strategy/functional/FR-008-bound-domain-strategy-admission.md
+  role: examined
+  excerpt: Unknown clause, absent claim, unsupported clause kind and malformed comparison report distinct typed
+    causes in the stated first-defect order. Diagnostics carry selected clause and claim, structural path and reached
+    child id when available, without claiming a unique child source region.
+- id: FR-008-AC-5
+  path: spec/strategy/functional/FR-008-bound-domain-strategy-admission.md
+  role: examined
+  excerpt: A request with several applicable defects returns the first only. Every refusal returns zero artifacts;
+    a successful request returns the complete source, census and runner bundle.
+- id: FR-008-AC-6
+  path: spec/strategy/functional/FR-008-bound-domain-strategy-admission.md
+  role: examined
+  excerpt: Either read endpoint or a literal at i64::MIN - 1, i64::MAX + 1, i128::MIN or i128::MAX refuses `UnsupportedRelation`
+    at that operand without narrowing. Two individually i64-representable reads with unequal ranges also refuse;
+    equal ranges admit when other rules hold.
+- id: FR-008-AC-7
+  path: spec/strategy/functional/FR-008-bound-domain-strategy-admission.md
+  role: examined
+  excerpt: PLANNED. Beyond the per-operator agreement stated in FR-008-AC-3, which this criterion does not repeat,
+    for each of integer.eq, ne, lt, le, gt and ge the selected claim's V2 comparison oracle returns, for every valuation
+    of a 1- to 4-member domain (read-versus-read and read-versus-literal, the literal at each member and in either
+    authored position), the result of an independently evaluated ordered relation.
+- id: FR-008-AC-8
+  path: spec/strategy/functional/FR-008-bound-domain-strategy-admission.md
+  role: examined
+  excerpt: PLANNED. The V2 comparison oracle takes only the accessor's typed result for the selected claim, and
+    no V1 bound oracle or `BoundPackage` is an input to it.
+- id: FR-008-AC-9
+  path: spec/strategy/functional/FR-008-bound-domain-strategy-admission.md
+  role: examined
+  excerpt: PLANNED. A CG integration test calls IR's public clause-context accessor through its public API only,
+    and the generator's census, ordered relation and diagnostics equal the accessor's operator, ordinals, provenance,
+    observation, bounds and refusal fields for each closed operator, provenance and observation variant.
+- id: FR-008-AC-10
+  path: spec/strategy/functional/FR-008-bound-domain-strategy-admission.md
+  role: examined
+  excerpt: PLANNED. Source inspection shows the generator reads no `CheckedSemanticNodeV2.body` field and decodes
+    no body JSON (the verification of FR-008-CON-1).
+- id: FR-008-CON-1
+  path: spec/strategy/functional/FR-008-bound-domain-strategy-admission.md
+  role: examined
+  excerpt: The generator SHALL read V2 operand identity, provenance, observation, operator and bounds only through
+    IR's public typed accessor. A private decoder or copied schema is forbidden.
+- id: FR-008-CON-2
+  path: spec/strategy/functional/FR-008-bound-domain-strategy-admission.md
+  role: examined
+  excerpt: Admission SHALL finish before any strategy, population, census or runner source is published; a refusal
+    returns no artifact or partial bundle.
+- id: FR-008-CON-3
+  path: spec/strategy/functional/FR-008-bound-domain-strategy-admission.md
+  role: examined
+  excerpt: The generator SHALL check each read endpoint for i64 representability before constructing the shared-domain
+    relation.
+- id: FR-008-CON-4
+  path: spec/strategy/functional/FR-008-bound-domain-strategy-admission.md
+  role: examined
+  excerpt: The generator SHALL check each comparison literal for i64 representability before conversion.
+- id: FR-009-AC-1
+  path: spec/strategy/functional/FR-009-constructive-correlated-populations.md
+  role: examined
+  excerpt: "For the QSL-produced, IR-admitted V2 `VersionUnchanged` selected claim (FR-008-AC-1) over 0..=1000,\
+    \ every `Satisfying` case has post = pre, every `Violating` case has post \u2260 pre, and every value lies in\
+    \ 0..=1000."
+- id: FR-009-AC-2
+  path: spec/strategy/functional/FR-009-constructive-correlated-populations.md
+  role: examined
+  excerpt: 'For every V2 comparison operator, every domain of 1, 2, 3, and 4 members, and both a two-read relation
+    and a read-versus-literal relation with the literal at each domain member, the generatable set of each population
+    equals the independently enumerated satisfying or violating set: none missing, none extra. An empty side is
+    refused with `EmptyPopulation` and never produces an empty strategy.'
+- id: FR-009-AC-3
+  path: spec/strategy/functional/FR-009-constructive-correlated-populations.md
+  role: examined
+  excerpt: Generated population source contains no filter, assume, reject, or discard call, and a seeded 10,000-case
+    run of each population records zero discards and zero proptest global rejects.
+- id: FR-009-AC-4
+  path: spec/strategy/functional/FR-009-constructive-correlated-populations.md
+  role: examined
+  excerpt: For `amount < 0` over 0..=1000, `Satisfying` and `Broad` are refused with `EmptyPopulation` naming `Satisfying`,
+    and `Violating` generates; for `amount >= 0`, `Violating` and `Broad` are refused naming `Violating`; no refused
+    request emits an artifact.
+- id: FR-009-AC-5
+  path: spec/strategy/functional/FR-009-constructive-correlated-populations.md
+  role: examined
+  excerpt: A domain of `i64::MIN..=i64::MAX` with `NotEqual`, `Less`, and `Equal` compiles as generated Rust and
+    generates 10,000 seeded cases without overflow or panic, every case in domain and on its side.
+- id: FR-009-AC-6
+  path: spec/strategy/functional/FR-009-constructive-correlated-populations.md
+  role: examined
+  excerpt: Repeated generation for the same `CheckedPackageV2`, selected clause id, authentic claim occurrence,
+    and population is byte-identical.
+- id: FR-009-AC-7
+  path: spec/strategy/functional/FR-009-constructive-correlated-populations.md
+  role: examined
+  excerpt: PLANNED. For each noncommutative operator, a comparison written with the literal in the first position
+    produces the same satisfying and violating sets as its mirrored read-first form, enumerated independently.
+- id: FR-010-AC-1
+  path: spec/strategy/functional/FR-010-domain-boundary-campaigns.md
+  role: examined
+  excerpt: For `amount < 7` over 0..=1000, the in-domain census is exactly [0 Holds, 1 Holds, 6 Holds, 7 Violated,
+    8 Violated, 999 Violated, 1000 Violated], and the out-of-domain array is exactly [-1, 1001]; for `amount < 1`,
+    where the literal edges coincide with the domain edges, the in-domain census is exactly [0 Holds, 1 Violated,
+    2 Violated, 999 Violated, 1000 Violated] with no duplicates, and the out-of-domain array is exactly [-1, 1001].
+- id: FR-010-AC-2
+  path: spec/strategy/functional/FR-010-domain-boundary-campaigns.md
+  role: examined
+  excerpt: 'For the QSL-produced, IR-admitted V2 `VersionUnchanged` selected claim (primary post, partner pre; FR-008-AC-1)
+    over 0..=1000, the in-domain census is exactly the 10 pairs (post, pre): (0,0 H), (0,1 V), (1,0 V), (1,1 H),
+    (1,2 V), (999,998 V), (999,999 H), (999,1000 V), (1000,999 V), (1000,1000 H); the out-of-domain array is exactly
+    the 10 pairs (-1,0), (0,-1), (0,1001), (1,-1), (1,1001), (999,-1), (999,1001), (1000,-1), (1000,1001), (1001,1000).'
+- id: FR-010-AC-3
+  path: spec/strategy/functional/FR-010-domain-boundary-campaigns.md
+  role: examined
+  excerpt: A selected claim whose accessor domain is exactly `i64::MIN..=i64::MAX` (representable under FR-008-AC-6)
+    compiles as generated Rust without overflow or panic, its out-of-domain array holds no case for either outer
+    edge, and its unrepresentable-edge array lists both.
+- id: FR-010-AC-4
+  path: spec/strategy/functional/FR-010-domain-boundary-campaigns.md
+  role: examined
+  excerpt: '`amount <= 1000` over 0..=1000 refuses `Boundary` with `UnsupportedCampaignConstraint` and emits no
+    artifact for that request, while its `Satisfying` bundle still carries the out-of-domain array [-1, 1001].'
+- id: FR-010-AC-5
+  path: spec/strategy/functional/FR-010-domain-boundary-campaigns.md
+  role: examined
+  excerpt: Every in-domain census tag equals an independent evaluation of the relation, every out-of-domain case
+    has at least one value outside the domain, and repeated generation produces byte-identical arrays.
+- id: FR-011-AC-1
+  path: spec/strategy/functional/FR-011-numeric-harness-campaigns.md
+  role: examined
+  excerpt: Over V2 selected claims, a QSL-produced `VersionUnchanged` (`Postcondition`) `Broad` campaign records
+    `Holds` cases as `Passed` and `Violated` cases as `FailedPostcondition` and passes; a `Precondition` fixture
+    records `Violated` cases as `RejectedPrecondition` in `rejected` and passes with zero proptest global rejects;
+    the `amount < 7` `Invariant` records `Violated` cases as `FailedPostcondition`.
+- id: FR-011-AC-2
+  path: spec/strategy/functional/FR-011-numeric-harness-campaigns.md
+  role: examined
+  excerpt: A V2 comparison oracle deliberately swapped for its negation fails each campaign with `ConformanceMismatch`
+    carrying the case values, expected tag, and observed verdict kind.
+- id: FR-011-AC-3
+  path: spec/strategy/functional/FR-011-numeric-harness-campaigns.md
+  role: examined
+  excerpt: The census runner evaluates each of the 10 `VersionUnchanged` in-domain census cases exactly once, in
+    census order, and evaluates none of the out-of-domain cases.
+- id: FR-011-AC-4
+  path: spec/strategy/functional/FR-011-numeric-harness-campaigns.md
+  role: examined
+  excerpt: A campaign over a report seeded with fixed prior counts returns `discard_rate() == Some((discarded, attempted))`
+    and `rejection_rate() == Some((rejected, attempted))` with those exact values, a fresh zero-attempt summary
+    returns `None` for both, and a runtime snapshot whose counters are `at_limit` returns `None` for both through
+    the generated snapshot-summary operation.
+- id: FR-011-AC-5
+  path: spec/strategy/functional/FR-011-numeric-harness-campaigns.md
+  role: examined
+  excerpt: A fresh 10,000-case `Broad` campaign for each fixture returns `discard_rate() == Some((0, attempted))`
+    with `attempted > 0`, passes a zero discard ceiling, and does not end `Exhausted`.
+- id: FR-012-AC-1
+  path: spec/strategy/functional/FR-012-constraint-preserving-shrinking.md
+  role: examined
+  excerpt: For every V2 comparison operator and every domain of 1 to 4 members from FR-009-AC-2, an exhaustive walk
+    of every valid `simplify` and `complicate` path of `Satisfying`, `Violating`, and `Broad` value trees visits
+    only in-domain candidates that keep their original tag; a valid path calls `complicate` only after at least
+    one successful `simplify`.
+- id: FR-012-AC-2
+  path: spec/strategy/functional/FR-012-constraint-preserving-shrinking.md
+  role: examined
+  excerpt: For 1,000 seeded `VersionUnchanged` value trees of each population over 0..=1000, every candidate on
+    the greedy shrink path stays in domain and keeps its tag.
+- id: FR-012-AC-3
+  path: spec/strategy/functional/FR-012-constraint-preserving-shrinking.md
+  role: examined
+  excerpt: A `Violating` V2 `VersionUnchanged` campaign whose comparison oracle is replaced by `post == pre
+- id: FR-012-AC-4
+  path: spec/strategy/functional/FR-012-constraint-preserving-shrinking.md
+  role: examined
+  excerpt: After a shrinking campaign, `attempted` equals the number of oracle evaluations the runner performed,
+    including shrink replays.
+- id: FR-013-AC-1
+  path: spec/strategy/functional/FR-013-it010-consumable-output.md
+  role: examined
+  excerpt: A consumer fixture crate that includes the generated Rust source and whose manifest depends only on `proptest`
+    and `quire-contract-runtime` compiles under denied warnings, draws `VersionUnchanged` cases, and reads the selected
+    `versionNumber` StateField at `"pre"` and `"post"` through the generated typed-identity, path and observation
+    constants.
+- id: FR-013-AC-2
+  path: spec/strategy/functional/FR-013-it010-consumable-output.md
+  role: examined
+  excerpt: The generated bundle contains no serialized case, census, or summary file, and the change adds no file
+    under `schemas/`.
+- id: FR-013-AC-4
+  path: spec/strategy/functional/FR-013-it010-consumable-output.md
+  role: examined
+  excerpt: The generated Rust header carries the selected checked clause id and authentic claim occurrence, and
+    generating two distinct selected claims from one package produces different headers and artifact paths.
+- id: FR-013-AC-5
+  path: spec/strategy/functional/FR-013-it010-consumable-output.md
+  role: examined
+  excerpt: interface-001 `bound_strategy_slice.consumer` records the case, census, and runner surface a downstream
+    consumer compiles against.
+- id: NFR-004-AC-1
+  path: spec/strategy/non-functional/NFR-004-constructive-generation-efficiency.md
+  role: examined
+  excerpt: Fresh 10,000-case and 256-case campaigns of every population over the V2 selected claims `VersionUnchanged`,
+    `amount < 7`, and a `Precondition` fixture record zero discards, zero proptest global rejects, and no `Exhausted`
+    conclusion.
+- id: NFR-004-AC-2
+  path: spec/strategy/non-functional/NFR-004-constructive-generation-efficiency.md
+  role: examined
+  excerpt: For every admitted fixture in TC-019, the in-domain census plus out-of-domain array holds at most 20
+    cases.
+- id: NFR-004-M-1
+  path: spec/strategy/non-functional/NFR-004-constructive-generation-efficiency.md
+  role: examined
+  excerpt: Discarded / attempted on a fresh 10,000-case campaign per population and fixture
+- id: NFR-004-M-2
+  path: spec/strategy/non-functional/NFR-004-constructive-generation-efficiency.md
+  role: examined
+  excerpt: Proptest global rejects on the same campaigns
+- id: NFR-004-M-3
+  path: spec/strategy/non-functional/NFR-004-constructive-generation-efficiency.md
+  role: examined
+  excerpt: Campaigns ending `Exhausted` on the same campaigns, and on 256-case default-config campaigns
+- id: NFR-004-M-4
+  path: spec/strategy/non-functional/NFR-004-constructive-generation-efficiency.md
+  role: examined
+  excerpt: In-domain plus out-of-domain census cases per admitted clause
+- id: FR-043
+  path: spec/core/functional/FR-043-owned-lock-coherence-gate.md
+  role: examined
+  excerpt: 'When a developer runs `make deny`, quire-contract-codegen shall execute the released
+
+    `quire check-lock Cargo.lock` command and propagate its failure to Make.'
+- id: spec/spec.md
+  path: spec/spec.md
+  role: examined
+  excerpt: '[FR-043](core/functional/FR-043-owned-lock-coherence-gate.md) defines planned consumption of the single
+    owned CLI lock
+
+    coherence gate under IR-641. It does not claim consumer implementation or qualification.'
+- id: FR-027
+  path: quire-cli/spec/functional/FR-027-check-lock-subcommand.md
+  role: context_only
+  excerpt: 'The distributed `quire` executable SHALL expose `quire check-lock <Cargo.lock>...`
+
+    as the single owned developer gate for agent-ix Git dependency coherence.'
+- id: src/routed/contract_package_tests.rs:1575
+  path: src/routed/contract_package_tests.rs
+  role: examined
+  excerpt: '"FR-049-AC-1",'
+- id: src/routed/contract_package_tests.rs:1655
+  path: src/routed/contract_package_tests.rs
+  role: examined
+  excerpt: '"FR-049-AC-1",'
+- id: src/routed/contract_package_tests.rs:1656
+  path: src/routed/contract_package_tests.rs
+  role: examined
+  excerpt: '"FR-049-AC-5",'
+- id: tests/it/oracle_generation.rs:532
+  path: tests/it/oracle_generation.rs
+  role: examined
+  excerpt: '// Trace: AD-004 L-9, TC-001. RFC 8785 orders `clauseId` before `role`, unlike the'
+findings:
+- fnd: FND-280
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-026-AC-1
+  related_ids: []
+  path: spec/routed/functional/FR-026-backend-adapter-contract.md
+  lines: '60'
+  excerpt: The Kani adapter implements the adapter trait, and a function generic over that trait reaches the Kani
+    adapter's generation arm, execution, transcript parser and witness renderer through it.
+  finding: 'FR-026-AC-1 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-281
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-026-AC-4
+  related_ids: []
+  path: spec/routed/functional/FR-026-backend-adapter-contract.md
+  lines: '61'
+  excerpt: The execution evidence type is an associated type of the adapter trait, and the Kani adapter's is `KaniExecutionEvidence`.
+  finding: 'FR-026-AC-4 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-282
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-002-AC-7
+  related_ids: []
+  path: spec/strategy/functional/FR-002-tristate-proptest.md
+  lines: '91'
+  excerpt: PLANNED (IR-815). For one precondition and one postcondition selected from an admitted `CheckedPackageV2`,
+    the generated harness embeds each selected clause's FR-014 V2 clause oracle.
+  finding: 'FR-002-AC-7 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-283
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-002-AC-8
+  related_ids: []
+  path: spec/strategy/functional/FR-002-tristate-proptest.md
+  lines: '92'
+  excerpt: PLANNED (IR-815). In the V2 harness, an instrumented snapshot, precondition oracle, subject and postcondition
+    oracle record that the snapshot precedes precondition evaluation, which precedes subject invocation, which precedes
+    postcondition evaluation, for every case.
+  finding: 'FR-002-AC-8 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-284
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-002-AC-10
+  related_ids: []
+  path: spec/strategy/functional/FR-002-tristate-proptest.md
+  lines: '94'
+  excerpt: PLANNED (IR-815). A selected clause identity that is unknown, of the wrong clause kind, or the same for
+    both selections yields a typed, located diagnostic naming the selection and no artifact.
+  finding: 'FR-002-AC-10 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-285
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-002-AC-11
+  related_ids: []
+  path: spec/strategy/functional/FR-002-tristate-proptest.md
+  lines: '95'
+  excerpt: PLANNED (IR-815). A selected clause body outside the FR-014-AC-38 shape yields a structured unsupported
+    diagnostic and no artifact, and the generator emits no filtering strategy for it.
+  finding: 'FR-002-AC-11 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-286
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-002-AC-12
+  related_ids: []
+  path: spec/strategy/functional/FR-002-tristate-proptest.md
+  lines: '96'
+  excerpt: PLANNED (IR-815). Repeated V2 harness generation for the same admitted package, selected clause identities
+    and campaign policy is byte-identical. The requirement and revision identity that the generated header, `RequirementId`
+    and symbols carry is not an input here and waits on OQ-1.
+  finding: 'FR-002-AC-12 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-287
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-002-AC-13
+  related_ids: []
+  path: spec/strategy/functional/FR-002-tristate-proptest.md
+  lines: '97'
+  excerpt: PLANNED (IR-815). A seeded V2 case on which both oracles complete true runs the subject once and is a
+    pass.
+  finding: 'FR-002-AC-13 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-288
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-002-AC-14
+  related_ids: []
+  path: spec/strategy/functional/FR-002-tristate-proptest.md
+  lines: '98'
+  excerpt: PLANNED (IR-815). A seeded V2 case on which the precondition oracle completes false is a rejected precondition
+    and the subject is not invoked.
+  finding: 'FR-002-AC-14 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-289
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-002-AC-15
+  related_ids: []
+  path: spec/strategy/functional/FR-002-tristate-proptest.md
+  lines: '99'
+  excerpt: PLANNED (IR-815). A seeded V2 case on which the precondition oracle completes true and the postcondition
+    oracle completes false is a failed postcondition.
+  finding: 'FR-002-AC-15 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-290
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-002-AC-16
+  related_ids: []
+  path: spec/strategy/functional/FR-002-tristate-proptest.md
+  lines: '100'
+  excerpt: PLANNED (IR-815). A seeded V2 case on which the precondition or postcondition oracle returns an outcome
+    that does not complete (stopped or undefined) is reported as a non-completed case retaining the oracle's cause,
+    is not counted as a pass.
+  finding: 'FR-002-AC-16 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-291
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-002-AC-17
+  related_ids: []
+  path: spec/strategy/functional/FR-002-tristate-proptest.md
+  lines: '101'
+  excerpt: PLANNED (IR-815). A seeded V2 case on which the precondition oracle returns an outcome that does not
+    complete does not invoke the subject.
+  finding: 'FR-002-AC-17 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-292
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-002-AC-18
+  related_ids: []
+  path: spec/strategy/functional/FR-002-tristate-proptest.md
+  lines: '102'
+  excerpt: PLANNED (IR-815). A seeded V2 case on which the precondition oracle returns an outcome that does not
+    complete does not evaluate the postcondition oracle.
+  finding: 'FR-002-AC-18 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-293
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-008-AC-7
+  related_ids: []
+  path: spec/strategy/functional/FR-008-bound-domain-strategy-admission.md
+  lines: '123'
+  excerpt: PLANNED. Beyond the per-operator agreement stated in FR-008-AC-3, which this criterion does not repeat,
+    for each of integer.eq, ne, lt, le, gt and ge the selected claim's V2 comparison oracle returns, for every valuation
+    of a 1- to 4-member domain (read-versus-read and read-versus-literal, the literal at each member and in either
+    authored position), the result of an independently evaluated ordered relation.
+  finding: 'FR-008-AC-7 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-294
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-008-AC-9
+  related_ids: []
+  path: spec/strategy/functional/FR-008-bound-domain-strategy-admission.md
+  lines: '125'
+  excerpt: PLANNED. A CG integration test calls IR's public clause-context accessor through its public API only,
+    and the generator's census, ordered relation and diagnostics equal the accessor's operator, ordinals, provenance,
+    observation, bounds and refusal fields for each closed operator, provenance and observation variant.
+  finding: 'FR-008-AC-9 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-295
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-009-AC-7
+  related_ids: []
+  path: spec/strategy/functional/FR-009-constructive-correlated-populations.md
+  lines: '77'
+  excerpt: PLANNED. For each noncommutative operator, a comparison written with the literal in the first position
+    produces the same satisfying and violating sets as its mirrored read-first form, enumerated independently.
+  finding: 'FR-009-AC-7 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-296
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: NFR-004-M-1
+  related_ids: []
+  path: spec/strategy/non-functional/NFR-004-constructive-generation-efficiency.md
+  lines: '1'
+  excerpt: Discarded / attempted on a fresh 10,000-case campaign per population and fixture
+  finding: 'NFR-004-M-1 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-297
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: NFR-004-M-2
+  related_ids: []
+  path: spec/strategy/non-functional/NFR-004-constructive-generation-efficiency.md
+  lines: '1'
+  excerpt: Proptest global rejects on the same campaigns
+  finding: 'NFR-004-M-2 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-298
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: NFR-004-M-3
+  related_ids: []
+  path: spec/strategy/non-functional/NFR-004-constructive-generation-efficiency.md
+  lines: '1'
+  excerpt: Campaigns ending `Exhausted` on the same campaigns, and on 256-case default-config campaigns
+  finding: 'NFR-004-M-3 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-299
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: NFR-004-M-4
+  related_ids: []
+  path: spec/strategy/non-functional/NFR-004-constructive-generation-efficiency.md
+  lines: '1'
+  excerpt: In-domain plus out-of-domain census cases per admitted clause
+  finding: 'NFR-004-M-4 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-300
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: other
+  artifact_id: src/routed/contract_package_tests.rs:1575
+  related_ids:
+  - FR-049-AC-1
+  path: src/routed/contract_package_tests.rs
+  lines: '1575'
+  excerpt: '"FR-049-AC-1",'
+  finding: Inherited annotation names FR-049-AC-1 without a local criterion target; remove or correct its criterion
+    claim under IR-878.
+- fnd: FND-301
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: other
+  artifact_id: src/routed/contract_package_tests.rs:1655
+  related_ids:
+  - FR-049-AC-1
+  path: src/routed/contract_package_tests.rs
+  lines: '1655'
+  excerpt: '"FR-049-AC-1",'
+  finding: Inherited annotation names FR-049-AC-1 without a local criterion target; remove or correct its criterion
+    claim under IR-878.
+- fnd: FND-302
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: other
+  artifact_id: src/routed/contract_package_tests.rs:1656
+  related_ids:
+  - FR-049-AC-5
+  path: src/routed/contract_package_tests.rs
+  lines: '1656'
+  excerpt: '"FR-049-AC-5",'
+  finding: Inherited annotation names FR-049-AC-5 without a local criterion target; remove or correct its criterion
+    claim under IR-878.
+- fnd: FND-303
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: other
+  artifact_id: tests/it/oracle_generation.rs:532
+  related_ids:
+  - AD-004
+  path: tests/it/oracle_generation.rs
+  lines: '532'
+  excerpt: '// Trace: AD-004 L-9, TC-001. RFC 8785 orders `clauseId` before `role`, unlike the'
+  finding: Inherited annotation names AD-004 without a local criterion target; remove or correct its criterion claim
+    under IR-878.
+bindings: []
+```
+
++++

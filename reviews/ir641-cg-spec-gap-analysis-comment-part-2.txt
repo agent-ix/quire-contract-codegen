@@ -1,0 +1,850 @@
+<!-- reviewer repo=agent-ix/quire-contract-codegen visibility=public quoin=0.28.4 module=spec-artifacts-process@b82e42e893612b4b4ee94127714b4577ee893502 id=SR-15325 method=gap-analysis lang=spec pr=quire-contract-codegen#502 model=unavailable run=23ce763a-e82d-46ed-97f5-512b2a58c66f part=2 -->
+
+SR-15325 full repository gap review: FAIL (299 untagged criteria + four inherited annotation defects). Partition 2 of 12. Linear refused the complete 702123-character body: limit 100000 characters. This partition reports only the units and findings below; all partitions collectively equal the single unchanged validated SR. A clean partition does not change the overall FAIL. New four PLANNED Test criteria remain IR-641 coding work; inherited 295+four annotations are handed to IR-878 comment 93895fc0. No consumer implementation or passing committed-lock baseline is claimed.
+
++++ [reviewer data]
+
+```yaml
+clean: false
+scope:
+- id: FR-004-AC-16
+  path: spec/evidence/functional/FR-004-vacuity-evidence.md
+  role: examined
+  excerpt: PLANNED (IR-815). The expected clause population and implication counts of the V2 analyzer equal those
+    independently derived from the admitted `CheckedPackageV2` clause bodies.
+- id: FR-004-AC-17
+  path: spec/evidence/functional/FR-004-vacuity-evidence.md
+  role: examined
+  excerpt: PLANNED (IR-815). Source inspection shows the V2 analyzer opens a `CheckedPackageV2` body only through
+    the `core/ir/` layer of AD-004, and names no `BoundPackage` or `ClauseRef`, both of which today's `analyze_bound_coverage`
+    names.
+- id: FR-004-AC-18
+  path: spec/evidence/functional/FR-004-vacuity-evidence.md
+  role: examined
+  excerpt: PLANNED (IR-815). A V2 clause whose generated source map declares an implication count unequal to the
+    count derived from its body yields a structured binding non-success naming the clause and no classification,
+    and is never treated as implication-free.
+- id: FR-004-AC-19
+  path: spec/evidence/functional/FR-004-vacuity-evidence.md
+  role: examined
+  excerpt: PLANNED (IR-815). Over a V2 clause population, a clause whose oracle evaluation was observed, that has
+    at least one implication and for which no expected consequent probe was observed is `vacuous`.
+- id: FR-004-AC-20
+  path: spec/evidence/functional/FR-004-vacuity-evidence.md
+  role: examined
+  excerpt: PLANNED (IR-815). Over a V2 clause population, a mapped clause whose oracle-evaluation region has no
+    positive execution count is `unexecuted`.
+- id: FR-004-AC-21
+  path: spec/evidence/functional/FR-004-vacuity-evidence.md
+  role: examined
+  excerpt: PLANNED (IR-815). Over a V2 clause population, an implication-bearing clause for which some but not all
+    expected consequent probes were observed is `partially_exercised`.
+- id: FR-004-AC-22
+  path: spec/evidence/functional/FR-004-vacuity-evidence.md
+  role: examined
+  excerpt: PLANNED (IR-815). Over a V2 clause population, an implication-bearing clause with every expected consequent
+    probe observed, and an implication-free clause with its evaluation region observed, is `exercised`.
+- id: FR-004-AC-23
+  path: spec/evidence/functional/FR-004-vacuity-evidence.md
+  role: examined
+  excerpt: PLANNED (IR-815). Over a V2 clause population, removing one clause, one consequent probe, one evaluation
+    probe, or every clause from the generated artifacts, each alone, prevents successful analysis.
+- id: FR-004-AC-24
+  path: spec/evidence/functional/FR-004-vacuity-evidence.md
+  role: examined
+  excerpt: PLANNED (IR-815). Over a V2 clause population, each malformed input class of FR-004-AC-5 yields a non-success
+    outcome with no invented classification.
+- id: FR-036-AC-1
+  path: spec/evidence/functional/FR-036-source-obligation-census.md
+  role: examined
+  excerpt: 'A genuine typed fixture with criteria C1/C2, obligations O1/O2/O3, source identities S1/S2, domain D
+    and two production functions in one module exports three obligation inventory entries and exactly four candidate
+    keys for authored tuples (C1,O1,S1,D), (C2,O1,S1,D), (C1,O2,S1,D), (C1,O2,S2,D). O3 has no authored criterion
+    correspondence: it remains an inventory/gap record with no candidate. Missing production correspondence and
+    authored no-function remain distinct gaps on complete candidate keys; a zero-mapping source symbol remains an
+    inventory/gap record. Removing only C2''s relation leaves C'
+- id: FR-036-AC-2
+  path: spec/evidence/functional/FR-036-source-obligation-census.md
+  role: examined
+  excerpt: For the unchanged AC-1 fixture, omitting a result, reporting unsupported or pre-run refusal, retrying
+    and changing method/profile/subject/artifact/run leave the complete obligation inventory, all four criterion-obligation-source-domain
+    keys and mapping-gap records unchanged; enumeration precedes producer invocation. Removing O1 and its authored
+    relations from the authoritative source removes its inventory entry and exactly the two O1 candidate tuples
+    without editing an auxiliary catalog.
+- id: FR-036-AC-3
+  path: spec/evidence/functional/FR-036-source-obligation-census.md
+  role: examined
+  excerpt: Capability facts preserve unsupported capability and reason without artifact/run/outcome; pre-run refusal
+    facts preserve producer/stage/cause separately from actual execution outcomes. An absent decision or observation
+    and an unfamiliar producer state remain distinct, and missing, counterexample, invalid/incomplete, unavailable,
+    timeout, exhaustion, cancellation and inconclusive evidence states survive export.
+- id: FR-036-AC-4
+  path: spec/evidence/functional/FR-036-source-obligation-census.md
+  role: examined
+  excerpt: A matching executed production fact retains its actual typed artifact and run identities separately from
+    attempt identity, exact source/profile/subject/domain/bounds and explicitly bound load-bearing check plus production
+    reachability. Wrong, missing and mismatched artifact/run identity controls preserve the received typed identity
+    or explicit missing reason for IR joining, without inventing or repairing identities. Zero-check, check-location-only,
+    tag-only, LLVM-only and incidental-reachability controls never acquire positive observations by export.
+- id: FR-036-AC-5
+  path: spec/evidence/functional/FR-036-source-obligation-census.md
+  role: examined
+  excerpt: Shadow-only evidence, a narrower effective bound and separately executed sampled native refinement retain
+    distinct subject/scope/assumption observations. Missing refinement stays missing; adding a refinement observation
+    does not change the census or create an unqualified-production-proof flag.
+- id: FR-036-AC-6
+  path: spec/evidence/functional/FR-036-source-obligation-census.md
+  role: examined
+  excerpt: A downstream consumer above CG and IR borrows the public census/fact types over the reviewed neutral
+    correspondence contract without source/transcript/name parsing or a copied schema. Duplicate and artifact/run/source/profile/subject/domain-mismatched
+    result controls survive as separate inspectable records without changing inventories or candidate tuples; repeated
+    identical inputs produce identical ordering.
+- id: FR-036-AC-7
+  path: spec/evidence/functional/FR-036-source-obligation-census.md
+  role: examined
+  excerpt: Missing/incomplete authoritative inputs, a relation targeting a foreign selection and a dangling relation
+    endpoint produce distinct typed census refusals with their offending input/relation and no complete census.
+    A valid absent correspondence remains an explicit obligation/criterion/source-symbol gap, or a production gap
+    on an existing complete candidate key, instead of that global refusal.
+- id: FR-015-AC-1
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: Pre, post, invariant and frame obligations of one contract produce separate harnesses with distinct identities.
+- id: FR-015-AC-2
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: Every harness identity records its model-domain bounds, taken only from IR `bounded_domain` nodes, and
+    its solver and options and unwind bound.
+- id: FR-015-AC-3
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: An unbounded or non-finite obligation is refused with a typed reason and no harness.
+- id: FR-015-AC-4
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: No harness assumption excludes an undefined, refused or incomplete runtime outcome.
+- id: FR-015-AC-5
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: An obligation whose bounds are unsatisfiable is refused with a typed reason and no harness.
+- id: FR-015-AC-6
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: An obligation over an oracle whose operation identity is `caller_declared` is refused with a typed reason
+    and no harness.
+- id: FR-015-AC-7
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: 'Every generated harness contains exactly one non-vacuity cover; a precondition harness covers that the
+    precondition holds within the IR bounds, and a contract harness''s cover stands after the contract call, so
+    a run that satisfies every check without satisfying the cover is not a proof. The cover is the last statement
+    of the harness, after every assertion the harness carries: the state-clause and frame-effect harnesses and the
+    scalar harness place it after their assertions, and a contract harness''s checks are inside the contract call
+    its cover follows. A cover that preceded an assertion would '
+- id: FR-015-AC-8
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: A postcondition or invariant harness emits every package precondition sharing its anchor operation as
+    a `requires` on its generated contract and records each in its identity's embedded oracles; it embeds no other
+    obligation's oracle; and an obligation whose sibling precondition is not a supported item of the same request
+    is refused with a typed reason naming that precondition and no harness.
+- id: FR-015-AC-9
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: "Every harness identity records solver `cadical` and the complete ordered option vector \u2014 function\
+    \ contracts, concrete playback, the exact fully qualified harness, `--exact`, the explicit unwind, the explicit\
+    \ solver, `--output-format regular`, and `--concrete-playback print` \u2014 and no option enabling stubbing\
+    \ is emitted."
+- id: FR-015-AC-10
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: Regeneration from equal inputs is byte-identical, and changing the unwind bound or the customer subject
+    changes the harness identity.
+- id: FR-015-AC-11
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: Every symbolic argument carries an inclusive assumption equal to its IR `bounded_domain` or a literal
+    operand's own value (FR-015-AC-16); for a V2 scalar claim, an operand with the FR-014 inferred application interval
+    uses that interval (FR-015-AC-103). A bounded-integer post-state result is required to lie in the same domain;
+    no generated source carries a `#[kani::unwind]`.
+- id: FR-015-AC-12
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: A request naming no items, more than 256 items, an unparsable subject path, or an unwind bound outside
+    `1..=1024` is refused whole, with no item accounted and no harness exposed.
+- id: FR-015-AC-13
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: An otherwise-supported obligation whose generated harness source exceeds the bounded-resource ceiling
+    is refused with a distinct resource-limit reason naming the generated size, and one that fits the ceiling but
+    fails to parse as Rust is refused with a distinct syntax reason naming the parse error; neither is reported
+    as the internal-invariant render-assembly fallback.
+- id: FR-015-AC-14
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: A scalar-claim item whose graph node carries a tag/form pair this generator does not model as a contract
+    role is refused with a typed reason naming that tag and form, and no harness is emitted; a claim naming a node
+    id absent from the graph entirely is refused rather than accounted as supported with no contract role recorded.
+- id: FR-015-AC-15
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: A scalar-claim item whose claim is a `NoDerivableClaim` refusal yields `unsupported` with the `no_derivable_claim`
+    reason naming the node and the derivation refusal, emits no harness, and does not reject the group.
+- id: FR-015-AC-16
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: 'A scalar harness constrains a literal operand, inline or a reference to a `value` node whose body is
+    a literal, to exactly its own value: `x + 1` over `x: Int[0, 9]` into `Int[0, 10]` has arguments `[0, 9]` and
+    `[1, 1]`.'
+- id: FR-015-AC-17
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: A scalar claim whose literal operand does not fit `i64` (`x + 10^23`) is `unsupported` as `domain_not_representable_in_i64`
+    naming the literal as both endpoints, with no harness.
+- id: FR-015-AC-18
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: 'A scalar claim whose operation over its operand ranges yields no result inside the result range (`x
+    + 100` over `x: Int[0, 9]` into `Int[0, 10]`, reachable `[100, 109]`) is `unsupported` as `result_bound_unreachable`
+    naming both ranges, with no harness.'
+- id: FR-015-AC-19
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: A zero-input transition over one bounded-integer state value verifies for an identity subject and is
+    falsified with a concrete counterexample for a subject that changes the value.
+- id: FR-015-AC-20
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: A harness for a Boolean-connective or bounded-integer comparison claim (`and`, `or`, `not`, `implies`,
+    `eq`, `ne` and the six integer comparisons) embeds its FR-014 oracle byte-identical to the oracle crate's function.
+- id: FR-015-AC-21
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: A precondition that reads a post-state value is refused with a typed reason naming the node, and no harness
+    is emitted.
+- id: FR-015-AC-22
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: A declared proof-dependency census with an empty or duplicate identity, an inconsistent kind, state and
+    path combination, or a non-`Required` kind is refused as a typed invalid input with no harness.
+- id: FR-015-AC-23
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: Every requested item receives exactly one `ObligationDisposition` (`supported`, `requires-bound`, `unsupported`
+    or `invalid-request`), and an item that is not `supported` keeps its source identity and typed reason with no
+    harness and no assumption emitted for it.
+- id: FR-015-AC-24
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: A falsifying in-domain assignment of a plain bounded-integer comparison claim is reported through Kani's
+    concrete playback.
+- id: FR-015-AC-25
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: A valid declared census is folded into the harness identity, readiness is `ready` only when every dependency
+    passed and `incomplete` while any is missing or failed, and proof execution is recorded `not_run`.
+- id: FR-015-AC-26
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: One `postcondition` `state_clause` of an admitted package, whose condition is one integer comparison
+    of the pre and post reads of one field through its first parameter `self`, yields a separate operation-contract
+    harness and frame-effect harness for the operation its anchor names. Each has exactly one non-vacuity cover,
+    and its identity is scoped to the operation, anchor, frame and framed object; the two harnesses of two clauses
+    of one operation are written to different paths.
+- id: FR-015-AC-27
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: The operation-contract harness assumes each ranged state field within the inclusive `i64` endpoints returned
+    by `model_object_fields` for the QSL-emitted selected model declaration (FR-015-AC-77). It draws a present non-clause
+    field with no usable range without an assumption (FR-015-AC-78), asserts the clause's comparison between pre-state
+    and post-state, and refuses a clause whose own field has no usable range. A non-model object or admitted unselected
+    model/object_type body is refused rather than used as a range source (FR-015-AC-78). PLANNED (IR-624).
+- id: FR-015-AC-28
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: The frame-effect harness takes the granted fields from the frame node's `modifies` entries and asserts
+    every other state field the caller names unchanged.
+- id: FR-015-AC-29
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: A state clause that is not a postcondition, whose condition is not one comparison of the pre and post
+    reads of one field through `self` (a literal operand, a negation, two fields, two reads of one side, or a read
+    through another parameter), whose frame creates, deletes or grants a relationship or a foreign field, whose
+    frame grants every state field, whose field the caller's state lacks, or whose clause field declares no integer
+    range, is refused with a typed reason and no harness; a malformed request is refused first.
+- id: FR-015-AC-30
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: With the installed backend, the operation contract verifies for a healthy subject and is falsified, naming
+    the postcondition, for a subject mutated to debit.
+- id: FR-015-AC-31
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: With the installed backend, a frame-allowed effect verifies, a frame-forbidden effect is falsified naming
+    the forbidden field, and regenerating the frame from a package whose `modifies` is mutated to grant nothing
+    falsifies the allowed subject.
+- id: FR-015-AC-32
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: The forbidden frame counterexample, executed natively, reproduces as a frame violation of that field
+    through QSL's `replay_frame`, and the allowed run replays as a respected frame.
+- id: FR-015-AC-33
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: The frame-replay payload's anchor, frame and frame occurrence are the values `qsl_replay::call_site`
+    names for the operation's name.
+- id: FR-015-AC-34
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: The frame-replay envelope's `clause_node` is the payload's frame node and its `occurrence_key` is the
+    payload's frame occurrence.
+- id: FR-015-AC-35
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: An operation the unit names no frame for, whether the domain package declares it or not, is refused by
+    the call site when the frame-replay request is built.
+- id: FR-015-AC-36
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: '`FrameReplay::replay` returns QSL''s `replay_frame` result: a forbidden write settles a reproduced violation
+    naming the written field, and a write the frame grants settles `inconclusive` with no frame witness.'
+- id: FR-015-AC-37
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: 'A scalar function-application harness asserts the oracle''s outcome against the clause''s operation
+    evaluated natively in `i128` over the same symbolic operands, independently of the oracle: `Completed` with
+    exactly that value when it lies in the result bound, `Refused` when it does not, and any other outcome fails.
+    With the installed backend, the healthy oracle verifies and an oracle whose arithmetic is mutated is falsified
+    on that assertion.'
+- id: FR-015-AC-38
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: A V2 clause claim naming a `state`/`state_clause` node of an admitted `CheckedPackageV2` whose `operation.member.clause`
+    is `precondition`, `postcondition` or `invariant` yields one harness of that obligation kind, separate from
+    the harness of every other clause of the package; the kind is read from the node and no caller value changes
+    it. PLANNED (IR-489).
+- id: FR-015-AC-39
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: 'A V2 clause harness draws one nondeterministic value per drawn input: the pre-state of each state field
+    of `self` the body reads, whether bare or under `pre(...)` (the subject''s input state; how it reaches the subject
+    is FR-025''s), and each operation parameter (for a precondition or invariant, each bare state field read, since
+    the state is the one judged). Each carries an inclusive assumption equal to its declared domain: the accessor''s
+    `IntRange` values for a selected model declaration state field (FR-015-AC-77), and the IR `bounded_domain` of
+    a parameter''s type. A non-model or admitted unsel'
+- id: FR-015-AC-40
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: A harness for a V2 clause whose condition, inline or referenced from an admitted Boolean expression node,
+    contains Boolean connectives and bounded-integer comparisons (`and`, `or`, `not`, `implies`, `eq`, `ne` and
+    the six integer comparisons) embeds an FR-014 oracle of that condition byte-identical to the oracle crate's
+    clause-identified function, as FR-015-AC-20 states for a scalar claim; the clause-identified oracle needs FR-014-AC-38.
+    PLANNED (IR-489).
+- id: FR-015-AC-41
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: 'A V2 clause whose body holds integer arithmetic (add, subtract, multiply, negate) as an operand of a
+    comparison lowers, and its harness keeps the independent native assertion of FR-015-AC-37 for each arithmetic
+    subterm (the oracle''s outcome against the operation evaluated natively in `i128` over the same operands, `Refused`
+    assumed away nowhere): a postcondition `amount < 1000 implies amount + 1 <= 1000` over `amount: Int[0, 1000]`
+    yields one contract harness. With the installed backend the unmutated clause verifies with its cover satisfied,
+    and the same clause with `+` mutated to return `left'
+- id: FR-015-AC-42
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: A V2 clause body holding an operator the V2 arm does not support (division, modulo, absolute value, and
+    every operator outside connectives, the six integer comparisons and add, subtract, multiply, negate; those operators
+    are planned scope for a later criterion) is `unsupported`, with a typed reason naming the node and the operator
+    and no harness; a node that is not a modelled clause role, or a node id absent from the package, is refused
+    as FR-015-AC-14 states; no item is skipped silently, and a supported item of the same request is unaffected.
+    PLANNED (IR-489).
+- id: FR-015-AC-43
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: A V2 postcondition harness emits every `precondition` clause node sharing its anchor node as a `requires`
+    and records each in its identity's embedded oracles, embeds no other obligation's oracle, and a postcondition
+    whose sibling precondition is not a supported item of the same request is refused naming that precondition with
+    no harness; a V2 invariant is anchored at an object type, binds `self` alone, and so has no operation precondition
+    to assume. PLANNED (IR-489).
+- id: FR-015-AC-44
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: A census declared on a V2 clause claim with an empty or duplicate dependency identity, an inconsistent
+    kind, state and path combination, or a non-`Required` kind is refused as a typed invalid input with no harness,
+    by the same rules as FR-015-AC-22; the census request and readiness types it uses are not `ProofDependencyGraph`.
+    PLANNED (IR-489).
+- id: FR-015-AC-45
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: A valid census declared on a V2 clause claim is folded into that harness's identity record, readiness
+    is `ready` only when every dependency passed and `incomplete` while any is missing or failed, and proof execution
+    is recorded `not_run`, by the same rules as FR-015-AC-25; in addition, the folded census is independent of the
+    order the caller lists its dependencies. PLANNED (IR-489).
+- id: FR-015-AC-46
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: 'Every V2 clause harness contains exactly one non-vacuity cover, placed after every assumption, after
+    the subject call and after every assertion the harness carries (the last statement, as FR-015-AC-7 states),
+    that states the family''s reachability, as FR-015-AC-7 does: a precondition harness covers that the precondition
+    holds within the bounds; a postcondition harness covers, after the subject call returns, that the requires and
+    the bounds are jointly satisfiable; an invariant harness covers that the drawn state satisfies its domain assumptions.
+    The subject call is the call of the customer subj'
+- id: FR-015-AC-47
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: Regeneration of a V2 clause harness from equal inputs is byte-identical, and changing the unwind bound
+    or the customer subject changes the harness identity record (as FR-015-AC-10 states). PLANNED (IR-489).
+- id: FR-015-AC-48
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: The obligation identity of a V2 clause claim is formed by AD-003 E-1 from the clause node id, its occurrence
+    key, the obligation kind, and the arguments each as parameter node id and declared domain for an operation parameter,
+    as E-1 states (the domain FR-015-AC-39 defines). A state field read is named by its declaring node id and field
+    name, never by a node of its own; that E-1 lists parameters only is an open question for the AD-003 owner and
+    E-1 is not widened here. The source span is excluded; changing any included member changes it, and changing
+    the span, the unwind bound or the subject d
+- id: FR-015-AC-49
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: A V2 invariant claim yields a harness that draws its state and parameters within their declared domains
+    (FR-015-AC-39) and asserts the invariant clause; its subject is the clause itself, with no subject call. Preservation
+    of the invariant under an operation is not specified by this criterion. PLANNED (IR-489).
+- id: FR-015-AC-50
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: '`negotiate` reports an obligation whose scalar refusal is `ExactScalarRefusal::LoweringByteLimitExceeded`
+    or `LoweringLimitUnrecognised` as `Outcome::Unsupported(UnsupportedObligation::OracleRefused { refusal })` with
+    `refusal` equal to the scalar refusal, field for field, and neither is mapped to another `UnsupportedObligation`
+    variant nor to `LoweringWorkExhausted`.'
+- id: FR-015-AC-51
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: Until the final retirement slice (FR-015-AC-111, AD-004 step 4g) deletes the hand-built bounded-corpus
+    path, a finite input validated under a profile selection other than the offered profile's is refused as a typed
+    `InvalidInput` `kani_profile_input_mismatch` result naming the request's source id, with no artifact and no
+    case identity recorded.
+- id: FR-015-AC-52
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: Until the final retirement slice (FR-015-AC-111, AD-004 step 4g) deletes the hand-built bounded-corpus
+    path, the context of every outcome and refusal that path returns (generated-case `Proved` or `Counterexample`,
+    `kani_corpus_dependency_invalid`, `kani_corpus_identity_collision`, a lowering refusal and `kani_profile_input_mismatch`)
+    is the profile selection's revision. The generated-case values are not Kani run verdicts.
+- id: FR-015-AC-53
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: 'Each of the seven harness kinds the generator emits (precondition, V1 contract, scalar, state-clause,
+    frame-effect, V1 bundle and corpus) is subject to the cover-last rule of FR-015-AC-7: exactly one `kani::cover!`,
+    the last statement of the body. What the cover witnesses, by kind: a precondition harness, that the precondition
+    holds within the IR bounds (it asserts nothing); a V1 contract harness (postcondition or invariant), that the
+    requires clause and the IR bounds are jointly satisfiable, after the contract call whose `ensures` is the harness''s
+    check; a scalar harness, that the oracle''s `C'
+- id: FR-015-AC-54
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: A V1 bundle harness (`generate_kani_bundle`, the `proof_for_contract` harness it emits for a requires
+    clause, an ensures clause and the bundle's bounded arguments) ends with exactly one `kani::cover!` after the
+    call of its contract, which witnesses that the requires clause and the argument and result bounds are jointly
+    satisfiable, so a run whose requires clause no bounded argument satisfies never reaches it; the bundle's `ensures`
+    is checked at the contract call, so the cover follows every check the harness carries.
+- id: FR-015-AC-55
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: While a family's corpus arm remains (deleted by FR-015-AC-109 for arithmetic, FR-015-AC-110 for collection,
+    FR-015-AC-111 for graph), a bounded-corpus harness of that family ends with exactly one `kani::cover!` after
+    its `assert!` of the case's oracle, which witnesses that the harness runs to its end past that assertion.
+- id: FR-015-AC-56
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: With the installed backend, a V1 bundle harness whose requires clause some bounded argument satisfies
+    and whose `ensures` holds for every such argument classifies `Verified` (FR-017-AC-4); the same bundle with
+    a requires clause no bounded argument satisfies classifies `CoverUnsatisfied` with its satisfied and total cover
+    counts, never `Verified` and never `Falsified`.
+- id: FR-015-AC-57
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: While its arm remains (FR-015-AC-109 to FR-015-AC-111), with the installed backend, a bounded-corpus
+    harness of each of the arithmetic, graph and collection families whose oracle is true classifies `Verified`,
+    and a graph or collection harness whose oracle is false (an arithmetic case's oracle is always true) classifies
+    `Falsified` carrying the assertion's playback, which until FR-015-AC-111 deletes the corpus replay is replayed
+    through the corpus case's QSL source (`tc_023_real_corpus_playback_replays_through_its_qsl_source`), never `Inconclusive`
+    for lack of a counterexample.
+- id: FR-015-AC-58
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: A test generates a harness through every emitting entry point (the precondition, V1 contract, scalar,
+    state-clause and frame-effect families, `generate_kani_bundle`, and the corpus generator for each of its families
+    whose arm remains, per FR-015-AC-109 to FR-015-AC-111), parses each emitted source, and fails for any function
+    attributed `#[kani::proof]` or `#[kani::proof_for_contract]` whose body does not contain exactly one `kani::cover!`,
+    which must be the last statement, with no assertion after it and no other cover; and a scan of the non-test
+    string literals of `src/` fails when a file othe
+- id: FR-015-AC-59
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: A request of `StateFrame` items in which the first item is refused and later items are supported, requires-bound,
+    unsupported or invalid yields exactly one `ObligationRecord` per item in request order, `kind` `postcondition`
+    for a `contract` item and `frame` for a `frame` item; and each later item's record (disposition and reason)
+    equals the record the same item has in a request holding that item only; a request of three refused items yields
+    three records. The requires-bound item comes from a lowering `RequiresBound` record in that same admitted package,
+    not an object-body member target; remov
+findings:
+- fnd: FND-018
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-004-AC-18
+  related_ids: []
+  path: spec/evidence/functional/FR-004-vacuity-evidence.md
+  lines: '198'
+  excerpt: PLANNED (IR-815). A V2 clause whose generated source map declares an implication count unequal to the
+    count derived from its body yields a structured binding non-success naming the clause and no classification,
+    and is never treated as implication-free.
+  finding: 'FR-004-AC-18 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-019
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-036-AC-1
+  related_ids: []
+  path: spec/evidence/functional/FR-036-source-obligation-census.md
+  lines: '140'
+  excerpt: 'A genuine typed fixture with criteria C1/C2, obligations O1/O2/O3, source identities S1/S2, domain D
+    and two production functions in one module exports three obligation inventory entries and exactly four candidate
+    keys for authored tuples (C1,O1,S1,D), (C2,O1,S1,D), (C1,O2,S1,D), (C1,O2,S2,D). O3 has no authored criterion
+    correspondence: it remains an inventory/gap record with no candidate. Missing production correspondence and
+    authored no-function remain distinct gaps on complete candidate keys; a zero-mapping source symbol remains an
+    inventory/gap record. Removing only C2''s relation leaves C'
+  finding: 'FR-036-AC-1 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-020
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-036-AC-2
+  related_ids: []
+  path: spec/evidence/functional/FR-036-source-obligation-census.md
+  lines: '141'
+  excerpt: For the unchanged AC-1 fixture, omitting a result, reporting unsupported or pre-run refusal, retrying
+    and changing method/profile/subject/artifact/run leave the complete obligation inventory, all four criterion-obligation-source-domain
+    keys and mapping-gap records unchanged; enumeration precedes producer invocation. Removing O1 and its authored
+    relations from the authoritative source removes its inventory entry and exactly the two O1 candidate tuples
+    without editing an auxiliary catalog.
+  finding: 'FR-036-AC-2 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-021
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-036-AC-3
+  related_ids: []
+  path: spec/evidence/functional/FR-036-source-obligation-census.md
+  lines: '142'
+  excerpt: Capability facts preserve unsupported capability and reason without artifact/run/outcome; pre-run refusal
+    facts preserve producer/stage/cause separately from actual execution outcomes. An absent decision or observation
+    and an unfamiliar producer state remain distinct, and missing, counterexample, invalid/incomplete, unavailable,
+    timeout, exhaustion, cancellation and inconclusive evidence states survive export.
+  finding: 'FR-036-AC-3 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-022
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-036-AC-4
+  related_ids: []
+  path: spec/evidence/functional/FR-036-source-obligation-census.md
+  lines: '143'
+  excerpt: A matching executed production fact retains its actual typed artifact and run identities separately from
+    attempt identity, exact source/profile/subject/domain/bounds and explicitly bound load-bearing check plus production
+    reachability. Wrong, missing and mismatched artifact/run identity controls preserve the received typed identity
+    or explicit missing reason for IR joining, without inventing or repairing identities. Zero-check, check-location-only,
+    tag-only, LLVM-only and incidental-reachability controls never acquire positive observations by export.
+  finding: 'FR-036-AC-4 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-023
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-036-AC-5
+  related_ids: []
+  path: spec/evidence/functional/FR-036-source-obligation-census.md
+  lines: '144'
+  excerpt: Shadow-only evidence, a narrower effective bound and separately executed sampled native refinement retain
+    distinct subject/scope/assumption observations. Missing refinement stays missing; adding a refinement observation
+    does not change the census or create an unqualified-production-proof flag.
+  finding: 'FR-036-AC-5 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-024
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-036-AC-6
+  related_ids: []
+  path: spec/evidence/functional/FR-036-source-obligation-census.md
+  lines: '145'
+  excerpt: A downstream consumer above CG and IR borrows the public census/fact types over the reviewed neutral
+    correspondence contract without source/transcript/name parsing or a copied schema. Duplicate and artifact/run/source/profile/subject/domain-mismatched
+    result controls survive as separate inspectable records without changing inventories or candidate tuples; repeated
+    identical inputs produce identical ordering.
+  finding: 'FR-036-AC-6 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-025
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-036-AC-7
+  related_ids: []
+  path: spec/evidence/functional/FR-036-source-obligation-census.md
+  lines: '146'
+  excerpt: Missing/incomplete authoritative inputs, a relation targeting a foreign selection and a dangling relation
+    endpoint produce distinct typed census refusals with their offending input/relation and no complete census.
+    A valid absent correspondence remains an explicit obligation/criterion/source-symbol gap, or a production gap
+    on an existing complete candidate key, instead of that global refusal.
+  finding: 'FR-036-AC-7 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-026
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-015-AC-21
+  related_ids: []
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  lines: '757'
+  excerpt: A precondition that reads a post-state value is refused with a typed reason naming the node, and no harness
+    is emitted.
+  finding: 'FR-015-AC-21 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-027
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-015-AC-22
+  related_ids: []
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  lines: '758'
+  excerpt: A declared proof-dependency census with an empty or duplicate identity, an inconsistent kind, state and
+    path combination, or a non-`Required` kind is refused as a typed invalid input with no harness.
+  finding: 'FR-015-AC-22 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-028
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-015-AC-23
+  related_ids: []
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  lines: '759'
+  excerpt: Every requested item receives exactly one `ObligationDisposition` (`supported`, `requires-bound`, `unsupported`
+    or `invalid-request`), and an item that is not `supported` keeps its source identity and typed reason with no
+    harness and no assumption emitted for it.
+  finding: 'FR-015-AC-23 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-029
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-015-AC-38
+  related_ids: []
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  lines: '774'
+  excerpt: A V2 clause claim naming a `state`/`state_clause` node of an admitted `CheckedPackageV2` whose `operation.member.clause`
+    is `precondition`, `postcondition` or `invariant` yields one harness of that obligation kind, separate from
+    the harness of every other clause of the package; the kind is read from the node and no caller value changes
+    it. PLANNED (IR-489).
+  finding: 'FR-015-AC-38 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-030
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-015-AC-39
+  related_ids: []
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  lines: '775'
+  excerpt: 'A V2 clause harness draws one nondeterministic value per drawn input: the pre-state of each state field
+    of `self` the body reads, whether bare or under `pre(...)` (the subject''s input state; how it reaches the subject
+    is FR-025''s), and each operation parameter (for a precondition or invariant, each bare state field read, since
+    the state is the one judged). Each carries an inclusive assumption equal to its declared domain: the accessor''s
+    `IntRange` values for a selected model declaration state field (FR-015-AC-77), and the IR `bounded_domain` of
+    a parameter''s type. A non-model or admitted unsel'
+  finding: 'FR-015-AC-39 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-031
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-015-AC-40
+  related_ids: []
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  lines: '776'
+  excerpt: A harness for a V2 clause whose condition, inline or referenced from an admitted Boolean expression node,
+    contains Boolean connectives and bounded-integer comparisons (`and`, `or`, `not`, `implies`, `eq`, `ne` and
+    the six integer comparisons) embeds an FR-014 oracle of that condition byte-identical to the oracle crate's
+    clause-identified function, as FR-015-AC-20 states for a scalar claim; the clause-identified oracle needs FR-014-AC-38.
+    PLANNED (IR-489).
+  finding: 'FR-015-AC-40 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-032
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-015-AC-41
+  related_ids: []
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  lines: '777'
+  excerpt: 'A V2 clause whose body holds integer arithmetic (add, subtract, multiply, negate) as an operand of a
+    comparison lowers, and its harness keeps the independent native assertion of FR-015-AC-37 for each arithmetic
+    subterm (the oracle''s outcome against the operation evaluated natively in `i128` over the same operands, `Refused`
+    assumed away nowhere): a postcondition `amount < 1000 implies amount + 1 <= 1000` over `amount: Int[0, 1000]`
+    yields one contract harness. With the installed backend the unmutated clause verifies with its cover satisfied,
+    and the same clause with `+` mutated to return `left'
+  finding: 'FR-015-AC-41 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-033
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-015-AC-42
+  related_ids: []
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  lines: '778'
+  excerpt: A V2 clause body holding an operator the V2 arm does not support (division, modulo, absolute value, and
+    every operator outside connectives, the six integer comparisons and add, subtract, multiply, negate; those operators
+    are planned scope for a later criterion) is `unsupported`, with a typed reason naming the node and the operator
+    and no harness; a node that is not a modelled clause role, or a node id absent from the package, is refused
+    as FR-015-AC-14 states; no item is skipped silently, and a supported item of the same request is unaffected.
+    PLANNED (IR-489).
+  finding: 'FR-015-AC-42 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-034
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-015-AC-43
+  related_ids: []
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  lines: '779'
+  excerpt: A V2 postcondition harness emits every `precondition` clause node sharing its anchor node as a `requires`
+    and records each in its identity's embedded oracles, embeds no other obligation's oracle, and a postcondition
+    whose sibling precondition is not a supported item of the same request is refused naming that precondition with
+    no harness; a V2 invariant is anchored at an object type, binds `self` alone, and so has no operation precondition
+    to assume. PLANNED (IR-489).
+  finding: 'FR-015-AC-43 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-035
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-015-AC-44
+  related_ids: []
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  lines: '780'
+  excerpt: A census declared on a V2 clause claim with an empty or duplicate dependency identity, an inconsistent
+    kind, state and path combination, or a non-`Required` kind is refused as a typed invalid input with no harness,
+    by the same rules as FR-015-AC-22; the census request and readiness types it uses are not `ProofDependencyGraph`.
+    PLANNED (IR-489).
+  finding: 'FR-015-AC-44 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-036
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-015-AC-45
+  related_ids: []
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  lines: '781'
+  excerpt: A valid census declared on a V2 clause claim is folded into that harness's identity record, readiness
+    is `ready` only when every dependency passed and `incomplete` while any is missing or failed, and proof execution
+    is recorded `not_run`, by the same rules as FR-015-AC-25; in addition, the folded census is independent of the
+    order the caller lists its dependencies. PLANNED (IR-489).
+  finding: 'FR-015-AC-45 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-037
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-015-AC-46
+  related_ids: []
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  lines: '782'
+  excerpt: 'Every V2 clause harness contains exactly one non-vacuity cover, placed after every assumption, after
+    the subject call and after every assertion the harness carries (the last statement, as FR-015-AC-7 states),
+    that states the family''s reachability, as FR-015-AC-7 does: a precondition harness covers that the precondition
+    holds within the bounds; a postcondition harness covers, after the subject call returns, that the requires and
+    the bounds are jointly satisfiable; an invariant harness covers that the drawn state satisfies its domain assumptions.
+    The subject call is the call of the customer subj'
+  finding: 'FR-015-AC-46 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-038
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-015-AC-47
+  related_ids: []
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  lines: '783'
+  excerpt: Regeneration of a V2 clause harness from equal inputs is byte-identical, and changing the unwind bound
+    or the customer subject changes the harness identity record (as FR-015-AC-10 states). PLANNED (IR-489).
+  finding: 'FR-015-AC-47 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-039
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-015-AC-48
+  related_ids: []
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  lines: '784'
+  excerpt: The obligation identity of a V2 clause claim is formed by AD-003 E-1 from the clause node id, its occurrence
+    key, the obligation kind, and the arguments each as parameter node id and declared domain for an operation parameter,
+    as E-1 states (the domain FR-015-AC-39 defines). A state field read is named by its declaring node id and field
+    name, never by a node of its own; that E-1 lists parameters only is an open question for the AD-003 owner and
+    E-1 is not widened here. The source span is excluded; changing any included member changes it, and changing
+    the span, the unwind bound or the subject d
+  finding: 'FR-015-AC-48 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-040
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-015-AC-49
+  related_ids: []
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  lines: '785'
+  excerpt: A V2 invariant claim yields a harness that draws its state and parameters within their declared domains
+    (FR-015-AC-39) and asserts the invariant clause; its subject is the clause itself, with no subject call. Preservation
+    of the invariant under an operation is not specified by this criterion. PLANNED (IR-489).
+  finding: 'FR-015-AC-49 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-041
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-015-AC-51
+  related_ids: []
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  lines: '787'
+  excerpt: Until the final retirement slice (FR-015-AC-111, AD-004 step 4g) deletes the hand-built bounded-corpus
+    path, a finite input validated under a profile selection other than the offered profile's is refused as a typed
+    `InvalidInput` `kani_profile_input_mismatch` result naming the request's source id, with no artifact and no
+    case identity recorded.
+  finding: 'FR-015-AC-51 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+- fnd: FND-042
+  severity: medium
+  confidence: high
+  method: gap-analysis
+  check: coverage
+  artifact_id: FR-015-AC-52
+  related_ids: []
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  lines: '788'
+  excerpt: Until the final retirement slice (FR-015-AC-111, AD-004 step 4g) deletes the hand-built bounded-corpus
+    path, the context of every outcome and refusal that path returns (generated-case `Proved` or `Counterexample`,
+    `kani_corpus_dependency_invalid`, `kani_corpus_identity_collision`, a lowering refusal and `kani_profile_input_mismatch`)
+    is the profile selection's revision. The generated-case values are not Kani run verdicts.
+  finding: 'FR-015-AC-52 has no computed criterion-tagged test binding; owner: IR-878 repository assurance backlog.'
+bindings: []
+```
+
++++

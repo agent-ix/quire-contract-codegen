@@ -1580,7 +1580,9 @@ fn wide_qsl_package() -> CheckedPackageV2 {
 fn work_qsl_package() -> CheckedPackageV2 {
     fn balanced(start: u64, count: u64) -> String {
         if count == 1 {
-            return format!("(x + {start})");
+            // Internal groups preserve the balanced shape; additive leaves need no extra
+            // parentheses, keeping the source inside QSL's default syntax-node limit.
+            return format!("x + {start}");
         }
         let half = count / 2;
         format!(
@@ -1589,9 +1591,9 @@ fn work_qsl_package() -> CheckedPackageV2 {
             balanced(start + half, count - half)
         )
     }
-    let expression = format!("({}) + 0", balanced(0, 1400));
+    let expression = format!("({}) + 0", balanced(0, 2049));
     let source = format!(
-        "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\nfunction work_nested using v(x: Int[0, 0]): Int[0, 979300] pure {{ {expression} }}\nfunction sibling using v(x: Int[0, 9]): Int[0, 10] pure {{ x + 1 }}\n"
+        "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\nfunction work_nested using v(x: Int[0, 0]): Int[0, 2098176] pure {{ {expression} }}\nfunction sibling using v(x: Int[0, 9]): Int[0, 10] pure {{ x + 1 }}\n"
     );
     let compiled = compile_package(
         SourceIdentity::new("test", "ir306-work.native", "git", "fixture"),
@@ -1866,6 +1868,46 @@ fn tc_033_qsl_nested_operand_depth_limit_is_typed_and_keeps_sibling_supported() 
     );
 
     let package = work_qsl_package();
+    // Count the genuine producer's referenced operand graph, excluding inline literals and
+    // type metadata. The fixture must cross the inference budget even when literals have no
+    // graph nodes. Its balanced shape stays below the independent depth/endpoint ceilings.
+    let work_node = qsl_function_application(&package, "work_nested");
+    let graph = package
+        .graph()
+        .nodes
+        .iter()
+        .map(|node| (&node.node_id, node))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    let operand: CheckedNodeId =
+        serde_json::from_value(graph[&work_node].body["arguments"][0]["target"].clone())
+            .expect("work fixture has a referenced inference operand");
+    let mut pending = vec![operand];
+    let mut visited = std::collections::BTreeSet::new();
+    while let Some(node_id) = pending.pop() {
+        if !visited.insert(node_id.clone()) {
+            continue;
+        }
+        let node = graph
+            .get(&node_id)
+            .expect("operand belongs to the checked graph");
+        for argument in node.body["arguments"].as_array().into_iter().flatten() {
+            if argument["term"] == "reference" {
+                pending.push(
+                    serde_json::from_value(argument["target"].clone())
+                        .expect("authentic graph reference"),
+                );
+            }
+        }
+    }
+    assert_eq!(
+        visited.len(),
+        4098,
+        "actual graph visits include 4097 applications and the shared parameter"
+    );
+    assert!(
+        visited.len() > 4096,
+        "the authored operand exceeds the inference work ceiling"
+    );
     // This oversized package exists only to cross the scalar inference work ceiling; keep its
     // larger read limit local to this test path. Normal fixture readers retain the default 1 MiB.
     let work_read_limits = CheckedPackageReadLimits {
