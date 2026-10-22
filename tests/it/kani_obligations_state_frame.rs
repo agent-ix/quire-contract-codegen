@@ -646,11 +646,12 @@ fn tc_025_real_kani_covers_v2_parameter_precondition() {
     );
 }
 
-/// The healthy invariant verifies and the same checked model with a false-at-zero condition
-/// must produce a Kani counterexample rather than a successful cover.
-#[trace("FR-015-AC-49", "TC-025")]
+/// Open IR-705 proof control: the healthy invariant and its false-at-zero mutation
+/// must receive actual Kani verdicts before either can be credited. The unchanged
+/// 16 GiB fixture returned MemoryExhausted at 17,193,668,608 B with no check.
+#[trace("TC-025")]
 #[test]
-#[ignore = "kani lane: run serially through `make kani`"]
+#[ignore = "IR-705: real V2 invariant proof exceeds the 16 GiB ceiling"]
 fn tc_025_real_kani_asserts_v2_state_invariant() {
     assert_eq!(
         run_real_v2_clause(Twin::with_balance_invariant(), "BalanceNonnegative"),
