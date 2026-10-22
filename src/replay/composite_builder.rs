@@ -13,9 +13,9 @@ use qsl_replay::{
     compile_admitted, parity_obligation, settle_verified_shadow, AdmittedCompilation,
     AdmittedContext, AdmittedRefusal, BoundEntries, ByteDigest, CompositeEvidence,
     CompositeIdentity, CompositeParityClaim, DependencyInput, DigestDomain, DigestRecord, Domain,
-    DomainKey, EqualityOperator, Identifier, IdentityEncodeError, OperandIdentity, Origin,
+    DomainKey, EqualityOperator, Identifier, IdentityEncodeError, OccurrenceKey, OperandIdentity, Origin,
     ParityArgument, ParityPreimage, ProofBound, QualifiedName, ReplayRequest, ReplayRequestRefusal,
-    ReplayRequestWire, ReplaySource, Role, VerifiedShadow, VerifiedShadowReport, WireNodeId,
+    ReplayRequestWire, ReplaySource, RequestTargetWire, Role, VerifiedShadow, VerifiedShadowReport, WireNodeId,
 };
 use quire_contract_model::{
     CheckedCompositeOperandDomain, CheckedCompositeOperandError, CheckedCompositeOperands,
@@ -324,7 +324,10 @@ impl OriginalCompositeEqContext {
         };
         let wire = self.inputs.wire(
             self.package_id,
-            self.selection.clone(),
+            RequestTargetWire::function(
+                self.selection.clone(),
+                OccurrenceKey::new(preimage.node, preimage.occurrence.clone()),
+            ),
             ReplaySource::Input(Vec::new()),
             *obligation.as_bytes(),
             &[],
