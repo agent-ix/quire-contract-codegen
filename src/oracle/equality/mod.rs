@@ -2983,36 +2983,6 @@ mod tests {
         Ok(closure)
     }
 
-    fn check_synthetic_items(
-        nodes: Vec<CheckedSemanticNodeV2>,
-        operands: &[(EqualityOperandDescriptor, EqualityOperandDescriptor)],
-    ) -> (Vec<Result<(), CompositeEqualityRefusal>>, String) {
-        let (outcomes, source) = check_synthetic_items_with_limits(
-            nodes,
-            operands,
-            CompositeEqualityLimits {
-                source_bytes: usize::MAX,
-                ..CompositeEqualityLimits::default()
-            },
-        );
-        let lib = source
-            .finish(usize::MAX)
-            .expect("synthetic source is complete")
-            .into_iter()
-            .find(|artifact| artifact.path == "src/lib.rs")
-            .expect("synthetic library exists")
-            .contents;
-        (outcomes, lib)
-    }
-
-    fn check_synthetic_items_with_limits(
-        nodes: Vec<CheckedSemanticNodeV2>,
-        operands: &[(EqualityOperandDescriptor, EqualityOperandDescriptor)],
-        limits: CompositeEqualityLimits,
-    ) -> (Vec<Result<(), CompositeEqualityRefusal>>, SourceBuilder) {
-        check_component_items_with_context(None, nodes, operands, limits)
-    }
-
     fn check_nominal_items_with_limits(
         nodes: Vec<CheckedSemanticNodeV2>,
         operands: &[(EqualityOperandDescriptor, EqualityOperandDescriptor)],
@@ -4293,28 +4263,99 @@ fn deep_matches_shallow() {
     ) {
         let requests = [request('1'), request('2')];
         let mut claims = vec![generated_claim('1'), generated_claim('2')];
+        let admitted = qsl_replay::compile_admitted(
+            qsl_replay::SourceIdentity::new("test", "render-boundary.native", "git", "fixture"),
+            "render-boundary.native",
+            b"language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\ndimension Length;\nunit m : Length = rational(1, 1);\n",
+            [], &qsl_replay::DependencyInput::default(), qsl_replay::StageLimits::default(),
+            qsl_replay::ReplayLimits::default(),
+        ).expect("the render boundary has a genuine owner-admitted quantity unit");
+        let record = admitted.context().package_id().record();
+        let package = CheckedSemanticId {
+            domain: record.domain().as_str().into(),
+            algorithm: "sha256".into(),
+            digest: record.hex().into(),
+        };
+        for claim in &mut claims {
+            let ClaimDisposition::Generated(claim) = &mut claim.result else {
+                panic!("the fixture starts generated");
+            };
+            claim.package_id = package.clone();
+        }
+        let unit = admitted
+            .context()
+            .units()
+            .next()
+            .expect("original metre unit")
+            .id();
+        let environment = TypeEnvironment::new([], [])
+            .expect("scalar environment")
+            .with_units(admitted.context().unit_table().clone());
         let pending = requests
             .iter()
             .zip(fails)
             .enumerate()
-            .map(|(position, (item, fails))| (position, DescriptorKey::of(item), item, fails))
+            .map(|(position, (item, fails))| {
+                let unsupported_quantity = fails
+                    && matches!(
+                        error,
+                        RenderError::UnsupportedValueType { family: "quantity" }
+                    );
+                let value_type = if unsupported_quantity {
+                    ValueType::Quantity(unit)
+                } else {
+                    ValueType::Integer
+                };
+                let checked = environment
+                    .check_equality(
+                        item.operator.to_runtime(),
+                        EqualityOperand::typed(value_type.clone()),
+                        EqualityOperand::typed(value_type.clone()),
+                        &sv::EnumMemberIndex::default(),
+                    )
+                    .expect("the owner admits this equality plan before rendering");
+                let prepared = CheckedItem {
+                    checked,
+                    left_source: value_type.clone(),
+                    right_source: value_type,
+                    left_target: None,
+                    right_target: None,
+                    composites: Vec::new(),
+                    declaration_keys: Vec::new(),
+                    enums: Vec::new(),
+                    composite_bindings: BTreeMap::new(),
+                };
+                (
+                    position,
+                    DescriptorKey::of(item),
+                    item,
+                    (fails, unsupported_quantity, prepared),
+                )
+            })
             .collect();
-        let ClaimDisposition::Generated(first) = &claims[0].result else {
-            panic!("the fixture starts with checked generated claims");
-        };
-        // The emitter's plan must carry the same package the checked fixture claims
-        // already name, so item rendering reaches the injected typed render error.
         let mut source = SourceBuilder {
-            expected_package: Some(first.package_id.clone()),
+            expected_package: Some(package),
             ..SourceBuilder::default()
         };
-        let result = render_and_emit(&mut claims, &mut source, pending, |fails| {
-            if *fails {
-                Err(error.clone())
-            } else {
-                Ok(rendered_item())
-            }
-        });
+        let result = render_and_emit(
+            &mut claims,
+            &mut source,
+            pending,
+            |(fails, unsupported_quantity, checked)| {
+                // Quantity's actual render error follows a valid owner-checked plan.
+                // The whole-call generation error remains a deliberate boundary injection.
+                let rendered = render_item(checked)?;
+                if *fails {
+                    assert!(
+                        !unsupported_quantity,
+                        "the actual quantity renderer must already refuse"
+                    );
+                    Err(error.clone())
+                } else {
+                    Ok(rendered)
+                }
+            },
+        );
         (result, claims, test_source(source))
     }
 
