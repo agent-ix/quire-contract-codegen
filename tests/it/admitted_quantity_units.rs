@@ -39,7 +39,7 @@ fn compile() -> AdmittedCompilation {
     .expect("genuine quantity and union source must compile without a quantity literal")
 }
 
-#[trace("TC-029", "FR-018-AC-18", "FR-018-AC-38")]
+#[trace("TC-029", "FR-018-AC-18", "FR-018-AC-38", "FR-018-AC-45")]
 #[test]
 fn genuine_quantity_items_keep_their_refusal_and_healthy_sibling() {
     let compiled = compile();
@@ -80,7 +80,7 @@ fn genuine_quantity_items_keep_their_refusal_and_healthy_sibling() {
     }
 }
 
-#[trace("TC-029", "FR-018-AC-18", "FR-018-AC-38")]
+#[trace("TC-029", "FR-018-AC-18", "FR-018-AC-38", "FR-018-AC-45")]
 #[test]
 fn nested_quantity_stays_unsupported_with_owner_metadata_and_healthy_unions() {
     let compiled = compile();

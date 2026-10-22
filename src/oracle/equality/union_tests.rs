@@ -63,6 +63,7 @@ fn closure(package: &CheckedPackageV2, context: &qsl_replay::AdmittedContext) ->
 
 fn environment(closure: &TypeClosure) -> TypeEnvironment {
     match admit_environment(
+        None,
         closure.composites.values().cloned().collect(),
         &closure.composite_bindings,
     ) {
@@ -295,7 +296,11 @@ fn union_lookup_and_seal_faults_keep_typed_causes_before_equality() {
     let mut bindings = healthy.composite_bindings.clone();
     bindings.get_mut(&shape.key()).unwrap().declaration = declaration(&context, "Wrap").clone();
     bindings.remove(&declaration(&context, "Wrap").key());
-    let failure = admit_environment(healthy.composites.values().cloned().collect(), &bindings);
+    let failure = admit_environment(
+        None,
+        healthy.composites.values().cloned().collect(),
+        &bindings,
+    );
     assert!(matches!(
         failure,
         Err(ItemCheckError::Refusal(

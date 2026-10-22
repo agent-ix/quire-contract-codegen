@@ -1153,3 +1153,85 @@ bindings:
   ac_id: FR-031-AC-26
   trace: wrong
 ```
+
+## Dispositions
+
+Round 1, fix head 64fabc7e4c3545f9a16261d72521931656a42d9a. Original Findings and all original review text above are preserved.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Source fixed: generated operands use QSV UnitQuantity, conversion takes IdentifiedUnit and constructs kernel Quantity with unit.id(), comparison uses QSV compare_quantity, and arithmetic returns the complete QSV (Outcome<Quantity>, IdentifiedUnit) through OracleStop::Quantity preserving both QuantityRefusal variants. Native helpers now use public checked graph/table/scope APIs; original vector values/limits and full direct/generated outcome/unit/charge/counter/denial comparisons remain. New chained and stopped paired-unit assertions exist. Execution acceptance remains unrun. |
+| FND-002 | fixed | Source fixed: both independent Record/Tuple fixture matches explicitly reject Union with a fixture-specific panic; no Union shape fallback or native Union qualification claim. The existing authentic Record/Tuple assertions and input source are preserved. Generated integration compilation remains a final qualification requirement. |
+| FND-003 | fixed | Fixed: the enum comparator expectation now matches enum_owner::compare_enum in each individual generated function body. The author scalar-family host control passed before the final trace-version constraint change; current source retains the corrected assertion. |
+| FND-004 | fixed | Fixed: FR031 AC26, Behavior, OD6 and TC044 step14 now require one retain per completed connective including unary and left-decided results, no retain on a child stop, and precise denial behavior. This matches existing completed_boolean and the retention control; its current AC26 binding is correct. PLANNED and unrun execution status remain. |
+| FND-005 | fixed | Fixed: Outputs names the actual quire_exact Outcome/Meter without the misleading Runtime parenthetical; prerequisite and OD2 text state the delivered single-kernel compatibility and current QSV/Runtime ownership. Planned behavior and verification are still required; no native/Kani completion is asserted. |
+| FND-006 | fixed | Fixed: module documentation names EnvironmentError::Declaration with complete typed QSV EnvironmentFailure, including bounded admission stops; the nonexistent Admission variant is no longer promised. |
+| FND-007 | fixed | Fixed custody: committed reviews/ir-17-pr397-code-review.md exactly contains the reviewer-owned validated historical append. Original text and prior rows are preserved, and FND004 explicitly records fixed with source basis and existing original round-2 comment 04e41ac8-b480-47f4-a973-73fe74bb760d. No coder-authored review verdict or new execution claim. |
+| FND-008 | fixed | Fixed: moved enum vector prose now identifies the independently compiled original local Phase source. Only the comment changes; member literals, domains, setup and assertions remain. |
+
+## Round 1 scope and qualification
+
+Round 1 source inspection at 64fabc7e only. All eight original source/custody defects are fixed by inspected changes; this is CONDITIONAL source acceptance, with final generated-native execution and broader qualification still pending. No new source defect was found in the fix diff. The user has authorized existing namespace tests, but no Cargo, namespace/backend execution or gate ran in this reviewer pass. The kernel owns the next heavy slot; this review acquired no slot and changed no host/security/account settings.
+
+Supplied author evidence: fix-round-1/compile.log finishes all-targets no-run compilation, and scalar-generation.log has exactly one passing scalar-family host test, both before the final trace constraint change. scalar-native-agreement.log fails fresh dependency resolution at ix-trace-rs =0.1.0 (candidate 0.1.2), before generated test compilation or native assertions. Current root and agreement manifests consistently allow 0.1, which addresses that selection mismatch by source inspection, but there is no successful rerun yet. fmt.log is a formatting action, not an independent fmt-check result. None of these logs proves all current generated-native vectors, paired backend receipts, aggregate gates, or future integrated head.
+
+Quantity source inspection checked owner UnitQuantity resolution, conversion target.id() handoff, complete paired IdentifiedUnit including stops, unflattened IllTyped/Identity errors, subsequent UnitScope::form consumption, original numeric/quantity vectors and denied-charge prefixes. Public QSV owns identities; no QSL947/unit-table facade dependency or copied private identity recipe was added. Equality Quantity Unsupported AC18/38 is untouched. Per-item standalone scalar oracle source keeps quantity-only error variants out of integer proof/observer bodies, preserving the scalar native ABI. The restored Boolean spec agrees with existing retain/stop semantics. Historical SR11690 custody is exact reviewer-owned text.
+
+This is not the final mergeable freeze: AC45 unit metadata and the codex2 port are explicitly scheduled to join later, requiring integrated review and safe final qualification. No aggregate PASS, positive quantity-equality acceptance, native Union acceptance or backend proof is claimed.
+
+```yaml
+dispositions:
+- fnd: FND-001
+  outcome: fixed
+  after_excerpt: "                    output: OracleOutput::QuantityWithUnit,\n  \
+    \                  prelude: Vec::new(),\n                    call: format!(\n\
+    \                        \"quantity_owner::evaluate_quantity_unit(quantity_owner::QuantityOperation::{operation},\
+    \ meter).map_err(OracleStop::Quantity)\"\n                    ),"
+- fnd: FND-002
+  outcome: fixed
+  after_excerpt: '            AdmittedCompositeForm::Union => panic!("the independent
+    record/tuple fixture cannot contain a Union"),'
+- fnd: FND-003
+  outcome: fixed
+  after_excerpt: '            format!("enum_owner::compare_enum(rt::ComparisonOperator::{operator:?},"),'
+- fnd: FND-004
+  outcome: fixed
+  after_excerpt: Each completed connective, including unary BooleanNot, calls `quire_exact::retain_boolean`
+    exactly once and charges `boolean.result-retain` once, including a result decided
+    by the left; a child stop charges no connective result-retain point. Neither rendering
+    calls `evaluate_boolean`. In a generated crate the completed Boolean values and
+    first-stop outcomes of FR-031-AC-9's cases and Z-3 agree with the prior rendering,
+    while completed connective meter counters include their new result-retain charges;
+    denial at that point returns `Incomplete` before applying the denied charge.
+- fnd: FND-005
+  outcome: fixed
+  after_excerpt: "- For an expression with at least one arithmetic node, a native\
+    \ oracle is a function that returns\n  `quire_exact::Outcome<bool>` and takes\
+    \ a trailing `&mut quire_exact::Meter`, as the FR-014\n  oracles do. A Kani bundle\
+    \ oracle is a function that\n  returns `bool`, as before."
+- fnd: FND-006
+  outcome: fixed
+  after_excerpt: '//! `EnvironmentError::Declaration`, which preserves the complete
+    typed QSV
+
+    //! `EnvironmentFailure`, including bounded admission stops without inventing
+    a declaration cause.'
+- fnd: FND-007
+  outcome: fixed
+  after_excerpt: '| FND-004 | fixed | Historical round 2, private Linear comment 04e41ac8-b480-47f4-a973-73fe74bb760d,
+    already records FND-004 fixed. Independently rechecked at landing head 5e60b358:
+    src/kani/run/scalar.rs:1719-1741 names literal Runtime/Exact package and repository
+    pairs, asserts each is present in production LOCKED_DEPENDENCIES, and checks each
+    separately generated root/observer lock against the build-lock identity. Removing
+    Exact from production now fails the independent membership assertion. This append
+    reconciles the missing artifact custod'
+- fnd: FND-008
+  outcome: fixed
+  after_excerpt: "    // Enum (E_ENUM, `equal`): equal and unequal members of the\
+    \ original local\n    // `Phase` source declaration, using the independently compiled\
+    \ facade identities."
+bindings:
+- test_id: tests/it/oracle_arithmetic.rs::tc_044_native_connectives_retain_only_completed_results
+  ac_id: FR-031-AC-26
+  trace: correct
+```

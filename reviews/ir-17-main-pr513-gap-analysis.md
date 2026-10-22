@@ -975,3 +975,42 @@ findings:
     replay-owner scope.
 bindings: []
 ```
+
+## Dispositions
+
+Round 1, fix head 64fabc7e4c3545f9a16261d72521931656a42d9a. Original Findings and all original review text above are preserved.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | deferred | Baseline-main CLI owning-spec/plan obligation outside the authorized IR-17 owner migration and host controls. Existing reviews/ir-954-gap-analysis.md SR-15352/FND-001 retains the criterion, owning path and explicit deferred outcome routed through existing IR-954/IR-17 planner records. No new issue, fix, proof or completion claimed; repository FAIL remains. |
+| FND-002 | deferred | Baseline-main FR-016-AC-25 replay obligation belongs to existing IR-604/PR498 and spec/replay/functional/FR-016-witness-native-replay.md, outside this IR-17 migration. Retain that existing owner for its first-eligible-playback/native replay oracle; no duplicate ticket, fix, proof or completion claimed. Repository FAIL remains. |
+
+## Round 1 scope and qualification
+
+Round 1 source inspection at 64fabc7e only. All eight original source/custody defects are fixed by inspected changes; this is CONDITIONAL source acceptance, with final generated-native execution and broader qualification still pending. No new source defect was found in the fix diff. The user has authorized existing namespace tests, but no Cargo, namespace/backend execution or gate ran in this reviewer pass. The kernel owns the next heavy slot; this review acquired no slot and changed no host/security/account settings.
+
+Supplied author evidence: fix-round-1/compile.log finishes all-targets no-run compilation, and scalar-generation.log has exactly one passing scalar-family host test, both before the final trace constraint change. scalar-native-agreement.log fails fresh dependency resolution at ix-trace-rs =0.1.0 (candidate 0.1.2), before generated test compilation or native assertions. Current root and agreement manifests consistently allow 0.1, which addresses that selection mismatch by source inspection, but there is no successful rerun yet. fmt.log is a formatting action, not an independent fmt-check result. None of these logs proves all current generated-native vectors, paired backend receipts, aggregate gates, or future integrated head.
+
+Quantity source inspection checked owner UnitQuantity resolution, conversion target.id() handoff, complete paired IdentifiedUnit including stops, unflattened IllTyped/Identity errors, subsequent UnitScope::form consumption, original numeric/quantity vectors and denied-charge prefixes. Public QSV owns identities; no QSL947/unit-table facade dependency or copied private identity recipe was added. Equality Quantity Unsupported AC18/38 is untouched. Per-item standalone scalar oracle source keeps quantity-only error variants out of integer proof/observer bodies, preserving the scalar native ABI. The restored Boolean spec agrees with existing retain/stop semantics. Historical SR11690 custody is exact reviewer-owned text.
+
+This is not the final mergeable freeze: AC45 unit metadata and the codex2 port are explicitly scheduled to join later, requiring integrated review and safe final qualification. No aggregate PASS, positive quantity-equality acceptance, native Union acceptance or backend proof is claimed.
+
+Fresh read-only matrix: 898 criteria, 542 tagged, 288 untagged, 16 ignored-only and 52 method-without-symbol. The only static change from the reviewed candidate is FR014 AC52 untagged -> tagged. All evidence rows still say no run evidence; the new binding is not execution discharge. Both inherited findings remain untagged and are explicitly deferred to their existing owners. Repository FAIL remains; no new incremental gap was found. Plan completion: not assessed.
+
+```yaml
+dispositions:
+- fnd: FND-001
+  outcome: deferred
+  reason: Baseline-main CLI owning-spec/plan obligation outside the authorized IR-17
+    owner migration and host controls. Existing reviews/ir-954-gap-analysis.md SR-15352/FND-001
+    retains the criterion, owning path and explicit deferred outcome routed through
+    existing IR-954/IR-17 planner records. No new issue, fix, proof or completion
+    claimed; repository FAIL remains.
+- fnd: FND-002
+  outcome: deferred
+  reason: Baseline-main FR-016-AC-25 replay obligation belongs to existing IR-604/PR498
+    and spec/replay/functional/FR-016-witness-native-replay.md, outside this IR-17
+    migration. Retain that existing owner for its first-eligible-playback/native replay
+    oracle; no duplicate ticket, fix, proof or completion claimed. Repository FAIL
+    remains.
+```

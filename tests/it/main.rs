@@ -50,6 +50,7 @@ mod admitted_composite_fixture;
 mod admitted_enum_equality;
 #[path = "../admitted_enum_support/fixture.rs"]
 mod admitted_enum_fixture;
+mod admitted_quantity_units;
 mod bound_census;
 mod bound_coverage;
 mod bound_generation;

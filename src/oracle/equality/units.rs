@@ -26,7 +26,7 @@ mod tests {
     use quire_exact::ValueType;
     use quire_semantic_value::declaration::TypeEnvironment;
 
-    #[trace("TC-029")]
+    #[trace("TC-029", "FR-018-AC-45")]
     #[test]
     fn preparation_preserves_the_complete_owner_table_and_returned_unit_ids() {
         let compiled = compile_admitted(

@@ -102,6 +102,7 @@ mod admitted;
 mod resolution;
 #[cfg(test)]
 mod union_tests;
+mod units;
 
 /// Work budget for lowering one requested equality expression node.
 pub const COMPOSITE_EQUALITY_LOWERING_WORK_LIMIT: u64 = 65_536;
@@ -1114,7 +1115,7 @@ fn check_item(
     let mut declaration_keys = closure.node_ids.clone();
     declaration_keys.sort();
     let composites: Vec<CompositeDeclaration> = closure.composites.values().cloned().collect();
-    let environment = admit_environment(composites.clone(), &closure.composite_bindings)?;
+    let environment = admit_environment(admitted, composites.clone(), &closure.composite_bindings)?;
 
     let left_operand = match left_target.clone() {
         Some(target) => EqualityOperand::converted(left_source.clone(), target),
@@ -1153,11 +1154,14 @@ fn check_item(
 }
 
 fn admit_environment(
+    admitted: Option<&qsl_replay::AdmittedContext>,
     composites: Vec<CompositeDeclaration>,
     bindings: &BTreeMap<NodeKey, admitted::CompositeBinding>,
 ) -> Result<TypeEnvironment, ItemCheckError> {
-    let mut environment =
-        TypeEnvironment::new(composites, std::iter::empty()).map_err(environment_failure)?;
+    let mut environment = units::attach_owner_units(
+        TypeEnvironment::new(composites, std::iter::empty()).map_err(environment_failure)?,
+        admitted,
+    );
     for (key, binding) in bindings {
         if let Some(members) = binding.declaration.union_members() {
             environment
@@ -1952,7 +1956,7 @@ impl SourceBuilder {
         let package_domain = package.domain.as_ref();
         let package_digest = package.digest.as_ref();
         self.append_function(format!(
-"\n/// Prepare this item's descriptors and environment from the original package context.\npub fn environment_{symbol}<'ctx>(context: Option<&'ctx qsl_replay::AdmittedContext>) -> Result<PreparedEqualityEnvironment<'ctx>, EnvironmentError> {{\n    if let Some(context) = context {{\n    let actual = context.package_id().record();\n    if actual.domain().as_str() != {package_domain:?} || actual.hex() != {package_digest:?} {{\n        return Err(EnvironmentError::ContextPackageMismatch {{\n            expected_domain: {package_domain:?}, expected_digest: {package_digest:?},\n            actual_domain: actual.domain().as_str().to_owned(), actual_digest: actual.hex(),\n        }});\n    }}\n    }}\n    let mut enum_members = quire_semantic_value::enumeration::EnumMemberIndex::default();\n    let composites = composites_{symbol}(context, &mut enum_members)?;\n    let environment = sv::TypeEnvironment::new(composites, core::iter::empty::<sv::ObjectTypeDeclaration>())\n        .map_err(EnvironmentError::Declaration)?;\n{union_seals}    let left_source = left_source_{symbol}(context, &mut enum_members)?;\n    let left_target = left_target_{symbol}(context, &mut enum_members)?;\n    let right_source = right_source_{symbol}(context, &mut enum_members)?;\n    let right_target = right_target_{symbol}(context, &mut enum_members)?;\n    Ok(PreparedEqualityEnvironment {{\n        context, expected_domain: {package_domain:?}, expected_digest: {package_digest:?},\n        binding: {symbol:?}, requires_context: {requires_context}, environment, enum_members,\n        left_source, left_target, right_source, right_target,\n    }})\n}}\n", package_domain = package_domain, package_digest = package_digest))?;
+"\n/// Prepare this item's descriptors and environment from the original package context.\npub fn environment_{symbol}<'ctx>(context: Option<&'ctx qsl_replay::AdmittedContext>) -> Result<PreparedEqualityEnvironment<'ctx>, EnvironmentError> {{\n    if let Some(context) = context {{\n    let actual = context.package_id().record();\n    if actual.domain().as_str() != {package_domain:?} || actual.hex() != {package_digest:?} {{\n        return Err(EnvironmentError::ContextPackageMismatch {{\n            expected_domain: {package_domain:?}, expected_digest: {package_digest:?},\n            actual_domain: actual.domain().as_str().to_owned(), actual_digest: actual.hex(),\n        }});\n    }}\n    }}\n    let mut enum_members = quire_semantic_value::enumeration::EnumMemberIndex::default();\n    let composites = composites_{symbol}(context, &mut enum_members)?;\n    let environment = sv::TypeEnvironment::new(composites, core::iter::empty::<sv::ObjectTypeDeclaration>())\n        .map_err(EnvironmentError::Declaration)?;\n    let environment = match context {{\n        Some(context) => environment.with_units(context.unit_table().clone()),\n        None => environment,\n    }};\n{union_seals}    let left_source = left_source_{symbol}(context, &mut enum_members)?;\n    let left_target = left_target_{symbol}(context, &mut enum_members)?;\n    let right_source = right_source_{symbol}(context, &mut enum_members)?;\n    let right_target = right_target_{symbol}(context, &mut enum_members)?;\n    Ok(PreparedEqualityEnvironment {{\n        context, expected_domain: {package_domain:?}, expected_digest: {package_digest:?},\n        binding: {symbol:?}, requires_context: {requires_context}, environment, enum_members,\n        left_source, left_target, right_source, right_target,\n    }})\n}}\n", package_domain = package_domain, package_digest = package_digest))?;
         self.append_function(format!(
 "\n/// Environment-checked oracle for `{operation}`.\npub fn oracle_{symbol}(\n    prepared: &PreparedEqualityEnvironment<'_>, left: &exact::Value,\n    right: &exact::Value, meter: &mut exact::Meter,\n) -> exact::Outcome<bool> {{\n    let context_mismatch = match prepared.context {{\n        Some(context) => {{ let actual = context.package_id().record();\n            actual.domain().as_str() != {package_domain:?} || actual.hex() != {package_digest:?} }},\n        None => prepared.requires_context,\n    }};\n    if prepared.binding != {symbol:?} || prepared.expected_domain != {package_domain:?}\n        || prepared.expected_digest != {package_digest:?}\n        || prepared.requires_context != {requires_context} || context_mismatch\n    {{\n        return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedDescriptorReconstructionFailed }});\n    }}\n    let environment = &prepared.environment;\n    let left_comparison = match &prepared.left_target {{ Some(target) => target, None => &prepared.left_source }};\n    let right_comparison = match &prepared.right_target {{ Some(target) => target, None => &prepared.right_source }};\n    if let Err(error) = environment.check_type(left_comparison) {{\n        return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedTypeCheckRejected {{ cause: error.cause }} }});\n    }}\n    if let Err(error) = environment.check_type(right_comparison) {{\n        return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedTypeCheckRejected {{ cause: error.cause }} }});\n    }}\n    let left_operand = match prepared.left_target.clone() {{\n        Some(target) => sv::EqualityOperand::converted(prepared.left_source.clone(), target),\n        None => sv::EqualityOperand::typed(prepared.left_source.clone()),\n    }};\n    let right_operand = match prepared.right_target.clone() {{\n        Some(target) => sv::EqualityOperand::converted(prepared.right_source.clone(), target),\n        None => sv::EqualityOperand::typed(prepared.right_source.clone()),\n    }};\n    let checked = match environment.check_equality({operator}, left_operand, right_operand, &prepared.enum_members) {{\n        Ok(checked) => checked,\n        Err(error) => return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedEqualityCheckRejected {{ cause: error.cause }} }}),\n    }};\n    checked.evaluate(environment, left, right, meter)\n}}\n", operation = item.operator.identity(), operator = item.operator.path(), package_domain = package_domain, package_digest = package_digest))?;
         Ok(())
