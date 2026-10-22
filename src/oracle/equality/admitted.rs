@@ -209,7 +209,7 @@ pub(super) fn resolve_composite(
 
 #[cfg(test)]
 #[path = "../../../tests/admitted_composite_support/fixture.rs"]
-mod composite_fixture;
+pub(super) mod composite_fixture;
 
 #[cfg(test)]
 mod tests {

@@ -282,23 +282,30 @@ pub(super) fn resolve_type(
                             let mismatch = || CompositeEqualityRefusal::CompositeContextMismatch {
                                 declaration: id.clone(),
                             };
-                            let binding = closure.composite_bindings.get(&key)
-                                .ok_or_else(mismatch)?;
-                            let members = binding.declaration.union_members()
-                                .ok_or_else(mismatch)?.to_vec();
-                            let wire_members = aggregate_members(&node.body).ok_or_else(mismatch)?;
+                            let binding =
+                                closure.composite_bindings.get(&key).ok_or_else(mismatch)?;
+                            let members = binding
+                                .declaration
+                                .union_members()
+                                .ok_or_else(mismatch)?
+                                .to_vec();
+                            let wire_members =
+                                aggregate_members(&node.body).ok_or_else(mismatch)?;
                             if wire_members.len() != members.len() {
                                 return Err(mismatch().into());
                             }
                             let mut children = Vec::new();
                             for (wire, member) in wire_members.iter().zip(&members) {
-                                if wire.get("term").and_then(serde_json::Value::as_str) != Some("binding")
+                                if wire.get("term").and_then(serde_json::Value::as_str)
+                                    != Some("binding")
                                     || wire.get("name").and_then(serde_json::Value::as_str)
                                         != Some(member.identifier().as_str())
                                 {
                                     return Err(mismatch().into());
                                 }
-                                let payload = wire.get("value").and_then(aggregate_members)
+                                let payload = wire
+                                    .get("value")
+                                    .and_then(aggregate_members)
                                     .ok_or_else(mismatch)?;
                                 if payload.len() != member.payload().len() {
                                     return Err(mismatch().into());
@@ -457,23 +464,37 @@ pub(super) fn resolve_type(
                 let mismatch = || CompositeEqualityRefusal::CompositeContextMismatch {
                     declaration: id.clone(),
                 };
-                let positions = members.iter().map(|member| member.payload().len()).sum::<usize>();
+                let positions = members
+                    .iter()
+                    .map(|member| member.payload().len())
+                    .sum::<usize>();
                 let start = values.len().checked_sub(positions).ok_or_else(mismatch)?;
                 let mut payloads = values.split_off(start).into_iter();
                 let mut built = Vec::with_capacity(members.len());
                 for member in members {
-                    let payload = payloads.by_ref().take(member.payload().len()).collect::<Vec<_>>();
+                    let payload = payloads
+                        .by_ref()
+                        .take(member.payload().len())
+                        .collect::<Vec<_>>();
                     if payload != member.payload() {
                         return Err(mismatch().into());
                     }
-                    built.push(quire_semantic_value::declaration::UnionMemberDeclaration::resolved(
-                        member.identifier().clone(), payload,
-                    ));
+                    built.push(
+                        quire_semantic_value::declaration::UnionMemberDeclaration::resolved(
+                            member.identifier().clone(),
+                            payload,
+                        ),
+                    );
                 }
                 closure.in_progress.remove(&key);
-                closure.composites.insert(key, CompositeDeclaration::new(
-                    key, id.digest.to_string(), CompositeShape::Union(built),
-                ));
+                closure.composites.insert(
+                    key,
+                    CompositeDeclaration::new(
+                        key,
+                        id.digest.to_string(),
+                        CompositeShape::Union(built),
+                    ),
+                );
                 closure.node_ids.push(id);
                 values.push(ValueType::Composite(key));
             }

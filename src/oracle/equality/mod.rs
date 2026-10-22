@@ -99,6 +99,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 mod admitted;
 mod resolution;
+#[cfg(test)]
+mod union_tests;
 
 /// Work budget for lowering one requested equality expression node.
 pub const COMPOSITE_EQUALITY_LOWERING_WORK_LIMIT: u64 = 65_536;
@@ -1111,16 +1113,7 @@ fn check_item(
     let mut declaration_keys = closure.node_ids.clone();
     declaration_keys.sort();
     let composites: Vec<CompositeDeclaration> = closure.composites.values().cloned().collect();
-    let mut environment = TypeEnvironment::new(composites.clone(), std::iter::empty())
-        .map_err(environment_failure)?;
-    for (key, binding) in &closure.composite_bindings {
-        if let Some(members) = binding.declaration.union_members() {
-            environment.seal_union_verified(
-                *key, binding.declaration.node(),
-                members.iter().map(|member| member.member().clone()).collect(),
-            ).map_err(environment_failure)?;
-        }
-    }
+    let environment = admit_environment(composites.clone(), &closure.composite_bindings)?;
 
     let left_operand = match left_target.clone() {
         Some(target) => EqualityOperand::converted(left_source.clone(), target),
@@ -1158,12 +1151,37 @@ fn check_item(
     })
 }
 
+fn admit_environment(
+    composites: Vec<CompositeDeclaration>,
+    bindings: &BTreeMap<NodeKey, admitted::CompositeBinding>,
+) -> Result<TypeEnvironment, ItemCheckError> {
+    let mut environment = TypeEnvironment::new(composites, std::iter::empty())
+        .map_err(environment_failure)?;
+    for (key, binding) in bindings {
+        if let Some(members) = binding.declaration.union_members() {
+            environment
+                .seal_union_verified(
+                    *key,
+                    binding.declaration.node(),
+                    members
+                        .iter()
+                        .map(|member| member.member().clone())
+                        .collect(),
+                )
+                .map_err(environment_failure)?;
+        }
+    }
+    Ok(environment)
+}
+
 fn environment_failure(failure: sv::EnvironmentFailure) -> ItemCheckError {
     match failure {
         sv::EnvironmentFailure::Refused(invalid) => match invalid.cause.try_into() {
             Ok(cause) => CompositeEqualityRefusal::Declaration {
-                declaration: invalid.declaration, cause,
-            }.into(),
+                declaration: invalid.declaration,
+                cause,
+            }
+            .into(),
             Err(error) => ItemCheckError::Generation(error),
         },
         failure => OracleGenerationError::EnvironmentAdmission(failure).into(),
@@ -2055,19 +2073,33 @@ fn render_composite_declaration(
             format!("sv::CompositeShape::Tuple(vec![{rendered}])")
         }
         CompositeShape::Union(members) => {
-            let binding = composites.get(&declaration.key())
+            let binding = composites
+                .get(&declaration.key())
                 .ok_or(OracleGenerationError::InvalidPlanState)?;
-            let qualified = binding.qualified.iter().map(|part| format!("{part:?}"))
-                .collect::<Vec<_>>().join(", ");
-            let payloads = members.iter().map(|member| {
-                let positions = member.positions().iter().map(|position| {
-                    render_value_type(position, enums, composites)
-                }).collect::<Result<Vec<_>, _>>()?.join(", ");
-                Ok(format!("vec![{positions}]"))
-            }).collect::<Result<Vec<_>, RenderError>>()?.join(", ");
-            format!("rebuild_union(_context, {:?}, &[{qualified}], vec![{payloads}])?", binding.node.digest)
+            let qualified = binding
+                .qualified
+                .iter()
+                .map(|part| format!("{part:?}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let payloads = members
+                .iter()
+                .map(|member| {
+                    let positions = member
+                        .positions()
+                        .iter()
+                        .map(|position| render_value_type(position, enums, composites))
+                        .collect::<Result<Vec<_>, _>>()?
+                        .join(", ");
+                    Ok(format!("vec![{positions}]"))
+                })
+                .collect::<Result<Vec<_>, RenderError>>()?
+                .join(", ");
+            format!(
+                "rebuild_union(_context, {:?}, &[{qualified}], vec![{payloads}])?",
+                binding.node.digest
+            )
         }
-        &_ => return Err(OracleGenerationError::unknown_variant("CompositeShape").into()),
     };
     let key = render_composite_key(declaration.key(), composites)?;
     Ok(format!(
