@@ -48,7 +48,7 @@ impl std::fmt::Display for RationalPredicateDecodeError {
 impl std::error::Error for RationalPredicateDecodeError {}
 
 /// Decoded native inputs and selected assertion text, not an authenticated solver counterexample.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct RationalPredicateDecodedInputs<'a> {
     /// One canonical owner Rational per original logical parameter, in identifier order.
     pub values: Vec<(String, WitnessValue)>,
@@ -58,6 +58,18 @@ pub struct RationalPredicateDecodedInputs<'a> {
     pub check_text: String,
     /// Selected raw block's verbatim assertion clause (including its original quotes).
     pub check_clause: &'a str,
+}
+
+// Payloads and the retained raw clause require explicit typed-field access.
+impl std::fmt::Debug for RationalPredicateDecodedInputs<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RationalPredicateDecodedInputs")
+            .field("logical_values", &self.values.len())
+            .field("oracle_arguments", &self.oracle_arguments.len())
+            .field("check_text_bytes", &self.check_text.len())
+            .field("check_clause_bytes", &self.check_clause.len())
+            .finish()
+    }
 }
 
 impl RationalPredicateCodec {
@@ -88,18 +100,120 @@ impl RationalPredicateCodec {
         transcript: &'a str,
         limits: WitnessDecodeLimits,
     ) -> Result<RationalPredicateDecodedInputs<'a>, RationalPredicateDecodeError> {
-        let _ = (
-            schema,
+        let failure = |code| {
+            RationalPredicateDecodeError::Decode(DecodeFailure::new(
+                code,
+                harness_symbol,
+                module_symbol,
+            ))
+        };
+        if transcript.len() > limits.bytes {
+            return Err(RationalPredicateDecodeError::Decode(DecodeFailure::new(
+                "cg_witness_decode_bytes_limit",
+                harness_symbol,
+                &format!("{module_symbol};bytes={}", limits.bytes),
+            )));
+        }
+        if schema != &self.schema {
+            return Err(RationalPredicateDecodeError::SchemaMismatch);
+        }
+        // Refuse before allocating the owner-sized primitive view when the required physical
+        // budget cannot represent this selection. Grouping never hides two values as one.
+        if self.schema.physical.len() > limits.values {
+            return Err(RationalPredicateDecodeError::Decode(DecodeFailure::new(
+                "cg_witness_decode_values_limit",
+                harness_symbol,
+                &format!("{module_symbol};values={}", limits.values),
+            )));
+        }
+        let primitive = self
+            .schema
+            .physical
+            .iter()
+            .map(|binding| crate::kani::identity::ObligationBinding {
+                identifier: binding.identifier.clone(),
+                role: crate::kani::abi::KaniBindingRole::Argument,
+                primitive_type: binding.primitive,
+                // Only a temporary primitive view: no invented integer IR domain/dependency.
+                // The original Rational components are checked from the immutable native schema.
+                integer_bounds: None,
+                dependencies: Vec::new(),
+            })
+            .collect::<Vec<_>>();
+        let decoded = crate::replay::witness::decode_playback(
             harness_symbol,
             module_symbol,
+            &primitive,
             transcript,
             limits,
-            &self.context,
-        );
-        Err(RationalPredicateDecodeError::Decode(DecodeFailure {
-            code: "cg_rational_decode_not_implemented".into(),
-            source_id: harness_symbol.into(),
-            context: module_symbol.into(),
-        }))
+        )
+        .map_err(RationalPredicateDecodeError::Decode)?;
+        let mut values = Vec::with_capacity(self.schema.logical.len());
+        let mut oracle_arguments = std::iter::repeat_with(|| None)
+            .take(self.context.oracle().parameters().len())
+            .collect::<Vec<Option<Rational>>>();
+        for (logical_index, logical) in self.schema.logical.iter().enumerate() {
+            let position = logical_index * 2;
+            let mut components = [0_i64; 2];
+            for (offset, component) in components.iter_mut().enumerate() {
+                let (_, WitnessValue::Integer(value)) = decoded
+                    .values
+                    .get(position + offset)
+                    .ok_or_else(|| failure("kani_witness_arity_mismatch"))?
+                else {
+                    return Err(failure("kani_witness_width_mismatch"));
+                };
+                *component =
+                    i64::try_from(*value).map_err(|_| failure("kani_witness_width_mismatch"))?;
+            }
+            let numerator = quire_exact::Integer::from(components[0]);
+            let denominator = quire_exact::Integer::from(components[1]);
+            // Malformed representation is never normalized into an alternative valid witness.
+            let rational = Rational::new(numerator.clone(), denominator.clone()).map_err(|_| {
+                RationalPredicateDecodeError::NonCanonical {
+                    parameter: logical.parameter.clone(),
+                }
+            })?;
+            if rational.numerator() != &numerator || rational.denominator() != &denominator {
+                return Err(RationalPredicateDecodeError::NonCanonical {
+                    parameter: logical.parameter.clone(),
+                });
+            }
+            for (offset, value) in components.iter().enumerate() {
+                let binding = self
+                    .schema
+                    .physical
+                    .get(position + offset)
+                    .ok_or(RationalPredicateDecodeError::SchemaMismatch)?;
+                if !(binding.minimum..=binding.maximum).contains(value) {
+                    return Err(RationalPredicateDecodeError::OutsideDomain {
+                        parameter: logical.parameter.clone(),
+                        component: binding.component,
+                    });
+                }
+            }
+            let slot = oracle_arguments
+                .get_mut(logical.oracle_position)
+                .ok_or(RationalPredicateDecodeError::SchemaMismatch)?;
+            if slot.replace(rational).is_some() {
+                return Err(RationalPredicateDecodeError::SchemaMismatch);
+            }
+            values.push((
+                logical.identifier.clone(),
+                WitnessValue::Rational {
+                    numerator,
+                    denominator,
+                },
+            ));
+        }
+        Ok(RationalPredicateDecodedInputs {
+            values,
+            oracle_arguments: oracle_arguments
+                .into_iter()
+                .map(|value| value.ok_or(RationalPredicateDecodeError::SchemaMismatch))
+                .collect::<Result<Vec<_>, _>>()?,
+            check_text: decoded.check_text,
+            check_clause: decoded.check_clause,
+        })
     }
 }

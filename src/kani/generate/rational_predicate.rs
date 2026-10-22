@@ -17,6 +17,7 @@ pub enum RationalComponent {
 
 /// One physical draw, grouped to its single real source parameter.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct RationalComponentBinding {
     /// Distinct generated draw identifier, not a new parameter node id.
     pub identifier: String,
