@@ -3,7 +3,7 @@ id: TC-058
 title: "Load CG generated-closure cases into QSL evaluator comparison"
 type: TC
 relationships:
-  - target: ix://agent-ix/quire-contract-codegen/FR-043
+  - target: ix://agent-ix/quire-contract-codegen/FR-044
     type: verifies
 ---
 # TC-058: Load CG generated-closure cases into QSL evaluator comparison
@@ -22,16 +22,16 @@ agreement; this case verifies CG's export boundary.
    with a caller-selected `EVALUATOR_CORPUS_DIR` and load `cases.jsonl` using
    QSL's public corpus loader. Assert its format, case count, distinct stable
    ids, checked application and registered-body identities, limits, complete
-   expected evaluations and ordered charges (FR-043-AC-1).
+   expected evaluations and ordered charges (FR-044-AC-1).
 2. Export twice from fresh admitted instances and compare bytes. Independently
    perturb one identity, location, limit, result distinction, refusal, loss,
    consumed work or charge-order field and assert that the loader reports the
    changed case or refuses invalid checked input. Remove one case and assert
-   the expected census fails (FR-043-AC-2).
+   the expected census fails (FR-044-AC-2).
 3. Make QSL reference evaluation unavailable or make one checked input
    unencodable; assert the producer fails and leaves no partial published
    bundle. Inspect the producer for computation of expected outcomes from
-   emitted source or Contract Runtime `exact` (FR-043-AC-2).
+   emitted source or Contract Runtime `exact` (FR-044-AC-2).
 
 ## Expected Results
 

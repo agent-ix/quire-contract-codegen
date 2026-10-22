@@ -1,5 +1,5 @@
 ---
-id: FR-043
+id: FR-044
 title: "Export generated-closure cases for QSL evaluator comparison"
 type: FR
 relationships:
@@ -8,7 +8,7 @@ relationships:
   - target: ix://agent-ix/quire-spec-language/FR-262
     type: depends_on
 ---
-# FR-043: Export generated-closure cases for QSL evaluator comparison
+# FR-044: Export generated-closure cases for QSL evaluator comparison
 
 ## Description
 
@@ -60,8 +60,8 @@ tests do not discharge that comparison.
 
 | ID | Criteria | Verification |
 | --- | --- | --- |
-| FR-043-AC-1 | Given an admitted scalar case, an equality case and a nested generated-to-generated-to-interpreted call case, `make evaluator-corpus` writes `cases.jsonl` at `EVALUATOR_CORPUS_DIR` with one stable, unique case id per application; every line is a complete `quire.generated-closure-evaluation/v1` record containing the QSL-owned checked input, exact registration and application identity, limits, complete QSL std expected `Evaluation` and ordered charge log. QSL's corpus loader admits all three records and selects the same checked applications. | Test (TC-058) |
-| FR-043-AC-2 | Repeated export of the same admitted cases is byte-identical. Removing a case, changing a selected callable, source location, limit, result arm, refusal, loss, consumed work or charge order changes or rejects the corresponding loaded record; an unavailable QSL reference or unencodable checked input produces no published partial bundle. No exported expectation is computed from CG's emitted source or from Contract Runtime `exact`. | Test (TC-058) |
+| FR-044-AC-1 | Given an admitted scalar case, an equality case and a nested generated-to-generated-to-interpreted call case, `make evaluator-corpus` writes `cases.jsonl` at `EVALUATOR_CORPUS_DIR` with one stable, unique case id per application; every line is a complete `quire.generated-closure-evaluation/v1` record containing the QSL-owned checked input, exact registration and application identity, limits, complete QSL std expected `Evaluation` and ordered charge log. QSL's corpus loader admits all three records and selects the same checked applications. | Test (TC-058) |
+| FR-044-AC-2 | Repeated export of the same admitted cases is byte-identical. Removing a case, changing a selected callable, source location, limit, result arm, refusal, loss, consumed work or charge order changes or rejects the corresponding loaded record; an unavailable QSL reference or unencodable checked input produces no published partial bundle. No exported expectation is computed from CG's emitted source or from Contract Runtime `exact`. | Test (TC-058) |
 
 ## Dependencies
 
