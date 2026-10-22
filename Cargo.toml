@@ -24,6 +24,7 @@ path = "src/lib.rs"
 [dependencies]
 ix-trace-rs = { version = "=0.1.0", git = "https://github.com/agent-ix/ix-trace-rs", branch = "main" }
 quire-exact = { git = "https://github.com/agent-ix/quire-exact", branch = "main" }
+quire-semantic-value = { git = "https://github.com/agent-ix/quire-semantic-value", branch = "main" }
 quire-contract-ir = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-ir", branch = "main" }
 # The model items (`CheckedPackageV2`, `RequirementRef`, ...) come from quire-contract-model, a crate in
 # the same repository and the same lock entry as quire-contract-ir; the IR root crate is named only
@@ -32,7 +33,7 @@ quire-contract-model = { version = "=0.1.0", git = "https://github.com/agent-ix/
 quire-contract-runtime = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-runtime", branch = "main", features = ["exact"] }
 # qsl-replay is the only QSL crate this repository depends on (QSL arch-lint T12-A); the
 # replay adapter in src/replay/function.rs builds its requests from `call_site` and the crate's own
-# re-exports and goes through its `replay` entry. It tracks QSL `main`; Cargo.lock records the commit.
+# re-exports and goes through its `replay` entry. Cargo.lock records the selected public source.
 qsl-replay = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-spec-language", branch = "main" }
 # The one RFC 8785 encoder (ADR-013 section 2) the obligation identity is encoded by. CG calls it
 # from `core::canonical` only (AD-004); it tracks `main` like the other first-party crates.

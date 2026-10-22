@@ -475,6 +475,35 @@ Record/tuple member semantics stay unchanged. Their unresolved genuine member
 bound association must not be filled by guessing lexical ownership or adding
 a public descriptor field; this control is direct-root-only.
 
+### Admitted Union consumer controls
+
+Planned host verification for FR-018-AC-44 (IR-17): compile authentic source
+through root `compile_admitted`, strictly read and normally lower its unchanged
+package, then generate equality with that package's genuine context. Include
+two distinct same-shaped unions, a member without payload, record payloads
+and a nested-Union payload. Independently read the facade declarations and
+compare closure keys, settled nodes, member bindings and member/payload order.
+Inspect emitted preparation for original-node lookup, declaration/type use of
+`key()` and `seal_union_verified(key(), node(), cloned member() bindings)`;
+a Union enum spelling alone does not discharge the criterion.
+
+Construct the in-process environment through public QSV/kernel APIs from those
+same owner declarations and bindings. Seal every Union after closing the full
+environment and admit values of every member, nested unions included. Compare
+with independent genuine owner-context values and retain the owning refusal
+for values from the other same-shaped union. Exercise missing and wrong
+context, Unknown/Foreign/WrongKind lookup, and private name/form or omitted/
+altered-seal faults at their actual boundaries. Assert typed causes, no
+successful prepared wrapper or equality-meter charge, no symbols for a refused
+item and unchanged healthy siblings for per-item failures. Wrong-package
+context still fails the whole request before classification; retain existing
+charged traversal and first-error precedence.
+
+These host controls are planned consumer evidence only; they do not qualify
+execution of the emitted crate, native agreement or Kani. Existing AC-10,
+AC-11 and AC-17 host controls, AC-18/AC-38 Quantity negatives, and all original
+native and proof procedures remain unchanged.
+
 ## Expected Results
 
 The source scans find zero panic sites, and the render function returns a typed

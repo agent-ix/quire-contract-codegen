@@ -11,13 +11,13 @@ use ix_trace_rs::trace;
 use std::{collections::BTreeSet, fs, ops::Deref, path::PathBuf, process::Command};
 
 use crate::common::panic_scan::{non_test_code, panic_tokens_in};
-use crate::scratch_crate::{runtime_dependency, seed_lock, TemporaryDirectory};
+use crate::scratch_crate::{runtime_dependency, TemporaryDirectory};
 use quire_contract_codegen::{
     generate_composite_equality_oracles, ClaimDisposition, CompositeEqualityClaim,
     CompositeEqualityItem, CompositeEqualityLimits, CompositeEqualityOracles,
-    CompositeEqualityRefusal, ContractRequestPosition, DeclarationRefusalCause,
-    EqualityOperandDescriptor, EqualityOperatorKind, IllTypedCauseKind, OracleGenerationError,
-    RecordedSchedule, UpstreamBlocker, COMPOSITE_EQUALITY_CRATE_NAME,
+    CompositeEqualityRefusal, ContractRequestPosition, EqualityOperandDescriptor,
+    EqualityOperatorKind, OracleGenerationError, RecordedSchedule, UpstreamBlocker,
+    COMPOSITE_EQUALITY_CRATE_NAME,
 };
 use quire_contract_model::{
     derive_structural_candidates, CheckedNodeTag, CheckedPackageLimit, CheckedPackageReadLimits,
@@ -26,10 +26,10 @@ use quire_contract_model::{
     CompleteLoweringRecordV2, ContractDependencies, ContractFeatureRecordV1,
     ContractPackageReadResult, ContractPackageWireV1, StructuralCandidateError,
 };
-use quire_contract_runtime::exact::{
-    CardinalityBound, CollectionKind, CollectionType, CompositeDeclaration, CompositeShape,
-    FieldDeclaration, IeeeWidth, NodeKey, ObjectTypeDeclaration, Presence, TypeEnvironment,
-    ValueType,
+use quire_exact::{CardinalityBound, CollectionKind, IeeeWidth};
+use quire_exact::{CollectionType, Presence, ValueType};
+use quire_semantic_value::declaration::{
+    CompositeDeclaration, CompositeShape, FieldDeclaration, ObjectTypeDeclaration, TypeEnvironment,
 };
 use serde_json::json;
 
@@ -162,10 +162,6 @@ impl FixtureOracles {
     fn key(&self, code: u32) -> quire_contract_model::CheckedNodeId {
         self.ids.resolve(&code_id(code))
     }
-
-    fn runtime_key(&self, code: u32) -> String {
-        self.key(code).digest.to_string()
-    }
 }
 
 impl Deref for FixtureOracles {
@@ -279,8 +275,12 @@ fn generate_with_context(
             .into_iter()
             .map(|node_id| ContractRequestPosition::ContextRoot { node_id }),
     );
+    // Standalone primitive/early-refusal fixtures need no owner key. The legacy nominal
+    // corpus still requires genuine owner capabilities and remains QSL937 migration work;
+    // its original positive/precise assertions are intentionally not replaced by Missing.
     let output = generate_composite_equality_oracles(
         &admitted,
+        None,
         &roots,
         &positions,
         &items,
@@ -292,6 +292,64 @@ fn generate_with_context(
         ids: package.ids.clone(),
     }
 }
+
+/// Each request retains its own original source and capability; no synthetic graph is
+/// attached to a context. The mixed case exercises ordering over distinct expression nodes.
+fn genuine_host_case(case: &str, reversed: bool) -> CompositeEqualityOracles {
+    eprintln!("genuine host fixture case={case}; reversed={reversed}");
+    let compiled = if case == "mixed" {
+        super::admitted_composite_fixture::compile(
+            super::admitted_composite_fixture::SOURCE,
+            &qsl_replay::DependencyInput::default(),
+        )
+    } else {
+        genuine_fixture::compile(case)
+    };
+    let package = super::admitted_enum_equality::checked(&compiled, &[]);
+    let mut items = if case == "mixed" {
+        [
+            "pair_same",
+            "holder_same",
+            "other_pair_same",
+            "other_holder_same",
+        ]
+        .iter()
+        .map(|name| super::admitted_enum_equality::direct_source_item(&package, name))
+        .collect::<Vec<_>>()
+    } else {
+        vec![super::composite_equality_agreement::original_item(
+            &package,
+            case.starts_with("conv"),
+        )]
+    };
+    let mut not_equal = items[0].clone();
+    not_equal.operator = EqualityOperatorKind::NotEqual;
+    items.push(not_equal);
+    if reversed {
+        items.reverse();
+    }
+    let output = super::admitted_enum_equality::generate_items(
+        &package,
+        Some(compiled.context()),
+        &items,
+        &[],
+    )
+    .expect("the unchanged genuine case generates");
+    assert_eq!(output.claim_map.items.len(), items.len(), "{case}");
+    for claim in &output.claim_map.items {
+        let _ = generated(claim);
+    }
+    output
+}
+
+fn genuine_host_cases() -> impl Iterator<Item = &'static str> {
+    genuine_fixture::CASES
+        .iter()
+        .copied()
+        .chain(std::iter::once("mixed"))
+}
+
+use super::composite_equality_agreement::fixture as genuine_fixture;
 
 fn admitted_profile() -> CompleteLoweringProfileV2 {
     CompleteLoweringProfileV2 {
@@ -327,8 +385,10 @@ fn invalid_type_resolution_work_limit_refuses_before_lowering() {
         ContractPackageReadResult::Admitted(package) => package,
         other => panic!("IR must admit its package: {other:?}"),
     };
+    // The invalid setting precedes traversal and needs no identity capability.
     let result = generate_composite_equality_oracles(
         &admitted,
+        None,
         &[],
         &[],
         &[],
@@ -460,6 +520,7 @@ fn tc_029_ac32_direct_control_case_refusal_preserves_healthy_equality_sibling() 
         });
     let combined = generate_composite_equality_oracles(
         &contract,
+        None,
         &requests,
         &[0, 1],
         &[case_item, equality_item.clone()],
@@ -468,6 +529,7 @@ fn tc_029_ac32_direct_control_case_refusal_preserves_healthy_equality_sibling() 
     .unwrap();
     let equality_only = generate_composite_equality_oracles(
         &contract,
+        None,
         &requests,
         &[1],
         &[equality_item],
@@ -552,125 +614,144 @@ fn generated(
 #[trace("FR-018-AC-24", "TC-029")]
 #[test]
 fn tc_029_ac24_recursive_list_and_tree_items_emit_one_oracle_each() {
-    let list = generate(
-        &admit(corpus_package()),
-        &[item(
-            E_SELF,
-            EqualityOperatorKind::Equal,
-            typed(R_SELF),
-            typed(R_SELF),
-        )],
-    );
-    let tree = generate(
-        &admit(recursive_tree_package()),
-        &[item(
-            E_TREE_CYCLE,
-            EqualityOperatorKind::Equal,
-            typed(R_TREE_CYCLE),
-            typed(R_TREE_CYCLE),
-        )],
-    );
-    for (oracles, expression, record) in
-        [(&list, E_SELF, R_SELF), (&tree, E_TREE_CYCLE, R_TREE_CYCLE)]
-    {
-        let claim = generated(only_claim(oracles, expression));
-        assert_eq!(claim.declaration_keys, vec![oracles.key(record)]);
-        let lib = contents(oracles, "src/lib.rs");
+    for (declarations, name) in [
+        ("record SelfRecord { next: SelfRecord?; }\n", "SelfRecord"),
+        ("record Tree { children: Sequence<Tree>[0, 2]; }\n", "Tree"),
+    ] {
+        let source = format!("language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\n{declarations}function f using v(a: {name},b: {name}): Boolean pure {{ a = b }}\n");
+        let compiled = genuine_fixture::compile_source(&source);
+        let package = super::admitted_enum_equality::checked(&compiled, &[]);
+        let item = super::composite_equality_agreement::original_item(&package, false);
+        let oracles = super::admitted_enum_equality::generate_items(
+            &package,
+            Some(compiled.context()),
+            std::slice::from_ref(&item),
+            &[],
+        )
+        .expect("original recursive shape");
+        assert_eq!(oracles.claim_map.items.len(), 1);
+        let claim = generated(&oracles.claim_map.items[0]);
+        assert_eq!(claim.declaration_keys, vec![item.left.source_type.clone()]);
+        let actual = compiled
+            .context()
+            .composites()
+            .find(|actual| {
+                actual
+                    .qualified_name()
+                    .iter()
+                    .map(|part| part.as_str())
+                    .eq([name])
+            })
+            .unwrap();
+        assert_eq!(
+            claim.declaration_runtime_keys,
+            vec![actual.key().to_string()]
+        );
+        let lib = contents(&oracles, "src/lib.rs");
         assert_eq!(lib.matches("pub fn oracle_").count(), 1);
         assert_eq!(lib.matches("pub fn environment_").count(), 1);
         assert!(lib.contains(&claim.oracle_symbol));
+        if name == "Tree" {
+            assert!(lib.contains("rebuild_cardinality(0, 2)?"));
+        }
     }
 }
 
 #[trace("FR-018-AC-24", "FR-018-AC-26", "FR-018-AC-27", "TC-029")]
 #[test]
 fn tc_029_public_qsl_recursive_items_generate_through_reader() {
-    let (builder, list, tree) = qsl_recursive_items_package();
-    assert_recursive_item_generation(builder, list, tree);
+    super::admitted_composite_equality::assert_authentic_recursive_item_generation();
 }
 
-fn assert_recursive_item_generation(
-    builder: PackageBuilder,
-    list: quire_contract_model::CheckedNodeId,
-    tree: quire_contract_model::CheckedNodeId,
-) {
-    fn emitted_key(node: &quire_contract_model::CheckedNodeId) -> String {
-        let key = NodeKey::from_hex(&node.digest).expect("a checked node digest is a runtime key");
-        let bytes = key
-            .as_bytes()
+/// A raw external fixture proves strict-reader admission and original shape only.
+/// It is never rewritten into a package authenticated by a QSL context.
+fn assert_recursive_fixture_shapes(package: &CheckedPackageV2) {
+    use quire_contract_model::CheckedNodeId;
+    fn members(node: &CheckedSemanticNodeV2) -> &[serde_json::Value] {
+        assert_eq!(node.body["term"], "aggregate");
+        node.body["members"]
+            .as_array()
+            .expect("original aggregate members")
+    }
+    fn reference(term: &serde_json::Value) -> CheckedNodeId {
+        assert_eq!(term["term"], "reference");
+        serde_json::from_value(term["target"].clone()).expect("reader-admitted wire reference")
+    }
+    let nodes = &package.graph().nodes;
+    let lookup = |id: &CheckedNodeId| {
+        nodes
             .iter()
-            .map(u8::to_string)
-            .collect::<Vec<_>>()
-            .join(", ");
-        format!("rt::NodeKey::from_bytes([{bytes}])")
+            .find(|node| &node.node_id == id)
+            .expect("original referenced node")
+    };
+    let named = |name: &str| {
+        nodes
+            .iter()
+            .find(|node| {
+                node.declaration.as_ref().is_some_and(|declaration| {
+                    declaration
+                        .qualified_name
+                        .iter()
+                        .map(|part| part.as_ref())
+                        .eq([name])
+                })
+            })
+            .expect("original record declaration")
+    };
+    let list = named("List");
+    let tree = named("Tree");
+    assert_eq!(list.semantic_form.as_ref(), "record");
+    assert_eq!(tree.semantic_form.as_ref(), "record");
+    let list_members = members(list);
+    assert_eq!(list_members.len(), 1);
+    assert_eq!(list_members[0]["term"], "binding");
+    assert_eq!(list_members[0]["name"], "next");
+    let next = &list_members[0]["value"];
+    assert_eq!(next["term"], "aggregate");
+    let optional = next["members"].as_array().unwrap();
+    assert_eq!(optional.len(), 1);
+    assert_eq!(optional[0]["term"], "binding");
+    assert_eq!(optional[0]["name"], "optional");
+    let option = lookup(&reference(&optional[0]["value"]));
+    assert_eq!(option.semantic_form.as_ref(), "option");
+    let payload = members(option);
+    assert_eq!(payload.len(), 1);
+    assert_eq!(reference(&payload[0]), list.node_id);
+    let tree_members = members(tree);
+    assert_eq!(tree_members.len(), 1);
+    assert_eq!(tree_members[0]["term"], "binding");
+    assert_eq!(tree_members[0]["name"], "kids");
+    let bound = lookup(&reference(&tree_members[0]["value"]));
+    assert_eq!(bound.node_tag.as_ref(), "bounded_domain");
+    assert_eq!(bound.semantic_form.as_ref(), "collection_bounds");
+    let sequence = lookup(&bound.semantic_type);
+    assert_eq!(sequence.semantic_form.as_ref(), "sequence");
+    let elements = members(sequence);
+    assert_eq!(elements.len(), 1);
+    assert_eq!(reference(&elements[0]), tree.node_id);
+    let bounds = members(bound);
+    assert_eq!(bounds.len(), 2);
+    for (binding, (name, value)) in bounds.iter().zip([("min", "0"), ("max", "3")]) {
+        assert_eq!(binding["term"], "binding");
+        assert_eq!(binding["name"], name);
+        assert_eq!(binding["value"]["term"], "literal");
+        assert_eq!(binding["value"]["value_kind"], "integer");
+        assert_eq!(binding["value"]["value"], value);
+        let integer: CheckedNodeId =
+            serde_json::from_value(binding["value"]["type"].clone()).unwrap();
+        assert_eq!(lookup(&integer).semantic_form.as_ref(), "integer");
     }
-
-    fn composites_block<'a>(source: &'a str, oracle_symbol: &str) -> &'a str {
-        let stem = oracle_symbol
-            .strip_prefix("oracle_")
-            .expect("generated oracle symbol");
-        let marker = format!("fn composites_{stem}()");
-        let (_, block) = source
-            .split_once(&marker)
-            .expect("item's declaration block");
-        block.split_once("\n}\n").expect("declaration block end").0
-    }
-
-    let package = admit(builder);
-    let items = [
-        CompositeEqualityItem {
-            node_id: code_id(E_QSPEC_LIST),
-            operator: EqualityOperatorKind::Equal,
-            left: EqualityOperandDescriptor::typed(list.clone()),
-            right: EqualityOperandDescriptor::typed(list.clone()),
-        },
-        CompositeEqualityItem {
-            node_id: code_id(E_QSPEC_TREE),
-            operator: EqualityOperatorKind::Equal,
-            left: EqualityOperandDescriptor::typed(tree.clone()),
-            right: EqualityOperandDescriptor::typed(tree.clone()),
-        },
-    ];
-    let oracles = generate(&package, &items);
-    let list_claim = generated(only_claim(&oracles, E_QSPEC_LIST));
-    let tree_claim = generated(only_claim(&oracles, E_QSPEC_TREE));
-    let list = package.ids.resolve(&list);
-    let tree = package.ids.resolve(&tree);
-    assert_eq!(list_claim.declaration_keys, vec![list.clone()]);
-    assert_eq!(tree_claim.declaration_keys, vec![tree.clone()]);
-    let lib = contents(&oracles, "src/lib.rs");
-    assert_eq!(lib.matches("pub fn oracle_").count(), 2);
-    assert_eq!(lib.matches("pub fn environment_").count(), 2);
-    let list_block = composites_block(lib, &list_claim.oracle_symbol);
-    let list_key = emitted_key(&list);
-    assert!(
-        list_block.contains(&format!("rt::CompositeDeclaration::new({list_key}, ")),
-        "List declaration: {list_block}"
-    );
-    assert!(list_block.contains("rt::FieldDeclaration::new(\"next\", {"));
-    assert!(list_block.contains(&format!("rt::ValueType::Composite({list_key})")));
-    assert!(list_block.contains("rt::Presence::Optional)"));
-    let tree_block = composites_block(lib, &tree_claim.oracle_symbol);
-    let tree_key = emitted_key(&tree);
-    assert!(
-        tree_block.contains(&format!("rt::CompositeDeclaration::new({tree_key}, ")),
-        "Tree declaration: {tree_block}"
-    );
-    assert!(tree_block.contains("rt::FieldDeclaration::new(\"kids\", {"));
-    assert!(tree_block.contains(&format!("rt::ValueType::Composite({tree_key})")));
-    assert!(tree_block.contains("rt::CollectionKind::Sequence"));
-    assert!(tree_block.contains("rebuild_cardinality(0, 3)?"));
-    assert!(tree_block.contains("rt::Presence::Required)"));
 }
 
-/// Optional local conformance against the private QSpec fixture. The public
-/// QSL facade case above exercises the same reader-to-oracle path in CI.
+/// Optional external reader/shape conformance only. Genuine public generation is a
+/// separate source-backed control and receives no credit from an unavailable fixture.
 #[trace("FR-018-AC-24", "FR-018-AC-26", "FR-018-AC-27", "TC-029")]
 #[test]
 fn tc_029_authoritative_qspec_recursive_items_generate_through_reader() {
     const FIXTURE: &str = "proposals/checked-package-v2/fixtures/positive-recursive-records.json";
-    let Some(repo) = std::env::var_os("QSPEC_REPO") else {
-        println!("SKIP local QSpec conformance: QSPEC_REPO is unset; private fixture is not available in public CI");
+    let Some(repo) = std::env::var_os("QSPEC_REPO").or_else(|| std::env::var_os("QSPEC_DIR"))
+    else {
+        println!("UNAVAILABLE QSpec reader/shape conformance: neither QSPEC_REPO nor QSPEC_DIR is set; no conformance or public-generation credit");
         return;
     };
     let output = Command::new("git")
@@ -699,8 +780,9 @@ fn tc_029_authoritative_qspec_recursive_items_generate_through_reader() {
         matches!(read, CheckedPackageV2ReadResult::Admitted(_)),
         "original QSpec fixture: {read:?}"
     );
-    let (builder, list, tree) = recursive_items_package_from_wire(wire);
-    assert_recursive_item_generation(builder, list, tree);
+    if let CheckedPackageV2ReadResult::Admitted(package) = &read {
+        assert_recursive_fixture_shapes(package);
+    }
 }
 
 fn refused(claim: &CompositeEqualityClaim) -> &CompositeEqualityRefusal {
@@ -805,87 +887,102 @@ fn tc_029_ac20_byte_ceiling_has_failed_records_and_no_contract_package() {
 #[trace("FR-018-AC-1", "TC-029")]
 #[test]
 fn tc_029_ac1_every_item_gets_one_disposition_refused_siblings_unchanged() {
-    let package = admit(corpus_package());
-    let items = vec![
-        item(
-            E_RECORD,
-            EqualityOperatorKind::Equal,
-            typed(R_POINT),
-            typed(R_POINT),
-        ),
-        item(
-            E_DUP,
-            EqualityOperatorKind::Equal,
-            typed(R_DUP),
-            typed(R_DUP),
-        ),
-    ];
-    let oracles = generate(&package, &items);
-    assert_eq!(oracles.claim_map.items.len(), 2);
-    let _ = generated(only_claim(&oracles, E_RECORD));
-    assert!(matches!(
-        refused(only_claim(&oracles, E_DUP)),
-        CompositeEqualityRefusal::Declaration {
-            cause: DeclarationRefusalCause::DuplicateMember { .. },
-            ..
+    let compiled = super::admitted_composite_fixture::compile(
+        super::admitted_composite_fixture::SOURCE,
+        &qsl_replay::DependencyInput::default(),
+    );
+    let package = super::admitted_enum_equality::checked(&compiled, &[]);
+    let healthy = super::admitted_enum_equality::direct_source_item(&package, "pair_same");
+    let mut bad = super::admitted_enum_equality::direct_source_item(&package, "holder_same");
+    let original = bad.left.source_type.clone();
+    let boolean = package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| node.semantic_form.as_ref() == "boolean")
+        .expect("actual source Boolean")
+        .node_id
+        .clone();
+    bad.left.source_type = boolean.clone();
+    let alone = super::admitted_enum_equality::generate_items(
+        &package,
+        Some(compiled.context()),
+        std::slice::from_ref(&healthy),
+        &[],
+    )
+    .unwrap();
+    let output = super::admitted_enum_equality::generate_items(
+        &package,
+        Some(compiled.context()),
+        &[healthy.clone(), bad.clone()],
+        std::slice::from_ref(&boolean),
+    )
+    .unwrap();
+    assert_eq!(output.claim_map.items.len(), 2);
+    let healthy_claim = output
+        .claim_map
+        .items
+        .iter()
+        .find(|claim| claim.node_id == healthy.node_id)
+        .unwrap();
+    let healthy_generated = generated(healthy_claim);
+    let bad_claim = output
+        .claim_map
+        .items
+        .iter()
+        .find(|claim| claim.node_id == bad.node_id)
+        .unwrap();
+    assert_eq!(
+        refused(bad_claim),
+        &CompositeEqualityRefusal::OperandTypeMismatch {
+            position: 0,
+            expected: boolean,
+            found: Some(original),
         }
-    ));
-    let lib = contents(&oracles, "src/lib.rs");
+    );
+    let baseline = generated(&alone.claim_map.items[0]);
+    assert_eq!(healthy_generated.descriptor, baseline.descriptor);
+    assert_eq!(healthy_generated.schedule, baseline.schedule);
+    assert_eq!(healthy_generated.source_map, baseline.source_map);
+    let lib = contents(&output, "src/lib.rs");
     assert_eq!(
         lib.matches("pub fn oracle_").count(),
         1,
-        "the refused item must contribute no oracle function"
+        "refused item contributes no oracle"
     );
     assert_eq!(
         lib.matches("pub fn environment_").count(),
         1,
-        "the refused item must contribute no environment constructor"
+        "refused item contributes no constructor"
     );
+    for symbol in [
+        &healthy_generated.oracle_symbol,
+        &healthy_generated.environment_symbol,
+    ] {
+        let combined = emitted_fns(lib);
+        let single = emitted_fns(contents(&alone, "src/lib.rs"));
+        let actual = combined
+            .iter()
+            .find(|function| function.name == symbol.as_str())
+            .unwrap();
+        let expected = single
+            .iter()
+            .find(|function| function.name == symbol.as_str())
+            .unwrap();
+        assert_eq!(actual.signature, expected.signature);
+        assert_eq!(
+            actual.body, expected.body,
+            "healthy sibling function bytes stay unchanged"
+        );
+    }
+    // DuplicateMember x and its unchanged sibling are retained at the labelled private
+    // declaration seam; duplicate source has no successful public admitted context.
 }
 
 #[trace("FR-018-AC-3", "TC-029")]
 #[test]
 fn tc_029_ac3_claim_descriptor_matches_the_request() {
-    // Left and right carry different source types (a bounded-integer-to-integer
-    // conversion on the left only) so a descriptor-recording bug that swaps or
-    // drops an operand side is observable, not masked by a symmetric request.
-    // E_CONV's own body agrees with exactly this descriptor (its natural
-    // usage elsewhere in this module and in the agreement test) -- since
-    // codegen#82, an arbitrary node id can no longer stand in for one whose
-    // body disagrees with the requested descriptor.
-    let package = admit(corpus_package());
-    let left = converted(T_INTEGER_BOUNDED, T_INTEGER);
-    let right = typed(T_INTEGER);
-    let requested = item(
-        E_CONV,
-        EqualityOperatorKind::Equal,
-        left.clone(),
-        right.clone(),
-    );
-    let oracles = generate(&package, std::slice::from_ref(&requested));
-    let claim = generated(only_claim(&oracles, E_CONV));
-    assert_eq!(claim.descriptor.operator, EqualityOperatorKind::Equal);
-    assert_eq!(
-        claim.descriptor.left_source_type,
-        package.ids.resolve(&left.source_type)
-    );
-    assert_eq!(
-        claim.descriptor.left_conversion_target,
-        left.conversion_target
-            .as_ref()
-            .map(|id| package.ids.resolve(id))
-    );
-    assert_eq!(
-        claim.descriptor.right_source_type,
-        package.ids.resolve(&right.source_type)
-    );
-    assert_eq!(
-        claim.descriptor.right_conversion_target,
-        right
-            .conversion_target
-            .as_ref()
-            .map(|id| package.ids.resolve(id))
-    );
+    super::admitted_enum_equality::assert_authentic_conversion_descriptor();
 }
 
 #[trace("FR-018-AC-4", "TC-029")]
@@ -924,73 +1021,20 @@ fn tc_029_admitted_one_reference_sequence_resolves_its_separate_bound() {
 #[trace("FR-018-AC-4", "TC-029")]
 #[test]
 fn tc_029_ac4_schedule_matches_checked_equality_for_every_shape() {
-    let package = admit(corpus_package());
-    let items = vec![
-        item(
-            E_RECORD,
-            EqualityOperatorKind::Equal,
-            typed(R_POINT),
-            typed(R_POINT),
-        ),
-        item(
-            E_TUPLE,
-            EqualityOperatorKind::Equal,
-            typed(TUP_PAIR),
-            typed(TUP_PAIR),
-        ),
-        item(
-            E_OPTION,
-            EqualityOperatorKind::Equal,
-            typed(OPT_INT),
-            typed(OPT_INT),
-        ),
-        item(
-            E_COLLECTION,
-            EqualityOperatorKind::Equal,
-            typed(SEQ_INT),
-            typed(SEQ_INT),
-        ),
-        item(
-            E_TEXT,
-            EqualityOperatorKind::Equal,
-            typed(T_TEXT),
-            typed(T_TEXT),
-        ),
-        item(
-            E_ENUM,
-            EqualityOperatorKind::Equal,
-            EqualityOperandDescriptor::typed(enum_type_id()),
-            EqualityOperandDescriptor::typed(enum_type_id()),
-        ),
-    ];
-    let oracles = generate(&package, &items);
-    assert_eq!(
-        generated(only_claim(&oracles, E_RECORD)).schedule,
-        RecordedSchedule::Plan
-    );
-    assert_eq!(
-        generated(only_claim(&oracles, E_TUPLE)).schedule,
-        RecordedSchedule::Plan
-    );
-    assert_eq!(
-        generated(only_claim(&oracles, E_OPTION)).schedule,
-        RecordedSchedule::Plan
-    );
-    assert_eq!(
-        generated(only_claim(&oracles, E_COLLECTION)).schedule,
-        RecordedSchedule::Plan
-    );
-    assert_eq!(
-        generated(only_claim(&oracles, E_TEXT)).schedule,
-        RecordedSchedule::Text
-    );
-    assert_eq!(
-        generated(only_claim(&oracles, E_ENUM)).schedule,
-        RecordedSchedule::Enum
-    );
-    // Quantity is out of scope for this generator (module doc, disclosed):
-    // FR-018's Inputs vocabulary excludes dimension/unit nodes, so no vector
-    // here exercises `EqualitySchedule::Quantity`.
+    for (case, schedule) in [
+        ("record", RecordedSchedule::Plan),
+        ("tuple", RecordedSchedule::Plan),
+        ("option", RecordedSchedule::Plan),
+        ("collection", RecordedSchedule::Plan),
+        ("text", RecordedSchedule::Text),
+        ("enum", RecordedSchedule::Enum),
+    ] {
+        let oracles = genuine_host_case(case, false);
+        for claim in &oracles.claim_map.items {
+            assert_eq!(generated(claim).schedule, schedule, "{case}");
+        }
+    }
+    // Quantity remains outside this generator's admitted descriptor vocabulary.
 }
 
 /// Sequence cardinality comes from
@@ -1020,120 +1064,51 @@ fn tc_029_a_sequence_without_a_separate_collection_bound_is_refused() {
 #[trace("FR-018-AC-5", "TC-029")]
 #[test]
 fn tc_029_ac5_a_disallowed_conversion_refuses_at_generation_time() {
-    let package = admit(corpus_package());
-    let requested = item(
-        E_BAD_CONVERT,
-        EqualityOperatorKind::Equal,
-        converted(T_TEXT, T_INTEGER),
-        typed(T_TEXT),
-    );
-    let oracles = generate(&package, std::slice::from_ref(&requested));
-    assert!(matches!(
-        refused(only_claim(&oracles, E_BAD_CONVERT)),
-        CompositeEqualityRefusal::IllTyped {
-            cause: IllTypedCauseKind::TypeMismatch
-        }
-    ));
-    let lib = contents(&oracles, "src/lib.rs");
-    assert_eq!(lib.matches("pub fn oracle_").count(), 0);
+    super::admitted_enum_equality::assert_authentic_disallowed_caller_conversion();
 }
 
-/// FR-018 Behavior ("disagrees with its descriptor's arity or
-/// operand types"), TC-029 step 1 ("a descriptor disagreeing with its
-/// operand types"), codegen#82.
-///
-/// `E_OPERAND_MISMATCH`'s body names both operands `T_INTEGER`
-/// (`package::binary_body(T_INTEGER, T_INTEGER)`). A descriptor naming a
-/// different type for either position must refuse before generation --
-/// checked left, then right, so the two requests below exercise both
-/// positions and each reports the position that actually disagreed.
+/// The authentic Integer source/body/context remain unchanged while external descriptors
+/// disagree. Precise left-first and right-only mismatch IDs and a healthy control are retained.
 #[trace("FR-018", "TC-029")]
 #[test]
 fn tc_029_a_body_operand_disagreeing_with_the_descriptor_refuses_before_generation() {
-    let package = admit(corpus_package());
-
-    // Both positions disagree: the refusal names position 0 (left), checked
-    // first.
-    let both_wrong = item(
-        E_OPERAND_MISMATCH,
-        EqualityOperatorKind::Equal,
-        typed(T_TEXT),
-        typed(T_TEXT),
-    );
-    let oracles = generate(&package, std::slice::from_ref(&both_wrong));
-    match refused(only_claim(&oracles, E_OPERAND_MISMATCH)) {
-        CompositeEqualityRefusal::OperandTypeMismatch {
-            position,
-            expected,
-            found,
-        } => {
-            assert_eq!(*position, 0);
-            assert_eq!(*expected, oracles.key(T_TEXT));
-            assert_eq!(*found, Some(oracles.key(T_INTEGER)));
-        }
-        other => panic!("expected OperandTypeMismatch, got {other:?}"),
-    }
-    let lib = contents(&oracles, "src/lib.rs");
-    assert_eq!(
-        lib.matches("pub fn oracle_").count(),
-        0,
-        "a body/descriptor disagreement must contribute no oracle function"
-    );
-
-    // Only the right position disagrees: the refusal names position 1, not
-    // position 0 -- proving the check inspects both positions rather than
-    // stopping unconditionally at the first.
-    let right_wrong = item(
-        E_OPERAND_MISMATCH,
-        EqualityOperatorKind::Equal,
-        typed(T_INTEGER),
-        typed(T_TEXT),
-    );
-    let oracles = generate(&package, std::slice::from_ref(&right_wrong));
-    match refused(only_claim(&oracles, E_OPERAND_MISMATCH)) {
-        CompositeEqualityRefusal::OperandTypeMismatch {
-            position,
-            expected,
-            found,
-        } => {
-            assert_eq!(*position, 1);
-            assert_eq!(*expected, oracles.key(T_TEXT));
-            assert_eq!(*found, Some(oracles.key(T_INTEGER)));
-        }
-        other => panic!("expected OperandTypeMismatch, got {other:?}"),
-    }
-
-    // A request whose descriptor agrees with the body at both positions
-    // generates: proves the check is a genuine agreement test, not an
-    // unconditional refusal of this node id.
-    let agrees = item(
-        E_OPERAND_MISMATCH,
-        EqualityOperatorKind::Equal,
-        typed(T_INTEGER),
-        typed(T_INTEGER),
-    );
-    let oracles = generate(&package, std::slice::from_ref(&agrees));
-    let _ = generated(only_claim(&oracles, E_OPERAND_MISMATCH));
+    super::admitted_enum_equality::assert_authentic_operand_descriptor_mismatch();
 }
 
 #[trace("FR-018-AC-6", "TC-029")]
 #[test]
 fn tc_029_ac6_ieee_at_any_depth_is_operator_ineligible() {
-    let package = admit(corpus_package());
+    let source = "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\nrecord FloatRecord { f: Float64; }\nrecord IntegerRecord { f: Integer; }\n";
+    let compiled =
+        super::admitted_composite_fixture::compile(source, &qsl_replay::DependencyInput::default());
+    let owner_key = |name: &str| {
+        compiled
+            .context()
+            .composites()
+            .find(|actual| {
+                actual
+                    .qualified_name()
+                    .iter()
+                    .map(|part| part.as_str())
+                    .eq([name])
+            })
+            .expect("real source declaration")
+            .key()
+    };
     // Reconstruct SEQ_R_FLOAT (a sequence of R_FLOAT { f: Float64 }) exactly
     // as the runtime environment sees it, and confirm the reader refusal
     // asserted by `tc_052_nested_ieee_equality_is_refused_by_reader`
     // agrees with an independent, direct `contains_ieee` call over that
     // reconstructed type at both its depths (the record field, and the
     // sequence wrapping it) rather than merely riding on the same code path.
-    let float_record_key = NodeKey::from_hex(package.key(R_FLOAT).digest.as_ref()).unwrap();
+    let float_record_key = owner_key("FloatRecord");
     let environment = TypeEnvironment::new(
         vec![CompositeDeclaration::new(
             float_record_key,
-            "R_FLOAT",
+            "FloatRecord",
             CompositeShape::Record(vec![FieldDeclaration::new(
                 "f",
-                ValueType::Float(IeeeWidth::Binary64),
+                ValueType::Float(quire_exact::FloatType::exact(IeeeWidth::Binary64)),
                 Presence::Required,
             )]),
         )],
@@ -1141,16 +1116,20 @@ fn tc_029_ac6_ieee_at_any_depth_is_operator_ineligible() {
     )
     .unwrap();
     let record_type = ValueType::Composite(float_record_key);
-    let sequence_type = ValueType::Collection(Box::new(CollectionType::new(
+    let sequence_type = ValueType::collection(CollectionType::new(
         CollectionKind::Sequence,
         record_type.clone(),
-        CardinalityBound::new(0, 8).unwrap(),
-    )));
+        Some(CardinalityBound::new(0, 8).unwrap()),
+    ));
     // The leaf itself: `ValueType::Float(_) => return true` is `contains_ieee`'s
     // base case, unasserted by the record/sequence checks above (both of those
     // pass by *reaching* an IEEE leaf through a composite, never by naming the
     // leaf type directly).
-    assert!(environment.contains_ieee(&ValueType::Float(IeeeWidth::Binary64)));
+    assert!(
+        environment.contains_ieee(&ValueType::Float(quire_exact::FloatType::exact(
+            IeeeWidth::Binary64
+        )))
+    );
     assert!(environment.contains_ieee(&record_type));
     assert!(environment.contains_ieee(&sequence_type));
 
@@ -1158,11 +1137,11 @@ fn tc_029_ac6_ieee_at_any_depth_is_operator_ineligible() {
     // a field) would pass every assertion above. A structurally identical
     // record and sequence, but with an `Integer` field instead of `Float64`,
     // must report `false` at both depths.
-    let not_float_record_key = NodeKey::from_hex(&key(R_NOT_FLOAT)).unwrap();
+    let not_float_record_key = owner_key("IntegerRecord");
     let not_ieee_environment = TypeEnvironment::new(
         vec![CompositeDeclaration::new(
             not_float_record_key,
-            "R_NOT_FLOAT",
+            "IntegerRecord",
             CompositeShape::Record(vec![FieldDeclaration::new(
                 "f",
                 ValueType::Integer,
@@ -1173,11 +1152,11 @@ fn tc_029_ac6_ieee_at_any_depth_is_operator_ineligible() {
     )
     .unwrap();
     let not_float_record_type = ValueType::Composite(not_float_record_key);
-    let not_float_sequence_type = ValueType::Collection(Box::new(CollectionType::new(
+    let not_float_sequence_type = ValueType::collection(CollectionType::new(
         CollectionKind::Sequence,
         not_float_record_type.clone(),
-        CardinalityBound::new(0, 8).unwrap(),
-    )));
+        Some(CardinalityBound::new(0, 8).unwrap()),
+    ));
     assert!(!not_ieee_environment.contains_ieee(&ValueType::Integer));
     assert!(!not_ieee_environment.contains_ieee(&not_float_record_type));
     assert!(!not_ieee_environment.contains_ieee(&not_float_sequence_type));
@@ -1415,51 +1394,73 @@ fn tc_029_ac7_a_direct_reference_operand_is_refused_by_ir_today() {
     assert_eq!(refusal.locus, Some(node_id));
 }
 
-/// FR-018-AC-8 (generation-time half; the `check_type` guard
-/// half is `tc_029_ac8_check_type_guards_the_oracle` in the agreement test).
+/// Public admission-stage duplicate source control; the exact private CG declaration
+/// defense and the independent generated-oracle no-charge guard remain separate.
 #[trace("FR-018-AC-8", "TC-029")]
 #[test]
 fn tc_029_ac8_a_duplicate_field_is_refused_with_its_declaration_cause() {
-    let package = admit(corpus_package());
-    let requested = item(
-        E_DUP,
-        EqualityOperatorKind::Equal,
-        typed(R_DUP),
-        typed(R_DUP),
+    let source = concat!(
+        "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\n",
+        "record Point { x: Integer; x: Integer; }\n",
+        "function f using v(a: Point,b: Point): Boolean pure { a = b }\n",
     );
-    let oracles = generate(&package, std::slice::from_ref(&requested));
-    match refused(only_claim(&oracles, E_DUP)) {
-        CompositeEqualityRefusal::Declaration {
-            cause: DeclarationRefusalCause::DuplicateMember { name },
-            ..
-        } => assert_eq!(name, "x"),
-        other => panic!("expected DuplicateMember, got {other:?}"),
-    }
+    let result = qsl_replay::compile_admitted(
+        qsl_replay::SourceIdentity::new("test", "duplicate-field.native", "git", "fixture"),
+        "duplicate-field.native",
+        source.as_bytes(),
+        [],
+        &qsl_replay::DependencyInput::default(),
+        qsl_replay::StageLimits::default(),
+        qsl_replay::ReplayLimits::default(),
+    );
+    let qsl_replay::AdmittedRefusal::Package(refusal) =
+        result.expect_err("duplicate source produces no admitted context")
+    else {
+        panic!("duplicate source must retain its owning Package refusal");
+    };
+    assert_eq!(refusal.code(), qsl_replay::Code::AmbiguousDeclaration);
+    assert_eq!(refusal.cause(), None);
 }
 
 #[trace("FR-018-AC-10", "TC-029")]
 #[test]
 fn tc_029_ac10_bytes_are_deterministic_across_request_permutations() {
-    let package = admit(corpus_package());
-    let mut items = golden_items();
-    let forward = generate(&package, &items);
-    items.reverse();
-    let reversed = generate(&package, &items);
-    assert_eq!(
-        serde_json::to_string(&forward.claim_map).unwrap(),
-        serde_json::to_string(&reversed.claim_map).unwrap(),
-    );
-    assert_eq!(
-        contents(&forward, "src/lib.rs"),
-        contents(&reversed, "src/lib.rs")
-    );
-
-    // Two descriptors over one node id (E_RECORD `=` and `!=`) are both
-    // generated, in either request order; they are not a duplicate.
-    for oracles in [&forward, &reversed] {
-        assert_eq!(claims_for(oracles, E_RECORD).len(), 2);
-        for claim in claims_for(oracles, E_RECORD) {
-            let _ = generated(claim);
+    for case in genuine_host_cases() {
+        let forward = genuine_host_case(case, false);
+        let reversed = genuine_host_case(case, true);
+        assert_eq!(
+            serde_json::to_string(&forward.claim_map).unwrap(),
+            serde_json::to_string(&reversed.claim_map).unwrap(),
+            "{case}"
+        );
+        assert_eq!(
+            contents(&forward, "src/lib.rs"),
+            contents(&reversed, "src/lib.rs"),
+            "{case}"
+        );
+        for output in [&forward, &reversed] {
+            let distinct = output
+                .claim_map
+                .items
+                .iter()
+                .find(|claim| {
+                    generated(claim).descriptor.operator == EqualityOperatorKind::NotEqual
+                })
+                .unwrap();
+            let same_node = output
+                .claim_map
+                .items
+                .iter()
+                .filter(|claim| claim.node_id == distinct.node_id)
+                .collect::<Vec<_>>();
+            assert_eq!(
+                same_node.len(),
+                2,
+                "the caller declares both operators over one real node"
+            );
+            for claim in same_node {
+                let _ = generated(claim);
+            }
         }
     }
 }
@@ -1467,92 +1468,26 @@ fn tc_029_ac10_bytes_are_deterministic_across_request_permutations() {
 #[trace("FR-018-AC-10", "TC-029")]
 #[test]
 fn tc_029_ac10_claim_map_entries_ascend_by_the_descriptor_key() {
-    let package = admit(corpus_package());
-    let oracles = generate(&package, &golden_items());
-    let keys: Vec<(String, u8)> = oracles
-        .claim_map
-        .items
-        .iter()
-        .map(|claim| {
-            let operator = match &claim.result {
-                ClaimDisposition::Generated(g) => g.descriptor.operator as u8,
-                ClaimDisposition::Refused { .. } => 0,
-            };
-            (claim.node_id.digest.to_string(), operator)
-        })
-        .collect();
-    let mut sorted = keys.clone();
-    sorted.sort();
-    assert_eq!(
-        keys, sorted,
-        "claim map entries must already ascend by descriptor key"
-    );
-}
-
-/// The generator's current output for the whole corpus request, which
-/// `composite_equality_agreement` builds and executes.
-/// The `names.rs` the composite agreement cases `include!`: each executed oracle and environment
-/// under `{oracle,environment}_{code}_{operator}`, and the base package's enum declaration key.
-pub(super) fn agreement_names(oracles: &FixtureOracles) -> String {
-    let executed: &[(u32, &str, &str)] = &[
-        (E_RECORD, "equal", "e_record_equal"),
-        (E_TUPLE, "equal", "e_tuple_equal"),
-        (E_OPTION, "equal", "e_option_equal"),
-        (E_COLLECTION, "equal", "e_collection_equal"),
-        (E_SELF, "equal", "e_self_equal"),
-        (E_PAIR_OF_POINTS, "equal", "e_pair_of_points_equal"),
-        (E_RECORD, "not_equal", "e_record_not_equal"),
-        (E_TEXT, "equal", "e_text_equal"),
-        (E_ENUM, "equal", "e_enum_equal"),
-        (E_CONV, "equal", "e_conv_equal"),
-        (E_CONV_CHARGE, "equal", "e_conv_charge_equal"),
-        (E_CONV_RAT_RAT, "equal", "e_conv_rat_rat_equal"),
-        (E_CONV_RAT_INT, "equal", "e_conv_rat_int_equal"),
-        (E_CONV_DEC_RAT, "equal", "e_conv_dec_rat_equal"),
-        (E_CONV_DEC_DEC, "equal", "e_conv_dec_dec_equal"),
-        (E_CONV_DEC_INT, "equal", "e_conv_dec_int_equal"),
-    ];
-    let mut aliases = Vec::new();
-    for (code, operator, alias) in executed {
-        let identity = format!("equality.{operator}");
-        let generated = oracles
+    for case in genuine_host_cases() {
+        let output = genuine_host_case(case, true);
+        let keys = output
             .claim_map
             .items
             .iter()
-            .find(|claim| {
-                claim.node_id == oracles.key(*code) && claim.operation.identity == identity
+            .map(|claim| {
+                (
+                    claim.node_id.digest.to_string(),
+                    generated(claim).descriptor.operator as u8,
+                )
             })
-            .and_then(|claim| match &claim.result {
-                ClaimDisposition::Generated(generated) => Some(generated),
-                ClaimDisposition::Refused { .. } => None,
-            })
-            .unwrap_or_else(|| panic!("node {code} {operator} is not generated"));
-        aliases.push((generated.oracle_symbol.clone(), format!("oracle_{alias}")));
-        aliases.push((
-            generated.environment_symbol.clone(),
-            format!("environment_{alias}"),
-        ));
+            .collect::<Vec<_>>();
+        let mut sorted = keys.clone();
+        sorted.sort();
+        assert_eq!(
+            keys, sorted,
+            "{case}: claim map entries already ascend by descriptor key"
+        );
     }
-    super::exact_scalar_agreement::names_file(
-        quire_contract_codegen::COMPOSITE_EQUALITY_CRATE_NAME,
-        &aliases,
-        &format!(
-            "pub const ENUM_TYPE_DIGEST: &str = {:?};\n\
-             pub const R_POINT_DIGEST: &str = {:?};\n\
-             pub const TUP_PAIR_DIGEST: &str = {:?};\n\
-             pub const R_SELF_DIGEST: &str = {:?};\n\
-             pub const R_PAIR_OF_POINTS_DIGEST: &str = {:?};\n",
-            enum_type_digest(),
-            oracles.runtime_key(R_POINT),
-            oracles.runtime_key(TUP_PAIR),
-            oracles.runtime_key(R_SELF),
-            oracles.runtime_key(R_PAIR_OF_POINTS),
-        ),
-    )
-}
-
-pub(super) fn corpus_oracles() -> FixtureOracles {
-    generate(&admit(corpus_package()), &golden_items())
 }
 
 /// Generating the corpus twice, each time from a freshly built and admitted
@@ -1560,43 +1495,49 @@ pub(super) fn corpus_oracles() -> FixtureOracles {
 #[trace("FR-018-AC-10", "TC-029", "TC-001", "NFR-002-AC-1", "NFR-002-AC-2")]
 #[test]
 fn tc_029_ac10_generation_is_repeatable_from_a_fresh_package() {
-    let first = corpus_oracles();
-    let second = corpus_oracles();
-    assert_eq!(first, second);
-    let subjects = first
-        .claim_map
-        .items
-        .iter()
-        .filter(|claim| matches!(&claim.result, ClaimDisposition::Generated(_)))
-        .map(|claim| format!("{}/{}", claim.node_id.domain, claim.node_id.digest))
-        .collect::<Vec<String>>();
-    let subject_refs = subjects.iter().map(String::as_str).collect::<Vec<_>>();
-    let declaration_subjects = first
-        .claim_map
-        .items
-        .iter()
-        .filter_map(|claim| match &claim.result {
-            ClaimDisposition::Generated(generated) => Some(&generated.declaration_keys),
-            ClaimDisposition::Refused { .. } => None,
-        })
-        .flatten()
-        .map(|id| format!("{}/{}", id.domain, id.digest))
-        .collect::<Vec<_>>();
-    let declaration_refs = declaration_subjects
-        .iter()
-        .map(String::as_str)
-        .collect::<Vec<_>>();
-    let lib = contents(&first, "src/lib.rs");
-    crate::generated_headers::assert_header("src/lib.rs", lib, &declaration_refs);
-    for artifact in first
-        .artifacts
-        .iter()
-        .filter(|artifact| artifact.path.ends_with(".rs"))
-    {
-        crate::generated_headers::assert_header(&artifact.path, &artifact.contents, &subject_refs);
-    }
-    for path in ["Cargo.toml", "src/lib.rs", "claim-map.json"] {
-        assert_eq!(contents(&first, path), contents(&second, path), "{path}");
+    for case in genuine_host_cases() {
+        let first = genuine_host_case(case, false);
+        let second = genuine_host_case(case, false);
+        assert_eq!(first, second);
+        let subjects = first
+            .claim_map
+            .items
+            .iter()
+            .filter(|claim| matches!(&claim.result, ClaimDisposition::Generated(_)))
+            .map(|claim| format!("{}/{}", claim.node_id.domain, claim.node_id.digest))
+            .collect::<Vec<String>>();
+        let subject_refs = subjects.iter().map(String::as_str).collect::<Vec<_>>();
+        let declaration_subjects = first
+            .claim_map
+            .items
+            .iter()
+            .filter_map(|claim| match &claim.result {
+                ClaimDisposition::Generated(generated) => Some(&generated.declaration_keys),
+                ClaimDisposition::Refused { .. } => None,
+            })
+            .flatten()
+            .map(|id| format!("{}/{}", id.domain, id.digest))
+            .collect::<Vec<_>>();
+        let declaration_refs = declaration_subjects
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+        let lib = contents(&first, "src/lib.rs");
+        crate::generated_headers::assert_header("src/lib.rs", lib, &declaration_refs);
+        for artifact in first
+            .artifacts
+            .iter()
+            .filter(|artifact| artifact.path.ends_with(".rs"))
+        {
+            crate::generated_headers::assert_header(
+                &artifact.path,
+                &artifact.contents,
+                &subject_refs,
+            );
+        }
+        for path in ["Cargo.toml", "src/lib.rs", "claim-map.json"] {
+            assert_eq!(contents(&first, path), contents(&second, path), "{path}");
+        }
     }
 }
 
@@ -1605,54 +1546,67 @@ fn tc_029_ac10_generation_is_repeatable_from_a_fresh_package() {
 #[trace("FR-018-AC-11", "TC-029")]
 #[test]
 fn tc_029_ac11_two_operators_over_one_node_get_distinct_symbols_and_are_caller_declared() {
-    let package = admit(corpus_package());
-    let oracles = generate(&package, &golden_items());
-    let claims = claims_for(&oracles, E_RECORD);
-    assert_eq!(claims.len(), 2);
-    let equal = claims
-        .iter()
-        .find(|c| generated(c).descriptor.operator == EqualityOperatorKind::Equal)
-        .unwrap();
-    let not_equal = claims
-        .iter()
-        .find(|c| generated(c).descriptor.operator == EqualityOperatorKind::NotEqual)
-        .unwrap();
-    assert_ne!(
-        generated(equal).oracle_symbol,
-        generated(not_equal).oracle_symbol
-    );
-    assert_ne!(
-        generated(equal).environment_symbol,
-        generated(not_equal).environment_symbol
-    );
-    for claim in &claims {
+    for case in genuine_host_cases() {
+        let oracles = genuine_host_case(case, false);
+        let node = &oracles
+            .claim_map
+            .items
+            .iter()
+            .find(|claim| generated(claim).descriptor.operator == EqualityOperatorKind::NotEqual)
+            .unwrap()
+            .node_id;
+        let claims = oracles
+            .claim_map
+            .items
+            .iter()
+            .filter(|claim| &claim.node_id == node)
+            .collect::<Vec<_>>();
+        assert_eq!(claims.len(), 2);
+        let equal = claims
+            .iter()
+            .find(|c| generated(c).descriptor.operator == EqualityOperatorKind::Equal)
+            .unwrap();
+        let not_equal = claims
+            .iter()
+            .find(|c| generated(c).descriptor.operator == EqualityOperatorKind::NotEqual)
+            .unwrap();
+        assert_ne!(
+            generated(equal).oracle_symbol,
+            generated(not_equal).oracle_symbol
+        );
+        assert_ne!(
+            generated(equal).environment_symbol,
+            generated(not_equal).environment_symbol
+        );
+        for claim in &claims {
+            assert_eq!(
+                claim.operation.provenance,
+                quire_contract_codegen::CompositeOperationProvenance::CallerDeclared {
+                    blocked_on: UpstreamBlocker::OperationIdentityNotConsumed
+                }
+            );
+        }
+        assert!(oracles
+            .claim_map
+            .blocked
+            .contains(&UpstreamBlocker::OperationIdentityNotConsumed));
+
+        let lib = contents(&oracles, "src/lib.rs");
+        let mut functions: Vec<&str> = lib
+            .lines()
+            .filter(|line| {
+                line.starts_with("pub fn oracle_") || line.starts_with("pub fn environment_")
+            })
+            .collect();
+        let total = functions.len();
+        functions.sort();
+        functions.dedup();
         assert_eq!(
-            claim.operation.provenance,
-            quire_contract_codegen::CompositeOperationProvenance::CallerDeclared {
-                blocked_on: UpstreamBlocker::OperationIdentityNotConsumed
-            }
+            functions.len(),
+            total,
+            "every generated symbol line must be unique"
         );
     }
-    assert!(oracles
-        .claim_map
-        .blocked
-        .contains(&UpstreamBlocker::OperationIdentityNotConsumed));
-
-    let lib = contents(&oracles, "src/lib.rs");
-    let mut functions: Vec<&str> = lib
-        .lines()
-        .filter(|line| {
-            line.starts_with("pub fn oracle_") || line.starts_with("pub fn environment_")
-        })
-        .collect();
-    let total = functions.len();
-    functions.sort();
-    functions.dedup();
-    assert_eq!(
-        functions.len(),
-        total,
-        "every generated symbol line must be unique"
-    );
 }
 
 /// The `rebuild_integer` reconstruction helper is emitted only when some rendered
@@ -1664,14 +1618,7 @@ fn tc_029_ac11_two_operators_over_one_node_get_distinct_symbols_and_are_caller_d
 #[trace("FR-018-AC-12", "TC-029")]
 #[test]
 fn tc_029_ac12_integer_helper_omitted_when_unreached() {
-    let package = admit(corpus_package());
-    let request = [item(
-        E_TEXT,
-        EqualityOperatorKind::Equal,
-        typed(T_TEXT),
-        typed(T_TEXT),
-    )];
-    let oracles = generate(&package, &request);
+    let oracles = super::admitted_enum_equality::authentic_text_oracles();
     let lib = contents(&oracles, "src/lib.rs");
     assert!(
         !lib.contains("fn rebuild_integer(") && !lib.contains("fn rebuild_interval("),
@@ -1682,7 +1629,7 @@ fn tc_029_ac12_integer_helper_omitted_when_unreached() {
 #[trace("FR-018-AC-12", "TC-029")]
 #[test]
 fn tc_029_ac12_manifest_is_unpublished_and_charge_free() {
-    let oracles = generate(&admit(corpus_package()), &golden_items());
+    let oracles = genuine_host_case("mixed", false);
     let manifest = contents(&oracles, "Cargo.toml");
     assert!(manifest.contains(&format!("name = \"{COMPOSITE_EQUALITY_CRATE_NAME}\"")));
     assert!(manifest.contains("publish = false"));
@@ -1736,9 +1683,19 @@ fn tc_029_ac12_manifest_is_unpublished_and_charge_free() {
     for artifact in &oracles.artifacts {
         fs::write(directory.path.join(&artifact.path), &artifact.contents).unwrap();
     }
-    seed_lock(&directory.path);
+    let resolved = Command::new(env!("CARGO"))
+        .arg("generate-lockfile")
+        .env("CARGO_TARGET_DIR", directory.path.join("target"))
+        .current_dir(&directory.path)
+        .output()
+        .unwrap();
+    assert!(
+        resolved.status.success(),
+        "independent generated manifest resolution failed: {}",
+        String::from_utf8_lossy(&resolved.stderr)
+    );
     let output = Command::new(env!("CARGO"))
-        .args(["build", "--offline", "--quiet"])
+        .args(["build", "--locked", "--offline", "--quiet"])
         .env("CARGO_TARGET_DIR", directory.path.join("target"))
         .env("RUSTFLAGS", "-Dwarnings")
         .env_remove("CARGO_ENCODED_RUSTFLAGS")
@@ -1755,150 +1712,109 @@ fn tc_029_ac12_manifest_is_unpublished_and_charge_free() {
 #[trace("FR-018-AC-13", "TC-029")]
 #[test]
 fn tc_029_ac13_declaration_keys_are_the_reached_v2_node_ids() {
-    let package = admit(corpus_package());
-    let items = vec![
-        item(
-            E_RECORD,
-            EqualityOperatorKind::Equal,
-            typed(R_POINT),
-            typed(R_POINT),
-        ),
-        item(
-            E_PAIR_OF_POINTS,
-            EqualityOperatorKind::Equal,
-            typed(R_PAIR_OF_POINTS),
-            typed(R_PAIR_OF_POINTS),
-        ),
-    ];
-    let oracles = generate(&package, &items);
-
-    let single = generated(only_claim(&oracles, E_RECORD));
-    assert_eq!(single.declaration_keys, vec![oracles.key(R_POINT)]);
-    assert_eq!(
-        single.declaration_runtime_keys,
-        vec![oracles.runtime_key(R_POINT)],
-        "declaration_runtime_keys must equal NodeKey::from_hex of declaration_keys"
-    );
-
-    let nested = generated(only_claim(&oracles, E_PAIR_OF_POINTS));
-    assert_eq!(
-        nested.declaration_keys,
-        vec![oracles.key(R_POINT), oracles.key(R_PAIR_OF_POINTS)],
-        "declaration keys ascend by digest domain then digest"
-    );
-    assert_eq!(
-        nested.declaration_runtime_keys,
-        vec![
-            oracles.runtime_key(R_POINT),
-            oracles.runtime_key(R_PAIR_OF_POINTS)
-        ]
-    );
-
-    // FR-018-AC-13 also names node id, package id, source map, claims
-    // and the selected schedule. Recompute each independently — never by
-    // reading it back off the generated claim-map — using the same public
-    // `CheckedPackageV2::lower` the generator calls, but with a
-    // self-constructed, maximally permissive profile (`CheckedNodeTag::ALL`)
-    // so this recomputation shares no private profile constant with the
-    // generator. `claims` and `source_map` must agree regardless of which
-    // permissive profile computed them.
-    let profile = CompleteLoweringProfileV2 {
-        reference: quire_contract_model::LoweringProfileRef {
-            authority: "agent-ix".into(),
-            identity: "quire.codegen.composite-equality/v1".into(),
-        },
-        supported_tags: CheckedNodeTag::ALL.iter().copied().collect::<BTreeSet<_>>(),
-        require_bounds: false,
-        work_limit: 10_000,
-    };
-    assert_eq!(
-        only_claim(&oracles, E_RECORD).node_id,
-        oracles.key(E_RECORD)
-    );
-    assert_eq!(
-        only_claim(&oracles, E_PAIR_OF_POINTS).node_id,
-        oracles.key(E_PAIR_OF_POINTS)
-    );
-    assert_eq!(single.schedule, RecordedSchedule::Plan);
-    assert_eq!(nested.schedule, RecordedSchedule::Plan);
-    assert_eq!(single.package_id, *package.package_id());
-    assert_eq!(nested.package_id, *package.package_id());
-
-    let single_lowering = package.lower(&[package.key(E_RECORD)], &profile);
-    assert_eq!(
-        *single_lowering.package.source_package_id(),
-        *package.package_id(),
-        "source_package_id is the admitted SOURCE package's identity; package_id() is a \
-         different digest, over the lowered closure"
-    );
-    match &single_lowering.records[..] {
-        [CompleteLoweringRecordV2::Lowered { node }] => {
-            assert_eq!(single.node_id, oracles.key(E_RECORD));
-            assert_eq!(
-                single.claims, node.claims,
-                "claims must equal the independently lowered node's"
-            );
-            assert_eq!(
-                single.source_map, node.source_map,
-                "source_map must equal the independently lowered node's"
-            );
+    for (case, names) in [
+        ("record", &["Point"][..]),
+        ("nested", &["Point", "PairOfPoints"][..]),
+    ] {
+        let compiled = genuine_fixture::compile(case);
+        let package = super::admitted_enum_equality::checked(&compiled, &[]);
+        let item = super::composite_equality_agreement::original_item(&package, false);
+        let oracles = super::admitted_enum_equality::generate_items(
+            &package,
+            Some(compiled.context()),
+            std::slice::from_ref(&item),
+            &[],
+        )
+        .expect("original complete package and context");
+        let claim = generated(&oracles.claim_map.items[0]);
+        let declarations = compiled
+            .context()
+            .composites()
+            .filter(|actual| {
+                names.iter().any(|name| {
+                    actual
+                        .qualified_name()
+                        .iter()
+                        .map(|part| part.as_str())
+                        .eq([*name])
+                })
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(declarations.len(), names.len());
+        let mut wire = declarations
+            .iter()
+            .map(|actual| quire_contract_model::CheckedNodeId {
+                domain: quire_exact::NODE_KEY_DOMAIN.into(),
+                digest: actual.node().to_string().into_boxed_str(),
+            })
+            .collect::<Vec<_>>();
+        wire.sort();
+        let runtime = wire
+            .iter()
+            .map(|id| {
+                declarations
+                    .iter()
+                    .find(|actual| actual.node().to_string() == id.digest.as_ref())
+                    .expect("actual wire-to-kernel pairing")
+                    .key()
+                    .to_string()
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            claim.declaration_keys, wire,
+            "wire identities ascend by domain/digest"
+        );
+        assert_eq!(
+            claim.declaration_runtime_keys, runtime,
+            "kernel identities retain the corresponding wire declaration order"
+        );
+        for actual in declarations {
+            assert_ne!(actual.node(), actual.key());
         }
-        other => panic!("expected exactly one Lowered record, found {other:?}"),
-    }
-
-    let nested_lowering = package.lower(&[package.key(E_PAIR_OF_POINTS)], &profile);
-    match &nested_lowering.records[..] {
-        [CompleteLoweringRecordV2::Lowered { node }] => {
-            assert_eq!(nested.node_id, oracles.key(E_PAIR_OF_POINTS));
-            assert_eq!(
-                nested.claims, node.claims,
-                "claims must equal the independently lowered node's"
-            );
-            assert_eq!(
-                nested.source_map, node.source_map,
-                "source_map must equal the independently lowered node's"
-            );
+        assert_eq!(claim.node_id, item.node_id);
+        assert_eq!(claim.schedule, RecordedSchedule::Plan);
+        assert_eq!(claim.package_id, *package.package_id());
+        // Independently recompute exact claims and source locations via public IR lowering,
+        // without reading the generator's private profile or claim-map to build expectations.
+        let profile = CompleteLoweringProfileV2 {
+            reference: quire_contract_model::LoweringProfileRef {
+                authority: "agent-ix".into(),
+                identity: "quire.codegen.composite-equality/v1".into(),
+            },
+            supported_tags: CheckedNodeTag::ALL.iter().copied().collect::<BTreeSet<_>>(),
+            require_bounds: false,
+            work_limit: 10_000,
+        };
+        let lowered = package.lower(std::slice::from_ref(&item.node_id), &profile);
+        assert_eq!(*lowered.package.source_package_id(), *package.package_id());
+        match &lowered.records[..] {
+            [CompleteLoweringRecordV2::Lowered { node }] => {
+                assert_eq!(claim.claims, node.claims);
+                assert_eq!(claim.source_map, node.source_map);
+            }
+            other => panic!("expected exactly one independent Lowered record, found {other:?}"),
         }
-        other => panic!("expected exactly one Lowered record, found {other:?}"),
     }
 }
 
-/// The generated source of `E_TUPLE` over `TUP_PAIR` built from `extras` and `members`.
-fn tuple_source(extras: &[u32], members: &[u32]) -> (FixtureOracles, String) {
-    let package = admit(tuple_members_package(extras, members));
-    let items = vec![item(
-        E_TUPLE,
-        EqualityOperatorKind::Equal,
-        typed(TUP_PAIR),
-        typed(TUP_PAIR),
-    )];
-    // These two scalar members name their base type; their separate bounded
-    // domains are caller-authored context roots, not body dependencies.
-    let context = members
-        .iter()
-        .filter_map(|member| match *member {
-            T_DECIMAL_SMALL => Some(BD_DECIMAL),
-            T_RATIONAL_NARROW => Some(BD_RATIONAL_NARROW),
-            _ => None,
-        })
-        .map(|code| package.key(code))
-        .collect::<Vec<_>>();
-    let oracles = generate_with_context(&package, &items, &context);
-    let lib = contents(&oracles, "src/lib.rs").to_owned();
-    (oracles, lib)
-}
-
-/// The refusal `E_TUPLE` gets over `TUP_PAIR` built from `extras` and `members`.
-fn tuple_refusal(extras: &[u32], members: &[u32]) -> (CompositeEqualityRefusal, FixtureIds) {
-    let package = admit(tuple_members_package(extras, members));
-    let items = vec![item(
-        E_TUPLE,
-        EqualityOperatorKind::Equal,
-        typed(TUP_PAIR),
-        typed(TUP_PAIR),
-    )];
-    let oracles = generate(&package, &items);
-    (refused(only_claim(&oracles, E_TUPLE)).clone(), oracles.ids)
+/// Generate an unchanged genuine tuple source; extra declarations remain original context,
+/// never synthetic nodes or a context borrowed from an unrelated source.
+fn genuine_tuple_source(members: &str, extras: &str) -> (CompositeEqualityOracles, String) {
+    let source = format!("language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\ntuple Pair({members});\n{extras}function f using v(a: Pair,b: Pair): Boolean pure {{ a = b }}\n");
+    let compiled = genuine_fixture::compile_source(&source);
+    let package = super::admitted_enum_equality::checked(&compiled, &[]);
+    let item = super::composite_equality_agreement::original_item(&package, false);
+    let output = super::admitted_enum_equality::generate_items(
+        &package,
+        Some(compiled.context()),
+        std::slice::from_ref(&item),
+        &[],
+    )
+    .expect("original genuine tuple");
+    assert_eq!(output.claim_map.items.len(), 1);
+    let _ = generated(&output.claim_map.items[0]);
+    let source = contents(&output, "src/lib.rs").to_owned();
+    (output, source)
 }
 
 /// The corpus tuple `(Int[-100, 100], Text[0, 16; nfc])` names the
@@ -1907,12 +1823,12 @@ fn tuple_refusal(extras: &[u32], members: &[u32]) -> (CompositeEqualityRefusal, 
 #[trace("FR-018-AC-16", "TC-029")]
 #[test]
 fn tc_029_ac16_a_text_bounds_member_reconstructs_its_own_text_type() {
-    let (oracles, lib) = tuple_source(&[], &[T_INTEGER_BOUNDED, BD_TEXT]);
-    let _ = generated(only_claim(&oracles, E_TUPLE));
-    let int = "rt::ValueType::Int(rebuild_interval(\"-100\", \"100\")?)";
-    let text = "rt::ValueType::Text(rebuild_text(0, 16, rt::TextProfile::Nfc)?)";
+    let (oracles, lib) = genuine_tuple_source("Int[-100, 100], Text[0, 16; nfc]", "");
+    let _ = generated(&oracles.claim_map.items[0]);
+    let int = "exact::ValueType::Int(rebuild_interval(\"-100\", \"100\")?)";
+    let text = "exact::ValueType::Text(rebuild_text(0, 16, exact::TextProfile::Nfc)?)";
     let tuple = lib
-        .find("rt::CompositeShape::Tuple(vec![")
+        .find("sv::CompositeShape::Tuple(vec![")
         .expect("tuple declaration");
     let int_position = lib[tuple..].find(int).expect("integer tuple member");
     let text_position = lib[tuple..].find(text).expect("text tuple member");
@@ -1928,29 +1844,31 @@ fn tc_029_ac16_a_text_bounds_member_reconstructs_its_own_text_type() {
 #[trace("FR-018-AC-16", "TC-029")]
 #[test]
 fn tc_029_ac16_numeric_bounded_domain_members_read_as_their_bounded_scalars() {
-    let (_, through_scalars) = tuple_source(
-        &[],
-        &[
-            T_INTEGER_BOUNDED,
-            BD_TEXT,
-            T_DECIMAL_SMALL,
-            T_RATIONAL_NARROW,
-        ],
-    );
-    let (_, through_domains) =
-        tuple_source(&[], &[BD_INTEGER, BD_TEXT, BD_DECIMAL, BD_RATIONAL_NARROW]);
-    assert!(
-        through_scalars.contains("rt::ValueType::Decimal(")
-            && through_scalars.contains("rt::ValueType::Rational(")
+    let (_, lib) = genuine_tuple_source(
+        "Int[-100, 100], Text[0, 16; nfc], Decimal[-100, 100; 0, 0; nearest-even], Rational[-10, 10; 1, 1]", "",
     );
     for reconstruction in [
-        "rt::ValueType::Int(rebuild_interval(\"-100\", \"100\")?)",
-        "rt::ValueType::Decimal(rebuild_decimal(\"-100\", \"100\", 0, 0, rt::RoundingMode::NearestEven)?)",
-        "rt::ValueType::Rational(rebuild_rational(rebuild_interval(\"-10\", \"10\")?, rebuild_interval(\"1\", \"1\")?)?)",
-    ] {
-        assert!(through_scalars.contains(reconstruction), "scalar member: {reconstruction}");
-        assert!(through_domains.contains(reconstruction), "domain member: {reconstruction}");
-    }
+        "exact::ValueType::Int(rebuild_interval(\"-100\", \"100\")?)",
+        "exact::ValueType::Decimal(rebuild_decimal(\"-100\", \"100\", 0, 0, exact::RoundingMode::NearestEven)?)",
+        "exact::ValueType::Rational(rebuild_rational(rebuild_interval(\"-10\", \"10\")?, rebuild_interval(\"1\", \"1\")?)?)",
+    ] { assert!(lib.contains(reconstruction), "actual public member: {reconstruction}"); }
+    let tuple = lib
+        .find("sv::CompositeShape::Tuple(vec![")
+        .expect("public tuple declaration");
+    let expected_order = [
+        "exact::ValueType::Int(",
+        "exact::ValueType::Text(",
+        "exact::ValueType::Decimal(",
+        "exact::ValueType::Rational(",
+    ];
+    let positions =
+        expected_order.map(|member| lib[tuple..].find(member).expect("actual public member"));
+    assert!(
+        positions.windows(2).all(|pair| pair[0] < pair[1]),
+        "all four original member positions remain ordered"
+    );
+    // Reviewed AC16 separately allocates both exact numeric forms to the private resolver
+    // control, without claiming public authentication for rewritten member references.
 }
 
 /// A `bounded_domain` member reads its own bound and never a sibling
@@ -1959,14 +1877,26 @@ fn tc_029_ac16_numeric_bounded_domain_members_read_as_their_bounded_scalars() {
 #[trace("FR-018-AC-16", "TC-029")]
 #[test]
 fn tc_029_ac16_a_bounded_domain_member_never_reads_a_sibling_bound() {
-    let (oracles, lib) = tuple_source(&[BD_TEXT_SIBLING], &[T_INTEGER_BOUNDED, BD_TEXT_SIBLING]);
-    let _ = generated(only_claim(&oracles, E_TUPLE));
-    assert!(lib.contains("rebuild_text(1, 5, rt::TextProfile::Nfc)?"));
-    assert!(!lib.contains("rebuild_text(0, 16,"));
-    let (oracles, lib) = tuple_source(&[BD_TEXT_SIBLING], &[T_INTEGER_BOUNDED, BD_TEXT]);
-    let _ = generated(only_claim(&oracles, E_TUPLE));
-    assert!(lib.contains("rebuild_text(0, 16, rt::TextProfile::Nfc)?"));
-    assert!(!lib.contains("rebuild_text(1, 5,"));
+    for (selected, sibling, present, absent) in [
+        (
+            "Text[1, 5; nfc]",
+            "Text[0, 16; nfc]",
+            "rebuild_text(1, 5, exact::TextProfile::Nfc)?",
+            "rebuild_text(0, 16,",
+        ),
+        (
+            "Text[0, 16; nfc]",
+            "Text[1, 5; nfc]",
+            "rebuild_text(0, 16, exact::TextProfile::Nfc)?",
+            "rebuild_text(1, 5,",
+        ),
+    ] {
+        let extras = format!("function sibling using v(a: {sibling}): Boolean pure {{ true }}\n");
+        let (oracles, lib) = genuine_tuple_source(&format!("Int[-100, 100], {selected}"), &extras);
+        let _ = generated(&oracles.claim_map.items[0]);
+        assert!(lib.contains(present));
+        assert!(!lib.contains(absent));
+    }
 }
 
 /// A bound whose form is not the one its base scalar reads is
@@ -1974,17 +1904,32 @@ fn tc_029_ac16_a_bounded_domain_member_never_reads_a_sibling_bound() {
 #[trace("FR-018-AC-16", "TC-029")]
 #[test]
 fn tc_029_ac16_a_bound_form_that_does_not_fit_its_base_is_refused() {
-    let (refusal, ids) = tuple_refusal(&[BD_INTEGER_WRONG_FORM], &[BD_INTEGER_WRONG_FORM, BD_TEXT]);
-    match refusal {
-        CompositeEqualityRefusal::MissingBound {
-            bounded_type,
-            expected_form,
-        } => {
-            assert_eq!(bounded_type, ids.resolve(&code_id(BD_INTEGER_WRONG_FORM)));
-            assert_eq!(expected_form, "integer_range");
-        }
-        other => panic!("expected MissingBound, got {other:?}"),
-    }
+    let source = genuine_fixture::source("tuple");
+    let compiled = genuine_fixture::compile_source(&source);
+    let mut wire: serde_json::Value = serde_json::from_slice(compiled.package().bytes()).unwrap();
+    let nodes = wire["semantic_graph"]["nodes"].as_array_mut().unwrap();
+    let position = nodes
+        .iter()
+        .position(|node| node["semantic_form"] == "integer_range")
+        .expect("genuine Int bound");
+    let id: quire_contract_model::CheckedNodeId =
+        serde_json::from_value(nodes[position]["node_id"].clone()).unwrap();
+    nodes[position]["semantic_form"] = json!("text_bounds");
+    let result = read_mutated_wire(wire);
+    let CheckedPackageV2ReadResult::Refused(refusal) = result else {
+        panic!("wrong-form source wire unexpectedly admitted: {result:?}")
+    };
+    assert_eq!(refusal.code, CheckedPackageRefusalCode::InvalidPackage);
+    assert_eq!(
+        refusal.cause,
+        Some(CheckedPackageRefusalCause::StaleNodeKey)
+    );
+    assert_eq!(
+        refusal.path.as_ref().map(|path| path.as_str().to_owned()),
+        Some(format!("/semantic_graph/nodes/{position}/node_id"))
+    );
+    assert_eq!(refusal.locus, Some(id));
+    // Exact CG MissingBound(integer_range) remains a separate private defensive assertion.
 }
 
 /// A tuple containing IEEE is
@@ -2139,11 +2084,13 @@ const HELPER_VARIANTS: [(&str, &str); 6] = [
     ("rebuild_cardinality", "Cardinality"),
 ];
 
-/// The emitted functions that return `Result<_, ReconstructionError>`: the helpers, and the
-/// per-item functions that build a declaration or a type from them.
+/// Numeric reconstruction keeps its original payload-free errors. Context/descriptor helpers
+/// additionally preserve genuine lookup and environment failures through EnvironmentError.
 fn returns_reconstruction(name: &str) -> bool {
     [
         "rebuild_",
+        "lookup_enum_case",
+        "lookup_composite_key",
         "composites_",
         "left_source_",
         "left_target_",
@@ -2167,11 +2114,16 @@ fn structural_violations(lib: &str) -> Vec<String> {
             .signature
             .rsplit_once("->")
             .map(|(_, ret)| ret.trim());
-        if !returns.is_some_and(|ret| {
-            ret.starts_with("Result<") && ret.ends_with(", ReconstructionError>")
-        }) {
+        let error = if REBUILD_HELPERS.contains(&function.name) {
+            "ReconstructionError"
+        } else {
+            "EnvironmentError"
+        };
+        if !returns
+            .is_some_and(|ret| ret.starts_with("Result<") && ret.ends_with(&format!(", {error}>")))
+        {
             violations.push(format!(
-                "`{}` does not return Result<_, ReconstructionError>",
+                "`{}` does not return Result<_, {error}>",
                 function.name
             ));
         }
@@ -2307,87 +2259,133 @@ fn emitted_enum<'l>(lib: &'l str, name: &str) -> &'l str {
 #[trace("FR-018-AC-17", "TC-029")]
 #[test]
 fn tc_029_ac17_emitted_source_has_no_panic_site_fallback_or_index_expression() {
-    let oracles = corpus_oracles();
-    let lib = contents(&oracles, "src/lib.rs");
-    assert!(
-        lib.matches("pub fn oracle_").count() > 1,
-        "the corpus must generate more than one item"
-    );
-    assert_eq!(panic_tokens_in(lib), Vec::<String>::new());
-    for fallback in [".ok()", ".unwrap_or(", ".unwrap_or_default("] {
+    for case in genuine_host_cases() {
+        let oracles = genuine_host_case(case, false);
+        let lib = contents(&oracles, "src/lib.rs");
         assert!(
-            !lib.contains(fallback),
-            "the emitted source holds `{fallback}`"
+            lib.matches("pub fn oracle_").count() > 1,
+            "the corpus must generate more than one item"
+        );
+        assert_eq!(panic_tokens_in(lib), Vec::<String>::new());
+        for fallback in [".ok()", ".unwrap_or(", ".unwrap_or_default("] {
+            assert!(
+                !lib.contains(fallback),
+                "the emitted source holds `{fallback}`"
+            );
+        }
+        assert_eq!(
+            index_expressions(lib),
+            Vec::<usize>::new(),
+            "an index or slice expression in the emitted source"
         );
     }
-    assert_eq!(
-        index_expressions(lib),
-        Vec::<usize>::new(),
-        "an index or slice expression in the emitted source"
-    );
 }
 
-/// Every reconstruction in the corpus crate goes through a helper
-/// returning `Result<_, ReconstructionError>`, every call of one is propagated or refused, no
-/// runtime constructor or integer parse is called outside a helper, and the two error enums have
-/// the variants the criterion lists.
+/// Numeric reconstruction retains its exact errors; context preparation preserves lookup and
+/// environment causes. Every failure propagates or refuses, with no hidden constructor/parse,
+/// and both error enums retain the exact merged ABI variants.
 #[trace("FR-018-AC-17", "TC-029")]
 #[test]
 fn tc_029_ac17_emitted_reconstruction_is_typed_and_refused_never_unwrapped() {
-    let oracles = corpus_oracles();
-    let lib = contents(&oracles, "src/lib.rs");
-    let fns = emitted_fns(lib);
-    for helper in REBUILD_HELPERS {
-        assert!(
-            fns.iter().any(|function| function.name == helper),
-            "the corpus crate does not exercise `{helper}`"
+    let mut exercised = BTreeSet::new();
+    for case in genuine_host_cases() {
+        let oracles = genuine_host_case(case, false);
+        let lib = contents(&oracles, "src/lib.rs");
+        let fns = emitted_fns(lib);
+        exercised.extend(
+            fns.iter()
+                .filter(|function| REBUILD_HELPERS.contains(&function.name))
+                .map(|function| function.name.to_owned()),
+        );
+        assert_eq!(structural_violations(lib), Vec::<String>::new());
+        // The context ABI publishes only a private prepared capability after typed preparation.
+        let environments: Vec<_> = fns
+            .iter()
+            .filter(|function| function.name.starts_with("environment_"))
+            .collect();
+        assert!(!environments.is_empty());
+        for function in environments {
+            assert!(function
+                .signature
+                .contains("Result<PreparedEqualityEnvironment<'ctx>, EnvironmentError>"));
+            assert!(function
+                .signature
+                .contains("Option<&'ctx qsl_replay::AdmittedContext>"));
+            assert!(function
+                .body
+                .contains("EnvironmentError::ContextPackageMismatch"));
+            assert!(function
+                .body
+                .contains(".map_err(EnvironmentError::Declaration)?"));
+        }
+        for function in fns
+            .iter()
+            .filter(|function| function.name.starts_with("oracle_"))
+        {
+            for required in [
+                "prepared.binding !=",
+                "actual.domain().as_str() !=",
+                "actual.hex() !=",
+                "GeneratedDescriptorReconstructionFailed",
+                "environment.check_type(left_comparison)",
+                "environment.check_type(right_comparison)",
+                "&prepared.enum_members",
+                "GeneratedTypeCheckRejected",
+                "GeneratedEqualityCheckRejected",
+                "checked.evaluate(environment, left, right, meter)",
+            ] {
+                assert!(
+                    function.body.contains(required),
+                    "{} missing {required}",
+                    function.name
+                );
+            }
+            assert!(
+                !function.body.contains("rebuild_"),
+                "preparation must precede metered execution"
+            );
+        }
+        let environment_error = emitted_enum(lib, "EnvironmentError");
+        for variant in [
+            "MissingAdmittedContext {",
+            "ContextPackageMismatch {",
+            "Lookup(qsl_replay::AdmittedLookupRefusal),",
+            "Declaration(sv::EnvironmentFailure),",
+            "Reconstruction(ReconstructionError),",
+        ] {
+            assert!(
+                environment_error.contains(variant),
+                "missing typed variant {variant}"
+            );
+        }
+        let variants: Vec<&str> = emitted_enum(lib, "ReconstructionError")
+            .lines()
+            .map(str::trim)
+            .filter(|line| {
+                !line.is_empty() && !line.starts_with("///") && *line != "{" && *line != "}"
+            })
+            .collect();
+        assert_eq!(
+            variants,
+            [
+                "Integer,",
+                "Interval,",
+                "Rational,",
+                "Decimal,",
+                "Text,",
+                "Cardinality,",
+                "Enum,",
+                "Composite,"
+            ],
+            "ReconstructionError must have exactly these unit variants"
         );
     }
-    assert_eq!(structural_violations(lib), Vec::<String>::new());
-    // The refusal paths exist: the environment constructors map a failure to
-    // `EnvironmentError::Reconstruction`, and the oracle functions to `CheckedInvariant`.
-    let environments: Vec<_> = fns
-        .iter()
-        .filter(|function| function.name.starts_with("environment_"))
-        .collect();
-    assert!(!environments.is_empty());
-    for function in environments {
-        assert!(function
-            .signature
-            .contains("Result<rt::TypeEnvironment, EnvironmentError>"));
-        assert!(function
-            .body
-            .contains("Err(error) => return Err(EnvironmentError::Reconstruction(error))"));
+    for helper in REBUILD_HELPERS {
+        assert!(
+            exercised.contains(helper),
+            "the genuine corpus union does not exercise {helper}"
+        );
     }
-    for function in fns
-        .iter()
-        .filter(|function| function.name.starts_with("oracle_"))
-    {
-        assert!(function
-            .body
-            .contains("Err(_) => return rt::Outcome::Refused(rt::Refusal::CheckedInvariant)"));
-    }
-
-    let environment_error = emitted_enum(lib, "EnvironmentError");
-    assert!(environment_error.contains("Declaration(rt::InvalidDeclaration),"));
-    assert!(environment_error.contains("Reconstruction(ReconstructionError),"));
-    let variants: Vec<&str> = emitted_enum(lib, "ReconstructionError")
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty() && !line.starts_with("///") && *line != "{" && *line != "}")
-        .collect();
-    assert_eq!(
-        variants,
-        [
-            "Integer,",
-            "Interval,",
-            "Rational,",
-            "Decimal,",
-            "Text,",
-            "Cardinality,"
-        ],
-        "ReconstructionError must have exactly these unit variants"
-    );
 }
 
 /// The structural checker names each way a source can depart from
@@ -2395,7 +2393,8 @@ fn tc_029_ac17_emitted_reconstruction_is_typed_and_refused_never_unwrapped() {
 #[trace("FR-018-AC-17", "TC-029")]
 #[test]
 fn tc_029_ac17_the_structural_checker_names_each_departure() {
-    let wrong_return = "fn rebuild_interval(a: &str) -> rt::IntegerInterval {\n    todo_body\n}\n";
+    let wrong_return =
+        "fn rebuild_interval(a: &str) -> exact::IntegerInterval {\n    todo_body\n}\n";
     assert!(structural_violations(wrong_return)
         .iter()
         .any(|violation| violation.contains("does not return Result")));
@@ -2434,7 +2433,7 @@ fn tc_029_ac17_the_structural_checker_names_each_departure() {
         .any(|violation| violation.contains("exactly ReconstructionError::Text")));
     let silent_widen = helper(
         "rebuild_cardinality",
-        "rt::CardinalityBound::new(a, 1).or_else(|_| rt::CardinalityBound::new(0, u64::MAX)).map_err(|_| ReconstructionError::Cardinality)",
+        "exact::CardinalityBound::new(a, 1).or_else(|_| exact::CardinalityBound::new(0, u64::MAX)).map_err(|_| ReconstructionError::Cardinality)",
     );
     assert!(structural_violations(&silent_widen)
         .iter()

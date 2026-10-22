@@ -14,6 +14,7 @@
 //! each seeded defect is falsified for the intended property, and regenerating the frame from a
 //! mutated package turns a green proof red.
 
+use quire_contract_codegen as scalar_fixture_types;
 #[path = "../state_frame_support/model.rs"]
 pub(crate) mod model;
 #[path = "../state_frame_support/native_twin.rs"]
@@ -125,8 +126,9 @@ fn qsl_emitted_state_clause_derives_a_confirmed_field_backed_oracle() {
     super::scratch_crate::write_manifest(
         &scratch.path,
         &format!(
-            "[package]\nname = \"generated-v2-clause\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
-            super::scratch_crate::runtime_dependency(&["exact"])
+            "[package]\nname = \"generated-v2-clause\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\nquire-exact = {{ {} }}\n\n[workspace]\n",
+            super::scratch_crate::runtime_dependency(&["exact"]),
+            quire_contract_codegen::EXACT_DEPENDENCY_SOURCE
         ),
     );
     let output = std::process::Command::new(env!("CARGO"))
@@ -248,8 +250,9 @@ fn admitted_inline_clause_keeps_the_clause_identity() {
     super::scratch_crate::write_manifest(
         &scratch.path,
         &format!(
-            "[package]\nname = \"generated-v2-inline-clause\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
-            super::scratch_crate::runtime_dependency(&["exact"])
+            "[package]\nname = \"generated-v2-inline-clause\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\nquire-exact = {{ {} }}\n\n[workspace]\n",
+            super::scratch_crate::runtime_dependency(&["exact"]),
+            quire_contract_codegen::EXACT_DEPENDENCY_SOURCE
         ),
     );
     let output = std::process::Command::new(env!("CARGO"))
@@ -336,8 +339,9 @@ fn qsl_bounded_operation_parameter_becomes_a_clause_input() {
     super::scratch_crate::write_manifest(
         &scratch.path,
         &format!(
-            "[package]\nname = \"generated-v2-param-clause\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
-            super::scratch_crate::runtime_dependency(&["exact"])
+            "[package]\nname = \"generated-v2-param-clause\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\nquire-exact = {{ {} }}\n\n[workspace]\n",
+            super::scratch_crate::runtime_dependency(&["exact"]),
+            quire_contract_codegen::EXACT_DEPENDENCY_SOURCE
         ),
     );
     let output = std::process::Command::new(env!("CARGO"))
@@ -413,8 +417,9 @@ fn qsl_emitted_clause_composes_boolean_and_integer_operations() {
     super::scratch_crate::write_manifest(
         &scratch.path,
         &format!(
-            "[package]\nname = \"generated-v2-clause-corpus\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
-            super::scratch_crate::runtime_dependency(&["exact"])
+            "[package]\nname = \"generated-v2-clause-corpus\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\nquire-exact = {{ {} }}\n\n[workspace]\n",
+            super::scratch_crate::runtime_dependency(&["exact"]),
+            quire_contract_codegen::EXACT_DEPENDENCY_SOURCE
         ),
     );
     let output = std::process::Command::new(env!("CARGO"))
@@ -456,8 +461,9 @@ fn skipped_v2_clause_consequent_has_a_measured_zero_native_probe() {
     super::scratch_crate::write_manifest(
         &scratch.path,
         &format!(
-            "[package]\nname = \"generated-v2-clause-native-probe\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
-            super::scratch_crate::runtime_dependency(&["exact"])
+            "[package]\nname = \"generated-v2-clause-native-probe\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\nquire-exact = {{ {} }}\n\n[workspace]\n",
+            super::scratch_crate::runtime_dependency(&["exact"]),
+            quire_contract_codegen::EXACT_DEPENDENCY_SOURCE
         ),
     );
     let toolchain = format!("+{}", env!("CARGO_PKG_RUST_VERSION"));

@@ -747,7 +747,7 @@ fn original_stage_limit_stops_recompile_before_invocation() {
     )
     .unwrap();
     assert!(
-        matches!(context.request(&node, &occurrence, EqualityOperator::Equal, &[], 100_000), Err(CompositeBuildError::Recompile(cause)) if matches!(*cause, qsl_replay::ReplayRefusal::Recompile(_)))
+        matches!(context.request(&node, &occurrence, EqualityOperator::Equal, &[], 100_000), Err(CompositeBuildError::Recompile(cause)) if matches!(*cause, qsl_replay::AdmittedRefusal::Resource(qsl_replay::AdmittedResource::StageLimit(_))))
     );
 }
 
@@ -839,4 +839,66 @@ fn original_imported_context_refuses_before_invocation() {
         ),
         Err(CompositeBuildError::ImportedContextUnsupported)
     ));
+}
+
+/// The immutable capability is exposed only by a successfully authenticated request.
+#[trace("FR-018-AC-33", "TC-029")]
+#[test]
+fn original_request_retains_the_actual_compilation_context() {
+    let package = checked(SOURCE);
+    let (node, occurrence) = application(&package, "f");
+    let expected = package.package_id().clone();
+    let request = context(package, "f")
+        .request(&node, &occurrence, EqualityOperator::Equal, &[], 100_000)
+        .expect("authentic original request");
+    let actual = request.admitted_context().package_id().record();
+    assert_eq!(actual.domain().as_str(), expected.domain.as_ref());
+    assert_eq!(actual.hex(), expected.digest.as_ref());
+}
+
+/// A later IR re-read ceiling remains distinct from source compiler limits.
+#[trace("FR-018-AC-35", "TC-029")]
+#[test]
+fn original_request_preserves_the_owning_reader_limit() {
+    let package = checked(SOURCE);
+    let (node, occurrence) = application(&package, "f");
+    let mut read_limits = CheckedPackageReadLimits::bounded();
+    read_limits.bytes = 1;
+    let original = OriginalCompositeEqContext::new(
+        package,
+        inputs(SOURCE),
+        "f",
+        content_identity(),
+        read_limits,
+    )
+    .expect("retaining already-admitted inputs does not re-read them");
+    assert!(matches!(
+        original.request(&node, &occurrence, EqualityOperator::Equal, &[], 100_000),
+        Err(CompositeBuildError::PackageReadLimit(_))
+    ));
+}
+
+/// An invalid reader-relative stage request is not relabeled as ill-typed input.
+#[trace("FR-018-AC-35", "TC-029")]
+#[test]
+fn original_request_preserves_the_above_reader_resource_refusal() {
+    let package = checked(SOURCE);
+    let (node, occurrence) = application(&package, "f");
+    let mut retained = inputs(SOURCE);
+    retained
+        .stage_limits
+        .insert("s1.input_bytes".to_owned(), u64::MAX);
+    let original = OriginalCompositeEqContext::new(
+        package,
+        retained,
+        "f",
+        content_identity(),
+        CheckedPackageReadLimits::bounded(),
+    )
+    .expect("retain authentic source before request-stage validation");
+    assert!(
+        matches!(original.request(&node, &occurrence, EqualityOperator::Equal, &[], 100_000),
+        Err(CompositeBuildError::Recompile(cause))
+            if matches!(*cause, qsl_replay::AdmittedRefusal::Resource(qsl_replay::AdmittedResource::AboveReader(_))))
+    );
 }

@@ -72,6 +72,19 @@ pub struct ClaimMap<C> {
 /// result in doubt, not just the one that surfaced it.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum OracleGenerationError {
+    /// The supplied owner context belongs to a different original checked package.
+    ContextPackageMismatch {
+        /// Original checked-package identity retained by Contract IR.
+        expected: quire_contract_model::CheckedSemanticId,
+        /// Actual owner-issued context's domain.
+        actual_domain: String,
+        /// Actual owner-issued context's digest.
+        actual_digest: String,
+    },
+    /// Genuine enum lookup succeeded but semantic reconstruction did not.
+    EnumReconstruction(quire_semantic_value::semantic_node::InvalidSemanticGraph),
+    /// Bounded declaration admission failed before an equality plan could be checked.
+    EnvironmentAdmission(quire_semantic_value::declaration::EnvironmentFailure),
     /// The caller's request sequence disagrees with admitted FR-330 accounting.
     PackageRequest(crate::core::contract_package::PackageRequestError),
     /// A lowered record has no admitted Contract IR package value.

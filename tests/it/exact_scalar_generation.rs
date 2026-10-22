@@ -2,6 +2,7 @@
 //! CheckedPackage V2 input.
 
 use ix_trace_rs::trace;
+use quire_contract_codegen as scalar_fixture_types;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
@@ -26,9 +27,7 @@ use quire_contract_model::{
     CheckedPackageRefusalCode, CheckedPackageV2, CheckedPackageV2ReadResult, CheckedSemanticNodeV2,
     StructuralCandidateError,
 };
-use quire_contract_runtime::exact::{
-    ComparisonOperator, DivisionProfile, Integer, IntegerDomain, IntegerInterval,
-};
+use quire_exact::{ComparisonOperator, DivisionProfile, Integer, IntegerDomain, IntegerInterval};
 use serde_json::{json, Value};
 
 // package.rs holds a process-global `application_registry()` static keyed by small integer
@@ -555,16 +554,19 @@ fn tc_024_every_scalar_family_generates_one_oracle_calling_its_runtime_operator(
         ),
         (
             1011,
-            "rt::divide(rt::DivisionProfile::Truncating,".to_owned(),
+            "rt::divide(rt::DivisionProfile::Truncating, rt::DivisionMember::Quotient,".to_owned(),
         ),
-        (1012, "rt::divide(rt::DivisionProfile::Floor,".to_owned()),
+        (
+            1012,
+            "rt::divide(rt::DivisionProfile::Floor, rt::DivisionMember::Quotient,".to_owned(),
+        ),
         (
             1013,
-            "rt::divide(rt::DivisionProfile::Euclidean,".to_owned(),
+            "rt::divide(rt::DivisionProfile::Euclidean, rt::DivisionMember::Quotient,".to_owned(),
         ),
         (
             1014,
-            "rt::divide(rt::DivisionProfile::Truncating,".to_owned(),
+            "rt::divide(rt::DivisionProfile::Truncating, rt::DivisionMember::Quotient,".to_owned(),
         ),
         (1021, "rt::modulo(".to_owned()),
         (
@@ -646,7 +648,7 @@ fn tc_024_every_scalar_family_generates_one_oracle_calling_its_runtime_operator(
             "rt::compare_ieee(rt::IeeeComparison::TotalOrder,".to_owned(),
         ),
         (1064, "rt::convert_ieee_width(".to_owned()),
-        (1140, "rt::convert_quantity(".to_owned()),
+        (1140, "residue::convert_quantity(".to_owned()),
         (
             1065,
             "rt::evaluate_ieee(rt::IeeeOperation::Subtract(".to_owned(),
@@ -665,23 +667,23 @@ fn tc_024_every_scalar_family_generates_one_oracle_calling_its_runtime_operator(
         ),
         (
             1081,
-            "rt::evaluate_quantity(rt::QuantityOperation::Add(".to_owned(),
+            "residue::evaluate_quantity(residue::QuantityOperation::Add(".to_owned(),
         ),
         (
             1082,
-            "rt::evaluate_quantity(rt::QuantityOperation::Multiply(".to_owned(),
+            "residue::evaluate_quantity(residue::QuantityOperation::Multiply(".to_owned(),
         ),
         (
             1083,
-            "rt::evaluate_quantity(rt::QuantityOperation::Power(".to_owned(),
+            "residue::evaluate_quantity(residue::QuantityOperation::Power(".to_owned(),
         ),
         (
             1088,
-            "rt::evaluate_quantity(rt::QuantityOperation::Subtract(".to_owned(),
+            "residue::evaluate_quantity(residue::QuantityOperation::Subtract(".to_owned(),
         ),
         (
             1089,
-            "rt::evaluate_quantity(rt::QuantityOperation::Divide(".to_owned(),
+            "residue::evaluate_quantity(residue::QuantityOperation::Divide(".to_owned(),
         ),
     ];
     for (index, operator) in ComparisonOperator::ALL.into_iter().enumerate() {
@@ -691,11 +693,11 @@ fn tc_024_every_scalar_family_generates_one_oracle_calling_its_runtime_operator(
         ));
         calls.push((
             ENUM_COMPARISONS[index],
-            format!("rt::compare_enum(rt::ComparisonOperator::{operator:?},"),
+            format!("residue::compare_enum(rt::ComparisonOperator::{operator:?},"),
         ));
         calls.push((
             QUANTITY_COMPARISONS[index],
-            format!("rt::compare_quantity(rt::ComparisonOperator::{operator:?},"),
+            format!("residue::compare_quantity(rt::ComparisonOperator::{operator:?},"),
         ));
     }
     calls.sort();
@@ -1257,7 +1259,7 @@ fn tc_024_claim_map_entries_ascend_by_node_id_domain_then_digest() {
 fn tc_024_a_mislabelled_descriptor_is_refused_where_bounds_disagree_and_marked_otherwise() {
     let package = corpus_package().admit();
     let floor = |lower, upper| ExactScalarOperation::IntegerDivision {
-        profile: quire_contract_runtime::exact::DivisionProfile::Floor,
+        profile: DivisionProfile::Floor,
         domain: bounded(lower, upper),
     };
     // Node 1014 is bounded [-5, 5]: a descriptor over [-1000, 1000] is refused.
@@ -2215,6 +2217,8 @@ fn tc_024_generated_crate_is_unpublished_charge_free_and_compiles() {
     assert!(manifest.contains(&format!("name = \"{EXACT_SCALAR_CRATE_NAME}\"")));
     assert!(manifest.contains("publish = false"));
     assert!(manifest.contains("features = [\"exact\"]"));
+    assert!(!manifest.contains("test-support"));
+    assert!(!manifest.contains("[[example]]"));
 
     let lib = contents(&oracles, "src/lib.rs");
     for forbidden in [
@@ -3217,7 +3221,7 @@ fn tc_024_boolean_and_integer_equality_nodes_generate_confirmed_runtime_oracles(
     }
     let source = contents(&oracles, "src/lib.rs");
     assert!(source.contains("rt::evaluate_boolean("));
-    assert!(source.contains("rt::evaluate_boolean_short_circuit("));
+    assert!(source.contains("residue::evaluate_boolean_short_circuit("));
     assert!(source.contains(".check_equality("));
     assert!(source.contains("checked.evaluate("));
 }
@@ -3789,10 +3793,10 @@ fn quantity_conversion_derives_and_preserves_target_provenance() {
         "distinct admitted target declarations remain distinct"
     );
     let source = contents(&generated, "src/lib.rs");
-    assert!(source.contains("unit: &rt::QuantityUnit"));
-    assert!(
-        source.contains("rt::convert_quantity(operand, unit, &rt::QuantityTarget::Exact, meter)")
-    );
+    assert!(source.contains("unit: &residue::QuantityUnit"));
+    assert!(source.contains(
+        "residue::convert_quantity(operand, unit, &residue::QuantityTarget::Exact, meter)"
+    ));
 }
 
 /// The Contract IR package of a request for `nodes`, and its driver positions in the same order.
@@ -3921,6 +3925,7 @@ fn tc_024_equality_generator_refuses_a_quantity_conversion_node_before_any_artif
     let (contract, positions) = contract_request(&package, std::slice::from_ref(&node));
     let output = generate_composite_equality_oracles(
         &contract,
+        None,
         &positions,
         &[0],
         &[CompositeEqualityItem {
@@ -4140,6 +4145,7 @@ fn tc_024_equality_over_a_conversion_operand_is_refused_as_an_unsupported_quanti
     let (contract, positions) = contract_request(&package, std::slice::from_ref(&node));
     let output = generate_composite_equality_oracles(
         &contract,
+        None,
         &positions,
         &[0],
         &[CompositeEqualityItem {
