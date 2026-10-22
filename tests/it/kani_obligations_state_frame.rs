@@ -42,9 +42,9 @@ use package::{
     PackageBuilder, FUNCTION, NODE_DOMAIN, T_BOOLEAN, T_INTEGER, T_TEXT,
 };
 use qsl_replay::{
-    CallSiteRefusal, Category, DisagreementCause, FrameChange, FrameIdentityMismatch,
-    InconclusiveCause, OperationSite, ReplayRefusal, ReplayResult, ReplaySource, TerminalValue,
-    Verdict, WitnessSettlement,
+    AdmissionFailure, CallSiteRefusal, Category, Code, DisagreementCause, FrameChange,
+    FrameIdentityMismatch, InconclusiveCause, OperationSite, ReplayRefusal, ReplayResult,
+    ReplaySource, TerminalValue, Verdict, WitnessSettlement,
 };
 use quire_contract_codegen::{
     derive_v2_clause_descriptor, generate_v2_clause_claim_map, generate_v2_clause_oracle,
@@ -3908,6 +3908,15 @@ fn tc_035_same_model_wide_range_refuses_outside_playback() {
         panic!("expected QSL refusal: {error}");
     };
     assert_eq!(unranged, &harness.unranged);
+    let ReplayRefusal::Admission(AdmissionFailure::Refused(record)) = refusal.as_ref() else {
+        panic!("expected an invalid pre-state value: {refusal}");
+    };
+    assert_eq!(record.code, Code::InvalidRuntimeInput);
+    assert_eq!(record.cause, "invalid-value");
+    assert_eq!(
+        record.fields.get("field").map(String::as_str),
+        Some("audit")
+    );
     let terminal = quire_contract_codegen::run_terminal_value(
         &crate::terminal_map::synthetic_evidence(
             KaniRunOutcome::Falsified {
@@ -3920,7 +3929,7 @@ fn tc_035_same_model_wide_range_refuses_outside_playback() {
     .expect("a falsified run has a settlement");
     assert_eq!(
         terminal,
-        TerminalValue::Inconclusive(InconclusiveCause::ReplayRefused(refusal.code()))
+        TerminalValue::Inconclusive(InconclusiveCause::ReplayRefused(Code::InvalidRuntimeInput))
     );
 
     let inside = -1_i64;

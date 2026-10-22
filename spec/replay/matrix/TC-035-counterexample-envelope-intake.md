@@ -193,10 +193,11 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     a nonempty body: each returns `ModelFields` with `Accessor(NotModelObjectType)` and no
     replay despite an apparently valid body range. A selected/read nonempty-body tamper
     instead refuses `StaleNodeKey` during IR admission, before CG replay receives a package;
-    do not expect a CG `ModelFields` result from it (IR TC-227). For `None` or out-of-`i64` accessor types
-    QSL cannot emit, use an admitted QSL-emitted graph with selected-model-document override
-    and recomputed digests (FR-024-AC-31, IR-624; gated on
-    CG dependency update and implementation).
+    do not expect a CG `ModelFields` result from it (IR TC-227). For `None`
+    or non-range accessor types that QSL cannot emit directly, use an admitted
+    QSL-emitted graph with selected-model-document override and recomputed
+    digests; the out-of-`i64` integer case uses one selected source model
+    throughout (FR-024-AC-31, FR-024-AC-35, IR-624).
 29. Generate the frame harness from the emitted package with accessor ranges, assert scope
     ids equal `call_site`'s before replay, remove `Twin::aligned`, and replay the forbidden
     write to a violation. Check request order and domains, including unread ranged `audit`;
@@ -238,20 +239,15 @@ is a real-Kani test in the module `kani_obligations_state_clause_replay`, run th
 `kani_obligations` filter of `make kani`; its subject debits within the declared range, because a
 debit past the floor runs to a post state QSL's snapshot admission refuses.
 
-Steps 18 to 26 (FR-024-AC-20 to FR-024-AC-29, IR-459) are implemented by `src/replay/obligation.rs`
-and `src/replay/frame.rs`, the `src` unit tests of steps 18 and 26, and the tests of
-`tests/it/kani_obligations_state_frame.rs` over the QSL twin of the state-frame fixture. The twin's
-harness scope is aligned to the node ids QSL names for the twin's compiled unit (`Twin::aligned`),
-because the fixture's checked package is hand-built and its node ids are its own. The package QSL
-itself emits (`call_site`'s package bytes, admitted by the model reader) carries exactly the anchor
-and frame ids `call_site` names (step 25's ids, read from the emitted package); a harness cannot yet
-be generated from that package, because the object type QSL emits has an empty body and the
-field-range reader finds no member. Step 27's formerly implemented hand-built positive
-must be migrated to the emitted package to meet the restated FR-024-AC-30; that
-criterion is planned with steps 28 to 32 (FR-024-AC-31 to FR-024-AC-35, IR-624). They are
-planned: they specify end-to-end replay from an emitted-package harness whose field ranges come
-from `model_object_fields` (FR-015-AC-77), after CG updates its IR dependency and implements the
-merged accessor. Step 27 is a real-Kani test in the module
+Steps 18 to 32 (FR-024-AC-20 to FR-024-AC-35, IR-459 and IR-624) are implemented
+by `src/replay/obligation.rs`, `src/replay/frame.rs`, the relevant `src` unit tests,
+and the emitted-package tests of `tests/it/kani_obligations_state_frame.rs` and
+`tests/it/kani_obligations_state_clause_replay.rs`. The generator obtains selected
+model fields from `model_object_fields` instead of the QSL-emitted object body's
+empty `members` list. The generated harness uses the anchor and frame ids
+`call_site` names, without `Twin::aligned`. Step 32 uses one wide source model
+for QSL package emission and replay and asserts the typed out-of-model refusal.
+Step 27 is a real-Kani test in the module
 `kani_obligations_state_frame`, run through the `kani_obligations` filter of `make kani`. Step 19's
 last case (a clause added on an operation that sorts earlier) is measured on the twin's operations
 `deposit` and `transfer`: a clause added on `deposit` changes the identity of `transfer`.
