@@ -1109,7 +1109,7 @@ mod tests {
             Ok(false)
         ));
         let _ = crate::oracle::function::take_function_preflight_graph_visits();
-        let _ = crate::oracle::function::take_function_preflight_graph_lookups();
+        let _ = crate::oracle::function::take_function_preflight_graph_lookup_work();
         let expected_visits = shared.graph().nodes.len() + different.graph().nodes.len();
         let first = RequestItem {
             kind: RequestedKind::Known(CapabilityKind::ValueValidity),
@@ -1185,10 +1185,17 @@ mod tests {
             expected_visits,
             "two cloned packages reuse one graph walk; a distinct identity gets its own"
         );
+        let lookup_work = crate::oracle::function::take_function_preflight_graph_lookup_work();
         assert_eq!(
-            crate::oracle::function::take_function_preflight_graph_lookups(),
-            49,
-            "each function item must resolve source nodes through the indexed view"
+            lookup_work.len(),
+            70,
+            "every node lookup must use the indexed view"
+        );
+        assert!(
+            lookup_work
+                .iter()
+                .all(|&comparisons| (1..=16).contains(&comparisons)),
+            "{lookup_work:?}"
         );
     }
 

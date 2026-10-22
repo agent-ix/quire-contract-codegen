@@ -1569,10 +1569,39 @@ pub struct ExactFunctionOracles {
 
 type Graph<'a> = BTreeMap<&'a CheckedNodeId, &'a CheckedSemanticNodeV2>;
 
+/// Ordered key whose comparisons expose actual indexed lookup work to tests.
+#[derive(Eq, PartialEq)]
+struct IndexedNodeId(CheckedNodeId);
+
+impl Ord for IndexedNodeId {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        #[cfg(test)]
+        FUNCTION_PREFLIGHT_KEY_COMPARISONS.with(|count| count.set(count.get() + 1));
+        self.0.cmp(&other.0)
+    }
+}
+
+impl PartialOrd for IndexedNodeId {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+/// Keep source-call matching identical for borrowed generation graphs and preflight indexes.
+trait NodeLookup<'a> {
+    fn get_node(&self, node_id: &CheckedNodeId) -> Option<&'a CheckedSemanticNodeV2>;
+}
+
+impl<'a> NodeLookup<'a> for Graph<'a> {
+    fn get_node(&self, node_id: &CheckedNodeId) -> Option<&'a CheckedSemanticNodeV2> {
+        self.get(node_id).copied()
+    }
+}
+
 /// One checked-graph lookup view shared by function preflight items in a request.
 pub(crate) struct FunctionPreflightGraph<'a> {
     package_id: CheckedSemanticId,
-    nodes: Graph<'a>,
+    nodes: BTreeMap<IndexedNodeId, &'a CheckedSemanticNodeV2>,
 }
 
 impl<'a> FunctionPreflightGraph<'a> {
@@ -1587,7 +1616,7 @@ impl<'a> FunctionPreflightGraph<'a> {
             .map(|node| {
                 #[cfg(test)]
                 FUNCTION_PREFLIGHT_GRAPH_VISITS.with(|count| count.set(count.get() + 1));
-                (&node.node_id, node)
+                (IndexedNodeId(node.node_id.clone()), node)
             })
             .collect();
         Self { package_id, nodes }
@@ -1596,14 +1625,26 @@ impl<'a> FunctionPreflightGraph<'a> {
     /// Resolve one node from the view's admitted package graph.
     pub(crate) fn get(&self, node_id: &CheckedNodeId) -> Option<&'a CheckedSemanticNodeV2> {
         #[cfg(test)]
-        FUNCTION_PREFLIGHT_GRAPH_LOOKUPS.with(|count| count.set(count.get() + 1));
-        self.nodes.get(node_id).copied()
+        let before = FUNCTION_PREFLIGHT_KEY_COMPARISONS.with(std::cell::Cell::get);
+        let found = self.nodes.get(&IndexedNodeId(node_id.clone())).copied();
+        #[cfg(test)]
+        FUNCTION_PREFLIGHT_GRAPH_LOOKUP_WORK.with(|work| {
+            work.borrow_mut()
+                .push(FUNCTION_PREFLIGHT_KEY_COMPARISONS.with(std::cell::Cell::get) - before);
+        });
+        found
+    }
+}
+
+impl<'a> NodeLookup<'a> for FunctionPreflightGraph<'a> {
+    fn get_node(&self, node_id: &CheckedNodeId) -> Option<&'a CheckedSemanticNodeV2> {
+        self.get(node_id)
     }
 }
 
 fn reference_in_graph<'a>(
     term: &serde_json::Value,
-    graph: &Graph<'a>,
+    graph: &impl NodeLookup<'a>,
 ) -> Option<&'a CheckedNodeId> {
     if term.get("term")?.as_str()? != "reference" {
         return None;
@@ -1613,17 +1654,17 @@ fn reference_in_graph<'a>(
         domain: target.get("domain")?.as_str()?.into(),
         digest: target.get("digest")?.as_str()?.into(),
     };
-    graph.get(&node_id).map(|node| &node.node_id)
+    graph.get_node(&node_id).map(|node| &node.node_id)
 }
 
 /// Check that the admitted application names this exact function and ordered argument list.
-fn source_call_matches(
+fn source_call_matches<'a>(
     body: &serde_json::Value,
-    graph: &Graph<'_>,
+    graph: &impl NodeLookup<'a>,
     function_node_id: &CheckedNodeId,
     argument_node_ids: &[CheckedNodeId],
 ) -> bool {
-    if !graph.get(function_node_id).is_some_and(|node| {
+    if !graph.get_node(function_node_id).is_some_and(|node| {
         &*node.node_tag == "function" && &*node.semantic_form == "pure_function"
     }) {
         return false;
@@ -1710,7 +1751,8 @@ thread_local! {
     static FUNCTION_PREFLIGHT_READS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     static FUNCTION_PREFLIGHT_INDICES: std::cell::RefCell<Vec<usize>> = const { std::cell::RefCell::new(Vec::new()) };
     static FUNCTION_PREFLIGHT_GRAPH_VISITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
-    static FUNCTION_PREFLIGHT_GRAPH_LOOKUPS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static FUNCTION_PREFLIGHT_KEY_COMPARISONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static FUNCTION_PREFLIGHT_GRAPH_LOOKUP_WORK: std::cell::RefCell<Vec<usize>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
 #[cfg(test)]
@@ -1729,8 +1771,8 @@ pub(crate) fn take_function_preflight_graph_visits() -> usize {
 }
 
 #[cfg(test)]
-pub(crate) fn take_function_preflight_graph_lookups() -> usize {
-    FUNCTION_PREFLIGHT_GRAPH_LOOKUPS.with(|count| count.replace(0))
+pub(crate) fn take_function_preflight_graph_lookup_work() -> Vec<usize> {
+    FUNCTION_PREFLIGHT_GRAPH_LOOKUP_WORK.with(|work| std::mem::take(&mut *work.borrow_mut()))
 }
 
 /// Non-admitted result of the internal function-package reader.
@@ -1779,7 +1821,7 @@ pub(crate) fn checked_integer_function_application_is_supported_with_graph(
     };
     let mut parameters = Vec::with_capacity(parameter_terms.len());
     for term in parameter_terms {
-        let Some(parameter_id) = reference_in_graph(term, &graph.nodes) else {
+        let Some(parameter_id) = reference_in_graph(term, graph) else {
             return Ok(false);
         };
         let Some(parameter_node) = graph.get(parameter_id) else {
@@ -1796,8 +1838,8 @@ pub(crate) fn checked_integer_function_application_is_supported_with_graph(
             type_node_id: parameter_node.semantic_type.clone(),
         });
     }
-    let Some(body_id) = binding_value(&function_node.body, "body")
-        .and_then(|term| reference_in_graph(term, &graph.nodes))
+    let Some(body_id) =
+        binding_value(&function_node.body, "body").and_then(|term| reference_in_graph(term, graph))
     else {
         return Ok(false);
     };
@@ -1820,12 +1862,7 @@ pub(crate) fn checked_integer_function_application_is_supported_with_graph(
     let Some(call_node) = graph.get(call_node_id) else {
         return Ok(false);
     };
-    if !source_call_matches(
-        &call_node.body,
-        &graph.nodes,
-        function_node_id,
-        argument_node_ids,
-    ) {
+    if !source_call_matches(&call_node.body, graph, function_node_id, argument_node_ids) {
         return Ok(false);
     }
     let declaration = ExactFunctionDeclaration {
@@ -3161,7 +3198,7 @@ mod tests {
         nodes[0].node_tag = "function".into();
         nodes[0].semantic_form = "pure_function".into();
         let _ = take_function_preflight_graph_visits();
-        let _ = take_function_preflight_graph_lookups();
+        let _ = take_function_preflight_graph_lookup_work();
         let graph = FunctionPreflightGraph::from_nodes(
             &nodes,
             CheckedSemanticId {
@@ -3192,18 +3229,26 @@ mod tests {
         });
         assert!(source_call_matches(
             &call,
-            &graph.nodes,
+            &graph,
             &nodes[0].node_id,
             &[nodes[15].node_id.clone(), nodes[31].node_id.clone()]
         ));
         assert!(!source_call_matches(
             &call,
-            &graph.nodes,
+            &graph,
             &nodes[0].node_id,
             &[nodes[31].node_id.clone(), nodes[15].node_id.clone()]
         ));
         assert_eq!(take_function_preflight_graph_visits(), nodes.len());
-        assert_eq!(take_function_preflight_graph_lookups(), 5);
+        let lookup_work = take_function_preflight_graph_lookup_work();
+        assert_eq!(lookup_work.len(), 12);
+        // Twelve indexed lookups stay below a full 32-node walk each.
+        assert!(
+            lookup_work
+                .iter()
+                .all(|&comparisons| (1..=10).contains(&comparisons)),
+            "{lookup_work:?}"
+        );
     }
 
     #[trace("FR-021-AC-27", "TC-031")]
