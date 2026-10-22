@@ -71,9 +71,15 @@ It introduces no kernel normalization API or copied GCD implementation.
 
 When evaluating the body, the generated oracle SHALL use the actual owner's
 exact operations and Meter with the original expression order, typed outcomes,
-charge ordering, stops and laziness. Input-domain restrictions do not constrain
-intermediate sums: for example, two permitted inputs equal to nine can sum to
-eighteen. Owner arbitrary-precision continuation remains intact.
+charge ordering, stops and laziness from body entry over already-admitted
+arguments. The comparison starts the generated body and independent owner body
+operations from matching entry Meter state and limits. The application's single
+pre-body `FunctionCall` charge is outside this predicate harness boundary;
+conversion and supplied-argument admission state are also outside the body.
+Full-call equivalence remains planned under IR-595 / IR-583. Input-domain
+restrictions do not constrain intermediate sums: for example, two permitted
+inputs equal to nine can sum to eighteen. Owner arbitrary-precision continuation
+remains intact.
 
 When asserting the predicate, the harness SHALL require actual completion with
 Boolean true over every admitted argument tuple. A false, undefined, refused or
@@ -144,7 +150,7 @@ Rational grouping or version observations.
 | --- | --- | --- |
 | FR-046-AC-1 | The genuine source function `rational_commutative(a: Rational[-9,9;1,9], b: Rational[-9,9;1,9]): Boolean` with body `a + b = b + a` selects its whole declaration and complete body through the public QSL admission, strict IR reader/lowering and CG route. Its artifact proves that predicate, not only validity or parity of either addition. Replacing the body by `a + b = a + a` selects the same authored mutation with unchanged parameter domains. | Test |
 | FR-046-AC-2 | Every accepted symbolic argument has canonical constructor/accessor roundtrip equality and lies in its original inclusive component domains. Its two physical I64 bindings retain numerator/denominator roles, original parameter identity and bounds in the FR-025 order. Every semantic value in those domains has exactly one accepted representation. Zero is `0/1`; negative, fractional and boundary values remain reachable. For the original domain there are 111 canonical values per argument and 12,321 argument tuples; admitting all 171 raw component pairs, restricting denominators to one, or clipping an endpoint fails correspondence validation under QSpec FR-196-AC-5. | Test |
-| FR-046-AC-3 | Generated evaluation preserves the authored full tree and declaration identity, exact owner arithmetic, intermediate values outside the input domains, arbitrary-precision continuation, full typed outcomes and Meter charge/stop order. Native comparison against an independent owner-operation reference checks those observations, including each denied charge prefix and exact/short budgets; it does not calculate expectations by running the generated oracle twice. | Test |
+| FR-046-AC-3 | Generated complete-body evaluation over already-admitted arguments preserves the authored full tree and declaration identity, exact owner arithmetic, intermediate values outside the input domains, arbitrary-precision continuation, full typed outcomes, laziness and the body's Meter charge/stop order from entry onward. Native comparison against an independent reference using public owner body operations starts from matching entry Meter state and limits and checks those observations, including each denied body-charge prefix and zero/exact/short budgets. The application's single pre-body FunctionCall charge is excluded at entry, not subtracted after a run or manually copied; comparison neither resets mutated Meter state nor assumes it matches. The reference does not run the generated oracle twice, call internal QSL application APIs or bridge through Runtime. Full-call equivalence remains planned under IR-595 / IR-583 and is not this body comparison. | Test |
 | FR-046-AC-4 | Generation introduces no assumption on completion, truth or an absence of undefined/refused/incomplete results. Controls producing each reachable noncompletion retain that typed outcome and cannot become a successful predicate proof; an outcome-based assume mutation is rejected. A completion assertion failure without a replayed false value is not labelled a confirmed semantic false counterexample. | Test |
 | FR-046-AC-5 | The healthy original function receives `Verified` only from an actual successful proof with all required checks and its completion cover satisfied. The wrong-addend mutation produces a substantive failed predicate assertion with actual solver playback of canonical in-domain arguments, and replay of that same authored function completes with Boolean false. A hypothetical witness or cover witness is not substituted for that playback. | Test |
 | FR-046-AC-6 | Each emitted predicate harness has exactly one final completion cover after all predicate assertions, including harnesses with representation constraints. Unsatisfied or unreported completion cover, failed unwind, timeout, memory exhaustion or missing verdict cannot yield `Verified`; classifications retain FR-017 and FR-029 distinctions. | Test |

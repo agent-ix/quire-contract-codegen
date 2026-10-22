@@ -49,11 +49,20 @@ runner and budget; a parked CG-self-proof gate is not feature evidence.
    order. Compare the persisted physical schema with actual symbolic calls;
    inspect both original domains, parameter/source identity, roles and positions.
    Existing Boolean/integer controls must retain their original order and values.
-3. Generate the actual oracle and compare its full native observations with an
-   independently constructed reference using public owner operations on the same
-   admitted function. Preserve all typed outcomes and ordered Meter charges,
-   counters and stops at every occurrence-denial prefix and zero/exact/short
-   budgets. Include `a = b = 9` to exercise a sum outside the input domain and
+3. Generate the actual complete-body oracle over already-admitted arguments and
+   compare its full native observations with an independently constructed
+   reference using public owner body operations for the same admitted function.
+   Start both bodies from matching entry Meter state and limits. Compare the
+   body's charge/stop order from entry onward, preserving all typed outcomes,
+   laziness, ordered Meter charges, counters and stops at every body
+   occurrence-denial prefix and zero/exact/short budgets. Exclude the application's
+   single pre-body `FunctionCall` charge at entry; do not subtract it after a run,
+   manually copy the charge, reset mutated Meter state or assume matching state.
+   Conversion and supplied-argument admission state remain outside this body
+   comparison. Do not use an internal QSL application call or Runtime bridge as
+   the reference. Full-call equivalence remains planned under IR-595 / IR-583;
+   this comparison does not replace step 4's actual solver playback and public
+   owner replay. Include `a = b = 9` to exercise a sum outside the input domain and
    owner continuation beyond a machine-sized intermediate in a separately
    admitted finite-domain case. Exercise reachable undefined/refused/incomplete
    outcomes without input filtering. Mark an unavailable authentic fixture or
