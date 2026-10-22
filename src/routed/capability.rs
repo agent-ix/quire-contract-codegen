@@ -35,6 +35,31 @@ pub(crate) fn take_package_classifier_indices() -> Vec<usize> {
     PACKAGE_CLASSIFIER_INDICES.with(|indices| std::mem::take(&mut *indices.borrow_mut()))
 }
 
+struct CapabilityLookups<'a> {
+    scalar: crate::kani::generate::negotiate::ScalarFormLookups<'a>,
+    functions: BTreeMap<CheckedSemanticId, crate::oracle::function::FunctionPreflightGraph<'a>>,
+}
+
+impl<'a> CapabilityLookups<'a> {
+    fn new() -> Self {
+        Self {
+            scalar: crate::kani::generate::negotiate::ScalarFormLookups::new(),
+            functions: BTreeMap::new(),
+        }
+    }
+
+    fn function_graph(
+        &mut self,
+        package: &'a quire_contract_model::CheckedPackageV2,
+    ) -> &crate::oracle::function::FunctionPreflightGraph<'a> {
+        // IR admission checks the package ID against the canonical identity preimage,
+        // including its ordered graph projection; equal IDs bind equal checked nodes.
+        self.functions
+            .entry(package.package_id().clone())
+            .or_insert_with(|| crate::oracle::function::FunctionPreflightGraph::new(package))
+    }
+}
+
 fn serialize_domain_kind<S: serde::Serializer>(
     kind: &DomainKind,
     serializer: S,
@@ -530,13 +555,12 @@ fn checked_node_family(
 }
 
 fn checked_function_call_matches(
-    package: &quire_contract_model::CheckedPackageV2,
+    graph: &crate::oracle::function::FunctionPreflightGraph<'_>,
     function_node_id: &quire_contract_model::CheckedNodeId,
     call_node_id: &quire_contract_model::CheckedNodeId,
     argument_node_ids: &[quire_contract_model::CheckedNodeId],
 ) -> bool {
-    let graph = &package.graph().nodes;
-    let Some(function) = graph.iter().find(|node| &node.node_id == function_node_id) else {
+    let Some(function) = graph.get(function_node_id) else {
         return false;
     };
     if &*function.node_tag != "function" || &*function.semantic_form != "pure_function" {
@@ -574,7 +598,7 @@ fn checked_function_call_matches(
     if !valid_parameters || !valid_body {
         return false;
     }
-    let Some(call) = graph.iter().find(|node| &node.node_id == call_node_id) else {
+    let Some(call) = graph.get(call_node_id) else {
         return false;
     };
     if &*call.node_tag != "expression"
@@ -619,15 +643,17 @@ fn checked_function_call_matches(
         let Some(domain) = target.get("domain").and_then(serde_json::Value::as_str) else {
             return false;
         };
-        let actual = graph.iter().find(|node| {
-            node.node_id.digest.as_ref() == digest && node.node_id.domain.as_ref() == domain
-        });
+        let target = CheckedNodeId {
+            domain: domain.into(),
+            digest: digest.into(),
+        };
+        let actual = graph.get(&target);
         actual.is_some_and(|node| node.node_id == *expected)
     })
 }
 
 fn resolve_checked_reference<'a>(
-    graph: &'a [quire_contract_model::CheckedSemanticNodeV2],
+    graph: &crate::oracle::function::FunctionPreflightGraph<'a>,
     term: &serde_json::Value,
 ) -> Option<&'a quire_contract_model::CheckedSemanticNodeV2> {
     if term.get("term").and_then(serde_json::Value::as_str) != Some("reference") {
@@ -636,13 +662,14 @@ fn resolve_checked_reference<'a>(
     let target = term.get("target")?;
     let digest = target.get("digest")?.as_str()?;
     let domain = target.get("domain")?.as_str()?;
-    graph.iter().find(|node| {
-        node.node_id.digest.as_ref() == digest && node.node_id.domain.as_ref() == domain
+    graph.get(&CheckedNodeId {
+        domain: domain.into(),
+        digest: digest.into(),
     })
 }
 
 impl KaniForm {
-    fn identity(&self) -> KaniFormIdentity {
+    fn identity<'a>(&'a self, lookups: &mut CapabilityLookups<'a>) -> KaniFormIdentity {
         match self {
             Self::V1BoundClause { clause } => KaniFormIdentity {
                 family: KaniFormFamily::Clause,
@@ -725,11 +752,9 @@ impl KaniForm {
             } => KaniFormIdentity {
                 family: KaniFormFamily::FunctionApplication,
                 form: KaniFormName::V2FunctionApplication,
-                operation_identity: package
-                    .graph()
-                    .nodes
-                    .iter()
-                    .find(|node| &node.node_id == call_node_id)
+                operation_identity: lookups
+                    .function_graph(package)
+                    .get(call_node_id)
                     .and_then(|node| node.body.get("operation")?.get("identity")?.as_str())
                     .map(str::to_owned),
                 role: None,
@@ -754,13 +779,13 @@ impl KaniForm {
         &'a self,
         backend: &BackendDescriptor,
         admitted: Option<(&ContractPackageV1, &[ContractRequestPosition], usize)>,
-        scalar_lookups: &mut crate::kani::generate::negotiate::ScalarFormLookups<'a>,
+        lookups: &mut CapabilityLookups<'a>,
     ) -> Result<KaniFormPreflightOutcome, Box<Cause>> {
         #[cfg(test)]
         if let Some((_, _, request_index)) = admitted {
             PACKAGE_CLASSIFIER_INDICES.with(|indices| indices.borrow_mut().push(request_index));
         }
-        let identity = self.identity();
+        let identity = self.identity(lookups);
         match self {
             Self::V1BoundClause { clause } => {
                 let refusal = match clause.kind() {
@@ -796,7 +821,7 @@ impl KaniForm {
                     positions,
                     *request_index,
                     node_id,
-                    scalar_lookups,
+                    &mut lookups.scalar,
                 ) {
                     ScalarFormAssessment::Supported => Ok(KaniFormPreflightOutcome::Ready),
                     ScalarFormAssessment::RequiresBound => {
@@ -883,8 +908,9 @@ impl KaniForm {
                 call_node_id,
                 argument_node_ids,
             } => {
+                let graph = lookups.function_graph(package);
                 let source_matches = checked_function_call_matches(
-                    package,
+                    graph,
                     function_node_id,
                     call_node_id,
                     argument_node_ids,
@@ -897,8 +923,9 @@ impl KaniForm {
                     }));
                 }
                 let supported =
-                    match crate::oracle::function::checked_integer_function_application_is_supported(
+                    match crate::oracle::function::checked_integer_function_application_is_supported_with_graph(
                         package,
+                        graph,
                         function_node_id,
                         call_node_id,
                         argument_node_ids,
@@ -1438,7 +1465,7 @@ fn negotiate_backend_provider_with_package(
     admitted: Option<(&ContractPackageV1, &[ContractRequestPosition], &[usize])>,
 ) -> Result<Vec<ItemSettlement>, EnvelopeRefusal> {
     validate_backend_provider_envelope(envelope)?;
-    let mut scalar_lookups = crate::kani::generate::negotiate::ScalarFormLookups::new();
+    let mut lookups = CapabilityLookups::new();
     let request_indices = match admitted {
         Some((_, _, indices)) => indices.to_vec(),
         None => (0..envelope.items.len()).collect(),
@@ -1458,7 +1485,7 @@ fn negotiate_backend_provider_with_package(
                     &envelope.manifest,
                     item,
                     admitted.map(|(package, positions, _)| (package, positions, request_index)),
-                    &mut scalar_lookups,
+                    &mut lookups,
                 )?,
             })
         })
@@ -1592,7 +1619,7 @@ fn negotiate_item<'a>(
     manifest: &[BackendDescriptor],
     item: &'a RequestItem,
     admitted: Option<(&ContractPackageV1, &[ContractRequestPosition], usize)>,
-    scalar_lookups: &mut crate::kani::generate::negotiate::ScalarFormLookups<'a>,
+    lookups: &mut CapabilityLookups<'a>,
 ) -> Result<Disposition, EnvelopeRefusal> {
     let kind = match &item.kind {
         RequestedKind::Absent => {
@@ -1651,7 +1678,7 @@ fn negotiate_item<'a>(
             extent,
             &item.kani_form,
             admitted,
-            scalar_lookups,
+            lookups,
         ),
         many if item.named_backend.is_none() => Ok(Disposition::InvalidRequest {
             cause: Cause::AmbiguousBackend {
@@ -1735,7 +1762,7 @@ fn negotiate_single_candidate<'a>(
     extent: &ExtentClassification,
     kani_form: &'a KaniForm,
     admitted: Option<(&ContractPackageV1, &[ContractRequestPosition], usize)>,
-    scalar_lookups: &mut crate::kani::generate::negotiate::ScalarFormLookups<'a>,
+    lookups: &mut CapabilityLookups<'a>,
 ) -> Result<Disposition, EnvelopeRefusal> {
     let Some(backend) = descriptor(manifest, candidate) else {
         return Ok(Disposition::InvalidRequest {
@@ -1751,15 +1778,7 @@ fn negotiate_single_candidate<'a>(
             },
         });
     };
-    negotiate_arm(
-        routed,
-        backend,
-        kind,
-        extent,
-        kani_form,
-        admitted,
-        scalar_lookups,
-    )
+    negotiate_arm(routed, backend, kind, extent, kani_form, admitted, lookups)
 }
 
 /// Dispatch one arm per backend kind.
@@ -1775,12 +1794,10 @@ fn negotiate_arm<'a>(
     extent: &ExtentClassification,
     kani_form: &'a KaniForm,
     admitted: Option<(&ContractPackageV1, &[ContractRequestPosition], usize)>,
-    scalar_lookups: &mut crate::kani::generate::negotiate::ScalarFormLookups<'a>,
+    lookups: &mut CapabilityLookups<'a>,
 ) -> Result<Disposition, EnvelopeRefusal> {
     match routed {
-        BackendKind::Kani => {
-            negotiate_kani(backend, kind, extent, kani_form, admitted, scalar_lookups)
-        }
+        BackendKind::Kani => negotiate_kani(backend, kind, extent, kani_form, admitted, lookups),
         BackendKind::Process(_) => Ok(negotiate_process(backend, kind, extent)),
     }
 }
@@ -1798,9 +1815,9 @@ fn negotiate_kani<'a>(
     extent: &ExtentClassification,
     kani_form: &'a KaniForm,
     admitted: Option<(&ContractPackageV1, &[ContractRequestPosition], usize)>,
-    scalar_lookups: &mut crate::kani::generate::negotiate::ScalarFormLookups<'a>,
+    lookups: &mut CapabilityLookups<'a>,
 ) -> Result<Disposition, EnvelopeRefusal> {
-    let readiness = match kani_form.preflight(backend, admitted, scalar_lookups) {
+    let readiness = match kani_form.preflight(backend, admitted, lookups) {
         Ok(readiness) => readiness,
         Err(cause) => match *cause {
             cause @ Cause::KaniFormInvalid { .. } => {

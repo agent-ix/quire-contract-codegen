@@ -1571,12 +1571,17 @@ type Graph<'a> = BTreeMap<&'a CheckedNodeId, &'a CheckedSemanticNodeV2>;
 
 /// One checked-graph lookup view shared by function preflight items in a request.
 pub(crate) struct FunctionPreflightGraph<'a> {
+    package_id: CheckedSemanticId,
     nodes: Graph<'a>,
 }
 
 impl<'a> FunctionPreflightGraph<'a> {
     /// Index the admitted graph once, before classifying its function items.
-    pub(crate) fn new(nodes: &'a [CheckedSemanticNodeV2]) -> Self {
+    pub(crate) fn new(checked: &'a CheckedPackageV2) -> Self {
+        Self::from_nodes(&checked.graph().nodes, checked.package_id().clone())
+    }
+
+    fn from_nodes(nodes: &'a [CheckedSemanticNodeV2], package_id: CheckedSemanticId) -> Self {
         let nodes = nodes
             .iter()
             .map(|node| {
@@ -1585,10 +1590,11 @@ impl<'a> FunctionPreflightGraph<'a> {
                 (&node.node_id, node)
             })
             .collect();
-        Self { nodes }
+        Self { package_id, nodes }
     }
 
-    fn get(&self, node_id: &CheckedNodeId) -> Option<&'a CheckedSemanticNodeV2> {
+    /// Resolve one node from the view's admitted package graph.
+    pub(crate) fn get(&self, node_id: &CheckedNodeId) -> Option<&'a CheckedSemanticNodeV2> {
         self.nodes.get(node_id).copied()
     }
 }
@@ -1725,26 +1731,6 @@ pub(crate) enum FunctionPackageReadFailure {
     Incomplete(CheckedPackageIncomplete),
 }
 
-/// Classify one source-backed integer function application with the same V1 reader and generator
-/// used after routed settlement. No source artifact is returned to the negotiation path.
-pub(crate) fn checked_integer_function_application_is_supported(
-    checked: &CheckedPackageV2,
-    function_node_id: &CheckedNodeId,
-    call_node_id: &CheckedNodeId,
-    argument_node_ids: &[CheckedNodeId],
-    admitted: Option<(&ContractPackageV1, &[ContractRequestPosition], usize)>,
-) -> Result<bool, FunctionPackageReadFailure> {
-    let graph = FunctionPreflightGraph::new(&checked.graph().nodes);
-    checked_integer_function_application_is_supported_with_graph(
-        checked,
-        &graph,
-        function_node_id,
-        call_node_id,
-        argument_node_ids,
-        admitted,
-    )
-}
-
 /// Classify a function item using the request's shared admitted-graph view.
 pub(crate) fn checked_integer_function_application_is_supported_with_graph(
     checked: &CheckedPackageV2,
@@ -1754,6 +1740,9 @@ pub(crate) fn checked_integer_function_application_is_supported_with_graph(
     argument_node_ids: &[CheckedNodeId],
     admitted: Option<(&ContractPackageV1, &[ContractRequestPosition], usize)>,
 ) -> Result<bool, FunctionPackageReadFailure> {
+    if &graph.package_id != checked.package_id() {
+        return Ok(false);
+    }
     #[cfg(test)]
     if let Some((_, _, request_index)) = admitted {
         FUNCTION_PREFLIGHT_INDICES.with(|indices| indices.borrow_mut().push(request_index));
@@ -3164,7 +3153,14 @@ mod tests {
         nodes[0].node_tag = "function".into();
         nodes[0].semantic_form = "pure_function".into();
         let _ = take_function_preflight_graph_visits();
-        let graph = FunctionPreflightGraph::new(&nodes);
+        let graph = FunctionPreflightGraph::from_nodes(
+            &nodes,
+            CheckedSemanticId {
+                domain: "quire.package.semantic/v2".into(),
+                algorithm: "sha256".into(),
+                digest: "0".repeat(64).into(),
+            },
+        );
         for ordinal in [0, 15, 31, 0, 31] {
             assert_eq!(
                 graph
