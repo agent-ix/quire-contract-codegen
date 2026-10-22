@@ -128,7 +128,7 @@ build:
 
 .PHONY: msrv
 msrv:
-	$(CARGO) +$(MSRV) test $(LOCKED)
+	rustup run $(MSRV) cargo check $(LOCKED) --all-targets
 
 .PHONY: spec
 spec:
