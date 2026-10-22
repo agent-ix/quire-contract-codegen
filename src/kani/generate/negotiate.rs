@@ -49,6 +49,39 @@
 //! grounds are checked in that order and are never conflated with the internal-invariant
 //! [`UnsupportedObligation::RenderFailed`] fallback.
 
+// These admitted QSL fixtures exercise request-level lookup work in this Kani layer.
+#[cfg(test)]
+#[allow(dead_code, clippy::duplicate_mod)]
+#[path = "../../../tests/state_frame_support/model.rs"]
+mod model;
+#[cfg(test)]
+#[allow(dead_code, clippy::duplicate_mod)]
+#[path = "../../../tests/state_frame_support/native_twin.rs"]
+mod native_twin;
+
+#[cfg(test)]
+mod request_lookup_work {
+    use std::cell::Cell;
+    std::thread_local! {
+        static VISITS: Cell<(usize, usize)> = const { Cell::new((0, 0)) };
+    }
+    pub(super) fn graph() {
+        VISITS.with(|visits| {
+            let (graph, source) = visits.get();
+            visits.set((graph + 1, source));
+        });
+    }
+    pub(super) fn source() {
+        VISITS.with(|visits| {
+            let (graph, source) = visits.get();
+            visits.set((graph, source + 1));
+        });
+    }
+    pub(super) fn take() -> (usize, usize) {
+        VISITS.with(|visits| visits.replace((0, 0)))
+    }
+}
+
 use std::collections::{BTreeMap, BTreeSet};
 
 use quire_contract_model::{
@@ -489,6 +522,10 @@ fn classify_v2_clause<'a>(
         .graph()
         .nodes
         .iter()
+        .inspect(|_| {
+            #[cfg(test)]
+            request_lookup_work::graph();
+        })
         .find(|node| &node.node_id == clause);
     let kind = graph_node
         .and_then(|node| {
@@ -530,6 +567,10 @@ fn classify_v2_clause<'a>(
             source_map: package
                 .source_map()
                 .iter()
+                .inspect(|_| {
+                    #[cfg(test)]
+                    request_lookup_work::source();
+                })
                 .filter(|entry| &entry.node_id == clause)
                 .cloned()
                 .collect(),
@@ -573,6 +614,10 @@ fn classify_collection<'a>(
             source_map: package
                 .source_map()
                 .iter()
+                .inspect(|_| {
+                    #[cfg(test)]
+                    request_lookup_work::source();
+                })
                 .filter(|entry| &entry.node_id == node_id)
                 .cloned()
                 .collect(),
@@ -1430,6 +1475,90 @@ mod tests {
 
     use super::*;
     use quire_contract_model::{ClauseId, RequirementRef, EXECUTABLE_PROJECTION_FORMAT};
+
+    // IR-276 AC-5 work measurement, not an unrelated FR behavior trace claim.
+    #[test]
+    fn request_v2_clause_lookups_share_graph_and_source_work() {
+        let mut excessive_work = Vec::new();
+        for clause_count in [8, 16, 32] {
+            let names = (0..clause_count)
+                .map(|i| format!("Clause{i}"))
+                .collect::<Vec<_>>();
+            let declarations = names
+                .iter()
+                .map(|name| (name.as_str(), "deposit", "balance"))
+                .collect::<Vec<_>>();
+            let (package, _) = native_twin::Twin::build(&model::GRANTED, &declarations, 0)
+                .emitted_package(&names[0]);
+            let clauses = package
+                .graph()
+                .nodes
+                .iter()
+                .filter(|node| &*node.node_tag == "state" && &*node.semantic_form == "state_clause")
+                .map(|node| &node.node_id)
+                .collect::<Vec<_>>();
+            assert_eq!(
+                clauses.len(),
+                clause_count,
+                "actual admitted authored population"
+            );
+            for count in [2, 4, 8] {
+                let items = clauses
+                    .iter()
+                    .take(count)
+                    .map(|clause| ObligationItem::V2Clause {
+                        package: &package,
+                        clause,
+                    })
+                    .collect::<Vec<_>>();
+                let request = KaniObligationRequest {
+                    ceilings: crate::kani::test_support::proof_ceilings::proof_ceilings(),
+                    items: &items,
+                    subject_path: "crate::subject::deposit",
+                    unwind: 8,
+                };
+                request_lookup_work::take();
+                let outcome =
+                    negotiate_kani_obligations(&request).expect("well-formed admitted request");
+                let (graph_visits, source_visits) = request_lookup_work::take();
+                let graph_size = package.graph().nodes.len();
+                let source_size = package.source_map().len();
+                assert!(source_size > 0);
+                println!("IR276_WORK K={count} R={graph_size} S={source_size} graph_visits={graph_visits} source_visits={source_visits}");
+                assert_eq!(outcome.records().len(), count);
+                for (index, item) in items.iter().enumerate() {
+                    let single_items = [item.clone()];
+                    let single = negotiate_kani_obligations(&KaniObligationRequest {
+                        items: &single_items,
+                        ..request
+                    })
+                    .expect("independent single-item baseline");
+                    let mut expected = single.records()[0].clone();
+                    expected.request_index = index;
+                    assert_eq!(
+                        outcome.records()[index],
+                        expected,
+                        "typed refusal, source order and role unchanged"
+                    );
+                }
+                let repeated = negotiate_kani_obligations(&request).unwrap();
+                assert_eq!(outcome, repeated, "complete deterministic output");
+                if graph_visits > graph_size || source_visits > source_size {
+                    excessive_work.push((
+                        count,
+                        graph_size,
+                        source_size,
+                        graph_visits,
+                        source_visits,
+                    ));
+                }
+            }
+        }
+        assert!(
+            excessive_work.is_empty(),
+            "request-level graph/source scans repeat per item: {excessive_work:?}"
+        );
+    }
 
     // ---- FND-003 regression: the byte-ceiling and syntax refusals split out of `RenderFailed`
     // ----
