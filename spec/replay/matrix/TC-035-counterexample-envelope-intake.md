@@ -26,12 +26,26 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
    values and parameter bindings, and pass the rendered transcript to `qsl_replay::Witness::parse`.
 3. For a parameter with declared domain `[lo, hi]`, submit counterexamples with the value at `lo`,
    `hi`, `lo - 1` and `hi + 1`, and record whether `replay` was called.
-4. Build one `WitnessPacket` per member QSL defines, each missing only that member, and submit
-   each. Then submit a complete packet whose trace position is
-   present with the value none.
+4. Build one `WitnessPacket` per common required member QSL defines, excluding the three alternative
+   replay-target members, each missing only that common member, and submit each. Then submit a
+   complete packet whose trace position is present with the value none. With every common member
+   present, submit function, frame and state-clause packets with none of `function`,
+   `frame_operation` and `state_clause`, each pair of targets, and all three; record the typed
+   admission refusal and whether an envelope or replay executor is reached.
+   Inspect the packet type and construction path to confirm an empty name or old
+   `selected_function` placeholder cannot supply the absent selection.
 5. Retired (FR-024-AC-5, IR-890): no corpus `Input`-arm submission is tested.
-6. Submit a frame counterexample through `replay_frame`, and read back the clause, frame, anchor and
-   occurrence identities QSL reports.
+6. Submit a function counterexample and a frame counterexample through their respective QSL replay
+   paths. Read the function packet and admitted envelope's `function` selection and absent
+   `frame_operation` and `state_clause`; read the frame packet and envelope's
+   `frame_operation` (`object` and `operation`) and absent `function` and `state_clause`.
+   Inspect that neither has a `selected_function` member or
+   alias. For the frame, compare the pair with QSL's validated call-site result, including an
+   inherited operation whose selected object differs from its declaring owner; confirm the packet
+   names the declaring owner. When QSL supplies no validated pair, confirm packet construction
+   refuses instead of using the caller's `OperationName`. Confirm the request carries no
+   `arguments` or `occurrence_key`, and the packet and payload
+   retain the ADR-017 PF-4 clause, frame, anchor and generated-occurrence identities QSL reports.
 7. Reduce one `Witness`-arm counterexample with a candidate set that holds a
    failure-preserving candidate, an out-of-domain candidate and a verdict-changing candidate.
    Begin with an admitted original failure. Retain the valid equivalent reduction, then propose
@@ -47,9 +61,11 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
    through `StateClauseReplay::replay`, and call `qsl_replay::replay_state_clause` directly with
    the same request and envelope. Replay once more through `replay_through` with an executor that
    records its arguments and returns a sentinel result.
-10. Read back each clause's payload `clause` and `observation` and the envelope's `clause_node`
-    and `occurrence_key`, and the `ClauseSite` that `qsl_replay::call_site` returns for each
-    clause name. Request an undeclared clause name.
+10. Read back each clause's packet and request `state_clause`, its payload `observation` and
+    absence of payload `clause`, and the envelope's `clause_node` and `occurrence_key`. Compare
+    each selection and identity with the `ClauseSite` that `qsl_replay::call_site` validates for
+    that clause name. Confirm both other target members are absent and the request carries no
+    `arguments` or `occurrence_key`. Request an undeclared clause name.
 11. Read the invocation document and its pre and post snapshots and their digests; change one
     playback value and one post-state value and read the digests again.
 12. Build the document vector of FR-024-AC-14 (unsorted members, escaped characters, a large
@@ -102,6 +118,22 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     disagreement. Send the decode refusal through the adapter outcome's refusal arm, with its
     backend identity, obligation identity and typed cause but no assignments, packet or native
     text; record the common intake's typed result, contract settlement and whether replay ran.
+29. From an admitted function-contract counterexample packet, build a `function` replay request
+    using its genuine function `declaration` occurrence. Compare the complete packet and request
+    keys (node, role and ordinal), `function` target and `obligation_identity` before and after
+    typed request serialization and readback. Replay a falsified Boolean predicate through
+    QSL and record its reproduced violation. Inspect construction for a locally minted or
+    default key.
+30. Build operator-parity and value-parity requests from their admitted packets and compare each
+    request's complete key with its own packet's key after typed readback. Include an admitted
+    scalar `expression` occurrence with a nonzero ordinal and two authentic occurrences of one
+    node with different ordinals; check that the request retains the chosen occurrence and its
+    `obligation_identity`. The value-parity request uses its packet's function `declaration`
+    occurrence. Recheck that frame and state-clause requests from steps 6 and 10 have neither
+    `arguments` nor `occurrence_key` while their envelope and payload identities remain.
+31. Remove `occurrence_key` from an otherwise valid serialized `function` request, then also
+    remove one byte-provision entry. Decode both with QSL's public request reader and record
+    the code, path and phase of each refusal; confirm no replay executor is called.
 
 ## Expected Results
 
@@ -111,10 +143,20 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
    values and parameter bindings, with no string of backend output (FR-024-AC-2).
 3. The values at `lo` and `hi` replay. The values at `lo - 1` and `hi + 1` are reported
    out-of-domain, and `replay` is not called for either (FR-024-AC-3).
-4. Each incomplete packet is refused by `WitnessEnvelope::reconstruct` with `MissingMember` naming
-   its member, and no replay runs. The packet with trace position none is admitted (FR-024-AC-4).
+4. Each packet missing one common required member is refused by `WitnessEnvelope::reconstruct`
+   with `MissingMember` naming it, and no replay runs. The packet with trace position none is
+   admitted (FR-024-AC-4). No selection and each two-or-three-target combination produce
+   distinguishable typed packet-admission refusals, admit no envelope and call no replay
+   executor. An empty name or old
+   `selected_function` placeholder cannot supply the absent selection (FR-024-AC-42).
 5. Retired (FR-024-AC-5, IR-890): this step asserts no result.
-6. Each identity QSL reports equals the one submitted (FR-024-AC-6).
+6. The function packet and envelope carry only `function`; the frame packet and envelope carry
+   only `frame_operation` with QSL's validated declaring owner's qualified name and operation
+   identifier, including for an inherited operation. If QSL supplies no validated pair, CG
+   refuses packet construction instead of deriving an owner from the caller's selection;
+   neither carries `selected_function` or an alias. The frame request has no `arguments` or
+   `occurrence_key`, while the packet and payload retain their PF-4 identity members and every
+   identity QSL reports equals the one submitted (FR-024-AC-6, FR-024-AC-41).
 7. Only valid failure-preserving candidates are retained (FR-024-AC-7). The root
    and both retained revisions refer to their exact QSL envelopes and unchanged obligation;
    each child names the actual retained parent. The invalid-domain and verdict-changing proposals
@@ -127,8 +169,9 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
    (FR-024-AC-10).
 9. `replay` returns the direct `replay_state_clause` result for each run, the two runs' results
    differ, and the sentinel executor's value is returned as it is (FR-024-AC-11).
-10. Each payload names its clause and the `Invocation` arm, each envelope's identities equal that
-    clause's `ClauseSite` node and occurrence, and the undeclared name returns
+10. Each packet and request carry only `state_clause` as that clause's validated declared name;
+    each payload has no `clause` member and carries the `Invocation` arm, each envelope's
+    identities equal that clause's `ClauseSite` node and occurrence, and the undeclared name returns
     `StateClauseReplayError::CallSite` with the executor not called (FR-024-AC-12).
 11. The pre snapshot holds the playback's values and the post snapshot the supplied post-state
     values, and the invocation document holds the stated members with its two digests; each
@@ -221,6 +264,18 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     never contract success or failure. Decode, domain and QSL admission refusals invoke no replay
     (FR-024-AC-36,
     FR-024-AC-37). Kani-specific refusal details follow FR-016.
+34. The function-contract request retains the admitted packet's full `declaration` key,
+    selected function and obligation identity through typed readback, with no locally
+    constructed key. QSL replay settles the falsified predicate as a reproduced violation
+    (FR-024-AC-43).
+35. The operator-parity request retains its own scalar application occurrence, including
+    the nonzero ordinal and the difference between occurrences of one node; the value-parity
+    request retains its own function `declaration` occurrence. Both retain their obligation
+    identity. Frame and state-clause requests retain their existing key-free shape
+    (FR-024-AC-44, FR-024-AC-41).
+36. Both missing-key requests refuse `invalid_runtime_input`/`missing-member` at
+    `/replay/occurrence_key` at decode before byte provision or recompile, and neither
+    invokes replay or produces a contract verdict (FR-024-AC-45).
 
 ## Status
 
@@ -229,12 +284,14 @@ values (`src/replay/function.rs`, TC-026, now through `render_witness`), which i
 checks, but it builds no envelope. Step 8 holds for the decode path: `src/replay/witness.rs` uses
 no Contract IR witness type. The bounded-Kani corpus retains no counterexample packet, so step 5
 (FR-024-AC-5) is retired, as is the `Input`-arm reduction (FR-024-AC-9) in step 7.
-Steps 9 to 17 (FR-024-AC-11 to FR-024-AC-19, IR-460) are
+Steps 9 and 11 to 17 (FR-024-AC-11 and FR-024-AC-13 to FR-024-AC-19, IR-460) are
 implemented by `src/replay/state_clause.rs` and the tests of
 `tests/it/kani_obligations_state_clause_replay.rs`, plus the `src` unit tests of step 12. Step 16
 is a real-Kani test in the module `kani_obligations_state_clause_replay`, run through the
 `kani_obligations` filter of `make kani`; its subject debits within the declared range, because a
 debit past the floor runs to a post state QSL's snapshot admission refuses.
+Step 10 (FR-024-AC-12) is planned under IR-965: the current state-clause path still carries
+the old payload selection and has not been tested against the `state_clause` replay target.
 
 Steps 18 to 26 (FR-024-AC-20 to FR-024-AC-29, IR-459) are implemented by `src/replay/obligation.rs`
 and `src/replay/frame.rs`, the `src` unit tests of steps 18 and 26, and the tests of
@@ -255,3 +312,6 @@ last case (a clause added on an operation that sorts earlier) is measured on the
 `deposit` and `transfer`: a clause added on `deposit` changes the identity of `transfer`.
 FR-024-AC-36 to FR-024-AC-40, including common typed intake and CG lineage retention, are
 planned. No production minimizer or lineage record is claimed by this test case.
+Steps 29 to 31 and their results 34 to 36 are planned for IR-968. They require QSL's
+QSL-973 replay-target and STD-264 occurrence-key implementations and authentic admitted
+occurrence-bearing packets; no CG implementation or tagged test coverage is claimed yet.
