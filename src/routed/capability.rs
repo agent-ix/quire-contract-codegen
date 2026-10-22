@@ -37,15 +37,69 @@ pub(crate) fn take_package_classifier_indices() -> Vec<usize> {
 
 struct CapabilityLookups<'a> {
     scalar: crate::kani::generate::negotiate::ScalarFormLookups<'a>,
+    scalar_targets: BTreeMap<CheckedSemanticId, BTreeSet<CheckedNodeId>>,
+    scalar_families: BTreeMap<CheckedSemanticId, BTreeMap<CheckedNodeId, Option<KaniFormFamily>>>,
     functions: BTreeMap<CheckedSemanticId, crate::oracle::function::FunctionPreflightGraph<'a>>,
 }
 
 impl<'a> CapabilityLookups<'a> {
-    fn new() -> Self {
+    fn new(envelope: &BackendProviderEnvelope) -> Self {
+        let mut scalar_targets = BTreeMap::<CheckedSemanticId, BTreeSet<CheckedNodeId>>::new();
+        for item in &envelope.items {
+            match &item.kani_form {
+                KaniForm::V2ScalarClaim {
+                    package, node_id, ..
+                }
+                | KaniForm::OutsideSet { package, node_id } => {
+                    scalar_targets
+                        .entry(package.package_id().clone())
+                        .or_default()
+                        .insert(node_id.clone());
+                }
+                KaniForm::V1BoundClause { .. }
+                | KaniForm::V2StateFrame { .. }
+                | KaniForm::V2FunctionApplication { .. } => {}
+            }
+        }
         Self {
             scalar: crate::kani::generate::negotiate::ScalarFormLookups::new(),
+            scalar_targets,
+            scalar_families: BTreeMap::new(),
             functions: BTreeMap::new(),
         }
+    }
+
+    fn scalar_family(
+        &mut self,
+        package: &quire_contract_model::CheckedPackageV2,
+        node_id: &CheckedNodeId,
+    ) -> Option<KaniFormFamily> {
+        let package_id = package.package_id();
+        let families = self
+            .scalar_families
+            .entry(package_id.clone())
+            .or_insert_with(|| {
+                let node_ids = self
+                    .scalar_targets
+                    .get(package_id)
+                    .into_iter()
+                    .flat_map(|targets| targets.iter().cloned())
+                    .collect::<Vec<_>>();
+                crate::oracle::scalar::derive_exact_scalar_items(package, &node_ids)
+                    .into_iter()
+                    .zip(node_ids)
+                    .map(|(result, id)| (id, result.ok().map(scalar_family_from_item)))
+                    .collect()
+            });
+        families.get(node_id).copied().flatten()
+    }
+
+    fn checked_node(
+        &mut self,
+        package: &'a quire_contract_model::CheckedPackageV2,
+        node_id: &CheckedNodeId,
+    ) -> Option<&'a quire_contract_model::CheckedSemanticNodeV2> {
+        self.function_graph(package).get(node_id)
     }
 
     fn function_graph(
@@ -479,19 +533,11 @@ fn obligation_role(role: &str) -> Option<KaniObligationRole> {
     }
 }
 
-fn scalar_operation_family(
-    package: &quire_contract_model::CheckedPackageV2,
-    node_id: &quire_contract_model::CheckedNodeId,
-) -> Option<KaniFormFamily> {
+fn scalar_family_from_item(item: crate::oracle::scalar::ExactScalarItem) -> KaniFormFamily {
     use crate::oracle::scalar::{
         EqualityOperandKind, ExactScalarOperation as Op, OrderingOperandKind,
     };
-    let item =
-        crate::oracle::scalar::derive_exact_scalar_items(package, std::slice::from_ref(node_id))
-            .into_iter()
-            .next()?
-            .ok()?;
-    Some(match item.operation {
+    match item.operation {
         Op::Boolean { .. } => KaniFormFamily::Boolean,
         Op::Equality { operands, .. } => match operands {
             EqualityOperandKind::Boolean => KaniFormFamily::Boolean,
@@ -515,21 +561,19 @@ fn scalar_operation_family(
         Op::QuantityConversion | Op::QuantityArithmetic { .. } | Op::QuantityComparison { .. } => {
             KaniFormFamily::Quantity
         }
-    })
+    }
 }
 
-fn checked_node_family(
-    package: &quire_contract_model::CheckedPackageV2,
-    node_id: &quire_contract_model::CheckedNodeId,
+fn checked_node_family<'a>(
+    package: &'a quire_contract_model::CheckedPackageV2,
+    node_id: &CheckedNodeId,
+    lookups: &mut CapabilityLookups<'a>,
 ) -> KaniFormFamily {
-    if let Some(family) = scalar_operation_family(package, node_id) {
+    if let Some(family) = lookups.scalar_family(package, node_id) {
         return family;
     }
-    let identity = package
-        .graph()
-        .nodes
-        .iter()
-        .find(|node| &node.node_id == node_id)
+    let identity = lookups
+        .checked_node(package, node_id)
         .and_then(|node| node.body.get("operation")?.get("identity")?.as_str());
     match identity {
         Some(
@@ -686,18 +730,12 @@ impl KaniForm {
             Self::V2ScalarClaim {
                 package, node_id, ..
             } => {
-                let operation_identity = package
-                    .graph()
-                    .nodes
-                    .iter()
-                    .find(|node| &node.node_id == node_id)
+                let operation_identity = lookups
+                    .checked_node(package, node_id)
                     .and_then(|node| node.body.get("operation")?.get("identity")?.as_str())
                     .map(str::to_owned);
-                let state_clause_role = package
-                    .graph()
-                    .nodes
-                    .iter()
-                    .find(|node| &node.node_id == node_id)
+                let state_clause_role = lookups
+                    .checked_node(package, node_id)
                     .filter(|node| {
                         &*node.node_tag == "state" && &*node.semantic_form == "state_clause"
                     })
@@ -708,7 +746,7 @@ impl KaniForm {
                             .get("clause")?
                             .as_str()
                     });
-                let identity_family = checked_node_family(package, node_id);
+                let identity_family = checked_node_family(package, node_id, lookups);
                 KaniFormIdentity {
                     family: if state_clause_role.is_some() {
                         KaniFormFamily::StateFrame
@@ -729,11 +767,8 @@ impl KaniForm {
             } => KaniFormIdentity {
                 family: KaniFormFamily::StateFrame,
                 form: KaniFormName::V2StateFrame,
-                operation_identity: package
-                    .graph()
-                    .nodes
-                    .iter()
-                    .find(|node| &node.node_id == clause)
+                operation_identity: lookups
+                    .checked_node(package, clause)
                     .and_then(|node| node.body.get("operation")?.get("identity")?.as_str())
                     .map(str::to_owned),
                 role: Some(*role),
@@ -763,11 +798,8 @@ impl KaniForm {
             Self::OutsideSet { package, node_id } => KaniFormIdentity {
                 family: KaniFormFamily::OutsideSet,
                 form: KaniFormName::OutsideSet,
-                operation_identity: package
-                    .graph()
-                    .nodes
-                    .iter()
-                    .find(|node| &node.node_id == node_id)
+                operation_identity: lookups
+                    .checked_node(package, node_id)
                     .map(|node| node.semantic_form.to_string()),
                 role: None,
                 state_frame_role: None,
@@ -852,18 +884,13 @@ impl KaniForm {
                 subject_path,
             } => {
                 use crate::kani::generate::outcome::StateFrameRole;
-                let actual_clause = package
-                    .graph()
-                    .nodes
-                    .iter()
-                    .find(|node| &node.node_id == clause)
-                    .and_then(|node| {
-                        node.body
-                            .get("operation")?
-                            .get("member")?
-                            .get("clause")?
-                            .as_str()
-                    });
+                let actual_clause = lookups.checked_node(package, clause).and_then(|node| {
+                    node.body
+                        .get("operation")?
+                        .get("member")?
+                        .get("clause")?
+                        .as_str()
+                });
                 let role = match role {
                     KaniObligationRole::Postcondition => StateFrameRole::Contract,
                     KaniObligationRole::Frame => StateFrameRole::Frame,
@@ -965,11 +992,7 @@ impl KaniForm {
                 }
             }
             Self::OutsideSet { package, node_id } => {
-                let node = package
-                    .graph()
-                    .nodes
-                    .iter()
-                    .find(|node| &node.node_id == node_id);
+                let node = lookups.checked_node(package, node_id);
                 let Some(node) = node else {
                     return Err(Box::new(Cause::KaniFormInvalid {
                         form: identity,
@@ -977,7 +1000,7 @@ impl KaniForm {
                         backend: backend.identity.clone(),
                     }));
                 };
-                if scalar_operation_family(package, node_id).is_some()
+                if lookups.scalar_family(package, node_id).is_some()
                     || &*node.semantic_form == "state_clause"
                 {
                     Err(Box::new(Cause::KaniFormInvalid {
@@ -1465,7 +1488,7 @@ fn negotiate_backend_provider_with_package(
     admitted: Option<(&ContractPackageV1, &[ContractRequestPosition], &[usize])>,
 ) -> Result<Vec<ItemSettlement>, EnvelopeRefusal> {
     validate_backend_provider_envelope(envelope)?;
-    let mut lookups = CapabilityLookups::new();
+    let mut lookups = CapabilityLookups::new(envelope);
     let request_indices = match admitted {
         Some((_, _, indices)) => indices.to_vec(),
         None => (0..envelope.items.len()).collect(),

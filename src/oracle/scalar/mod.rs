@@ -4444,7 +4444,11 @@ pub fn derive_exact_scalar_items(
         .graph()
         .nodes
         .iter()
-        .map(|node| (&node.node_id, node))
+        .map(|node| {
+            #[cfg(test)]
+            SCALAR_DERIVE_GRAPH_VISITS.with(|count| count.set(count.get() + 1));
+            (&node.node_id, node)
+        })
         .collect::<BTreeMap<_, _>>();
     node_ids
         .iter()
@@ -4456,6 +4460,16 @@ pub fn derive_exact_scalar_items(
             })
         })
         .collect()
+}
+
+#[cfg(test)]
+thread_local! {
+    static SCALAR_DERIVE_GRAPH_VISITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(crate) fn take_scalar_derive_graph_visits() -> usize {
+    SCALAR_DERIVE_GRAPH_VISITS.with(|count| count.replace(0))
 }
 
 /// What the derivation reads about one node.
