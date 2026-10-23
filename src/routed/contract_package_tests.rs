@@ -3227,27 +3227,26 @@ mod tests {
                         .cmp(&right["node_id"]["digest"].as_str())
                 });
         }
-        let projection = collision["semantic_graph"]["nodes"]
-            .as_array()
-            .expect("graph nodes")
-            .iter()
-            .cloned()
-            .map(|mut node| {
-                node.as_object_mut()
-                    .expect("graph node")
-                    .remove("occurrences");
-                node
-            })
-            .collect();
-        collision["identity_preimage"]["identity_projection"] =
-            serde_json::Value::Array(projection);
+        let selections: quire_contract_model::CheckedPackageIdentityPreimageV2 =
+            serde_json::from_value(collision["identity_preimage"].clone())
+                .expect("typed identity selections");
+        let nodes: Vec<quire_contract_model::CheckedSemanticNodeV2> =
+            serde_json::from_value(collision["semantic_graph"]["nodes"].clone())
+                .expect("typed graph nodes");
+        let preimage = quire_contract_model::CheckedPackageIdentityPreimageRefV2 {
+            version: &selections.version,
+            edition: &selections.edition,
+            profile_selections: &selections.profile_selections,
+            definition_selections: &selections.definition_selections,
+            model_selections: &selections.model_selections,
+            required_features: &selections.required_features,
+            dependency_selections: &selections.dependency_selections,
+            identity_projection: &nodes,
+        };
         collision["package_id"]["digest"] = serde_json::Value::String(
-            quire_canonical::sha256(
-                &collision["identity_preimage"],
-                quire_canonical::Limits::new(1 << 24),
-            )
-            .expect("identity preimage canonicalizes")
-            .to_string(),
+            quire_canonical::sha256(&preimage, quire_canonical::Limits::new(1 << 24))
+                .expect("identity preimage canonicalizes")
+                .to_string(),
         );
         let collision_bytes =
             quire_canonical::to_vec(&collision, quire_canonical::Limits::new(1 << 24))

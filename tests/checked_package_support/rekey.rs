@@ -10,8 +10,9 @@ use quire_canonical::{sha256, Limits};
 use quire_contract_model::{
     derive_application_node_id, derive_structural_candidates, ApplicationIdentityContext,
     ApplicationIdentityError, ApplicationNodeDraft, CheckedNodeId, CheckedPackageEvidence,
-    CheckedPackageIdentityPreimageV2, CheckedPackageReadLimits, CheckedPackageRefusalCause,
-    CheckedPackageV2, CheckedPackageV2ReadResult, CheckedSemanticNodeV2,
+    CheckedPackageIdentityPreimageRefV2, CheckedPackageIdentityPreimageV2,
+    CheckedPackageReadLimits, CheckedPackageRefusalCause, CheckedPackageV2,
+    CheckedPackageV2ReadResult, CheckedSemanticNodeV2,
 };
 use serde_json::{json, Value};
 
@@ -228,23 +229,23 @@ impl FixtureIds {
     }
 }
 
-/// Rebuilds projection and package identity after a node-ID substitution.
+/// Rebuilds package identity after a node-ID substitution.
 pub(super) fn refresh_identity(wire: &mut Value) {
-    let projection = wire["semantic_graph"]["nodes"]
-        .as_array()
-        .expect("fixture graph nodes")
-        .iter()
-        .cloned()
-        .map(|mut node| {
-            node.as_object_mut()
-                .expect("fixture node")
-                .remove("occurrences");
-            node
-        })
-        .collect();
-    wire["identity_preimage"]["identity_projection"] = Value::Array(projection);
-    let preimage: CheckedPackageIdentityPreimageV2 =
+    let selections: CheckedPackageIdentityPreimageV2 =
         serde_json::from_value(wire["identity_preimage"].clone()).expect("typed fixture preimage");
+    let nodes: Vec<CheckedSemanticNodeV2> =
+        serde_json::from_value(wire["semantic_graph"]["nodes"].clone())
+            .expect("typed fixture graph nodes");
+    let preimage = CheckedPackageIdentityPreimageRefV2 {
+        version: &selections.version,
+        edition: &selections.edition,
+        profile_selections: &selections.profile_selections,
+        definition_selections: &selections.definition_selections,
+        model_selections: &selections.model_selections,
+        required_features: &selections.required_features,
+        dependency_selections: &selections.dependency_selections,
+        identity_projection: &nodes,
+    };
     // Fixture construction also serves large-package limit tests. The checked
     // reader applies the requested byte ceiling when this wire is submitted.
     wire["package_id"]["digest"] = json!(sha256(&preimage, Limits::new(u64::MAX))

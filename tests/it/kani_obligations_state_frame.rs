@@ -43,9 +43,9 @@ use package::{
     PackageBuilder, FUNCTION, NODE_DOMAIN, T_BOOLEAN, T_INTEGER, T_TEXT,
 };
 use qsl_replay::{
-    CallSiteRefusal, Category, DisagreementCause, FrameChange, FrameIdentityMismatch,
-    InconclusiveCause, OperationSite, ReplayRefusal, ReplayResult, ReplaySource, TerminalValue,
-    Verdict, WitnessSettlement,
+    CallSiteRefusal, DisagreementCause, FrameChange, FrameIdentityMismatch, InconclusiveCause,
+    OperationSite, ReplayRefusal, ReplayResult, ReplaySource, TerminalValue, Verdict,
+    WitnessSettlement,
 };
 use quire_contract_codegen::{
     derive_v2_clause_descriptor, generate_v2_clause_claim_map, generate_v2_clause_oracle,
@@ -65,6 +65,7 @@ use quire_contract_codegen::{HarnessSymbol, StateFrameRecordError};
 use quire_contract_model::{
     CheckedMemberType, CheckedNodeId, CheckedPackageReadLimits, CheckedPackageV2,
 };
+use quire_semantic_value::catalog::Category;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
@@ -3037,7 +3038,7 @@ fn tc_025_the_frame_replay_envelope_names_the_payloads_frame_and_occurrence() {
 
 /// The non-Kani frame path carries QSL's call-site identities through the packet and succeeds
 /// through `FrameReplay::replay`, whose implementation calls `qsl_replay::replay_frame`.
-#[trace("TC-035", "FR-024-AC-6")]
+#[trace("TC-035", "FR-024-AC-6", "FR-024-AC-41")]
 #[test]
 fn tc_035_frame_packet_reaches_qsl_with_call_site_identities() {
     let twin = Twin::new();
@@ -3053,6 +3054,18 @@ fn tc_035_frame_packet_reaches_qsl_with_call_site_identities() {
     assert_eq!(payload.anchor, site.anchor);
     assert_eq!(payload.occurrence, site.frame_occurrence);
     assert_eq!(replay.packet.clause_node, Some(site.frame));
+    assert_eq!(
+        replay.packet.replay_target.frame_operation.as_ref(),
+        Some(&site.frame_operation)
+    );
+    assert!(replay.packet.replay_target.function.is_none());
+    assert!(replay.packet.replay_target.state_clause.is_none());
+    assert_eq!(
+        replay.wire.replay_target.members,
+        replay.packet.replay_target
+    );
+    assert!(!replay.wire.replay_target.arguments);
+    assert!(replay.wire.replay_target.occurrence_key.is_none());
     assert_eq!(
         replay.packet.occurrence_key.as_ref(),
         Some(&site.frame_occurrence)
