@@ -4,6 +4,8 @@ pub(crate) mod execute;
 pub(crate) mod harness;
 // Spawn, bounded capture, timeout and process-group kill.
 pub(crate) mod launch;
+// Shared bounded direct-child process API built on the owned launcher.
+pub mod process;
 // The unique report path, stale removal and bounded read.
 pub(crate) mod report_file;
 // Private staging and paired Kani/native execution for routed scalar obligations.
