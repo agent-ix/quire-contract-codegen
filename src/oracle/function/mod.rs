@@ -1839,12 +1839,17 @@ mod ir988_source_function_tests {
 }
 
 #[cfg(test)]
+#[allow(clippy::duplicate_mod)] // Reuse the admitted fixture in this test binary.
+#[path = "../../../tests/exact_function_support/package.rs"]
+mod ir988_function_fixture;
+
+#[cfg(test)]
 mod ir988_admitted_generation_tests {
     use super::*;
     use ix_trace_rs::trace;
     use serde_json::json;
 
-    use crate::ir988_function_fixture as fixture;
+    use super::ir988_function_fixture as fixture;
 
     fn source_reference(code: u32) -> serde_json::Value {
         let id = fixture::code_id(code);
@@ -1853,7 +1858,7 @@ mod ir988_admitted_generation_tests {
 
     struct AdmittedCase {
         contract: ContractPackageV1,
-        positions: Vec<crate::ContractRequestPosition>,
+        positions: Vec<ContractRequestPosition>,
         function_positions: Vec<usize>,
         declarations: Vec<ExactFunctionDeclaration>,
         item_positions: Vec<usize>,
