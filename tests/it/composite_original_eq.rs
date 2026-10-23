@@ -1029,12 +1029,16 @@ fn retained_context_kr_families_preserve_complete_request_outputs_and_refused_si
                         actual: EqualityOperator::Equal
                     }
                 ));
-                // Debug includes the complete typed claim, operands (including consumed_work),
-                // positional preimage, and replay limits. No solver-origin assertion is made.
+                // Typed equality checks include every positional operand and consumed_work.
+                // Debug additionally retains the private claim/limits in the native snapshot;
+                // it is neither wire serialization nor an assertion of solver origin.
                 let snapshot = (
+                    equal.preimage().clone(),
+                    equal.operands().clone(),
+                    not_equal.preimage().clone(),
+                    not_equal.operands().clone(),
                     format!("{equal:?}"),
                     format!("{not_equal:?}"),
-                    format!("{refusal:?}"),
                 );
                 if let Some(expected) = &expected_in_context {
                     assert_eq!(&snapshot, expected);
