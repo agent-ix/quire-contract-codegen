@@ -1,8 +1,9 @@
 //! Bounded cover harness for an admitted V2 parameter precondition (FR-015).
 
-use quire_contract_model::{CheckedNodeId, CheckedPackageV2, CheckedSemanticId};
+use quire_contract_model::{CheckedNodeId, CheckedSemanticId};
 
 use crate::{
+    core::ir::clause::ClauseGraphView,
     kani::{
         abi::{KaniPrimitiveType, KaniSolver},
         generate::{
@@ -18,7 +19,7 @@ use crate::{
             V2ClauseObligationIdentity,
         },
     },
-    oracle::clause::{generate_v2_clause_oracle, V2ClauseOracle},
+    oracle::clause::{generate_v2_clause_oracle_with_view, V2ClauseOracle},
 };
 
 pub(in crate::kani::generate) struct LoweredV2Clause {
@@ -30,13 +31,14 @@ pub(in crate::kani::generate) struct LoweredV2Clause {
 }
 
 pub(in crate::kani::generate) fn lower(
-    package: &CheckedPackageV2,
+    view: &ClauseGraphView<'_>,
     clause: &CheckedNodeId,
 ) -> Result<LoweredV2Clause, UnsupportedObligation> {
+    let package = view.package();
     let refusal = || UnsupportedObligation::V2ClauseConditionNotRendered {
         node_id: clause.clone(),
     };
-    let oracle = generate_v2_clause_oracle(package, clause).map_err(|_| refusal())?;
+    let oracle = generate_v2_clause_oracle_with_view(clause, view).map_err(|_| refusal())?;
     let [input] = oracle.descriptor.inputs.as_slice() else {
         return Err(refusal());
     };
