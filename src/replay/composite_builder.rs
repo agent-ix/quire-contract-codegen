@@ -439,7 +439,8 @@ mod admitted_failure_tests {
     #[trace("FR-018-AC-35", "TC-029")]
     #[test]
     fn actual_boundary_mapping_retains_public_fault_payload() {
-        let fault = qsl_replay::InternalFault::new("fixture-stage", "fixture-invariant");
+        let fault =
+            quire_semantic_value::catalog::InternalFault::new("fixture-stage", "fixture-invariant");
         let mapped = recompile_failure(AdmittedRefusal::Fault(fault));
         let CompositeBuildError::Recompile(cause) = mapped else {
             panic!("mapping lost its typed recompile envelope");
