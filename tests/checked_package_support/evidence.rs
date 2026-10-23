@@ -55,7 +55,6 @@ pub(crate) fn retain_selected_extensions(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ix_trace_rs::trace;
     use quire_contract_model::{
         CheckedPackageReadLimits, CheckedPackageRefusalCode, CheckedPackageV2,
         CheckedPackageV2ReadResult,
@@ -114,7 +113,6 @@ mod tests {
     }
 
     /// Provenance: IR-975 / CG #546 fixture-evidence repair for the IR120 reader.
-    #[trace("FR-014-AC-44", "TC-024")]
     #[test]
     fn published_extension_evidence_is_required_for_strict_all_families_admission() {
         let (root, wire, bytes) = all_families();
@@ -137,7 +135,6 @@ mod tests {
         );
     }
 
-    #[trace("FR-014-AC-44", "TC-024")]
     #[test]
     fn mismatched_selected_extension_refs_do_not_manufacture_reader_evidence() {
         let (root, wire, bytes) = all_families();
