@@ -43,6 +43,13 @@ Some generation inputs, including V2 and corpus inputs, carry no requirement, re
 identifier; headers name these identifiers only when supplied by the input and never infer or
 invent them.
 
+Local independent evaluation and third-party differential comparison are separate evidence
+classes. The 265-expression evaluator in `tests/it/oracle_generation.rs` and generated
+compile/runtime controls establish local implementation checks. A Sireum/INSPECTA comparison
+requires the permitted provenance and actual observations specified by
+[FR-005](../functional/FR-005-cli-conformance.md). The current open claim and unavailable
+third-party lane are recorded in [AA-001](../../assurance/AA-001-differential-fixture-provenance.md).
+
 ## Measurement and Evaluation
 
 | Metric | Target | Threshold | Method |
@@ -59,6 +66,7 @@ invent them.
 | NFR-002-AC-2 | Every generated Rust file carries the `MIT OR Apache-2.0` SPDX identity. | Test (TC-001) |
 | NFR-002-AC-3 | Unsupported and inconclusive states remain explicit rather than silently succeeding. | Test (TC-003) |
 | NFR-002-AC-4 | Generated output makes no project-specific validation, accreditation, certification, or release-approval claim. | Inspection |
+| NFR-002-AC-5 | Assurance claims distinguish local independent evaluation from attributed third-party differential evidence. An unexecuted or unavailable Sireum/INSPECTA lane supplies no third-party agreement claim; tool metadata and a proposed invocation alone do not establish execution or semantic agreement. | Inspection |
 
 ## Verification
 
