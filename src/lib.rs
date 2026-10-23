@@ -7,6 +7,10 @@
 #[cfg(test)]
 extern crate self as quire_contract_codegen;
 
+#[cfg(test)]
+#[path = "../tests/checked_package_support/evidence.rs"]
+pub(crate) mod checked_package_evidence;
+
 // Private integration control needs internal generation and execution in the library test binary.
 #[cfg(test)]
 #[path = "../tests/it/kani_render_private.rs"]
