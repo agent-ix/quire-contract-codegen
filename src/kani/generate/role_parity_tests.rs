@@ -59,7 +59,7 @@ fn clause_test_node(number: u8, label: &str) -> CheckedSemanticNodeV2 {
     }
 }
 
-#[trace("FR-015-AC-96", "TC-025")]
+#[trace("TC-025")]
 #[test]
 fn collection_lower_calls_reuse_the_admitted_graph_constructor() {
     let (package, function_id) = native_twin::Twin::new().emitted_package("BalanceNeverDrops");
