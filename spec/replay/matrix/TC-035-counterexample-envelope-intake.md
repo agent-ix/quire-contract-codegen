@@ -126,6 +126,8 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     readback. Replay a falsified Boolean predicate through QSL and record its reproduced
     violation. With the selected claim held fixed, omit the producer packet, then substitute a
     second QSL-admitted packet for another declaration occurrence; neither may build a request.
+    Substitute an otherwise admitted `Input`-arm packet and a packet from another package
+    revision with the same function node, occurrence and obligation identity; both refuse.
     Inspect that the request builder accepts an admitted envelope and no bare key or call site.
 30. Have the checked parity claim producer complete an input-arm `WitnessPacket<NoPayload>`
     before invoking CG's parity intake. Build operator-parity and value-parity requests from
@@ -134,7 +136,9 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     scalar `expression` occurrence with a nonzero ordinal and two authentic occurrences of one
     node with different ordinals; check that the request retains the chosen occurrence and its
     `obligation_identity`. Swap the two admitted packets while holding each selected claim fixed;
-    neither swapped packet may build a request. The value-parity request uses its packet's
+    neither swapped packet may build a request. Substitute a `Witness`-arm packet and an
+    otherwise admitted packet from another package revision with the same selected node,
+    occurrence and obligation identity; both refuse. The value-parity request uses its packet's
     function `declaration` occurrence. Recheck that frame and state-clause requests from steps 6 and 10 have neither
     `arguments` nor `occurrence_key` while their envelope and payload identities remain.
 31. Remove `occurrence_key` from an otherwise valid serialized `function` request, then also
@@ -142,7 +146,8 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     the code, path and phase of each refusal; confirm no replay executor is called.
 32. For each of function contract, operator parity and value parity, hold an independently
     selected claim fixed and replace one producer packet member at a time: `function` target,
-    occurrence node, role, ordinal or opaque obligation identity. Use a second otherwise valid
+    occurrence node, role, ordinal, subject `clause_node`, `package_id`, source arm or opaque
+    obligation identity. Use a second otherwise valid
     packet when testing the different ordinal of the same node. Record the typed claim-binding
     refusal and confirm no request builder or replay executor runs. Remove the packet occurrence
     key and check QSL packet admission refuses without a CG default. Check that a packet
@@ -280,20 +285,22 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     FR-024-AC-37). Kani-specific refusal details follow FR-016.
 34. The function-contract request retains the independently supplied admitted packet's full
     `declaration` key, selected function and obligation identity through typed readback. An
-    omitted or other-occurrence packet builds no request; no packet is assembled inside the
+    omitted, other-occurrence, wrong-arm or other-package packet builds no request; no packet is assembled inside the
     request builder. QSL replay settles the valid falsified predicate as a reproduced violation
     (FR-024-AC-43).
 35. The operator-parity request retains its own scalar application occurrence, including
     the nonzero ordinal and the difference between occurrences of one node; the value-parity
     request retains its own function `declaration` occurrence. Both retain their obligation
-    identity; swapping authentic packets while the selected claim stays fixed builds no request.
+    identity; swapping authentic packets or supplying a wrong-arm or other-package packet while
+    the selected claim stays fixed builds no request.
     Frame and state-clause requests retain their existing key-free shape
     (FR-024-AC-44, FR-024-AC-41).
 36. Both missing-key requests refuse `invalid_runtime_input`/`missing-member` at
     `/replay/occurrence_key` at decode before byte provision or recompile, and neither
     invokes replay or produces a contract verdict (FR-024-AC-45).
-37. Each mismatched target, node, role, ordinal and obligation identity produces a typed
-    claim-binding refusal naming the member, before request construction or replay. A packet
+37. Each mismatched target, key node, role, ordinal, subject node, package, source arm and
+    obligation identity produces a typed claim-binding refusal naming the member, before request
+    construction or replay. A packet
     whose key is absent receives QSL's packet-admission refusal. Two occurrences of one node
     remain distinct, and neither a call site nor `ParityPreimage` can replace an independently
     supplied packet (FR-024-AC-46).

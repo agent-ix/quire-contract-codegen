@@ -87,9 +87,10 @@ completes that packet from the retained proving-run members and its decoded
 witness. For an input-arm parity claim the claim producer completes the packet
 from the original checked claim and its input source; no backend witness is
 implied. These packets carry QSL's `function` target, their own occurrence key,
-obligation identity and source. CG admits each packet through
-`WitnessEnvelope::reconstruct`, then checks the admitted target, full key and
-obligation identity against the independently selected function or checked claim.
+subject node, package identity, obligation identity and source. CG admits each packet through
+`WitnessEnvelope::reconstruct`, then checks the admitted target, full key, subject node, package
+identity, source arm and obligation identity against the independently selected function or
+checked claim.
 The expected claim is taken from the admitted package and retained proving-run
 identity for a function, or from the original checked parity claim; it is not
 read back from the packet being checked. The request builder
@@ -145,16 +146,19 @@ members against the operation's declaration in the domain package.
   `falsified` run's playback, decoded by FR-016 into values named by their argument bindings.
 - The obligation's `KaniObligationIdentity` and its argument bindings, each naming its parameter
   node id and declared domain ([FR-025](../../kani/functional/FR-025-generated-subject-abi.md)).
-- The proving run's envelope members, supplied by the caller: every `WitnessPacket` member QSL
-  defines, the trace position included (present in every packet, with the value none for a family
-  that has no trace position).
+- For a backend falsification, the proving run's envelope members, supplied by the adapter:
+  every `WitnessPacket` member QSL defines, including the trace position (present in every
+  packet, with the value none for a family that has no trace position). For input-arm parity,
+  the claim producer supplies those members from the original checked claim and its retained
+  input/source context; there is no backend proving run or witness transcript for that arm.
 - For a function-contract or parity request, the producer's completed
   `WitnessPacket<NoPayload>` is a single input to CG's packet-admission
   boundary. A function adapter supplies its decoded witness arm; a parity
   claim producer supplies its input arm. The independently selected claim and
   request-only members are separate inputs to that boundary. Neither request
   builder accepts the occurrence key separately.
-- The proving run's request members, which belong to the replay request and not to the envelope:
+- The request-only members from the proving run for a falsification, or from the original checked
+  claim context for input-arm parity, which belong to the replay request and not to the envelope:
   the dependency entries (QSL ADR-015 D-4), the state environment, the accounting limits, the S1 to
   S4 stage limits and the byte provision.
 - For a postcondition state-clause counterexample, the proving run's byte provision is the
@@ -228,8 +232,10 @@ members against the operation's declaration in the domain package.
   `StaleNodeKey` before replay receives a package.
 - If a value lies outside its declared domain, then the generator shall report an out-of-domain
   counterexample and shall not call `replay`, `replay_frame` or `replay_state_clause`.
-- The generator shall fill every common required `WitnessPacket` member from the proving run's
-  envelope members and the obligation identity, and shall invent none. It shall fill exactly one
+- For a backend falsification, the generator shall fill every common required `WitnessPacket`
+  member from the proving run's envelope members and the obligation identity. For input-arm
+  parity, it shall fill them from the original checked claim and retained input/source context.
+  It shall invent none. It shall fill exactly one
   replay-target member: `function` on a function packet, `frame_operation` on a frame packet,
   using the validated declaring object and operation returned for that frame by QSL's typed
   call-site result, or `state_clause` on a state-clause packet, using the clause's declared
@@ -245,8 +251,9 @@ members against the operation's declaration in the domain package.
 - The generator shall admit the envelope only through `WitnessEnvelope::reconstruct`.
 - If `WitnessEnvelope::reconstruct` refuses the packet, then the generator shall return QSL's
   `WitnessRefusal` and shall not call `replay`, `replay_frame` or `replay_state_clause`.
-- The generator shall build the replay request from the admitted envelope and the proving run's
-  request members, and shall invent no request member. The state-clause path's invocation and
+- The generator shall build the replay request from the admitted envelope and the request-only
+  members of the proving run or original checked parity claim context, and shall invent no
+  request member. The state-clause path's invocation and
   snapshot documents are the one addition to the byte provision, built as the state-clause
   bullets below state, and no other document is added.
 - When a function-contract or parity replay is requested, the generator shall
@@ -257,12 +264,14 @@ members against the operation's declaration in the domain package.
   It shall not complete a packet inside the request builder from a call site,
   claim preimage or caller-supplied bare occurrence key.
 - When a function-contract or parity packet is admitted, the generator shall compare the admitted
-  packet's `function` target, complete occurrence key and opaque obligation
+  packet's `function` target, complete occurrence key, subject `clause_node`, `package_id`,
+  source arm and opaque obligation
   identity with the independently selected function-contract, operator-parity or
   value-parity claim, whose expected identity is established before reading the
   packet. A mismatch shall return a typed claim-binding refusal that identifies
   the mismatched member and shall invoke neither request construction nor
-  replay. For operator parity, the selected occurrence is the checked scalar
+  replay. A falsified function contract requires QSL's `Witness` source arm; operator and value
+  parity require its `Input` arm. For operator parity, the selected occurrence is the checked scalar
   application; for function contracts and value parity, it is the selected
   function declaration. Distinct admitted occurrences of one node remain
   distinct claims.
@@ -482,10 +491,10 @@ members against the operation's declaration in the domain package.
 | FR-024-AC-40 | A retained reduced `Witness` envelope holds a transcript from its own backend re-run, bound to its own reduced assignments; it cannot reuse any ancestor's transcript. | Test (TC-035) |
 | FR-024-AC-41 | A function counterexample packet and its admitted `WitnessEnvelope` carry `function` as the selected function's `QualifiedName`, with no `frame_operation` or `state_clause`; a frame counterexample packet and envelope carry `frame_operation` as `{object, operation}` from QSL's validated typed call-site result, with `object` naming the operation's declaring object type, process or state machine (also when the caller selected an inherited operation) and `operation` its `Identifier`, and no `function` or `state_clause`; a postcondition state-clause counterexample packet and envelope carry `state_clause` as the clause's own declared `QualifiedName` after QSL's `ClauseSite` validates that selection, and no `function` or `frame_operation`. CG refuses packet construction if the relevant validated selection is unavailable. None contains a `selected_function` member or alias. For a frame or state clause, the replay request has no `arguments` or `occurrence_key`; the frame packet's ADR-017 PF-4 frame and generated-occurrence identities remain unchanged, and a state-clause payload has no `clause` member. | Test (TC-035) |
 | FR-024-AC-42 | A function, frame or state-clause packet with none of `function`, `frame_operation` and `state_clause` is refused as a missing replay target; one with any two or all three is refused as a conflicting replay target. Each refusal is typed and distinguishable, `WitnessEnvelope::reconstruct` admits no envelope, and no replay executor is called, even when every common member is present. An absent selection is not replaced by an empty name, an inferred payload operation or clause, or `selected_function`. | Test (TC-035) |
-| FR-024-AC-43 | A function-contract adapter supplies a completed `WitnessPacket<NoPayload>` carrying its decoded witness and retained proving-run members. CG admits it through `WitnessEnvelope::reconstruct` before request construction. The request builder accepts the admitted envelope and request-only members, and copies exactly its function `declaration` occurrence key, `function` target and opaque `obligation_identity`; it accepts no bare key or selected-site substitute. Removing the producer packet, or replacing its key with a different admitted function occurrence while leaving the selected claim fixed, produces no request or replay. | Test (TC-035) |
-| FR-024-AC-44 | An input-arm parity claim producer supplies a completed `WitnessPacket<NoPayload>` before its request builder. CG admits it through `WitnessEnvelope::reconstruct`. The operator-parity request copies that packet's checked scalar application occurrence key, and the value-parity request copies its function `declaration` occurrence key, target and opaque obligation identity. Typed request serialization and readback preserve each full key, including two admitted occurrences of one node and an `expression` occurrence with a nonzero ordinal. No request builder mints a key from `ParityPreimage` or takes a bare key. Replacing the producer packet with the other admitted occurrence while holding the selected claim fixed produces no request. | Test (TC-035) |
+| FR-024-AC-43 | A function-contract adapter supplies a completed `WitnessPacket<NoPayload>` carrying its decoded witness and retained proving-run members. CG admits it through `WitnessEnvelope::reconstruct` before request construction and requires its `Witness` source arm. The request builder accepts the admitted envelope and request-only members, and copies exactly its function `declaration` occurrence key, `function` target and opaque `obligation_identity`; it accepts no bare key or selected-site substitute. Omitting the producer packet, substituting a different admitted function occurrence or changing its source to `Input` while leaving the selected claim fixed produces no request or replay. | Test (TC-035) |
+| FR-024-AC-44 | An input-arm parity claim producer supplies a completed `WitnessPacket<NoPayload>` before its request builder. CG admits it through `WitnessEnvelope::reconstruct` and requires its `Input` source arm. The operator-parity request copies that packet's checked scalar application occurrence key, and the value-parity request copies its function `declaration` occurrence key, target and opaque obligation identity. Typed request serialization and readback preserve each full key, including two admitted occurrences of one node and an `expression` occurrence with a nonzero ordinal. No request builder mints a key from `ParityPreimage` or takes a bare key. Replacing the producer packet with the other admitted occurrence or a `Witness` source while holding the selected claim fixed produces no request. | Test (TC-035) |
 | FR-024-AC-45 | A `function` replay request missing `occurrence_key` refuses through QSL's request reader as `invalid_runtime_input`/`missing-member` at `/replay/occurrence_key` before byte provision and recompile; the same request with a byte-provision entry also removed reports the same refusal. Neither refusal invokes replay or becomes a contract verdict. | Test (TC-035) |
-| FR-024-AC-46 | Before constructing a function-contract, operator-parity or value-parity request, CG compares the admitted packet's `function` target, complete occurrence key and opaque obligation identity with the independently selected claim from the admitted package and proving-run identity or original checked parity claim, never from that packet. A wrong target, role, ordinal, node or obligation identity returns a typed claim-binding refusal naming the mismatched member, with no request or replay. A different valid occurrence of one node is accepted only for its own selected claim; the other claim's packet is refused. A missing packet key is QSL's packet-admission refusal and is never defaulted. | Test (TC-035) |
+| FR-024-AC-46 | Before constructing a function-contract, operator-parity or value-parity request, CG compares the admitted packet's `function` target, complete occurrence key, subject `clause_node`, `package_id`, source arm and opaque obligation identity with the independently selected claim from the admitted package and proving-run identity or original checked parity claim, never from that packet. A wrong target, key node, role or ordinal, subject node, package, source arm or obligation identity returns a typed claim-binding refusal naming the mismatched member, with no request or replay. A different valid occurrence of one node is accepted only for its own selected claim; the other claim's packet is refused. A missing packet key is QSL's packet-admission refusal and is never defaulted. | Test (TC-035) |
 
 ### Mutations FR-024-AC-31 to FR-024-AC-35 detect
 
