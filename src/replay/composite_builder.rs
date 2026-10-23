@@ -195,7 +195,7 @@ struct SelectedParityClaim {
 impl OriginalCompositeEqContext {
     /// Retain the original context and require its exact unit source reference and bytes.
     ///
-    /// [`Self::request`] recompiles using the constructed request's admitted stage limits and
+    /// [`Self::request_from_packet`] recompiles using the constructed request's admitted stage limits and
     /// requires the complete original package/context before returning a request for invocation.
     /// Imported contexts refuse until CG retains their admitted dependency packages from the
     /// original compile; this constructor does not compile or resolve libraries.
@@ -203,7 +203,7 @@ impl OriginalCompositeEqContext {
     /// # Errors
     /// Returns a typed source, package identity, dependency or function-selection refusal. These
     /// prechecks create neither a parity report nor a terminal value. Recompile/read/context
-    /// refusals are returned later by [`Self::request`].
+    /// refusals are returned later by [`Self::request_from_packet`].
     // The 192-byte refusal is retained inline to preserve the public PackageRead payload.
     #[allow(clippy::result_large_err)]
     pub fn new(
