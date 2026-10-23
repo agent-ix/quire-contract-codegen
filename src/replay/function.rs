@@ -13,10 +13,11 @@ use std::{collections::BTreeMap, fmt};
 use qsl_replay::{
     call_site, replay, ByteDigest, CallSite, CallSiteRefusal, DeclaredDomain, DependencyEntryWire,
     DependencyInput, DependencyInputRefusal, DigestDomain, DigestRecord, DisagreementCause,
-    FunctionSite, Identifier, MalformedTranscript, ObligationIdentity, OccurrenceKey,
+    FunctionSite, Identifier, MalformedTranscript, NoPayload, ObligationIdentity, OccurrenceKey,
     QualifiedName, ReplayLimits, ReplayRefusal, ReplayRequestWire, ReplayResult, ReplaySource,
-    RequestTargetWire, ScalarLimits, SourceIdentity, StateEnvironment, SuppliedLibrary, WireNodeId,
-    Witness, WitnessArmResult, WitnessSettlement, WitnessValue,
+    ReplayTarget, RequestTargetWire, ScalarLimits, SourceIdentity, StateEnvironment,
+    SuppliedLibrary, WireNodeId, Witness, WitnessArmResult, WitnessEnvelope, WitnessPacket,
+    WitnessRefusal, WitnessSettlement, WitnessValue,
 };
 use quire_semantic_value::catalog::Category;
 
@@ -114,6 +115,8 @@ pub enum SpineReplayError {
     PackageIdentity,
     /// The harness has no function-contract obligation identity.
     Identity(ObligationIdentityError),
+    /// The producer packet did not admit or bind to the selected function claim.
+    Packet(FunctionPacketError),
 }
 
 impl fmt::Display for SpineReplayError {
@@ -144,6 +147,7 @@ impl fmt::Display for SpineReplayError {
                 f.write_str("the harness identity belongs to another QSL package")
             }
             Self::Identity(cause) => write!(f, "the obligation identity was not built: {cause}"),
+            Self::Packet(cause) => write!(f, "the producer packet was refused: {cause:?}"),
         }
     }
 }
@@ -181,7 +185,7 @@ pub fn replay_falsification(
         check_text,
         values,
         parameters,
-        request,
+        |source| Ok(request(source)),
         &mut |wire| replay(wire, replay_limits),
     )
 }
@@ -218,7 +222,7 @@ fn replay_falsification_through(
     check_text: &str,
     values: &[(String, WitnessValue)],
     parameters: &[ReplayParameter<'_>],
-    request: impl FnOnce(ReplaySource) -> ReplayRequestWire,
+    request: impl FnOnce(ReplaySource) -> Result<ReplayRequestWire, SpineReplayError>,
     execute: Execute<'_>,
 ) -> Result<WitnessArmResult, SpineReplayError> {
     if [harness, check_text]
@@ -270,7 +274,8 @@ fn replay_falsification_through(
     // QSL joins function witness entries by parameter node id and requires ascending id order.
     bindings.sort_unstable_by(|left, right| left.0.cmp(right.0));
     let witness = render_witness(harness, check_text, &bindings)?;
-    match execute(request(ReplaySource::Witness(witness))) {
+    let request = request(ReplaySource::Witness(witness))?;
+    match execute(request) {
         Ok(ReplayResult::Witness(result)) => Ok(result),
         Ok(ReplayResult::Input(_)) => Err(SpineReplayError::WrongArm),
         Err(refusal) => Err(SpineReplayError::Refused(Box::new(refusal))),
@@ -320,7 +325,7 @@ impl LockedSource {
         )
     }
 
-    fn wire(&self) -> (String, String, String, String, Option<String>, String) {
+    pub(crate) fn wire(&self) -> (String, String, String, String, Option<String>, String) {
         (
             self.authority.clone(),
             self.identity.clone(),
@@ -522,6 +527,51 @@ pub struct ReplayPackage {
     parameters: Vec<(String, String)>,
 }
 
+/// Which independently selected function-claim member a producer packet failed to match.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PacketClaimMember {
+    /// The packet selected another function.
+    Target,
+    /// The packet selected another occurrence of the function.
+    Occurrence,
+    /// The packet named another subject node.
+    Subject,
+    /// The packet named another checked package.
+    Package,
+    /// A function falsification requires a backend witness.
+    SourceArm,
+    /// The packet named another obligation.
+    Obligation,
+}
+
+/// A producer packet did not admit or bind to the function claim selected for replay.
+#[derive(Debug)]
+pub enum FunctionPacketError {
+    /// QSL refused the packet before a request existed.
+    Admission(WitnessRefusal),
+    /// An admitted packet belongs to another claim.
+    ClaimMismatch(PacketClaimMember),
+    /// The selected Kani identity did not bind to this function package.
+    Identity(ObligationIdentityError),
+}
+
+impl fmt::Display for FunctionPacketError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Admission(cause) => write!(f, "QSL refused the producer packet: {cause}"),
+            Self::ClaimMismatch(member) => {
+                write!(
+                    f,
+                    "the producer packet does not match the selected claim: {member:?}"
+                )
+            }
+            Self::Identity(cause) => write!(f, "the selected claim identity failed: {cause}"),
+        }
+    }
+}
+
+impl std::error::Error for FunctionPacketError {}
+
 impl ReplayPackage {
     /// Compiles `inputs.source` against the lock's dependencies and locates `function` in it.
     /// A dependency the unit imports is compiled from its lock source; one the unit does not
@@ -621,7 +671,7 @@ impl ReplayPackage {
             )
             .map_err(SpineReplayError::Identity)?;
         match replay(
-            self.request_for(obligation, ReplaySource::Input(Vec::new())),
+            self.request_for_input_oracle(obligation),
             self.inputs.replay_limits,
         )
         .map_err(|refusal| SpineReplayError::Refused(Box::new(refusal)))?
@@ -649,20 +699,78 @@ impl ReplayPackage {
     pub fn request(
         &self,
         identity: &KaniObligationIdentity,
-        source: ReplaySource,
-    ) -> Result<ReplayRequestWire, ObligationIdentityError> {
-        Ok(self.request_for(self.obligation_identity(identity)?, source))
+        packet: WitnessPacket<NoPayload>,
+    ) -> Result<ReplayRequestWire, FunctionPacketError> {
+        let obligation = self
+            .obligation_identity(identity)
+            .map_err(FunctionPacketError::Identity)?;
+        self.request_from_packet(packet, obligation)
     }
 
-    fn request_for(
+    fn request_from_packet(
         &self,
+        packet: WitnessPacket<NoPayload>,
         obligation: ObligationIdentity,
-        source: ReplaySource,
-    ) -> ReplayRequestWire {
+    ) -> Result<ReplayRequestWire, FunctionPacketError> {
+        let envelope = WitnessEnvelope::reconstruct(packet, self.inputs.replay_limits)
+            .map_err(FunctionPacketError::Admission)?;
+        if envelope.replay_target() != &ReplayTarget::function(self.selection.clone(), None) {
+            return Err(FunctionPacketError::ClaimMismatch(
+                PacketClaimMember::Target,
+            ));
+        }
+        if envelope.occurrence_key() != &self.site.site.declaration {
+            return Err(FunctionPacketError::ClaimMismatch(
+                PacketClaimMember::Occurrence,
+            ));
+        }
+        if envelope.clause_node() != self.site.site.function {
+            return Err(FunctionPacketError::ClaimMismatch(
+                PacketClaimMember::Subject,
+            ));
+        }
+        if envelope.package_id() != self.site.package_id {
+            return Err(FunctionPacketError::ClaimMismatch(
+                PacketClaimMember::Package,
+            ));
+        }
+        if !matches!(envelope.source(), ReplaySource::Witness(_)) {
+            return Err(FunctionPacketError::ClaimMismatch(
+                PacketClaimMember::SourceArm,
+            ));
+        }
+        if envelope.obligation_identity() != obligation {
+            return Err(FunctionPacketError::ClaimMismatch(
+                PacketClaimMember::Obligation,
+            ));
+        }
+        self.request_from_envelope(&envelope)
+    }
+
+    fn request_from_envelope(
+        &self,
+        envelope: &WitnessEnvelope<NoPayload>,
+    ) -> Result<ReplayRequestWire, FunctionPacketError> {
+        let ReplayTarget::Declaration { name, .. } = envelope.replay_target() else {
+            return Err(FunctionPacketError::ClaimMismatch(
+                PacketClaimMember::Target,
+            ));
+        };
+        Ok(self.inputs.wire(
+            envelope.package_id(),
+            RequestTargetWire::function(name.clone(), envelope.occurrence_key().clone()),
+            envelope.source().clone(),
+            *envelope.obligation_identity().as_bytes(),
+            &[],
+        ))
+    }
+
+    #[cfg(test)]
+    fn request_for_input_oracle(&self, obligation: ObligationIdentity) -> ReplayRequestWire {
         self.inputs.wire(
             self.site.package_id,
             RequestTargetWire::function(self.selection.clone(), self.site.site.declaration.clone()),
-            source,
+            ReplaySource::Input(Vec::new()),
             *obligation.as_bytes(),
             &[],
         )
@@ -705,6 +813,36 @@ impl ReplayPackage {
             kind,
             &arguments,
         )
+    }
+}
+
+/// The function backend adapter completes its packet from the retained proving-run selection
+/// and the decoded witness source before the packet enters the replay request boundary.
+fn backend_function_packet(
+    package: &ReplayPackage,
+    obligation: ObligationIdentity,
+    subject: WireNodeId,
+    occurrence: OccurrenceKey,
+    source: ReplaySource,
+) -> WitnessPacket<NoPayload> {
+    let package_id = package.site.package_id;
+    WitnessPacket {
+        obligation_identity: Some(*obligation.as_bytes()),
+        occurrence_key: Some(occurrence),
+        clause_node: Some(subject),
+        replay_target: qsl_replay::ReplayTargetMembers::function(package.selection.clone()),
+        package_id: Some((
+            Some(package_id.domain().as_str().to_owned()),
+            package_id.hex(),
+        )),
+        source_digests: Some(vec![package.inputs.source.wire()]),
+        profile_selections: Some(Vec::new()),
+        run_limits: Some(package.inputs.accounting_limits),
+        declared_domains: Some(package.inputs.declared_domains.clone()),
+        backend: Some(BACKEND_IDENTITY.to_owned()),
+        trace_position: Some(None),
+        source: Some(source),
+        family_payload: Some(NoPayload),
     }
 }
 
@@ -975,7 +1113,8 @@ impl<'a> From<&'a SpineReplayError> for ReplaySettlement<'a> {
             | SpineReplayError::FieldDelimiter
             | SpineReplayError::Transcript(_)
             | SpineReplayError::WrongArm
-            | SpineReplayError::Identity(_) => Self::CgDefect,
+            | SpineReplayError::Identity(_)
+            | SpineReplayError::Packet(_) => Self::CgDefect,
             #[cfg(test)]
             SpineReplayError::NoInputValue | SpineReplayError::PackageIdentity => Self::CgDefect,
             SpineReplayError::Refused(refusal) => Self::Refused(refusal),
@@ -1098,7 +1237,18 @@ pub(crate) fn replay_harness_counterexample_through(
         &decoded.check_text,
         &decoded.values,
         &package.parameters(),
-        |source| package.request_for(obligation, source),
+        |source| {
+            let packet = backend_function_packet(
+                package,
+                obligation,
+                identity.function,
+                identity.declaration.clone(),
+                source,
+            );
+            package
+                .request_from_packet(packet, obligation)
+                .map_err(SpineReplayError::Packet)
+        },
         &mut execute,
     )?;
     Ok(verdict_of(
@@ -1146,7 +1296,18 @@ pub fn replay_counterexample_through(
         identity.clause.clause().as_str(),
         &values,
         &package.parameters(),
-        |source| package.request_for(obligation, source),
+        |source| {
+            let packet = backend_function_packet(
+                package,
+                obligation,
+                package.site.site.function,
+                package.site.site.declaration.clone(),
+                source,
+            );
+            package
+                .request_from_packet(packet, obligation)
+                .map_err(SpineReplayError::Packet)
+        },
         &mut execute,
     )?;
     Ok(verdict_of(
@@ -1187,7 +1348,10 @@ mod tests {
         identity::ObligationBinding,
     };
     use ix_trace_rs::trace;
-    use qsl_replay::{OccurrenceKey, ReplayRequest, ReplayRequestRefusal, WireNodeId};
+    use qsl_replay::{
+        NoPayload, OccurrenceKey, ReplayRequest, ReplayRequestRefusal, ReplayTargetMembers,
+        WireNodeId, WitnessPacket,
+    };
     use quire_contract_model::{IntegerDomain, OverflowPolicy};
 
     const UNIT: &str = "language \"ix:native\" edition \"1-draft\";\n\
@@ -1248,6 +1412,129 @@ mod tests {
         }
     }
 
+    fn producer_packet(
+        package: &ReplayPackage,
+        obligation: ObligationIdentity,
+    ) -> WitnessPacket<NoPayload> {
+        let package_id = package.site.package_id;
+        WitnessPacket {
+            obligation_identity: Some(*obligation.as_bytes()),
+            occurrence_key: Some(package.site.site.declaration.clone()),
+            clause_node: Some(package.site.site.function),
+            replay_target: ReplayTargetMembers::function(package.selection.clone()),
+            package_id: Some((
+                Some(package_id.domain().as_str().to_owned()),
+                package_id.hex(),
+            )),
+            source_digests: Some(vec![package.inputs.source.wire()]),
+            profile_selections: Some(Vec::new()),
+            run_limits: Some(package.inputs.accounting_limits),
+            declared_domains: Some(package.inputs.declared_domains.clone()),
+            backend: Some(BACKEND_IDENTITY.to_owned()),
+            trace_position: Some(None),
+            source: Some(ReplaySource::Witness(
+                render_witness("function_fixture", "falsified", &[])
+                    .expect("the fixture witness renders"),
+            )),
+            family_payload: Some(NoPayload),
+        }
+    }
+
+    /// A producer packet is admitted and bound to the independent function claim before
+    /// request construction. Shape-valid packets for another source, package or subject refuse.
+    #[trace("FR-024-AC-43", "FR-024-AC-46", "TC-035")]
+    #[test]
+    fn tc_035_function_request_requires_its_producer_packet() {
+        let package = package();
+        let obligation = package
+            .obligation_identity_for(
+                crate::kani::identity::ObligationKind::Postcondition,
+                &[binding("a"), binding("b")],
+            )
+            .expect("both arguments bind");
+        let packet = producer_packet(&package, obligation);
+        let request = package
+            .request_from_packet(packet.clone(), obligation)
+            .expect("the matching witness packet is admitted");
+        assert_eq!(
+            request.replay_target.occurrence_key.as_ref(),
+            packet.occurrence_key.as_ref()
+        );
+
+        let mut wrong_arm = packet.clone();
+        wrong_arm.source = Some(ReplaySource::Input(Vec::new()));
+        assert!(matches!(
+            package.request_from_packet(wrong_arm, obligation),
+            Err(FunctionPacketError::ClaimMismatch(
+                PacketClaimMember::SourceArm
+            ))
+        ));
+
+        let mut wrong_package = packet.clone();
+        wrong_package.package_id = Some((
+            Some(package.site.package_id.domain().as_str().to_owned()),
+            "ab".repeat(32),
+        ));
+        assert!(matches!(
+            package.request_from_packet(wrong_package, obligation),
+            Err(FunctionPacketError::ClaimMismatch(
+                PacketClaimMember::Package
+            ))
+        ));
+
+        let mut wrong_subject = packet;
+        wrong_subject.clause_node =
+            Some(WireNodeId::from_hex(&"44".repeat(32)).expect("the test node id is valid"));
+        assert!(matches!(
+            package.request_from_packet(wrong_subject, obligation),
+            Err(FunctionPacketError::ClaimMismatch(
+                PacketClaimMember::Subject
+            ))
+        ));
+
+        let mut wrong_occurrence = producer_packet(&package, obligation);
+        wrong_occurrence.occurrence_key = Some(OccurrenceKey::new(
+            package.site.site.function,
+            qsl_replay::Origin::new(qsl_replay::Role::new("declaration"), 1),
+        ));
+        assert!(matches!(
+            package.request_from_packet(wrong_occurrence, obligation),
+            Err(FunctionPacketError::ClaimMismatch(
+                PacketClaimMember::Occurrence
+            ))
+        ));
+
+        let mut wrong_target = producer_packet(&package, obligation);
+        wrong_target.replay_target = ReplayTargetMembers::function(
+            QualifiedName::new(vec![Identifier::new("other").expect("valid name")])
+                .expect("valid selection"),
+        );
+        assert!(matches!(
+            package.request_from_packet(wrong_target, obligation),
+            Err(FunctionPacketError::ClaimMismatch(
+                PacketClaimMember::Target
+            ))
+        ));
+
+        let mut wrong_obligation = producer_packet(&package, obligation);
+        wrong_obligation.obligation_identity = Some([0x55; 32]);
+        assert!(matches!(
+            package.request_from_packet(wrong_obligation, obligation),
+            Err(FunctionPacketError::ClaimMismatch(
+                PacketClaimMember::Obligation
+            ))
+        ));
+
+        let mut missing_occurrence = producer_packet(&package, obligation);
+        missing_occurrence.occurrence_key = None;
+        assert!(matches!(
+            package.request_from_packet(missing_occurrence, obligation),
+            Err(FunctionPacketError::Admission(
+                WitnessRefusal::MissingMember("occurrence_key")
+            ))
+        ));
+    }
+
     /// The function request carries QSL's selected declaration occurrence.
     /// Packet-sourced provenance is a separate FR-024-AC-43 obligation.
     #[trace("TC-035")]
@@ -1260,7 +1547,7 @@ mod tests {
                 &[binding("a"), binding("b")],
             )
             .expect("both arguments bind");
-        let request = package.request_for(obligation, ReplaySource::Input(Vec::new()));
+        let request = package.request_for_input_oracle(obligation);
         assert_eq!(
             request.replay_target.members.function.as_ref(),
             Some(&package.selection)
@@ -1284,7 +1571,7 @@ mod tests {
                 &[binding("a"), binding("b")],
             )
             .expect("both arguments bind");
-        let request = package.request_for(obligation, ReplaySource::Input(Vec::new()));
+        let request = package.request_for_input_oracle(obligation);
         assert!(!request.byte_provision.is_empty());
         for drop_bytes in [false, true] {
             let mut missing = request.clone();
