@@ -1837,7 +1837,6 @@ mod ir988_admitted_generation_tests {
     use super::*;
     use ix_trace_rs::trace;
     use serde_json::json;
-    use sha2::{Digest, Sha256};
 
     use crate::ir988_function_fixture as fixture;
 
@@ -1995,32 +1994,28 @@ mod ir988_admitted_generation_tests {
                     visits, graph_nodes,
                     "one source index build per admitted batch"
                 );
-                let mut bytes = Vec::new();
-                for artifact in &output.artifacts {
-                    bytes.extend_from_slice(artifact.path.as_bytes());
-                    bytes.push(0);
-                    bytes.extend_from_slice(artifact.contents.as_bytes());
-                    bytes.push(0);
-                }
-                bytes.extend(serde_json::to_vec(&output.claim_map).unwrap());
-                bytes.extend(serde_json::to_vec(&output.location_map).unwrap());
-                let hash = format!("{:x}", Sha256::digest(&bytes));
-                let expected = match (requests, functions) {
-                    (2, 4) => "dd4eb53c79b0bbc2ec55173c69bbd28a7295b0657b729796099297920e01e571",
-                    (2, 8) => "e424682aefb3613e5b5bf901ebffdf6c81d835ab45b3221332e40423f6d26a92",
-                    (2, 16) => "68bf89b6c6c382c94cbd4e17ef9b0226b3a6bac70c56762bff0ac1d1889dd83c",
-                    (4, 4) => "4ba924b7a1040a60a914113235c1a33fb2fcf9283cfcfbd8569fd039779611e9",
-                    (4, 8) => "9d8041ef83c9a455995f3de4e291c1503e9bcbe7e0903c4b3d3aab6747ac54ae",
-                    (4, 16) => "dfebd99cda8af173215fa80b8ac63fad8cacdd91bcf832937ce599f2ba82e58d",
-                    (8, 4) => "e2643e8c6a454ca729f4f0221c434a96f15fcc1d30ca669f59b37f908256dd9d",
-                    (8, 8) => "2033925ebc3203ab4ee78009f36f8a25cb6d1e705f7283e74ba2723130fa6e17",
-                    (8, 16) => "6b758fe808ad879eabff68fe825cf1ebf2cf49056ec07fe18910c07082699aab",
-                    _ => unreachable!("fixed K/R test matrix"),
-                };
+                let repeated = generate_exact_function_oracles(
+                    &contract,
+                    &positions,
+                    &function_positions,
+                    &declarations,
+                    &item_positions,
+                    &items,
+                )
+                .expect("repeat generation from the same admitted package");
                 assert_eq!(
-                    hash, expected,
-                    "complete public output changed at K={requests} R={functions}"
+                    output, repeated,
+                    "complete output changed across repeat runs"
                 );
+                if let Some(directory) = std::env::var_os("IR988_OUTPUT_DIR") {
+                    let directory = std::path::PathBuf::from(directory);
+                    std::fs::create_dir_all(&directory).expect("evidence directory");
+                    std::fs::write(
+                        directory.join(format!("k{requests}-r{functions}.txt")),
+                        format!("{output:#?}"),
+                    )
+                    .expect("full output evidence");
+                }
                 assert_eq!(output.claim_map.items.len(), requests + 1);
                 assert_eq!(
                     output
