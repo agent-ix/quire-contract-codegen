@@ -11,7 +11,7 @@ use ix_trace_rs::trace;
 use std::{collections::BTreeSet, fs, ops::Deref, path::PathBuf, process::Command};
 
 use crate::common::panic_scan::{non_test_code, panic_tokens_in};
-use crate::scratch_crate::{runtime_dependency, seed_lock, TemporaryDirectory};
+use crate::scratch_crate::{runtime_dependency, TemporaryDirectory};
 use quire_contract_codegen::{
     generate_composite_equality_oracles, ClaimDisposition, CompositeEqualityClaim,
     CompositeEqualityItem, CompositeEqualityLimits, CompositeEqualityOracles,
@@ -1736,9 +1736,9 @@ fn tc_029_ac12_manifest_is_unpublished_and_charge_free() {
     for artifact in &oracles.artifacts {
         fs::write(directory.path.join(&artifact.path), &artifact.contents).unwrap();
     }
-    seed_lock(&directory.path);
+    super::scratch_crate::resolve_seeded_lock(&directory.path);
     let output = Command::new(env!("CARGO"))
-        .args(["build", "--offline", "--quiet"])
+        .args(["build", "--locked", "--offline", "--quiet"])
         .env("CARGO_TARGET_DIR", directory.path.join("target"))
         .env("RUSTFLAGS", "-Dwarnings")
         .env_remove("CARGO_ENCODED_RUSTFLAGS")
