@@ -1519,6 +1519,138 @@ mod tests {
         ReplayPackage::new(inputs, "f").expect("the unit compiles and declares `f`")
     }
 
+    fn value_package() -> ReplayPackage {
+        let mut inputs = package().inputs;
+        inputs.source.bytes = b"language \"ix:native\" edition \"1-draft\";\n\
+            profile v = \"quire.value.complete/v1\";\n\
+            function f using v(x: Int[0, 9]): Integer pure { x + 1 }\n"
+            .to_vec();
+        ReplayPackage::new(inputs, "f").expect("the non-Boolean function is selected")
+    }
+
+    /// A value-parity request must retain the Input packet's independently selected function
+    /// declaration, target and obligation through typed readback and QSL's parity report.
+    #[trace("FR-024-AC-44", "FR-024-AC-46", "TC-035")]
+    #[test]
+    fn tc_035_value_parity_request_binds_the_original_checked_claim() {
+        use qsl_replay::{
+            replay_value_parity, CanonicalAssignment, Integer, ScalarOutcome, Value,
+            ValueParityResult,
+        };
+
+        let package = value_package();
+        let obligation = ObligationIdentity::from_digest([0x35; 32]);
+        let assignments = vec![CanonicalAssignment {
+            parameter: package.site.site.parameters[0].1,
+            value: 4,
+        }];
+        let packet = package.value_parity_packet(obligation, assignments.clone());
+        let envelope = WitnessEnvelope::reconstruct(packet.clone(), package.inputs.replay_limits)
+            .expect("QSL admits the original checked claim packet");
+        assert_eq!(envelope.occurrence_key(), &package.site.site.declaration);
+        assert!(matches!(envelope.source(), ReplaySource::Input(values) if values == &assignments));
+
+        let wire = package
+            .value_parity_request(packet.clone(), obligation)
+            .expect("the independently selected claim binds its packet");
+        assert_eq!(
+            wire.replay_target.occurrence_key.as_ref(),
+            packet.occurrence_key.as_ref()
+        );
+        assert_eq!(wire.obligation_identity, *obligation.as_bytes());
+        let readback = ReplayRequest::decode(wire.clone(), package.inputs.replay_limits)
+            .expect("QSL reads the packet-backed value request");
+        assert_eq!(
+            readback.replay_target().occurrence_key(),
+            packet.occurrence_key.as_ref()
+        );
+        assert_eq!(readback.obligation_identity(), obligation);
+
+        let generated = ScalarOutcome::Value(Value::Integer(Integer::from(5_i64)));
+        let report = replay_value_parity(wire, generated.clone(), package.inputs.replay_limits);
+        assert_eq!(report.claim().function.as_ref(), Some(&package.selection));
+        assert_eq!(report.claim().obligation, obligation);
+        assert_eq!(report.claim().generated, generated);
+        assert!(matches!(report.result(), ValueParityResult::Agrees { .. }));
+    }
+
+    /// Another admitted packet, even for this node, cannot select this value-parity claim.
+    #[trace("FR-024-AC-44", "FR-024-AC-46", "TC-035")]
+    #[test]
+    fn tc_035_value_parity_refuses_packet_substitution_before_request() {
+        use qsl_replay::CanonicalAssignment;
+
+        let package = value_package();
+        let obligation = ObligationIdentity::from_digest([0x35; 32]);
+        let assignments = vec![CanonicalAssignment {
+            parameter: package.site.site.parameters[0].1,
+            value: 4,
+        }];
+        let packet = package.value_parity_packet(obligation, assignments);
+
+        let mut alternate = packet.clone();
+        alternate.occurrence_key = Some(OccurrenceKey::new(
+            package.site.site.function,
+            qsl_replay::Origin::new(qsl_replay::Role::new("declaration"), 1),
+        ));
+        WitnessEnvelope::reconstruct(alternate.clone(), package.inputs.replay_limits)
+            .expect("the alternate packet is well formed");
+        assert!(matches!(
+            package.value_parity_request(alternate, obligation),
+            Err(FunctionPacketError::ClaimMismatch(
+                PacketClaimMember::Occurrence
+            ))
+        ));
+
+        let mut wrong_arm = packet.clone();
+        wrong_arm.source = Some(ReplaySource::Witness(
+            render_witness("value_fixture", "falsified", &[]).expect("the fixture witness renders"),
+        ));
+        assert!(matches!(
+            package.value_parity_request(wrong_arm, obligation),
+            Err(FunctionPacketError::ClaimMismatch(
+                PacketClaimMember::SourceArm
+            ))
+        ));
+
+        let mut wrong_package = packet.clone();
+        wrong_package.package_id = Some((Some("sha256-jcs".to_owned()), "ab".repeat(32)));
+        assert!(matches!(
+            package.value_parity_request(wrong_package, obligation),
+            Err(FunctionPacketError::ClaimMismatch(
+                PacketClaimMember::Package
+            ))
+        ));
+
+        let mut wrong_subject = packet.clone();
+        wrong_subject.clause_node =
+            Some(WireNodeId::from_hex(&"44".repeat(32)).expect("the test node id is valid"));
+        assert!(matches!(
+            package.value_parity_request(wrong_subject, obligation),
+            Err(FunctionPacketError::ClaimMismatch(
+                PacketClaimMember::Subject
+            ))
+        ));
+
+        let mut wrong_obligation = packet.clone();
+        wrong_obligation.obligation_identity = Some([0x55; 32]);
+        assert!(matches!(
+            package.value_parity_request(wrong_obligation, obligation),
+            Err(FunctionPacketError::ClaimMismatch(
+                PacketClaimMember::Obligation
+            ))
+        ));
+
+        let mut missing_occurrence = packet;
+        missing_occurrence.occurrence_key = None;
+        assert!(matches!(
+            package.value_parity_request(missing_occurrence, obligation),
+            Err(FunctionPacketError::Admission(
+                WitnessRefusal::MissingMember("occurrence_key")
+            ))
+        ));
+    }
+
     fn binding(identifier: &str) -> ObligationBinding {
         ObligationBinding {
             identifier: identifier.to_owned(),
