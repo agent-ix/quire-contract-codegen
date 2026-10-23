@@ -36,6 +36,9 @@ pub(crate) fn take_package_classifier_indices() -> Vec<usize> {
 }
 
 #[cfg(test)]
+use crate::oracle::scalar as scalar_fixture_types;
+
+#[cfg(test)]
 #[allow(clippy::duplicate_mod)] // Reuse the admitted scalar corpus in this crate's unit test binary.
 #[path = "../../tests/exact_scalar_support/package.rs"]
 mod exact_scalar_fixture;

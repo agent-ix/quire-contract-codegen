@@ -44,6 +44,13 @@ pub(crate) const fn unbounded_decode_limits() -> quire_contract_codegen::Witness
     }
 }
 
+mod admitted_composite_equality;
+#[path = "../admitted_composite_support/fixture.rs"]
+mod admitted_composite_fixture;
+mod admitted_enum_equality;
+#[path = "../admitted_enum_support/fixture.rs"]
+mod admitted_enum_fixture;
+mod admitted_quantity_units;
 mod bound_census;
 mod bound_coverage;
 mod bound_generation;
@@ -84,5 +91,7 @@ pub(crate) mod scratch_crate;
 mod skeleton_spine;
 mod strategy_generation;
 mod terminal_map;
+mod v2_clause_integer_literal_agreement;
+mod v2_clause_integer_literals;
 mod v2_llvm_coverage;
 mod vacuity_primitives;

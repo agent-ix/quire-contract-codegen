@@ -12,10 +12,6 @@ extern crate self as quire_contract_codegen;
 #[path = "../tests/it/kani_render_private.rs"]
 mod kani_render_private;
 
-#[cfg(test)]
-#[path = "../tests/it/kani_scalar_native_private.rs"]
-mod kani_scalar_native_private;
-
 #[cfg(all(test, target_os = "linux"))]
 #[path = "../tests/it/kani_terminal_private.rs"]
 mod kani_terminal_private;
@@ -137,7 +133,9 @@ pub use oracle::bound_v1::{
 };
 
 pub use crate::core::identity::{HarnessPath, HarnessSymbol, ModuleSymbol, SymbolError};
-pub use crate::core::profile::RUNTIME_DEPENDENCY_SOURCE;
+pub use crate::core::profile::{
+    EXACT_DEPENDENCY_SOURCE, RUNTIME_DEPENDENCY_SOURCE, SEMANTIC_VALUE_DEPENDENCY_SOURCE,
+};
 pub use core::contract_package::{
     routed_contract_lowering_profile, AdmittedItemAccounting, ContractDriverResultSelection,
     ContractRequestPosition, PackageRequestError,
@@ -183,7 +181,7 @@ pub use kani::run::tool::{KaniInstallation, KaniTool, KaniToolError};
 pub use kani::terminal::{
     ir_outcome_terminal_value, run_terminal_value, ReplaySettlement, TerminalPairError,
 };
-pub use quire_contract_runtime::exact::ScalarLimits;
+pub use quire_exact::ScalarLimits;
 pub use routed::capability::{
     negotiate_backend_provider, negotiate_contract_package, project_contract_package_incomplete,
     project_contract_package_refusal, BackendDescriptor, BackendId, BackendKind,

@@ -22,8 +22,10 @@ use std::{
 /// constraints from this repository's manifest use its seeded dependency
 /// resolution before the locked native test.
 const AGREEMENT_DEV_DEPENDENCIES: &str = concat!(
+    "qsl-replay = { version = \"=0.1.0\", git = \"https://github.com/agent-ix/quire-spec-language\", branch = \"main\" }\n",
     "serde_json = \"=1.0.151\"\nsha2 = \"=0.10.9\"\n",
-    "ix-trace-rs = { version = \"=0.1.0\", git = \"https://github.com/agent-ix/ix-trace-rs\", branch = \"main\" }\n",
+    "ix-trace-rs = { version = \"0.1\", git = \"https://github.com/agent-ix/ix-trace-rs\", branch = \"main\" }\n",
+    "quire-exact = { git = \"https://github.com/agent-ix/quire-exact\", branch = \"main\", features = [\"test-support\"] }\n",
 );
 
 /// Writes `artifacts` (path, contents) as a crate at `<target tmp>/<label>`,
@@ -39,6 +41,27 @@ pub(super) fn run_agreement_cases<'a>(
     artifacts: impl IntoIterator<Item = (&'a str, &'a str)>,
     extra_files: &[(&'a str, &'a str)],
     cases: &str,
+) {
+    run_agreement_cases_with_expectation(label, artifacts, extra_files, cases, None);
+}
+
+/// Require a named native assertion failure, never a setup or compiler failure.
+pub(super) fn run_agreement_mutant<'a>(
+    label: &str,
+    artifacts: impl IntoIterator<Item = (&'a str, &'a str)>,
+    extra_files: &[(&'a str, &'a str)],
+    cases: &str,
+    failed_test: &str,
+) {
+    run_agreement_cases_with_expectation(label, artifacts, extra_files, cases, Some(failed_test));
+}
+
+fn run_agreement_cases_with_expectation<'a>(
+    label: &str,
+    artifacts: impl IntoIterator<Item = (&'a str, &'a str)>,
+    extra_files: &[(&'a str, &'a str)],
+    cases: &str,
+    failed_test: Option<&str>,
 ) {
     let scratch = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
     let root = scratch.join(label);
@@ -75,6 +98,31 @@ pub(super) fn run_agreement_cases<'a>(
         .output()
         .expect("spawn cargo");
     let stdout = String::from_utf8_lossy(&output.stdout);
+    if let Some(failed_test) = failed_test {
+        assert_eq!(
+            output.status.code(),
+            Some(101),
+            "{label}: expected Cargo native test failure"
+        );
+        assert!(
+            stdout
+                .lines()
+                .any(|line| line.starts_with("running ") && line.ends_with(" tests")),
+            "{label}: no native test dispatch: {stdout}\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(
+            stdout
+                .lines()
+                .any(|line| line == format!("test {failed_test} ... FAILED")),
+            "{label}: required assertion did not fail: {stdout}"
+        );
+        assert!(
+            stdout.contains("test result: FAILED."),
+            "{label}: missing native failure summary: {stdout}"
+        );
+        return;
+    }
     assert!(
         output.status.success(),
         "{label}: generated crate did not pass its agreement cases:\n{stdout}\n{}",
