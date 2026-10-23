@@ -156,6 +156,17 @@ fn published_source_associations_survive_lowering() {
         "positive-recursive-records.json",
     ] {
         let source = published_package(fixture);
+        let mut visited = 0;
+        let source_graph = CheckedGraph::from_checked_with_node_visit(&source, || visited += 1);
+        assert_eq!(visited, source.graph().nodes.len());
+        assert_eq!(source_graph.len(), source.graph().nodes.len());
+        for node in &source.graph().nodes {
+            assert!(ptr::eq(
+                source_graph.node(&node.node_id).expect("source node"),
+                node
+            ));
+            assert_eq!(source_graph.term(&node.node_id), source.term(&node.node_id));
+        }
         let lowered = source.lower(&roots(&source), &routed_contract_lowering_profile());
         let producer = lowered.package.wire().expect("producer's admitted package");
         assert_associations(&source, producer);

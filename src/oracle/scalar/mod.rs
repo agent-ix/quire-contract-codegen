@@ -2727,7 +2727,7 @@ impl Bounds<'_, '_> {
         } else {
             self.graph
                 .node(&self.node.semantic_type)
-                .is_some_and(|typing| is_bounded_domain(typing))
+                .is_some_and(is_bounded_domain)
                 || self.narrowing().narrowed()
         };
         if result_typed || owned.iter().any(Option::is_some) {
@@ -4828,7 +4828,7 @@ mod tests {
                 .expect("closed fixture kind"),
                 operation: serde_json::json!({"identity": operation}),
                 result_type: node_id('0'),
-                arguments: arguments,
+                arguments,
             },
         )
     }
@@ -5328,7 +5328,7 @@ mod tests {
     }
 
     fn range_body(members: Vec<CheckedTerm>) -> CheckedTerm {
-        CheckedTerm::Aggregate { members: members }
+        CheckedTerm::Aggregate { members }
     }
 
     /// Nodes `1` (Integer scalar type), `2` (`Int[0,9]`, an `integer_range` bounded_domain over
@@ -5383,7 +5383,7 @@ mod tests {
                     operator: ApplicationOperator::Convert,
                     operation: serde_json::json!({"identity": identity}),
                     result_type: node_id('0'),
-                    arguments: arguments,
+                    arguments,
                 },
             )
         };
@@ -6072,3 +6072,6 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod opaque_metadata_tests;

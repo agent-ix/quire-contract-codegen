@@ -43,15 +43,7 @@ impl<'a> CheckedGraph<'a> {
         package: &'a CheckedPackageV2,
         mut visit: impl FnMut(),
     ) -> Self {
-        let mut ordered: Vec<_> = package
-            .graph()
-            .nodes
-            .iter()
-            .map(|node| {
-                visit();
-                node
-            })
-            .collect();
+        let mut ordered: Vec<_> = package.graph().nodes.iter().inspect(|_| visit()).collect();
         ordered.sort_unstable_by(|left, right| left.node_id.cmp(&right.node_id));
         Self {
             package: Package::Checked(package),

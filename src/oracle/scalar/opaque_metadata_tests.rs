@@ -242,10 +242,6 @@ fn opaque_operation_member_does_not_add_a_consumer_to_true_narrowing() {
             references(graph.term(&key), &target.node_id),
             "true argument consumes the target"
         );
-        assert!(
-            !references(graph.term(add_key), &target.node_id),
-            "opaque operation metadata is not a semantic child"
-        );
         match narrowing(&graph, &target.node_id) {
             Narrowing::To(bounds) => {
                 assert_eq!(bounds.len(), 1, "one genuine narrowing bound");
@@ -255,6 +251,10 @@ fn opaque_operation_member_does_not_add_a_consumer_to_true_narrowing() {
             Narrowing::Mixed => panic!("metadata must not create a second semantic consumer"),
             Narrowing::Unnarrowed => panic!("true narrowing argument must remain a consumer"),
         }
+        assert!(
+            !references(graph.term(add_key), &target.node_id),
+            "opaque operation metadata is not a semantic child"
+        );
         assert_eq!(
             graph.node(add_key).expect("admitted add").dependencies,
             opaque_node.dependencies,
