@@ -1726,6 +1726,7 @@ pub(crate) fn binding_value<'a>(body: &'a CheckedTerm, name: &str) -> Option<&'a
         })
 }
 
+#[cfg(test)]
 pub(crate) fn reference_node_id<'a>(
     term: &CheckedTerm,
     mut nodes: impl Iterator<Item = &'a CheckedSemanticNodeV2>,
@@ -2663,10 +2664,9 @@ pub fn generate_exact_function_oracles(
                 &survivors,
                 &function_index,
                 &package_refusal,
-                package,
+                (package, &graph),
                 item,
                 admitted,
-                &graph,
             ) {
                 Ok((stem, claim)) => {
                     match survivors
@@ -2862,11 +2862,11 @@ fn item_disposition(
     survivors: &[&ExactFunctionDeclaration],
     function_index: &BTreeMap<&CheckedNodeId, usize>,
     package_refusal: &Option<String>,
-    package: &ContractPackageV1,
+    source: (&ContractPackageV1, &Graph<'_>),
     item: &ExactFunctionItem,
     admitted: PackageItem<'_>,
-    graph: &Graph<'_>,
 ) -> Result<(String, GeneratedExactFunctionClaim), ExactFunctionRefusal> {
+    let (package, graph) = source;
     let (closure, occurrences) = admitted_binary_body(admitted)?;
     let node = closure.root;
     if &*node.semantic_form != "call" {
