@@ -33,6 +33,10 @@ const SOURCE: &str = "language \"ix:native\" edition \"1-draft\";\n\
     function h using v(): Boolean pure { Q { x: 1 } = Q { x: 2 } }\n\
     function same using v(a: Q): Boolean pure { a = a }\n";
 
+const REPEATED_SOURCE: &str = "language \"ix:native\" edition \"1-draft\";\n\
+    profile v = \"quire.value.complete/v1\";\n\
+    function repeated using v(a: Sequence<Int[0, 9]>[0, 3], b: Sequence<Int[0, 9]>[0, 3]): Boolean pure { (a = b) and (a = b) }\n";
+
 fn limits() -> ScalarLimits {
     ScalarLimits {
         integer_bits: 1_000,
@@ -872,6 +876,77 @@ fn tc_035_original_composite_request_requires_its_own_packet() {
         ),
         Err(CompositeBuildError::PacketAdmission(ref cause))
             if matches!(**cause, qsl_replay::WitnessRefusal::MissingMember("occurrence_key"))
+    ));
+}
+
+/// Two independently selected occurrences of one structural-equality node each retain their
+/// own admitted packet key, and swapping those complete packets refuses before request creation.
+#[trace("FR-024-AC-44", "FR-024-AC-46", "TC-035")]
+#[test]
+fn tc_035_original_composite_packets_bind_distinct_real_occurrences() {
+    let package = checked(REPEATED_SOURCE);
+    let application = package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| {
+            node.body
+                .pointer("/operation/identity")
+                .and_then(serde_json::Value::as_str)
+                == Some("quire.op.structural.eq")
+                && node.occurrences.len() >= 2
+        })
+        .expect("QSL emits one structural equality node with two actual occurrences");
+    let node = application.node_id.clone();
+    let first = application.occurrences[0].clone();
+    let second = application.occurrences[1].clone();
+    assert_ne!(first, second);
+    assert_ne!(second.ordinal, 0);
+    let context = OriginalCompositeEqContext::new(
+        package,
+        inputs(REPEATED_SOURCE),
+        "repeated",
+        content_identity(),
+        CheckedPackageReadLimits::bounded(),
+    )
+    .expect("the repeated source selects one checked function");
+    let first_packet = context
+        .parity_packet(&node, &first, EqualityOperator::Equal, &[], 100_000)
+        .expect("the first checked occurrence produces a packet");
+    let second_packet = context
+        .parity_packet(&node, &second, EqualityOperator::Equal, &[], 100_000)
+        .expect("the second checked occurrence produces a packet");
+    assert_ne!(first_packet.occurrence_key, second_packet.occurrence_key);
+    for (packet, occurrence) in [(&first_packet, &first), (&second_packet, &second)] {
+        let request = context
+            .request_from_packet(
+                packet.clone(),
+                &node,
+                occurrence,
+                EqualityOperator::Equal,
+                &[],
+                100_000,
+            )
+            .expect("the matching independently produced packet is accepted");
+        let readback = ReplayRequest::decode(request.wire().clone(), ReplayLimits::default())
+            .expect("QSL reads the packet-backed occurrence");
+        assert_eq!(
+            readback.replay_target().occurrence_key(),
+            packet.occurrence_key.as_ref()
+        );
+    }
+    assert!(matches!(
+        context.request_from_packet(
+            second_packet,
+            &node,
+            &first,
+            EqualityOperator::Equal,
+            &[],
+            100_000,
+        ),
+        Err(CompositeBuildError::PacketMismatch(
+            CompositePacketMember::Occurrence
+        ))
     ));
 }
 

@@ -525,6 +525,17 @@ pub struct ReplayPackage {
     selection: QualifiedName,
     site: CallSite<FunctionSite>,
     parameters: Vec<(String, String)>,
+    kani_binding: Option<KaniProofBinding>,
+}
+
+/// The retained proving-run identity and the QSL site selected for its hand-mirrored replay.
+#[derive(Clone, Debug)]
+struct KaniProofBinding {
+    identity: KaniObligationIdentity,
+    package_id: DigestRecord,
+    source_identity: SourceIdentity,
+    function: WireNodeId,
+    declaration: OccurrenceKey,
 }
 
 /// Which independently selected function-claim member a producer packet failed to match.
@@ -561,6 +572,8 @@ pub enum FunctionPacketError {
     Admission(WitnessRefusal),
     /// An admitted packet belongs to another claim.
     ClaimMismatch(PacketClaimMember),
+    /// The supplied Kani identity differs from the identity retained with this QSL twin.
+    ProvingRunMismatch,
     /// The selected Kani identity did not bind to this function package.
     Identity(ObligationIdentityError),
 }
@@ -574,6 +587,9 @@ impl fmt::Display for FunctionPacketError {
                     f,
                     "the producer packet does not match the selected claim: {member:?}"
                 )
+            }
+            Self::ProvingRunMismatch => {
+                f.write_str("the Kani proving-run identity differs from this QSL twin")
             }
             Self::Identity(cause) => write!(f, "the selected claim identity failed: {cause}"),
         }
@@ -621,6 +637,39 @@ impl ReplayPackage {
             selection,
             site,
             parameters,
+            kani_binding: None,
+        })
+    }
+
+    /// Retains the independent Kani proving-run identity beside this selected QSL twin before
+    /// any playback is decoded. The caller is responsible for pairing the hand-mirrored QSL
+    /// source with the proof it represents; subsequent replays refuse another identity or site.
+    ///
+    /// # Errors
+    ///
+    /// [`ObligationIdentityError`] when the proof arguments do not bind this QSL function.
+    pub fn with_kani_identity(
+        mut self,
+        identity: &KaniObligationIdentity,
+    ) -> Result<Self, ObligationIdentityError> {
+        self.obligation_identity(identity)?;
+        self.kani_binding = Some(KaniProofBinding {
+            identity: identity.clone(),
+            package_id: self.site.package_id,
+            source_identity: self.inputs.source.source_identity(),
+            function: self.site.site.function,
+            declaration: self.site.site.declaration.clone(),
+        });
+        Ok(self)
+    }
+
+    fn matches_kani_identity(&self, identity: &KaniObligationIdentity) -> bool {
+        self.kani_binding.as_ref().is_some_and(|binding| {
+            &binding.identity == identity
+                && binding.package_id == self.site.package_id
+                && binding.source_identity == self.inputs.source.source_identity()
+                && binding.function == self.site.site.function
+                && binding.declaration == self.site.site.declaration
         })
     }
 
@@ -707,12 +756,16 @@ impl ReplayPackage {
     /// # Errors
     ///
     /// [`FunctionPacketError`] when `identity` has no function-contract identity, QSL refuses
-    /// the packet, or an admitted packet belongs to another selected claim.
+    /// the packet, the retained proving-run binding differs, or an admitted packet belongs to
+    /// another selected claim.
     pub fn request(
         &self,
         identity: &KaniObligationIdentity,
         packet: WitnessPacket<NoPayload>,
     ) -> Result<ReplayRequestWire, FunctionPacketError> {
+        if !self.matches_kani_identity(identity) {
+            return Err(FunctionPacketError::ProvingRunMismatch);
+        }
         let obligation = self
             .obligation_identity(identity)
             .map_err(FunctionPacketError::Identity)?;
@@ -1219,7 +1272,8 @@ impl<'a> From<&'a ReplayVerdict> for ReplaySettlement<'a> {
 }
 
 /// Decodes `transcript` against `identity`, checks every value against its declared domain,
-/// replays it natively through `package` and reports the verdict.
+/// replays it natively through `package` and reports the verdict. The package must first retain
+/// this exact proving-run identity with [`ReplayPackage::with_kani_identity`].
 ///
 /// # Errors
 ///
@@ -1324,7 +1378,8 @@ pub(crate) fn replay_harness_counterexample_through(
 
 /// [`replay_counterexample`] with the request handed to `execute` instead of straight to
 /// [`qsl_replay::replay`]: a caller that records or wraps the request QSL receives passes a
-/// closure that ends in `qsl_replay::replay`.
+/// closure that ends in `qsl_replay::replay`. A different or absent retained proving-run binding
+/// yields [`EvidenceFailureCause::PackageIdentity`] before decoding or invoking `execute`.
 ///
 /// # Errors
 ///
@@ -1336,6 +1391,9 @@ pub fn replay_counterexample_through(
     mut execute: impl FnMut(ReplayRequestWire) -> Result<ReplayResult, ReplayRefusal>,
 ) -> Result<ReplayVerdict, SpineReplayError> {
     let failure = |cause| Ok(ReplayVerdict::EvidenceFailure(cause));
+    if !package.matches_kani_identity(identity) {
+        return failure(EvidenceFailureCause::PackageIdentity);
+    }
     let values = match decode_falsification(
         identity.harness_symbol.as_str(),
         identity.module_symbol.as_str(),
