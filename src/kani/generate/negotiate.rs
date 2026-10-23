@@ -1922,4 +1922,205 @@ mod tests {
             Err(UnsupportedObligation::FrameNotClauseRendered)
         ));
     }
+
+    // Fixture dependencies are upstream QSL, strict IR reader and canonical encoding only.
+    fn admitted_collection_request_fixture(
+        quantifiers: usize,
+    ) -> (CheckedPackageV2, CheckedNodeId, Vec<CheckedNodeId>) {
+        let authored = native_twin::Twin::build(&model::GRANTED, &[], 0);
+        let mut document: serde_json::Value = serde_json::from_slice(&authored.domain).unwrap();
+        let account = document["types"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|entry| entry["identity"] == "ix://test/bank/Account")
+            .unwrap();
+        let balance = account["fields"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|entry| entry["name"] == "balance")
+            .unwrap();
+        // Author a finite ordered collection over the original [0,1000] integer field type.
+        balance["multiplicity"] = json!({"lower": 0, "upper": 3, "ordered": true, "unique": false});
+        let limits = quire_canonical::Limits::new(1 << 20);
+        let domain = quire_canonical::to_vec(&document, limits).unwrap();
+        let digest = quire_canonical::sha256(&document, limits)
+            .unwrap()
+            .to_string();
+        let body = (0..quantifiers)
+            .map(|index| format!("forall(item in deref(input).balance: item >= {index})"))
+            .collect::<Vec<_>>()
+            .join(" and ");
+        let source = format!(
+            "language \"ix:native\" edition \"1-draft\";\n\
+         profile v = \"quire.model.complete/v1\";\n\
+         model Bank = \"test/bank\" version \"1.0.0\" digest \"sha256-jcs:{digest}\";\n\
+         predicate inspect using v (input: Bank::Account): Boolean {{ {body} }}\n"
+        );
+        let selection =
+            qsl_replay::QualifiedName::new(vec![qsl_replay::Identifier::new("inspect").unwrap()])
+                .unwrap();
+        let located = qsl_replay::call_site(
+            qsl_replay::SourceIdentity::new(
+                "agent-ix",
+                "ir276-collection-request",
+                "git",
+                "fixture",
+            ),
+            "ir276-collection-request",
+            source.as_bytes(),
+            [domain.as_slice()],
+            &qsl_replay::DependencyInput::default(),
+            &selection,
+        )
+        .expect("public QSL admission of authored finite collection predicate");
+        let mut evidence = quire_contract_model::CheckedPackageEvidence::new();
+        evidence
+            .insert_domain_package_document(digest, domain)
+            .unwrap();
+        evidence.support_feature("quire.value.complete/v1");
+        let package = match CheckedPackageV2::read(
+            &located.package,
+            quire_contract_model::CheckedPackageReadLimits::bounded(),
+            &evidence,
+        ) {
+            quire_contract_model::CheckedPackageV2ReadResult::Admitted(package) => *package,
+            other => panic!("owner-emitted graph admits unchanged: {other:?}"),
+        };
+        let function = package
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.node_id.digest.as_ref() == located.site.function.to_string())
+            .unwrap()
+            .node_id
+            .clone();
+        let nodes = package
+            .graph()
+            .nodes
+            .iter()
+            .filter(|node| {
+                node.body.get("operation").and_then(|op| op.get("identity"))
+                    == Some(&json!("quire.op.collection.forall"))
+            })
+            .map(|node| node.node_id.clone())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            nodes.len(),
+            quantifiers,
+            "all distinct authored quantifiers admitted"
+        );
+        (package, function, nodes)
+    }
+
+    // IR-276 AC-5 work control: no unrelated requirement trace is invented.
+    #[test]
+    fn collection_request_builds_one_real_graph_and_preserves_ordered_results() {
+        use crate::kani::generate::collection::take_collection_graph_builds;
+
+        let mut excessive_constructions = Vec::new();
+        for quantifiers in [8, 16, 32] {
+            let (package, function, nodes) = admitted_collection_request_fixture(quantifiers);
+            let evaluate = |items: &[ObligationItem<'_>]| {
+                negotiate_kani_obligations(&KaniObligationRequest {
+                    ceilings: crate::kani::test_support::proof_ceilings::proof_ceilings(),
+                    items,
+                    subject_path: "crate::unused",
+                    unwind: 8,
+                })
+                .expect("valid request receives supported and typed-refused records")
+            };
+            for k in [2, 4, 8] {
+                let good = nodes
+                    .iter()
+                    .take(k - 1)
+                    .map(|node_id| ObligationItem::CollectionClaim {
+                        package: &package,
+                        function_id: &function,
+                        node_id,
+                    })
+                    .collect::<Vec<_>>();
+                // Real admitted function id is intentionally selected in the quantifier role;
+                // the request is owned but not a collection claim. No package/key is fabricated.
+                let refused = ObligationItem::CollectionClaim {
+                    package: &package,
+                    function_id: &function,
+                    node_id: &function,
+                };
+                let mut items = good;
+                items.push(refused);
+                for reverse in [false, true] {
+                    if reverse {
+                        items.reverse();
+                    }
+                    take_collection_graph_builds();
+                    let baselines = items
+                        .iter()
+                        .map(|item| evaluate(std::slice::from_ref(item)))
+                        .collect::<Vec<_>>();
+                    assert_eq!(take_collection_graph_builds(), k, "K independent requests");
+                    let actual = evaluate(&items);
+                    let constructions = take_collection_graph_builds();
+                    let mut expected_harnesses = Vec::new();
+                    for (index, baseline) in baselines.into_iter().enumerate() {
+                        let mut record = baseline.records()[0].clone();
+                        record.request_index = index;
+                        assert_eq!(actual.records()[index], record, "complete ordered record");
+                        let KaniObligationOutcome::Emitted {
+                            collection_harnesses,
+                            ..
+                        } = baseline
+                        else {
+                            panic!("typed unsupported does not reject a healthy request");
+                        };
+                        expected_harnesses.extend(collection_harnesses);
+                    }
+                    let KaniObligationOutcome::Emitted {
+                        collection_harnesses,
+                        records,
+                        ..
+                    } = actual
+                    else {
+                        panic!("typed unsupported does not reject supported siblings");
+                    };
+                    assert_eq!(
+                        collection_harnesses.len(),
+                        k - 1,
+                        "healthy claims really generate"
+                    );
+                    assert_eq!(
+                        collection_harnesses, expected_harnesses,
+                        "full identity/source/record bytes"
+                    );
+                    let refusal_index = if reverse { 0 } else { k - 1 };
+                    assert!(matches!(
+                        records[refusal_index].disposition,
+                        ObligationDisposition::Unsupported {
+                            reason: UnsupportedObligation::CollectionClaimNotRendered {
+                                reason: CollectionUnsupportedReason::UnsupportedClaimShape,
+                                ..
+                            }
+                        }
+                    ));
+                    println!(
+                    "IR276_COLLECTION_WORK K={k} R={} constructors={constructions} reversed={reverse}",
+                    package.graph().nodes.len()
+                );
+                    if constructions != 1 {
+                        excessive_constructions.push((
+                            k,
+                            package.graph().nodes.len(),
+                            reverse,
+                            constructions,
+                        ));
+                    }
+                }
+            }
+        }
+        assert!(
+            excessive_constructions.is_empty(),
+            "one actual CollectionGraph::new for K lower calls; observed {excessive_constructions:?}"
+        );
+    }
 }
