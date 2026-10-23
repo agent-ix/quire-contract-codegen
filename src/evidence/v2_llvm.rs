@@ -410,13 +410,13 @@ fn observe_clause(
 }
 
 #[cfg(test)]
-// This layer may exercise admitted source fixtures, including their replay input builders.
+// Admission-only fixture dependencies obey this subsystem’s production import direction.
 #[allow(dead_code, clippy::duplicate_mod)]
 #[path = "../../tests/state_frame_support/model.rs"]
 mod model;
 #[cfg(test)]
 #[allow(dead_code, clippy::duplicate_mod)]
-#[path = "../../tests/state_frame_support/native_twin.rs"]
+#[path = "../../tests/clause_admission_support/mod.rs"]
 mod native_twin;
 
 #[cfg(test)]

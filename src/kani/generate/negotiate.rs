@@ -56,7 +56,7 @@
 mod model;
 #[cfg(test)]
 #[allow(dead_code, clippy::duplicate_mod)]
-#[path = "../../../tests/state_frame_support/native_twin.rs"]
+#[path = "../../../tests/clause_admission_support/mod.rs"]
 mod native_twin;
 
 #[cfg(test)]
@@ -1663,10 +1663,7 @@ mod tests {
                 .map(|name| (name.as_str(), "deposit", "balance"))
                 .collect::<Vec<_>>();
             let twin = native_twin::Twin::build(&model::GRANTED, &declarations, 0);
-            let (seed_package, seed_clause) = twin.emitted_package(&names[0]);
-            let inputs =
-                twin.state_clause_inputs(&seed_package, &seed_clause, &names[0], (0, 0), (0, 0));
-            let mut source = String::from_utf8(inputs.run.source.bytes.clone()).unwrap();
+            let mut source = String::from_utf8(twin.unit.clone()).unwrap();
             for (index, name) in names.iter().enumerate() {
                 let original = format!("post {name} using v on Bank::Account::deposit {{ self.balance >= pre(self.balance) }}");
                 let distinct = format!(
@@ -1675,20 +1672,11 @@ mod tests {
                 assert!(source.contains(&original));
                 source = source.replace(&original, &distinct);
             }
-            let locked = &inputs.run.source;
             let located = qsl_replay::call_site(
-                qsl_replay::SourceIdentity::new(
-                    &locked.authority,
-                    &locked.identity,
-                    &locked.namespace,
-                    &locked.revision,
-                ),
-                &locked.identity,
+                qsl_replay::SourceIdentity::new("agent-ix", "test:state-frame-twin", "git", "1"),
+                "test:state-frame-twin",
                 source.as_bytes(),
-                inputs
-                    .packages
-                    .iter()
-                    .map(|document| document.bytes.as_slice()),
+                [twin.domain.as_slice()],
                 &qsl_replay::DependencyInput::default(),
                 &qsl_replay::ClauseName(qsl_replay::Identifier::new(&names[0]).unwrap()),
             )
@@ -1699,7 +1687,7 @@ mod tests {
                 .unwrap();
             let mut evidence = quire_contract_model::CheckedPackageEvidence::new();
             evidence
-                .insert_domain_package_document(digest.to_owned(), inputs.packages[0].bytes.clone())
+                .insert_domain_package_document(digest.to_owned(), twin.domain.clone())
                 .unwrap();
             evidence.support_feature("quire.value.complete/v1");
             let package = match CheckedPackageV2::read(
