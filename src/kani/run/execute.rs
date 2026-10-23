@@ -2045,6 +2045,22 @@ exit 0
             stand_in
         }
 
+        /// Timing controls wait for actual teardown readiness before the owner's one poll.
+        #[cfg(target_os = "linux")]
+        fn with_preconfirmed_cleanup(mut self) -> Self {
+            use super::super::owners::{LaunchOwners, ProcessMemory, SystemPoll};
+            self.installation = KaniInstallation::with_owners(
+                self.installation.launcher.clone(),
+                std::sync::Arc::new(LaunchOwners {
+                    memory: std::sync::Arc::new(ProcessMemory),
+                    stdout: std::sync::Arc::new(SystemPoll),
+                    stderr: std::sync::Arc::new(SystemPoll),
+                    confirmation: std::sync::Arc::new(PreconfirmedPoll(SystemPoll)),
+                }),
+            );
+            self
+        }
+
         /// Hold the first real ready sample and first real cleanup poll return once.
         #[cfg(target_os = "linux")]
         fn controlled_owners(&mut self) -> (OwnerControl, OwnerControl) {
@@ -2717,10 +2733,12 @@ exec sleep 45
     /// consume the production owner's single five-second confirmation poll.
     #[cfg(target_os = "linux")]
     #[derive(Debug)]
-    struct PreconfirmedPoll(ControlledPoll);
+    struct PreconfirmedPoll<P: super::super::owners::PollOperation>(P);
 
     #[cfg(target_os = "linux")]
-    impl super::super::owners::PollOperation for PreconfirmedPoll {
+    impl<P: super::super::owners::PollOperation> super::super::owners::PollOperation
+        for PreconfirmedPoll<P>
+    {
         fn poll(
             &self,
             fds: &mut [rustix::event::PollFd<'_>],
@@ -3677,7 +3695,8 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
         let stand_in = StandIn::running(
             "inside-n-times-t",
             &format!("sleep 8\n{VERIFY_EVERY_HARNESS}"),
-        );
+        )
+        .with_preconfirmed_cleanup();
         let harnesses: Vec<_> = (0..4)
             .map(|index| member(&format!("m{index}"), "check", 4))
             .collect();
@@ -3699,7 +3718,8 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
         let stand_in = StandIn::running(
             "full-member-count-bound",
             &format!("sleep 30\n{VERIFY_EVERY_HARNESS}"),
-        );
+        )
+        .with_preconfirmed_cleanup();
         let evidence = only_group(stand_in.batch(&pair(), Duration::from_secs(20)))
             .expect("both members must finish before their full 40-second batch bound");
         assert_eq!(
