@@ -618,10 +618,31 @@ fn tc_035_missing_packet_members_stop_before_replay() {
     assert_eq!(calls, 1);
 }
 
+/// Two selected target families refuse before the replay executor is invoked.
+#[trace("FR-024-AC-42", "TC-035")]
+#[test]
+fn tc_035_conflicting_replay_targets_stop_before_replay() {
+    let (twin, fixture) = (Twin::new(), healthy());
+    let mut replay = built(&twin, &fixture, BALANCE, VIOLATING.0, VIOLATING.1);
+    replay.packet.replay_target.function = replay.packet.replay_target.state_clause.clone();
+    let mut calls = 0;
+    let result = replay.replay_through(|_, _| {
+        calls += 1;
+        panic!("a conflicting target reached the executor")
+    });
+    assert!(matches!(
+        result,
+        Err(StateClauseReplayError::Envelope(
+            WitnessRefusal::ConflictingTarget { .. }
+        ))
+    ));
+    assert_eq!(calls, 0);
+}
+
 /// The replay target names its clause and the payload holds the `Invocation` arm; the envelope's identities are the
 /// `ClauseSite`'s that `call_site` names, two clauses carry their own, and an undeclared clause is
 /// refused by the call site when the request is built.
-#[trace("FR-024-AC-12", "TC-035")]
+#[trace("FR-024-AC-12", "FR-024-AC-41", "TC-035")]
 #[test]
 fn tc_035_the_envelope_carries_the_call_sites_clause_identities() {
     let twin = Twin::new();
@@ -642,6 +663,14 @@ fn tc_035_the_envelope_carries_the_call_sites_clause_identities() {
             clause
         );
         assert_eq!(site.name.as_str(), clause);
+        assert!(replay.packet.replay_target.function.is_none());
+        assert!(replay.packet.replay_target.frame_operation.is_none());
+        assert_eq!(
+            replay.wire.replay_target.members,
+            replay.packet.replay_target
+        );
+        assert!(!replay.wire.replay_target.arguments);
+        assert!(replay.wire.replay_target.occurrence_key.is_none());
         assert!(matches!(
             payload.observation,
             ClauseSelectionInput::Invocation { .. }

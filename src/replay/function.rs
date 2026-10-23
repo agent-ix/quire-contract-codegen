@@ -1248,6 +1248,30 @@ mod tests {
         }
     }
 
+    /// The function request preserves QSL's selected declaration occurrence.
+    #[trace("TC-035", "FR-024-AC-41")]
+    #[test]
+    fn tc_035_function_request_carries_selected_site_and_occurrence() {
+        let package = package();
+        let obligation = package
+            .obligation_identity_for(
+                crate::kani::identity::ObligationKind::Postcondition,
+                &[binding("a"), binding("b")],
+            )
+            .expect("both arguments bind");
+        let request = package.request_for(obligation, ReplaySource::Input(Vec::new()));
+        assert_eq!(
+            request.replay_target.members.function.as_ref(),
+            Some(&package.selection)
+        );
+        assert!(request.replay_target.members.frame_operation.is_none());
+        assert!(request.replay_target.members.state_clause.is_none());
+        assert_eq!(
+            request.replay_target.occurrence_key.as_ref(),
+            Some(&package.site.site.declaration)
+        );
+    }
+
     /// Both integer-domain endpoints enter the function executor. Values immediately outside
     /// either endpoint retain the named argument and never call it.
     #[trace("TC-035", "FR-024-AC-3")]
