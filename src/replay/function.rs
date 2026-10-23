@@ -1187,7 +1187,7 @@ mod tests {
         identity::ObligationBinding,
     };
     use ix_trace_rs::trace;
-    use qsl_replay::{OccurrenceKey, WireNodeId};
+    use qsl_replay::{OccurrenceKey, ReplayRequest, ReplayRequestRefusal, WireNodeId};
     use quire_contract_model::{IntegerDomain, OverflowPolicy};
 
     const UNIT: &str = "language \"ix:native\" edition \"1-draft\";\n\
@@ -1271,6 +1271,37 @@ mod tests {
             request.replay_target.occurrence_key.as_ref(),
             Some(&package.site.site.declaration)
         );
+    }
+
+    /// QSL rejects a missing function occurrence before checking provided bytes.
+    #[trace("FR-024-AC-45", "TC-035")]
+    #[test]
+    fn tc_035_missing_function_request_occurrence_refuses_before_byte_provision() {
+        let package = package();
+        let obligation = package
+            .obligation_identity_for(
+                crate::kani::identity::ObligationKind::Postcondition,
+                &[binding("a"), binding("b")],
+            )
+            .expect("both arguments bind");
+        let request = package.request_for(obligation, ReplaySource::Input(Vec::new()));
+        assert!(!request.byte_provision.is_empty());
+        for drop_bytes in [false, true] {
+            let mut missing = request.clone();
+            missing.replay_target.occurrence_key = None;
+            if drop_bytes {
+                missing.byte_provision.clear();
+            }
+            let refusal = ReplayRequest::decode(missing, package.inputs.replay_limits)
+                .expect_err("missing occurrence must refuse before replay");
+            assert!(matches!(
+                &refusal,
+                ReplayRequestRefusal::MissingOccurrenceKey
+            ));
+            assert_eq!(refusal.code(), qsl_replay::Code::InvalidRuntimeInput);
+            assert_eq!(refusal.cause(), Some("missing-member"));
+            assert_eq!(refusal.pointer(), Some("/replay/occurrence_key"));
+        }
     }
 
     /// Both integer-domain endpoints enter the function executor. Values immediately outside
