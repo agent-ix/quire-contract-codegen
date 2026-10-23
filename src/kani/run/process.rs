@@ -249,7 +249,7 @@ pub fn run_bounded_process(request: ProcessRequest) -> Result<ProcessRun, Proces
             source: error,
         },
     })?;
-    let (outcome, stdout, stderr) = match (run.outcome, run.input_failure) {
+    let (outcome, completed_streams) = match (run.outcome, run.input_failure) {
         (
             LaunchOutcome::Completed {
                 exited_successfully,
@@ -265,38 +265,38 @@ pub fn run_bounded_process(request: ProcessRequest) -> Result<ProcessRun, Proces
                     exit_code,
                 },
             },
-            Some(streams.stdout),
-            Some(streams.stderr),
+            Some(streams),
         ),
-        (outcome, input_failure) => {
-            let outcome = match (outcome, input_failure) {
-                (LaunchOutcome::MemoryExhausted, _) => ProcessOutcome::MemoryExhausted,
-                (LaunchOutcome::MemoryUnobserved { detail }, _) => {
-                    ProcessOutcome::MemoryUnobserved { detail }
-                }
-                (LaunchOutcome::OutputOverLimit { stream, .. }, _) => {
-                    ProcessOutcome::OutputOverLimit { stream }
-                }
-                (LaunchOutcome::OutputUnread { stream, detail }, _) => {
-                    ProcessOutcome::OutputUnread { stream, detail }
-                }
-                (LaunchOutcome::Cancelled { source }, _) => ProcessOutcome::Cancelled {
-                    source: match source {
-                        KaniCancellationSource::Requested => CancelCause::Requested,
-                        KaniCancellationSource::Deadline => CancelCause::Deadline,
-                    },
-                },
-                (LaunchOutcome::TimedOut, Some(detail)) => ProcessOutcome::InputUnread { detail },
-                (LaunchOutcome::TimedOut, None) => ProcessOutcome::TimedOut,
-                (LaunchOutcome::Completed { .. }, _) => unreachable!("completed run handled above"),
-            };
-            (outcome, run.partial_stdout, run.partial_stderr)
+        (LaunchOutcome::MemoryExhausted, _) => (ProcessOutcome::MemoryExhausted, None),
+        (LaunchOutcome::MemoryUnobserved { detail }, _) => {
+            (ProcessOutcome::MemoryUnobserved { detail }, None)
         }
+        (LaunchOutcome::OutputOverLimit { stream, .. }, _) => {
+            (ProcessOutcome::OutputOverLimit { stream }, None)
+        }
+        (LaunchOutcome::OutputUnread { stream, detail }, _) => {
+            (ProcessOutcome::OutputUnread { stream, detail }, None)
+        }
+        (LaunchOutcome::Cancelled { source }, _) => (
+            ProcessOutcome::Cancelled {
+                source: match source {
+                    KaniCancellationSource::Requested => CancelCause::Requested,
+                    KaniCancellationSource::Deadline => CancelCause::Deadline,
+                },
+            },
+            None,
+        ),
+        (LaunchOutcome::TimedOut, Some(detail)) => (ProcessOutcome::InputUnread { detail }, None),
+        (LaunchOutcome::TimedOut, None) => (ProcessOutcome::TimedOut, None),
+    };
+    let (stdout, stderr) = match completed_streams {
+        Some(streams) => (Some(streams.stdout), Some(streams.stderr)),
+        None => (run.partial_stdout, run.partial_stderr),
     };
     Ok(finish(run.started, outcome, stdout, stderr))
 }
 
-#[cfg(all(test, target_os = "linux"))]
+#[cfg(test)]
 mod tests {
     use super::*;
     use ix_trace_rs::trace;
