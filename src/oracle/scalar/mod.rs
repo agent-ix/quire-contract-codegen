@@ -59,16 +59,15 @@ use crate::oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, Up
 use crate::oracle::{classify_lowering_failure, direct_unsupported_form, LoweringFailure};
 use num_bigint::BigInt;
 use quire_contract_model::{
-    BoundedDomainForm, CheckedNodeId, CheckedNodeTag, CheckedOccurrenceRole, CheckedPackageV2,
-    CheckedSemanticId, CheckedSemanticNodeV2, CheckedSourceMapEntry, CompleteContractNodeV2,
-    CompleteLoweringProfileV2, CompleteLoweringRecordV2, ContractFeatureRecordV1,
-    ContractOccurrenceKeyV1, ContractPackageV1, ContractResultContextV1, ContractResultViewV1,
-    ContractRootViewError,
+    ApplicationOperator, BoundedDomainForm, CheckedNodeId, CheckedNodeTag, CheckedOccurrenceRole,
+    CheckedPackageV2, CheckedSemanticId, CheckedSemanticNodeV2, CheckedSourceMapEntry, CheckedTerm,
+    CompleteContractNodeV2, CompleteLoweringProfileV2, CompleteLoweringRecordV2,
+    ContractFeatureRecordV1, ContractOccurrenceKeyV1, ContractPackageV1, ContractResultContextV1,
+    ContractResultViewV1, ContractRootViewError, LiteralKind,
 };
 use quire_exact::{
-    ComparisonOperator, DecimalType, DivisionProfile, IeeeComparison, IeeeWidth, Integer,
-    IntegerDomain, IntegerInterval, OrderingOperator, RationalDomain, RoundingMode, TextProfile,
-    TextType,
+    ComparisonOperator, DecimalType, DivisionProfile, IeeeComparison, IeeeWidth, IntegerDomain,
+    IntegerInterval, OrderingOperator, RationalDomain, RoundingMode, TextProfile, TextType,
 };
 use quire_semantic_value::declaration::EqualityOperator;
 use serde::Serialize;
@@ -346,17 +345,21 @@ pub enum ScalarForm {
 }
 
 impl ScalarForm {
-    fn from_literal_kind(kind: &str) -> Option<Self> {
+    fn from_literal_kind(kind: LiteralKind) -> Option<Self> {
         Some(match kind {
-            "boolean" => Self::Boolean,
-            "integer" => Self::Integer,
-            "rational" => Self::Rational,
-            "decimal" => Self::Decimal,
-            "float32_bits" => Self::Float32,
-            "float64_bits" => Self::Float64,
-            "text" => Self::Text,
-            "enum" => Self::Enum,
-            _ => return None,
+            LiteralKind::Boolean => Self::Boolean,
+            LiteralKind::Integer => Self::Integer,
+            LiteralKind::Rational => Self::Rational,
+            LiteralKind::Decimal => Self::Decimal,
+            LiteralKind::Float32Bits => Self::Float32,
+            LiteralKind::Float64Bits => Self::Float64,
+            LiteralKind::Text => Self::Text,
+            LiteralKind::Enum => Self::Enum,
+            LiteralKind::Quantity
+            | LiteralKind::String
+            | LiteralKind::Uuid
+            | LiteralKind::Timestamp
+            | LiteralKind::None => return None,
         })
     }
 
@@ -740,8 +743,14 @@ struct PendingOraclePlan {
     expected_consequents: u32,
 }
 
-fn node_implication_count(node: &CheckedSemanticNodeV2) -> u32 {
-    u32::from(node.body["operation"]["identity"].as_str() == Some("quire.op.boolean.implies"))
+fn node_implication_count(graph: &Graph<'_>, node: &CheckedSemanticNodeV2) -> u32 {
+    u32::from(
+        graph
+            .operation(&node.node_id)
+            .and_then(|op| op.get("identity"))
+            .and_then(Value::as_str)
+            == Some("quire.op.boolean.implies"),
+    )
 }
 
 impl ExactScalarPlan {
@@ -779,12 +788,7 @@ pub fn plan_exact_scalar_oracles(
     }
     let requested = requests.keys().map(|id| (*id).clone()).collect::<Vec<_>>();
     let lowering = package.lower(&requested, &scalar_profile());
-    let graph = package
-        .graph()
-        .nodes
-        .iter()
-        .map(|node| (&node.node_id, node))
-        .collect::<BTreeMap<_, _>>();
+    let graph = Graph::from_checked(package);
 
     let mut claims = Vec::with_capacity(requests.len());
     let mut pending: Vec<PendingOraclePlan> = Vec::new();
@@ -817,9 +821,9 @@ pub fn plan_exact_scalar_oracles(
                     // consumed an identity the node does not carry. Reading it
                     // first keeps the two apart: absent is refused, present and
                     // disagreeing is caller-declared.
-                    let confirmed_identity = match catalogued_operation_identity(node) {
+                    let confirmed_identity = match catalogued_operation_identity(&graph, node) {
                         Ok(catalogued) => {
-                            Ok(operation_confirmed(node, operation)?.then_some(catalogued))
+                            Ok(operation_confirmed(&graph, node, operation)?.then_some(catalogued))
                         }
                         Err(refusal) => Err(refusal),
                     };
@@ -841,7 +845,7 @@ pub fn plan_exact_scalar_oracles(
                                 identity: identity.clone(),
                                 confirmed,
                                 operation: (*operation).clone(),
-                                expected_consequents: node_implication_count(&node.node),
+                                expected_consequents: node_implication_count(&graph, &node.node),
                             });
                             (
                                 OperationClaim {
@@ -860,7 +864,9 @@ pub fn plan_exact_scalar_oracles(
                                     package_id: lowering.package.source_package_id().clone(),
                                     semantic_form: node.node.semantic_form.to_string(),
                                     semantic_type: node.semantic_type.clone(),
-                                    quantity_conversion_target: conversion_target(&node.node),
+                                    quantity_conversion_target: conversion_target(
+                                        &graph, &node.node,
+                                    ),
                                     source_map: node.source_map.clone(),
                                     claims: node.claims.clone(),
                                     bounds: node.bounds.clone(),
@@ -1164,13 +1170,7 @@ fn build_contract_scalar_oracles(
     mode: ScalarBuildMode,
 ) -> Result<(ExactScalarOracles, Vec<usize>), ContractScalarError> {
     let items = PackageItems::new(package, requested).map_err(ContractScalarError::Request)?;
-    let graph: Graph<'_> = package
-        .wire()
-        .semantic_graph
-        .nodes
-        .iter()
-        .map(|node| (&node.node_id, node))
-        .collect();
+    let graph = Graph::new(package);
     let mut source = SourceBuilder::default();
     let mut claims = Vec::with_capacity(positions.len());
     let mut pending = Vec::new();
@@ -1225,10 +1225,9 @@ fn build_contract_scalar_oracles(
                             cause: Box::new(ContractRootViewError::Inconsistent),
                         })
                     })?;
-                let identity = closure
-                    .root
-                    .body
-                    .pointer("/operation/identity")
+                let identity = graph
+                    .operation(&closure.root.node_id)
+                    .and_then(|operation| operation.get("identity"))
                     .and_then(Value::as_str)
                     .unwrap_or_default()
                     .to_owned();
@@ -1284,7 +1283,7 @@ fn build_contract_scalar_oracles(
                             pending.push((
                                 claims.len(),
                                 operation.clone(),
-                                node_implication_count(closure.root),
+                                node_implication_count(&graph, closure.root),
                             ));
                             (
                                 identity,
@@ -1295,7 +1294,10 @@ fn build_contract_scalar_oracles(
                                     package_id: package.wire().package.source.package_id.clone(),
                                     semantic_form: closure.root.semantic_form.to_string(),
                                     semantic_type: closure.root.semantic_type.clone(),
-                                    quantity_conversion_target: conversion_target(closure.root),
+                                    quantity_conversion_target: conversion_target(
+                                        &graph,
+                                        closure.root,
+                                    ),
                                     source_map: root_sources.to_vec(),
                                     claims: closure.claims,
                                     bounds: closure.bounds,
@@ -1598,7 +1600,7 @@ fn contract_scalar_shape(
                 found: node.semantic_form.to_string(),
             });
         }
-        let arguments = application_arguments(&node.body, shape.body_operator)
+        let arguments = application_arguments(graph.term(&node.node_id), shape.body_operator)
             .filter(|arguments| arguments.len() == shape.operands.len())
             .ok_or(ExactScalarRefusal::BodyMismatch {
                 expected_operator: shape.body_operator,
@@ -1630,7 +1632,10 @@ fn scalar_profile() -> CompleteLoweringProfileV2 {
     }
 }
 
-pub(crate) type Graph<'a> = BTreeMap<&'a CheckedNodeId, &'a CheckedSemanticNodeV2>;
+use crate::oracle::checked_graph::{
+    aggregate_members, bound_members, literal, literal_count, literal_integer, term_name,
+    CheckedGraph as Graph,
+};
 
 /// The lowered node and the bounds its descriptor was checked against.
 type CheckedItem<'r> = (&'r CompleteContractNodeV2, Vec<CheckedNodeId>);
@@ -1657,7 +1662,7 @@ fn check_item<'r>(
     record: &'r CompleteLoweringRecordV2,
     operation: &ExactScalarOperation,
 ) -> Result<CheckedItem<'r>, ItemCheckError> {
-    if let Some(node) = graph.get(requested_node_id).copied() {
+    if let Some(node) = graph.node(requested_node_id) {
         if let Some(node_tag) = direct_unsupported_form(node) {
             return Err(ExactScalarRefusal::Unsupported {
                 unsupported_node_id: requested_node_id.clone(),
@@ -1671,7 +1676,7 @@ fn check_item<'r>(
         ..
     } = record
     {
-        if let Some(node) = graph.get(unsupported_node_id).copied() {
+        if let Some(node) = graph.node(unsupported_node_id) {
             if let Some(node_tag) = direct_unsupported_form(node) {
                 return Err(ExactScalarRefusal::Unsupported {
                     unsupported_node_id: unsupported_node_id.clone(),
@@ -1724,7 +1729,7 @@ fn check_item<'r>(
         }
         .into());
     }
-    let arguments = application_arguments(&node.node.body, shape.body_operator)
+    let arguments = application_arguments(graph.term(&node.node.node_id), shape.body_operator)
         .filter(|arguments| arguments.len() == shape.operands.len())
         .ok_or(ExactScalarRefusal::BodyMismatch {
             expected_operator: shape.body_operator,
@@ -1830,15 +1835,22 @@ fn unsupported_family(node_id: &CheckedNodeId, tag: CheckedNodeTag) -> ExactScal
     }
 }
 
-fn application_arguments<'v>(body: &'v Value, operator: &str) -> Option<&'v Vec<Value>> {
-    if body.get("term")?.as_str()? != "application" || body.get("operator")?.as_str()? != operator {
-        return None;
+fn application_arguments<'a>(
+    body: impl Into<Option<&'a CheckedTerm>>,
+    expected: &str,
+) -> Option<&'a [CheckedTerm]> {
+    match body.into()? {
+        CheckedTerm::Application {
+            operator,
+            arguments,
+            ..
+        } if operator.as_wire() == expected => Some(arguments),
+        _ => None,
     }
-    body.get("arguments")?.as_array()
 }
 
 fn type_form(graph: &Graph<'_>, type_id: &CheckedNodeId) -> Option<String> {
-    let node = graph.get(type_id)?;
+    let node = graph.node(type_id)?;
     (&*node.node_tag == CheckedNodeTag::ScalarType.as_wire())
         .then(|| node.semantic_form.to_string())
 }
@@ -1849,20 +1861,19 @@ fn type_form(graph: &Graph<'_>, type_id: &CheckedNodeId) -> Option<String> {
 fn check_operand(
     graph: &Graph<'_>,
     position: usize,
-    term: &Value,
+    term: &CheckedTerm,
     expected: ScalarForm,
 ) -> Result<(), ExactScalarRefusal> {
-    let kind = term.get("term").and_then(Value::as_str).unwrap_or_default();
-    let found = match kind {
-        "literal" if expected == ScalarForm::Unit => {
+    let found = match term {
+        CheckedTerm::Literal { .. } if expected == ScalarForm::Unit => {
             return Err(ExactScalarRefusal::UnitlessLiteralOperand { position });
         }
-        "literal" => literal_form(term),
-        "reference" => reference_form(graph, term),
+        CheckedTerm::Literal { .. } => literal_form(term),
+        CheckedTerm::Reference { .. } => reference_form(graph, term),
         other => {
             return Err(ExactScalarRefusal::OperandUnsupported {
                 position,
-                term: other.to_owned(),
+                term: term_name(other).to_owned(),
             });
         }
     };
@@ -1877,25 +1888,25 @@ fn check_operand(
     }
 }
 
-fn literal_form(term: &Value) -> Option<String> {
-    term.get("value_kind")
-        .and_then(Value::as_str)
-        .and_then(ScalarForm::from_literal_kind)
-        .map(|form| form.wire().to_owned())
+fn literal_form(term: &CheckedTerm) -> Option<String> {
+    let CheckedTerm::Literal { value_kind, .. } = term else {
+        return None;
+    };
+    ScalarForm::from_literal_kind(*value_kind).map(|form| form.wire().to_owned())
 }
 
-/// The scalar form of an operand that is a literal or a reference, as [`check_operand`] reads it.
-fn operand_form(graph: &Graph<'_>, term: &Value) -> Option<String> {
-    match term.get("term").and_then(Value::as_str)? {
-        "literal" => literal_form(term),
-        "reference" => reference_form(graph, term),
+/// Classify only the owner's literal and reference variants.
+fn operand_form(graph: &Graph<'_>, term: &CheckedTerm) -> Option<String> {
+    match term {
+        CheckedTerm::Literal { .. } => literal_form(term),
+        CheckedTerm::Reference { .. } => reference_form(graph, term),
         _ => None,
     }
 }
 
-fn reference_form(graph: &Graph<'_>, term: &Value) -> Option<String> {
-    let target: CheckedNodeId = serde_json::from_value(term.get("target")?.clone()).ok()?;
-    scalar_type_form(graph, &graph.get(&target)?.semantic_type)
+fn reference_form(graph: &Graph<'_>, term: &CheckedTerm) -> Option<String> {
+    let target = reference_target(term)?;
+    scalar_type_form(graph, &graph.node(&target)?.semantic_type)
 }
 
 /// The scalar form of `type_id`, following one `bounded_domain` step. A parameter typed
@@ -1903,7 +1914,7 @@ fn reference_form(graph: &Graph<'_>, term: &Value) -> Option<String> {
 /// QSL emits a bounded domain directly over its scalar base, so one step reaches the type the form
 /// is read from. A node's result typed by a bounded domain reads the same way.
 fn scalar_type_form(graph: &Graph<'_>, type_id: &CheckedNodeId) -> Option<String> {
-    let node = graph.get(type_id)?;
+    let node = graph.node(type_id)?;
     if is_bounded_domain(node) {
         type_form(graph, &node.semantic_type)
     } else {
@@ -1917,10 +1928,13 @@ fn is_bounded_domain(node: &CheckedSemanticNodeV2) -> bool {
 
 /// The `bounded_domain` node that types a `reference` operand's target: the operand's own bound.
 /// A literal, a reference typed by a scalar type, or any other term has none.
-fn operand_own_bound<'g>(graph: &Graph<'g>, term: &Value) -> Option<&'g CheckedSemanticNodeV2> {
+fn operand_own_bound<'g>(
+    graph: &Graph<'g>,
+    term: &CheckedTerm,
+) -> Option<&'g CheckedSemanticNodeV2> {
     let target = reference_target(term)?;
-    let typing = graph.get(&graph.get(&target)?.semantic_type)?;
-    is_bounded_domain(typing).then_some(*typing)
+    let typing = graph.node(&graph.node(&target)?.semantic_type)?;
+    is_bounded_domain(typing).then_some(typing)
 }
 
 /// The type of a `reference` operand that no `bounded_domain` types; `None` for a literal, a
@@ -1930,18 +1944,18 @@ fn operand_own_bound<'g>(graph: &Graph<'g>, term: &Value) -> Option<&'g CheckedS
 /// literal and whose type is the plain scalar type. That is a constant, like an inline literal,
 /// and is decided by the referenced node's body, never by its type: a `value` node with any other
 /// body (a parameter) and a plain type is an unbounded operand.
-fn plain_reference_type(graph: &Graph<'_>, term: &Value) -> Option<CheckedNodeId> {
+fn plain_reference_type(graph: &Graph<'_>, term: &CheckedTerm) -> Option<CheckedNodeId> {
     if operand_own_bound(graph, term).is_some() {
         return None;
     }
-    let node = graph.get(&reference_target(term)?)?;
-    (!is_literal_value(node)).then(|| node.semantic_type.clone())
+    let node = graph.node(&reference_target(term)?)?;
+    (!is_literal_value(graph, node)).then(|| node.semantic_type.clone())
 }
 
 /// A `value` node whose body is a literal: the node QSL emits for a literal operand.
-fn is_literal_value(node: &CheckedSemanticNodeV2) -> bool {
+fn is_literal_value(graph: &Graph<'_>, node: &CheckedSemanticNodeV2) -> bool {
     &*node.node_tag == CheckedNodeTag::Value.as_wire()
-        && node.body.get("term").and_then(Value::as_str) == Some("literal")
+        && matches!(graph.term(&node.node_id), Some(CheckedTerm::Literal { .. }))
 }
 
 /// The catalogued identity of the narrowing conversion QSL wraps a bounded-context expression in.
@@ -1973,24 +1987,40 @@ impl Narrowing<'_> {
 /// Whether `consumer` is a narrowing conversion of the node `id`: an `expression` of form
 /// `conversion` whose body is a `convert` application with the catalogued identity
 /// `quire.op.numeric.narrow` and exactly one argument, a `reference` to `id`.
-fn narrows(consumer: &CheckedSemanticNodeV2, id: &CheckedNodeId) -> bool {
+fn narrows(graph: &Graph<'_>, consumer: &CheckedSemanticNodeV2, id: &CheckedNodeId) -> bool {
     &*consumer.node_tag == CheckedNodeTag::Expression.as_wire()
         && &*consumer.semantic_form == "conversion"
-        && consumer.body["operation"]["identity"].as_str() == Some(NARROW_IDENTITY)
-        && application_arguments(&consumer.body, "convert").is_some_and(|arguments| {
-            matches!(arguments.as_slice(), [only] if reference_target(only).as_ref() == Some(id))
-        })
+        && graph
+            .operation(&consumer.node_id)
+            .and_then(|op| op.get("identity"))
+            .and_then(Value::as_str)
+            == Some(NARROW_IDENTITY)
+        && application_arguments(graph.term(&consumer.node_id), "convert").is_some_and(
+            |arguments| matches!(arguments, [only] if reference_target(only).as_ref() == Some(id)),
+        )
 }
 
-/// Whether a `reference` to `id` occurs anywhere in `value`.
-fn references(value: &Value, id: &CheckedNodeId) -> bool {
-    match value {
-        Value::Object(members) => {
-            reference_target(value).as_ref() == Some(id)
-                || members.values().any(|member| references(member, id))
+/// Walk only the reader-admitted term structure; operation payloads are not term bodies.
+fn references(term: Option<&CheckedTerm>, id: &CheckedNodeId) -> bool {
+    match term {
+        Some(CheckedTerm::Reference { target }) => target == id,
+        Some(CheckedTerm::Application { arguments, .. }) => {
+            arguments.iter().any(|term| references(Some(term), id))
         }
-        Value::Array(items) => items.iter().any(|item| references(item, id)),
-        _ => false,
+        Some(CheckedTerm::Aggregate { members }) => {
+            members.iter().any(|term| references(Some(term), id))
+        }
+        Some(CheckedTerm::Binding { value, .. }) => references(Some(value), id),
+        Some(CheckedTerm::ExtensionForm { clauses, .. }) => {
+            clauses.iter().any(|term| references(Some(term), id))
+        }
+        Some(
+            CheckedTerm::Literal { .. }
+            | CheckedTerm::DependencyReference { .. }
+            | CheckedTerm::Frame { .. }
+            | CheckedTerm::AbstractionRelation { .. },
+        )
+        | None => false,
     }
 }
 
@@ -1999,20 +2029,20 @@ fn references(value: &Value, id: &CheckedNodeId) -> bool {
 fn narrowing<'g>(graph: &Graph<'g>, id: &CheckedNodeId) -> Narrowing<'g> {
     let mut bounds = BTreeMap::new();
     let (mut narrowed, mut other) = (false, false);
-    for consumer in graph.values() {
-        if &consumer.node_id == id || !references(&consumer.body, id) {
+    for consumer in graph.nodes() {
+        if &consumer.node_id == id || !references(graph.term(&consumer.node_id), id) {
             continue;
         }
-        if !narrows(consumer, id) {
+        if !narrows(graph, consumer, id) {
             other = true;
             continue;
         }
         narrowed = true;
         if let Some(bound) = graph
-            .get(&consumer.semantic_type)
+            .node(&consumer.semantic_type)
             .filter(|typing| is_bounded_domain(typing))
         {
-            bounds.insert(&bound.node_id, *bound);
+            bounds.insert(&bound.node_id, bound);
         }
     }
     match (narrowed, other) {
@@ -2023,31 +2053,35 @@ fn narrowing<'g>(graph: &Graph<'g>, id: &CheckedNodeId) -> Narrowing<'g> {
 }
 
 /// The node a `reference` term names.
-fn reference_target(term: &Value) -> Option<CheckedNodeId> {
-    if term.get("term")?.as_str()? != "reference" {
-        return None;
+fn reference_target(term: &CheckedTerm) -> Option<CheckedNodeId> {
+    match term {
+        CheckedTerm::Reference { target } => Some(target.clone()),
+        _ => None,
     }
-    serde_json::from_value(term.get("target")?.clone()).ok()
 }
 
-/// Each argument of an application body, with its own bound where it has one.
-fn own_bounds<'g>(graph: &Graph<'g>, body: &Value) -> Vec<Option<&'g CheckedSemanticNodeV2>> {
-    body.get("arguments")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
+fn own_bounds<'a>(
+    graph: &Graph<'a>,
+    body: Option<&CheckedTerm>,
+) -> Vec<Option<&'a CheckedSemanticNodeV2>> {
+    let arguments = match body {
+        Some(CheckedTerm::Application { arguments, .. }) => arguments.as_slice(),
+        _ => &[],
+    };
+    arguments
+        .iter()
         .map(|argument| operand_own_bound(graph, argument))
         .collect()
 }
 
-/// The literal an operand stands for: the operand itself when it is an inline `literal`, or the body
-/// of the `value` node it references when that body is a `literal` (QSL's shape for a literal).
-fn operand_literal<'a>(graph: &Graph<'a>, term: &'a Value) -> Option<&'a Value> {
-    if term.get("term").and_then(Value::as_str) == Some("literal") {
+fn operand_literal<'a>(graph: &Graph<'a>, term: &'a CheckedTerm) -> Option<&'a CheckedTerm> {
+    if matches!(term, CheckedTerm::Literal { .. }) {
         return Some(term);
     }
-    let node = graph.get(&reference_target(term)?)?;
-    is_literal_value(node).then_some(&node.body)
+    let node = graph.node(&reference_target(term)?)?;
+    is_literal_value(graph, node)
+        .then(|| graph.term(&node.node_id))
+        .flatten()
 }
 
 /// How a Kani harness ranges one operand of a scalar node.
@@ -2076,12 +2110,11 @@ pub(crate) enum OperandRange {
 /// in the claim's `checked_bounds` (`lower_scalar_claim`): the two sources cannot silently
 /// disagree.
 pub(crate) fn operand_ranges(graph: &Graph<'_>, node_id: &CheckedNodeId) -> Vec<OperandRange> {
-    let Some(node) = graph.get(node_id) else {
+    let Some(node) = graph.node(node_id) else {
         return Vec::new();
     };
-    node.body
-        .get("arguments")
-        .and_then(Value::as_array)
+    graph
+        .arguments(&node.node_id)
         .into_iter()
         .flatten()
         .enumerate()
@@ -2090,11 +2123,11 @@ pub(crate) fn operand_ranges(graph: &Graph<'_>, node_id: &CheckedNodeId) -> Vec<
                 OperandRange::Bound(bound.node_id.clone())
             } else if let Some(literal) = operand_literal(graph, argument) {
                 OperandRange::Literal(
-                    literal
-                        .get("value")
-                        .and_then(Value::as_str)
-                        .unwrap_or_default()
-                        .to_owned(),
+                    match literal {
+                        CheckedTerm::Literal { value, .. } => value.as_str().unwrap_or_default(),
+                        _ => "",
+                    }
+                    .to_owned(),
                 )
             } else if let Some(source) = reference_target(argument) {
                 infer_integer_range(graph, &source, position).ok().map_or(
@@ -2134,7 +2167,7 @@ fn infer_integer_range(
         work: &mut u64,
     ) -> Result<(BigInt, BigInt), ExactScalarRefusal> {
         let node = graph
-            .get(node_id)
+            .node(node_id)
             .ok_or_else(|| ExactScalarRefusal::InvalidBody {
                 body_node_id: node_id.clone(),
             })?;
@@ -2169,28 +2202,29 @@ fn infer_integer_range(
                 body_node_id: node_id.clone(),
             });
         }
-        let result = if is_literal_value(node) {
-            let literal = literal_integer(&node.body).ok_or_else(|| {
-                ExactScalarRefusal::OperandTypeMismatch {
+        let result = if is_literal_value(graph, node) {
+            let literal = graph
+                .term(&node.node_id)
+                .and_then(literal_integer)
+                .ok_or_else(|| ExactScalarRefusal::OperandTypeMismatch {
                     position,
                     expected: ScalarForm::Integer,
-                    found: literal_form(&node.body),
-                }
-            })?;
+                    found: graph.term(&node.node_id).and_then(literal_form),
+                })?;
             let value = literal.to_string().parse::<BigInt>().map_err(|_| {
                 ExactScalarRefusal::InvalidBody {
                     body_node_id: node_id.clone(),
                 }
             })?;
             (value.clone(), value)
-        } else if let Some(typing) = graph.get(&node.semantic_type) {
+        } else if let Some(typing) = graph.node(&node.semantic_type) {
             if is_bounded_domain(typing) {
                 let range =
-                    read_integer_range(aggregate_members(&typing.body).ok_or_else(|| {
-                        ExactScalarRefusal::InvalidBody {
+                    read_integer_range(aggregate_members(graph.term(&typing.node_id)).ok_or_else(
+                        || ExactScalarRefusal::InvalidBody {
                             body_node_id: typing.node_id.clone(),
-                        }
-                    })?)
+                        },
+                    )?)
                     .ok_or_else(|| ExactScalarRefusal::InvalidBody {
                         body_node_id: typing.node_id.clone(),
                     })?;
@@ -2215,9 +2249,8 @@ fn infer_integer_range(
             } else if &*node.node_tag == CheckedNodeTag::Expression.as_wire()
                 && scalar_type_form(graph, &node.semantic_type).as_deref() == Some("integer")
             {
-                let operation = node
-                    .body
-                    .get("operation")
+                let operation = graph
+                    .operation(&node.node_id)
                     .and_then(|v| v.get("identity"))
                     .and_then(Value::as_str)
                     .ok_or_else(|| ExactScalarRefusal::InvalidBody {
@@ -2229,20 +2262,21 @@ fn infer_integer_range(
                         position,
                         term: operation.to_owned(),
                     })?;
-                let args = node
-                    .body
-                    .get("arguments")
-                    .and_then(Value::as_array)
-                    .ok_or_else(|| ExactScalarRefusal::InvalidBody {
+                let args = graph.arguments(&node.node_id).ok_or_else(|| {
+                    ExactScalarRefusal::InvalidBody {
                         body_node_id: node_id.clone(),
-                    })?;
+                    }
+                })?;
                 let (expected_operator, expected_arity) = match integer_operator {
                     IntegerOperator::Add
                     | IntegerOperator::Subtract
                     | IntegerOperator::Multiply => ("binary", 2),
                     IntegerOperator::Negate => ("unary", 1),
                 };
-                if node.body.get("operator").and_then(Value::as_str) != Some(expected_operator)
+                if graph
+                    .operator(&node.node_id)
+                    .map(ApplicationOperator::as_wire)
+                    != Some(expected_operator)
                     || args.len() != expected_arity
                 {
                     return Err(ExactScalarRefusal::InvalidBody {
@@ -2251,7 +2285,7 @@ fn infer_integer_range(
                 }
                 let mut ranges = Vec::with_capacity(args.len());
                 for arg in args {
-                    if arg.get("term").and_then(Value::as_str) == Some("literal") {
+                    if matches!(arg, CheckedTerm::Literal { .. }) {
                         let literal = literal_integer(arg).ok_or_else(|| {
                             ExactScalarRefusal::OperandTypeMismatch {
                                 position,
@@ -2269,18 +2303,9 @@ fn infer_integer_range(
                         continue;
                     }
                     let Some(target) = reference_target(arg) else {
-                        if arg.get("term").and_then(Value::as_str) == Some("reference") {
-                            return Err(ExactScalarRefusal::InvalidBody {
-                                body_node_id: node_id.clone(),
-                            });
-                        }
                         return Err(ExactScalarRefusal::OperandUnsupported {
                             position,
-                            term: arg
-                                .get("term")
-                                .and_then(Value::as_str)
-                                .unwrap_or("missing")
-                                .to_owned(),
+                            term: term_name(arg).to_owned(),
                         });
                     };
                     ranges.push(visit(
@@ -2313,7 +2338,7 @@ fn infer_integer_range(
                     _ => {
                         return Err(ExactScalarRefusal::InvalidBody {
                             body_node_id: node_id.clone(),
-                        })
+                        });
                     }
                 }
             } else {
@@ -2494,7 +2519,7 @@ impl Bounds<'_, '_> {
     fn read<T>(
         &self,
         form: BoundForm,
-        read: fn(&[Value]) -> Option<T>,
+        read: fn(&[CheckedTerm]) -> Option<T>,
     ) -> Result<(CheckedNodeId, T), ExactScalarRefusal> {
         if let Some(selected) = &self.node.selected {
             let result = selected
@@ -2530,7 +2555,7 @@ impl Bounds<'_, '_> {
                     return Err(ExactScalarRefusal::IncompleteContext);
                 }
             };
-            let value = aggregate_members(&bound.body)
+            let value = aggregate_members(self.graph.term(&bound.node_id))
                 .and_then(read)
                 .ok_or_else(|| ExactScalarRefusal::UnreadableBound {
                     bound: bound.node_id.clone(),
@@ -2538,7 +2563,7 @@ impl Bounds<'_, '_> {
             return Ok((bound.node_id.clone(), value));
         }
         let bounded_type = &self.node.semantic_type;
-        let typing = self.graph.get(bounded_type).copied();
+        let typing = self.graph.node(bounded_type);
         let bound = match typing.filter(|typing| is_bounded_domain(typing)) {
             Some(bound) if &*bound.semantic_form == form.wire() => bound,
             Some(bound) => {
@@ -2549,7 +2574,7 @@ impl Bounds<'_, '_> {
             }
             None => self.scalar_result_bound(form)?,
         };
-        let value = aggregate_members(&bound.body)
+        let value = aggregate_members(self.graph.term(&bound.node_id))
             .and_then(read)
             .ok_or_else(|| ExactScalarRefusal::UnreadableBound {
                 bound: bound.node_id.clone(),
@@ -2616,7 +2641,7 @@ impl Bounds<'_, '_> {
             .node
             .bounds
             .iter()
-            .filter_map(|id| self.graph.get(id).copied())
+            .filter_map(|id| self.graph.node(id))
             .filter(|bound| {
                 &bound.semantic_type == bounded_type && &*bound.semantic_form == form.wire()
             })
@@ -2628,7 +2653,7 @@ impl Bounds<'_, '_> {
                 expected_form: form,
             }),
             [_, _, ..] => {
-                let own = own_bounds(self.graph, &self.node.root.body);
+                let own = own_bounds(self.graph, self.graph.term(&self.node.root.node_id));
                 let mut free = candidates.iter().filter(|candidate| {
                     !own.iter()
                         .flatten()
@@ -2660,12 +2685,8 @@ impl Bounds<'_, '_> {
     fn integer_operand_bounds(&self) -> Result<Vec<CheckedNodeId>, ExactScalarRefusal> {
         let form = BoundForm::IntegerRange;
         let arguments = self
-            .node
-            .root
-            .body
-            .get("arguments")
-            .and_then(Value::as_array)
-            .map(Vec::as_slice)
+            .graph
+            .arguments(&self.node.root.node_id)
             .unwrap_or_default();
         for (position, argument) in arguments.iter().enumerate() {
             if let Some(literal) = operand_literal(self.graph, argument) {
@@ -2678,7 +2699,7 @@ impl Bounds<'_, '_> {
                 }
             }
         }
-        let owned = own_bounds(self.graph, &self.node.root.body);
+        let owned = own_bounds(self.graph, self.graph.term(&self.node.root.node_id));
         let result_typed = if let Some(selected) = &self.node.selected {
             match selected
                 .package
@@ -2705,7 +2726,7 @@ impl Bounds<'_, '_> {
             }
         } else {
             self.graph
-                .get(&self.node.semantic_type)
+                .node(&self.node.semantic_type)
                 .is_some_and(|typing| is_bounded_domain(typing))
                 || self.narrowing().narrowed()
         };
@@ -2715,7 +2736,7 @@ impl Bounds<'_, '_> {
                     continue;
                 };
                 let eligible = own.is_none()
-                    && self.graph.get(&target).is_some_and(|node| {
+                    && self.graph.node(&target).is_some_and(|node| {
                         &*node.node_tag == CheckedNodeTag::Expression.as_wire()
                             && scalar_type_form(self.graph, &node.semantic_type).as_deref()
                                 == Some("integer")
@@ -2729,7 +2750,7 @@ impl Bounds<'_, '_> {
                 .zip(&owned)
                 .find_map(|(argument, own)| match own {
                     None if reference_target(argument).is_some_and(|target| {
-                        self.graph.get(&target).is_some_and(|node| {
+                        self.graph.node(&target).is_some_and(|node| {
                             &*node.node_tag == CheckedNodeTag::Expression.as_wire()
                                 && scalar_type_form(self.graph, &node.semantic_type).as_deref()
                                     == Some("integer")
@@ -2753,7 +2774,7 @@ impl Bounds<'_, '_> {
                     expected_form: form,
                 });
             }
-            if aggregate_members(&bound.body)
+            if aggregate_members(self.graph.term(&bound.node_id))
                 .and_then(read_integer_range)
                 .is_none()
             {
@@ -2774,7 +2795,7 @@ impl Bounds<'_, '_> {
     fn equal<T: PartialEq>(
         &self,
         form: BoundForm,
-        read: fn(&[Value]) -> Option<T>,
+        read: fn(&[CheckedTerm]) -> Option<T>,
         declared: Option<&T>,
     ) -> Result<CheckedNodeId, ExactScalarRefusal> {
         let (bound, value) = self.read(form, read)?;
@@ -2786,66 +2807,7 @@ impl Bounds<'_, '_> {
     }
 }
 
-pub(crate) fn aggregate_members(body: &Value) -> Option<&[Value]> {
-    if body.get("term")?.as_str()? != "aggregate" {
-        return None;
-    }
-    body.get("members")?.as_array().map(Vec::as_slice)
-}
-
-/// The literals of a bound body, looked up BY NAME (QSpec's reader does the same), in any member
-/// order. Each member is `{term: binding, name, value: <literal>}` (checked-package v2, QSpec
-/// `positive-operation-identities.json`); the result holds each named member's `value`, in the
-/// order of `names`. A body with a missing, duplicate or unlisted name, or a member that is not a
-/// `binding` (a bare literal, say), is not a bound body and yields `None`.
-pub(crate) fn bound_members<'v, const N: usize>(
-    members: &'v [Value],
-    names: [&str; N],
-) -> Option<[&'v Value; N]> {
-    if members.len() != N {
-        return None;
-    }
-    let mut found: [Option<&'v Value>; N] = [None; N];
-    for member in members {
-        if member.get("term")?.as_str()? != "binding" {
-            return None;
-        }
-        let name = member.get("name")?.as_str()?;
-        let slot = &mut found[names.iter().position(|expected| *expected == name)?];
-        if slot.replace(member.get("value")?).is_some() {
-            return None;
-        }
-    }
-    found
-        .into_iter()
-        .collect::<Option<Vec<_>>>()?
-        .try_into()
-        .ok()
-}
-
-/// The spelling of a literal of `kind`.
-pub(crate) fn literal<'v>(term: &'v Value, kind: &str) -> Option<&'v str> {
-    if term.get("term")?.as_str()? != "literal" || term.get("value_kind")?.as_str()? != kind {
-        return None;
-    }
-    term.get("value")?.as_str()
-}
-
-/// A canonical decimal integer literal.
-pub(crate) fn literal_integer(term: &Value) -> Option<Integer> {
-    let spelling = literal(term, "integer")?;
-    let value: Integer = spelling.parse().ok()?;
-    (value.to_string() == spelling).then_some(value)
-}
-
-/// A canonical decimal integer literal within `u64`.
-pub(crate) fn literal_count(term: &Value) -> Option<u64> {
-    let spelling = literal(term, "integer")?;
-    let value: u64 = spelling.parse().ok()?;
-    (value.to_string() == spelling).then_some(value)
-}
-
-fn literal_interval(lower: &Value, upper: &Value) -> Option<IntegerInterval> {
+fn literal_interval(lower: &CheckedTerm, upper: &CheckedTerm) -> Option<IntegerInterval> {
     IntegerInterval::new(literal_integer(lower)?, literal_integer(upper)?).ok()
 }
 
@@ -2873,12 +2835,12 @@ pub(crate) const TEXT_BOUNDS_MEMBERS: [&str; 3] = ["min", "max", "text_profile"]
 /// The `collection_bounds` member names.
 pub(crate) const COLLECTION_BOUNDS_MEMBERS: [&str; 2] = ["min", "max"];
 
-pub(crate) fn read_integer_range(members: &[Value]) -> Option<IntegerInterval> {
+pub(crate) fn read_integer_range(members: &[CheckedTerm]) -> Option<IntegerInterval> {
     let [lower, upper] = bound_members(members, INTEGER_RANGE_MEMBERS)?;
     literal_interval(lower, upper)
 }
 
-pub(crate) fn read_rational_range(members: &[Value]) -> Option<RationalDomain> {
+pub(crate) fn read_rational_range(members: &[CheckedTerm]) -> Option<RationalDomain> {
     let [numerator_lower, numerator_upper, denominator_lower, denominator_upper] =
         bound_members(members, RATIONAL_RANGE_MEMBERS)?;
     RationalDomain::new(
@@ -2888,7 +2850,7 @@ pub(crate) fn read_rational_range(members: &[Value]) -> Option<RationalDomain> {
     .ok()
 }
 
-pub(crate) fn read_decimal_range(members: &[Value]) -> Option<DecimalType> {
+pub(crate) fn read_decimal_range(members: &[CheckedTerm]) -> Option<DecimalType> {
     let [lower, upper, min_scale, max_scale, rounding] =
         bound_members(members, DECIMAL_RANGE_MEMBERS)?;
     DecimalType::new(
@@ -2896,22 +2858,22 @@ pub(crate) fn read_decimal_range(members: &[Value]) -> Option<DecimalType> {
         literal_integer(upper)?,
         literal_count(min_scale)?,
         literal_count(max_scale)?,
-        RoundingMode::from_code(literal(rounding, "text")?)?,
+        RoundingMode::from_code(literal(rounding, LiteralKind::Text)?)?,
     )
     .ok()
 }
 
-fn read_float_rounding(members: &[Value]) -> Option<RoundingMode> {
+fn read_float_rounding(members: &[CheckedTerm]) -> Option<RoundingMode> {
     let [rounding] = bound_members(members, FLOAT_ROUNDING_MEMBERS)?;
-    RoundingMode::from_code(literal(rounding, "text")?)
+    RoundingMode::from_code(literal(rounding, LiteralKind::Text)?)
 }
 
-pub(crate) fn read_text_bounds(members: &[Value]) -> Option<TextType> {
+pub(crate) fn read_text_bounds(members: &[CheckedTerm]) -> Option<TextType> {
     let [min, max, profile] = bound_members(members, TEXT_BOUNDS_MEMBERS)?;
     TextType::new(
         literal_count(min)?,
         literal_count(max)?,
-        TextProfile::from_code(literal(profile, "text")?)?,
+        TextProfile::from_code(literal(profile, LiteralKind::Text)?)?,
     )
     .ok()
 }
@@ -3136,10 +3098,13 @@ fn refused_claim(
 /// crate's invariant, not this one's, so a violation is reported rather than
 /// panicked on.
 fn catalogued_operation_identity(
+    graph: &Graph<'_>,
     node: &CompleteContractNodeV2,
 ) -> Result<String, ExactScalarRefusal> {
-    node.node.body["operation"]["identity"]
-        .as_str()
+    graph
+        .operation(&node.node.node_id)
+        .and_then(|operation| operation.get("identity"))
+        .and_then(Value::as_str)
         .map(str::to_owned)
         .ok_or_else(|| ExactScalarRefusal::MissingOperationIdentity {
             node_id: node.node.node_id.clone(),
@@ -3321,7 +3286,7 @@ fn ordering_identity(
         (Kind::Integer, _) => {
             return Err(OracleGenerationError::unknown_variant(
                 "OrderingOperandKind",
-            ))
+            ));
         }
     })
 }
@@ -3382,29 +3347,29 @@ fn comparison_identity(
 /// `text_profile`) or none at all, so its shape and identity/mode checks are
 /// already the whole story for it.
 fn operation_confirmed(
+    graph: &Graph<'_>,
     node: &CompleteContractNodeV2,
     operation: &ExactScalarOperation,
 ) -> Result<bool, OracleGenerationError> {
     let Some(catalogued) = catalogued_operation(operation)? else {
         return Ok(false);
     };
-    if node.node.body["operation"]["identity"].as_str() != Some(catalogued.identity) {
+    let Some(payload) = graph.operation(&node.node.node_id) else {
+        return Ok(false);
+    };
+    if payload["identity"].as_str() != Some(catalogued.identity) {
         return Ok(false);
     }
     if let Some((kind, value)) = catalogued.mode {
-        let mode = &node.node.body["operation"]["mode"];
+        let mode = &payload["mode"];
         if mode["kind"].as_str() != Some(kind) || mode["value"].as_str() != Some(value) {
             return Ok(false);
         }
     }
     if let ExactScalarOperation::IntegerDivision { profile, .. } = operation {
-        let law_confirmed = node.node.body["operation"]["laws"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .any(|law| {
-                law["definition"]["identity"].as_str() == Some(profile.definition_identity())
-            });
+        let law_confirmed = payload["laws"].as_array().into_iter().flatten().any(|law| {
+            law["definition"]["identity"].as_str() == Some(profile.definition_identity())
+        });
         if !law_confirmed {
             return Ok(false);
         }
@@ -4227,17 +4192,16 @@ fn profile_path(profile: TextProfile) -> Result<&'static str, OracleGenerationEr
 /// The operation identity of a quantity conversion.
 pub(crate) const QUANTITY_CONVERT_IDENTITY: &str = "quire.op.quantity.convert";
 
-fn conversion_target(node: &CheckedSemanticNodeV2) -> Option<CheckedNodeId> {
-    (node.body["operation"]["identity"].as_str() == Some(QUANTITY_CONVERT_IDENTITY))
-        .then(|| {
-            serde_json::from_value(node.body["operation"]["member"]["declaration"].clone()).ok()
-        })
+fn conversion_target(graph: &Graph<'_>, node: &CheckedSemanticNodeV2) -> Option<CheckedNodeId> {
+    let payload = graph.operation(&node.node_id)?;
+    (payload["identity"].as_str() == Some(QUANTITY_CONVERT_IDENTITY))
+        .then(|| serde_json::from_value(payload["member"]["declaration"].clone()).ok())
         .flatten()
 }
 
 fn quantity_conversion_target_is_unit(graph: &Graph<'_>, node: &CheckedSemanticNodeV2) -> bool {
-    conversion_target(node)
-        .and_then(|id| graph.get(&id).copied())
+    conversion_target(graph, node)
+        .and_then(|id| graph.node(&id))
         .is_some_and(|target| {
             target.node_tag.as_ref() == "scalar_type" && target.semantic_form.as_ref() == "unit"
         })
@@ -4469,16 +4433,10 @@ fn derive_exact_scalar_items_from_records(
     node_ids: &[CheckedNodeId],
     records: &[CompleteLoweringRecordV2],
 ) -> Vec<Result<ExactScalarItem, ExactScalarRefusal>> {
-    let graph = package
-        .graph()
-        .nodes
-        .iter()
-        .map(|node| {
-            #[cfg(test)]
-            SCALAR_DERIVE_GRAPH_VISITS.with(|count| count.set(count.get() + 1));
-            (&node.node_id, node)
-        })
-        .collect::<BTreeMap<_, _>>();
+    let graph = Graph::from_checked_with_node_visit(package, || {
+        #[cfg(test)]
+        SCALAR_DERIVE_GRAPH_VISITS.with(|count| count.set(count.get() + 1));
+    });
     node_ids
         .iter()
         .zip(records)
@@ -4511,25 +4469,22 @@ struct Derivation<'a, 'g, 'n> {
 
 impl Derivation<'_, '_, '_> {
     fn right_may_stop(&self) -> bool {
-        let Some(right) = self.node.body["arguments"]
-            .as_array()
+        let Some(right) = self
+            .graph
+            .arguments(&self.node.node_id)
             .and_then(|args| args.get(1))
         else {
             return false;
         };
-        match right["term"].as_str() {
-            Some("application") => true,
-            Some("reference") => {
-                let Some(target) = right.get("target").and_then(|target| {
-                    serde_json::from_value::<CheckedNodeId>(target.clone()).ok()
-                }) else {
-                    return false;
-                };
-                self.graph.get(&target).is_some_and(|node| {
-                    &*node.node_tag == CheckedNodeTag::Expression.as_wire()
-                        && node.body["term"].as_str() == Some("application")
-                })
-            }
+        match right {
+            CheckedTerm::Application { .. } => true,
+            CheckedTerm::Reference { target } => self.graph.node(target).is_some_and(|node| {
+                &*node.node_tag == CheckedNodeTag::Expression.as_wire()
+                    && matches!(
+                        self.graph.term(&node.node_id),
+                        Some(CheckedTerm::Application { .. })
+                    )
+            }),
             _ => false,
         }
     }
@@ -4552,7 +4507,7 @@ impl Derivation<'_, '_, '_> {
     fn read<T>(
         &self,
         form: BoundForm,
-        read: fn(&[Value]) -> Option<T>,
+        read: fn(&[CheckedTerm]) -> Option<T>,
     ) -> Result<T, ExactScalarRefusal> {
         let bounds = Bounds {
             graph: self.graph,
@@ -4563,10 +4518,8 @@ impl Derivation<'_, '_, '_> {
 
     /// The scalar forms of the application's arguments.
     fn operand_forms(&self) -> Vec<Option<String>> {
-        self.node
-            .body
-            .get("arguments")
-            .and_then(Value::as_array)
+        self.graph
+            .arguments(&self.node.node_id)
             .into_iter()
             .flatten()
             .map(|argument| operand_form(self.graph, argument))
@@ -4580,7 +4533,7 @@ impl Derivation<'_, '_, '_> {
 
     /// The `operation.mode` value when its kind is `rounding`.
     fn mode_value(&self) -> Option<&str> {
-        let mode = &self.node.body["operation"]["mode"];
+        let mode = &self.graph.operation(&self.node.node_id)?["mode"];
         (mode["kind"].as_str() == Some("rounding"))
             .then(|| mode["value"].as_str())
             .flatten()
@@ -4600,8 +4553,10 @@ impl Derivation<'_, '_, '_> {
         let named = DivisionProfile::ALL
             .into_iter()
             .filter(|profile| {
-                self.node.body["operation"]["laws"]
-                    .as_array()
+                self.graph
+                    .operation(&self.node.node_id)
+                    .and_then(|operation| operation.get("laws"))
+                    .and_then(Value::as_array)
                     .into_iter()
                     .flatten()
                     .any(|law| {
@@ -4668,8 +4623,7 @@ fn derive_operation(
     // The graph and the lowering come first, so a node absent from the graph, or one that does not
     // lower, keeps the refusal `generate_exact_scalar_oracles` gives it and FR-015 classifies.
     let node = graph
-        .get(node_id)
-        .copied()
+        .node(node_id)
         .ok_or(ExactScalarRefusal::InvalidInput)?;
     let lowered = lowered(record)?;
     derive_operation_from_view(graph, node, BoundView::complete(lowered))
@@ -4682,15 +4636,20 @@ fn derive_operation_from_view<'g>(
 ) -> Result<ExactScalarOperation, ExactScalarRefusal> {
     use ExactScalarOperation as Op;
     if &*node.node_tag != CheckedNodeTag::Expression.as_wire()
-        || node.body.get("term").and_then(Value::as_str) != Some("application")
+        || !matches!(
+            graph.term(&node.node_id),
+            Some(CheckedTerm::Application { .. })
+        )
     {
         return Err(ClaimDerivationRefusal::NotApplication {
             node_tag: node.node_tag.to_string(),
         }
         .refusal());
     }
-    let identity = node.body["operation"]["identity"]
-        .as_str()
+    let identity = graph
+        .operation(&node.node_id)
+        .and_then(|operation| operation.get("identity"))
+        .and_then(Value::as_str)
         .ok_or_else(|| ClaimDerivationRefusal::MissingOperationIdentity.refusal())?;
     let derivation = Derivation {
         graph,
@@ -4803,6 +4762,7 @@ fn derive_operation_from_view<'g>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::oracle::checked_graph::fixture::Node as FixtureNode;
     use ix_trace_rs::trace;
     use quire_contract_model::{CheckedPackageIncomplete, CheckedPackageLimit};
 
@@ -4827,49 +4787,57 @@ mod tests {
         tag: &str,
         form: &str,
         semantic_type: CheckedNodeId,
-        body: Value,
-    ) -> CheckedSemanticNodeV2 {
-        CheckedSemanticNodeV2 {
-            node_id: id,
-            owner: None,
-            schema_version: "quire.checked-semantic-graph/v2".into(),
-            node_tag: tag.into(),
-            semantic_form: form.into(),
-            semantic_type,
-            dependencies: Vec::new(),
-            occurrences: Vec::new(),
-            recursion_group: None,
-            nominal_identity_preimage: None,
-            declaration: None,
-            body,
-        }
+        body: impl Into<Option<CheckedTerm>>,
+    ) -> FixtureNode {
+        FixtureNode::new(
+            CheckedSemanticNodeV2 {
+                node_id: id,
+                owner: None,
+                schema_version: "quire.checked-semantic-graph/v2".into(),
+                node_tag: tag.into(),
+                semantic_form: form.into(),
+                semantic_type,
+                dependencies: Vec::new(),
+                occurrences: Vec::new(),
+                recursion_group: None,
+                nominal_identity_preimage: None,
+                declaration: None,
+                body: Value::Null,
+            },
+            body.into(),
+        )
     }
 
     fn inference_application_node(
         id: CheckedNodeId,
         integer_type: &CheckedNodeId,
         operation: &str,
-        arguments: Vec<Value>,
-    ) -> CheckedSemanticNodeV2 {
+        arguments: Vec<CheckedTerm>,
+    ) -> FixtureNode {
         inference_node(
             id,
             "expression",
             "binary",
             integer_type.clone(),
-            serde_json::json!({
-                "term": "application",
-                "operator": if operation.ends_with("negate") { "unary" } else { "binary" },
-                "operation": {"identity": operation},
-                "arguments": arguments,
-            }),
+            CheckedTerm::Application {
+                operator: ApplicationOperator::from_wire(if operation.ends_with("negate") {
+                    "unary"
+                } else {
+                    "binary"
+                })
+                .expect("closed fixture kind"),
+                operation: serde_json::json!({"identity": operation}),
+                result_type: node_id('0'),
+                arguments: arguments,
+            },
         )
     }
 
-    fn reference(id: &CheckedNodeId) -> Value {
-        serde_json::json!({"term": "reference", "target": id})
+    fn reference(id: &CheckedNodeId) -> CheckedTerm {
+        CheckedTerm::Reference { target: id.clone() }
     }
 
-    fn inference_graph(nodes: &[CheckedSemanticNodeV2]) -> Graph<'_> {
+    fn inference_graph(nodes: &[FixtureNode]) -> Graph<'_> {
         nodes.iter().map(|node| (&node.node_id, node)).collect()
     }
 
@@ -4884,7 +4852,7 @@ mod tests {
             "scalar_type",
             "integer",
             integer.clone(),
-            Value::Null,
+            None,
         );
         let missing = node_id('b');
         let root_id = node_id('a');
@@ -4903,13 +4871,16 @@ mod tests {
             })
         );
 
-        let malformed_reference = inference_application_node(
+        // A target-less Reference cannot be constructed through CheckedTerm. An absent
+        // retained body still preserves the private InvalidBody/root-key defense.
+        let missing_body = inference_node(
             root_id.clone(),
-            &integer,
-            "quire.op.integer.negate",
-            vec![serde_json::json!({"term": "reference"})],
+            "expression",
+            "binary",
+            integer.clone(),
+            None,
         );
-        let nodes = [scalar.clone(), malformed_reference];
+        let nodes = [scalar.clone(), missing_body];
         let graph = inference_graph(&nodes);
         assert_eq!(
             infer_integer_range(&graph, &root_id, 2),
@@ -4961,11 +4932,11 @@ mod tests {
                 "value",
                 "literal",
                 integer.clone(),
-                serde_json::json!({
-                    "term": "literal",
-                    "value_kind": value_kind,
-                    "value": literal_value,
-                }),
+                CheckedTerm::Literal {
+                    type_id: node_id('0'),
+                    value_kind: LiteralKind::from_wire(value_kind).expect("closed fixture kind"),
+                    value: serde_json::json!(literal_value),
+                },
             );
             let unary = inference_application_node(
                 root_id.clone(),
@@ -4998,39 +4969,46 @@ mod tests {
             "scalar_type",
             "integer",
             integer.clone(),
-            Value::Null,
+            None,
         );
         let bounded_type = inference_node(
             bounded.clone(),
             "bounded_domain",
             "integer_range",
             integer.clone(),
-            serde_json::json!({
-                "term": "aggregate",
-                "members": [
-                    {"term": "binding", "name": "min", "value": {"term": "literal", "value_kind": "integer", "value": "0"}},
-                    {"term": "binding", "name": "max", "value": {"term": "literal", "value_kind": "integer", "value": "9"}}
-                ]
-            }),
+            CheckedTerm::Aggregate {
+                members: vec![
+                    CheckedTerm::Binding {
+                        name: ("min").into(),
+                        value: Box::new(CheckedTerm::Literal {
+                            type_id: node_id('0'),
+                            value_kind: LiteralKind::Integer,
+                            value: serde_json::json!("0"),
+                        }),
+                    },
+                    CheckedTerm::Binding {
+                        name: ("max").into(),
+                        value: Box::new(CheckedTerm::Literal {
+                            type_id: node_id('0'),
+                            value_kind: LiteralKind::Integer,
+                            value: serde_json::json!("9"),
+                        }),
+                    },
+                ],
+            },
         );
-        let value = inference_node(
-            parameter.clone(),
-            "value",
-            "parameter",
-            bounded,
-            Value::Null,
-        );
+        let value = inference_node(parameter.clone(), "value", "parameter", bounded, None);
         let application = inference_application_node(
             root.clone(),
             &integer,
             "quire.op.integer.add",
             vec![
                 reference(&parameter),
-                serde_json::json!({
-                    "term": "literal",
-                    "value_kind": "integer",
-                    "value": "1"
-                }),
+                CheckedTerm::Literal {
+                    type_id: node_id('0'),
+                    value_kind: LiteralKind::Integer,
+                    value: serde_json::json!("1"),
+                },
             ],
         );
         let nodes = [scalar, bounded_type, value, application];
@@ -5055,39 +5033,46 @@ mod tests {
             "scalar_type",
             "integer",
             integer.clone(),
-            Value::Null,
+            None,
         );
         let bounded_type = inference_node(
             bounded.clone(),
             "bounded_domain",
             "integer_range",
             integer.clone(),
-            serde_json::json!({
-                "term": "aggregate",
-                "members": [
-                    {"term": "binding", "name": "min", "value": {"term": "literal", "value_kind": "integer", "value": "0"}},
-                    {"term": "binding", "name": "max", "value": {"term": "literal", "value_kind": "integer", "value": "9"}}
-                ]
-            }),
+            CheckedTerm::Aggregate {
+                members: vec![
+                    CheckedTerm::Binding {
+                        name: ("min").into(),
+                        value: Box::new(CheckedTerm::Literal {
+                            type_id: node_id('0'),
+                            value_kind: LiteralKind::Integer,
+                            value: serde_json::json!("0"),
+                        }),
+                    },
+                    CheckedTerm::Binding {
+                        name: ("max").into(),
+                        value: Box::new(CheckedTerm::Literal {
+                            type_id: node_id('0'),
+                            value_kind: LiteralKind::Integer,
+                            value: serde_json::json!("9"),
+                        }),
+                    },
+                ],
+            },
         );
-        let value = inference_node(
-            parameter.clone(),
-            "value",
-            "parameter",
-            bounded,
-            Value::Null,
-        );
+        let value = inference_node(parameter.clone(), "value", "parameter", bounded, None);
         let shared_expression = inference_application_node(
             shared.clone(),
             &integer,
             "quire.op.integer.add",
             vec![
                 reference(&parameter),
-                serde_json::json!({
-                    "term": "literal",
-                    "value_kind": "integer",
-                    "value": "1"
-                }),
+                CheckedTerm::Literal {
+                    type_id: node_id('0'),
+                    value_kind: LiteralKind::Integer,
+                    value: serde_json::json!("1"),
+                },
             ],
         );
         let mut nodes = vec![scalar, bounded_type, value, shared_expression];
@@ -5294,8 +5279,16 @@ mod tests {
             .expect("an ir id"),
         };
 
+        let fixture = FixtureNode::new(
+            node.node.clone(),
+            Some(app_term(serde_json::json!({
+                "mode": { "kind": "rounding", "value": "truncate" }
+            }))),
+        );
+        let key = fixture.node_id.clone();
+        let graph: Graph<'_> = [(&key, &fixture)].into_iter().collect();
         assert_eq!(
-            catalogued_operation_identity(&node),
+            catalogued_operation_identity(&graph, &node),
             Err(ExactScalarRefusal::MissingOperationIdentity {
                 node_id: node_id('d'),
             }),
@@ -5310,40 +5303,20 @@ mod tests {
         tag: &str,
         form: &str,
         semantic_type: char,
-        body: Value,
-    ) -> CheckedSemanticNodeV2 {
-        serde_json::from_value(serde_json::json!({
-            "node_id": {"domain": "quire.checked-semantic-node/v1", "digest": digit.to_string().repeat(64)},
-            "schema_version": "quire.checked-semantic-graph/v2",
-            "node_tag": tag,
-            "semantic_form": form,
-            "semantic_type": {"domain": "quire.checked-semantic-node/v1", "digest": semantic_type.to_string().repeat(64)},
-            "dependencies": [],
-            "occurrences": [],
-            "body": body,
-        }))
-        .expect("v2 node")
+        body: impl Into<Option<CheckedTerm>>,
+    ) -> FixtureNode {
+        inference_node(node_id(digit), tag, form, node_id(semantic_type), body)
     }
 
     /// A `{term: binding, name, value: <literal>}` member, the shape QSL emits and IR reads;
     /// the literal carries `type` as FR-322 requires.
-    fn binding_member(name: &str, value: &str) -> Value {
-        serde_json::json!({"term": "binding", "name": name, "value": {
-            "term": "literal",
-            "type": {"domain": "quire.checked-semantic-node/v1", "digest": "1".repeat(64)},
-            "value_kind": "integer",
-            "value": value,
-        }})
+    fn binding_member(name: &str, value: &str) -> CheckedTerm {
+        CheckedTerm::Binding { name: (name).into(), value: Box::new(CheckedTerm::Literal { type_id: serde_json::from_value(serde_json::json!({"domain": "quire.checked-semantic-node/v1", "digest": "1".repeat(64)})).expect("fixture type key"), value_kind: LiteralKind::Integer, value: serde_json::json!(value) }) }
     }
 
     /// A `text`-kind binding member.
-    fn text_member(name: &str, value: &str) -> Value {
-        serde_json::json!({"term": "binding", "name": name, "value": {
-            "term": "literal",
-            "type": {"domain": "quire.checked-semantic-node/v1", "digest": "1".repeat(64)},
-            "value_kind": "text",
-            "value": value,
-        }})
+    fn text_member(name: &str, value: &str) -> CheckedTerm {
+        CheckedTerm::Binding { name: (name).into(), value: Box::new(CheckedTerm::Literal { type_id: serde_json::from_value(serde_json::json!({"domain": "quire.checked-semantic-node/v1", "digest": "1".repeat(64)})).expect("fixture type key"), value_kind: LiteralKind::Text, value: serde_json::json!(value) }) }
     }
 
     fn interval_of(lower: &str, upper: &str) -> IntegerInterval {
@@ -5354,14 +5327,14 @@ mod tests {
         .expect("interval")
     }
 
-    fn range_body(members: Vec<Value>) -> Value {
-        serde_json::json!({"term": "aggregate", "members": members})
+    fn range_body(members: Vec<CheckedTerm>) -> CheckedTerm {
+        CheckedTerm::Aggregate { members: members }
     }
 
     /// Nodes `1` (Integer scalar type), `2` (`Int[0,9]`, an `integer_range` bounded_domain over
     /// `1`), `3` (a parameter typed by `2`), `4` (Text scalar type) and `5` (a parameter typed by
     /// a `text_bounds` bounded_domain `6` over `4`).
-    fn bounded_parameter_nodes() -> Vec<CheckedSemanticNodeV2> {
+    fn bounded_parameter_nodes() -> Vec<FixtureNode> {
         vec![
             v2_node('1', "scalar_type", "integer", '1', range_body(vec![])),
             v2_node(
@@ -5384,10 +5357,13 @@ mod tests {
         ]
     }
 
-    fn reference_to(digit: char) -> Value {
-        serde_json::json!({"term": "reference", "target": {
-            "domain": "quire.checked-semantic-node/v1", "digest": digit.to_string().repeat(64),
-        }})
+    fn reference_to(digit: char) -> CheckedTerm {
+        CheckedTerm::Reference {
+            target: serde_json::from_value(serde_json::json!({
+                "domain": "quire.checked-semantic-node/v1", "digest": digit.to_string().repeat(64),
+            }))
+            .expect("fixture type key"),
+        }
     }
 
     /// A conversion narrows a node only with the catalogued narrow identity and exactly one
@@ -5397,25 +5373,29 @@ mod tests {
     #[test]
     fn tc_024_a_conversion_narrows_only_its_one_referenced_argument() {
         let target = node_id('2');
-        let conversion = |digit, identity: &str, arguments: Vec<Value>| {
+        let conversion = |digit, identity: &str, arguments: Vec<CheckedTerm>| {
             v2_node(
                 digit,
                 "expression",
                 "conversion",
                 '9',
-                serde_json::json!({
-                    "term": "application",
-                    "operator": "convert",
-                    "operation": {"identity": identity},
-                    "arguments": arguments,
-                }),
+                CheckedTerm::Application {
+                    operator: ApplicationOperator::Convert,
+                    operation: serde_json::json!({"identity": identity}),
+                    result_type: node_id('0'),
+                    arguments: arguments,
+                },
             )
         };
-        assert!(narrows(
+        let narrows_fixture = |node: &FixtureNode, target: &CheckedNodeId| {
+            let graph: Graph<'_> = [(&node.node_id, node)].into_iter().collect();
+            narrows(&graph, node, target)
+        };
+        assert!(narrows_fixture(
             &conversion('a', NARROW_IDENTITY, vec![reference_to('2')]),
             &target
         ));
-        assert!(!narrows(
+        assert!(!narrows_fixture(
             &conversion(
                 'b',
                 NARROW_IDENTITY,
@@ -5423,11 +5403,11 @@ mod tests {
             ),
             &target
         ));
-        assert!(!narrows(
+        assert!(!narrows_fixture(
             &conversion('c', "quire.op.numeric.convert", vec![reference_to('2')]),
             &target
         ));
-        assert!(!narrows(
+        assert!(!narrows_fixture(
             &conversion('d', NARROW_IDENTITY, vec![reference_to('3')]),
             &target
         ));
@@ -5462,7 +5442,11 @@ mod tests {
     fn tc_024_integer_range_is_read_from_binding_members_and_refuses_bare_literals() {
         let bound_id = node_id('2');
         let mut nodes = bounded_parameter_nodes();
-        let bare = |value: &str| serde_json::json!({"term": "literal", "value_kind": "integer", "value": value});
+        let bare = |value: &str| CheckedTerm::Literal {
+            type_id: node_id('0'),
+            value_kind: LiteralKind::Integer,
+            value: serde_json::json!(value),
+        };
         nodes.push(v2_node(
             '7',
             "bounded_domain",
@@ -5472,7 +5456,7 @@ mod tests {
         ));
         let graph: Graph<'_> = nodes.iter().map(|node| (&node.node_id, node)).collect();
         let members = |digit: char| {
-            aggregate_members(&graph[&node_id(digit)].body)
+            aggregate_members(graph.term(&node_id(digit)))
                 .expect("aggregate body")
                 .to_vec()
         };
@@ -5485,7 +5469,7 @@ mod tests {
         // Through `Bounds::equal`, as `check_parameters` reads it: the descriptor parameter equals
         // the binding-shaped bound, and the bare one is `UnreadableBound`.
         let node = |bound: char| CompleteContractNodeV2 {
-            node: v2_node('8', "expression", "application", '1', range_body(vec![])),
+            node: v2_node('8', "expression", "application", '1', range_body(vec![])).metadata,
             node_tag: CheckedNodeTag::Expression,
             source_map: vec![],
             semantic_type: node_id('1'),
@@ -5842,15 +5826,32 @@ mod tests {
         }
     }
 
-    fn application_node(body: Value) -> (CheckedNodeId, CheckedSemanticNodeV2) {
+    fn app_term(operation: Value) -> CheckedTerm {
+        CheckedTerm::Application {
+            operator: ApplicationOperator::Binary,
+            operation,
+            result_type: node_id('1'),
+            arguments: Vec::new(),
+        }
+    }
+
+    fn zero_literal() -> CheckedTerm {
+        CheckedTerm::Literal {
+            type_id: node_id('1'),
+            value_kind: LiteralKind::Integer,
+            value: serde_json::json!("0"),
+        }
+    }
+
+    fn application_node(body: impl Into<Option<CheckedTerm>>) -> (CheckedNodeId, FixtureNode) {
         let node = v2_node('a', "expression", "binary", '1', body);
         (node.node_id.clone(), node)
     }
 
     /// The lowered form of a hand-built node, as IR lowering would return it.
-    fn lowered_node(node: &CheckedSemanticNodeV2) -> CompleteContractNodeV2 {
+    fn lowered_node(node: &FixtureNode) -> CompleteContractNodeV2 {
         CompleteContractNodeV2 {
-            node: node.clone(),
+            node: node.metadata.clone(),
             node_tag: CheckedNodeTag::Expression,
             source_map: vec![],
             semantic_type: node.semantic_type.clone(),
@@ -5866,9 +5867,11 @@ mod tests {
         }
     }
 
-    fn derive_hand_built(body: Value) -> Result<ExactScalarOperation, ExactScalarRefusal> {
+    fn derive_hand_built(
+        body: impl Into<Option<CheckedTerm>>,
+    ) -> Result<ExactScalarOperation, ExactScalarRefusal> {
         let (id, node) = application_node(body);
-        let graph = BTreeMap::from([(&id, &node)]);
+        let graph: Graph<'_> = [(&id, &node)].into_iter().collect();
         let record = CompleteLoweringRecordV2::Lowered {
             node: Box::new(lowered_node(&node)),
         };
@@ -5884,8 +5887,8 @@ mod tests {
     #[trace("FR-014-AC-18", "FR-022-AC-8", "TC-024")]
     #[test]
     fn tc_024_derivation_checks_the_graph_and_the_lowering_before_the_identity() {
-        let (id, node) = application_node(serde_json::json!({"term": "literal"}));
-        let graph = BTreeMap::from([(&id, &node)]);
+        let (id, node) = application_node(zero_literal());
+        let graph: Graph<'_> = [(&id, &node)].into_iter().collect();
         let record = CompleteLoweringRecordV2::InvalidInput {
             node_id: id.clone(),
         };
@@ -5905,11 +5908,13 @@ mod tests {
     fn quantity_conversion_confirmation_requires_identity_and_exact_mode() {
         for identity in [QUANTITY_CONVERT_IDENTITY, "quire.op.quantity.add"] {
             for mode in ["exact", "nearest-even"] {
-                let (_, node) = application_node(serde_json::json!({"operation": {
+                let (_, node) = application_node(app_term(serde_json::json!({
                     "identity": identity, "mode": {"kind":"rounding", "value": mode}
-                }}));
+                })));
+                let graph: Graph<'_> = [(&node.node_id, &node)].into_iter().collect();
                 assert_eq!(
                     operation_confirmed(
+                        &graph,
                         &lowered_node(&node),
                         &ExactScalarOperation::QuantityConversion
                     )
@@ -5925,16 +5930,16 @@ mod tests {
     #[test]
     fn quantity_conversion_rejects_scalar_targets_after_mode() {
         for form in ["decimal", "integer", "compound_unit"] {
-            let target = v2_node('b', "scalar_type", form, 'b', serde_json::json!({}));
+            let target = v2_node('b', "scalar_type", form, 'b', None);
             for mode in ["exact", "nearest-even", "toward-zero"] {
-                let (id, node) = application_node(serde_json::json!({
-                    "term": "application", "operation": {
-                        "identity": QUANTITY_CONVERT_IDENTITY,
-                        "mode": {"kind": "rounding", "value": mode},
-                        "member": {"kind": "type_argument", "declaration": target.node_id},
-                    }
-                }));
-                let graph = BTreeMap::from([(&id, &node), (&target.node_id, &target)]);
+                let (id, node) = application_node(app_term(serde_json::json!({
+                    "identity": QUANTITY_CONVERT_IDENTITY,
+                    "mode": {"kind": "rounding", "value": mode},
+                    "member": {"kind": "type_argument", "declaration": target.node_id},
+                })));
+                let graph: Graph<'_> = [(&id, &node), (&target.node_id, &target)]
+                    .into_iter()
+                    .collect();
                 let record = CompleteLoweringRecordV2::Lowered {
                     node: Box::new(lowered_node(&node)),
                 };
@@ -5963,19 +5968,19 @@ mod tests {
     #[test]
     fn tc_024_derivation_refuses_a_missing_identity_a_non_application_and_a_foreign_identity() {
         assert_eq!(
-            derive_hand_built(serde_json::json!({"term": "application", "operation": {}})),
+            derive_hand_built(app_term(serde_json::json!({}))),
             Err(no_claim(ClaimDerivationRefusal::MissingOperationIdentity))
         );
         assert_eq!(
-            derive_hand_built(serde_json::json!({"term": "literal"})),
+            derive_hand_built(zero_literal()),
             Err(no_claim(ClaimDerivationRefusal::NotApplication {
                 node_tag: "expression".to_owned()
             }))
         );
         assert_eq!(
-            derive_hand_built(serde_json::json!({
-                "term": "application", "operation": {"identity": "quire.op.rational.eq"}
-            })),
+            derive_hand_built(app_term(
+                serde_json::json!({"identity": "quire.op.rational.eq"})
+            )),
             Err(no_claim(ClaimDerivationRefusal::OperationNotDerivable {
                 operation_identity: "quire.op.rational.eq".to_owned()
             }))
@@ -5988,7 +5993,7 @@ mod tests {
     #[test]
     fn tc_024_derivation_reads_the_division_profile_from_the_laws_and_nowhere_else() {
         let laws = |identities: &[&str]| {
-            serde_json::json!({"term": "application", "operation": {
+            app_term(serde_json::json!({
                 "identity": "quire.op.integer.div",
                 "laws": identities
                     .iter()
@@ -5996,12 +6001,11 @@ mod tests {
                         "role": "integer_division", "definition": {"identity": identity}
                     }))
                     .collect::<Vec<_>>(),
-            }})
+            }))
         };
-        let (id, node) = application_node(laws(&[]));
-        let graph = BTreeMap::from([(&id, &node)]);
-        let profile_of = |body: Value| {
-            let (_, node) = application_node(body);
+        let profile_of = |body: CheckedTerm| {
+            let (id, node) = application_node(body);
+            let graph: Graph<'_> = [(&id, &node)].into_iter().collect();
             let lowered = lowered_node(&node);
             Derivation {
                 graph: &graph,
@@ -6037,11 +6041,10 @@ mod tests {
     #[test]
     fn tc_024_derivation_requires_the_mode_to_agree_with_the_bound_rounding() {
         let derivation_of = |mode: Value| {
-            let (id, node) = application_node(serde_json::json!({
-                "term": "application",
-                "operation": {"identity": "quire.op.decimal.add", "mode": mode},
-            }));
-            let graph = BTreeMap::from([(&id, &node)]);
+            let (id, node) = application_node(app_term(
+                serde_json::json!({"identity": "quire.op.decimal.add", "mode": mode}),
+            ));
+            let graph: Graph<'_> = [(&id, &node)].into_iter().collect();
             let lowered = lowered_node(&node);
             Derivation {
                 graph: &graph,

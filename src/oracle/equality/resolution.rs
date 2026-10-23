@@ -7,6 +7,7 @@ use super::{
     CompositeEqualityRefusal, CompositeShape, FieldDeclaration, Graph, ItemCheckError, NodeKey,
     Presence, TypeClosure, ValueType, COLLECTION_BOUNDS_MEMBERS,
 };
+use quire_contract_model::CheckedTerm;
 use std::collections::{BTreeMap, BTreeSet};
 
 enum Frame {
@@ -75,7 +76,7 @@ fn collection_parts(
     let malformed = || CompositeEqualityRefusal::MalformedComposite {
         composite: id.clone(),
     };
-    let members = aggregate_members(&node.body).ok_or_else(malformed)?;
+    let members = aggregate_members(graph.term(&node.node_id)).ok_or_else(malformed)?;
     let (element_term, bound) = match (members, external_bound) {
         ([element], Some(bound)) if &*node.semantic_form == "sequence" => (element, bound),
         ([element], None) if &*node.semantic_form == "sequence" => {
@@ -117,7 +118,7 @@ fn collection_parts(
     let unreadable = || CompositeEqualityRefusal::UnreadableBound {
         bound: bound.node_id.clone(),
     };
-    let terms = aggregate_members(&bound.body).ok_or_else(unreadable)?;
+    let terms = aggregate_members(graph.term(&bound.node_id)).ok_or_else(unreadable)?;
     let [minimum, maximum] =
         bound_members(terms, COLLECTION_BOUNDS_MEMBERS).ok_or_else(unreadable)?;
     let minimum = literal_count(minimum).ok_or_else(unreadable)?;
@@ -166,7 +167,7 @@ pub(super) fn resolve_type(
                         } else {
                             bounds_by_type.get(&id).map_or(&[][..], Vec::as_slice)
                         };
-                        values.push(resolve_scalar(admitted, closure, bounds, &id, node)?);
+                        values.push(resolve_scalar(admitted, graph, closure, bounds, &id, node)?);
                     }
                     Some(CheckedNodeTag::BoundedDomain) => {
                         let base = lookup(graph, &node.semantic_type)?;
@@ -212,6 +213,7 @@ pub(super) fn resolve_type(
                             }
                             values.push(resolve_scalar(
                                 admitted,
+                                graph,
                                 closure,
                                 core::slice::from_ref(&node),
                                 &id,
@@ -229,11 +231,12 @@ pub(super) fn resolve_type(
                                 values.push(ValueType::Composite(key));
                                 continue;
                             }
-                            let members = aggregate_members(&node.body).ok_or_else(|| {
-                                CompositeEqualityRefusal::MalformedComposite {
-                                    composite: id.clone(),
-                                }
-                            })?;
+                            let members =
+                                aggregate_members(graph.term(&node.node_id)).ok_or_else(|| {
+                                    CompositeEqualityRefusal::MalformedComposite {
+                                        composite: id.clone(),
+                                    }
+                                })?;
                             let malformed = || CompositeEqualityRefusal::MalformedComposite {
                                 composite: id.clone(),
                             };
@@ -289,24 +292,21 @@ pub(super) fn resolve_type(
                                 .union_members()
                                 .ok_or_else(mismatch)?
                                 .to_vec();
-                            let wire_members =
-                                aggregate_members(&node.body).ok_or_else(mismatch)?;
+                            let wire_members = aggregate_members(graph.term(&node.node_id))
+                                .ok_or_else(mismatch)?;
                             if wire_members.len() != members.len() {
                                 return Err(mismatch().into());
                             }
                             let mut children = Vec::new();
                             for (wire, member) in wire_members.iter().zip(&members) {
-                                if wire.get("term").and_then(serde_json::Value::as_str)
-                                    != Some("binding")
-                                    || wire.get("name").and_then(serde_json::Value::as_str)
-                                        != Some(member.identifier().as_str())
-                                {
+                                let CheckedTerm::Binding { name, value } = wire else {
+                                    return Err(mismatch().into());
+                                };
+                                if name.as_ref() != member.identifier().as_str() {
                                     return Err(mismatch().into());
                                 }
-                                let payload = wire
-                                    .get("value")
-                                    .and_then(aggregate_members)
-                                    .ok_or_else(mismatch)?;
+                                let payload =
+                                    aggregate_members(value.as_ref()).ok_or_else(mismatch)?;
                                 if payload.len() != member.payload().len() {
                                     return Err(mismatch().into());
                                 }
@@ -326,11 +326,12 @@ pub(super) fn resolve_type(
                         }
                         "option" => {
                             entered(&mut active, &id)?;
-                            let members = aggregate_members(&node.body).ok_or_else(|| {
-                                CompositeEqualityRefusal::MalformedComposite {
-                                    composite: id.clone(),
-                                }
-                            })?;
+                            let members =
+                                aggregate_members(graph.term(&node.node_id)).ok_or_else(|| {
+                                    CompositeEqualityRefusal::MalformedComposite {
+                                        composite: id.clone(),
+                                    }
+                                })?;
                             let [payload] = members else {
                                 return Err(CompositeEqualityRefusal::MalformedComposite {
                                     composite: id,
@@ -374,14 +375,14 @@ pub(super) fn resolve_type(
                                 node_tag: "composite_type.reference",
                                 issue: super::UpstreamBlocker::QuireSpecLanguage120,
                             }
-                            .into())
+                            .into());
                         }
                         _ => {
                             return Err(CompositeEqualityRefusal::Unsupported {
                                 unsupported_node_id: id,
                                 node_tag: "composite_type",
                             }
-                            .into())
+                            .into());
                         }
                     },
                     _ => {
@@ -389,7 +390,7 @@ pub(super) fn resolve_type(
                             unsupported_node_id: id,
                             node_tag: "unknown",
                         }
-                        .into())
+                        .into());
                     }
                 }
             }

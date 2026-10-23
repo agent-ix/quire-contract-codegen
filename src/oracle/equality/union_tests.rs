@@ -38,12 +38,7 @@ fn declaration<'a>(
 }
 
 fn closure(package: &CheckedPackageV2, context: &qsl_replay::AdmittedContext) -> TypeClosure {
-    let graph = package
-        .graph()
-        .nodes
-        .iter()
-        .map(|node| (&node.node_id, node))
-        .collect();
+    let graph = Graph::from_checked(package);
     let root = declaration(context, "Wrap");
     let id = package
         .graph()
