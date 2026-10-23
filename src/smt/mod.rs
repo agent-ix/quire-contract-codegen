@@ -3,6 +3,14 @@
 //! This module classifies only the producer's two associated solver records.
 //! QSL owns the query encoder, inductive method outcome and terminal record.
 
+use std::{ffi::OsString, path::PathBuf};
+
+use quire_exact::Cancel;
+
+use crate::process::{
+    run_bounded_process, ProcessError, ProcessLimits, ProcessOutcome, ProcessRequest, ProcessRun,
+};
+
 /// The per-query resource limit reached by a solver invocation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ReachedLimit {
@@ -33,6 +41,8 @@ pub enum SolverStatus {
     MalformedResponse,
     /// The process failed independently of a reached resource limit.
     ProcessFailed,
+    /// Caller cancellation stopped this query before a complete response.
+    Cancelled,
 }
 
 /// The exact QSL-owned selection and query bytes an invocation represents.
@@ -66,6 +76,87 @@ pub struct QueryRun<Product, Item, Instance, Kind> {
     pub association: QueryAssociation<Product, Item, Instance, Kind>,
     /// The solver response or typed non-success.
     pub status: SolverStatus,
+}
+
+/// The selected child invocation and its associated, interpreted response.
+///
+/// The process record keeps the actual executable, arguments, limits, completion
+/// and bounded raw streams. The association keeps the exact QSL query bytes.
+#[derive(Debug)]
+pub struct SolverExecution<Product, Item, Instance, Kind> {
+    /// The typed query identity and non-proof or response status.
+    pub query: QueryRun<Product, Item, Instance, Kind>,
+    /// The exact owned child invocation record.
+    pub process: ProcessRun,
+}
+
+/// Invoke the selected solver directly for exactly one QSL-authored query.
+///
+/// This records a solver response; it never constructs a QSL outcome.
+pub fn run_solver_query<Product, Item, Instance, Kind>(
+    association: QueryAssociation<Product, Item, Instance, Kind>,
+    executable: PathBuf,
+    arguments: Vec<OsString>,
+    limits: ProcessLimits,
+    cancel: Cancel,
+) -> Result<SolverExecution<Product, Item, Instance, Kind>, ProcessError> {
+    let process = run_bounded_process(ProcessRequest {
+        executable,
+        arguments,
+        stdin: association.query_bytes.clone(),
+        limits,
+        cancel,
+    })?;
+    let status = match &process.outcome {
+        ProcessOutcome::MissingTool => SolverStatus::MissingTool,
+        ProcessOutcome::InputOverLimit => SolverStatus::Stopped(ReachedLimit::InputBytes),
+        ProcessOutcome::TimedOut => SolverStatus::Stopped(ReachedLimit::WallClock),
+        ProcessOutcome::MemoryExhausted => SolverStatus::Stopped(ReachedLimit::MemoryBytes),
+        ProcessOutcome::OutputOverLimit { .. } => SolverStatus::Stopped(ReachedLimit::OutputBytes),
+        ProcessOutcome::Cancelled { .. } => SolverStatus::Cancelled,
+        ProcessOutcome::Completed { success: true, .. } => process
+            .stdout
+            .as_deref()
+            .map_or(SolverStatus::MalformedResponse, parse_solver_status),
+        ProcessOutcome::Completed { success: false, .. }
+        | ProcessOutcome::MemoryUnobserved { .. }
+        | ProcessOutcome::OutputUnread { .. }
+        | ProcessOutcome::InputUnread { .. } => SolverStatus::ProcessFailed,
+    };
+    Ok(SolverExecution {
+        query: QueryRun {
+            association,
+            status,
+        },
+        process,
+    })
+}
+
+fn parse_solver_status(stdout: &[u8]) -> SolverStatus {
+    let mut status = None;
+    for line in stdout.split(|byte| *byte == b'\n') {
+        let line = line.trim_ascii();
+        if line.is_empty() || line.starts_with(b";") || line == b"success" {
+            continue;
+        }
+        if line.starts_with(b"(error") {
+            return SolverStatus::MalformedResponse;
+        }
+        let response = match line {
+            b"sat" => Some(SolverStatus::Sat),
+            b"unsat" => Some(SolverStatus::Unsat),
+            b"unknown" => Some(SolverStatus::Unknown),
+            _ => None,
+        };
+        if let Some(response) = response {
+            if status.replace(response).is_some() {
+                return SolverStatus::MalformedResponse;
+            }
+        } else if status.is_none() {
+            return SolverStatus::MalformedResponse;
+        }
+    }
+    status.unwrap_or(SolverStatus::MalformedResponse)
 }
 
 /// CG's assessment of a base/step pair as run evidence only.
@@ -112,6 +203,7 @@ pub fn classify_pair<Product: Eq, Item: Eq, Instance: Eq, Kind: Eq>(
                 | SolverStatus::Stopped(_)
                 | SolverStatus::MalformedResponse
                 | SolverStatus::ProcessFailed
+                | SolverStatus::Cancelled
         ) {
             return PairEvidence::NonProof(status);
         }

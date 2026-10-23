@@ -1,10 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::num::NonZeroU64;
+use std::{num::NonZeroUsize, time::Duration};
 
 use ix_trace_rs::trace;
+use quire_exact::Cancel;
 
-use super::{classify_pair, PairEvidence, QueryAssociation, QueryRun, ReachedLimit, SolverStatus};
+use super::{
+    classify_pair, run_solver_query, PairEvidence, QueryAssociation, QueryRun, ReachedLimit,
+    SolverStatus,
+};
+use crate::process::{ProcessLimits, ProcessOutcome};
 
 type Association = QueryAssociation<&'static str, &'static str, &'static str, &'static str>;
 type Run = QueryRun<&'static str, &'static str, &'static str, &'static str>;
@@ -146,4 +152,115 @@ fn solver_responses_do_not_become_terminal_proof_or_refutation() {
         ),
         PairEvidence::NonProof(SolverStatus::Stopped(ReachedLimit::MemoryBytes))
     );
+}
+
+fn process_limits(input_bytes: usize) -> ProcessLimits {
+    ProcessLimits {
+        input_bytes: NonZeroUsize::new(input_bytes).expect("finite input limit"),
+        wall_clock: Duration::from_secs(5),
+        memory_bytes: NonZeroU64::new(128 * 1024 * 1024).expect("finite memory limit"),
+        output_bytes: NonZeroUsize::new(1024).expect("finite capture limit"),
+    }
+}
+
+#[trace("TC-059", "FR-045-AC-2", "FR-045-AC-3")]
+#[test]
+fn completed_solver_run_keeps_exact_query_and_bounded_raw_response() {
+    let association = QueryAssociation {
+        query_bytes: b"unsat\n".to_vec(),
+        ..base()
+    };
+    let execution = run_solver_query(
+        association.clone(),
+        "/usr/bin/cat".into(),
+        vec![],
+        process_limits(1024),
+        Cancel::new(),
+    )
+    .expect("owned direct child");
+    assert_eq!(execution.query.association, association);
+    assert_eq!(execution.query.status, SolverStatus::Unsat);
+    assert!(execution.process.started);
+    assert!(matches!(
+        execution.process.outcome,
+        ProcessOutcome::Completed {
+            success: true,
+            exit_code: Some(0)
+        }
+    ));
+    assert_eq!(
+        execution.process.stdout.as_deref(),
+        Some(b"unsat\n".as_slice())
+    );
+    assert_eq!(execution.process.stderr.as_deref(), Some(b"".as_slice()));
+}
+
+#[trace("TC-059", "FR-045-AC-2", "FR-045-AC-3")]
+#[test]
+fn excess_input_and_conflicting_status_never_become_unsat_evidence() {
+    let blocked = run_solver_query(
+        base(),
+        "/usr/bin/cat".into(),
+        vec![],
+        process_limits(1),
+        Cancel::new(),
+    )
+    .expect("input preflight");
+    assert!(!blocked.process.started);
+    assert_eq!(
+        blocked.query.status,
+        SolverStatus::Stopped(ReachedLimit::InputBytes)
+    );
+    assert!(matches!(
+        blocked.process.outcome,
+        ProcessOutcome::InputOverLimit
+    ));
+
+    let conflicting = run_solver_query(
+        QueryAssociation {
+            query_bytes: b"unsat\nsat\n".to_vec(),
+            ..base()
+        },
+        "/usr/bin/cat".into(),
+        vec![],
+        process_limits(1024),
+        Cancel::new(),
+    )
+    .expect("completed direct child");
+    assert_eq!(conflicting.query.status, SolverStatus::MalformedResponse);
+    assert_eq!(
+        conflicting.process.stdout.as_deref(),
+        Some(b"unsat\nsat\n".as_slice())
+    );
+
+    let missing = run_solver_query(
+        base(),
+        "/nonexistent/cg-ir974-solver".into(),
+        vec![],
+        process_limits(1024),
+        Cancel::new(),
+    )
+    .expect("missing executable is a typed result");
+    assert!(!missing.process.started);
+    assert_eq!(missing.query.status, SolverStatus::MissingTool);
+
+    let failed = run_solver_query(
+        QueryAssociation {
+            query_bytes: Vec::new(),
+            ..base()
+        },
+        "/usr/bin/false".into(),
+        vec![],
+        process_limits(1024),
+        Cancel::new(),
+    )
+    .expect("nonzero exit is a typed result");
+    assert_eq!(failed.query.status, SolverStatus::ProcessFailed);
+    assert!(matches!(
+        failed.process.outcome,
+        ProcessOutcome::Completed {
+            success: false,
+            exit_code: Some(1)
+        }
+    ));
 }
