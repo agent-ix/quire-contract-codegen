@@ -47,8 +47,12 @@ mod declaration_lookup_tests {
                 "requirements":[{"id":"FR-100","revision":1,"source":span(1),
                     "clauses":[{"id":"amount-check","kind":"postcondition",
                         "anchor":anchor,"source":span(2),
-                        "body":{"node":"reference","identity":{"requirement":owner,
-                            "kind":"state","observation":"post","path":["amount"]}}}]}]},
+                        "body":{"node":"composite","children":[
+                            {"node":"reference","identity":{"requirement":owner,
+                                "kind":"state","observation":"post","path":["amount"]}},
+                            {"node":"reference","identity":{"requirement":owner,
+                                "kind":"state","observation":"pre","path":["amount"]}}
+                        ]}}]}]},
             "bindings":[{"clause":{"requirement":owner,"clause":"amount-check"},
                 "expression":{"owner":owner,"types":[],"values":values,"functions":[],
                     "expression":{"node":"compare","operator":"equal",
