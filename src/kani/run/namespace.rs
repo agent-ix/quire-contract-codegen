@@ -522,7 +522,7 @@ mod tests {
     }
 
     /// The first empty sample refuses; a separate subsequent owner call may confirm teardown.
-    #[trace("FR-017-AC-24", "FR-040-AC-4")]
+    #[trace("FR-017-AC-55")]
     #[test]
     fn empty_namespace_confirmation_refuses_before_later_real_confirmation() {
         let confirmation = Arc::new(OmittedFirstConfirmation::default());

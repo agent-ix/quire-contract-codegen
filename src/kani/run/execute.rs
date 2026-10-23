@@ -2816,7 +2816,7 @@ exec sleep 45
     }
 
     /// Missing readiness from the owned pidfd still refuses public evidence after real teardown.
-    #[trace("FR-017-AC-24", "FR-040-AC-4")]
+    #[trace("FR-017-AC-55")]
     #[cfg(target_os = "linux")]
     #[test]
     fn omitted_namespace_confirmation_refuses_public_evidence() {
