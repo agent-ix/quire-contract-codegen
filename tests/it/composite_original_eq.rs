@@ -730,6 +730,7 @@ fn tc_035_original_composite_request_requires_its_own_packet() {
         request.wire().replay_target.occurrence_key.as_ref(),
         packet.occurrence_key.as_ref()
     );
+    assert_eq!(request.wire().backend, packet.backend.as_deref().unwrap());
     let readback = ReplayRequest::decode(request.wire().clone(), ReplayLimits::default())
         .expect("the packet-backed request has a typed QSL readback");
     assert_eq!(

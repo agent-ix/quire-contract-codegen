@@ -30,6 +30,8 @@ use super::{
     function::{DependencyLockError, ReplayInputs},
 };
 
+const PARITY_PRODUCER: &str = "quire-contract-codegen";
+
 /// A pre-invocation construction refusal. No QSL report or terminal value exists on this path.
 #[derive(Debug)]
 pub enum CompositeBuildError {
@@ -407,7 +409,7 @@ impl OriginalCompositeEqContext {
             profile_selections: Some(Vec::new()),
             run_limits: Some(self.inputs.accounting_limits),
             declared_domains: Some(self.inputs.declared_domains.clone()),
-            backend: Some("quire-contract-codegen".to_owned()),
+            backend: Some(PARITY_PRODUCER.to_owned()),
             trace_position: Some(None),
             source: Some(ReplaySource::Input(Vec::new())),
             family_payload: Some(NoPayload),
@@ -475,7 +477,7 @@ impl OriginalCompositeEqContext {
                 CompositePacketMember::Domains,
             ));
         }
-        if envelope.backend().as_str() != "quire-contract-codegen" {
+        if envelope.backend().as_str() != PARITY_PRODUCER {
             return Err(CompositeBuildError::PacketMismatch(
                 CompositePacketMember::Backend,
             ));
@@ -495,13 +497,16 @@ impl OriginalCompositeEqContext {
                 CompositePacketMember::Target,
             ));
         };
-        let wire = self.inputs.wire(
+        let mut wire = self.inputs.wire(
             envelope.package_id(),
             RequestTargetWire::function(name.clone(), envelope.occurrence_key().clone()),
             envelope.source().clone(),
             *envelope.obligation_identity().as_bytes(),
             &[],
         );
+        // ReplayInputs is shared with Kani witness paths; input parity's producer is this
+        // checked-claim context, so retain the admitted packet's backend identity here.
+        wire.backend = envelope.backend().as_str().to_owned();
         self.check_recompiled_context(&wire)?;
         Ok(OriginalCompositeEqRequest {
             wire,
