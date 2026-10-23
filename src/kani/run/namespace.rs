@@ -491,11 +491,11 @@ mod tests {
 
     /// An empty first observation cannot establish teardown, even if a later poll can.
     #[derive(Debug, Default)]
-    struct DelayedConfirmation {
+    struct OmittedFirstConfirmation {
         observations: AtomicUsize,
     }
 
-    impl PollOperation for DelayedConfirmation {
+    impl PollOperation for OmittedFirstConfirmation {
         fn poll(
             &self,
             fds: &mut [PollFd<'_>],
@@ -503,6 +503,19 @@ mod tests {
         ) -> Result<usize, rustix::io::Errno> {
             if self.observations.fetch_add(1, Ordering::AcqRel) == 0 {
                 return Ok(0);
+            }
+            let ready = poll(
+                fds,
+                Some(&Timespec {
+                    tv_sec: 30,
+                    tv_nsec: 0,
+                }),
+            )?;
+            if ready == 0 || !fds.iter().any(|fd| fd.revents().contains(PollFlags::IN)) {
+                return Err(rustix::io::Errno::TIMEDOUT);
+            }
+            for fd in fds.iter_mut() {
+                fd.clear_revents();
             }
             poll(fds, timeout)
         }
@@ -512,7 +525,7 @@ mod tests {
     #[trace("FR-017-AC-24", "FR-040-AC-4")]
     #[test]
     fn empty_namespace_confirmation_refuses_before_later_real_confirmation() {
-        let confirmation = Arc::new(DelayedConfirmation::default());
+        let confirmation = Arc::new(OmittedFirstConfirmation::default());
         let (mut command, mut owner) =
             NamespaceOwner::prepare(BackendCommand::new("true"), confirmation.clone()).unwrap();
         command
