@@ -26,8 +26,12 @@ mod kani;
 pub mod oracle;
 // The publication subsystem.
 mod publication;
+// Shared bounded child execution for proof backends and SMT solvers.
+pub use kani::run::process;
 // The routed subsystem.
 mod routed;
+// CG-owned solver run evidence, implemented in the routed subsystem.
+pub use routed::smt;
 // The replay subsystem.
 mod replay;
 // The evidence subsystem.

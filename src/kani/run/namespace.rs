@@ -63,7 +63,6 @@ impl BackendCommand {
             read_only_binds: Vec::new(),
         }
     }
-    #[cfg(test)]
     pub(super) fn arg(&mut self, argument: impl AsRef<OsStr>) -> &mut Self {
         self.arguments.push(argument.as_ref().to_owned());
         self
@@ -487,6 +486,72 @@ mod tests {
     use ix_trace_rs::trace;
     use std::os::unix::process::CommandExt;
     use std::process::Stdio;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    /// An empty first observation cannot establish teardown, even if a later poll can.
+    #[derive(Debug, Default)]
+    struct OmittedFirstConfirmation {
+        observations: AtomicUsize,
+    }
+
+    impl PollOperation for OmittedFirstConfirmation {
+        fn poll(
+            &self,
+            fds: &mut [PollFd<'_>],
+            timeout: Option<&Timespec>,
+        ) -> Result<usize, rustix::io::Errno> {
+            if self.observations.fetch_add(1, Ordering::AcqRel) == 0 {
+                return Ok(0);
+            }
+            let ready = poll(
+                fds,
+                Some(&Timespec {
+                    tv_sec: 30,
+                    tv_nsec: 0,
+                }),
+            )?;
+            if ready == 0 || !fds.iter().any(|fd| fd.revents().contains(PollFlags::IN)) {
+                return Err(rustix::io::Errno::TIMEDOUT);
+            }
+            for fd in fds.iter_mut() {
+                fd.clear_revents();
+            }
+            poll(fds, timeout)
+        }
+    }
+
+    /// The first empty sample refuses; a separate subsequent owner call may confirm teardown.
+    #[trace("FR-017-AC-55")]
+    #[test]
+    fn empty_namespace_confirmation_refuses_before_later_real_confirmation() {
+        let confirmation = Arc::new(OmittedFirstConfirmation::default());
+        let (mut command, mut owner) =
+            NamespaceOwner::prepare(BackendCommand::new("true"), confirmation.clone()).unwrap();
+        command
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .process_group(0);
+        let mut child = command.spawn().unwrap();
+        drop(command);
+        owner.attach(&child).unwrap();
+        let mut observer =
+            super::super::memory::MemoryObserver::prepare(Path::new("/proc")).unwrap();
+        owner
+            .dispatch(Some(Instant::now() + Duration::from_secs(5)), &mut observer)
+            .unwrap();
+        let error = owner
+            .cleanup()
+            .expect_err("an empty first sample cannot confirm teardown");
+        assert_eq!(error.to_string(), "namespace teardown was not confirmed");
+        assert_eq!(confirmation.observations.load(Ordering::Acquire), 1);
+        assert!(!owner.cleaned);
+        owner
+            .cleanup()
+            .expect("a separate real poll confirms teardown");
+        assert!(confirmation.observations.load(Ordering::Acquire) >= 2);
+        assert!(ready(&owner.init.as_ref().unwrap().2));
+        child.wait().unwrap();
+    }
 
     fn ready(handle: &OwnedFd) -> bool {
         let mut fds = [PollFd::new(handle, PollFlags::IN)];

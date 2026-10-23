@@ -60,9 +60,55 @@ fn arguments<'a>(value: &'a Value, operator: &str, identity: &str) -> Option<&'a
         .flatten()
 }
 
-struct Reader<'a> {
-    package: &'a CheckedPackageV2,
+/// First occurrence of each checked graph node, retained for repeated clause lookups.
+pub(crate) struct ClauseNodeIndex<'a> {
     nodes: BTreeMap<&'a CheckedNodeId, &'a CheckedSemanticNodeV2>,
+}
+
+impl<'a> ClauseNodeIndex<'a> {
+    /// Read graph nodes once, keeping the first node for duplicate identities.
+    pub(crate) fn from_nodes(
+        graph_nodes: impl IntoIterator<Item = &'a CheckedSemanticNodeV2>,
+    ) -> Self {
+        let mut nodes = BTreeMap::new();
+        for node in graph_nodes {
+            nodes.entry(&node.node_id).or_insert(node);
+        }
+        Self { nodes }
+    }
+
+    /// Look up an admitted node without scanning the graph again.
+    pub(crate) fn node(&self, id: &CheckedNodeId) -> Option<&'a CheckedSemanticNodeV2> {
+        self.nodes.get(id).copied()
+    }
+}
+
+/// One admitted package and its node lookup, shared by clause planning and body reading.
+pub(crate) struct ClauseGraphView<'a> {
+    package: &'a CheckedPackageV2,
+    index: ClauseNodeIndex<'a>,
+}
+
+impl<'a> ClauseGraphView<'a> {
+    pub(crate) fn new(package: &'a CheckedPackageV2) -> Self {
+        Self {
+            package,
+            index: ClauseNodeIndex::from_nodes(package.graph().nodes.iter()),
+        }
+    }
+
+    pub(crate) fn package(&self) -> &'a CheckedPackageV2 {
+        self.package
+    }
+
+    pub(crate) fn node(&self, id: &CheckedNodeId) -> Option<&'a CheckedSemanticNodeV2> {
+        self.index.node(id)
+    }
+}
+
+struct Reader<'a, 'view> {
+    package: &'a CheckedPackageV2,
+    nodes: &'view ClauseGraphView<'a>,
     self_id: CheckedNodeId,
     allowed_parameters: BTreeSet<CheckedNodeId>,
     inputs: BTreeSet<ClauseInput>,
@@ -70,9 +116,9 @@ struct Reader<'a> {
     visits: usize,
 }
 
-impl Reader<'_> {
+impl Reader<'_, '_> {
     fn node(&self, id: &CheckedNodeId) -> Option<&CheckedSemanticNodeV2> {
-        self.nodes.get(id).copied()
+        self.nodes.node(id)
     }
 
     fn term(&mut self, value: &Value, side: ClauseInputSide) -> Option<ClauseTerm> {
@@ -248,16 +294,11 @@ impl Reader<'_> {
 }
 
 pub(crate) fn read_clause(
-    package: &CheckedPackageV2,
     id: &CheckedNodeId,
+    nodes: &ClauseGraphView<'_>,
 ) -> Option<ClauseCondition> {
-    let nodes: BTreeMap<_, _> = package
-        .graph()
-        .nodes
-        .iter()
-        .map(|node| (&node.node_id, node))
-        .collect();
-    let clause = nodes.get(id)?;
+    let package = nodes.package();
+    let clause = nodes.node(id)?;
     if &*clause.node_tag != "state" || &*clause.semantic_form != "state_clause" {
         return None;
     }

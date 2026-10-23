@@ -9,6 +9,7 @@ use quire_contract_model::{
     CheckedSemanticNodeV2,
 };
 use serde_json::Value;
+use std::{borrow::Borrow, collections::BTreeMap};
 
 use crate::{
     core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES},
@@ -84,6 +85,85 @@ pub(super) struct LoweredCollectionClaim {
     pub(super) field: CollectionFieldDomain,
 }
 
+/// First admitted graph entries, retained in source order for collection lowering.
+pub(super) struct CollectionGraph<'a> {
+    package: &'a CheckedPackageV2,
+    index: CollectionNodeIndex<'a>,
+}
+
+struct CollectionNodeIndex<'a> {
+    by_id: FirstMatchIndex<&'a CheckedNodeId, &'a CheckedSemanticNodeV2>,
+    by_digest: FirstMatchIndex<&'a str, &'a CheckedSemanticNodeV2>,
+}
+
+#[cfg(test)]
+thread_local! {
+    static COLLECTION_GRAPH_BUILD_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static COLLECTION_NODE_INDEX_BUILD_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Read and reset the number of real admitted collection graph constructions on this test thread.
+#[cfg(test)]
+pub(crate) fn take_collection_graph_builds() -> usize {
+    COLLECTION_GRAPH_BUILD_COUNT.with(|count| count.replace(0))
+}
+
+struct FirstMatchIndex<K, V> {
+    entries: BTreeMap<K, V>,
+}
+
+impl<K: Ord, V> FirstMatchIndex<K, V> {
+    fn new() -> Self {
+        Self {
+            entries: BTreeMap::new(),
+        }
+    }
+
+    fn insert_first(&mut self, key: K, value: V) {
+        self.entries.entry(key).or_insert(value);
+    }
+
+    fn get<Q: Ord + ?Sized>(&self, key: &Q) -> Option<&V>
+    where
+        K: Borrow<Q>,
+    {
+        self.entries.get(key)
+    }
+}
+
+impl<'a> CollectionGraph<'a> {
+    pub(super) fn new(package: &'a CheckedPackageV2) -> Self {
+        #[cfg(test)]
+        COLLECTION_GRAPH_BUILD_COUNT.with(|count| count.set(count.get() + 1));
+        Self {
+            package,
+            index: CollectionNodeIndex::from_nodes(package.graph().nodes.iter()),
+        }
+    }
+}
+
+impl<'a> CollectionNodeIndex<'a> {
+    fn from_nodes(nodes: impl IntoIterator<Item = &'a CheckedSemanticNodeV2>) -> Self {
+        #[cfg(test)]
+        COLLECTION_NODE_INDEX_BUILD_COUNT.with(|count| count.set(count.get() + 1));
+        let mut by_id = FirstMatchIndex::new();
+        let mut by_digest = FirstMatchIndex::new();
+        for node in nodes {
+            by_id.insert_first(&node.node_id, node);
+            by_digest.insert_first(node.node_id.digest.as_ref(), node);
+        }
+        Self { by_id, by_digest }
+    }
+
+    fn node(&self, id: &CheckedNodeId) -> Option<&'a CheckedSemanticNodeV2> {
+        self.by_id.get(id).copied()
+    }
+
+    fn declaration(&self, digest: &str) -> Option<&'a CheckedSemanticNodeV2> {
+        self.by_digest.get(digest).copied()
+    }
+}
+
 /// Canonical digest of the complete semantic identity used to shorten generated Rust symbols.
 /// The short symbol is only a path component; the persisted proof record retains the full fields.
 fn collection_symbol_digest<T: serde::Serialize + ?Sized>(
@@ -122,19 +202,17 @@ pub(super) fn collection_symbols_conflict<I: PartialEq>(
 
 /// Resolve one selected claim before rendering; no caller-provided field or domain is accepted.
 pub(super) fn lower_collection_claim(
-    package: &CheckedPackageV2,
+    graph: &CollectionGraph<'_>,
     function_id: &CheckedNodeId,
     quantifier_id: &CheckedNodeId,
 ) -> Result<LoweredCollectionClaim, CollectionDomainRefusal> {
-    let quantifier = package
-        .graph()
-        .nodes
-        .iter()
-        .find(|node| &node.node_id == quantifier_id)
+    let quantifier = graph
+        .index
+        .node(quantifier_id)
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
-    let field = resolve_collection_field(package, function_id, quantifier)?;
+    let field = resolve_collection_field(graph.package, &graph.index, function_id, quantifier)?;
     Ok(LoweredCollectionClaim {
-        package_digest: package.package_id().digest.to_string(),
+        package_digest: graph.package.package_id().digest.to_string(),
         field,
     })
 }
@@ -356,12 +434,12 @@ fn declared_field<'a, F, E, T: ?Sized>(
         .ok_or(CollectionDomainRefusal::FieldNotAdmitted)
 }
 
-fn find_admitted_declaration<'a>(
-    mut nodes: impl Iterator<Item = &'a CheckedSemanticNodeV2>,
+fn admitted_declaration(
+    graph: &CollectionNodeIndex<'_>,
     digest: &str,
 ) -> Result<CheckedNodeId, CollectionDomainRefusal> {
-    nodes
-        .find(|node| node.node_id.digest.as_ref() == digest)
+    graph
+        .declaration(digest)
         .map(|node| node.node_id.clone())
         .ok_or(CollectionDomainRefusal::FieldNotAdmitted)
 }
@@ -370,16 +448,14 @@ fn find_admitted_declaration<'a>(
 ///
 /// Resolution uses the graph's projection declaration identity plus `model_object_fields`; it
 /// never picks a declaration by matching a same-typed field elsewhere in the package.
-pub(crate) fn resolve_collection_field(
+fn resolve_collection_field(
     package: &CheckedPackageV2,
+    graph: &CollectionNodeIndex<'_>,
     function_id: &CheckedNodeId,
     quantifier: &CheckedSemanticNodeV2,
 ) -> Result<CollectionFieldDomain, CollectionDomainRefusal> {
-    let function = package
-        .graph()
-        .nodes
-        .iter()
-        .find(|node| &node.node_id == function_id)
+    let function = graph
+        .node(function_id)
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
     if CheckedNodeTag::from_wire(&function.node_tag) != Some(CheckedNodeTag::Function) {
         return Err(CollectionDomainRefusal::UnsupportedShape);
@@ -396,7 +472,7 @@ pub(crate) fn resolve_collection_field(
         .and_then(|member| member.get("value"))
         .and_then(term_target)
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
-    if !is_top_level_conjunct(package, &function_body, &quantifier.node_id) {
+    if !is_top_level_conjunct(graph, &function_body, &quantifier.node_id) {
         return Err(CollectionDomainRefusal::UnsupportedShape);
     }
     if CheckedNodeTag::from_wire(&quantifier.node_tag) != Some(CheckedNodeTag::Expression)
@@ -424,11 +500,8 @@ pub(crate) fn resolve_collection_field(
             .ok_or(CollectionDomainRefusal::UnsupportedShape)?,
     )
     .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
-    let collection = package
-        .graph()
-        .nodes
-        .iter()
-        .find(|node| node.node_id == collection_id)
+    let collection = graph
+        .node(&collection_id)
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
     if CheckedNodeTag::from_wire(&collection.node_tag) != Some(CheckedNodeTag::Expression)
         || collection.semantic_form.as_ref() != "query"
@@ -453,8 +526,8 @@ pub(crate) fn resolve_collection_field(
         .and_then(|declaration| declaration.get("digest"))
         .and_then(Value::as_str)
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
-    let declaration = find_admitted_declaration(package.graph().nodes.iter(), declaration_digest)?;
-    verify_function_receiver(package, function, collection, &declaration)?;
+    let declaration = admitted_declaration(graph, declaration_digest)?;
+    verify_function_receiver(graph, function, collection, &declaration)?;
     let fields = package.model_object_fields(&declaration);
     let field = declared_field(fields.as_ref(), |fields| fields.field(&field_name))?;
     let Some(CheckedMemberType::Collection {
@@ -465,7 +538,7 @@ pub(crate) fn resolve_collection_field(
     else {
         return Err(CollectionDomainRefusal::UnsupportedFieldType);
     };
-    let element_type = sequence_element_type(package, collection)?;
+    let element_type = sequence_element_type(graph, collection)?;
     let element = match element.as_ref() {
         CheckedMemberType::Boolean => CollectionElementDomain::Boolean,
         CheckedMemberType::IntRange { lower, upper } if lower <= upper => {
@@ -509,14 +582,11 @@ pub(crate) fn resolve_collection_field(
             .ok_or(CollectionDomainRefusal::UnsupportedShape)?,
     )
     .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
-    let predicate_node = package
-        .graph()
-        .nodes
-        .iter()
-        .find(|node| node.node_id == predicate_id)
+    let predicate_node = graph
+        .node(&predicate_id)
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
     let predicate = resolve_predicate(
-        package,
+        graph,
         function,
         binder_name,
         predicate_node,
@@ -553,7 +623,7 @@ fn binary_predicate_operation(
 }
 
 fn resolve_predicate(
-    package: &CheckedPackageV2,
+    graph: &CollectionNodeIndex<'_>,
     function: &CheckedSemanticNodeV2,
     binder_name: &str,
     predicate: &CheckedSemanticNodeV2,
@@ -581,7 +651,7 @@ fn resolve_predicate(
     let selected_parameter = arguments
         .iter()
         .filter_map(term_target)
-        .filter_map(|id| package.graph().nodes.iter().find(|node| node.node_id == id))
+        .filter_map(|id| graph.node(&id))
         .find(|node| {
             node.semantic_form.as_ref() == "parameter"
                 && parameter_name(node) == Some(binder_name)
@@ -603,15 +673,15 @@ fn resolve_predicate(
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
     match (element, operation, selected_index) {
         (CollectionElementDomain::Integer { .. }, "quire.op.integer.ge", 0) => {
-            let threshold = integer_literal(package, literal, element_type)?;
+            let threshold = integer_literal(graph, literal, element_type)?;
             Ok(CollectionPredicateIdentity::IntegerGreaterOrEqual { threshold })
         }
         (CollectionElementDomain::Integer { .. }, "quire.op.integer.eq", _) => {
-            let value = integer_literal(package, literal, element_type)?;
+            let value = integer_literal(graph, literal, element_type)?;
             Ok(CollectionPredicateIdentity::IntegerEqual { value })
         }
         (CollectionElementDomain::Boolean, "quire.op.boolean.ne", _) => {
-            let value = boolean_literal(package, literal)?;
+            let value = boolean_literal(graph, literal)?;
             Ok(CollectionPredicateIdentity::BooleanNotEqual { value })
         }
         _ => Err(CollectionDomainRefusal::UnsupportedShape),
@@ -619,21 +689,15 @@ fn resolve_predicate(
 }
 
 fn sequence_element_type(
-    package: &CheckedPackageV2,
+    graph: &CollectionNodeIndex<'_>,
     collection: &CheckedSemanticNodeV2,
 ) -> Result<CheckedNodeId, CollectionDomainRefusal> {
-    let type_node = package
-        .graph()
-        .nodes
-        .iter()
-        .find(|node| node.node_id == collection.semantic_type)
+    let type_node = graph
+        .node(&collection.semantic_type)
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
     let sequence = match type_node.semantic_form.as_ref() {
-        "collection_bounds" => package
-            .graph()
-            .nodes
-            .iter()
-            .find(|node| node.node_id == type_node.semantic_type)
+        "collection_bounds" => graph
+            .node(&type_node.semantic_type)
             .filter(|node| node.semantic_form.as_ref() == "sequence"),
         "sequence" => Some(type_node),
         _ => None,
@@ -654,7 +718,7 @@ fn sequence_element_type(
 }
 
 fn verify_function_receiver(
-    package: &CheckedPackageV2,
+    graph: &CollectionNodeIndex<'_>,
     function: &CheckedSemanticNodeV2,
     projection: &CheckedSemanticNodeV2,
     declaration: &CheckedNodeId,
@@ -679,7 +743,7 @@ fn verify_function_receiver(
         .and_then(Value::as_array)
         .and_then(|arguments| arguments.first())
         .and_then(term_target)
-        .and_then(|id| package.graph().nodes.iter().find(|node| node.node_id == id))
+        .and_then(|id| graph.node(&id))
         .filter(|node| operation_identity(node) == Some("quire.op.model.deref"))
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
     let parameter_id = receiver
@@ -689,23 +753,17 @@ fn verify_function_receiver(
         .and_then(|arguments| arguments.first())
         .and_then(term_target)
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
-    let parameter = package
-        .graph()
-        .nodes
-        .iter()
-        .find(|node| node.node_id == parameter_id)
+    let parameter = graph
+        .node(&parameter_id)
         .filter(|node| {
             parameter_ids.contains(&node.node_id) && node.semantic_form.as_ref() == "parameter"
         })
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
-    let parameter_type = package
-        .graph()
-        .nodes
-        .iter()
-        .find(|node| node.node_id == parameter.semantic_type)
+    let parameter_type = graph
+        .node(&parameter.semantic_type)
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
     if parameter_type.semantic_form.as_ref() != "reference"
-        || !depends_on(package, &parameter_type.node_id, declaration)
+        || !depends_on(graph, &parameter_type.node_id, declaration)
     {
         return Err(CollectionDomainRefusal::UnsupportedShape);
     }
@@ -737,16 +795,13 @@ fn parameter_level(node: &CheckedSemanticNodeV2) -> Option<u64> {
 }
 
 fn integer_literal(
-    package: &CheckedPackageV2,
+    graph: &CollectionNodeIndex<'_>,
     term: &Value,
     element_type: &CheckedNodeId,
 ) -> Result<i64, CollectionDomainRefusal> {
     let id = term_target(term).ok_or(CollectionDomainRefusal::UnsupportedShape)?;
-    let node = package
-        .graph()
-        .nodes
-        .iter()
-        .find(|node| node.node_id == id)
+    let node = graph
+        .node(&id)
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
     let literal = if node.semantic_form.as_ref() == "literal" {
         node
@@ -761,13 +816,9 @@ fn integer_literal(
             .and_then(|arguments| arguments.first())
             .and_then(term_target)
             .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
-        package
-            .graph()
-            .nodes
-            .iter()
-            .find(|candidate| {
-                candidate.node_id == source && candidate.semantic_form.as_ref() == "literal"
-            })
+        graph
+            .node(&source)
+            .filter(|candidate| candidate.semantic_form.as_ref() == "literal")
             .ok_or(CollectionDomainRefusal::UnsupportedShape)?
     } else {
         return Err(CollectionDomainRefusal::UnsupportedShape);
@@ -790,19 +841,14 @@ fn integer_literal(
 /// nodes. A quantifier under negation, disjunction, implication, or another operation does not
 /// represent an independent obligation and must not be asserted on its own.
 fn is_top_level_conjunct(
-    package: &CheckedPackageV2,
+    graph: &CollectionNodeIndex<'_>,
     root: &CheckedNodeId,
     selected: &CheckedNodeId,
 ) -> bool {
     if root == selected {
         return true;
     }
-    let Some(node) = package
-        .graph()
-        .nodes
-        .iter()
-        .find(|node| &node.node_id == root)
-    else {
+    let Some(node) = graph.node(root) else {
         return false;
     };
     if operation_identity(node) != Some("quire.op.boolean.and") {
@@ -815,20 +861,18 @@ fn is_top_level_conjunct(
             arguments
                 .iter()
                 .filter_map(term_target)
-                .any(|child| is_top_level_conjunct(package, &child, selected))
+                .any(|child| is_top_level_conjunct(graph, &child, selected))
         })
 }
 
 fn boolean_literal(
-    package: &CheckedPackageV2,
+    graph: &CollectionNodeIndex<'_>,
     term: &Value,
 ) -> Result<bool, CollectionDomainRefusal> {
     let id = term_target(term).ok_or(CollectionDomainRefusal::UnsupportedShape)?;
-    let literal = package
-        .graph()
-        .nodes
-        .iter()
-        .find(|node| node.node_id == id && node.semantic_form.as_ref() == "literal")
+    let literal = graph
+        .node(&id)
+        .filter(|node| node.semantic_form.as_ref() == "literal")
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
     if literal.body.get("value_kind").and_then(Value::as_str) != Some("boolean") {
         return Err(CollectionDomainRefusal::UnsupportedShape);
@@ -840,7 +884,11 @@ fn boolean_literal(
         .ok_or(CollectionDomainRefusal::UnsupportedShape)
 }
 
-fn depends_on(package: &CheckedPackageV2, root: &CheckedNodeId, selected: &CheckedNodeId) -> bool {
+fn depends_on(
+    graph: &CollectionNodeIndex<'_>,
+    root: &CheckedNodeId,
+    selected: &CheckedNodeId,
+) -> bool {
     let mut pending = vec![root.clone()];
     let mut seen = std::collections::BTreeSet::new();
     while let Some(current) = pending.pop() {
@@ -850,12 +898,7 @@ fn depends_on(package: &CheckedPackageV2, root: &CheckedNodeId, selected: &Check
         if !seen.insert(current.clone()) {
             continue;
         }
-        if let Some(node) = package
-            .graph()
-            .nodes
-            .iter()
-            .find(|node| node.node_id == current)
-        {
+        if let Some(node) = graph.node(&current) {
             pending.extend(node.dependencies.iter().cloned());
         }
     }
@@ -881,6 +924,106 @@ fn term_target(term: &Value) -> Option<CheckedNodeId> {
 mod tests {
     use super::*;
     use ix_trace_rs::trace;
+    use std::{cell::Cell, cmp::Ordering, rc::Rc};
+
+    #[derive(Clone)]
+    struct CountedKey {
+        value: usize,
+        comparisons: Rc<Cell<usize>>,
+    }
+
+    impl PartialEq for CountedKey {
+        fn eq(&self, other: &Self) -> bool {
+            self.cmp(other) == Ordering::Equal
+        }
+    }
+
+    impl Eq for CountedKey {}
+
+    impl PartialOrd for CountedKey {
+        fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+            Some(self.cmp(other))
+        }
+    }
+
+    impl Ord for CountedKey {
+        fn cmp(&self, other: &Self) -> Ordering {
+            self.comparisons.set(self.comparisons.get() + 1);
+            self.value.cmp(&other.value)
+        }
+    }
+
+    fn assert_collection_index_lookup_avoids_full_graph_walk() {
+        let comparisons = Rc::new(Cell::new(0));
+        let key = |value| CountedKey {
+            value,
+            comparisons: Rc::clone(&comparisons),
+        };
+        let mut index = FirstMatchIndex::new();
+        for value in 0..128 {
+            index.insert_first(key(value), value);
+        }
+        index.insert_first(key(127), 999);
+        comparisons.set(0);
+        for _ in 0..3 {
+            assert_eq!(index.get(&key(127)), Some(&127), "first entry wins");
+        }
+        assert!(
+            comparisons.get() < 128,
+            "three lookups must avoid K*R comparisons; saw {} for K=3 R=128",
+            comparisons.get(),
+        );
+    }
+
+    fn assert_collection_graph_reuses_one_ordered_walk() {
+        COLLECTION_NODE_INDEX_BUILD_COUNT.with(|count| count.set(0));
+        let checked_node = |digit: &str| -> CheckedSemanticNodeV2 {
+            let id = |digit: &str| {
+                serde_json::json!({
+                    "domain": "quire.checked-semantic-node/v1", "digest": digit.repeat(64),
+                })
+            };
+            serde_json::from_value(serde_json::json!({
+                "node_id": id(digit),
+                "schema_version": "quire.checked-semantic-graph/v2",
+                "node_tag": "expression", "semantic_form": "literal",
+                "semantic_type": id("3"), "dependencies": [], "occurrences": [],
+                "body": {"value_kind": "boolean", "value": true},
+            }))
+            .expect("checked node")
+        };
+        let preceding = checked_node("1");
+        let selected = checked_node("2");
+        let duplicate = checked_node("2");
+        let visited = Cell::new(0usize);
+        let nodes = std::iter::repeat_n(&preceding, 126).chain([&selected, &duplicate]);
+        let graph =
+            CollectionNodeIndex::from_nodes(nodes.inspect(|_| visited.set(visited.get() + 1)));
+        COLLECTION_NODE_INDEX_BUILD_COUNT.with(|count| {
+            assert_eq!(count.get(), 1, "the graph index was built once");
+        });
+        for _ in 0..3 {
+            let found = graph.node(&selected.node_id);
+            assert!(std::ptr::eq(found.expect("selected node"), &selected));
+        }
+        assert_eq!(visited.get(), 128, "one request graph construction");
+        COLLECTION_NODE_INDEX_BUILD_COUNT.with(|count| {
+            assert_eq!(count.get(), 1, "K lookups must reuse the same graph index");
+        });
+        assert!(
+            std::ptr::eq(
+                graph
+                    .declaration(selected.node_id.digest.as_ref())
+                    .expect("declaration"),
+                &selected,
+            ),
+            "declaration lookup retains the first graph entry"
+        );
+        assert!(
+            graph.node(&node("absent")).is_none(),
+            "missing node remains missing"
+        );
+    }
 
     #[test]
     fn collection_symbols_are_bounded_and_stable_per_full_identity() {
@@ -982,6 +1125,11 @@ mod tests {
     #[trace("FR-015-AC-100", "TC-025")]
     #[test]
     fn every_identity_component_changes_the_rendered_harness_path() {
+        // The same collection implementation keeps first-match graph identity and bounded
+        // lookup work while rendering the harness identities asserted below.
+        assert_collection_index_lookup_avoids_full_graph_walk();
+        assert_collection_graph_reuses_one_ordered_walk();
+
         const MEMORY: u64 = 1 << 30;
         let base = base_claim();
         let original = rendered_module(&base, "crate::subject", 8, MEMORY);
@@ -1173,9 +1321,10 @@ mod tests {
 
     #[test]
     fn unresolved_projection_declaration_is_field_not_admitted() {
+        let graph = CollectionNodeIndex::from_nodes(std::iter::empty());
         assert_eq!(
-            find_admitted_declaration(std::iter::empty(), "missing-declaration"),
-            Err(CollectionDomainRefusal::FieldNotAdmitted)
+            admitted_declaration(&graph, "missing-declaration"),
+            Err(CollectionDomainRefusal::FieldNotAdmitted),
         );
     }
 }

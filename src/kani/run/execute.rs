@@ -2050,6 +2050,22 @@ exit 0
             stand_in
         }
 
+        /// Timing controls wait for actual teardown readiness before the owner's one poll.
+        #[cfg(target_os = "linux")]
+        fn with_preconfirmed_cleanup(mut self) -> Self {
+            use super::super::owners::{LaunchOwners, ProcessMemory, SystemPoll};
+            self.installation = KaniInstallation::with_owners(
+                self.installation.launcher.clone(),
+                std::sync::Arc::new(LaunchOwners {
+                    memory: std::sync::Arc::new(ProcessMemory),
+                    stdout: std::sync::Arc::new(SystemPoll),
+                    stderr: std::sync::Arc::new(SystemPoll),
+                    confirmation: std::sync::Arc::new(PreconfirmedPoll(SystemPoll)),
+                }),
+            );
+            self
+        }
+
         /// Hold the first real ready sample and first real cleanup poll return once.
         #[cfg(target_os = "linux")]
         fn controlled_owners(&mut self) -> (OwnerControl, OwnerControl) {
@@ -2065,11 +2081,11 @@ exit 0
                     }),
                     stdout: std::sync::Arc::new(SystemPoll),
                     stderr: std::sync::Arc::new(SystemPoll),
-                    confirmation: std::sync::Arc::new(ControlledPoll {
+                    confirmation: std::sync::Arc::new(PreconfirmedPoll(ControlledPoll {
                         ready: None,
                         gate: cleanup,
                         fail: false,
-                    }),
+                    })),
                 }),
             );
             (observation, confirmation)
@@ -2716,6 +2732,129 @@ exec sleep 45
             }
             Ok(observed)
         }
+    }
+
+    /// Batch-order tests first wait for genuine pidfd readiness, so host scheduling does not
+    /// consume the production owner's single five-second confirmation poll.
+    #[cfg(target_os = "linux")]
+    #[derive(Debug)]
+    struct PreconfirmedPoll<P: super::super::owners::PollOperation>(P);
+
+    #[cfg(target_os = "linux")]
+    impl<P: super::super::owners::PollOperation> super::super::owners::PollOperation
+        for PreconfirmedPoll<P>
+    {
+        fn poll(
+            &self,
+            fds: &mut [rustix::event::PollFd<'_>],
+            timeout: Option<&rustix::time::Timespec>,
+        ) -> Result<usize, rustix::io::Errno> {
+            let ready = rustix::event::poll(
+                fds,
+                Some(&rustix::time::Timespec {
+                    tv_sec: 30,
+                    tv_nsec: 0,
+                }),
+            )?;
+            if ready == 0
+                || !fds
+                    .iter()
+                    .any(|fd| fd.revents().contains(rustix::event::PollFlags::IN))
+            {
+                return Err(rustix::io::Errno::TIMEDOUT);
+            }
+            for fd in fds.iter_mut() {
+                fd.clear_revents();
+            }
+            super::super::owners::PollOperation::poll(&self.0, fds, timeout)
+        }
+    }
+
+    /// Confirm the real pidfd first, then omit only the first result delivered to its owner.
+    /// The owner's Drop retry receives the real result from the same descriptor.
+    #[cfg(target_os = "linux")]
+    #[derive(Debug, Default)]
+    struct OmittedReadyPoll {
+        calls: std::sync::atomic::AtomicUsize,
+    }
+
+    #[cfg(target_os = "linux")]
+    impl super::super::owners::PollOperation for OmittedReadyPoll {
+        fn poll(
+            &self,
+            fds: &mut [rustix::event::PollFd<'_>],
+            timeout: Option<&rustix::time::Timespec>,
+        ) -> Result<usize, rustix::io::Errno> {
+            if self.calls.fetch_add(1, std::sync::atomic::Ordering::AcqRel) == 0 {
+                let ready = rustix::event::poll(
+                    fds,
+                    Some(&rustix::time::Timespec {
+                        tv_sec: 30,
+                        tv_nsec: 0,
+                    }),
+                )?;
+                if ready == 0
+                    || !fds
+                        .iter()
+                        .any(|fd| fd.revents().contains(rustix::event::PollFlags::IN))
+                {
+                    return Err(rustix::io::Errno::TIMEDOUT);
+                }
+                for fd in fds.iter_mut() {
+                    fd.clear_revents();
+                }
+                let observed = rustix::event::poll(fds, timeout)?;
+                if observed == 0
+                    || !fds
+                        .iter()
+                        .any(|fd| fd.revents().contains(rustix::event::PollFlags::IN))
+                {
+                    return Err(rustix::io::Errno::TIMEDOUT);
+                }
+                for fd in fds.iter_mut() {
+                    fd.clear_revents();
+                }
+                return Ok(0);
+            }
+            rustix::event::poll(fds, timeout)
+        }
+    }
+
+    /// Missing readiness from the owned pidfd still refuses public evidence after real teardown.
+    #[trace("FR-017-AC-55")]
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn omitted_namespace_confirmation_refuses_public_evidence() {
+        use super::super::owners::{LaunchOwners, ProcessMemory, SystemPoll};
+
+        let harness = member("omitted_cleanup", "check", 4);
+        let body = format!(
+            "printf '%s' \"$(readlink /proc/self/ns/pid)\" > \"$CALLS.namespace\"\nprintf '%s' \"$$\" > \"$CALLS.child\"\n{VERIFY_EVERY_HARNESS}"
+        );
+        let mut stand_in = StandIn::running("omitted-cleanup-confirmation", &body);
+        stand_in.containing(&[&harness]);
+        let omission = std::sync::Arc::new(OmittedReadyPoll::default());
+        stand_in.installation = KaniInstallation::with_owners(
+            stand_in.installation.launcher.clone(),
+            std::sync::Arc::new(LaunchOwners {
+                memory: std::sync::Arc::new(ProcessMemory),
+                stdout: std::sync::Arc::new(SystemPoll),
+                stderr: std::sync::Arc::new(SystemPoll),
+                confirmation: omission.clone(),
+            }),
+        );
+        let refusal = execute_kani_obligation(&stand_in.request(&harness, T)).unwrap_err();
+        assert!(
+            matches!(
+                refusal,
+                KaniExecutionRefusal::MemoryObservationFailed { ref detail }
+                    if detail.contains("namespace cleanup failed: namespace teardown was not confirmed")
+            ),
+            "{refusal:?}"
+        );
+        assert_eq!(omission.calls.load(std::sync::atomic::Ordering::Acquire), 2);
+        assert_eq!(stand_in.calls().len(), 1);
+        recorded_process_gone(&stand_in.directory.join("calls.child"));
     }
 
     /// A failed real RSS observation owns the public refusal even if a cause is already recorded.
@@ -3546,13 +3685,12 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
         assert_eq!(first.calls().len(), 2);
     }
 
-    /// A batch of N is bounded by N times T, not by T: four members at T = 3 s run for eight
-    /// seconds, longer than T and than N times T halved (6 s), and inside N times T (12 s), and
+    /// A batch of N is bounded by N times T, not by T: four members at T = 20 s run for 41
+    /// seconds, longer than T and than N times T halved (40 s), and inside N times T (80 s), and
     /// complete with every member verified.
     ///
     /// The stand-in's sleep never ends early, so it outlasts T and N times T halved however the
-    /// scheduler treats the test; only the 4 s between it and the 12 s bound can be eaten by a
-    /// loaded host (an earlier 1 s / 2 s / 4 s version left 2 s and flaked on a loaded runner).
+    /// scheduler treats the test; the 39 s between it and the 80 s bound tolerate host load.
     // Exercises the real Linux namespace/procfs bounded execution API.
     #[trace("FR-017-AC-21", "FR-028-AC-12", "TC-039", "TC-043")]
     #[cfg(target_os = "linux")]
@@ -3560,12 +3698,13 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
     fn tc_043_a_batch_may_run_longer_than_t_when_it_is_inside_n_times_t() {
         let stand_in = StandIn::running(
             "inside-n-times-t",
-            &format!("sleep 8\n{VERIFY_EVERY_HARNESS}"),
-        );
+            &format!("sleep 41\n{VERIFY_EVERY_HARNESS}"),
+        )
+        .with_preconfirmed_cleanup();
         let harnesses: Vec<_> = (0..4)
             .map(|index| member(&format!("m{index}"), "check", 4))
             .collect();
-        let evidence = only_group(stand_in.batch(&harnesses, Duration::from_secs(3))).unwrap();
+        let evidence = only_group(stand_in.batch(&harnesses, Duration::from_secs(20))).unwrap();
         assert_eq!(
             outcomes(&evidence),
             vec![KaniRunOutcome::Verified; 4],
@@ -3573,8 +3712,8 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
         );
     }
 
-    /// Two members at T = 20 s complete after 30 s: beyond (N - 1) times T (20 s), with
-    /// ten seconds left before N times T (40 s). The real batch launch must count both members.
+    /// Two members at T = 45 s complete after 46 s: beyond (N - 1) times T (45 s), with
+    /// 44 seconds left before N times T (90 s). The real batch launch must count both members.
     // Exercises the real Linux namespace/procfs bounded execution API.
     #[trace("FR-017-AC-21", "FR-028-AC-12", "TC-039", "TC-043")]
     #[cfg(target_os = "linux")]
@@ -3582,10 +3721,11 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
     fn a_batch_finishes_between_one_fewer_members_bound_and_its_full_bound() {
         let stand_in = StandIn::running(
             "full-member-count-bound",
-            &format!("sleep 30\n{VERIFY_EVERY_HARNESS}"),
-        );
-        let evidence = only_group(stand_in.batch(&pair(), Duration::from_secs(20)))
-            .expect("both members must finish before their full 40-second batch bound");
+            &format!("sleep 46\n{VERIFY_EVERY_HARNESS}"),
+        )
+        .with_preconfirmed_cleanup();
+        let evidence = only_group(stand_in.batch(&pair(), Duration::from_secs(45)))
+            .expect("both members must finish before their full 90-second batch bound");
         assert_eq!(
             outcomes(&evidence),
             vec![KaniRunOutcome::Verified; 2],

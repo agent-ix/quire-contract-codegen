@@ -17,8 +17,8 @@ mod tests {
     use crate::routed::capability::{
         negotiate_backend_provider, negotiate_contract_package, BackendDescriptor,
         BackendProviderEnvelope, Candidate, Candidates, CapabilityKind, ContractItemSettlement,
-        EnvelopeRefusal, ExtentClassification, KaniForm, Mode, ProviderOrigin, RequestItem,
-        RequestedKind, BACKEND_PROVIDER_CONTRACT, CAPABILITY_VOCABULARY,
+        Disposition, EnvelopeRefusal, ExtentClassification, KaniForm, Mode, ProviderOrigin,
+        RequestItem, RequestedKind, BACKEND_PROVIDER_CONTRACT, CAPABILITY_VOCABULARY,
     };
     use crate::routed::generate::{
         generate_routed, GenerationContexts, KaniGenerationContext, KindOutput,
@@ -1074,6 +1074,220 @@ mod tests {
             crate::oracle::function::take_function_preflight_reads(),
             0,
             "FR-330 must not call the internal V1 reader"
+        );
+    }
+
+    /// One envelope indexes each admitted function graph once, including cloned package values.
+    #[trace("FR-019-AC-25", "TC-030")]
+    #[test]
+    fn function_preflight_graph_index_is_shared_only_within_one_package_identity() {
+        use exact_function_fixture::{
+            ac11_classifier_package, code_id, source_bound_call_package, SOURCE_CALL,
+            SOURCE_FUNCTION, SOURCE_OTHER_FUNCTION, SOURCE_PARAM_A, SOURCE_PARAM_B,
+        };
+
+        let (shared, shared_ids) = source_bound_call_package().admit_resolved();
+        let (different, different_ids) = ac11_classifier_package().admit_resolved();
+        assert_ne!(shared.package_id(), different.package_id());
+        assert_eq!(
+            shared_ids.resolve(&code_id(SOURCE_CALL)),
+            different_ids.resolve(&code_id(SOURCE_CALL)),
+            "heterogeneous packages retain an overlapping checked call ID"
+        );
+        let foreign_view = crate::oracle::function::FunctionPreflightGraph::new(&different);
+        assert!(matches!(
+            crate::oracle::function::checked_integer_function_application_is_supported_with_graph(
+                &shared,
+                &foreign_view,
+                &shared_ids.resolve(&code_id(SOURCE_FUNCTION)),
+                &shared_ids.resolve(&code_id(SOURCE_CALL)),
+                &[
+                    shared_ids.resolve(&code_id(SOURCE_PARAM_A)),
+                    shared_ids.resolve(&code_id(SOURCE_PARAM_B)),
+                ],
+                None,
+            ),
+            Ok(false)
+        ));
+        let _ = crate::oracle::function::take_function_preflight_graph_visits();
+        let _ = crate::oracle::function::take_function_preflight_graph_lookup_work();
+        let expected_visits = shared.graph().nodes.len() + different.graph().nodes.len();
+        let first = RequestItem {
+            kind: RequestedKind::Known(CapabilityKind::ValueValidity),
+            extent: Some(ExtentClassification {
+                extent: Mode::Bounded,
+                finite_bound_available: true,
+                domains: Vec::new(),
+                bounds: Vec::new(),
+            }),
+            named_backend: None,
+            candidates: Candidates::Set(vec![Candidate {
+                identity: "kani".to_owned(),
+            }]),
+            kani_form: KaniForm::V2FunctionApplication {
+                package: Box::new(shared),
+                function_node_id: shared_ids.resolve(&code_id(SOURCE_FUNCTION)),
+                call_node_id: shared_ids.resolve(&code_id(SOURCE_CALL)),
+                argument_node_ids: vec![
+                    shared_ids.resolve(&code_id(SOURCE_PARAM_A)),
+                    shared_ids.resolve(&code_id(SOURCE_PARAM_B)),
+                ],
+            },
+        };
+        let second = first.clone();
+        let mut wrong_callee = first.clone();
+        let KaniForm::V2FunctionApplication {
+            function_node_id, ..
+        } = &mut wrong_callee.kani_form
+        else {
+            unreachable!("cloned function form")
+        };
+        *function_node_id = shared_ids.resolve(&code_id(SOURCE_OTHER_FUNCTION));
+        let third = RequestItem {
+            kani_form: KaniForm::V2FunctionApplication {
+                package: Box::new(different),
+                function_node_id: different_ids.resolve(&code_id(SOURCE_FUNCTION)),
+                call_node_id: different_ids.resolve(&code_id(SOURCE_CALL)),
+                argument_node_ids: vec![
+                    different_ids.resolve(&code_id(SOURCE_PARAM_A)),
+                    different_ids.resolve(&code_id(SOURCE_PARAM_B)),
+                ],
+            },
+            ..first.clone()
+        };
+        let envelope = BackendProviderEnvelope {
+            contract_version: BACKEND_PROVIDER_CONTRACT.to_owned(),
+            capability_vocabulary: CAPABILITY_VOCABULARY.to_owned(),
+            manifest: vec![BackendDescriptor {
+                identity: "kani".to_owned(),
+                advertised: vec![(CapabilityKind::ValueValidity, Mode::Bounded)],
+                origin: ProviderOrigin::Linked,
+                domains: None,
+                bounds: None,
+            }],
+            items: vec![first, second, third, wrong_callee],
+        };
+
+        assert_eq!(
+            crate::oracle::function::take_function_preflight_graph_visits(),
+            0
+        );
+        let settled = negotiate_backend_provider(&envelope).expect("valid function envelope");
+        assert_eq!(settled.len(), 4);
+        for item in &settled[..3] {
+            assert!(matches!(item.disposition, Disposition::Supported { .. }));
+        }
+        assert!(matches!(
+            settled[3].disposition,
+            Disposition::InvalidRequest { .. }
+        ));
+        assert_eq!(
+            crate::oracle::function::take_function_preflight_graph_visits(),
+            expected_visits,
+            "two cloned packages reuse one graph walk; a distinct identity gets its own"
+        );
+        let lookup_work = crate::oracle::function::take_function_preflight_graph_lookup_work();
+        assert_eq!(
+            lookup_work.len(),
+            70,
+            "every node lookup must use the indexed view"
+        );
+        assert!(
+            lookup_work
+                .iter()
+                .all(|&comparisons| (1..=16).contains(&comparisons)),
+            "{lookup_work:?}"
+        );
+    }
+
+    /// Repeated outside forms share checked-node and scalar-derivation graph work.
+    #[trace("TC-030")]
+    #[test]
+    fn routed_forms_batch_graph_lookup_and_scalar_family_derivation() {
+        use crate::routed::capability::{Cause, KaniFormFamily};
+        use exact_function_fixture::{
+            ac11_classifier_package, code_id, source_bound_call_package, SOURCE_CALL,
+            SOURCE_FUNCTION,
+        };
+
+        let (checked, ids) = source_bound_call_package().admit_resolved();
+        let (other, other_ids) = ac11_classifier_package().admit_resolved();
+        let node_count = checked.graph().nodes.len() + other.graph().nodes.len();
+        let call = ids.resolve(&code_id(SOURCE_CALL));
+        let function = ids.resolve(&code_id(SOURCE_FUNCTION));
+        let other_call = other_ids.resolve(&code_id(SOURCE_CALL));
+        assert_ne!(checked.package_id(), other.package_id());
+        assert_eq!(
+            call, other_call,
+            "distinct packages share a checked node id"
+        );
+        let item = |package: &CheckedPackageV2, node_id: CheckedNodeId| RequestItem {
+            kind: RequestedKind::Known(CapabilityKind::ValueValidity),
+            extent: Some(ExtentClassification {
+                extent: Mode::Bounded,
+                finite_bound_available: true,
+                domains: Vec::new(),
+                bounds: Vec::new(),
+            }),
+            named_backend: None,
+            candidates: Candidates::Set(vec![Candidate {
+                identity: "kani".to_owned(),
+            }]),
+            kani_form: KaniForm::OutsideSet {
+                package: Box::new(package.clone()),
+                node_id,
+            },
+        };
+        let envelope = BackendProviderEnvelope {
+            contract_version: BACKEND_PROVIDER_CONTRACT.to_owned(),
+            capability_vocabulary: CAPABILITY_VOCABULARY.to_owned(),
+            manifest: vec![BackendDescriptor {
+                identity: "kani".to_owned(),
+                advertised: vec![(CapabilityKind::ValueValidity, Mode::Bounded)],
+                origin: ProviderOrigin::Linked,
+                domains: None,
+                bounds: None,
+            }],
+            items: vec![
+                item(&checked, call.clone()),
+                item(&checked, function.clone()),
+                item(&other, other_call),
+                item(&checked, call),
+                item(&checked, function),
+            ],
+        };
+        let _ = crate::oracle::scalar::take_scalar_derive_graph_visits();
+        let _ = crate::oracle::function::take_function_preflight_graph_visits();
+        let settled = negotiate_backend_provider(&envelope).expect("valid capability envelope");
+        assert_eq!(settled.len(), 5);
+        let refused_forms = settled
+            .iter()
+            .map(|item| match &item.disposition {
+                Disposition::Unsupported {
+                    cause: Cause::UnsupportedKaniForm { form, backend },
+                } if backend == "kani" && form.family == KaniFormFamily::OutsideSet => {
+                    form.operation_identity.as_deref()
+                }
+                other => panic!("expected exact outside-set refusal, got {other:?}"),
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            refused_forms,
+            [
+                Some("call"),
+                Some("pure_function"),
+                Some("call"),
+                Some("call"),
+                Some("pure_function")
+            ]
+        );
+        assert_eq!(
+            crate::oracle::scalar::take_scalar_derive_graph_visits(),
+            node_count
+        );
+        assert_eq!(
+            crate::oracle::function::take_function_preflight_graph_visits(),
+            node_count
         );
     }
 

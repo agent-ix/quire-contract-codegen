@@ -1571,17 +1571,103 @@ pub struct ExactFunctionOracles {
 
 type Graph<'a> = BTreeMap<&'a CheckedNodeId, &'a CheckedSemanticNodeV2>;
 
+/// Ordered key whose comparisons expose actual indexed lookup work to tests.
+#[derive(Eq, PartialEq)]
+struct IndexedNodeId(CheckedNodeId);
+
+impl Ord for IndexedNodeId {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        #[cfg(test)]
+        FUNCTION_PREFLIGHT_KEY_COMPARISONS.with(|count| count.set(count.get() + 1));
+        self.0.cmp(&other.0)
+    }
+}
+
+impl PartialOrd for IndexedNodeId {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+/// Keep source-call matching identical for borrowed generation graphs and preflight indexes.
+trait NodeLookup<'a> {
+    fn get_node(&self, node_id: &CheckedNodeId) -> Option<&'a CheckedSemanticNodeV2>;
+}
+
+impl<'a> NodeLookup<'a> for Graph<'a> {
+    fn get_node(&self, node_id: &CheckedNodeId) -> Option<&'a CheckedSemanticNodeV2> {
+        self.get(node_id).copied()
+    }
+}
+
+/// One checked-graph lookup view shared by function preflight items in a request.
+pub(crate) struct FunctionPreflightGraph<'a> {
+    package_id: CheckedSemanticId,
+    nodes: BTreeMap<IndexedNodeId, &'a CheckedSemanticNodeV2>,
+}
+
+impl<'a> FunctionPreflightGraph<'a> {
+    /// Index the admitted graph once, before classifying its function items.
+    pub(crate) fn new(checked: &'a CheckedPackageV2) -> Self {
+        Self::from_nodes(&checked.graph().nodes, checked.package_id().clone())
+    }
+
+    fn from_nodes(nodes: &'a [CheckedSemanticNodeV2], package_id: CheckedSemanticId) -> Self {
+        let nodes = nodes
+            .iter()
+            .map(|node| {
+                #[cfg(test)]
+                FUNCTION_PREFLIGHT_GRAPH_VISITS.with(|count| count.set(count.get() + 1));
+                (IndexedNodeId(node.node_id.clone()), node)
+            })
+            .collect();
+        Self { package_id, nodes }
+    }
+
+    /// Resolve one node from the view's admitted package graph.
+    pub(crate) fn get(&self, node_id: &CheckedNodeId) -> Option<&'a CheckedSemanticNodeV2> {
+        #[cfg(test)]
+        let before = FUNCTION_PREFLIGHT_KEY_COMPARISONS.with(std::cell::Cell::get);
+        let found = self.nodes.get(&IndexedNodeId(node_id.clone())).copied();
+        #[cfg(test)]
+        FUNCTION_PREFLIGHT_GRAPH_LOOKUP_WORK.with(|work| {
+            work.borrow_mut()
+                .push(FUNCTION_PREFLIGHT_KEY_COMPARISONS.with(std::cell::Cell::get) - before);
+        });
+        found
+    }
+}
+
+impl<'a> NodeLookup<'a> for FunctionPreflightGraph<'a> {
+    fn get_node(&self, node_id: &CheckedNodeId) -> Option<&'a CheckedSemanticNodeV2> {
+        self.get(node_id)
+    }
+}
+
+fn reference_in_graph<'a>(
+    term: &serde_json::Value,
+    graph: &impl NodeLookup<'a>,
+) -> Option<&'a CheckedNodeId> {
+    if term.get("term")?.as_str()? != "reference" {
+        return None;
+    }
+    let target = term.get("target")?;
+    let node_id = CheckedNodeId {
+        domain: target.get("domain")?.as_str()?.into(),
+        digest: target.get("digest")?.as_str()?.into(),
+    };
+    graph.get_node(&node_id).map(|node| &node.node_id)
+}
+
 /// Check that the admitted application names this exact function and ordered argument list.
-fn source_call_matches(
+fn source_call_matches<'a>(
     body: &serde_json::Value,
-    graph: &Graph<'_>,
+    graph: &impl NodeLookup<'a>,
     function_node_id: &CheckedNodeId,
     argument_node_ids: &[CheckedNodeId],
 ) -> bool {
-    if !graph.values().any(|node| {
-        &node.node_id == function_node_id
-            && &*node.node_tag == "function"
-            && &*node.semantic_form == "pure_function"
+    if !graph.get_node(function_node_id).is_some_and(|node| {
+        &*node.node_tag == "function" && &*node.semantic_form == "pure_function"
     }) {
         return false;
     }
@@ -1602,26 +1688,7 @@ fn source_call_matches(
     }
     let mut expected = std::iter::once(function_node_id).chain(argument_node_ids.iter());
     arguments.iter().all(|term| {
-        let Some(target) = term
-            .get("term")
-            .filter(|term| term.as_str() == Some("reference"))
-            .and_then(|_| term.get("target"))
-        else {
-            return false;
-        };
-        let Some(digest) = target.get("digest").and_then(serde_json::Value::as_str) else {
-            return false;
-        };
-        let Some(domain) = target.get("domain").and_then(serde_json::Value::as_str) else {
-            return false;
-        };
-        let Some(actual_id) = graph
-            .values()
-            .find(|node| {
-                node.node_id.digest.as_ref() == digest && node.node_id.domain.as_ref() == domain
-            })
-            .map(|node| &node.node_id)
-        else {
+        let Some(actual_id) = reference_in_graph(term, graph) else {
             return false;
         };
         expected
@@ -1685,6 +1752,9 @@ pub(crate) fn reference_node_id<'a>(
 thread_local! {
     static FUNCTION_PREFLIGHT_READS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     static FUNCTION_PREFLIGHT_INDICES: std::cell::RefCell<Vec<usize>> = const { std::cell::RefCell::new(Vec::new()) };
+    static FUNCTION_PREFLIGHT_GRAPH_VISITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static FUNCTION_PREFLIGHT_KEY_COMPARISONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static FUNCTION_PREFLIGHT_GRAPH_LOOKUP_WORK: std::cell::RefCell<Vec<usize>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
 #[cfg(test)]
@@ -1697,32 +1767,39 @@ pub(crate) fn take_function_preflight_indices() -> Vec<usize> {
     FUNCTION_PREFLIGHT_INDICES.with(|indices| std::mem::take(&mut *indices.borrow_mut()))
 }
 
+#[cfg(test)]
+pub(crate) fn take_function_preflight_graph_visits() -> usize {
+    FUNCTION_PREFLIGHT_GRAPH_VISITS.with(|count| count.replace(0))
+}
+
+#[cfg(test)]
+pub(crate) fn take_function_preflight_graph_lookup_work() -> Vec<usize> {
+    FUNCTION_PREFLIGHT_GRAPH_LOOKUP_WORK.with(|work| std::mem::take(&mut *work.borrow_mut()))
+}
+
 /// Non-admitted result of the internal function-package reader.
 pub(crate) enum FunctionPackageReadFailure {
     Refused(Box<CheckedPackageRefusal>),
     Incomplete(CheckedPackageIncomplete),
 }
 
-/// Classify one source-backed integer function application with the same V1 reader and generator
-/// used after routed settlement. No source artifact is returned to the negotiation path.
-pub(crate) fn checked_integer_function_application_is_supported(
+/// Classify a function item using the request's shared admitted-graph view.
+pub(crate) fn checked_integer_function_application_is_supported_with_graph(
     checked: &CheckedPackageV2,
+    graph: &FunctionPreflightGraph<'_>,
     function_node_id: &CheckedNodeId,
     call_node_id: &CheckedNodeId,
     argument_node_ids: &[CheckedNodeId],
     admitted: Option<(&ContractPackageV1, &[ContractRequestPosition], usize)>,
 ) -> Result<bool, FunctionPackageReadFailure> {
+    if &graph.package_id != checked.package_id() {
+        return Ok(false);
+    }
     #[cfg(test)]
     if let Some((_, _, request_index)) = admitted {
         FUNCTION_PREFLIGHT_INDICES.with(|indices| indices.borrow_mut().push(request_index));
     }
-    let graph: Graph<'_> = checked
-        .graph()
-        .nodes
-        .iter()
-        .map(|node| (&node.node_id, node))
-        .collect();
-    let Some(function_node) = graph.get(function_node_id).copied() else {
+    let Some(function_node) = graph.get(function_node_id) else {
         return Ok(false);
     };
     if &*function_node.node_tag != "function" || &*function_node.semantic_form != "pure_function" {
@@ -1746,10 +1823,10 @@ pub(crate) fn checked_integer_function_application_is_supported(
     };
     let mut parameters = Vec::with_capacity(parameter_terms.len());
     for term in parameter_terms {
-        let Some(parameter_id) = reference_node_id(term, graph.values().copied()) else {
+        let Some(parameter_id) = reference_in_graph(term, graph) else {
             return Ok(false);
         };
-        let Some(parameter_node) = graph.get(parameter_id).copied() else {
+        let Some(parameter_node) = graph.get(parameter_id) else {
             return Ok(false);
         };
         let Some(name) = binding_value(&parameter_node.body, "name")
@@ -1763,12 +1840,12 @@ pub(crate) fn checked_integer_function_application_is_supported(
             type_node_id: parameter_node.semantic_type.clone(),
         });
     }
-    let Some(body_id) = binding_value(&function_node.body, "body")
-        .and_then(|term| reference_node_id(term, graph.values().copied()))
+    let Some(body_id) =
+        binding_value(&function_node.body, "body").and_then(|term| reference_in_graph(term, graph))
     else {
         return Ok(false);
     };
-    let Some(body_node) = graph.get(body_id).copied() else {
+    let Some(body_node) = graph.get(body_id) else {
         return Ok(false);
     };
     let Some(operation_identity) = body_node
@@ -1784,10 +1861,10 @@ pub(crate) fn checked_integer_function_application_is_supported(
         "quire.op.integer.mul" => IntegerOperator::Multiply,
         _ => return Ok(false),
     };
-    let Some(call_node) = graph.get(call_node_id).copied() else {
+    let Some(call_node) = graph.get(call_node_id) else {
         return Ok(false);
     };
-    if !source_call_matches(&call_node.body, &graph, function_node_id, argument_node_ids) {
+    if !source_call_matches(&call_node.body, graph, function_node_id, argument_node_ids) {
         return Ok(false);
     }
     let declaration = ExactFunctionDeclaration {
@@ -3097,6 +3174,86 @@ mod tests {
     use crate::oracle::failed_records::{failed_record, unrecognised_kinds};
     use ix_trace_rs::trace;
     use quire_contract_model::CheckedPackageLimit;
+
+    #[trace("TC-030")]
+    #[test]
+    fn function_preflight_reuses_one_graph_index_across_items() {
+        let node = |ordinal: usize| {
+            let id = CheckedNodeId {
+                domain: "quire.checked-semantic-node/v1".into(),
+                digest: format!("{ordinal:064x}").into(),
+            };
+            CheckedSemanticNodeV2 {
+                node_id: id.clone(),
+                schema_version: "quire.checked-semantic-graph/v2".into(),
+                node_tag: "expression".into(),
+                semantic_form: "binary".into(),
+                semantic_type: id,
+                dependencies: Vec::new(),
+                occurrences: Vec::new(),
+                recursion_group: None,
+                nominal_identity_preimage: None,
+                declaration: None,
+                owner: None,
+                body: serde_json::json!({}),
+            }
+        };
+        let mut nodes = (0..32).map(node).collect::<Vec<_>>();
+        nodes[0].node_tag = "function".into();
+        nodes[0].semantic_form = "pure_function".into();
+        let _ = take_function_preflight_graph_visits();
+        let _ = take_function_preflight_graph_lookup_work();
+        let graph = FunctionPreflightGraph::from_nodes(
+            &nodes,
+            CheckedSemanticId {
+                domain: "quire.package.semantic/v2".into(),
+                algorithm: "sha256".into(),
+                digest: "0".repeat(64).into(),
+            },
+        );
+        for ordinal in [0, 15, 31, 0, 31] {
+            assert_eq!(
+                graph
+                    .get(&nodes[ordinal].node_id)
+                    .map(|found| &found.node_id),
+                Some(&nodes[ordinal].node_id)
+            );
+        }
+        let reference = |node: &CheckedSemanticNodeV2| {
+            serde_json::json!({
+                "term": "reference",
+                "target": {"domain": node.node_id.domain, "digest": node.node_id.digest},
+            })
+        };
+        let call = serde_json::json!({
+            "term": "application",
+            "operator": "call",
+            "operation": {"identity": "quire.op.function.call"},
+            "arguments": [reference(&nodes[0]), reference(&nodes[15]), reference(&nodes[31])],
+        });
+        assert!(source_call_matches(
+            &call,
+            &graph,
+            &nodes[0].node_id,
+            &[nodes[15].node_id.clone(), nodes[31].node_id.clone()]
+        ));
+        assert!(!source_call_matches(
+            &call,
+            &graph,
+            &nodes[0].node_id,
+            &[nodes[31].node_id.clone(), nodes[15].node_id.clone()]
+        ));
+        assert_eq!(take_function_preflight_graph_visits(), nodes.len());
+        let lookup_work = take_function_preflight_graph_lookup_work();
+        assert_eq!(lookup_work.len(), 12);
+        // Twelve indexed lookups stay below a full 32-node walk each.
+        assert!(
+            lookup_work
+                .iter()
+                .all(|&comparisons| (1..=10).contains(&comparisons)),
+            "{lookup_work:?}"
+        );
+    }
 
     #[trace("FR-021-AC-27", "TC-031")]
     #[test]

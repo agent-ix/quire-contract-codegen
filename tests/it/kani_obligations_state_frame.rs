@@ -220,6 +220,27 @@ fn admitted_clause_refuses_non_clause_node() {
     );
 }
 
+#[trace("FR-014-AC-38", "TC-024")]
+#[test]
+fn clause_oracle_refuses_a_clause_from_another_admitted_package() {
+    let admitted = fixture(&Shape::HEALTHY);
+    let foreign = fixture(&Shape {
+        variant: 146,
+        condition: Condition::InlineTrue,
+        ..Shape::HEALTHY
+    });
+    assert!(!admitted
+        .package
+        .graph()
+        .nodes
+        .iter()
+        .any(|node| node.node_id == foreign.clause));
+    assert_eq!(
+        generate_v2_clause_oracle(&admitted.package, &foreign.clause),
+        Err(quire_contract_codegen::V2ClauseRefusal::NotClause)
+    );
+}
+
 #[trace("FR-014-AC-38")]
 #[test]
 fn admitted_inline_clause_keeps_the_clause_identity() {

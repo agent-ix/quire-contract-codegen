@@ -18,3 +18,5 @@ pub(crate) mod generate;
 #[cfg(all(test, target_os = "linux"))]
 #[path = "../../tests/it/kani_scalar_native_private.rs"]
 mod scalar_native_private;
+// Solver run records and evidence mapping for QSL-authored queries.
+pub mod smt;

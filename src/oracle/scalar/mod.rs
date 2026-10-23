@@ -1822,7 +1822,8 @@ fn unsupported_family(node_id: &CheckedNodeId, tag: CheckedNodeTag) -> ExactScal
         | CheckedNodeTag::Value
         | CheckedNodeTag::Expression
         | CheckedNodeTag::Claim
-        | CheckedNodeTag::Correspondence => ExactScalarRefusal::Unsupported {
+        | CheckedNodeTag::Correspondence
+        | CheckedNodeTag::Extension => ExactScalarRefusal::Unsupported {
             unsupported_node_id: node_id.clone(),
             node_tag: tag.as_wire(),
         },
@@ -4450,15 +4451,37 @@ pub fn derive_exact_scalar_items(
     node_ids: &[CheckedNodeId],
 ) -> Vec<Result<ExactScalarItem, ExactScalarRefusal>> {
     let lowering = package.lower(node_ids, &scalar_profile());
+    derive_exact_scalar_items_from_records(package, node_ids, &lowering.records)
+}
+
+/// Classify each item under its original one-key lowering semantics while
+/// sharing Contract IR's graph and closure context across the request.
+pub(crate) fn derive_exact_scalar_items_independent(
+    package: &CheckedPackageV2,
+    node_ids: &[CheckedNodeId],
+) -> Vec<Result<ExactScalarItem, ExactScalarRefusal>> {
+    let records = package.lower_independent_records(node_ids, &scalar_profile());
+    derive_exact_scalar_items_from_records(package, node_ids, &records)
+}
+
+fn derive_exact_scalar_items_from_records(
+    package: &CheckedPackageV2,
+    node_ids: &[CheckedNodeId],
+    records: &[CompleteLoweringRecordV2],
+) -> Vec<Result<ExactScalarItem, ExactScalarRefusal>> {
     let graph = package
         .graph()
         .nodes
         .iter()
-        .map(|node| (&node.node_id, node))
+        .map(|node| {
+            #[cfg(test)]
+            SCALAR_DERIVE_GRAPH_VISITS.with(|count| count.set(count.get() + 1));
+            (&node.node_id, node)
+        })
         .collect::<BTreeMap<_, _>>();
     node_ids
         .iter()
-        .zip(&lowering.records)
+        .zip(records)
         .map(|(node_id, record)| {
             derive_operation(&graph, node_id, record).map(|operation| ExactScalarItem {
                 node_id: node_id.clone(),
@@ -4466,6 +4489,16 @@ pub fn derive_exact_scalar_items(
             })
         })
         .collect()
+}
+
+#[cfg(test)]
+thread_local! {
+    static SCALAR_DERIVE_GRAPH_VISITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(crate) fn take_scalar_derive_graph_visits() -> usize {
+    SCALAR_DERIVE_GRAPH_VISITS.with(|count| count.replace(0))
 }
 
 /// What the derivation reads about one node.

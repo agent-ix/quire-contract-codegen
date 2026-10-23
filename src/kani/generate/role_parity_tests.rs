@@ -9,6 +9,9 @@ mod model;
 #[path = "../../../tests/state_frame_support/native_twin.rs"]
 mod native_twin;
 
+use crate::kani::generate::collection::{
+    lower_collection_claim, take_collection_graph_builds, CollectionDomainRefusal, CollectionGraph,
+};
 use crate::kani::generate::frame::{
     generate_state_frame_obligations, generate_state_frame_role, StateFrameRequest,
 };
@@ -19,10 +22,125 @@ use crate::kani::generate::outcome::{
 };
 use crate::kani::identity::StateFrameHarness;
 use ix_trace_rs::trace;
+use quire_contract_model::{CheckedNodeId, CheckedSemanticNodeV2};
+use std::cell::Cell;
+
+use crate::core::ir::clause::{ClauseGraphView, ClauseNodeIndex};
+use crate::oracle::clause::{
+    derive_v2_clause_descriptor, derive_v2_clause_descriptor_with_view, generate_v2_clause_oracle,
+    generate_v2_clause_oracle_with_view, V2ClauseRefusal,
+};
 
 const FIELDS: [&str; 2] = [model::FIELDS[0].0, model::FIELDS[1].0];
 const STATE_PATH: &str = "crate::subject::Account";
 const SUBJECT_PATH: &str = "crate::subject::deposit";
+
+fn clause_test_id(number: u8) -> CheckedNodeId {
+    CheckedNodeId {
+        domain: "quire.checked-semantic-node/v1".into(),
+        digest: format!("{number:064x}").into(),
+    }
+}
+
+fn clause_test_node(number: u8, label: &str) -> CheckedSemanticNodeV2 {
+    CheckedSemanticNodeV2 {
+        node_id: clause_test_id(number),
+        schema_version: "quire.checked-semantic-graph/v2".into(),
+        node_tag: "expression".into(),
+        semantic_form: "literal".into(),
+        semantic_type: clause_test_id(0),
+        dependencies: Vec::new(),
+        occurrences: Vec::new(),
+        recursion_group: None,
+        nominal_identity_preimage: None,
+        declaration: None,
+        owner: None,
+        body: serde_json::json!({"label": label}),
+    }
+}
+
+#[trace("TC-025")]
+#[test]
+fn collection_lower_calls_reuse_the_admitted_graph_constructor() {
+    let (package, function_id) = native_twin::Twin::new().emitted_package("BalanceNeverDrops");
+    let missing_quantifier = clause_test_id(255);
+    let _ = take_collection_graph_builds();
+    let graph = CollectionGraph::new(&package);
+    for _ in 0..3 {
+        assert!(matches!(
+            lower_collection_claim(&graph, &function_id, &missing_quantifier),
+            Err(CollectionDomainRefusal::UnsupportedShape)
+        ));
+    }
+    assert_eq!(take_collection_graph_builds(), 1);
+}
+
+#[trace("FR-014-AC-38", "TC-024")]
+#[test]
+fn clause_node_index_preserves_first_node_and_reuses_one_walk() {
+    let graph = [
+        clause_test_node(1, "first"),
+        clause_test_node(2, "other"),
+        clause_test_node(1, "later"),
+    ];
+    let visits = Cell::new(0);
+    let index = ClauseNodeIndex::from_nodes(graph.iter().inspect(|_| {
+        visits.set(visits.get() + 1);
+    }));
+    for _ in 0..3 {
+        assert_eq!(
+            index.node(&clause_test_id(1)).unwrap().body["label"],
+            "first"
+        );
+        assert_eq!(
+            index.node(&clause_test_id(2)).unwrap().body["label"],
+            "other"
+        );
+        assert!(index.node(&clause_test_id(3)).is_none());
+    }
+    assert_eq!(visits.get(), graph.len());
+
+    let (package, clause) = native_twin::Twin::new().emitted_package("BalanceNeverDrops");
+    let view = ClauseGraphView::new(&package);
+    let generated = generate_v2_clause_oracle_with_view(&clause, &view).unwrap();
+    assert_eq!(generated.descriptor.node_id, clause);
+    assert_eq!(
+        generated,
+        generate_v2_clause_oracle(&package, &clause).unwrap()
+    );
+}
+
+#[trace("FR-014-AC-38", "TC-024")]
+#[test]
+fn clause_planning_and_reading_share_one_graph_walk() {
+    // A checked graph is a Vec; guard its whole-graph access in the production call sites.
+    let reader = include_str!("../../core/ir/clause.rs");
+    let source = format!("{}{}", include_str!("../../oracle/clause.rs"), reader);
+    assert_eq!(
+        source.matches(concat!(".gra", "ph()")).count(),
+        1,
+        "clause planning and reading must build one reusable graph view"
+    );
+
+    let (package, clause) = native_twin::Twin::new().emitted_package("BalanceNeverDrops");
+    let view = ClauseGraphView::new(&package);
+    let descriptor = derive_v2_clause_descriptor_with_view(&clause, &view).unwrap();
+    assert_eq!(descriptor.node_id, clause);
+    assert_eq!(
+        descriptor,
+        derive_v2_clause_descriptor(&package, &clause).unwrap()
+    );
+    let non_clause = package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| node.node_tag.as_ref() == "expression")
+        .unwrap();
+    assert_eq!(
+        generate_v2_clause_oracle_with_view(&non_clause.node_id, &view),
+        Err(V2ClauseRefusal::NotClause)
+    );
+}
 
 fn compare_roles(twin: &native_twin::Twin, refused_role: Option<StateFrameRole>) {
     let (package, clause) = twin.emitted_package("BalanceNeverDrops");
