@@ -34,8 +34,8 @@ mod publication;
 pub use kani::run::process;
 // The routed subsystem.
 mod routed;
-// CG-owned solver run evidence.
-pub mod smt;
+// CG-owned solver run evidence, implemented in the routed subsystem.
+pub use routed::smt;
 // The replay subsystem.
 mod replay;
 // The evidence subsystem.
