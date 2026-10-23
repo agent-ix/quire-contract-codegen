@@ -1545,3 +1545,97 @@ fn tc_022_bundle_is_typed_rust_with_bound_identity() {
         .contents
         .contains("test/version-strategy/FR-034@9/VersionStillUnchanged"));
 }
+
+fn residual_strategy_projection(clause_count: usize) -> Value {
+    let mut projection = version_projection();
+    for index in 1..clause_count {
+        let name = format!("Other{index:04}");
+        let mut clause = projection["package"]["requirements"][0]["clauses"][0].clone();
+        clause["id"] = json!(name);
+        projection["package"]["requirements"][0]["clauses"]
+            .as_array_mut()
+            .unwrap()
+            .push(clause);
+        let mut binding = projection["bindings"][0].clone();
+        binding["clause"]["clause"] = json!(name);
+        projection["bindings"].as_array_mut().unwrap().push(binding);
+    }
+    projection
+}
+
+/// This uses IR's real public executable-projection reader, not a QSL source fixture.
+#[trace("TC-017", "FR-008-AC-3", "FR-008-AC-6")]
+#[test]
+fn residual_strategy_kr_families_preserve_complete_selected_artifacts() {
+    let mut expected = None;
+    for clauses in [4, 8, 16] {
+        let package = decode(&residual_strategy_projection(clauses));
+        assert_eq!(package.clauses().len(), clauses);
+        for requests in [2, 4, 8] {
+            for _ in 0..requests {
+                let generated = generate_bound_strategy(&BoundStrategyRequest {
+                    package: &package,
+                    clause: &clause_ref(),
+                    population: BoundStrategyPopulation::Broad,
+                    minimum_accepted_cases: 1,
+                    minimum_rejected_cases: 0,
+                    maximum_discarded_cases: 0,
+                })
+                .expect("the complete admitted package generates a selected numeric strategy");
+                let snapshot = (generated.rust.path, generated.rust.contents);
+                if let Some(expected) = &expected {
+                    assert_eq!(&snapshot, expected);
+                } else {
+                    expected = Some(snapshot);
+                }
+            }
+            println!("strategy baseline K={requests} R={clauses}: complete selected artifact bytes preserved");
+        }
+    }
+}
+
+/// Whole-package refusal must precede selection of a healthy clause's generated oracle.
+#[trace("TC-017", "FR-008-AC-3", "FR-008-AC-6")]
+#[test]
+fn residual_strategy_keeps_unknown_selection_and_refused_sibling_precedence() {
+    let mut projection = residual_strategy_projection(4);
+    let read = projection["bindings"][1]["expression"]["expression"]["left"].clone();
+    projection["bindings"][1]["expression"]["expression"]["left"] =
+        json!({"node":"numeric_negate", "operand":read, "source":span(4)});
+    let package = decode(&projection);
+    let absent = ClauseRef::new(
+        clause_ref().requirement().clone(),
+        ClauseId::new("Absent").unwrap(),
+    );
+    let refused_sibling = ClauseRef::new(
+        clause_ref().requirement().clone(),
+        ClauseId::new("Other0001").unwrap(),
+    );
+    let mut expected_refusal = None;
+    for _ in 0..8 {
+        let request = |clause| BoundStrategyRequest {
+            package: &package,
+            clause,
+            population: BoundStrategyPopulation::Broad,
+            minimum_accepted_cases: 1,
+            minimum_rejected_cases: 0,
+            maximum_discarded_cases: 0,
+        };
+        let unknown = generate_bound_strategy(&request(&absent)).unwrap_err();
+        assert_eq!(unknown.code, StrategyErrorCode::UnknownClause);
+        assert_eq!(unknown.clause.as_deref(), Some(&absent));
+        let refusal = generate_bound_strategy(&request(&clause_ref())).unwrap_err();
+        assert_eq!(refusal.code, StrategyErrorCode::UnsupportedClause);
+        assert_eq!(
+            refusal.generation_code,
+            Some(GenerationErrorCode::UnsupportedExpression)
+        );
+        assert_eq!(refusal.clause.as_deref(), Some(&refused_sibling));
+        let snapshot = format!("{refusal:?}");
+        if let Some(expected) = &expected_refusal {
+            assert_eq!(&snapshot, expected);
+        } else {
+            expected_refusal = Some(snapshot);
+        }
+    }
+}
