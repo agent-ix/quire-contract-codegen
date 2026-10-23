@@ -3292,6 +3292,95 @@ mod tests {
         ));
     }
 
+    fn typed_fixture_node(
+        ordinal: usize,
+        tag: &str,
+        form: &str,
+        body: Option<quire_contract_model::CheckedTerm>,
+    ) -> crate::oracle::checked_graph::fixture::Node {
+        let id = CheckedNodeId {
+            domain: "quire.checked-semantic-node/v1".into(),
+            digest: format!("{ordinal:064x}").into(),
+        };
+        crate::oracle::checked_graph::fixture::Node::new(CheckedSemanticNodeV2 {
+            node_id: id.clone(), schema_version: "quire.checked-semantic-graph/v2".into(),
+            node_tag: tag.into(), semantic_form: form.into(), semantic_type: id,
+            dependencies: Vec::new(), occurrences: Vec::new(), recursion_group: None,
+            nominal_identity_preimage: None, declaration: None, owner: None,
+            body: serde_json::Value::Null,
+        }, body)
+    }
+
+    /// Private typed terms guard the schedule projection policy. These raw
+    /// spellings do not claim admission through the package reader.
+    #[trace("TC-031")]
+    #[test]
+    fn schedule_literals_keep_raw_spelling_and_refusal_precedence() {
+        use quire_contract_model::{CheckedTerm, LiteralKind};
+        let owner = typed_fixture_node(1, "expression", "binary", None).node_id.clone();
+        let ty = typed_fixture_node(2, "scalar_type", "integer", None).node_id.clone();
+        let types = BTreeMap::from([(ty.clone(), schedule::ValueKind::Integer)]);
+        for spelling in ["0", "01", "-0", "-01", "999999999999999999999999999999999999999999999999"] {
+            let literal = CheckedTerm::Literal { type_id: ty.clone(), value_kind: LiteralKind::Integer,
+                value: serde_json::json!(spelling) };
+            assert_eq!(decode_schedule_operand(&literal, &owner, &types),
+                Ok(schedule::GraphOperand::Literal { value_kind: schedule::ValueKind::Integer,
+                    value: spelling.into() }));
+        }
+        for value in [serde_json::json!("+1"), serde_json::json!(""), serde_json::json!("-"),
+            serde_json::json!("--1"), serde_json::json!("1x"), serde_json::json!(1)] {
+            let literal = CheckedTerm::Literal { type_id: ty.clone(), value_kind: LiteralKind::Integer, value };
+            assert_eq!(decode_schedule_operand(&literal, &owner, &types),
+                Err(schedule::ScheduleRefusal::MalformedTerm(owner.clone())));
+            assert_eq!(decode_schedule_operand(&literal, &owner, &BTreeMap::new()),
+                Err(schedule::ScheduleRefusal::WrongType(owner.clone())));
+        }
+        let unsupported = CheckedTerm::Literal { type_id: ty, value_kind: LiteralKind::Text,
+            value: serde_json::Value::Null };
+        assert_eq!(decode_schedule_operand(&unsupported, &owner, &BTreeMap::new()),
+            Err(schedule::ScheduleRefusal::UnsupportedLiteral(owner.clone())));
+        assert_eq!(decode_reference(&unsupported, &owner),
+            Err(schedule::ScheduleRefusal::UnsupportedLiteral(owner)));
+    }
+
+    #[trace("TC-031")]
+    #[test]
+    fn first_body_binding_full_keys_and_name_body_ambiguity_stay_distinct() {
+        use quire_contract_model::{CheckedDeclaration, CheckedTerm, LiteralKind};
+        let body = typed_fixture_node(10, "expression", "binary", None);
+        let other = typed_fixture_node(11, "expression", "binary", None);
+        let reference = |target: &CheckedNodeId| CheckedTerm::Reference { target: target.clone() };
+        let binding = |value: CheckedTerm| CheckedTerm::Binding { name: "body".into(), value: Box::new(value) };
+        let function = |ordinal, target: &CheckedNodeId| {
+            let mut node = typed_fixture_node(ordinal, "function", "pure_function",
+                Some(CheckedTerm::Aggregate { members: vec![binding(reference(target))] }));
+            node.declaration = Some(CheckedDeclaration { qualified_name: vec!["same".into()] });
+            node
+        };
+        let first = function(20, &body.node_id);
+        let same_name_other_body = function(21, &other.node_id);
+        let nodes = [&body, &other, &first, &same_name_other_body];
+        let graph: Graph<'_> = nodes.into_iter().map(|node| (&node.node_id, node)).collect();
+        assert_eq!(source_function_node_id(&graph, "same", &body.node_id), Some(&first.node_id));
+        assert_eq!(source_function_node_id(&graph, "Same", &body.node_id), None);
+        let duplicate = function(22, &body.node_id);
+        let nodes = [&body, &other, &first, &same_name_other_body, &duplicate];
+        let ambiguous: Graph<'_> = nodes.into_iter().map(|node| (&node.node_id, node)).collect();
+        assert_eq!(source_function_node_id(&ambiguous, "same", &body.node_id), None);
+        let malformed_first = CheckedTerm::Aggregate { members: vec![
+            binding(CheckedTerm::Literal { type_id: body.node_id.clone(), value_kind: LiteralKind::Integer,
+                value: serde_json::json!("1") }), binding(reference(&body.node_id)),
+        ] };
+        assert_eq!(binding_value(&malformed_first, "body").and_then(|term| reference_in_graph(term, &graph)), None);
+        let mut foreign = body.node_id.clone();
+        foreign.domain = "different-domain".into();
+        let first_dangling = CheckedTerm::Aggregate { members: vec![binding(reference(&foreign)), binding(reference(&body.node_id))] };
+        assert_eq!(binding_value(&first_dangling, "body").and_then(|term| reference_in_graph(term, &graph)), None);
+        assert_eq!(reference_in_graph(&reference(&foreign), &graph), None);
+        assert_eq!(reference_node_id(&reference(&foreign), graph.nodes()), None);
+        assert_eq!(reference_node_id(&reference(&body.node_id), graph.nodes()), Some(&body.node_id));
+    }
+
     #[test]
     fn generated_function_claim_serializes_package_identity_and_requested_key() {
         let identity: CheckedSemanticId = serde_json::from_value(serde_json::json!({
