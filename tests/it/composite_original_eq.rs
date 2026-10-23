@@ -10,12 +10,12 @@ use qsl_replay::{
     compile_package, parity_obligation, DependencyInput, DigestDomain, DigestRecord, Domain,
     DomainKey, DomainKind, EqualityOperator, FiniteBound, InconclusiveCause, Integer,
     OperandIdentity, ParityBoundRefusal, ProofBound, Refinement, ReplayLimits, ReplayRefusal,
-    ReplaySource, ScalarIdentityMismatch, ScalarLimits, SourceIdentity, StageLimits,
+    ReplayRequest, ReplaySource, ScalarIdentityMismatch, ScalarLimits, SourceIdentity, StageLimits,
     SuppliedLibrary, TerminalValue, VerifiedShadow, VerifiedShadowResult, WireNodeId,
 };
 use quire_contract_codegen::{
-    CompositeBuildError, DependencyLock, LockedSource, OriginalCompositeEqContext,
-    OriginalCompositeEqRequest, ReplayInputs,
+    CompositeBuildError, CompositePacketMember, DependencyLock, LockedSource,
+    OriginalCompositeEqContext, OriginalCompositeEqRequest, ReplayInputs,
 };
 use quire_contract_model::{
     CheckedCompositeOperandDomain, CheckedCompositeOperandError, CheckedNodeId, CheckedOccurrence,
@@ -730,6 +730,12 @@ fn tc_035_original_composite_request_requires_its_own_packet() {
         request.wire().replay_target.occurrence_key.as_ref(),
         packet.occurrence_key.as_ref()
     );
+    let readback = ReplayRequest::decode(request.wire().clone(), ReplayLimits::default())
+        .expect("the packet-backed request has a typed QSL readback");
+    assert_eq!(
+        readback.replay_target().occurrence_key(),
+        packet.occurrence_key.as_ref()
+    );
 
     let mut wrong_arm = packet.clone();
     wrong_arm.source = Some(ReplaySource::Witness(
@@ -744,7 +750,9 @@ fn tc_035_original_composite_request_requires_its_own_packet() {
             &[],
             100_000,
         ),
-        Err(CompositeBuildError::PacketMismatch(_))
+        Err(CompositeBuildError::PacketMismatch(
+            CompositePacketMember::SourceArm
+        ))
     ));
 
     let mut wrong_package = packet;
@@ -762,7 +770,108 @@ fn tc_035_original_composite_request_requires_its_own_packet() {
             &[],
             100_000,
         ),
-        Err(CompositeBuildError::PacketMismatch(_))
+        Err(CompositeBuildError::PacketMismatch(
+            CompositePacketMember::Package
+        ))
+    ));
+
+    let mut wrong_subject = context
+        .parity_packet(&node, &occurrence, EqualityOperator::Equal, &[], 100_000)
+        .expect("the checked claim supplies another packet");
+    wrong_subject.clause_node =
+        Some(WireNodeId::from_hex(&"44".repeat(32)).expect("the test node id is valid"));
+    assert!(matches!(
+        context.request_from_packet(
+            wrong_subject,
+            &node,
+            &occurrence,
+            EqualityOperator::Equal,
+            &[],
+            100_000,
+        ),
+        Err(CompositeBuildError::PacketMismatch(
+            CompositePacketMember::Subject
+        ))
+    ));
+
+    let mut wrong_occurrence = context
+        .parity_packet(&node, &occurrence, EqualityOperator::Equal, &[], 100_000)
+        .expect("the checked claim supplies another packet");
+    wrong_occurrence.occurrence_key = Some(qsl_replay::OccurrenceKey::new(
+        WireNodeId::from_hex(&node.digest).expect("the checked node id is valid"),
+        qsl_replay::Origin::new(qsl_replay::Role::new("expression"), u64::MAX),
+    ));
+    assert!(matches!(
+        context.request_from_packet(
+            wrong_occurrence,
+            &node,
+            &occurrence,
+            EqualityOperator::Equal,
+            &[],
+            100_000,
+        ),
+        Err(CompositeBuildError::PacketMismatch(
+            CompositePacketMember::Occurrence
+        ))
+    ));
+
+    let mut wrong_target = context
+        .parity_packet(&node, &occurrence, EqualityOperator::Equal, &[], 100_000)
+        .expect("the checked claim supplies another packet");
+    wrong_target.replay_target = qsl_replay::ReplayTargetMembers::function(
+        qsl_replay::QualifiedName::new(vec![
+            qsl_replay::Identifier::new("g").expect("valid function name")
+        ])
+        .expect("valid function selection"),
+    );
+    assert!(matches!(
+        context.request_from_packet(
+            wrong_target,
+            &node,
+            &occurrence,
+            EqualityOperator::Equal,
+            &[],
+            100_000,
+        ),
+        Err(CompositeBuildError::PacketMismatch(
+            CompositePacketMember::Target
+        ))
+    ));
+
+    let mut wrong_obligation = context
+        .parity_packet(&node, &occurrence, EqualityOperator::Equal, &[], 100_000)
+        .expect("the checked claim supplies another packet");
+    wrong_obligation.obligation_identity = Some([0x55; 32]);
+    assert!(matches!(
+        context.request_from_packet(
+            wrong_obligation,
+            &node,
+            &occurrence,
+            EqualityOperator::Equal,
+            &[],
+            100_000,
+        ),
+        Err(CompositeBuildError::PacketMismatch(
+            CompositePacketMember::Obligation
+        ))
+    ));
+
+    let mut missing_key = context
+        .parity_packet(&node, &occurrence, EqualityOperator::Equal, &[], 100_000)
+        .expect("the checked claim supplies another packet");
+    missing_key.occurrence_key = None;
+    assert!(matches!(
+        context.request_from_packet(
+            missing_key,
+            &node,
+            &occurrence,
+            EqualityOperator::Equal,
+            &[],
+            100_000,
+        ),
+        Err(CompositeBuildError::PacketAdmission(
+            qsl_replay::WitnessRefusal::MissingMember("occurrence_key")
+        ))
     ));
 }
 

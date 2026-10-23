@@ -93,6 +93,16 @@ pub enum CompositePacketMember {
     Subject,
     /// The packet belongs to another checked package.
     Package,
+    /// The packet's source references differ from the checked package context.
+    SourceDigests,
+    /// The packet's profile selections differ from the request context.
+    Profiles,
+    /// The packet's accounting limits differ from the checked claim context.
+    Limits,
+    /// The packet's declared domains differ from the checked claim context.
+    Domains,
+    /// The packet names a different claim producer.
+    Backend,
     /// Parity requires an input-source packet.
     SourceArm,
     /// The packet identifies a different parity obligation.
@@ -443,6 +453,31 @@ impl OriginalCompositeEqContext {
         if envelope.package_id() != self.package_id {
             return Err(CompositeBuildError::PacketMismatch(
                 CompositePacketMember::Package,
+            ));
+        }
+        if envelope.to_packet().source_digests != Some(vec![self.inputs.source.wire()]) {
+            return Err(CompositeBuildError::PacketMismatch(
+                CompositePacketMember::SourceDigests,
+            ));
+        }
+        if !envelope.profile_selections().is_empty() {
+            return Err(CompositeBuildError::PacketMismatch(
+                CompositePacketMember::Profiles,
+            ));
+        }
+        if envelope.run_limits() != self.inputs.accounting_limits {
+            return Err(CompositeBuildError::PacketMismatch(
+                CompositePacketMember::Limits,
+            ));
+        }
+        if envelope.declared_domains() != self.inputs.declared_domains.as_slice() {
+            return Err(CompositeBuildError::PacketMismatch(
+                CompositePacketMember::Domains,
+            ));
+        }
+        if envelope.backend().as_str() != "quire-contract-codegen" {
+            return Err(CompositeBuildError::PacketMismatch(
+                CompositePacketMember::Backend,
             ));
         }
         if !matches!(envelope.source(), ReplaySource::Input(_)) {

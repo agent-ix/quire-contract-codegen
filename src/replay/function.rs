@@ -538,6 +538,16 @@ pub enum PacketClaimMember {
     Subject,
     /// The packet named another checked package.
     Package,
+    /// The packet's source references differ from the package lock.
+    SourceDigests,
+    /// The packet's profile selections differ from the request context.
+    Profiles,
+    /// The packet's accounting limits differ from the proving run.
+    Limits,
+    /// The packet's declared domains differ from the proving run.
+    Domains,
+    /// The packet names a different backend producer.
+    Backend,
     /// A function falsification requires a backend witness.
     SourceArm,
     /// The packet named another obligation.
@@ -732,6 +742,31 @@ impl ReplayPackage {
         if envelope.package_id() != self.site.package_id {
             return Err(FunctionPacketError::ClaimMismatch(
                 PacketClaimMember::Package,
+            ));
+        }
+        if envelope.to_packet().source_digests != Some(vec![self.inputs.source.wire()]) {
+            return Err(FunctionPacketError::ClaimMismatch(
+                PacketClaimMember::SourceDigests,
+            ));
+        }
+        if !envelope.profile_selections().is_empty() {
+            return Err(FunctionPacketError::ClaimMismatch(
+                PacketClaimMember::Profiles,
+            ));
+        }
+        if envelope.run_limits() != self.inputs.accounting_limits {
+            return Err(FunctionPacketError::ClaimMismatch(
+                PacketClaimMember::Limits,
+            ));
+        }
+        if envelope.declared_domains() != self.inputs.declared_domains.as_slice() {
+            return Err(FunctionPacketError::ClaimMismatch(
+                PacketClaimMember::Domains,
+            ));
+        }
+        if envelope.backend().as_str() != BACKEND_IDENTITY {
+            return Err(FunctionPacketError::ClaimMismatch(
+                PacketClaimMember::Backend,
             ));
         }
         if !matches!(envelope.source(), ReplaySource::Witness(_)) {
@@ -1458,6 +1493,12 @@ mod tests {
             .expect("the matching witness packet is admitted");
         assert_eq!(
             request.replay_target.occurrence_key.as_ref(),
+            packet.occurrence_key.as_ref()
+        );
+        let readback = ReplayRequest::decode(request, package.inputs.replay_limits)
+            .expect("QSL reads the packet-backed request");
+        assert_eq!(
+            readback.replay_target().occurrence_key(),
             packet.occurrence_key.as_ref()
         );
 
