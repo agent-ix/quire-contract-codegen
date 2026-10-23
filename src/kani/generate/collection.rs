@@ -87,8 +87,18 @@ pub(super) struct LoweredCollectionClaim {
 
 /// First admitted graph entries, retained in source order for collection lowering.
 pub(super) struct CollectionGraph<'a> {
+    package: &'a CheckedPackageV2,
+    index: CollectionNodeIndex<'a>,
+}
+
+struct CollectionNodeIndex<'a> {
     by_id: FirstMatchIndex<&'a CheckedNodeId, &'a CheckedSemanticNodeV2>,
     by_digest: FirstMatchIndex<&'a str, &'a CheckedSemanticNodeV2>,
+}
+
+#[cfg(test)]
+thread_local! {
+    static COLLECTION_GRAPH_BUILD_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 struct FirstMatchIndex<K, V> {
@@ -116,10 +126,17 @@ impl<K: Ord, V> FirstMatchIndex<K, V> {
 
 impl<'a> CollectionGraph<'a> {
     pub(super) fn new(package: &'a CheckedPackageV2) -> Self {
-        Self::from_nodes(package.graph().nodes.iter())
+        Self {
+            package,
+            index: CollectionNodeIndex::from_nodes(package.graph().nodes.iter()),
+        }
     }
+}
 
+impl<'a> CollectionNodeIndex<'a> {
     fn from_nodes(nodes: impl IntoIterator<Item = &'a CheckedSemanticNodeV2>) -> Self {
+        #[cfg(test)]
+        COLLECTION_GRAPH_BUILD_COUNT.with(|count| count.set(count.get() + 1));
         let mut by_id = FirstMatchIndex::new();
         let mut by_digest = FirstMatchIndex::new();
         for node in nodes {
@@ -176,17 +193,17 @@ pub(super) fn collection_symbols_conflict<I: PartialEq>(
 
 /// Resolve one selected claim before rendering; no caller-provided field or domain is accepted.
 pub(super) fn lower_collection_claim(
-    package: &CheckedPackageV2,
+    graph: &CollectionGraph<'_>,
     function_id: &CheckedNodeId,
     quantifier_id: &CheckedNodeId,
 ) -> Result<LoweredCollectionClaim, CollectionDomainRefusal> {
-    let graph = CollectionGraph::new(package);
     let quantifier = graph
+        .index
         .node(quantifier_id)
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
-    let field = resolve_collection_field(package, &graph, function_id, quantifier)?;
+    let field = resolve_collection_field(graph.package, &graph.index, function_id, quantifier)?;
     Ok(LoweredCollectionClaim {
-        package_digest: package.package_id().digest.to_string(),
+        package_digest: graph.package.package_id().digest.to_string(),
         field,
     })
 }
@@ -409,7 +426,7 @@ fn declared_field<'a, F, E, T: ?Sized>(
 }
 
 fn admitted_declaration(
-    graph: &CollectionGraph<'_>,
+    graph: &CollectionNodeIndex<'_>,
     digest: &str,
 ) -> Result<CheckedNodeId, CollectionDomainRefusal> {
     graph
@@ -424,7 +441,7 @@ fn admitted_declaration(
 /// never picks a declaration by matching a same-typed field elsewhere in the package.
 fn resolve_collection_field(
     package: &CheckedPackageV2,
-    graph: &CollectionGraph<'_>,
+    graph: &CollectionNodeIndex<'_>,
     function_id: &CheckedNodeId,
     quantifier: &CheckedSemanticNodeV2,
 ) -> Result<CollectionFieldDomain, CollectionDomainRefusal> {
@@ -597,7 +614,7 @@ fn binary_predicate_operation(
 }
 
 fn resolve_predicate(
-    graph: &CollectionGraph<'_>,
+    graph: &CollectionNodeIndex<'_>,
     function: &CheckedSemanticNodeV2,
     binder_name: &str,
     predicate: &CheckedSemanticNodeV2,
@@ -663,7 +680,7 @@ fn resolve_predicate(
 }
 
 fn sequence_element_type(
-    graph: &CollectionGraph<'_>,
+    graph: &CollectionNodeIndex<'_>,
     collection: &CheckedSemanticNodeV2,
 ) -> Result<CheckedNodeId, CollectionDomainRefusal> {
     let type_node = graph
@@ -692,7 +709,7 @@ fn sequence_element_type(
 }
 
 fn verify_function_receiver(
-    graph: &CollectionGraph<'_>,
+    graph: &CollectionNodeIndex<'_>,
     function: &CheckedSemanticNodeV2,
     projection: &CheckedSemanticNodeV2,
     declaration: &CheckedNodeId,
@@ -769,7 +786,7 @@ fn parameter_level(node: &CheckedSemanticNodeV2) -> Option<u64> {
 }
 
 fn integer_literal(
-    graph: &CollectionGraph<'_>,
+    graph: &CollectionNodeIndex<'_>,
     term: &Value,
     element_type: &CheckedNodeId,
 ) -> Result<i64, CollectionDomainRefusal> {
@@ -815,7 +832,7 @@ fn integer_literal(
 /// nodes. A quantifier under negation, disjunction, implication, or another operation does not
 /// represent an independent obligation and must not be asserted on its own.
 fn is_top_level_conjunct(
-    graph: &CollectionGraph<'_>,
+    graph: &CollectionNodeIndex<'_>,
     root: &CheckedNodeId,
     selected: &CheckedNodeId,
 ) -> bool {
@@ -840,7 +857,7 @@ fn is_top_level_conjunct(
 }
 
 fn boolean_literal(
-    graph: &CollectionGraph<'_>,
+    graph: &CollectionNodeIndex<'_>,
     term: &Value,
 ) -> Result<bool, CollectionDomainRefusal> {
     let id = term_target(term).ok_or(CollectionDomainRefusal::UnsupportedShape)?;
@@ -858,7 +875,11 @@ fn boolean_literal(
         .ok_or(CollectionDomainRefusal::UnsupportedShape)
 }
 
-fn depends_on(graph: &CollectionGraph<'_>, root: &CheckedNodeId, selected: &CheckedNodeId) -> bool {
+fn depends_on(
+    graph: &CollectionNodeIndex<'_>,
+    root: &CheckedNodeId,
+    selected: &CheckedNodeId,
+) -> bool {
     let mut pending = vec![root.clone()];
     let mut seen = std::collections::BTreeSet::new();
     while let Some(current) = pending.pop() {
@@ -946,6 +967,7 @@ mod tests {
     }
 
     fn assert_collection_graph_reuses_one_ordered_walk() {
+        COLLECTION_GRAPH_BUILD_COUNT.with(|count| count.set(0));
         let checked_node = |digit: &str| -> CheckedSemanticNodeV2 {
             let id = |digit: &str| {
                 serde_json::json!({
@@ -966,12 +988,19 @@ mod tests {
         let duplicate = checked_node("2");
         let visited = Cell::new(0usize);
         let nodes = std::iter::repeat_n(&preceding, 126).chain([&selected, &duplicate]);
-        let graph = CollectionGraph::from_nodes(nodes.inspect(|_| visited.set(visited.get() + 1)));
+        let graph =
+            CollectionNodeIndex::from_nodes(nodes.inspect(|_| visited.set(visited.get() + 1)));
+        COLLECTION_GRAPH_BUILD_COUNT.with(|count| {
+            assert_eq!(count.get(), 1, "the graph index was built once");
+        });
         for _ in 0..3 {
             let found = graph.node(&selected.node_id);
             assert!(std::ptr::eq(found.expect("selected node"), &selected));
         }
         assert_eq!(visited.get(), 128, "one request graph construction");
+        COLLECTION_GRAPH_BUILD_COUNT.with(|count| {
+            assert_eq!(count.get(), 1, "K lookups must reuse the same graph index");
+        });
         assert!(
             std::ptr::eq(
                 graph
@@ -1283,7 +1312,7 @@ mod tests {
 
     #[test]
     fn unresolved_projection_declaration_is_field_not_admitted() {
-        let graph = CollectionGraph::from_nodes(std::iter::empty());
+        let graph = CollectionNodeIndex::from_nodes(std::iter::empty());
         assert_eq!(
             admitted_declaration(&graph, "missing-declaration"),
             Err(CollectionDomainRefusal::FieldNotAdmitted),
