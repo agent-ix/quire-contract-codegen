@@ -4806,6 +4806,19 @@ mod tests {
     use ix_trace_rs::trace;
     use quire_contract_model::{CheckedPackageIncomplete, CheckedPackageLimit};
 
+    #[trace("FR-014-AC-3")]
+    #[test]
+    fn hybrid_family_is_unsupported_and_preserves_node_identity() {
+        let node = node_id('b');
+        assert_eq!(
+            unsupported_family(&node, CheckedNodeTag::Hybrid),
+            ExactScalarRefusal::Unsupported {
+                unsupported_node_id: node,
+                node_tag: "hybrid",
+            }
+        );
+    }
+
     fn node_id(digit: char) -> CheckedNodeId {
         serde_json::from_value(serde_json::json!({
             "domain": "quire.checked-semantic-node/v1",
