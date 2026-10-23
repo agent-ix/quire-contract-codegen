@@ -6,8 +6,9 @@
 //! claim of QSL compilation or generated oracle behavior.
 
 use super::{narrowing, references, Graph, Narrowing};
+use crate::core::canonical;
 use ix_trace_rs::trace;
-use quire_canonical::{sha256, Limits};
+use quire_canonical::Limits;
 use quire_contract_model::{
     derive_application_node_id, encode_checked_package_v2, ApplicationIdentityContext,
     ApplicationNodeDraft, ApplicationOperator, CheckedCapability, CheckedNodeId,
@@ -76,9 +77,11 @@ fn encode_draft(wire: &Value) -> Vec<u8> {
         identity_projection: &graph.nodes,
     };
     let mut id: CheckedSemanticId = serde_json::from_value(wire["package_id"].clone()).unwrap();
-    id.digest = sha256(&borrowed, Limits::new(BYTES))
+    id.digest = canonical::content_digest_with_limits(&borrowed, Limits::new(BYTES))
         .unwrap()
-        .to_string()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>()
         .into();
     encode_checked_package_v2(
         &borrowed,
@@ -123,7 +126,7 @@ fn opaque_operation_member_does_not_add_a_consumer_to_true_narrowing() {
             )
             .unwrap();
     }
-    let original_bytes = quire_canonical::to_vec(&wire, Limits::new(BYTES)).unwrap();
+    let original_bytes = canonical::content_bytes(&wire).unwrap();
     let original = read(&original_bytes, &evidence, "ORIGINAL");
     let target = original.graph().nodes.iter().find(|n| matches!(original.term(&n.node_id),
         Some(CheckedTerm::Application { operation, .. }) if operation["identity"] == "quire.op.integer.mul")).unwrap();
