@@ -10,11 +10,12 @@ use qsl_replay::{
     compile_package, parity_obligation, DependencyInput, DigestDomain, DigestRecord, Domain,
     DomainKey, DomainKind, EqualityOperator, FiniteBound, InconclusiveCause, Integer,
     OperandIdentity, ParityBoundRefusal, ProofBound, Refinement, ReplayLimits, ReplayRefusal,
-    ScalarIdentityMismatch, ScalarLimits, SourceIdentity, StageLimits, SuppliedLibrary,
-    TerminalValue, VerifiedShadow, VerifiedShadowResult, WireNodeId,
+    ReplaySource, ScalarIdentityMismatch, ScalarLimits, SourceIdentity, StageLimits,
+    SuppliedLibrary, TerminalValue, VerifiedShadow, VerifiedShadowResult, WireNodeId,
 };
 use quire_contract_codegen::{
-    CompositeBuildError, DependencyLock, LockedSource, OriginalCompositeEqContext, ReplayInputs,
+    CompositeBuildError, DependencyLock, LockedSource, OriginalCompositeEqContext,
+    OriginalCompositeEqRequest, ReplayInputs,
 };
 use quire_contract_model::{
     CheckedCompositeOperandDomain, CheckedCompositeOperandError, CheckedNodeId, CheckedOccurrence,
@@ -135,6 +136,40 @@ fn context(package: CheckedPackageV2, function: &str) -> OriginalCompositeEqCont
         CheckedPackageReadLimits::bounded(),
     )
     .unwrap()
+}
+
+// Existing FR-033 controls use the claim producer before invoking the new packet-only request
+// boundary. FR-024-AC-44/46 swap packets explicitly in their dedicated control below.
+trait OriginalRequestFixture {
+    fn request(
+        &self,
+        node: &CheckedNodeId,
+        occurrence: &CheckedOccurrence,
+        operator: EqualityOperator,
+        harness_bounds: &[ProofBound],
+        work_limit: u64,
+    ) -> Result<OriginalCompositeEqRequest, CompositeBuildError>;
+}
+
+impl OriginalRequestFixture for OriginalCompositeEqContext {
+    fn request(
+        &self,
+        node: &CheckedNodeId,
+        occurrence: &CheckedOccurrence,
+        operator: EqualityOperator,
+        harness_bounds: &[ProofBound],
+        work_limit: u64,
+    ) -> Result<OriginalCompositeEqRequest, CompositeBuildError> {
+        let packet = self.parity_packet(node, occurrence, operator, harness_bounds, work_limit)?;
+        self.request_from_packet(
+            packet,
+            node,
+            occurrence,
+            operator,
+            harness_bounds,
+            work_limit,
+        )
+    }
 }
 
 fn application(package: &CheckedPackageV2, function: &str) -> (CheckedNodeId, CheckedOccurrence) {
@@ -669,6 +704,66 @@ fn wrong_node_and_occurrence_refuse_before_invocation() {
     assert!(
         matches!(context.request(&node, &wrong_occurrence, EqualityOperator::Equal, &[], 100_000), Err(CompositeBuildError::Operands(cause)) if matches!(*cause, CheckedCompositeOperandError::MissingOccurrence { .. }))
     );
+}
+
+/// Operator parity uses the independently produced, admitted packet for its own checked claim.
+#[trace("FR-024-AC-44", "FR-024-AC-46", "TC-035")]
+#[test]
+fn tc_035_original_composite_request_requires_its_own_packet() {
+    let package = checked(SOURCE);
+    let (node, occurrence) = application(&package, "f");
+    let context = context(package, "f");
+    let packet = context
+        .parity_packet(&node, &occurrence, EqualityOperator::Equal, &[], 100_000)
+        .expect("the original checked claim supplies a packet");
+    let request = context
+        .request_from_packet(
+            packet.clone(),
+            &node,
+            &occurrence,
+            EqualityOperator::Equal,
+            &[],
+            100_000,
+        )
+        .expect("the matching packet can build a request");
+    assert_eq!(
+        request.wire().replay_target.occurrence_key.as_ref(),
+        packet.occurrence_key.as_ref()
+    );
+
+    let mut wrong_arm = packet.clone();
+    wrong_arm.source = Some(ReplaySource::Witness(
+        qsl_replay::Witness::parse("<<<assertion|h|c|>>>").expect("valid fixture witness"),
+    ));
+    assert!(matches!(
+        context.request_from_packet(
+            wrong_arm,
+            &node,
+            &occurrence,
+            EqualityOperator::Equal,
+            &[],
+            100_000,
+        ),
+        Err(CompositeBuildError::PacketMismatch(_))
+    ));
+
+    let mut wrong_package = packet;
+    wrong_package
+        .package_id
+        .as_mut()
+        .expect("the producer supplied package identity")
+        .1 = "ab".repeat(32);
+    assert!(matches!(
+        context.request_from_packet(
+            wrong_package,
+            &node,
+            &occurrence,
+            EqualityOperator::Equal,
+            &[],
+            100_000,
+        ),
+        Err(CompositeBuildError::PacketMismatch(_))
+    ));
 }
 
 /// QSL owns body membership and refuses an admitted node from another function before Disagreed.

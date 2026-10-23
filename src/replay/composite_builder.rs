@@ -10,13 +10,14 @@
 use std::{collections::BTreeMap, fmt};
 
 use qsl_replay::{
-    compile_admitted, parity_obligation, settle_verified_shadow, AdmittedCompilation,
-    AdmittedContext, AdmittedRefusal, BoundEntries, ByteDigest, CompositeEvidence,
-    CompositeIdentity, CompositeParityClaim, DependencyInput, DigestDomain, DigestRecord, Domain,
-    DomainKey, EqualityOperator, Identifier, IdentityEncodeError, OccurrenceKey, OperandIdentity,
-    Origin, ParityArgument, ParityPreimage, ProofBound, QualifiedName, ReplayRequest,
-    ReplayRequestRefusal, ReplayRequestWire, ReplaySource, RequestTargetWire, Role, VerifiedShadow,
-    VerifiedShadowReport, WireNodeId,
+    compile_admitted, compile_package, parity_obligation, settle_verified_shadow,
+    AdmittedCompilation, AdmittedContext, AdmittedRefusal, BoundEntries, ByteDigest,
+    CompositeEvidence, CompositeIdentity, CompositeParityClaim, DependencyInput, DigestDomain,
+    DigestRecord, Domain, DomainKey, EqualityOperator, Identifier, IdentityEncodeError, NoPayload,
+    OccurrenceKey, OperandIdentity, Origin, ParityArgument, ParityPreimage, ProofBound,
+    QualifiedName, ReplayRefusal, ReplayRequest, ReplayRequestRefusal, ReplayRequestWire,
+    ReplaySource, ReplayTarget, ReplayTargetMembers, RequestTargetWire, Role, VerifiedShadow,
+    VerifiedShadowReport, WireNodeId, WitnessEnvelope, WitnessPacket, WitnessRefusal,
 };
 use quire_contract_model::{
     CheckedCompositeOperandDomain, CheckedCompositeOperandError, CheckedCompositeOperands,
@@ -74,8 +75,29 @@ pub enum CompositeBuildError {
     OperandShape,
     /// The owning O-09 encoder refused the preimage.
     Identity(IdentityEncodeError),
+    /// QSL refused the producer packet before request construction.
+    PacketAdmission(WitnessRefusal),
+    /// An admitted packet belongs to another checked parity claim.
+    PacketMismatch(CompositePacketMember),
     /// A genuine QSL report did not bind to the request actually sent.
     Report(CompositeReportError),
+}
+
+/// The checked parity claim member that did not match an independently supplied packet.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CompositePacketMember {
+    /// The packet selected a different function.
+    Target,
+    /// The packet selected another application occurrence.
+    Occurrence,
+    /// The packet named another application node.
+    Subject,
+    /// The packet belongs to another checked package.
+    Package,
+    /// Parity requires an input-source packet.
+    SourceArm,
+    /// The packet identifies a different parity obligation.
+    Obligation,
 }
 
 impl fmt::Display for CompositeBuildError {
@@ -120,6 +142,13 @@ impl fmt::Display for CompositeBuildError {
             Self::UnsupportedNodeOperation => f.write_str("unsupported original node operation"),
             Self::OperandShape => f.write_str("unsupported structural operand projection"),
             Self::Identity(cause) => cause.fmt(f),
+            Self::PacketAdmission(cause) => cause.fmt(f),
+            Self::PacketMismatch(member) => {
+                write!(
+                    f,
+                    "parity packet does not match the checked claim: {member:?}"
+                )
+            }
             Self::Report(cause) => cause.fmt(f),
         }
     }
@@ -142,6 +171,13 @@ pub struct OriginalCompositeEqContext {
     package_id: DigestRecord,
     content_identity: DigestRecord,
     read_limits: CheckedPackageReadLimits,
+}
+
+struct SelectedParityClaim {
+    operands: CheckedCompositeOperands,
+    preimage: ParityPreimage,
+    obligation: qsl_replay::ObligationIdentity,
+    claim: CompositeParityClaim,
 }
 
 impl OriginalCompositeEqContext {
@@ -253,14 +289,14 @@ impl OriginalCompositeEqContext {
     /// original-context refusal, with no report.
     // The 192-byte refusal is retained inline to preserve the public PackageRead payload.
     #[allow(clippy::result_large_err)]
-    pub fn request(
+    fn selected_claim(
         &self,
         node: &CheckedNodeId,
         occurrence: &CheckedOccurrence,
         operator: EqualityOperator,
         harness_bounds: &[ProofBound],
         work_limit: u64,
-    ) -> Result<OriginalCompositeEqRequest, CompositeBuildError> {
+    ) -> Result<SelectedParityClaim, CompositeBuildError> {
         let operands = self
             .original
             .composite_application_operands(node, occurrence, work_limit)
@@ -323,23 +359,122 @@ impl OriginalCompositeEqContext {
             limits: self.inputs.accounting_limits,
             content_identity: self.content_identity,
         };
+        Ok(SelectedParityClaim {
+            operands,
+            preimage,
+            obligation,
+            claim,
+        })
+    }
+
+    /// Complete an input-arm packet from an original checked parity claim, before request intake.
+    ///
+    /// # Errors
+    /// Returns the original checked-claim projection or identity refusal.
+    #[allow(clippy::result_large_err)]
+    pub fn parity_packet(
+        &self,
+        node: &CheckedNodeId,
+        occurrence: &CheckedOccurrence,
+        operator: EqualityOperator,
+        harness_bounds: &[ProofBound],
+        work_limit: u64,
+    ) -> Result<WitnessPacket<NoPayload>, CompositeBuildError> {
+        let selected =
+            self.selected_claim(node, occurrence, operator, harness_bounds, work_limit)?;
+        Ok(WitnessPacket {
+            obligation_identity: Some(*selected.obligation.as_bytes()),
+            occurrence_key: Some(OccurrenceKey::new(
+                selected.preimage.node,
+                selected.preimage.occurrence.clone(),
+            )),
+            clause_node: Some(selected.preimage.node),
+            replay_target: ReplayTargetMembers::function(self.selection.clone()),
+            package_id: Some((
+                Some(self.package_id.domain().as_str().to_owned()),
+                self.package_id.hex(),
+            )),
+            source_digests: Some(vec![self.inputs.source.wire()]),
+            profile_selections: Some(Vec::new()),
+            run_limits: Some(self.inputs.accounting_limits),
+            declared_domains: Some(self.inputs.declared_domains.clone()),
+            backend: Some("quire-contract-codegen".to_owned()),
+            trace_position: Some(None),
+            source: Some(ReplaySource::Input(Vec::new())),
+            family_payload: Some(NoPayload),
+        })
+    }
+
+    /// Build a parity request only from an admitted packet bound to this checked claim.
+    ///
+    /// # Errors
+    /// Returns a typed packet admission, claim-binding, original projection or replay setup
+    /// refusal before any report or terminal value exists.
+    #[allow(clippy::result_large_err)]
+    pub fn request_from_packet(
+        &self,
+        packet: WitnessPacket<NoPayload>,
+        node: &CheckedNodeId,
+        occurrence: &CheckedOccurrence,
+        operator: EqualityOperator,
+        harness_bounds: &[ProofBound],
+        work_limit: u64,
+    ) -> Result<OriginalCompositeEqRequest, CompositeBuildError> {
+        let selected =
+            self.selected_claim(node, occurrence, operator, harness_bounds, work_limit)?;
+        let envelope = WitnessEnvelope::reconstruct(packet, self.inputs.replay_limits)
+            .map_err(CompositeBuildError::PacketAdmission)?;
+        if envelope.replay_target() != &ReplayTarget::function(self.selection.clone(), None) {
+            return Err(CompositeBuildError::PacketMismatch(
+                CompositePacketMember::Target,
+            ));
+        }
+        if envelope.occurrence_key()
+            != &OccurrenceKey::new(selected.preimage.node, selected.preimage.occurrence.clone())
+        {
+            return Err(CompositeBuildError::PacketMismatch(
+                CompositePacketMember::Occurrence,
+            ));
+        }
+        if envelope.clause_node() != selected.preimage.node {
+            return Err(CompositeBuildError::PacketMismatch(
+                CompositePacketMember::Subject,
+            ));
+        }
+        if envelope.package_id() != self.package_id {
+            return Err(CompositeBuildError::PacketMismatch(
+                CompositePacketMember::Package,
+            ));
+        }
+        if !matches!(envelope.source(), ReplaySource::Input(_)) {
+            return Err(CompositeBuildError::PacketMismatch(
+                CompositePacketMember::SourceArm,
+            ));
+        }
+        if envelope.obligation_identity() != selected.obligation {
+            return Err(CompositeBuildError::PacketMismatch(
+                CompositePacketMember::Obligation,
+            ));
+        }
+        let ReplayTarget::Declaration { name, .. } = envelope.replay_target() else {
+            return Err(CompositeBuildError::PacketMismatch(
+                CompositePacketMember::Target,
+            ));
+        };
         let wire = self.inputs.wire(
-            self.package_id,
-            RequestTargetWire::function(
-                self.selection.clone(),
-                OccurrenceKey::new(preimage.node, preimage.occurrence.clone()),
-            ),
-            ReplaySource::Input(Vec::new()),
-            *obligation.as_bytes(),
+            envelope.package_id(),
+            RequestTargetWire::function(name.clone(), envelope.occurrence_key().clone()),
+            envelope.source().clone(),
+            *envelope.obligation_identity().as_bytes(),
             &[],
         );
         let admitted = self.check_recompiled_context(&wire)?;
         Ok(OriginalCompositeEqRequest {
             admitted,
             wire,
-            claim,
-            operands,
-            preimage,
+            claim: selected.claim,
+            operands: selected.operands,
+            preimage: selected.preimage,
             replay_limits: self.inputs.replay_limits,
         })
     }
@@ -478,6 +613,11 @@ impl OriginalCompositeEqRequest {
     /// Genuine immutable context retained only after full original-package authentication.
     pub fn admitted_context(&self) -> &AdmittedContext {
         self.admitted.context()
+    }
+
+    /// The typed request that carries the admitted packet's replay selection and occurrence.
+    pub fn wire(&self) -> &ReplayRequestWire {
+        &self.wire
     }
 
     /// The retained original operands and their package-authored domains, in positional order.
