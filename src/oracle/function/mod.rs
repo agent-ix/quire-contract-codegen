@@ -1693,29 +1693,54 @@ fn source_call_matches<'a>(
     }) && expected.next().is_none()
 }
 
-fn source_function_node_id<'a>(
-    graph: &Graph<'a>,
-    name: &str,
-    body_node_id: &CheckedNodeId,
-) -> Option<&'a CheckedNodeId> {
-    let mut matching = graph.nodes().inspect(|_| {
-        #[cfg(test)]
-        IR988_SOURCE_GRAPH_VISITS.with(|visits| visits.set(visits.get() + 1));
-    }).filter(|node| {
-        if &*node.node_tag != "function" || &*node.semantic_form != "pure_function" {
-            return false;
+struct FunctionSourceIndex<'a> {
+    graph: Graph<'a>,
+    by_name_body: BTreeMap<(&'a str, &'a CheckedNodeId), Option<&'a CheckedNodeId>>,
+}
+
+impl<'a> FunctionSourceIndex<'a> {
+    fn new(graph: Graph<'a>) -> Self {
+        let mut by_name_body = BTreeMap::new();
+        for node in graph.nodes() {
+            #[cfg(test)]
+            IR988_SOURCE_GRAPH_VISITS.with(|visits| visits.set(visits.get() + 1));
+            if &*node.node_tag != "function" || &*node.semantic_form != "pure_function" {
+                continue;
+            }
+            let Some(name) = node.declaration.as_ref().and_then(|declaration| {
+                (declaration.qualified_name.len() == 1)
+                    .then(|| declaration.qualified_name[0].as_ref())
+            }) else {
+                continue;
+            };
+            let Some(body) =
+                graph.term(&node.node_id)
+                    .and_then(|body| binding_value(body, "body"))
+                    .and_then(|term| reference_in_graph(term, &graph))
+            else {
+                continue;
+            };
+            by_name_body
+                .entry((name, body))
+                .and_modify(|matching| *matching = None)
+                .or_insert(Some(&node.node_id));
         }
-        let has_name = node.declaration.as_ref().is_some_and(|declaration| {
-            declaration.qualified_name.len() == 1 && declaration.qualified_name[0].as_ref() == name
-        });
-        let body = graph
-            .get_term(&node.node_id)
-            .and_then(|body| binding_value(body, "body"))
-            .and_then(|term| reference_in_graph(term, graph));
-        has_name && body == Some(body_node_id)
-    });
-    let node = matching.next()?;
-    matching.next().is_none().then_some(&node.node_id)
+        Self {
+            graph,
+            by_name_body,
+        }
+    }
+
+    fn source_function_node_id(
+        &self,
+        name: &str,
+        body_node_id: &CheckedNodeId,
+    ) -> Option<&'a CheckedNodeId> {
+        self.by_name_body
+            .get(&(name, body_node_id))
+            .copied()
+            .flatten()
+    }
 }
 
 #[cfg(test)]
@@ -1790,9 +1815,10 @@ mod ir988_source_function_tests {
                 );
                 let graph: Graph<'_> = nodes.iter().map(|node| (&node.node_id, node)).collect();
                 IR988_SOURCE_GRAPH_VISITS.with(|visits| visits.set(0));
+                let index = FunctionSourceIndex::new(graph);
                 for _ in 0..requests {
                     let found =
-                        source_function_node_id(&graph, &format!("f{}", functions - 1), &body);
+                        index.source_function_node_id(&format!("f{}", functions - 1), &body);
                     assert_eq!(found, Some(&id(functions as u64)));
                 }
                 let visits = IR988_SOURCE_GRAPH_VISITS.with(std::cell::Cell::get);
@@ -2494,7 +2520,8 @@ pub fn generate_exact_function_oracles(
     for (item, &position) in items.iter().zip(item_positions) {
         check_position(&accounting, position, &item.call_node_id)?;
     }
-    let graph = Graph::new(package);
+    let source_index = FunctionSourceIndex::new(Graph::new(package));
+    let graph = &source_index.graph;
 
     // Order declared functions by declaring node id (digest domain, then
     // digest), the same total order FR-014 already uses.
@@ -2653,10 +2680,10 @@ pub fn generate_exact_function_oracles(
         })
         .collect();
 
-    let function_index: BTreeMap<&CheckedNodeId, usize> = classified
+    let survivor_index: BTreeMap<&CheckedNodeId, (usize, &ExactFunctionDeclaration)> = classified
         .iter()
         .enumerate()
-        .map(|(index, function)| (&function.declaration.node_id, index))
+        .map(|(index, function)| (&function.declaration.node_id, (index, function.declaration)))
         .collect();
 
     let package_check = rt::PackageDeclarations {
@@ -2681,7 +2708,7 @@ pub fn generate_exact_function_oracles(
     // about the request, independent of admission (AC-15).
     let mut location_map = Vec::with_capacity(survivors.len());
     for declaration in &survivors {
-        let index = function_index[&declaration.node_id];
+        let index = survivor_index[&declaration.node_id].0;
         let call_point = match &declaration.body {
             ExactFunctionBody::Scalar { .. } => CallPointKind::ScalarOperator,
             ExactFunctionBody::CompositeEquality { .. } => CallPointKind::EqualityEvaluation,
@@ -2752,28 +2779,15 @@ pub fn generate_exact_function_oracles(
             match item_disposition(
                 &names,
                 &resolved,
-                &survivors,
-                &function_index,
+                &survivor_index,
                 &package_refusal,
-                (package, &graph),
+                (package, &source_index),
                 item,
                 admitted,
             ) {
-                Ok((stem, claim)) => {
-                    match survivors
-                        .iter()
-                        .find(|declaration| declaration.name == item.function)
-                    {
-                        Some(declaration) => {
-                            pending.push((claims.len(), stem, key.clone(), *declaration));
-                            ClaimDisposition::Generated(Box::new(claim))
-                        }
-                        None => ClaimDisposition::Refused {
-                            refusal: ExactFunctionRefusal::UnknownFunction {
-                                name: item.function.clone(),
-                            },
-                        },
-                    }
+                Ok((stem, claim, declaration)) => {
+                    pending.push((claims.len(), stem, key.clone(), declaration));
+                    ClaimDisposition::Generated(Box::new(claim))
                 }
                 Err(refusal) => ClaimDisposition::Refused { refusal },
             }
@@ -2947,17 +2961,17 @@ impl<'a> FunctionNames<'a> {
     }
 }
 
-fn item_disposition(
+fn item_disposition<'a>(
     names: &FunctionNames<'_>,
     resolved: &BTreeMap<&CheckedNodeId, Result<(), ExactFunctionRefusal>>,
-    survivors: &[&ExactFunctionDeclaration],
-    function_index: &BTreeMap<&CheckedNodeId, usize>,
+    survivor_index: &BTreeMap<&CheckedNodeId, (usize, &'a ExactFunctionDeclaration)>,
     package_refusal: &Option<String>,
-    source: (&ContractPackageV1, &Graph<'_>),
+    source: (&ContractPackageV1, &FunctionSourceIndex<'_>),
     item: &ExactFunctionItem,
     admitted: PackageItem<'_>,
-) -> Result<(String, GeneratedExactFunctionClaim), ExactFunctionRefusal> {
-    let (package, graph) = source;
+) -> Result<(String, GeneratedExactFunctionClaim, &'a ExactFunctionDeclaration), ExactFunctionRefusal> {
+    let (package, source_index) = source;
+    let graph = &source_index.graph;
     let (closure, occurrences) = admitted_binary_body(admitted)?;
     let node = closure.root;
     if &*node.semantic_form != "call" {
@@ -2977,10 +2991,7 @@ fn item_disposition(
     if let Some(Err(refusal)) = resolved.get(function_node_id) {
         return Err(refusal.clone());
     }
-    let Some(declaration) = survivors
-        .iter()
-        .find(|declaration| &declaration.node_id == function_node_id)
-    else {
+    let Some(&(index, declaration)) = survivor_index.get(function_node_id) else {
         return Err(ExactFunctionRefusal::UnknownFunction {
             name: item.function.clone(),
         });
@@ -2993,7 +3004,7 @@ fn item_disposition(
     }
     if graph.operator(&node.node_id) == Some(ApplicationOperator::Call) {
         let source_function_id =
-            source_function_node_id(graph, &declaration.name, &declaration.node_id)
+            source_index.source_function_node_id(&declaration.name, &declaration.node_id)
                 .ok_or(ExactFunctionRefusal::BodyMismatch)?;
         if !source_call_matches(
             graph
@@ -3022,7 +3033,6 @@ fn item_disposition(
         };
         resolve_operand_type(graph, type_node_id)?;
     }
-    let index = function_index[&declaration.node_id];
     if let Some(cause) = package_refusal {
         return Err(ExactFunctionRefusal::PackageRefused {
             function_index: Some(index),
@@ -3055,6 +3065,7 @@ fn item_disposition(
             },
             declaration_keys: Vec::new(),
         },
+        declaration,
     ))
 }
 
@@ -3508,19 +3519,22 @@ mod tests {
             .into_iter()
             .map(|node| (&node.node_id, node))
             .collect();
+        let index = FunctionSourceIndex::new(graph);
+        let graph = &index.graph;
         assert_eq!(
-            source_function_node_id(&graph, "same", &body.node_id),
+            index.source_function_node_id("same", &body.node_id),
             Some(&first.node_id)
         );
-        assert_eq!(source_function_node_id(&graph, "Same", &body.node_id), None);
+        assert_eq!(index.source_function_node_id("Same", &body.node_id), None);
         let duplicate = function(22, &body.node_id);
         let nodes = [&body, &other, &first, &same_name_other_body, &duplicate];
         let ambiguous: Graph<'_> = nodes
             .into_iter()
             .map(|node| (&node.node_id, node))
             .collect();
+        let ambiguous_index = FunctionSourceIndex::new(ambiguous);
         assert_eq!(
-            source_function_node_id(&ambiguous, "same", &body.node_id),
+            ambiguous_index.source_function_node_id("same", &body.node_id),
             None
         );
         let malformed_first = CheckedTerm::Aggregate {
@@ -3535,7 +3549,7 @@ mod tests {
         };
         assert_eq!(
             binding_value(&malformed_first, "body")
-                .and_then(|term| reference_in_graph(term, &graph)),
+                .and_then(|term| reference_in_graph(term, graph)),
             None
         );
         let mut malformed_function = function(23, &body.node_id);
@@ -3544,8 +3558,9 @@ mod tests {
             .into_iter()
             .map(|node| (&node.node_id, node))
             .collect();
+        let damaged_index = FunctionSourceIndex::new(damaged);
         assert_eq!(
-            source_function_node_id(&damaged, "same", &body.node_id),
+            damaged_index.source_function_node_id("same", &body.node_id),
             None
         );
 
@@ -3559,10 +3574,10 @@ mod tests {
         };
         assert_eq!(
             binding_value(&first_dangling, "body")
-                .and_then(|term| reference_in_graph(term, &graph)),
+                .and_then(|term| reference_in_graph(term, graph)),
             None
         );
-        assert_eq!(reference_in_graph(&reference(&foreign), &graph), None);
+        assert_eq!(reference_in_graph(&reference(&foreign), graph), None);
         assert_eq!(reference_node_id(&reference(&foreign), graph.nodes()), None);
         assert_eq!(
             reference_node_id(&reference(&body.node_id), graph.nodes()),
