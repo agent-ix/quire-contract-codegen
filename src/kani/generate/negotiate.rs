@@ -63,22 +63,24 @@ mod native_twin;
 mod request_lookup_work {
     use std::cell::Cell;
     std::thread_local! {
-        static VISITS: Cell<(usize, usize)> = const { Cell::new((0, 0)) };
-    }
-    pub(super) fn graph() {
-        VISITS.with(|visits| {
-            let (graph, source) = visits.get();
-            visits.set((graph + 1, source));
-        });
+        static VISITS: Cell<usize> = const { Cell::new(0) };
     }
     pub(super) fn source() {
         VISITS.with(|visits| {
-            let (graph, source) = visits.get();
-            visits.set((graph, source + 1));
+            visits.set(visits.get() + 1);
         });
     }
-    pub(super) fn take() -> (usize, usize) {
-        VISITS.with(|visits| visits.replace((0, 0)))
+    std::thread_local! {
+        static CLAUSE_VIEWS: Cell<usize> = const { Cell::new(0) };
+    }
+    pub(super) fn clause_view() {
+        CLAUSE_VIEWS.with(|views| views.set(views.get() + 1));
+    }
+    pub(super) fn take_clause_views() -> usize {
+        CLAUSE_VIEWS.with(|views| views.replace(0))
+    }
+    pub(super) fn take() -> usize {
+        VISITS.with(|visits| visits.replace(0))
     }
 }
 
@@ -95,6 +97,7 @@ use crate::{
     core::contract_package::ContractDriverResultSelection,
     core::diagnostic::GenerationErrorCode,
     core::identity::HarnessSymbol,
+    core::ir::clause::ClauseGraphView,
     core::naming::unique_names,
     kani::abi::{adapter_options, KaniSolver},
     kani::generate::clause::v2::{
@@ -165,6 +168,55 @@ impl<'a> ContractLookup<'a> {
     }
 }
 
+/// Request-local source occurrences and a lazy package-bound clause view.
+/// Each borrowed package keeps its own retained graph and original source occurrence order.
+struct CheckedLookup<'a> {
+    package: &'a CheckedPackageV2,
+    sources: BTreeMap<&'a CheckedNodeId, Vec<&'a CheckedSourceMapEntry>>,
+    clause: Option<ClauseGraphView<'a>>,
+}
+
+impl<'a> CheckedLookup<'a> {
+    fn new(package: &'a CheckedPackageV2) -> Self {
+        let mut sources = BTreeMap::<_, Vec<_>>::new();
+        for entry in package.source_map() {
+            #[cfg(test)]
+            request_lookup_work::source();
+            sources.entry(&entry.node_id).or_default().push(entry);
+        }
+        Self {
+            package,
+            sources,
+            clause: None,
+        }
+    }
+
+    fn clause(&mut self) -> &ClauseGraphView<'a> {
+        self.clause.get_or_insert_with(|| {
+            #[cfg(test)]
+            request_lookup_work::clause_view();
+            ClauseGraphView::new(self.package)
+        })
+    }
+
+    fn occurrences(&self, id: &CheckedNodeId) -> Vec<CheckedSourceMapEntry> {
+        self.sources.get(id).map_or_else(Vec::new, |entries| {
+            entries.iter().map(|entry| (*entry).clone()).collect()
+        })
+    }
+}
+
+type CheckedLookups<'a> = BTreeMap<*const CheckedPackageV2, CheckedLookup<'a>>;
+
+fn checked_lookup<'a, 'lookup>(
+    lookups: &'lookup mut CheckedLookups<'a>,
+    package: &'a CheckedPackageV2,
+) -> &'lookup mut CheckedLookup<'a> {
+    lookups
+        .entry(std::ptr::from_ref(package))
+        .or_insert_with(|| CheckedLookup::new(package))
+}
+
 /// Reuse admitted scalar graph lookups across capability items, whose boxed packages may be
 /// distinct allocations of the same admitted identity.
 pub(crate) struct ScalarFormLookups<'a> {
@@ -212,10 +264,19 @@ pub fn negotiate_kani_obligations(
 ) -> Result<KaniObligationOutcome, KaniObligationError> {
     validate_request(request)?;
     let mut scalar_lookups = BTreeMap::new();
+    let mut checked_lookups = BTreeMap::new();
     let mut states = request
         .items
         .iter()
-        .map(|item| classify(item, request.unwind, request.ceilings, &mut scalar_lookups))
+        .map(|item| {
+            classify(
+                item,
+                request.unwind,
+                request.ceilings,
+                &mut scalar_lookups,
+                &mut checked_lookups,
+            )
+        })
         .collect::<Vec<_>>();
     reject_duplicates_and_mixtures(request.items, &mut states);
     assign_names(request.items, &mut states);
@@ -464,9 +525,12 @@ fn classify<'a>(
     unwind: u32,
     ceilings: crate::kani::identity::ProofCeilings,
     scalar_lookups: &mut BTreeMap<*const ContractPackageV1, ContractLookup<'a>>,
+    checked_lookups: &mut CheckedLookups<'a>,
 ) -> ItemState<'a> {
     match *item {
-        ObligationItem::V2Clause { package, clause } => classify_v2_clause(package, clause),
+        ObligationItem::V2Clause { package, clause } => {
+            classify_v2_clause(checked_lookup(checked_lookups, package), clause)
+        }
         ObligationItem::BoundClause { package, clause } => classify_clause(package, clause),
         ObligationItem::ScalarClaim {
             package,
@@ -491,7 +555,12 @@ fn classify<'a>(
             package,
             function_id,
             node_id,
-        } => classify_collection(package, function_id, node_id),
+        } => classify_collection(
+            package,
+            function_id,
+            node_id,
+            checked_lookup(checked_lookups, package),
+        ),
         ObligationItem::StateFrame {
             package,
             clause,
@@ -510,23 +579,18 @@ fn classify<'a>(
                 unwind,
             },
             role,
+            checked_lookup(checked_lookups, package),
         ),
     }
 }
 
 fn classify_v2_clause<'a>(
-    package: &'a CheckedPackageV2,
+    lookup: &mut CheckedLookup<'a>,
     clause: &'a CheckedNodeId,
 ) -> ItemState<'a> {
-    let graph_node = package
-        .graph()
-        .nodes
-        .iter()
-        .inspect(|_| {
-            #[cfg(test)]
-            request_lookup_work::graph();
-        })
-        .find(|node| &node.node_id == clause);
+    let package = lookup.package;
+    let view = lookup.clause();
+    let graph_node = view.node(clause);
     let kind = graph_node
         .and_then(|node| {
             node.body
@@ -555,7 +619,7 @@ fn classify_v2_clause<'a>(
                 node_id: clause.clone(),
             })
         }
-        Some(_) => match lower_v2_clause(package, clause) {
+        Some(_) => match lower_v2_clause(view, clause) {
             Ok(lowered) => Outcome::LoweredV2Clause(Box::new(lowered)),
             Err(reason) => Outcome::Unsupported(reason),
         },
@@ -564,16 +628,7 @@ fn classify_v2_clause<'a>(
         kind,
         subject: ObligationSubject::CheckedNode {
             node_id: clause.clone(),
-            source_map: package
-                .source_map()
-                .iter()
-                .inspect(|_| {
-                    #[cfg(test)]
-                    request_lookup_work::source();
-                })
-                .filter(|entry| &entry.node_id == clause)
-                .cloned()
-                .collect(),
+            source_map: lookup.occurrences(clause),
         },
         identity: Some(ItemIdentity::V2Clause {
             package: package.package_id().digest.to_string(),
@@ -587,6 +642,7 @@ fn classify_collection<'a>(
     package: &'a CheckedPackageV2,
     function_id: &'a CheckedNodeId,
     node_id: &'a CheckedNodeId,
+    lookup: &CheckedLookup<'a>,
 ) -> ItemState<'a> {
     let outcome = match lower_collection_claim(package, function_id, node_id) {
         Ok(lowered) => Outcome::LoweredCollection(Box::new(lowered)),
@@ -611,16 +667,7 @@ fn classify_collection<'a>(
         kind: None,
         subject: ObligationSubject::CheckedNode {
             node_id: node_id.clone(),
-            source_map: package
-                .source_map()
-                .iter()
-                .inspect(|_| {
-                    #[cfg(test)]
-                    request_lookup_work::source();
-                })
-                .filter(|entry| &entry.node_id == node_id)
-                .cloned()
-                .collect(),
+            source_map: lookup.occurrences(node_id),
         },
         identity: Some(ItemIdentity::Collection {
             package: package.package_id().digest.to_string(),
@@ -643,6 +690,7 @@ fn collection_refusal(node_id: &CheckedNodeId, reason: CollectionUnsupportedReas
 fn classify_state_frame<'a>(
     request: &StateFrameRequest<'a>,
     role: StateFrameRole,
+    lookup: &CheckedLookup<'a>,
 ) -> ItemState<'a> {
     let outcome = match generate_state_frame_role(request, role) {
         Ok(harness) => Outcome::StateFrame(Box::new(harness)),
@@ -652,13 +700,7 @@ fn classify_state_frame<'a>(
         kind: Some(role.obligation_kind()),
         subject: ObligationSubject::CheckedNode {
             node_id: request.clause.clone(),
-            source_map: request
-                .package
-                .source_map()
-                .iter()
-                .filter(|entry| &entry.node_id == request.clause)
-                .cloned()
-                .collect(),
+            source_map: lookup.occurrences(request.clause),
         },
         identity: Some(ItemIdentity::StateFrame {
             package: request.package.package_id().digest.to_string(),
@@ -1476,6 +1518,54 @@ mod tests {
     use super::*;
     use quire_contract_model::{ClauseId, RequirementRef, EXECUTABLE_PROJECTION_FORMAT};
 
+    #[test]
+    fn request_views_keep_every_original_source_occurrence_and_package_separate() {
+        let declarations = [
+            ("First", "deposit", "balance"),
+            ("Second", "deposit", "balance"),
+            ("Third", "deposit", "balance"),
+        ];
+        let (left, clause) =
+            native_twin::Twin::build(&model::GRANTED, &declarations, 0).emitted_package("First");
+        let (right, _) =
+            native_twin::Twin::build(&model::GRANTED, &declarations, 7).emitted_package("First");
+        let expected = |package: &CheckedPackageV2| {
+            package
+                .source_map()
+                .iter()
+                .filter(|entry| entry.node_id == clause)
+                .cloned()
+                .collect::<Vec<_>>()
+        };
+        let left_expected = expected(&left);
+        let right_expected = expected(&right);
+        assert!(
+            left_expected.len() > 1,
+            "deduplicated semantic body retains all authored source occurrences"
+        );
+        assert_ne!(
+            left_expected, right_expected,
+            "genuine source line shift distinguishes package source authority"
+        );
+        let mut lookups = CheckedLookups::new();
+        request_lookup_work::take();
+        request_lookup_work::take_clause_views();
+        for _ in 0..4 {
+            let left_view = checked_lookup(&mut lookups, &left);
+            assert_eq!(left_view.occurrences(&clause), left_expected);
+            assert!(std::ptr::eq(left_view.clause().package(), &left));
+            let right_view = checked_lookup(&mut lookups, &right);
+            assert_eq!(right_view.occurrences(&clause), right_expected);
+            assert!(std::ptr::eq(right_view.clause().package(), &right));
+        }
+        assert_eq!(lookups.len(), 2);
+        assert_eq!(
+            request_lookup_work::take(),
+            left.source_map().len() + right.source_map().len()
+        );
+        assert_eq!(request_lookup_work::take_clause_views(), 2);
+    }
+
     #[trace("TC-025")]
     #[test]
     fn request_clause_view_preserves_supported_bytes_and_typed_refusals() {
@@ -1648,13 +1738,15 @@ mod tests {
                     unwind: 8,
                 };
                 request_lookup_work::take();
+                request_lookup_work::take_clause_views();
                 let outcome =
                     negotiate_kani_obligations(&request).expect("well-formed admitted request");
-                let (graph_visits, source_visits) = request_lookup_work::take();
+                let source_visits = request_lookup_work::take();
+                let clause_views = request_lookup_work::take_clause_views();
                 let graph_size = package.graph().nodes.len();
                 let source_size = package.source_map().len();
                 assert!(source_size > 0);
-                println!("IR276_WORK K={count} R={graph_size} S={source_size} graph_visits={graph_visits} source_visits={source_visits}");
+                println!("IR276_WORK K={count} R={graph_size} S={source_size} source_visits={source_visits} clause_view_builds={clause_views}");
                 assert_eq!(outcome.records().len(), count);
                 for (index, item) in items.iter().enumerate() {
                     let single_items = [*item];
@@ -1673,13 +1765,13 @@ mod tests {
                 }
                 let repeated = negotiate_kani_obligations(&request).unwrap();
                 assert_eq!(outcome, repeated, "complete deterministic output");
-                if graph_visits > graph_size || source_visits > source_size {
+                if source_visits != source_size || clause_views != 1 {
                     excessive_work.push((
                         count,
                         graph_size,
                         source_size,
-                        graph_visits,
                         source_visits,
+                        clause_views,
                     ));
                 }
             }
@@ -1764,6 +1856,7 @@ mod tests {
             item,
             4,
             render_probe_request(&[]).ceilings,
+            &mut BTreeMap::new(),
             &mut BTreeMap::new(),
         )
         .outcome

@@ -10,6 +10,7 @@ use serde::Serialize;
 
 use crate::{
     core::artifact::{MAX_ARTIFACTS, MAX_ARTIFACT_BYTES, MAX_BUNDLE_BYTES},
+    core::ir::clause::ClauseGraphView,
     evidence::{
         bound_coverage::{
             check_output_size, BoundAnalysisState, MAX_ANALYSIS_BYTES, MAX_SOURCE_ROOT_BYTES,
@@ -21,7 +22,8 @@ use crate::{
         },
     },
     oracle::clause::{
-        derive_v2_clause_descriptor, generate_v2_clause_oracle, V2ClauseCoverageRegion,
+        derive_v2_clause_descriptor_with_view, generate_v2_clause_oracle_with_view,
+        V2ClauseCoverageRegion,
     },
 };
 
@@ -226,6 +228,9 @@ fn analyze_inner(
     }
     body.population = "complete";
     body.state = BoundAnalysisState::Complete;
+    #[cfg(test)]
+    request_view_tests::shared_view();
+    let view = ClauseGraphView::new(package);
     for node_id in clauses {
         let input = by_id[&node_id];
         let root = normalize_path(input.source_root)?;
@@ -235,17 +240,14 @@ fn analyze_inner(
                 "source root must be an absolute package directory",
             ));
         }
-        #[cfg(test)]
-        request_view_tests::standalone_descriptor();
-        let descriptor = derive_v2_clause_descriptor(package, node_id).map_err(|error| {
-            diagnostic(
-                CoverageErrorCode::PopulationMismatch,
-                format!("checked clause {node_id:?} could not be described: {error:?}"),
-            )
-        })?;
-        #[cfg(test)]
-        request_view_tests::standalone_oracle();
-        let generated = generate_v2_clause_oracle(package, node_id).map_err(|error| {
+        let descriptor =
+            derive_v2_clause_descriptor_with_view(node_id, &view).map_err(|error| {
+                diagnostic(
+                    CoverageErrorCode::PopulationMismatch,
+                    format!("checked clause {node_id:?} could not be described: {error:?}"),
+                )
+            })?;
+        let generated = generate_v2_clause_oracle_with_view(node_id, &view).map_err(|error| {
             diagnostic(
                 CoverageErrorCode::PopulationMismatch,
                 format!("checked clause {node_id:?} could not be generated: {error:?}"),
@@ -420,39 +422,27 @@ mod native_twin;
 #[cfg(test)]
 mod request_view_tests {
     use super::*;
+    use crate::oracle::clause::generate_v2_clause_oracle;
     use ix_trace_rs::trace;
     use serde_json::{json, Value};
 
     std::thread_local! {
-        static WORK: std::cell::Cell<(usize, usize, usize, usize)> = const { std::cell::Cell::new((0, 0, 0, 0)) };
+        static WORK: std::cell::Cell<(usize, usize)> = const { std::cell::Cell::new((0, 0)) };
     }
     pub(super) fn population_entry() {
         WORK.with(|work| {
-            let (p, d, o, v) = work.get();
-            work.set((p + 1, d, o, v));
+            let (population, views) = work.get();
+            work.set((population + 1, views));
         });
     }
-    pub(super) fn standalone_descriptor() {
-        WORK.with(|work| {
-            let (p, d, o, v) = work.get();
-            work.set((p, d + 1, o, v));
-        });
-    }
-    pub(super) fn standalone_oracle() {
-        WORK.with(|work| {
-            let (p, d, o, v) = work.get();
-            work.set((p, d, o + 1, v));
-        });
-    }
-    #[allow(dead_code)]
     pub(super) fn shared_view() {
         WORK.with(|work| {
-            let (p, d, o, v) = work.get();
-            work.set((p, d, o, v + 1));
+            let (population, views) = work.get();
+            work.set((population, views + 1));
         });
     }
-    fn take_work() -> (usize, usize, usize, usize) {
-        WORK.with(|work| work.replace((0, 0, 0, 0)))
+    fn take_work() -> (usize, usize) {
+        WORK.with(|work| work.replace((0, 0)))
     }
 
     // IR-276 caller work only; owner graph-construction traversal has separate owner tests.
@@ -466,8 +456,14 @@ mod request_view_tests {
         let row = report(&package, &inputs);
         let measured = take_work();
         assert_eq!(row["population"], "complete");
-        println!("IR276_LLVM_WORK R={} K={} population_entries={} standalone_descriptor_calls={} standalone_oracle_calls={} shared_view_builds={}", package.graph().nodes.len(), inputs.len(), measured.0, measured.1, measured.2, measured.3);
-        assert_eq!(measured, (package.graph().nodes.len(), 0, 0, 1), "one original-order population census and one actual shared view construction; no standalone per-item index construction");
+        println!(
+            "IR276_LLVM_WORK R={} K={} population_entries={} shared_view_builds={}",
+            package.graph().nodes.len(),
+            inputs.len(),
+            measured.0,
+            measured.1
+        );
+        assert_eq!(measured, (package.graph().nodes.len(), 1), "one original-order population census and one actual shared view construction; no standalone per-item index construction");
     }
 
     struct ArtifactInput {
