@@ -138,16 +138,18 @@ use crate::core::contract_package::{
 };
 use crate::core::naming::{bounded_readable_component, unique_names};
 use crate::core::profile::oracle_crate_manifest;
+use crate::oracle::checked_graph::{aggregate_members, CheckedGraph};
 use crate::oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
 use crate::oracle::equality::EqualityOperatorKind;
 use crate::oracle::operator_catalog::IntegerOperator;
 use crate::oracle::{classify_lowering_failure, direct_unsupported_form, LoweringFailure};
 use quire_contract_model::{
-    CheckedNodeId, CheckedNodeTag, CheckedPackageIncomplete, CheckedPackageReadLimits,
-    CheckedPackageRefusal, CheckedPackageV2, CheckedSemanticId, CheckedSemanticNodeV2,
-    CheckedSourceMapEntry, CompleteLoweringProfileV2, CompleteLoweringRecordV2,
-    ContractDependencies, ContractFeatureRecordV1, ContractPackageReadResult, ContractPackageV1,
-    ContractPackageWireV1, ContractReachedClosureV1,
+    ApplicationOperator, CheckedNodeId, CheckedNodeTag, CheckedPackageIncomplete,
+    CheckedPackageReadLimits, CheckedPackageRefusal, CheckedPackageV2, CheckedSemanticId,
+    CheckedSemanticNodeV2, CheckedSourceMapEntry, CheckedTerm, CompleteLoweringProfileV2,
+    CompleteLoweringRecordV2, ContractDependencies, ContractFeatureRecordV1,
+    ContractPackageReadResult, ContractPackageV1, ContractPackageWireV1, ContractReachedClosureV1,
+    LiteralKind,
 };
 use quire_contract_runtime::exact as rt;
 use quire_exact::{self as exact, Outcome, Refusal};
@@ -312,12 +314,7 @@ pub fn generate_function_schedules_with_limits(
 ) -> Result<FunctionScheduleGeneration, schedule::ScheduleRefusal> {
     // Reject the unrepresentable setting before package indexing or graph projection begins.
     let _ = schedule::WorkCounter::new(limits.generation_work_units)?;
-    let source_nodes: BTreeMap<CheckedNodeId, &CheckedSemanticNodeV2> = package
-        .graph()
-        .nodes
-        .iter()
-        .map(|node| (node.node_id.clone(), node))
-        .collect();
+    let source_nodes = Graph::from_checked(package);
     let mut type_kinds = BTreeMap::new();
     for node in &package.graph().nodes {
         if node.node_tag.as_ref() == "scalar_type" {
@@ -339,12 +336,9 @@ pub fn generate_function_schedules_with_limits(
         .iter()
         .filter_map(|declaration| {
             source_nodes
-                .get(&declaration.body_node_id)
+                .node(&declaration.body_node_id)
                 .filter(|node| {
-                    node.body
-                        .get("operator")
-                        .and_then(serde_json::Value::as_str)
-                        == Some("binary")
+                    source_nodes.operator(&node.node_id) == Some(ApplicationOperator::Binary)
                 })
                 .map(|_| declaration.body_node_id.clone())
         })
@@ -392,7 +386,7 @@ pub fn generate_function_schedules_with_limits(
     ordered_declarations.sort_by(|left, right| left.function_node_id.cmp(&right.function_node_id));
     for declaration in &ordered_declarations {
         let function_node = source_nodes
-            .get(&declaration.function_node_id)
+            .node(&declaration.function_node_id)
             .ok_or_else(|| {
                 schedule::ScheduleRefusal::MissingNode(declaration.function_node_id.clone())
             })?;
@@ -401,8 +395,12 @@ pub fn generate_function_schedules_with_limits(
                 declaration.function_node_id.clone(),
             ));
         }
-        if decode_reference(&function_node.body, &declaration.function_node_id)?
-            != declaration.body_node_id
+        if decode_reference(
+            source_nodes.term(&function_node.node_id).ok_or_else(|| {
+                schedule::ScheduleRefusal::MalformedTerm(declaration.function_node_id.clone())
+            })?,
+            &declaration.function_node_id,
+        )? != declaration.body_node_id
         {
             return Err(schedule::ScheduleRefusal::WrongBodyBinding {
                 function: declaration.function_node_id.clone(),
@@ -846,7 +844,7 @@ fn render_schedule_source(
 }
 
 fn project_body_graph(
-    source_nodes: &BTreeMap<CheckedNodeId, &CheckedSemanticNodeV2>,
+    source_nodes: &Graph<'_>,
     type_kinds: &BTreeMap<CheckedNodeId, schedule::ValueKind>,
     root: &CheckedNodeId,
     work: &mut schedule::WorkCounter,
@@ -869,20 +867,16 @@ fn project_body_graph(
                     continue;
                 }
                 let source = source_nodes
-                    .get(&node_id)
+                    .node(&node_id)
                     .ok_or_else(|| schedule::ScheduleRefusal::MissingNode(node_id.clone()))?;
-                if source
-                    .body
-                    .get("operator")
-                    .and_then(serde_json::Value::as_str)
-                    == Some("call")
-                {
+                if source_nodes.operator(&source.node_id) == Some(ApplicationOperator::Call) {
                     // The call's argument-zero declaration binding is a child edge and is
                     // charged before its identity is decoded or any value argument is visited.
                     work.charge()?;
                 }
-                let (value_kind, kind, children) = project_function_node(source, type_kinds)?
-                    .ok_or_else(|| schedule::ScheduleRefusal::MalformedTerm(node_id.clone()))?;
+                let (value_kind, kind, children) =
+                    project_function_node(source, source_nodes.term(&source.node_id), type_kinds)?
+                        .ok_or_else(|| schedule::ScheduleRefusal::MalformedTerm(node_id.clone()))?;
                 projected.insert(
                     node_id.clone(),
                     schedule::GraphNode {
@@ -912,6 +906,7 @@ fn project_body_graph(
 
 fn project_function_node(
     source: &CheckedSemanticNodeV2,
+    body: Option<&CheckedTerm>,
     type_kinds: &BTreeMap<CheckedNodeId, schedule::ValueKind>,
 ) -> Result<
     Option<(
@@ -932,32 +927,27 @@ fn project_function_node(
         return Ok(None);
     }
 
-    let body = &source.body;
-    if body.get("term").and_then(serde_json::Value::as_str) != Some("application") {
+    let Some(CheckedTerm::Application {
+        result_type,
+        operation,
+        arguments,
+        operator,
+    }) = body
+    else {
         return Err(schedule::ScheduleRefusal::MalformedTerm(
             source.node_id.clone(),
         ));
-    }
-    let result_type = decode_node_id(body.get("result_type"), &source.node_id)?;
+    };
     let value_kind = type_kinds
-        .get(&result_type)
+        .get(result_type)
         .copied()
         .ok_or_else(|| schedule::ScheduleRefusal::UnsupportedOperation(source.node_id.clone()))?;
-    let operation_identity = body
-        .get("operation")
-        .and_then(|operation| operation.get("identity"))
-        .and_then(serde_json::Value::as_str)
-        .ok_or_else(|| schedule::ScheduleRefusal::MalformedTerm(source.node_id.clone()))?;
-    let arguments = body
-        .get("arguments")
-        .and_then(serde_json::Value::as_array)
-        .ok_or_else(|| schedule::ScheduleRefusal::MalformedTerm(source.node_id.clone()))?;
-    let operator = body
-        .get("operator")
+    let operation_identity = operation
+        .get("identity")
         .and_then(serde_json::Value::as_str)
         .ok_or_else(|| schedule::ScheduleRefusal::MalformedTerm(source.node_id.clone()))?;
 
-    if operator == "call" {
+    if *operator == ApplicationOperator::Call {
         if operation_identity != "quire.op.function.call" {
             return Err(schedule::ScheduleRefusal::UnsupportedOperation(
                 source.node_id.clone(),
@@ -982,7 +972,7 @@ fn project_function_node(
         )));
     }
 
-    if operator != "binary" || arguments.len() != 2 {
+    if *operator != ApplicationOperator::Binary || arguments.len() != 2 {
         return Err(schedule::ScheduleRefusal::MalformedTerm(
             source.node_id.clone(),
         ));
@@ -1002,25 +992,27 @@ fn project_function_node(
 }
 
 fn decode_schedule_operand(
-    term: &serde_json::Value,
+    term: &CheckedTerm,
     owner: &CheckedNodeId,
     type_kinds: &BTreeMap<CheckedNodeId, schedule::ValueKind>,
 ) -> Result<schedule::GraphOperand, schedule::ScheduleRefusal> {
-    match term.get("term").and_then(serde_json::Value::as_str) {
-        Some("reference") => decode_reference(term, owner).map(schedule::GraphOperand::Node),
-        Some("literal") => {
-            let value_kind = match term.get("value_kind").and_then(serde_json::Value::as_str) {
-                Some("boolean") => schedule::ValueKind::Boolean,
-                Some("integer") => schedule::ValueKind::Integer,
+    match term {
+        CheckedTerm::Reference { target } => Ok(schedule::GraphOperand::Node(target.clone())),
+        CheckedTerm::Literal {
+            value_kind,
+            type_id,
+            value,
+        } => {
+            let value_kind = match value_kind {
+                LiteralKind::Boolean => schedule::ValueKind::Boolean,
+                LiteralKind::Integer => schedule::ValueKind::Integer,
                 _ => return Err(schedule::ScheduleRefusal::UnsupportedLiteral(owner.clone())),
             };
-            let type_node = decode_node_id(term.get("type"), owner)?;
-            if type_kinds.get(&type_node).copied() != Some(value_kind) {
+            if type_kinds.get(type_id).copied() != Some(value_kind) {
                 return Err(schedule::ScheduleRefusal::WrongType(owner.clone()));
             }
-            let value = term
-                .get("value")
-                .and_then(serde_json::Value::as_str)
+            let value = value
+                .as_str()
                 .ok_or_else(|| schedule::ScheduleRefusal::MalformedTerm(owner.clone()))?;
             if value_kind == schedule::ValueKind::Boolean && !matches!(value, "true" | "false") {
                 return Err(schedule::ScheduleRefusal::MalformedTerm(owner.clone()));
@@ -1046,61 +1038,52 @@ fn decode_schedule_operand(
 }
 
 fn decode_reference(
-    term: &serde_json::Value,
+    term: &CheckedTerm,
     owner: &CheckedNodeId,
 ) -> Result<CheckedNodeId, schedule::ScheduleRefusal> {
-    match term.get("term").and_then(serde_json::Value::as_str) {
-        Some("reference") => decode_node_id(term.get("target"), owner),
-        Some("literal") => Err(schedule::ScheduleRefusal::UnsupportedLiteral(owner.clone())),
+    match term {
+        CheckedTerm::Reference { target } => Ok(target.clone()),
+        CheckedTerm::Literal { .. } => {
+            Err(schedule::ScheduleRefusal::UnsupportedLiteral(owner.clone()))
+        }
         _ => Err(schedule::ScheduleRefusal::MalformedTerm(owner.clone())),
     }
 }
 
-fn decode_node_id(
-    value: Option<&serde_json::Value>,
-    owner: &CheckedNodeId,
-) -> Result<CheckedNodeId, schedule::ScheduleRefusal> {
-    value
-        .cloned()
-        .ok_or_else(|| schedule::ScheduleRefusal::MalformedTerm(owner.clone()))
-        .and_then(|value| {
-            serde_json::from_value(value)
-                .map_err(|_| schedule::ScheduleRefusal::MalformedTerm(owner.clone()))
-        })
-}
-
 fn validate_schedule_item(
-    source_nodes: &BTreeMap<CheckedNodeId, &CheckedSemanticNodeV2>,
+    source_nodes: &Graph<'_>,
     type_kinds: &BTreeMap<CheckedNodeId, schedule::ValueKind>,
     item: &FunctionScheduleItem,
     binding: &schedule::FunctionBinding,
 ) -> Result<(), schedule::ScheduleRefusal> {
     let source = source_nodes
-        .get(&item.call_node_id)
+        .node(&item.call_node_id)
         .ok_or_else(|| schedule::ScheduleRefusal::MissingNode(item.call_node_id.clone()))?;
-    if source.node_tag.as_ref() != "expression"
-        || source.body.get("term").and_then(serde_json::Value::as_str) != Some("application")
-        || source
-            .body
-            .get("operator")
-            .and_then(serde_json::Value::as_str)
-            != Some("call")
-        || source
-            .body
-            .get("operation")
-            .and_then(|operation| operation.get("identity"))
-            .and_then(serde_json::Value::as_str)
-            != Some("quire.op.function.call")
+    if source.node_tag.as_ref() != "expression" {
+        return Err(schedule::ScheduleRefusal::MalformedTerm(
+            item.call_node_id.clone(),
+        ));
+    }
+    let Some(CheckedTerm::Application {
+        operator: ApplicationOperator::Call,
+        operation,
+        arguments,
+        result_type,
+    }) = source_nodes.term(&item.call_node_id)
+    else {
+        return Err(schedule::ScheduleRefusal::MalformedTerm(
+            item.call_node_id.clone(),
+        ));
+    };
+    if operation
+        .get("identity")
+        .and_then(serde_json::Value::as_str)
+        != Some("quire.op.function.call")
     {
         return Err(schedule::ScheduleRefusal::MalformedTerm(
             item.call_node_id.clone(),
         ));
     }
-    let arguments = source
-        .body
-        .get("arguments")
-        .and_then(serde_json::Value::as_array)
-        .ok_or_else(|| schedule::ScheduleRefusal::MalformedTerm(item.call_node_id.clone()))?;
     let callee_term = arguments
         .first()
         .ok_or_else(|| schedule::ScheduleRefusal::MalformedTerm(item.call_node_id.clone()))?;
@@ -1123,16 +1106,14 @@ fn validate_schedule_item(
         let value_kind =
             schedule_term_value_kind(term, source_nodes, type_kinds, &item.call_node_id)?;
         if value_kind != binding.parameter_kinds[index] {
-            let node_id = term
-                .get("target")
-                .cloned()
-                .and_then(|target| serde_json::from_value(target).ok())
-                .unwrap_or_else(|| item.call_node_id.clone());
+            let node_id = match term {
+                CheckedTerm::Reference { target } => target.clone(),
+                _ => item.call_node_id.clone(),
+            };
             return Err(schedule::ScheduleRefusal::WrongType(node_id));
         }
     }
-    let result_type = decode_node_id(source.body.get("result_type"), &item.call_node_id)?;
-    if type_kinds.get(&result_type).copied() != Some(binding.result_kind) {
+    if type_kinds.get(result_type).copied() != Some(binding.result_kind) {
         return Err(schedule::ScheduleRefusal::WrongType(
             item.call_node_id.clone(),
         ));
@@ -1141,28 +1122,30 @@ fn validate_schedule_item(
 }
 
 fn schedule_term_value_kind(
-    term: &serde_json::Value,
-    source_nodes: &BTreeMap<CheckedNodeId, &CheckedSemanticNodeV2>,
+    term: &CheckedTerm,
+    source_nodes: &Graph<'_>,
     type_kinds: &BTreeMap<CheckedNodeId, schedule::ValueKind>,
     owner: &CheckedNodeId,
 ) -> Result<schedule::ValueKind, schedule::ScheduleRefusal> {
-    let type_node_id = match term.get("term").and_then(serde_json::Value::as_str) {
-        Some("reference") => {
-            let target = decode_reference(term, owner)?;
+    let type_node_id = match term {
+        CheckedTerm::Reference { target } => {
             let source = source_nodes
-                .get(&target)
+                .node(target)
                 .ok_or_else(|| schedule::ScheduleRefusal::MissingNode(target.clone()))?;
+            let body = source_nodes.term(target);
             if source.node_tag.as_ref() == "function"
                 || (source.node_tag.as_ref() == "expression"
-                    && source.body.get("term").and_then(serde_json::Value::as_str)
-                        == Some("application"))
+                    && matches!(body, Some(CheckedTerm::Application { .. })))
             {
-                decode_node_id(source.body.get("result_type"), &target)?
+                let Some(CheckedTerm::Application { result_type, .. }) = body else {
+                    return Err(schedule::ScheduleRefusal::MalformedTerm(target.clone()));
+                };
+                result_type.clone()
             } else {
                 source.semantic_type.clone()
             }
         }
-        Some("literal") => {
+        CheckedTerm::Literal { .. } => {
             return decode_schedule_operand(term, owner, type_kinds).and_then(
                 |operand| match operand {
                     schedule::GraphOperand::Literal { value_kind, .. } => Ok(value_kind),
@@ -1569,7 +1552,7 @@ pub struct ExactFunctionOracles {
 // Generation
 // ---------------------------------------------------------------------------
 
-type Graph<'a> = BTreeMap<&'a CheckedNodeId, &'a CheckedSemanticNodeV2>;
+type Graph<'a> = CheckedGraph<'a>;
 
 /// Ordered key whose comparisons expose actual indexed lookup work to tests.
 #[derive(Eq, PartialEq)]
@@ -1592,16 +1575,22 @@ impl PartialOrd for IndexedNodeId {
 /// Keep source-call matching identical for borrowed generation graphs and preflight indexes.
 trait NodeLookup<'a> {
     fn get_node(&self, node_id: &CheckedNodeId) -> Option<&'a CheckedSemanticNodeV2>;
+    fn get_term(&self, node_id: &CheckedNodeId) -> Option<&'a CheckedTerm>;
 }
 
 impl<'a> NodeLookup<'a> for Graph<'a> {
     fn get_node(&self, node_id: &CheckedNodeId) -> Option<&'a CheckedSemanticNodeV2> {
-        self.get(node_id).copied()
+        self.node(node_id)
+    }
+    fn get_term(&self, node_id: &CheckedNodeId) -> Option<&'a CheckedTerm> {
+        self.term(node_id)
     }
 }
 
 /// One checked-graph lookup view shared by function preflight items in a request.
 pub(crate) struct FunctionPreflightGraph<'a> {
+    // Metadata-only private fixtures have no admitted owner; production new() always sets it.
+    checked: Option<&'a CheckedPackageV2>,
     package_id: CheckedSemanticId,
     nodes: BTreeMap<IndexedNodeId, &'a CheckedSemanticNodeV2>,
 }
@@ -1609,7 +1598,9 @@ pub(crate) struct FunctionPreflightGraph<'a> {
 impl<'a> FunctionPreflightGraph<'a> {
     /// Index the admitted graph once, before classifying its function items.
     pub(crate) fn new(checked: &'a CheckedPackageV2) -> Self {
-        Self::from_nodes(&checked.graph().nodes, checked.package_id().clone())
+        let mut graph = Self::from_nodes(&checked.graph().nodes, checked.package_id().clone());
+        graph.checked = Some(checked);
+        graph
     }
 
     fn from_nodes(nodes: &'a [CheckedSemanticNodeV2], package_id: CheckedSemanticId) -> Self {
@@ -1621,7 +1612,11 @@ impl<'a> FunctionPreflightGraph<'a> {
                 (IndexedNodeId(node.node_id.clone()), node)
             })
             .collect();
-        Self { package_id, nodes }
+        Self {
+            checked: None,
+            package_id,
+            nodes,
+        }
     }
 
     /// Resolve one node from the view's admitted package graph.
@@ -1642,26 +1637,24 @@ impl<'a> NodeLookup<'a> for FunctionPreflightGraph<'a> {
     fn get_node(&self, node_id: &CheckedNodeId) -> Option<&'a CheckedSemanticNodeV2> {
         self.get(node_id)
     }
+    fn get_term(&self, node_id: &CheckedNodeId) -> Option<&'a CheckedTerm> {
+        self.checked?.term(node_id)
+    }
 }
 
 fn reference_in_graph<'a>(
-    term: &serde_json::Value,
+    term: &CheckedTerm,
     graph: &impl NodeLookup<'a>,
 ) -> Option<&'a CheckedNodeId> {
-    if term.get("term")?.as_str()? != "reference" {
+    let CheckedTerm::Reference { target } = term else {
         return None;
-    }
-    let target = term.get("target")?;
-    let node_id = CheckedNodeId {
-        domain: target.get("domain")?.as_str()?.into(),
-        digest: target.get("digest")?.as_str()?.into(),
     };
-    graph.get_node(&node_id).map(|node| &node.node_id)
+    graph.get_node(target).map(|node| &node.node_id)
 }
 
 /// Check that the admitted application names this exact function and ordered argument list.
 fn source_call_matches<'a>(
-    body: &serde_json::Value,
+    body: &CheckedTerm,
     graph: &impl NodeLookup<'a>,
     function_node_id: &CheckedNodeId,
     argument_node_ids: &[CheckedNodeId],
@@ -1671,29 +1664,32 @@ fn source_call_matches<'a>(
     }) {
         return false;
     }
-    if body.get("term").and_then(serde_json::Value::as_str) != Some("application")
-        || body.get("operator").and_then(serde_json::Value::as_str) != Some("call")
-        || body
-            .pointer("/operation/identity")
-            .and_then(serde_json::Value::as_str)
-            != Some("quire.op.function.call")
+    let CheckedTerm::Application {
+        operator: ApplicationOperator::Call,
+        operation,
+        arguments,
+        ..
+    } = body
+    else {
+        return false;
+    };
+    if operation
+        .get("identity")
+        .and_then(serde_json::Value::as_str)
+        != Some("quire.op.function.call")
     {
         return false;
     }
-    let Some(arguments) = body.get("arguments").and_then(serde_json::Value::as_array) else {
-        return false;
-    };
     if arguments.len() != argument_node_ids.len() + 1 {
         return false;
     }
     let mut expected = std::iter::once(function_node_id).chain(argument_node_ids.iter());
     arguments.iter().all(|term| {
-        let Some(actual_id) = reference_in_graph(term, graph) else {
-            return false;
-        };
-        expected
-            .next()
-            .is_some_and(|expected_id| actual_id == expected_id)
+        reference_in_graph(term, graph).is_some_and(|actual_id| {
+            expected
+                .next()
+                .is_some_and(|expected_id| actual_id == expected_id)
+        })
     }) && expected.next().is_none()
 }
 
@@ -1702,49 +1698,43 @@ fn source_function_node_id<'a>(
     name: &str,
     body_node_id: &CheckedNodeId,
 ) -> Option<&'a CheckedNodeId> {
-    let mut matching = graph.values().filter(|node| {
+    let mut matching = graph.nodes().filter(|node| {
         if &*node.node_tag != "function" || &*node.semantic_form != "pure_function" {
             return false;
         }
         let has_name = node.declaration.as_ref().is_some_and(|declaration| {
             declaration.qualified_name.len() == 1 && declaration.qualified_name[0].as_ref() == name
         });
-        let body = binding_value(&node.body, "body")
-            .and_then(|term| reference_node_id(term, graph.values().copied()));
+        let body = graph
+            .get_term(&node.node_id)
+            .and_then(|body| binding_value(body, "body"))
+            .and_then(|term| reference_in_graph(term, graph));
         has_name && body == Some(body_node_id)
     });
     let node = matching.next()?;
     matching.next().is_none().then_some(&node.node_id)
 }
 
-pub(crate) fn binding_value<'a>(
-    body: &'a serde_json::Value,
-    name: &str,
-) -> Option<&'a serde_json::Value> {
-    body.get("members")?
-        .as_array()?
+pub(crate) fn binding_value<'a>(body: &'a CheckedTerm, name: &str) -> Option<&'a CheckedTerm> {
+    aggregate_members(body)?
         .iter()
-        .find(|member| {
-            member.get("term").and_then(serde_json::Value::as_str) == Some("binding")
-                && member.get("name").and_then(serde_json::Value::as_str) == Some(name)
-        })?
-        .get("value")
+        .find_map(|member| match member {
+            CheckedTerm::Binding { name: found, value } if found.as_ref() == name => {
+                Some(value.as_ref())
+            }
+            _ => None,
+        })
 }
 
 pub(crate) fn reference_node_id<'a>(
-    term: &serde_json::Value,
+    term: &CheckedTerm,
     mut nodes: impl Iterator<Item = &'a CheckedSemanticNodeV2>,
 ) -> Option<&'a CheckedNodeId> {
-    if term.get("term").and_then(serde_json::Value::as_str) != Some("reference") {
+    let CheckedTerm::Reference { target } = term else {
         return None;
-    }
-    let target = term.get("target")?;
-    let digest = target.get("digest")?.as_str()?;
-    let domain = target.get("domain")?.as_str()?;
+    };
     nodes
-        .find(|node| {
-            node.node_id.digest.as_ref() == digest && node.node_id.domain.as_ref() == domain
-        })
+        .find(|node| &node.node_id == target)
         .map(|node| &node.node_id)
 }
 
@@ -1815,9 +1805,10 @@ pub(crate) fn checked_integer_function_application_is_supported_with_graph(
     if name_segments.len() != 1 {
         return Ok(false);
     }
-    let Some(parameter_terms) = binding_value(&function_node.body, "parameters")
-        .and_then(|value| value.get("members"))
-        .and_then(serde_json::Value::as_array)
+    let Some(parameter_terms) = graph
+        .get_term(function_node_id)
+        .and_then(|body| binding_value(body, "parameters"))
+        .and_then(aggregate_members)
     else {
         return Ok(false);
     };
@@ -1829,9 +1820,13 @@ pub(crate) fn checked_integer_function_application_is_supported_with_graph(
         let Some(parameter_node) = graph.get(parameter_id) else {
             return Ok(false);
         };
-        let Some(name) = binding_value(&parameter_node.body, "name")
-            .and_then(|value| value.get("value"))
-            .and_then(serde_json::Value::as_str)
+        let Some(name) = graph
+            .get_term(parameter_id)
+            .and_then(|body| binding_value(body, "name"))
+            .and_then(|term| match term {
+                CheckedTerm::Literal { value, .. } => value.as_str(),
+                _ => None,
+            })
         else {
             return Ok(false);
         };
@@ -1840,19 +1835,22 @@ pub(crate) fn checked_integer_function_application_is_supported_with_graph(
             type_node_id: parameter_node.semantic_type.clone(),
         });
     }
-    let Some(body_id) =
-        binding_value(&function_node.body, "body").and_then(|term| reference_in_graph(term, graph))
+    let Some(body_id) = graph
+        .get_term(function_node_id)
+        .and_then(|body| binding_value(body, "body"))
+        .and_then(|term| reference_in_graph(term, graph))
     else {
         return Ok(false);
     };
-    let Some(body_node) = graph.get(body_id) else {
+    let Some(_body_node) = graph.get(body_id) else {
         return Ok(false);
     };
-    let Some(operation_identity) = body_node
-        .body
-        .pointer("/operation/identity")
-        .and_then(serde_json::Value::as_str)
-    else {
+    let Some(operation_identity) = graph.get_term(body_id).and_then(|term| match term {
+        CheckedTerm::Application { operation, .. } => operation
+            .get("identity")
+            .and_then(serde_json::Value::as_str),
+        _ => None,
+    }) else {
         return Ok(false);
     };
     let operator = match operation_identity {
@@ -1861,10 +1859,13 @@ pub(crate) fn checked_integer_function_application_is_supported_with_graph(
         "quire.op.integer.mul" => IntegerOperator::Multiply,
         _ => return Ok(false),
     };
-    let Some(call_node) = graph.get(call_node_id) else {
+    let Some(_call_node) = graph.get(call_node_id) else {
         return Ok(false);
     };
-    if !source_call_matches(&call_node.body, graph, function_node_id, argument_node_ids) {
+    let Some(call_body) = graph.get_term(call_node_id) else {
+        return Ok(false);
+    };
+    if !source_call_matches(call_body, graph, function_node_id, argument_node_ids) {
         return Ok(false);
     }
     let declaration = ExactFunctionDeclaration {
@@ -2165,13 +2166,11 @@ fn resolve_operand_type(
     graph: &Graph<'_>,
     type_node_id: &CheckedNodeId,
 ) -> Result<OperandKind, ExactFunctionRefusal> {
-    let node =
-        graph
-            .get(type_node_id)
-            .copied()
-            .ok_or_else(|| ExactFunctionRefusal::UnknownTypeNode {
-                type_node_id: type_node_id.clone(),
-            })?;
+    let node = graph
+        .node(type_node_id)
+        .ok_or_else(|| ExactFunctionRefusal::UnknownTypeNode {
+            type_node_id: type_node_id.clone(),
+        })?;
     match CheckedNodeTag::from_wire(&node.node_tag) {
         Some(CheckedNodeTag::ScalarType) => match &*node.semantic_form {
             "boolean" => Ok(OperandKind::Boolean),
@@ -2227,11 +2226,15 @@ fn unsupported_family(node_id: &CheckedNodeId, tag: CheckedNodeTag) -> ExactFunc
     }
 }
 
-fn application_arguments(body: &serde_json::Value) -> Option<&Vec<serde_json::Value>> {
-    if body.get("term")?.as_str()? != "application" || body.get("operator")?.as_str()? != "binary" {
-        return None;
+fn application_arguments(body: &CheckedTerm) -> Option<&[CheckedTerm]> {
+    match body {
+        CheckedTerm::Application {
+            operator: ApplicationOperator::Binary,
+            arguments,
+            ..
+        } => Some(arguments),
+        _ => None,
     }
-    body.get("arguments")?.as_array()
 }
 
 /// Classify one declared function's own body shape against its lowered
@@ -2240,6 +2243,7 @@ fn application_arguments(body: &serde_json::Value) -> Option<&Vec<serde_json::Va
 /// is checked, so the rendered body cannot disagree with the refusal.
 fn classify_body_shape<'r>(
     node: &CheckedSemanticNodeV2,
+    body: Option<&CheckedTerm>,
     declaration: &'r ExactFunctionDeclaration,
 ) -> Result<ClassifiedBody<'r>, ExactFunctionRefusal> {
     match &declaration.body {
@@ -2254,13 +2258,16 @@ fn classify_body_shape<'r>(
                     found: node.semantic_form.to_string(),
                 });
             }
-            let arguments = application_arguments(&node.body)
+            let arguments = body
+                .and_then(application_arguments)
                 .filter(|arguments| arguments.len() == 2)
                 .ok_or(ExactFunctionRefusal::BodyMismatch)?;
-            let operation_identity = node
-                .body
-                .pointer("/operation/identity")
-                .and_then(serde_json::Value::as_str);
+            let operation_identity = body.and_then(|term| match term {
+                CheckedTerm::Application { operation, .. } => operation
+                    .get("identity")
+                    .and_then(serde_json::Value::as_str),
+                _ => None,
+            });
             let expected_identity = match operator {
                 BinaryIntegerOperator::Add => "quire.op.integer.add",
                 BinaryIntegerOperator::Subtract => "quire.op.integer.sub",
@@ -2278,7 +2285,8 @@ fn classify_body_shape<'r>(
                     found: node.semantic_form.to_string(),
                 });
             }
-            let arguments = application_arguments(&node.body)
+            let arguments = body
+                .and_then(application_arguments)
                 .filter(|arguments| arguments.len() == 2)
                 .ok_or(ExactFunctionRefusal::BodyMismatch)?;
             let _ = arguments;
@@ -2394,13 +2402,7 @@ pub fn generate_exact_function_oracles(
     for (item, &position) in items.iter().zip(item_positions) {
         check_position(&accounting, position, &item.call_node_id)?;
     }
-    let graph: Graph<'_> = package
-        .wire()
-        .semantic_graph
-        .nodes
-        .iter()
-        .map(|node| (&node.node_id, node))
-        .collect();
+    let graph = Graph::new(package);
 
     // Order declared functions by declaring node id (digest domain, then
     // digest), the same total order FR-014 already uses.
@@ -2451,7 +2453,8 @@ pub fn generate_exact_function_oracles(
                 });
             }
             let (closure, _) = admitted_binary_body(admitted)?;
-            let body = classify_body_shape(closure.root, declaration)?;
+            let body =
+                classify_body_shape(closure.root, graph.term(&closure.root.node_id), declaration)?;
             let mut parameter_kinds = Vec::with_capacity(declaration.parameters.len());
             for parameter in &declaration.parameters {
                 parameter_kinds.push(resolve_operand_type(&graph, &parameter.type_node_id)?);
@@ -2641,8 +2644,7 @@ pub fn generate_exact_function_oracles(
                 refusal: ExactFunctionRefusal::DuplicateRequest,
             }
         } else if let Some(node_tag) = graph
-            .get(&item.call_node_id)
-            .copied()
+            .node(&item.call_node_id)
             .and_then(direct_unsupported_form)
         {
             ClaimDisposition::Refused {
@@ -2664,6 +2666,7 @@ pub fn generate_exact_function_oracles(
                 package,
                 item,
                 admitted,
+                &graph,
             ) {
                 Ok((stem, claim)) => {
                     match survivors
@@ -2862,6 +2865,7 @@ fn item_disposition(
     package: &ContractPackageV1,
     item: &ExactFunctionItem,
     admitted: PackageItem<'_>,
+    graph: &Graph<'_>,
 ) -> Result<(String, GeneratedExactFunctionClaim), ExactFunctionRefusal> {
     let (closure, occurrences) = admitted_binary_body(admitted)?;
     let node = closure.root;
@@ -2896,25 +2900,15 @@ fn item_disposition(
             found: item.argument_node_ids.len(),
         });
     }
-    let graph = package
-        .wire()
-        .semantic_graph
-        .nodes
-        .iter()
-        .map(|source| (&source.node_id, source))
-        .collect::<Graph<'_>>();
-    if node
-        .body
-        .get("operator")
-        .and_then(serde_json::Value::as_str)
-        == Some("call")
-    {
+    if graph.operator(&node.node_id) == Some(ApplicationOperator::Call) {
         let source_function_id =
-            source_function_node_id(&graph, &declaration.name, &declaration.node_id)
+            source_function_node_id(graph, &declaration.name, &declaration.node_id)
                 .ok_or(ExactFunctionRefusal::BodyMismatch)?;
         if !source_call_matches(
-            &node.body,
-            &graph,
+            graph
+                .term(&node.node_id)
+                .ok_or(ExactFunctionRefusal::BodyMismatch)?,
+            graph,
             source_function_id,
             &item.argument_node_ids,
         ) {
@@ -2923,10 +2917,9 @@ fn item_disposition(
     }
     for argument_id in &item.argument_node_ids {
         let argument = graph
-            .get(argument_id)
-            .copied()
+            .node(argument_id)
             .ok_or(ExactFunctionRefusal::BodyMismatch)?;
-        let type_node = graph.get(&argument.semantic_type).copied().ok_or_else(|| {
+        let type_node = graph.node(&argument.semantic_type).ok_or_else(|| {
             ExactFunctionRefusal::UnknownTypeNode {
                 type_node_id: argument.semantic_type.clone(),
             }
@@ -2936,7 +2929,7 @@ fn item_disposition(
         } else {
             &argument.semantic_type
         };
-        resolve_operand_type(&graph, type_node_id)?;
+        resolve_operand_type(graph, type_node_id)?;
     }
     let index = function_index[&declaration.node_id];
     if let Some(cause) = package_refusal {
@@ -3219,18 +3212,19 @@ mod tests {
                 Some(&nodes[ordinal].node_id)
             );
         }
-        let reference = |node: &CheckedSemanticNodeV2| {
-            serde_json::json!({
-                "term": "reference",
-                "target": {"domain": node.node_id.domain, "digest": node.node_id.digest},
-            })
+        let reference = |node: &CheckedSemanticNodeV2| CheckedTerm::Reference {
+            target: node.node_id.clone(),
         };
-        let call = serde_json::json!({
-            "term": "application",
-            "operator": "call",
-            "operation": {"identity": "quire.op.function.call"},
-            "arguments": [reference(&nodes[0]), reference(&nodes[15]), reference(&nodes[31])],
-        });
+        let call = CheckedTerm::Application {
+            operator: ApplicationOperator::Call,
+            operation: serde_json::json!({"identity": "quire.op.function.call"}),
+            result_type: nodes[0].semantic_type.clone(),
+            arguments: vec![
+                reference(&nodes[0]),
+                reference(&nodes[15]),
+                reference(&nodes[31]),
+            ],
+        };
         assert!(source_call_matches(
             &call,
             &graph,
@@ -3262,16 +3256,15 @@ mod tests {
             domain: "quire.checked-semantic-node/v1".into(),
             digest: "1".repeat(64).into(),
         };
-        let literal = serde_json::json!({
-            "term": "literal",
-            "type": {
-                "domain": "quire.checked-semantic-node/v1",
-                "digest": "2".repeat(64),
-            },
-            "value_kind": "integer",
-            "value": "7",
-        });
-        let type_node = serde_json::from_value(literal["type"].clone()).unwrap();
+        let type_node = CheckedNodeId {
+            domain: owner.domain.clone(),
+            digest: "2".repeat(64).into(),
+        };
+        let literal = CheckedTerm::Literal {
+            type_id: type_node.clone(),
+            value_kind: LiteralKind::Integer,
+            value: serde_json::json!("7"),
+        };
         let types = BTreeMap::from([(type_node, schedule::ValueKind::Integer)]);
         assert_eq!(
             decode_schedule_operand(&literal, &owner, &types),
@@ -3280,12 +3273,14 @@ mod tests {
                 value: "7".to_owned(),
             })
         );
-        let malformed = serde_json::json!({
-            "term": "literal",
-            "type": literal["type"],
-            "value_kind": "integer",
-            "value": "seven",
-        });
+        let CheckedTerm::Literal { type_id, .. } = &literal else {
+            panic!("literal fixture");
+        };
+        let malformed = CheckedTerm::Literal {
+            type_id: type_id.clone(),
+            value_kind: LiteralKind::Integer,
+            value: serde_json::json!("seven"),
+        };
         assert!(matches!(
             decode_schedule_operand(&malformed, &owner, &types),
             Err(schedule::ScheduleRefusal::MalformedTerm(_))
@@ -3302,13 +3297,23 @@ mod tests {
             domain: "quire.checked-semantic-node/v1".into(),
             digest: format!("{ordinal:064x}").into(),
         };
-        crate::oracle::checked_graph::fixture::Node::new(CheckedSemanticNodeV2 {
-            node_id: id.clone(), schema_version: "quire.checked-semantic-graph/v2".into(),
-            node_tag: tag.into(), semantic_form: form.into(), semantic_type: id,
-            dependencies: Vec::new(), occurrences: Vec::new(), recursion_group: None,
-            nominal_identity_preimage: None, declaration: None, owner: None,
-            body: serde_json::Value::Null,
-        }, body)
+        crate::oracle::checked_graph::fixture::Node::new(
+            CheckedSemanticNodeV2 {
+                node_id: id.clone(),
+                schema_version: "quire.checked-semantic-graph/v2".into(),
+                node_tag: tag.into(),
+                semantic_form: form.into(),
+                semantic_type: id,
+                dependencies: Vec::new(),
+                occurrences: Vec::new(),
+                recursion_group: None,
+                nominal_identity_preimage: None,
+                declaration: None,
+                owner: None,
+                body: serde_json::Value::Null,
+            },
+            body,
+        )
     }
 
     /// Private typed terms guard the schedule projection policy. These raw
@@ -3317,30 +3322,68 @@ mod tests {
     #[test]
     fn schedule_literals_keep_raw_spelling_and_refusal_precedence() {
         use quire_contract_model::{CheckedTerm, LiteralKind};
-        let owner = typed_fixture_node(1, "expression", "binary", None).node_id.clone();
-        let ty = typed_fixture_node(2, "scalar_type", "integer", None).node_id.clone();
+        let owner = typed_fixture_node(1, "expression", "binary", None)
+            .node_id
+            .clone();
+        let ty = typed_fixture_node(2, "scalar_type", "integer", None)
+            .node_id
+            .clone();
         let types = BTreeMap::from([(ty.clone(), schedule::ValueKind::Integer)]);
-        for spelling in ["0", "01", "-0", "-01", "999999999999999999999999999999999999999999999999"] {
-            let literal = CheckedTerm::Literal { type_id: ty.clone(), value_kind: LiteralKind::Integer,
-                value: serde_json::json!(spelling) };
-            assert_eq!(decode_schedule_operand(&literal, &owner, &types),
-                Ok(schedule::GraphOperand::Literal { value_kind: schedule::ValueKind::Integer,
-                    value: spelling.into() }));
+        for spelling in [
+            "0",
+            "01",
+            "-0",
+            "-01",
+            "999999999999999999999999999999999999999999999999",
+        ] {
+            let literal = CheckedTerm::Literal {
+                type_id: ty.clone(),
+                value_kind: LiteralKind::Integer,
+                value: serde_json::json!(spelling),
+            };
+            assert_eq!(
+                decode_schedule_operand(&literal, &owner, &types),
+                Ok(schedule::GraphOperand::Literal {
+                    value_kind: schedule::ValueKind::Integer,
+                    value: spelling.into()
+                })
+            );
         }
-        for value in [serde_json::json!("+1"), serde_json::json!(""), serde_json::json!("-"),
-            serde_json::json!("--1"), serde_json::json!("1x"), serde_json::json!(1)] {
-            let literal = CheckedTerm::Literal { type_id: ty.clone(), value_kind: LiteralKind::Integer, value };
-            assert_eq!(decode_schedule_operand(&literal, &owner, &types),
-                Err(schedule::ScheduleRefusal::MalformedTerm(owner.clone())));
-            assert_eq!(decode_schedule_operand(&literal, &owner, &BTreeMap::new()),
-                Err(schedule::ScheduleRefusal::WrongType(owner.clone())));
+        for value in [
+            serde_json::json!("+1"),
+            serde_json::json!(""),
+            serde_json::json!("-"),
+            serde_json::json!("--1"),
+            serde_json::json!("1x"),
+            serde_json::json!(1),
+        ] {
+            let literal = CheckedTerm::Literal {
+                type_id: ty.clone(),
+                value_kind: LiteralKind::Integer,
+                value,
+            };
+            assert_eq!(
+                decode_schedule_operand(&literal, &owner, &types),
+                Err(schedule::ScheduleRefusal::MalformedTerm(owner.clone()))
+            );
+            assert_eq!(
+                decode_schedule_operand(&literal, &owner, &BTreeMap::new()),
+                Err(schedule::ScheduleRefusal::WrongType(owner.clone()))
+            );
         }
-        let unsupported = CheckedTerm::Literal { type_id: ty, value_kind: LiteralKind::Text,
-            value: serde_json::Value::Null };
-        assert_eq!(decode_schedule_operand(&unsupported, &owner, &BTreeMap::new()),
-            Err(schedule::ScheduleRefusal::UnsupportedLiteral(owner.clone())));
-        assert_eq!(decode_reference(&unsupported, &owner),
-            Err(schedule::ScheduleRefusal::UnsupportedLiteral(owner)));
+        let unsupported = CheckedTerm::Literal {
+            type_id: ty,
+            value_kind: LiteralKind::Text,
+            value: serde_json::Value::Null,
+        };
+        assert_eq!(
+            decode_schedule_operand(&unsupported, &owner, &BTreeMap::new()),
+            Err(schedule::ScheduleRefusal::UnsupportedLiteral(owner.clone()))
+        );
+        assert_eq!(
+            decode_reference(&unsupported, &owner),
+            Err(schedule::ScheduleRefusal::UnsupportedLiteral(owner))
+        );
     }
 
     #[trace("TC-031")]
@@ -3349,36 +3392,167 @@ mod tests {
         use quire_contract_model::{CheckedDeclaration, CheckedTerm, LiteralKind};
         let body = typed_fixture_node(10, "expression", "binary", None);
         let other = typed_fixture_node(11, "expression", "binary", None);
-        let reference = |target: &CheckedNodeId| CheckedTerm::Reference { target: target.clone() };
-        let binding = |value: CheckedTerm| CheckedTerm::Binding { name: "body".into(), value: Box::new(value) };
+        let reference = |target: &CheckedNodeId| CheckedTerm::Reference {
+            target: target.clone(),
+        };
+        let binding = |value: CheckedTerm| CheckedTerm::Binding {
+            name: "body".into(),
+            value: Box::new(value),
+        };
         let function = |ordinal, target: &CheckedNodeId| {
-            let mut node = typed_fixture_node(ordinal, "function", "pure_function",
-                Some(CheckedTerm::Aggregate { members: vec![binding(reference(target))] }));
-            node.declaration = Some(CheckedDeclaration { qualified_name: vec!["same".into()] });
+            let mut node = typed_fixture_node(
+                ordinal,
+                "function",
+                "pure_function",
+                Some(CheckedTerm::Aggregate {
+                    members: vec![binding(reference(target))],
+                }),
+            );
+            node.declaration = Some(CheckedDeclaration {
+                qualified_name: vec!["same".into()],
+            });
             node
         };
         let first = function(20, &body.node_id);
         let same_name_other_body = function(21, &other.node_id);
         let nodes = [&body, &other, &first, &same_name_other_body];
-        let graph: Graph<'_> = nodes.into_iter().map(|node| (&node.node_id, node)).collect();
-        assert_eq!(source_function_node_id(&graph, "same", &body.node_id), Some(&first.node_id));
+        let graph: Graph<'_> = nodes
+            .into_iter()
+            .map(|node| (&node.node_id, node))
+            .collect();
+        assert_eq!(
+            source_function_node_id(&graph, "same", &body.node_id),
+            Some(&first.node_id)
+        );
         assert_eq!(source_function_node_id(&graph, "Same", &body.node_id), None);
         let duplicate = function(22, &body.node_id);
         let nodes = [&body, &other, &first, &same_name_other_body, &duplicate];
-        let ambiguous: Graph<'_> = nodes.into_iter().map(|node| (&node.node_id, node)).collect();
-        assert_eq!(source_function_node_id(&ambiguous, "same", &body.node_id), None);
-        let malformed_first = CheckedTerm::Aggregate { members: vec![
-            binding(CheckedTerm::Literal { type_id: body.node_id.clone(), value_kind: LiteralKind::Integer,
-                value: serde_json::json!("1") }), binding(reference(&body.node_id)),
-        ] };
-        assert_eq!(binding_value(&malformed_first, "body").and_then(|term| reference_in_graph(term, &graph)), None);
+        let ambiguous: Graph<'_> = nodes
+            .into_iter()
+            .map(|node| (&node.node_id, node))
+            .collect();
+        assert_eq!(
+            source_function_node_id(&ambiguous, "same", &body.node_id),
+            None
+        );
+        let malformed_first = CheckedTerm::Aggregate {
+            members: vec![
+                binding(CheckedTerm::Literal {
+                    type_id: body.node_id.clone(),
+                    value_kind: LiteralKind::Integer,
+                    value: serde_json::json!("1"),
+                }),
+                binding(reference(&body.node_id)),
+            ],
+        };
+        assert_eq!(
+            binding_value(&malformed_first, "body")
+                .and_then(|term| reference_in_graph(term, &graph)),
+            None
+        );
+        let mut malformed_function = function(23, &body.node_id);
+        malformed_function.body = Some(malformed_first.clone());
+        let damaged: Graph<'_> = [&body, &malformed_function]
+            .into_iter()
+            .map(|node| (&node.node_id, node))
+            .collect();
+        assert_eq!(
+            source_function_node_id(&damaged, "same", &body.node_id),
+            None
+        );
+
         let mut foreign = body.node_id.clone();
         foreign.domain = "different-domain".into();
-        let first_dangling = CheckedTerm::Aggregate { members: vec![binding(reference(&foreign)), binding(reference(&body.node_id))] };
-        assert_eq!(binding_value(&first_dangling, "body").and_then(|term| reference_in_graph(term, &graph)), None);
+        let first_dangling = CheckedTerm::Aggregate {
+            members: vec![
+                binding(reference(&foreign)),
+                binding(reference(&body.node_id)),
+            ],
+        };
+        assert_eq!(
+            binding_value(&first_dangling, "body")
+                .and_then(|term| reference_in_graph(term, &graph)),
+            None
+        );
         assert_eq!(reference_in_graph(&reference(&foreign), &graph), None);
         assert_eq!(reference_node_id(&reference(&foreign), graph.nodes()), None);
-        assert_eq!(reference_node_id(&reference(&body.node_id), graph.nodes()), Some(&body.node_id));
+        assert_eq!(
+            reference_node_id(&reference(&body.node_id), graph.nodes()),
+            Some(&body.node_id)
+        );
+    }
+
+    #[trace("TC-031")]
+    #[test]
+    fn referenced_function_requires_result_but_nonapplication_expression_uses_its_type() {
+        let integer = typed_fixture_node(1, "scalar_type", "integer", None);
+        let boolean = typed_fixture_node(2, "scalar_type", "boolean", None);
+        let mut function = typed_fixture_node(
+            3,
+            "function",
+            "pure_function",
+            Some(CheckedTerm::Aggregate { members: vec![] }),
+        );
+        function.semantic_type = integer.node_id.clone();
+        let mut expression = typed_fixture_node(
+            4,
+            "expression",
+            "binary",
+            Some(CheckedTerm::Aggregate { members: vec![] }),
+        );
+        expression.semantic_type = integer.node_id.clone();
+        let mut application = typed_fixture_node(
+            5,
+            "expression",
+            "binary",
+            Some(CheckedTerm::Application {
+                operator: ApplicationOperator::Binary,
+                operation: serde_json::json!({"identity": "quire.op.integer.eq"}),
+                arguments: vec![],
+                result_type: boolean.node_id.clone(),
+            }),
+        );
+        application.semantic_type = integer.node_id.clone();
+        let graph: Graph<'_> = [&integer, &boolean, &function, &expression, &application]
+            .into_iter()
+            .map(|node| (&node.node_id, node))
+            .collect();
+        let types = BTreeMap::from([
+            (integer.node_id.clone(), schedule::ValueKind::Integer),
+            (boolean.node_id.clone(), schedule::ValueKind::Boolean),
+        ]);
+        let reference = |target: &CheckedNodeId| CheckedTerm::Reference {
+            target: target.clone(),
+        };
+        assert_eq!(
+            schedule_term_value_kind(
+                &reference(&function.node_id),
+                &graph,
+                &types,
+                &function.node_id
+            ),
+            Err(schedule::ScheduleRefusal::MalformedTerm(
+                function.node_id.clone()
+            ))
+        );
+        assert_eq!(
+            schedule_term_value_kind(
+                &reference(&expression.node_id),
+                &graph,
+                &types,
+                &function.node_id
+            ),
+            Ok(schedule::ValueKind::Integer)
+        );
+        assert_eq!(
+            schedule_term_value_kind(
+                &reference(&application.node_id),
+                &graph,
+                &types,
+                &function.node_id
+            ),
+            Ok(schedule::ValueKind::Boolean)
+        );
     }
 
     #[test]
