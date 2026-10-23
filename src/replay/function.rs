@@ -1248,8 +1248,9 @@ mod tests {
         }
     }
 
-    /// The function request preserves QSL's selected declaration occurrence.
-    #[trace("TC-035", "FR-024-AC-41")]
+    /// The function request carries QSL's selected declaration occurrence.
+    /// Packet-sourced provenance is a separate FR-024-AC-43 obligation.
+    #[trace("TC-035")]
     #[test]
     fn tc_035_function_request_carries_selected_site_and_occurrence() {
         let package = package();
