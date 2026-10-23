@@ -29,31 +29,31 @@ mod declaration_lookup_tests {
 
     fn package_with_declarations(count: usize) -> BoundPackage {
         let owner = json!({"package":"test/ir-988","requirement":"FR-100","revision":1});
-        let anchor = json!({"kind":"pre","operation":"checkAmount"});
+        let anchor = json!({"kind":"post","operation":"checkAmount"});
         let integer = json!({"kind":"integer","domain":"signed","minimum":"0",
             "maximum":"1000","overflow":"reject"});
         let mut values = (0..count - 1)
             .map(|index| {
-                json!({"name":format!("filler{index}"),"kind":"input",
+                json!({"name":format!("filler{index}"),"kind":"state",
                 "value_type":integer,"source":span(index as u64 + 5)})
             })
             .collect::<Vec<_>>();
-        values.push(json!({"name":"amount","kind":"input","value_type":integer,
+        values.push(json!({"name":"amount","kind":"state","value_type":integer,
             "source":span(count as u64 + 5)}));
         let wire = json!({
             "format": EXECUTABLE_PROJECTION_FORMAT,
             "package":{"id":"test/ir-988","schema_version":{"major":1,"minor":1},
                 "source":{"document":"ir-988-numeric","revision":1},
                 "requirements":[{"id":"FR-100","revision":1,"source":span(1),
-                    "clauses":[{"id":"amount-check","kind":"precondition",
+                    "clauses":[{"id":"amount-check","kind":"postcondition",
                         "anchor":anchor,"source":span(2),
                         "body":{"node":"reference","identity":{"requirement":owner,
-                            "kind":"input","observation":"current","path":["amount"]}}}]}]},
+                            "kind":"state","observation":"post","path":["amount"]}}}]}]},
             "bindings":[{"clause":{"requirement":owner,"clause":"amount-check"},
                 "expression":{"owner":owner,"types":[],"values":values,"functions":[],
                     "expression":{"node":"compare","operator":"equal",
                         "left":{"node":"value_reference","name":"amount",
-                            "observation":"current","source":span(3)},
+                            "observation":"post","source":span(3)},
                         "right":{"node":"value_reference","name":"amount",
                             "observation":"pre","source":span(4)},
                         "source":span(3)},
@@ -67,6 +67,7 @@ mod declaration_lookup_tests {
     #[trace("TC-017")]
     #[test]
     fn ir_988_declaration_lookups_do_not_repeat_full_scans_per_read() {
+        let mut excessive = Vec::new();
         for requests in [2, 4, 8] {
             for declarations in [4, 8, 16] {
                 let package = package_with_declarations(declarations);
@@ -78,12 +79,15 @@ mod declaration_lookup_tests {
                 }
                 let visits = DECLARATION_VISITS.with(std::cell::Cell::get);
                 println!("K={requests} R={declarations} declaration_visits={visits}");
-                assert!(
-                    visits <= requests * (declarations + 2),
-                    "one declaration pass per request, then keyed reads"
-                );
+                if visits > requests * (declarations + 2) {
+                    excessive.push((requests, declarations, visits));
+                }
             }
         }
+        assert!(
+            excessive.is_empty(),
+            "repeated declaration scans: {excessive:?}"
+        );
     }
 }
 
