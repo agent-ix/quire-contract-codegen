@@ -1542,6 +1542,9 @@ mod tests {
     const UNIT: &str = "language \"ix:native\" edition \"1-draft\";\n\
         profile v = \"quire.value.complete/v1\";\n\
         function f using v(a: Int[0, 9], b: Int[0, 9]): Boolean pure { a <= b }\n";
+    const VALUE_UNIT: &str = "language \"ix:native\" edition \"1-draft\";\n\
+        profile v = \"quire.value.complete/v1\";\n\
+        function f using v(x: Int[0, 9]): Integer pure { x + 1 }\n";
 
     /// A source-bound typed identity rejects a different case package and a transcript naming
     /// another harness before any replay verdict is produced.
@@ -1590,9 +1593,9 @@ mod tests {
         }
     }
 
-    fn package() -> ReplayPackage {
+    fn test_inputs(unit: &str) -> ReplayInputs {
         let limits = unlimited();
-        let inputs = ReplayInputs {
+        ReplayInputs {
             decode_limits: WitnessDecodeLimits {
                 bytes: 1_048_576,
                 values: 1024,
@@ -1602,24 +1605,23 @@ mod tests {
                 identity: "unit".to_owned(),
                 namespace: "git".to_owned(),
                 revision: "r1".to_owned(),
-                bytes: UNIT.as_bytes().to_vec(),
+                bytes: unit.as_bytes().to_vec(),
             },
             dependencies: Vec::new(),
             accounting_limits: limits,
             stage_limits: BTreeMap::from([("s1.input_bytes".to_owned(), 1 << 20)]),
             declared_domains: Vec::new(),
             replay_limits: ReplayLimits::default(),
-        };
-        ReplayPackage::new(inputs, "f").expect("the unit compiles and declares `f`")
+        }
+    }
+
+    fn package() -> ReplayPackage {
+        ReplayPackage::new(test_inputs(UNIT), "f").expect("the unit compiles and declares `f`")
     }
 
     fn value_package() -> ReplayPackage {
-        let mut inputs = package().inputs;
-        inputs.source.bytes = b"language \"ix:native\" edition \"1-draft\";\n\
-            profile v = \"quire.value.complete/v1\";\n\
-            function f using v(x: Int[0, 9]): Integer pure { x + 1 }\n"
-            .to_vec();
-        ReplayPackage::new(inputs, "f").expect("the non-Boolean function is selected")
+        ReplayPackage::new(test_inputs(VALUE_UNIT), "f")
+            .expect("the non-Boolean function is selected")
     }
 
     /// A value-parity request must retain the Input packet's independently selected function
@@ -1659,6 +1661,13 @@ mod tests {
             packet.occurrence_key.as_ref()
         );
         assert_eq!(readback.obligation_identity(), obligation);
+        let roundtrip = ReplayRequest::decode(readback.to_wire(), package.inputs.replay_limits)
+            .expect("QSL reads its own typed request wire");
+        assert_eq!(
+            roundtrip.replay_target().occurrence_key(),
+            packet.occurrence_key.as_ref()
+        );
+        assert_eq!(roundtrip.obligation_identity(), obligation);
 
         let generated = ScalarOutcome::Value(Value::Integer(Integer::from(5_i64)));
         let report = replay_value_parity(wire, generated.clone(), package.inputs.replay_limits);
