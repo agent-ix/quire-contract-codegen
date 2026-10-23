@@ -11,13 +11,13 @@
 use std::{collections::BTreeMap, fmt};
 
 use qsl_replay::{
-    call_site, replay, ByteDigest, CallSite, CallSiteRefusal, DeclaredDomain, DependencyEntryWire,
-    DependencyInput, DependencyInputRefusal, DigestDomain, DigestRecord, DisagreementCause,
-    FunctionSite, Identifier, MalformedTranscript, NoPayload, ObligationIdentity, OccurrenceKey,
-    QualifiedName, ReplayLimits, ReplayRefusal, ReplayRequestWire, ReplayResult, ReplaySource,
-    ReplayTarget, RequestTargetWire, ScalarLimits, SourceIdentity, StateEnvironment,
-    SuppliedLibrary, WireNodeId, Witness, WitnessArmResult, WitnessEnvelope, WitnessPacket,
-    WitnessRefusal, WitnessSettlement, WitnessValue,
+    call_site, replay, ByteDigest, CallSite, CallSiteRefusal, CanonicalAssignment, DeclaredDomain,
+    DependencyEntryWire, DependencyInput, DependencyInputRefusal, DigestDomain, DigestRecord,
+    DisagreementCause, FunctionSite, Identifier, MalformedTranscript, NoPayload,
+    ObligationIdentity, OccurrenceKey, QualifiedName, ReplayLimits, ReplayRefusal,
+    ReplayRequestWire, ReplayResult, ReplaySource, ReplayTarget, RequestTargetWire, ScalarLimits,
+    SourceIdentity, StateEnvironment, SuppliedLibrary, WireNodeId, Witness, WitnessArmResult,
+    WitnessEnvelope, WitnessPacket, WitnessRefusal, WitnessSettlement, WitnessValue,
 };
 use quire_semantic_value::catalog::Category;
 
@@ -598,6 +598,12 @@ impl fmt::Display for FunctionPacketError {
 
 impl std::error::Error for FunctionPacketError {}
 
+#[derive(Clone, Copy)]
+enum FunctionPacketArm {
+    Witness,
+    Input,
+}
+
 impl ReplayPackage {
     /// Compiles `inputs.source` against the lock's dependencies and locates `function` in it.
     /// A dependency the unit imports is compiled from its lock source; one the unit does not
@@ -794,10 +800,52 @@ impl ReplayPackage {
         ))
     }
 
+    /// Completes a value-parity producer packet from this QSL-selected checked function and
+    /// an independently retained obligation and its canonical input assignments. The packet
+    /// carries the function's exact declaration occurrence before request intake.
+    pub fn value_parity_packet(
+        &self,
+        obligation: ObligationIdentity,
+        assignments: Vec<CanonicalAssignment>,
+    ) -> WitnessPacket<NoPayload> {
+        backend_function_packet(
+            self,
+            obligation,
+            self.site.site.function,
+            self.site.site.declaration.clone(),
+            ReplaySource::Input(assignments),
+        )
+    }
+
+    /// Builds a value-parity request only after QSL admits the producer packet and CG binds its
+    /// target, declaration occurrence, subject, package, Input arm and obligation to this
+    /// independently selected checked function and obligation.
+    ///
+    /// # Errors
+    ///
+    /// [`FunctionPacketError`] when QSL refuses the packet or a packet member does not match the
+    /// selected claim. A missing packet has no request path.
+    pub fn value_parity_request(
+        &self,
+        packet: WitnessPacket<NoPayload>,
+        obligation: ObligationIdentity,
+    ) -> Result<ReplayRequestWire, FunctionPacketError> {
+        self.request_from_packet_for_arm(packet, obligation, FunctionPacketArm::Input)
+    }
+
     fn request_from_packet(
         &self,
         packet: WitnessPacket<NoPayload>,
         obligation: ObligationIdentity,
+    ) -> Result<ReplayRequestWire, FunctionPacketError> {
+        self.request_from_packet_for_arm(packet, obligation, FunctionPacketArm::Witness)
+    }
+
+    fn request_from_packet_for_arm(
+        &self,
+        packet: WitnessPacket<NoPayload>,
+        obligation: ObligationIdentity,
+        arm: FunctionPacketArm,
     ) -> Result<ReplayRequestWire, FunctionPacketError> {
         let envelope = WitnessEnvelope::reconstruct(packet, self.inputs.replay_limits)
             .map_err(FunctionPacketError::Admission)?;
@@ -851,7 +899,12 @@ impl ReplayPackage {
                 PacketClaimMember::Backend,
             ));
         }
-        if !matches!(envelope.source(), ReplaySource::Witness(_)) {
+        let expected_source = matches!(
+            (arm, envelope.source()),
+            (FunctionPacketArm::Witness, ReplaySource::Witness(_))
+                | (FunctionPacketArm::Input, ReplaySource::Input(_))
+        );
+        if !expected_source {
             return Err(FunctionPacketError::ClaimMismatch(
                 PacketClaimMember::SourceArm,
             ));
@@ -1599,6 +1652,18 @@ mod tests {
             package.value_parity_request(alternate, obligation),
             Err(FunctionPacketError::ClaimMismatch(
                 PacketClaimMember::Occurrence
+            ))
+        ));
+
+        let mut wrong_target = packet.clone();
+        wrong_target.replay_target = ReplayTargetMembers::function(
+            QualifiedName::new(vec![Identifier::new("other").expect("valid name")])
+                .expect("valid selection"),
+        );
+        assert!(matches!(
+            package.value_parity_request(wrong_target, obligation),
+            Err(FunctionPacketError::ClaimMismatch(
+                PacketClaimMember::Target
             ))
         ));
 
