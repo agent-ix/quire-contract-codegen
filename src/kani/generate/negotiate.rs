@@ -2123,4 +2123,77 @@ mod tests {
             "one actual CollectionGraph::new for K lower calls; observed {excessive_constructions:?}"
         );
     }
+    #[test]
+    fn collection_request_keeps_actual_packages_separate() {
+        use crate::kani::generate::collection::take_collection_graph_builds;
+        let (left, left_function, left_nodes) = admitted_collection_request_fixture(8);
+        let (right, right_function, right_nodes) = admitted_collection_request_fixture(16);
+        assert_ne!(left.package_id(), right.package_id());
+        let items = [
+            ObligationItem::CollectionClaim {
+                package: &left,
+                function_id: &left_function,
+                node_id: &left_nodes[0],
+            },
+            ObligationItem::CollectionClaim {
+                package: &right,
+                function_id: &right_function,
+                node_id: &right_nodes[0],
+            },
+            ObligationItem::CollectionClaim {
+                package: &left,
+                function_id: &left_function,
+                node_id: &left_nodes[1],
+            },
+            ObligationItem::CollectionClaim {
+                package: &right,
+                function_id: &right_function,
+                node_id: &right_nodes[1],
+            },
+        ];
+        let evaluate = |items: &[ObligationItem<'_>]| {
+            negotiate_kani_obligations(&KaniObligationRequest {
+                ceilings: crate::kani::test_support::proof_ceilings::proof_ceilings(),
+                items,
+                subject_path: "crate::unused",
+                unwind: 8,
+            })
+            .unwrap()
+        };
+        take_collection_graph_builds();
+        let expected = items
+            .iter()
+            .map(|item| evaluate(std::slice::from_ref(item)))
+            .collect::<Vec<_>>();
+        assert_eq!(take_collection_graph_builds(), items.len());
+        let actual = evaluate(&items);
+        let constructions = take_collection_graph_builds();
+        let mut expected_harnesses = Vec::new();
+        for (index, baseline) in expected.into_iter().enumerate() {
+            let mut record = baseline.records()[0].clone();
+            record.request_index = index;
+            assert_eq!(actual.records()[index], record);
+            let KaniObligationOutcome::Emitted {
+                collection_harnesses,
+                ..
+            } = baseline
+            else {
+                panic!("healthy source collection generates");
+            };
+            assert_eq!(collection_harnesses.len(), 1);
+            expected_harnesses.extend(collection_harnesses);
+        }
+        let KaniObligationOutcome::Emitted {
+            collection_harnesses,
+            ..
+        } = actual
+        else {
+            panic!("independent packages generate");
+        };
+        assert_eq!(collection_harnesses, expected_harnesses);
+        assert_eq!(
+            constructions, 2,
+            "one actual graph per package, not per item or one shared graph"
+        );
+    }
 }
