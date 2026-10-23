@@ -1564,7 +1564,6 @@ fn residual_strategy_projection(clause_count: usize) -> Value {
 }
 
 /// This uses IR's real public executable-projection reader, not a QSL source fixture.
-#[trace("TC-017", "FR-008-AC-3", "FR-008-AC-6")]
 #[test]
 fn residual_strategy_kr_families_preserve_complete_selected_artifacts() {
     let mut expected = None;
@@ -1595,7 +1594,6 @@ fn residual_strategy_kr_families_preserve_complete_selected_artifacts() {
 }
 
 /// Whole-package refusal must precede selection of a healthy clause's generated oracle.
-#[trace("TC-017", "FR-008-AC-3", "FR-008-AC-6")]
 #[test]
 fn residual_strategy_keeps_unknown_selection_and_refused_sibling_precedence() {
     let mut projection = residual_strategy_projection(4);
