@@ -1,6 +1,7 @@
 //! Public bound-package admission and complete numeric strategy bundle generation.
 
 use std::fmt::Write as _;
+use std::{cell::OnceCell, collections::BTreeMap};
 
 #[cfg(test)]
 thread_local! {
@@ -78,8 +79,15 @@ mod declaration_lookup_tests {
                 let clause = &package.clauses()[0];
                 DECLARATION_VISITS.with(|visits| visits.set(0));
                 for _ in 0..requests {
-                    let admitted = admit_relation(clause).expect("admitted relation");
+                    let declarations = BoundDeclarationIndex::new(clause);
+                    let admitted =
+                        admit_relation(clause, &declarations).expect("admitted relation");
                     assert_eq!(admitted.primary.name, "amount");
+                    assert_eq!(admitted.primary.observation, StateObservation::Post);
+                    assert_eq!(
+                        admitted.partner.as_ref().map(|read| read.observation),
+                        Some(StateObservation::Pre)
+                    );
                 }
                 let visits = DECLARATION_VISITS.with(std::cell::Cell::get);
                 println!("K={requests} R={declarations} declaration_visits={visits}");
@@ -97,7 +105,8 @@ mod declaration_lookup_tests {
 
 use quire_contract_model::{
     BoundClause, BoundPackage, ClauseKind, ClauseRef, ComparisonOperator as IrComparisonOperator,
-    ExecutionPoint, Expression, ExpressionKind, StateObservation, ValueDeclarationKind, ValueType,
+    ExecutionPoint, Expression, ExpressionKind, StateObservation, ValueDeclaration,
+    ValueDeclarationKind, ValueType,
 };
 
 use super::{
@@ -178,6 +187,27 @@ struct AdmittedRelation {
     partner: Option<Read>,
 }
 
+struct BoundDeclarationIndex<'a> {
+    by_name: BTreeMap<&'a str, &'a ValueDeclaration>,
+}
+
+impl<'a> BoundDeclarationIndex<'a> {
+    fn new(clause: &'a BoundClause) -> Self {
+        let mut by_name = BTreeMap::new();
+        for declaration in clause.environment().values() {
+            record_declaration_visit();
+            by_name
+                .entry(declaration.name().as_str())
+                .or_insert(declaration);
+        }
+        Self { by_name }
+    }
+
+    fn get(&self, name: &str) -> Option<&'a ValueDeclaration> {
+        self.by_name.get(name).copied()
+    }
+}
+
 impl AdmittedRelation {
     fn reads(&self) -> impl Iterator<Item = &Read> {
         std::iter::once(&self.primary).chain(self.partner.iter())
@@ -210,6 +240,8 @@ pub fn generate_bound_strategy(
         ));
     };
 
+    let declarations = OnceCell::new();
+
     let generated_oracles = generate_bound_oracles(request.package).map_err(|error| {
         let diagnostic = map_oracle_error(request.clause, error);
         if diagnostic.clause.as_deref() == Some(request.clause)
@@ -221,7 +253,8 @@ pub fn generate_bound_strategy(
                 )
             )
         {
-            if let Some(locus) = explicit_relation_locus(clause) {
+            let index = declarations.get_or_init(|| BoundDeclarationIndex::new(clause));
+            if let Some(locus) = explicit_relation_locus(clause, index) {
                 return relation_diagnostic(
                     clause,
                     locus,
@@ -273,7 +306,8 @@ pub fn generate_bound_strategy(
         ));
     }
 
-    let admitted = admit_relation(clause)?;
+    let index = declarations.get_or_init(|| BoundDeclarationIndex::new(clause));
+    let admitted = admit_relation(clause, index)?;
     let read_identifiers = admitted
         .reads()
         .map(|read| read.identifier.as_str())
@@ -348,7 +382,10 @@ pub fn generate_bound_strategy(
 }
 
 // Implements: FR-008-CON-1
-fn admit_relation(clause: &BoundClause) -> Result<AdmittedRelation, StrategyDiagnostic> {
+fn admit_relation(
+    clause: &BoundClause,
+    declarations: &BoundDeclarationIndex<'_>,
+) -> Result<AdmittedRelation, StrategyDiagnostic> {
     let expression = clause.expression().expression();
     let ExpressionKind::Compare {
         operator,
@@ -363,8 +400,8 @@ fn admit_relation(clause: &BoundClause) -> Result<AdmittedRelation, StrategyDiag
         ));
     };
 
-    let left = read_operand(clause, left)?;
-    let right = read_operand(clause, right)?;
+    let left = read_operand(clause, declarations, left)?;
+    let right = read_operand(clause, declarations, right)?;
     if left.is_none() && right.is_none() {
         return Err(relation_diagnostic(
             clause,
@@ -414,19 +451,13 @@ fn admit_relation(clause: &BoundClause) -> Result<AdmittedRelation, StrategyDiag
         ));
     }
 
-    let declaration = clause
-        .environment()
-        .values()
-        .iter()
-        .inspect(|_| record_declaration_visit())
-        .find(|declaration| declaration.name().as_str() == primary.name)
-        .ok_or_else(|| {
-            relation_diagnostic(
-                clause,
-                expression,
-                "the primary read has no bound declaration",
-            )
-        })?;
+    let declaration = declarations.get(&primary.name).ok_or_else(|| {
+        relation_diagnostic(
+            clause,
+            expression,
+            "the primary read has no bound declaration",
+        )
+    })?;
     let ValueType::Integer { value } = declaration.value_type() else {
         return Err(relation_diagnostic(
             clause,
@@ -494,19 +525,14 @@ fn checked_relation_literal(
 
 fn read_operand(
     clause: &BoundClause,
+    declarations: &BoundDeclarationIndex<'_>,
     operand: &Expression,
 ) -> Result<Option<Read>, StrategyDiagnostic> {
     match operand.kind() {
         ExpressionKind::ValueReference { name, observation } => {
-            let declaration = clause
-                .environment()
-                .values()
-                .iter()
-                .inspect(|_| record_declaration_visit())
-                .find(|declaration| declaration.name() == name)
-                .ok_or_else(|| {
-                    relation_diagnostic(clause, operand, "the read has no bound declaration")
-                })?;
+            let declaration = declarations.get(name.as_str()).ok_or_else(|| {
+                relation_diagnostic(clause, operand, "the read has no bound declaration")
+            })?;
             if !matches!(declaration.value_type(), ValueType::Integer { .. }) {
                 return Err(relation_diagnostic(
                     clause,
@@ -530,7 +556,10 @@ fn read_operand(
     }
 }
 
-fn explicit_relation_locus(clause: &BoundClause) -> Option<&Expression> {
+fn explicit_relation_locus<'a>(
+    clause: &'a BoundClause,
+    declarations: &BoundDeclarationIndex<'_>,
+) -> Option<&'a Expression> {
     let ExpressionKind::Compare { left, right, .. } = clause.expression().expression().kind()
     else {
         return None;
@@ -539,15 +568,9 @@ fn explicit_relation_locus(clause: &BoundClause) -> Option<&Expression> {
         match operand.kind() {
             ExpressionKind::IntegerLiteral { .. } => {}
             ExpressionKind::ValueReference { name, .. } => {
-                let integer = clause
-                    .environment()
-                    .values()
-                    .iter()
-                    .inspect(|_| record_declaration_visit())
-                    .find(|declaration| declaration.name() == name)
-                    .is_some_and(|declaration| {
-                        matches!(declaration.value_type(), ValueType::Integer { .. })
-                    });
+                let integer = declarations.get(name.as_str()).is_some_and(|declaration| {
+                    matches!(declaration.value_type(), ValueType::Integer { .. })
+                });
                 if !integer {
                     return Some(operand);
                 }
@@ -1096,7 +1119,8 @@ mod tests {
             (0, i128::MAX),
         ] {
             let clause = wide_clause(minimum, maximum);
-            let Err(refusal) = admit_relation(&clause) else {
+            let declarations = BoundDeclarationIndex::new(&clause);
+            let Err(refusal) = admit_relation(&clause, &declarations) else {
                 panic!("wide relation was admitted");
             };
             assert_eq!(refusal.code, StrategyErrorCode::UnsupportedRelation);
