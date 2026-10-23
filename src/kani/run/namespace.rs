@@ -487,6 +487,53 @@ mod tests {
     use ix_trace_rs::trace;
     use std::os::unix::process::CommandExt;
     use std::process::Stdio;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    /// An empty first observation models a delayed pidfd readiness report under load.
+    #[derive(Debug, Default)]
+    struct DelayedConfirmation {
+        observations: AtomicUsize,
+    }
+
+    impl PollOperation for DelayedConfirmation {
+        fn poll(
+            &self,
+            fds: &mut [PollFd<'_>],
+            timeout: Option<&Timespec>,
+        ) -> Result<usize, rustix::io::Errno> {
+            if self.observations.fetch_add(1, Ordering::AcqRel) == 0 {
+                return Ok(0);
+            }
+            poll(fds, timeout)
+        }
+    }
+
+    /// A first empty readiness sample must not turn confirmed teardown into a refusal.
+    #[trace("FR-017-AC-24", "FR-040-AC-4")]
+    #[test]
+    fn delayed_namespace_confirmation_retries_before_accepting_teardown() {
+        let confirmation = Arc::new(DelayedConfirmation::default());
+        let (mut command, mut owner) =
+            NamespaceOwner::prepare(BackendCommand::new("true"), confirmation.clone()).unwrap();
+        command
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .process_group(0);
+        let mut child = command.spawn().unwrap();
+        drop(command);
+        owner.attach(&child).unwrap();
+        let mut observer =
+            super::super::memory::MemoryObserver::prepare(Path::new("/proc")).unwrap();
+        owner
+            .dispatch(Some(Instant::now() + Duration::from_secs(5)), &mut observer)
+            .unwrap();
+        owner
+            .cleanup()
+            .expect("the delayed observation still confirms teardown");
+        assert!(confirmation.observations.load(Ordering::Acquire) >= 2);
+        assert!(ready(&owner.init.as_ref().unwrap().2));
+        child.wait().unwrap();
+    }
 
     fn ready(handle: &OwnedFd) -> bool {
         let mut fds = [PollFd::new(handle, PollFlags::IN)];
