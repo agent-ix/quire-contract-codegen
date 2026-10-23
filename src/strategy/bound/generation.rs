@@ -2,6 +2,91 @@
 
 use std::fmt::Write as _;
 
+#[cfg(test)]
+thread_local! {
+    static DECLARATION_VISITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+fn record_declaration_visit() {
+    #[cfg(test)]
+    DECLARATION_VISITS.with(|visits| visits.set(visits.get() + 1));
+}
+
+#[cfg(test)]
+mod declaration_lookup_tests {
+    use super::*;
+    use ix_trace_rs::trace;
+    use quire_contract_model::{BoundPackage, EXECUTABLE_PROJECTION_FORMAT};
+    use serde_json::{json, Value};
+
+    fn span(line: u64) -> Value {
+        let source = json!({"document":"ir-988-numeric", "revision":1});
+        json!({
+            "start":{"source":source,"line":line,"column":1,"byte_offset":line - 1},
+            "end":{"source":source,"line":line,"column":2,"byte_offset":line}
+        })
+    }
+
+    fn package_with_declarations(count: usize) -> BoundPackage {
+        let owner = json!({"package":"test/ir-988","requirement":"FR-100","revision":1});
+        let anchor = json!({"kind":"pre","operation":"checkAmount"});
+        let integer = json!({"kind":"integer","domain":"signed","minimum":"0",
+            "maximum":"1000","overflow":"reject"});
+        let mut values = (0..count - 1)
+            .map(|index| {
+                json!({"name":format!("filler{index}"),"kind":"input",
+                "value_type":integer,"source":span(index as u64 + 5)})
+            })
+            .collect::<Vec<_>>();
+        values.push(json!({"name":"amount","kind":"input","value_type":integer,
+            "source":span(count as u64 + 5)}));
+        let wire = json!({
+            "format": EXECUTABLE_PROJECTION_FORMAT,
+            "package":{"id":"test/ir-988","schema_version":{"major":1,"minor":1},
+                "source":{"document":"ir-988-numeric","revision":1},
+                "requirements":[{"id":"FR-100","revision":1,"source":span(1),
+                    "clauses":[{"id":"amount-check","kind":"precondition",
+                        "anchor":anchor,"source":span(2),
+                        "body":{"node":"reference","identity":{"requirement":owner,
+                            "kind":"input","observation":"current","path":["amount"]}}}]}]},
+            "bindings":[{"clause":{"requirement":owner,"clause":"amount-check"},
+                "expression":{"owner":owner,"types":[],"values":values,"functions":[],
+                    "expression":{"node":"compare","operator":"equal",
+                        "left":{"node":"value_reference","name":"amount",
+                            "observation":"current","source":span(3)},
+                        "right":{"node":"value_reference","name":"amount",
+                            "observation":"pre","source":span(4)},
+                        "source":span(3)},
+                    "expected_type":{"kind":"boolean"},"execution_point":anchor,
+                    "clause_root":true}}]
+        });
+        BoundPackage::from_json_bytes(&serde_json::to_vec(&wire).expect("wire bytes"))
+            .expect("admitted numeric projection")
+    }
+
+    #[trace("TC-017")]
+    #[test]
+    fn ir_988_declaration_lookups_do_not_repeat_full_scans_per_read() {
+        for requests in [2, 4, 8] {
+            for declarations in [4, 8, 16] {
+                let package = package_with_declarations(declarations);
+                let clause = &package.clauses()[0];
+                DECLARATION_VISITS.with(|visits| visits.set(0));
+                for _ in 0..requests {
+                    let admitted = admit_relation(clause).expect("admitted relation");
+                    assert_eq!(admitted.primary.name, "amount");
+                }
+                let visits = DECLARATION_VISITS.with(std::cell::Cell::get);
+                println!("K={requests} R={declarations} declaration_visits={visits}");
+                assert!(
+                    visits <= requests * (declarations + 2),
+                    "one declaration pass per request, then keyed reads"
+                );
+            }
+        }
+    }
+}
+
 use quire_contract_model::{
     BoundClause, BoundPackage, ClauseKind, ClauseRef, ComparisonOperator as IrComparisonOperator,
     ExecutionPoint, Expression, ExpressionKind, StateObservation, ValueDeclarationKind, ValueType,
@@ -325,6 +410,7 @@ fn admit_relation(clause: &BoundClause) -> Result<AdmittedRelation, StrategyDiag
         .environment()
         .values()
         .iter()
+        .inspect(|_| record_declaration_visit())
         .find(|declaration| declaration.name().as_str() == primary.name)
         .ok_or_else(|| {
             relation_diagnostic(
@@ -408,6 +494,7 @@ fn read_operand(
                 .environment()
                 .values()
                 .iter()
+                .inspect(|_| record_declaration_visit())
                 .find(|declaration| declaration.name() == name)
                 .ok_or_else(|| {
                     relation_diagnostic(clause, operand, "the read has no bound declaration")
@@ -448,6 +535,7 @@ fn explicit_relation_locus(clause: &BoundClause) -> Option<&Expression> {
                     .environment()
                     .values()
                     .iter()
+                    .inspect(|_| record_declaration_visit())
                     .find(|declaration| declaration.name() == name)
                     .is_some_and(|declaration| {
                         matches!(declaration.value_type(), ValueType::Integer { .. })
