@@ -56,3 +56,13 @@ scope:
   role: context_only
   excerpt: A declared function whose own body fails to lower — an unlowerable node, a form none of this generator's classifiers admits, or a nested `call` naming a function absent from the request — refuses every item bound to that function with a typed reason, without changing an unrelated package's items.
 ```
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | At `b57743ddf4cdb0368ef09b6f4fffd0526443627b`, `src/oracle/scalar/mod.rs:24-28` now states that shape classifiers match retained `CheckedTerm` and closed `ApplicationOperator`, borrowing typed arguments through `CheckedGraph`. |
+
+## Narrow carry — round 1
+
+The eight original source/test commits are `=` under `git range-diff 1187f6cc..1af1e8a7 a3aad3b7..b57743dd`. The new head is based directly on actual merged #546 `a3aad3b757bdd3b9028094c0b562c26970aaa3d3`; no rebase conflict rewrite to those eight commits was observed. I inspected the new function port and extra test adaptations. No new code/Rust finding in the changed function path. Typed `source_call_matches` retains exact arity, canonical represented-key lookup and ordered arguments; `source_function_node_id` still walks node-key order and rejects a second same-name/body match; first binding and dangling/foreign-key controls exercise the changed typed helpers. The checked source and lowered package remain separately owned. The integer literal lexer retains raw accepted spellings while refusing invalid spelling and unsupported kinds. `git diff --check` passes. Author's focused logs show fmt and workspace lib/tests Clippy PASS, 38 function controls, and before/after generated source, claim map and location map byte equality; these are read as data, not a final aggregate gate. Original findings above remain unchanged.

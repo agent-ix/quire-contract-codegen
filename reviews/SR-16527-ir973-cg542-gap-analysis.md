@@ -48,3 +48,13 @@ scope:
   role: examined
   excerpt: A declared function whose own body fails to lower — an unlowerable node, a form none of this generator's classifiers admits, or a nested `call` naming a function absent from the request — refuses every item bound to that function with a typed reason, without changing an unrelated package's items.
 ```
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | At `b57743ddf4cdb0368ef09b6f4fffd0526443627b`, the function module aliases `Graph` to shared `CheckedGraph`, matches `CheckedTerm` and `ApplicationOperator`, and no longer has production `.get("term")` dispatch. The two three-consumer Syn structural tests pass in the author's focused run; independent source inspection confirms their predicates now see no old alias or raw dispatch. |
+
+## Narrow carry — round 1
+
+The owner typed function source helpers and schedule projector were inspected against the prior raw behavior and the new narrow controls. First binding, complete key, duplicate-name/body, dangling/foreign reference, application-result-type versus nonapplication `semantic_type`, literal spelling/refusal precedence, and caller order are explicitly exercised. The admitted opaque `operation.member` test still verifies metadata-only reference leaves the true narrowing unchanged and an actual argument reference changes it to `Mixed`. The before/after focused native function agreement ran 9/9 on each head and recorded byte-identical generated `src/lib.rs`, claim map and location map; this is author evidence. One earlier preflight run lacked the external QSpec selector and failed test setup, then the corrected published-selector run passed; no product failure is inferred from that setup run. Final native/Kani aggregate qualification remains outstanding and belongs to the author/lead. Original finding above remains unchanged.
