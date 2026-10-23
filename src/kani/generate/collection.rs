@@ -99,6 +99,13 @@ struct CollectionNodeIndex<'a> {
 #[cfg(test)]
 thread_local! {
     static COLLECTION_GRAPH_BUILD_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static COLLECTION_NODE_INDEX_BUILD_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Read and reset the number of real admitted collection graph constructions on this test thread.
+#[cfg(test)]
+pub(crate) fn take_collection_graph_builds() -> usize {
+    COLLECTION_GRAPH_BUILD_COUNT.with(|count| count.replace(0))
 }
 
 struct FirstMatchIndex<K, V> {
@@ -126,6 +133,8 @@ impl<K: Ord, V> FirstMatchIndex<K, V> {
 
 impl<'a> CollectionGraph<'a> {
     pub(super) fn new(package: &'a CheckedPackageV2) -> Self {
+        #[cfg(test)]
+        COLLECTION_GRAPH_BUILD_COUNT.with(|count| count.set(count.get() + 1));
         Self {
             package,
             index: CollectionNodeIndex::from_nodes(package.graph().nodes.iter()),
@@ -136,7 +145,7 @@ impl<'a> CollectionGraph<'a> {
 impl<'a> CollectionNodeIndex<'a> {
     fn from_nodes(nodes: impl IntoIterator<Item = &'a CheckedSemanticNodeV2>) -> Self {
         #[cfg(test)]
-        COLLECTION_GRAPH_BUILD_COUNT.with(|count| count.set(count.get() + 1));
+        COLLECTION_NODE_INDEX_BUILD_COUNT.with(|count| count.set(count.get() + 1));
         let mut by_id = FirstMatchIndex::new();
         let mut by_digest = FirstMatchIndex::new();
         for node in nodes {
@@ -967,7 +976,7 @@ mod tests {
     }
 
     fn assert_collection_graph_reuses_one_ordered_walk() {
-        COLLECTION_GRAPH_BUILD_COUNT.with(|count| count.set(0));
+        COLLECTION_NODE_INDEX_BUILD_COUNT.with(|count| count.set(0));
         let checked_node = |digit: &str| -> CheckedSemanticNodeV2 {
             let id = |digit: &str| {
                 serde_json::json!({
@@ -990,7 +999,7 @@ mod tests {
         let nodes = std::iter::repeat_n(&preceding, 126).chain([&selected, &duplicate]);
         let graph =
             CollectionNodeIndex::from_nodes(nodes.inspect(|_| visited.set(visited.get() + 1)));
-        COLLECTION_GRAPH_BUILD_COUNT.with(|count| {
+        COLLECTION_NODE_INDEX_BUILD_COUNT.with(|count| {
             assert_eq!(count.get(), 1, "the graph index was built once");
         });
         for _ in 0..3 {
@@ -998,7 +1007,7 @@ mod tests {
             assert!(std::ptr::eq(found.expect("selected node"), &selected));
         }
         assert_eq!(visited.get(), 128, "one request graph construction");
-        COLLECTION_GRAPH_BUILD_COUNT.with(|count| {
+        COLLECTION_NODE_INDEX_BUILD_COUNT.with(|count| {
             assert_eq!(count.get(), 1, "K lookups must reuse the same graph index");
         });
         assert!(

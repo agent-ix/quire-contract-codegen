@@ -9,6 +9,9 @@ mod model;
 #[path = "../../../tests/state_frame_support/native_twin.rs"]
 mod native_twin;
 
+use crate::kani::generate::collection::{
+    lower_collection_claim, take_collection_graph_builds, CollectionDomainRefusal, CollectionGraph,
+};
 use crate::kani::generate::frame::{
     generate_state_frame_obligations, generate_state_frame_role, StateFrameRequest,
 };
@@ -54,6 +57,22 @@ fn clause_test_node(number: u8, label: &str) -> CheckedSemanticNodeV2 {
         owner: None,
         body: serde_json::json!({"label": label}),
     }
+}
+
+#[trace("FR-015-AC-96", "TC-025")]
+#[test]
+fn collection_lower_calls_reuse_the_admitted_graph_constructor() {
+    let (package, function_id) = native_twin::Twin::new().emitted_package("BalanceNeverDrops");
+    let missing_quantifier = clause_test_id(255);
+    let _ = take_collection_graph_builds();
+    let graph = CollectionGraph::new(&package);
+    for _ in 0..3 {
+        assert!(matches!(
+            lower_collection_claim(&graph, &function_id, &missing_quantifier),
+            Err(CollectionDomainRefusal::UnsupportedShape)
+        ));
+    }
+    assert_eq!(take_collection_graph_builds(), 1);
 }
 
 #[trace("FR-014-AC-38", "TC-024")]
