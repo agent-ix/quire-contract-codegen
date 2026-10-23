@@ -2,7 +2,7 @@
 //! harness (FR-015).
 
 use crate::oracle::operator_catalog::{Operator as CatalogOperator, ScalarKaniOperator};
-use quire_contract_model::{CheckedNodeId, CheckedSemanticNodeV2};
+use quire_contract_model::{CheckedNodeId, CheckedSemanticNodeV2, CheckedTerm};
 
 #[cfg(test)]
 use crate::{
@@ -17,10 +17,10 @@ use crate::{
     kani::identity::{
         KaniScalarObligationHarness, ScalarObligationArgument, ScalarObligationIdentity,
     },
+    oracle::checked_graph::{aggregate_members, bound_members, literal_count, literal_integer},
     oracle::scalar::{
-        aggregate_members, bound_members, literal_count, literal_integer, ExactScalarClaim,
-        GeneratedScalarClaim, OperandRange, COLLECTION_BOUNDS_MEMBERS, INTEGER_RANGE_MEMBERS,
-        TEXT_BOUNDS_MEMBERS,
+        ExactScalarClaim, GeneratedScalarClaim, OperandRange, COLLECTION_BOUNDS_MEMBERS,
+        INTEGER_RANGE_MEMBERS, TEXT_BOUNDS_MEMBERS,
     },
 };
 
@@ -330,8 +330,11 @@ pub(super) fn lower_scalar_claim(
     })
 }
 
-pub(super) fn derive_domain(bound: &CheckedSemanticNodeV2) -> DerivedDomain {
-    let members = aggregate_members(&bound.body);
+pub(super) fn derive_domain(
+    bound: &CheckedSemanticNodeV2,
+    term: Option<&CheckedTerm>,
+) -> DerivedDomain {
+    let members = aggregate_members(term);
     match (&*bound.semantic_form, members) {
         ("integer_range", Some(members)) => {
             match bound_members(members, INTEGER_RANGE_MEMBERS)
@@ -357,8 +360,11 @@ fn not_symbolic(bound: &CheckedSemanticNodeV2) -> DerivedDomain {
 }
 
 /// The canonical inclusive limits of a range bound that admits no value.
-pub(super) fn unsatisfiable(bound: &CheckedSemanticNodeV2) -> Option<(String, String)> {
-    let members = aggregate_members(&bound.body)?;
+pub(super) fn unsatisfiable(
+    bound: &CheckedSemanticNodeV2,
+    term: Option<&CheckedTerm>,
+) -> Option<(String, String)> {
+    let members = aggregate_members(term)?;
     match &*bound.semantic_form {
         "integer_range" => {
             let [lower, upper] = bound_members(members, INTEGER_RANGE_MEMBERS)?;
@@ -378,10 +384,7 @@ pub(super) fn unsatisfiable(bound: &CheckedSemanticNodeV2) -> Option<(String, St
 }
 
 /// The canonical limits of a cardinality range whose minimum exceeds its maximum.
-fn count_bounds(
-    minimum: &serde_json::Value,
-    maximum: &serde_json::Value,
-) -> Option<(String, String)> {
+fn count_bounds(minimum: &CheckedTerm, maximum: &CheckedTerm) -> Option<(String, String)> {
     let (minimum, maximum) = (literal_count(minimum)?, literal_count(maximum)?);
     (minimum > maximum).then(|| (minimum.to_string(), maximum.to_string()))
 }
@@ -818,7 +821,8 @@ mod {module} {{\n\
 #[cfg(test)]
 mod tests {
     use ix_trace_rs::trace;
-    use serde_json::{json, Value};
+    use quire_contract_model::LiteralKind;
+    use serde_json::json;
 
     use super::*;
 
@@ -879,44 +883,65 @@ mod tests {
         );
     }
 
+    // Explicit typed unit fixtures; these do not claim public reader admission.
+    fn bound_fixture(
+        form: &str,
+        members: Vec<CheckedTerm>,
+    ) -> (CheckedSemanticNodeV2, CheckedTerm) {
+        let term = CheckedTerm::Aggregate { members };
+        let node = serde_json::from_value(json!({
+            "node_id": {"domain": "quire.checked-semantic-node/v1", "digest": "0".repeat(64)},
+            "schema_version": "quire.checked-semantic-graph/v2",
+            "node_tag": "bounded_domain",
+            "semantic_form": form,
+            "semantic_type": {"domain": "quire.checked-semantic-node/v1", "digest": "1".repeat(64)},
+            "dependencies": [],
+            "occurrences": [],
+            "body": &term,
+        }))
+        .expect("node");
+        (node, term)
+    }
+
+    fn bound_literal(kind: LiteralKind, value: &str) -> CheckedTerm {
+        CheckedTerm::Literal {
+            type_id: checked_node_id("1"),
+            value_kind: kind,
+            value: json!(value),
+        }
+    }
+
+    fn bound_member(name: &str, value: CheckedTerm) -> CheckedTerm {
+        CheckedTerm::Binding {
+            name: name.into(),
+            value: Box::new(value),
+        }
+    }
+
     /// The symbolic domain is read from binding-shaped `min`/`max` members (the shape QSL emits,
     /// FR-322); a bare-literal member is not symbolic.
     #[trace("FR-015-AC-5", "TC-025")]
     #[test]
     fn tc_025_derive_domain_reads_binding_shaped_range_members() {
-        let node = |members: Value| -> CheckedSemanticNodeV2 {
-            serde_json::from_value(json!({
-                "node_id": {"domain": "quire.checked-semantic-node/v1", "digest": "0".repeat(64)},
-                "schema_version": "quire.checked-semantic-graph/v2",
-                "node_tag": "bounded_domain",
-                "semantic_form": "integer_range",
-                "semantic_type": {"domain": "quire.checked-semantic-node/v1", "digest": "1".repeat(64)},
-                "dependencies": [],
-                "occurrences": [],
-                "body": {"term": "aggregate", "members": members},
-            }))
-            .expect("node")
-        };
-        let literal = |value: &str| {
-            json!({"term": "literal",
-                "type": {"domain": "quire.checked-semantic-node/v1", "digest": "1".repeat(64)},
-                "value_kind": "integer", "value": value})
-        };
-        let bound = node(json!([
-            {"term": "binding", "name": "min", "value": literal("0")},
-            {"term": "binding", "name": "max", "value": literal("9")},
-        ]));
+        let literal = |value: &str| bound_literal(LiteralKind::Integer, value);
+        let (bound, term) = bound_fixture(
+            "integer_range",
+            vec![
+                bound_member("min", literal("0")),
+                bound_member("max", literal("9")),
+            ],
+        );
         assert_eq!(
-            derive_domain(&bound),
+            derive_domain(&bound, Some(&term)),
             DerivedDomain::IntegerRange {
                 bound: bound.node_id.clone(),
                 lower: "0".to_owned(),
                 upper: "9".to_owned(),
             }
         );
-        let bare = node(json!([literal("0"), literal("9")]));
+        let (bare, term) = bound_fixture("integer_range", vec![literal("0"), literal("9")]);
         assert!(matches!(
-            derive_domain(&bare),
+            derive_domain(&bare, Some(&term)),
             DerivedDomain::NotSymbolic { .. }
         ));
     }
@@ -926,26 +951,15 @@ mod tests {
     #[trace("FR-015-AC-5", "TC-025")]
     #[test]
     fn tc_025_range_members_are_read_by_name_not_position() {
-        let node = |members: Value| -> CheckedSemanticNodeV2 {
-            serde_json::from_value(json!({
-                "node_id": {"domain": "quire.checked-semantic-node/v1", "digest": "0".repeat(64)},
-                "schema_version": "quire.checked-semantic-graph/v2",
-                "node_tag": "bounded_domain",
-                "semantic_form": "integer_range",
-                "semantic_type": {"domain": "quire.checked-semantic-node/v1", "digest": "1".repeat(64)},
-                "dependencies": [],
-                "occurrences": [],
-                "body": {"term": "aggregate", "members": members},
-            }))
-            .expect("node")
-        };
         let member = |name: &str, value: &str| {
-            json!({"term": "binding", "name": name, "value":
-                {"term": "literal", "value_kind": "integer", "value": value}})
+            bound_member(name, bound_literal(LiteralKind::Integer, value))
         };
-        let swapped = node(json!([member("max", "9"), member("min", "0")]));
+        let (swapped, term) = bound_fixture(
+            "integer_range",
+            vec![member("max", "9"), member("min", "0")],
+        );
         assert_eq!(
-            derive_domain(&swapped),
+            derive_domain(&swapped, Some(&term)),
             DerivedDomain::IntegerRange {
                 bound: swapped.node_id.clone(),
                 lower: "0".to_owned(),
@@ -953,75 +967,49 @@ mod tests {
             }
         );
         // `[max=0, min=9]` written high-first is an inverted range, not the range `[0, 9]`.
+        let (inverted, term) = bound_fixture(
+            "integer_range",
+            vec![member("max", "0"), member("min", "9")],
+        );
         assert_eq!(
-            unsatisfiable(&node(json!([member("max", "0"), member("min", "9")]))),
+            unsatisfiable(&inverted, Some(&term)),
             Some(("9".to_owned(), "0".to_owned()))
         );
         for members in [
-            json!([member("min", "0"), member("min", "9")]),
-            json!([member("min", "0"), member("high", "9")]),
-            json!([member("min", "0")]),
+            vec![member("min", "0"), member("min", "9")],
+            vec![member("min", "0"), member("high", "9")],
+            vec![member("min", "0")],
         ] {
+            let (bound, term) = bound_fixture("integer_range", members);
             assert!(matches!(
-                derive_domain(&node(members.clone())),
+                derive_domain(&bound, Some(&term)),
                 DerivedDomain::NotSymbolic { .. }
             ));
-            assert_eq!(unsatisfiable(&node(members)), None);
+            assert_eq!(unsatisfiable(&bound, Some(&term)), None);
         }
     }
 
     #[trace("FR-015-AC-5", "TC-025")]
     #[test]
     fn tc_025_inverted_ranges_are_unsatisfiable_and_ordered_ranges_are_not() {
-        let node = |form: &str, members: Value| -> CheckedSemanticNodeV2 {
-            serde_json::from_value(serde_json::json!({
-                "node_id": {"domain": "quire.checked-semantic-node/v1", "digest": "0".repeat(64)},
-                "schema_version": "quire.checked-semantic-graph/v2",
-                "node_tag": "bounded_domain",
-                "semantic_form": form,
-                "semantic_type": {"domain": "quire.checked-semantic-node/v1", "digest": "1".repeat(64)},
-                "dependencies": [],
-                "occurrences": [],
-                "body": {"term": "aggregate", "members": members},
-            }))
-            .expect("node")
-        };
-        // The QSL-emitted shape: each bound member is a `binding` carrying its literal.
-        let member = |name: &str, kind: &str, value: &str| {
-            serde_json::json!({"term":"binding","name":name,"value":
-                {"term":"literal","value_kind":kind,"value":value}})
-        };
         let (lo, hi) = (
-            |value: &str| member("min", "integer", value),
-            |value: &str| member("max", "integer", value),
+            |value: &str| bound_member("min", bound_literal(LiteralKind::Integer, value)),
+            |value: &str| bound_member("max", bound_literal(LiteralKind::Integer, value)),
         );
-        let text = |value: &str| member("text_profile", "text", value);
+        let text =
+            |value: &str| bound_member("text_profile", bound_literal(LiteralKind::Text, value));
+        let (bound, term) = bound_fixture("integer_range", vec![lo("5"), hi("-5")]);
         assert_eq!(
-            unsatisfiable(&node(
-                "integer_range",
-                serde_json::json!([lo("5"), hi("-5")])
-            )),
+            unsatisfiable(&bound, Some(&term)),
             Some(("5".to_owned(), "-5".to_owned()))
         );
+        let (bound, term) = bound_fixture("integer_range", vec![lo("-5"), hi("5")]);
+        assert_eq!(unsatisfiable(&bound, Some(&term)), None);
+        let (bound, term) = bound_fixture("integer_range", vec![lo("5"), hi("5")]);
+        assert_eq!(unsatisfiable(&bound, Some(&term)), None);
+        let (bound, term) = bound_fixture("text_bounds", vec![lo("4"), hi("0"), text("nfc")]);
         assert_eq!(
-            unsatisfiable(&node(
-                "integer_range",
-                serde_json::json!([lo("-5"), hi("5")])
-            )),
-            None
-        );
-        assert_eq!(
-            unsatisfiable(&node(
-                "integer_range",
-                serde_json::json!([lo("5"), hi("5")])
-            )),
-            None
-        );
-        assert_eq!(
-            unsatisfiable(&node(
-                "text_bounds",
-                serde_json::json!([lo("4"), hi("0"), text("nfc")])
-            )),
+            unsatisfiable(&bound, Some(&term)),
             Some(("4".to_owned(), "0".to_owned()))
         );
     }

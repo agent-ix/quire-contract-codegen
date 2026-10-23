@@ -11,6 +11,8 @@ pub(crate) mod clause;
 pub(crate) mod bound_v1;
 // Shared generation-result and claim vocabulary (FR-014, FR-018, FR-021).
 pub(crate) mod claim;
+// Borrowed IR-owned typed terms and node lookups for the oracle consumers.
+pub(crate) mod checked_graph;
 // Implements: FR-018
 pub(crate) mod equality;
 // Implements: FR-021

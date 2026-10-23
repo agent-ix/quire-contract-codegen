@@ -74,17 +74,20 @@ use crate::core::contract_package::{
 };
 use crate::core::naming::unique_names;
 use crate::core::profile::equality_oracle_crate_manifest;
+use crate::oracle::checked_graph::{
+    aggregate_members, bound_members, literal_count, CheckedGraph as Graph,
+};
 use crate::oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
 use crate::oracle::direct_unsupported_form;
 use crate::oracle::scalar::{
-    aggregate_members, bound_members, literal_count, read_decimal_range, read_integer_range,
-    read_rational_range, read_text_bounds, COLLECTION_BOUNDS_MEMBERS,
+    read_decimal_range, read_integer_range, read_rational_range, read_text_bounds,
+    COLLECTION_BOUNDS_MEMBERS,
 };
 #[cfg(test)]
 use quire_contract_model::CheckedPackageV2;
 use quire_contract_model::{
-    CheckedNodeId, CheckedNodeTag, CheckedSemanticId, CheckedSemanticNodeV2, CheckedSourceMapEntry,
-    ContractFeatureRecordV1, ContractPackageV1,
+    ApplicationOperator, CheckedNodeId, CheckedNodeTag, CheckedSemanticId, CheckedSemanticNodeV2,
+    CheckedSourceMapEntry, CheckedTerm, ContractFeatureRecordV1, ContractPackageV1,
 };
 use quire_exact::{
     self as exact, CardinalityBound, CollectionKind, CollectionType, DecimalType, IllTypedCause,
@@ -95,7 +98,6 @@ use quire_semantic_value::declaration::{
     FieldDeclaration, TypeEnvironment,
 };
 use serde::Serialize;
-use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 
 mod admitted;
@@ -693,13 +695,7 @@ pub fn generate_composite_equality_oracles(
             },
         ));
     }
-    let graph: Graph<'_> = package
-        .wire()
-        .semantic_graph
-        .nodes
-        .iter()
-        .map(|node| (&node.node_id, node))
-        .collect();
+    let graph = Graph::new(package);
     let mut bounds_by_type: BTreeMap<&CheckedNodeId, Vec<&CheckedSemanticNodeV2>> = BTreeMap::new();
     for node in package.wire().semantic_graph.nodes.iter() {
         if CheckedNodeTag::from_wire(&node.node_tag) == Some(CheckedNodeTag::BoundedDomain) {
@@ -760,11 +756,7 @@ pub fn generate_composite_equality_oracles(
             ClaimDisposition::Refused {
                 refusal: CompositeEqualityRefusal::DuplicateRequest,
             }
-        } else if let Some(node_tag) = graph
-            .get(&item.node_id)
-            .copied()
-            .and_then(direct_unsupported_form)
-        {
+        } else if let Some(node_tag) = graph.node(&item.node_id).and_then(direct_unsupported_form) {
             ClaimDisposition::Refused {
                 refusal: CompositeEqualityRefusal::Unsupported {
                     unsupported_node_id: item.node_id.clone(),
@@ -964,8 +956,6 @@ fn recorded_descriptor(item: &CompositeEqualityItem) -> RecordedDescriptor {
     }
 }
 
-type Graph<'a> = BTreeMap<&'a CheckedNodeId, &'a CheckedSemanticNodeV2>;
-
 // ---------------------------------------------------------------------------
 // Descriptor key and ordering (FR-018-AC-10, FR-018-AC-11)
 // ---------------------------------------------------------------------------
@@ -1076,7 +1066,7 @@ fn check_item(
         }
         .into());
     }
-    let arguments = application_arguments(&node.body)
+    let arguments = application_arguments(graph.term(&node.node_id))
         .filter(|arguments| arguments.len() == 2)
         .ok_or(CompositeEqualityRefusal::BodyMismatch)?;
     check_operand_types(graph, arguments, item)?;
@@ -1136,7 +1126,7 @@ fn check_item(
             return Err(CompositeEqualityRefusal::IllTyped {
                 cause: ill_typed.cause.try_into()?,
             }
-            .into())
+            .into());
         }
     };
 
@@ -1222,11 +1212,8 @@ fn unsupported_family(node_id: &CheckedNodeId, tag: CheckedNodeTag) -> Composite
     }
 }
 
-fn application_arguments(body: &Value) -> Option<&Vec<Value>> {
-    if body.get("term")?.as_str()? != "application" || body.get("operator")?.as_str()? != "binary" {
-        return None;
-    }
-    body.get("arguments")?.as_array()
+fn application_arguments(body: Option<&CheckedTerm>) -> Option<&[CheckedTerm]> {
+    application_of(body, ApplicationOperator::Binary)
 }
 
 /// The type a `binary` operand stands for, read as QSL emits operands: each operand is its own
@@ -1243,15 +1230,15 @@ fn application_arguments(body: &Value) -> Option<&Vec<Value>> {
 /// its descriptor's arity or operand types"): the type used to build the runtime call always
 /// comes from the descriptor, never from this value, so disagreement here is refused before
 /// either operand's type is resolved.
-fn operand_type_id(graph: &Graph<'_>, term: &Value) -> Option<CheckedNodeId> {
+fn operand_type_id(graph: &Graph<'_>, term: &CheckedTerm) -> Option<CheckedNodeId> {
     let mut term = term;
     // Each step follows one reference to a distinct-or-repeated node; the graph's size bounds a
     // chain that does not cycle, and a cycle of conversions reads as no type.
     for _ in 0..=graph.len() {
         let target = read_reference(term)?;
-        let node = graph.get(&target)?;
+        let node = graph.node(&target)?;
         let conversion = (&*node.node_tag == CheckedNodeTag::Expression.as_wire())
-            .then(|| application_of(&node.body, "convert"))
+            .then(|| application_of(graph.term(&node.node_id), ApplicationOperator::Convert))
             .flatten();
         match conversion {
             Some(arguments) => term = arguments.first()?,
@@ -1262,18 +1249,25 @@ fn operand_type_id(graph: &Graph<'_>, term: &Value) -> Option<CheckedNodeId> {
 }
 
 /// The `arguments` of a node body that is an `application` of `operator`.
-fn application_of<'b>(body: &'b Value, operator: &str) -> Option<&'b Vec<Value>> {
-    if body.get("term")?.as_str()? != "application" || body.get("operator")?.as_str()? != operator {
-        return None;
+fn application_of(
+    body: Option<&CheckedTerm>,
+    expected: ApplicationOperator,
+) -> Option<&[CheckedTerm]> {
+    match body? {
+        CheckedTerm::Application {
+            operator,
+            arguments,
+            ..
+        } if *operator == expected => Some(arguments),
+        _ => None,
     }
-    body.get("arguments")?.as_array()
 }
 
 /// Compare each body operand's declared type against the descriptor's for
 /// that position, left then right, refusing at the first disagreement.
 fn check_operand_types(
     graph: &Graph<'_>,
-    arguments: &[Value],
+    arguments: &[CheckedTerm],
     item: &CompositeEqualityItem,
 ) -> Result<(), CompositeEqualityRefusal> {
     let expected = [&item.left.source_type, &item.right.source_type];
@@ -1326,44 +1320,39 @@ fn lookup<'g>(
     node_id: &CheckedNodeId,
 ) -> Result<&'g CheckedSemanticNodeV2, CompositeEqualityRefusal> {
     graph
-        .get(node_id)
-        .copied()
+        .node(node_id)
         .ok_or_else(|| CompositeEqualityRefusal::UnknownTypeNode {
             type_node_id: node_id.clone(),
         })
 }
 
-fn read_reference(term: &Value) -> Option<CheckedNodeId> {
-    if term.get("term")?.as_str()? != "reference" {
-        return None;
+fn read_reference(term: &CheckedTerm) -> Option<CheckedNodeId> {
+    match term {
+        CheckedTerm::Reference { target } => Some(target.clone()),
+        _ => None,
     }
-    serde_json::from_value(term.get("target")?.clone()).ok()
 }
 
-fn read_binding(term: &Value) -> Option<(String, CheckedNodeId)> {
-    if term.get("term")?.as_str()? != "binding" {
+fn read_binding(term: &CheckedTerm) -> Option<(String, CheckedNodeId)> {
+    let CheckedTerm::Binding { name, value } = term else {
         return None;
-    }
-    let name = term.get("name")?.as_str()?.to_owned();
-    let target = read_reference(term.get("value")?)?;
-    Some((name, target))
+    };
+    Some((name.to_string(), read_reference(value)?))
 }
 
 /// A record field has either a direct type reference or the checked optional wrapper.
-fn read_record_field(term: &Value) -> Option<(String, CheckedNodeId, bool)> {
-    if term.get("term")?.as_str()? != "binding" {
+fn read_record_field(term: &CheckedTerm) -> Option<(String, CheckedNodeId, bool)> {
+    let CheckedTerm::Binding { name, value } = term else {
         return None;
-    }
-    let name = term.get("name")?.as_str()?.to_owned();
-    let value = term.get("value")?;
+    };
     if let Some(target) = read_reference(value) {
-        return Some((name, target, false));
+        return Some((name.to_string(), target, false));
     }
-    let [optional] = aggregate_members(value)? else {
+    let [optional] = aggregate_members(value.as_ref())? else {
         return None;
     };
     let (wrapper_name, target) = read_binding(optional)?;
-    (wrapper_name == "optional").then_some((name, target, true))
+    (wrapper_name == "optional").then_some((name.to_string(), target, true))
 }
 
 fn is_option_node(node: &CheckedSemanticNodeV2) -> bool {
@@ -1388,18 +1377,19 @@ fn resolve_type(
 /// names); `type_id` is the member's type node, for refusals.
 fn resolve_scalar(
     admitted: Option<&qsl_replay::AdmittedContext>,
+    graph: &Graph<'_>,
     closure: &mut TypeClosure,
     bounds: &[&CheckedSemanticNodeV2],
     type_id: &CheckedNodeId,
     node: &CheckedSemanticNodeV2,
 ) -> Result<ValueType, ItemCheckError> {
-    let bound = |form: &'static str| -> Result<&[Value], CompositeEqualityRefusal> {
+    let bound = |form: &'static str| -> Result<&[CheckedTerm], CompositeEqualityRefusal> {
         let candidates: Vec<_> = bounds
             .iter()
             .filter(|bound| &*bound.semantic_form == form)
             .collect();
         match candidates.as_slice() {
-            [bound] => aggregate_members(&bound.body).ok_or_else(|| {
+            [bound] => aggregate_members(graph.term(&bound.node_id)).ok_or_else(|| {
                 CompositeEqualityRefusal::UnreadableBound {
                     bound: bound.node_id.clone(),
                 }
@@ -1424,11 +1414,12 @@ fn resolve_scalar(
             match candidates.as_slice() {
                 [] => Ok(ValueType::Integer),
                 [bound] => {
-                    let members = aggregate_members(&bound.body).ok_or_else(|| {
-                        CompositeEqualityRefusal::UnreadableBound {
-                            bound: bound.node_id.clone(),
-                        }
-                    })?;
+                    let members =
+                        aggregate_members(graph.term(&bound.node_id)).ok_or_else(|| {
+                            CompositeEqualityRefusal::UnreadableBound {
+                                bound: bound.node_id.clone(),
+                            }
+                        })?;
                     let interval = read_integer_range(members).ok_or_else(|| {
                         CompositeEqualityRefusal::UnreadableBound {
                             bound: bound.node_id.clone(),
@@ -1976,7 +1967,9 @@ impl SourceBuilder {
         let name = format!("composites_{symbol}_{index}");
         let module_declaration = format!("mod {name};\n");
         let module_source = crate::core::provenance::with_rust_header(
-            format!("use super::*;\npub(super) fn declarations(_context: Option<&qsl_replay::AdmittedContext>, _enum_members: &mut quire_semantic_value::enumeration::EnumMemberIndex) -> Result<Vec<sv::CompositeDeclaration>, EnvironmentError> {{\n    let mut declarations = Vec::new();\n{declarations}    Ok(declarations)\n}}\n"),
+            format!(
+                "use super::*;\npub(super) fn declarations(_context: Option<&qsl_replay::AdmittedContext>, _enum_members: &mut quire_semantic_value::enumeration::EnumMemberIndex) -> Result<Vec<sv::CompositeDeclaration>, EnvironmentError> {{\n    let mut declarations = Vec::new();\n{declarations}    Ok(declarations)\n}}\n"
+            ),
             std::iter::once(subject).chain(composite_subjects.iter().map(String::as_str)),
         );
         self.charge(module_declaration.len().saturating_add(module_source.len()))?;
@@ -2168,7 +2161,10 @@ fn render_value_type(
                     ),
                     None => "None".to_owned(),
                 };
-                format!("exact::ValueType::collection(exact::CollectionType::new({}, {child}, {bound}))", collection_kind_path(kind)?)
+                format!(
+                    "exact::ValueType::collection(exact::CollectionType::new({}, {child}, {bound}))",
+                    collection_kind_path(kind)?
+                )
             }
             Task::Value(value_type) => match value_type {
                 ValueType::Boolean => "exact::ValueType::Boolean".to_owned(),
@@ -2339,7 +2335,9 @@ fn profile_path(profile: TextProfile) -> Result<&'static str, OracleGenerationEr
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::oracle::checked_graph::fixture::Node as FixtureNode;
     use ix_trace_rs::trace;
+    use quire_contract_model::LiteralKind;
     use serde_json::json;
 
     #[trace("FR-018-AC-1")]
@@ -2366,7 +2364,7 @@ mod tests {
     }
 
     /// Genuine baseline nodes; private mutation tests alter bodies only after this admission.
-    fn recursive_shape_nodes() -> Vec<CheckedSemanticNodeV2> {
+    fn recursive_shape_nodes() -> Vec<FixtureNode> {
         let (package, _) = recursive_fixture();
         let nodes = &package.graph().nodes;
         let named = |name: &str| {
@@ -2386,7 +2384,7 @@ mod tests {
         let list = named("List");
         let tree = named("Tree");
         let references = |node: &CheckedSemanticNodeV2, target: &CheckedNodeId| {
-            aggregate_members(&node.body).is_some_and(|members| {
+            aggregate_members(package.term(&node.node_id)).is_some_and(|members| {
                 members
                     .iter()
                     .any(|term| read_reference(term).as_ref() == Some(target))
@@ -2415,8 +2413,45 @@ mod tests {
             .expect("actual source Integer type");
         [list, option, tree, sequence, bound, integer]
             .into_iter()
-            .cloned()
+            .map(|node| FixtureNode::from_admitted(node, package.term(&node.node_id)))
             .collect()
+    }
+
+    fn fixture_nodes(package: &CheckedPackageV2) -> Vec<FixtureNode> {
+        package
+            .graph()
+            .nodes
+            .iter()
+            .map(|node| FixtureNode::from_admitted(node, package.term(&node.node_id)))
+            .collect()
+    }
+
+    fn fixture_members_mut(node: &mut FixtureNode) -> &mut Vec<CheckedTerm> {
+        let Some(CheckedTerm::Aggregate { members }) = node.body.as_mut() else {
+            panic!("fixture must be an aggregate")
+        };
+        members
+    }
+
+    fn fixture_binding_value_mut(term: &mut CheckedTerm) -> &mut CheckedTerm {
+        let CheckedTerm::Binding { value, .. } = term else {
+            panic!("fixture binding")
+        };
+        value
+    }
+
+    fn fixture_binding_name_mut(term: &mut CheckedTerm) -> &mut Box<str> {
+        let CheckedTerm::Binding { name, .. } = term else {
+            panic!("fixture binding")
+        };
+        name
+    }
+
+    fn fixture_reference_mut(term: &mut CheckedTerm) -> &mut CheckedNodeId {
+        let CheckedTerm::Reference { target } = term else {
+            panic!("fixture reference")
+        };
+        target
     }
 
     fn recursive_node_id(code: char) -> CheckedNodeId {
@@ -2524,7 +2559,7 @@ mod tests {
         ) else {
             panic!("the unmodified public tuple package must admit");
         };
-        let mut nodes = package.graph().nodes.clone();
+        let mut nodes = fixture_nodes(&package);
         let bound = |form: &str| {
             nodes
                 .iter()
@@ -2559,10 +2594,12 @@ mod tests {
             .find(|node| node.semantic_form.as_ref() == "tuple")
             .expect("actual Pair");
         let root = tuple.node_id.clone();
-        tuple.body["members"] = json!(members
-            .iter()
-            .map(|id| json!({"term":"reference","target":id}))
-            .collect::<Vec<_>>());
+        tuple.body = Some(CheckedTerm::Aggregate {
+            members: members
+                .iter()
+                .map(|id| CheckedTerm::Reference { target: id.clone() })
+                .collect(),
+        });
         if let Some(mutation) = mutation {
             let base = match mutation {
                 "wrong_form" => None,
@@ -2649,7 +2686,7 @@ mod tests {
             .find(|artifact| artifact.path == "src/lib.rs")
             .unwrap()
             .contents;
-        (lib, integer.node_id)
+        (lib, integer.node_id.clone())
     }
 
     #[trace("FR-018-AC-16", "TC-029")]
@@ -2670,8 +2707,14 @@ mod tests {
             "exact::ValueType::Decimal(rebuild_decimal(\"-100\", \"100\", 0, 0, exact::RoundingMode::NearestEven)?)",
             "exact::ValueType::Rational(rebuild_rational(rebuild_interval(\"-10\", \"10\")?, rebuild_interval(\"1\", \"1\")?)?)",
         ] {
-            assert!(through_scalars.contains(reconstruction), "scalar member: {reconstruction}");
-            assert!(through_domains.contains(reconstruction), "domain member: {reconstruction}");
+            assert!(
+                through_scalars.contains(reconstruction),
+                "scalar member: {reconstruction}"
+            );
+            assert!(
+                through_domains.contains(reconstruction),
+                "domain member: {reconstruction}"
+            );
         }
     }
 
@@ -2733,12 +2776,10 @@ mod tests {
     #[test]
     fn duplicate_member_private_defense_retains_exact_cause_and_healthy_sibling() {
         let mut nodes = recursive_shape_nodes();
-        nodes[0].body["members"][0]["name"] = json!("x");
-        let duplicate = nodes[0].body["members"][0].clone();
-        nodes[0].body["members"]
-            .as_array_mut()
-            .unwrap()
-            .push(duplicate);
+        let members = fixture_members_mut(&mut nodes[0]);
+        *fixture_binding_name_mut(&mut members[0]) = "x".into();
+        let duplicate = members[0].clone();
+        members.push(duplicate);
         let list = EqualityOperandDescriptor::typed(recursive_node_id('a'));
         let tree = EqualityOperandDescriptor::typed(recursive_node_id('c'));
         let (outcomes, source) = check_nominal_items_with_limits(
@@ -2779,7 +2820,8 @@ mod tests {
     #[test]
     fn tc_029_qsl_recursive_package_uses_the_reader_shapes() {
         let (package, context) = qsl_recursive_admission();
-        let nodes = &package.graph().nodes;
+        let retained = fixture_nodes(&package);
+        let nodes = &retained;
         let named = |name: &str| {
             nodes
                 .iter()
@@ -2845,7 +2887,9 @@ mod tests {
         use quire_contract_model::{
             CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2ReadResult,
         };
-        let mut source = String::from("language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\n");
+        let mut source = String::from(
+            "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\n",
+        );
         for index in 0..records {
             let payload = if index + 1 == records {
                 "Boolean".to_owned()
@@ -2880,7 +2924,9 @@ mod tests {
             .and_then(|limits| limits.with_named("s1.tokens", token_bound))
             .and_then(|limits| limits.with_named("s1.nodes", syntax_nodes))
             .expect("the public compiler recognizes its fixture intake settings");
-        eprintln!("genuine large fixture records={records}; optional={optional}; source_bytes={source_bytes}; token_bound={token_bound}; syntax_nodes={syntax_nodes}");
+        eprintln!(
+            "genuine large fixture records={records}; optional={optional}; source_bytes={source_bytes}; token_bound={token_bound}; syntax_nodes={syntax_nodes}"
+        );
         let admitted = compile_admitted(
             SourceIdentity::new("test", "deep.native", "git", "fixture"),
             "deep.native",
@@ -2987,7 +3033,7 @@ mod tests {
     }
 
     fn resolve_shape(
-        nodes: &[CheckedSemanticNodeV2],
+        nodes: &[FixtureNode],
         type_id: &CheckedNodeId,
     ) -> Result<TypeClosure, CompositeEqualityRefusal> {
         resolve_shape_with_context(Some(&recursive_fixture().1), nodes, type_id)
@@ -2995,7 +3041,7 @@ mod tests {
 
     fn resolve_shape_with_context(
         context: Option<&qsl_replay::AdmittedContext>,
-        nodes: &[CheckedSemanticNodeV2],
+        nodes: &[FixtureNode],
         type_id: &CheckedNodeId,
     ) -> Result<TypeClosure, CompositeEqualityRefusal> {
         let graph: Graph<'_> = nodes.iter().map(|node| (&node.node_id, node)).collect();
@@ -3005,7 +3051,7 @@ mod tests {
                 bounds
                     .entry(&node.semantic_type)
                     .or_insert_with(Vec::new)
-                    .push(node);
+                    .push(&node.metadata);
             }
         }
         let mut closure = TypeClosure::default();
@@ -3021,7 +3067,7 @@ mod tests {
     }
 
     fn check_nominal_items_with_limits(
-        nodes: Vec<CheckedSemanticNodeV2>,
+        nodes: Vec<FixtureNode>,
         operands: &[(EqualityOperandDescriptor, EqualityOperandDescriptor)],
         limits: CompositeEqualityLimits,
     ) -> (Vec<Result<(), CompositeEqualityRefusal>>, SourceBuilder) {
@@ -3030,7 +3076,7 @@ mod tests {
 
     fn check_component_items_with_context(
         context: Option<&qsl_replay::AdmittedContext>,
-        mut nodes: Vec<CheckedSemanticNodeV2>,
+        mut nodes: Vec<FixtureNode>,
         operands: &[(EqualityOperandDescriptor, EqualityOperandDescriptor)],
         limits: CompositeEqualityLimits,
     ) -> (Vec<Result<(), CompositeEqualityRefusal>>, SourceBuilder) {
@@ -3053,6 +3099,14 @@ mod tests {
                     "occurrences": [],
                     "body": {"term": "aggregate", "members": []},
                 }))
+                .map(|node| {
+                    FixtureNode::new(
+                        node,
+                        Some(CheckedTerm::Aggregate {
+                            members: Vec::new(),
+                        }),
+                    )
+                })
                 .expect("synthetic parameter")
             };
             let expression: CheckedSemanticNodeV2 = serde_json::from_value(json!({
@@ -3069,6 +3123,22 @@ mod tests {
                 ]},
             }))
             .unwrap();
+            let expression = FixtureNode::new(
+                expression,
+                Some(CheckedTerm::Application {
+                    operator: ApplicationOperator::Binary,
+                    operation: json!({}),
+                    result_type: left.source_type.clone(),
+                    arguments: vec![
+                        CheckedTerm::Reference {
+                            target: left_id.clone(),
+                        },
+                        CheckedTerm::Reference {
+                            target: right_id.clone(),
+                        },
+                    ],
+                }),
+            );
             items.push(CompositeEqualityItem {
                 node_id: expression_id,
                 operator: EqualityOperatorKind::Equal,
@@ -3086,7 +3156,7 @@ mod tests {
                 bounds
                     .entry(&node.semantic_type)
                     .or_insert_with(Vec::new)
-                    .push(node);
+                    .push(&node.metadata);
             }
         }
         let mut source = SourceBuilder::new(limits.source_bytes).expect("synthetic source starts");
@@ -3110,7 +3180,7 @@ mod tests {
                     context,
                     &graph,
                     &bounds,
-                    graph.get(&item.node_id).copied().expect("synthetic node"),
+                    graph.node(&item.node_id).expect("synthetic node"),
                     item,
                     limits.type_resolution_work_units,
                 ) {
@@ -3132,7 +3202,7 @@ mod tests {
     }
 
     fn check_nominal_component_item(
-        nodes: Vec<CheckedSemanticNodeV2>,
+        nodes: Vec<FixtureNode>,
         type_id: CheckedNodeId,
     ) -> Result<(), CompositeEqualityRefusal> {
         let typed = EqualityOperandDescriptor::typed(type_id);
@@ -3155,10 +3225,12 @@ mod tests {
             let form = form.to_str().expect("UTF-8 fixture form");
             let mut nodes = recursive_shape_nodes();
             let (root, repeated) = if form == "option" {
-                nodes[1].body["members"][0]["target"] = json!(recursive_node_id('b'));
+                *fixture_reference_mut(&mut fixture_members_mut(&mut nodes[1])[0]) =
+                    recursive_node_id('b');
                 (recursive_node_id('a'), recursive_node_id('b'))
             } else {
-                nodes[3].body["members"][0]["target"] = json!(recursive_node_id('d'));
+                *fixture_reference_mut(&mut fixture_members_mut(&mut nodes[3])[0]) =
+                    recursive_node_id('d');
                 (recursive_node_id('c'), recursive_node_id('d'))
             };
             assert_eq!(
@@ -3225,7 +3297,7 @@ mod tests {
         }
         let nodes = recursive_shape_nodes();
         let graph: Graph<'_> = nodes.iter().map(|node| (&node.node_id, node)).collect();
-        let bounds = BTreeMap::from([(&nodes[4].semantic_type, vec![&nodes[4]])]);
+        let bounds = BTreeMap::from([(&nodes[4].semantic_type, vec![&nodes[4].metadata])]);
         let mut closure = TypeClosure::default();
         resolve_nominal_component(&graph, &bounds, &mut closure, &recursive_node_id('a'))
             .expect("List closes");
@@ -3240,7 +3312,7 @@ mod tests {
         let count = usize::try_from(COMPOSITE_EQUALITY_TYPE_RESOLUTION_WORK_LIMIT).unwrap();
         let (_, original, context, mut ids, leaf) = admitted_record_chain(count, false);
         ids.push(leaf);
-        let chain = original.graph().nodes.clone();
+        let chain = fixture_nodes(&original);
         let graph: Graph<'_> = chain.iter().map(|node| (&node.node_id, node)).collect();
         let empty = BTreeMap::new();
         let mut over = TypeClosure::default();
@@ -3334,18 +3406,26 @@ mod tests {
                 digest: format!("{:064x}", index + 1).into(),
             })
             .collect();
-        let nodes: Vec<CheckedSemanticNodeV2> = (0..=DEPTH)
+        let nodes: Vec<FixtureNode> = (0..=DEPTH)
             .map(|index| {
                 let (tag, form, body) = if index == DEPTH {
-                    ("scalar_type", "boolean", json!({"term": "aggregate", "members": []}))
+                    (
+                        "scalar_type",
+                        "boolean",
+                        CheckedTerm::Aggregate { members: vec![] },
+                    )
                 } else {
                     (
                         "composite_type",
                         "option",
-                        json!({"term": "aggregate", "members": [{"term": "reference", "target": ids[index + 1]}]}),
+                        CheckedTerm::Aggregate {
+                            members: vec![CheckedTerm::Reference {
+                                target: ids[index + 1].clone(),
+                            }],
+                        },
                     )
                 };
-                serde_json::from_value(json!({
+                let metadata = serde_json::from_value::<CheckedSemanticNodeV2>(json!({
                     "node_id": ids[index],
                     "schema_version": "quire.checked-semantic-graph/v2",
                     "node_tag": tag,
@@ -3355,7 +3435,8 @@ mod tests {
                     "occurrences": [],
                     "body": body,
                 }))
-                .expect("synthetic deep Option node")
+                .expect("synthetic deep Option node");
+                FixtureNode::new(metadata, Some(body))
             })
             .collect();
         std::thread::Builder::new()
@@ -3386,7 +3467,7 @@ mod tests {
     #[test]
     fn cycle_refusal_follows_its_charged_entry_and_work_refusal_wins_at_the_boundary() {
         let mut nodes = recursive_shape_nodes();
-        nodes[1].body["members"][0]["target"] = json!(recursive_node_id('b'));
+        *fixture_reference_mut(&mut fixture_members_mut(&mut nodes[1])[0]) = recursive_node_id('b');
         let graph: Graph<'_> = nodes.iter().map(|node| (&node.node_id, node)).collect();
         let mut cycle = TypeClosure {
             work_limit: 3,
@@ -3459,8 +3540,9 @@ mod tests {
         let mut extra = denied_nodes[1].clone();
         extra.node_id = recursive_node_id('5');
         extra.semantic_type = recursive_node_id('5');
-        extra.body["members"][0]["target"] = json!(recursive_node_id('b'));
-        denied_nodes[1].body["members"][0]["target"] = json!(recursive_node_id('5'));
+        *fixture_reference_mut(&mut fixture_members_mut(&mut extra)[0]) = recursive_node_id('b');
+        *fixture_reference_mut(&mut fixture_members_mut(&mut denied_nodes[1])[0]) =
+            recursive_node_id('5');
         denied_nodes.push(extra);
         let (denied_items, denied_source) = check_nominal_items_with_limits(
             denied_nodes,
@@ -3495,7 +3577,7 @@ mod tests {
         };
         assert_eq!(
             resolve_component(
-                &BTreeMap::new(),
+                &std::iter::empty::<(&CheckedNodeId, &FixtureNode)>().collect::<Graph<'_>>(),
                 &BTreeMap::new(),
                 &mut closure,
                 &node_id('a')
@@ -3576,7 +3658,7 @@ mod tests {
         let (artifacts, _root) = std::thread::Builder::new()
             .stack_size(512 * 1024)
             .spawn(move || {
-                let nodes = original.graph().nodes.clone();
+                let nodes = fixture_nodes(&original);
                 let graph: Graph<'_> = nodes.iter().map(|node| (&node.node_id, node)).collect();
                 let mut default = TypeClosure::default();
                 assert_eq!(
@@ -3847,10 +3929,16 @@ fn deep_matches_shallow() {
         // Inline bounds remain meaningful for set/bag forms. A sequence's bound is a separate
         // typed node, so giving it a second body reference would now be malformed first.
         nodes[3].semantic_form = "set".into();
-        nodes[3].body = json!({"term": "aggregate", "members": [
-            {"term": "reference", "target": recursive_node_id('f')},
-            {"term": "reference", "target": recursive_node_id('7')}
-        ]});
+        nodes[3].body = Some(CheckedTerm::Aggregate {
+            members: vec![
+                CheckedTerm::Reference {
+                    target: recursive_node_id('f'),
+                },
+                CheckedTerm::Reference {
+                    target: recursive_node_id('7'),
+                },
+            ],
+        });
         let graph: Graph<'_> = nodes.iter().map(|node| (&node.node_id, node)).collect();
         let mut at_limit = TypeClosure {
             work_consumed: COMPOSITE_EQUALITY_TYPE_RESOLUTION_WORK_LIMIT - 2,
@@ -3926,15 +4014,21 @@ fn deep_matches_shallow() {
     fn tc_029_optional_wrapper_malformed_shapes_refuse_without_affecting_tree() {
         for mutation in ["remove", "rename", "second", "non_option"] {
             let mut nodes = recursive_shape_nodes();
-            let optional = &mut nodes[0].body["members"][0]["value"]["members"];
+            let value = fixture_binding_value_mut(&mut fixture_members_mut(&mut nodes[0])[0]);
+            let CheckedTerm::Aggregate { members: optional } = value else {
+                panic!("optional wrapper")
+            };
             match mutation {
-                "remove" => *optional = json!([]),
-                "rename" => optional[0]["name"] = json!("maybe"),
+                "remove" => optional.clear(),
+                "rename" => *fixture_binding_name_mut(&mut optional[0]) = "maybe".into(),
                 "second" => {
                     let duplicate = optional[0].clone();
-                    optional.as_array_mut().unwrap().push(duplicate);
+                    optional.push(duplicate);
                 }
-                "non_option" => optional[0]["value"]["target"] = json!(recursive_node_id('f')),
+                "non_option" => {
+                    *fixture_reference_mut(fixture_binding_value_mut(&mut optional[0])) =
+                        recursive_node_id('f')
+                }
                 _ => unreachable!(),
             }
             assert_eq!(
@@ -3955,8 +4049,10 @@ fn deep_matches_shallow() {
     #[test]
     fn tc_029_direct_option_field_is_required_not_silently_optional() {
         let mut nodes = recursive_shape_nodes();
-        nodes[0].body["members"][0]["value"] =
-            json!({"term": "reference", "target": recursive_node_id('b')});
+        *fixture_binding_value_mut(&mut fixture_members_mut(&mut nodes[0])[0]) =
+            CheckedTerm::Reference {
+                target: recursive_node_id('b'),
+            };
         let closure =
             resolve_shape(&nodes, &recursive_node_id('a')).expect("direct option is valid");
         let key = recursive_owner_key("List");
@@ -3983,16 +4079,21 @@ fn deep_matches_shallow() {
             match mutation {
                 "non_sequence" => nodes[4].semantic_type = recursive_node_id('f'),
                 "missing_min" => {
-                    nodes[4].body["members"].as_array_mut().unwrap().remove(0);
+                    fixture_members_mut(&mut nodes[4]).remove(0);
                 }
                 "duplicate_max" => {
-                    let duplicate = nodes[4].body["members"][1].clone();
-                    nodes[4].body["members"]
-                        .as_array_mut()
-                        .unwrap()
-                        .push(duplicate);
+                    let members = fixture_members_mut(&mut nodes[4]);
+                    let duplicate = members[1].clone();
+                    members.push(duplicate);
                 }
-                "non_integer" => nodes[4].body["members"][0]["value"]["value_kind"] = json!("text"),
+                "non_integer" => {
+                    let CheckedTerm::Literal { value_kind, .. } =
+                        fixture_binding_value_mut(&mut fixture_members_mut(&mut nodes[4])[0])
+                    else {
+                        panic!("literal bound")
+                    };
+                    *value_kind = LiteralKind::Text;
+                }
                 _ => unreachable!(),
             }
             let expected = if mutation == "non_sequence" {
@@ -4025,23 +4126,27 @@ fn deep_matches_shallow() {
         .expect("interval")
     }
 
-    fn member(name: &str, value: &str) -> Value {
-        json!({"term": "binding", "name": name, "value": {
-            "term": "literal",
-            "type": {"domain": "quire.checked-semantic-node/v1", "digest": "1".repeat(64)},
-            "value_kind": "integer",
-            "value": value,
-        }})
+    fn member(name: &str, value: &str) -> CheckedTerm {
+        CheckedTerm::Binding { name: (name).into(), value: Box::new(CheckedTerm::Literal { type_id: serde_json::from_value(serde_json::json!({"domain": "quire.checked-semantic-node/v1", "digest": "1".repeat(64)})).expect("fixture type key"), value_kind: LiteralKind::Integer, value: serde_json::json!(value) }) }
     }
 
-    fn text_member(name: &str, value: &str) -> Value {
-        json!({"term": "binding", "name": name, "value": {
-            "term": "literal", "value_kind": "text", "value": value,
-        }})
+    fn text_member(name: &str, value: &str) -> CheckedTerm {
+        CheckedTerm::Binding {
+            name: (name).into(),
+            value: Box::new(CheckedTerm::Literal {
+                type_id: node_id('0'),
+                value_kind: LiteralKind::Text,
+                value: serde_json::json!(value),
+            }),
+        }
     }
 
-    fn bare(kind: &str, value: &str) -> Value {
-        json!({"term": "literal", "value_kind": kind, "value": value})
+    fn bare(kind: &str, value: &str) -> CheckedTerm {
+        CheckedTerm::Literal {
+            type_id: node_id('0'),
+            value_kind: LiteralKind::from_wire(kind).expect("closed fixture kind"),
+            value: serde_json::json!(value),
+        }
     }
 
     /// Private parser defense over binding-shaped members. Reordered integer/collection
