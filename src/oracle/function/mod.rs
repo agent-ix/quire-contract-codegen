@@ -1713,10 +1713,10 @@ impl<'a> FunctionSourceIndex<'a> {
             }) else {
                 continue;
             };
-            let Some(body) =
-                graph.term(&node.node_id)
-                    .and_then(|body| binding_value(body, "body"))
-                    .and_then(|term| reference_in_graph(term, &graph))
+            let Some(body) = graph
+                .term(&node.node_id)
+                .and_then(|body| binding_value(body, "body"))
+                .and_then(|term| reference_in_graph(term, &graph))
             else {
                 continue;
             };
@@ -1763,7 +1763,11 @@ mod ir988_source_function_tests {
         .expect("synthetic node key")
     }
 
-    fn node(value: u64, name: Option<String>, body: &CheckedNodeId) -> crate::oracle::checked_graph::fixture::Node {
+    fn node(
+        value: u64,
+        name: Option<String>,
+        body: &CheckedNodeId,
+    ) -> crate::oracle::checked_graph::fixture::Node {
         let metadata = CheckedSemanticNodeV2 {
             node_id: id(value),
             owner: None,
@@ -1795,7 +1799,9 @@ mod ir988_source_function_tests {
             Some(CheckedTerm::Aggregate {
                 members: vec![CheckedTerm::Binding {
                     name: "body".into(),
-                    value: Box::new(CheckedTerm::Reference { target: body.clone() }),
+                    value: Box::new(CheckedTerm::Reference {
+                        target: body.clone(),
+                    }),
                 }],
             }),
         )
@@ -2789,9 +2795,9 @@ pub fn generate_exact_function_oracles(
                 classify_body_shape(closure.root, graph.term(&closure.root.node_id), declaration)?;
             let mut parameter_kinds = Vec::with_capacity(declaration.parameters.len());
             for parameter in &declaration.parameters {
-                parameter_kinds.push(resolve_operand_type(&graph, &parameter.type_node_id)?);
+                parameter_kinds.push(resolve_operand_type(graph, &parameter.type_node_id)?);
             }
-            let result_kind = resolve_operand_type(&graph, &declaration.result_type)?;
+            let result_kind = resolve_operand_type(graph, &declaration.result_type)?;
             validate_signature(declaration, &parameter_kinds, result_kind)?;
             Ok(Stage1Shape {
                 body,
@@ -3182,7 +3188,14 @@ fn item_disposition<'a>(
     source: (&ContractPackageV1, &FunctionSourceIndex<'_>),
     item: &ExactFunctionItem,
     admitted: PackageItem<'_>,
-) -> Result<(String, GeneratedExactFunctionClaim, &'a ExactFunctionDeclaration), ExactFunctionRefusal> {
+) -> Result<
+    (
+        String,
+        GeneratedExactFunctionClaim,
+        &'a ExactFunctionDeclaration,
+    ),
+    ExactFunctionRefusal,
+> {
     let (package, source_index) = source;
     let graph = &source_index.graph;
     let (closure, occurrences) = admitted_binary_body(admitted)?;
@@ -3216,9 +3229,9 @@ fn item_disposition<'a>(
         });
     }
     if graph.operator(&node.node_id) == Some(ApplicationOperator::Call) {
-        let source_function_id =
-            source_index.source_function_node_id(&declaration.name, &declaration.node_id)
-                .ok_or(ExactFunctionRefusal::BodyMismatch)?;
+        let source_function_id = source_index
+            .source_function_node_id(&declaration.name, &declaration.node_id)
+            .ok_or(ExactFunctionRefusal::BodyMismatch)?;
         if !source_call_matches(
             graph
                 .term(&node.node_id)
@@ -3786,8 +3799,7 @@ mod tests {
             ],
         };
         assert_eq!(
-            binding_value(&first_dangling, "body")
-                .and_then(|term| reference_in_graph(term, graph)),
+            binding_value(&first_dangling, "body").and_then(|term| reference_in_graph(term, graph)),
             None
         );
         assert_eq!(reference_in_graph(&reference(&foreign), graph), None);
