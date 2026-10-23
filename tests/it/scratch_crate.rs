@@ -280,7 +280,8 @@ mod tests {
                 runtime_dependency(&[])
             ),
         );
-        let output = Command::new(env!("CARGO"))
+        let scratch_probe_cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
+        let output = Command::new(scratch_probe_cargo)
             .args(["metadata", "--offline", "--format-version", "1"])
             .current_dir(&directory)
             .output()
