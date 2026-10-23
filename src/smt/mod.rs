@@ -7,7 +7,7 @@ use std::{ffi::OsString, path::PathBuf};
 
 use quire_exact::Cancel;
 
-use crate::process::{
+use crate::kani::run::process::{
     run_bounded_process, ProcessError, ProcessLimits, ProcessOutcome, ProcessRequest, ProcessRun,
 };
 

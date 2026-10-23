@@ -10,7 +10,7 @@ use super::{
     classify_pair, run_solver_query, PairEvidence, QueryAssociation, QueryRun, ReachedLimit,
     SolverStatus,
 };
-use crate::process::{ProcessLimits, ProcessOutcome};
+use crate::kani::run::process::{ProcessLimits, ProcessOutcome};
 
 type Association = QueryAssociation<&'static str, &'static str, &'static str, &'static str>;
 type Run = QueryRun<&'static str, &'static str, &'static str, &'static str>;
