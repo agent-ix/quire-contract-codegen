@@ -49,6 +49,41 @@
 //! grounds are checked in that order and are never conflated with the internal-invariant
 //! [`UnsupportedObligation::RenderFailed`] fallback.
 
+// These admitted QSL fixtures exercise request-level lookup work in this Kani layer.
+#[cfg(test)]
+#[allow(dead_code, clippy::duplicate_mod)]
+#[path = "../../../tests/state_frame_support/model.rs"]
+mod model;
+#[cfg(test)]
+#[allow(dead_code, clippy::duplicate_mod)]
+#[path = "../../../tests/clause_admission_support/mod.rs"]
+mod native_twin;
+
+#[cfg(test)]
+mod request_lookup_work {
+    use std::cell::Cell;
+    std::thread_local! {
+        static VISITS: Cell<usize> = const { Cell::new(0) };
+    }
+    pub(super) fn source() {
+        VISITS.with(|visits| {
+            visits.set(visits.get() + 1);
+        });
+    }
+    std::thread_local! {
+        static CLAUSE_VIEWS: Cell<usize> = const { Cell::new(0) };
+    }
+    pub(super) fn clause_view() {
+        CLAUSE_VIEWS.with(|views| views.set(views.get() + 1));
+    }
+    pub(super) fn take_clause_views() -> usize {
+        CLAUSE_VIEWS.with(|views| views.replace(0))
+    }
+    pub(super) fn take() -> usize {
+        VISITS.with(|visits| visits.replace(0))
+    }
+}
+
 use std::collections::{BTreeMap, BTreeSet};
 
 use quire_contract_model::{
@@ -62,6 +97,7 @@ use crate::{
     core::contract_package::ContractDriverResultSelection,
     core::diagnostic::GenerationErrorCode,
     core::identity::HarnessSymbol,
+    core::ir::clause::ClauseGraphView,
     core::naming::unique_names,
     kani::abi::{adapter_options, KaniSolver},
     kani::generate::clause::v2::{
@@ -73,7 +109,7 @@ use crate::{
     },
     kani::generate::collection::{
         collection_symbols_conflict, lower_collection_claim, render_collection,
-        CollectionDomainRefusal, LoweredCollectionClaim,
+        CollectionDomainRefusal, CollectionGraph, LoweredCollectionClaim,
     },
     kani::generate::contract::render_contract,
     kani::generate::frame::{generate_state_frame_role, StateFrameRequest},
@@ -132,6 +168,62 @@ impl<'a> ContractLookup<'a> {
     }
 }
 
+/// Request-local source occurrences and lazy package-bound clause and collection views.
+/// Each borrowed package keeps its own retained graph and original source occurrence order.
+struct CheckedLookup<'a> {
+    package: &'a CheckedPackageV2,
+    sources: BTreeMap<&'a CheckedNodeId, Vec<&'a CheckedSourceMapEntry>>,
+    clause: Option<ClauseGraphView<'a>>,
+    collection: Option<CollectionGraph<'a>>,
+}
+
+impl<'a> CheckedLookup<'a> {
+    fn new(package: &'a CheckedPackageV2) -> Self {
+        let mut sources = BTreeMap::<_, Vec<_>>::new();
+        for entry in package.source_map() {
+            #[cfg(test)]
+            request_lookup_work::source();
+            sources.entry(&entry.node_id).or_default().push(entry);
+        }
+        Self {
+            package,
+            sources,
+            clause: None,
+            collection: None,
+        }
+    }
+
+    fn clause(&mut self) -> &ClauseGraphView<'a> {
+        self.clause.get_or_insert_with(|| {
+            #[cfg(test)]
+            request_lookup_work::clause_view();
+            ClauseGraphView::new(self.package)
+        })
+    }
+
+    fn collection(&mut self) -> &CollectionGraph<'a> {
+        self.collection
+            .get_or_insert_with(|| CollectionGraph::new(self.package))
+    }
+
+    fn occurrences(&self, id: &CheckedNodeId) -> Vec<CheckedSourceMapEntry> {
+        self.sources.get(id).map_or_else(Vec::new, |entries| {
+            entries.iter().map(|entry| (*entry).clone()).collect()
+        })
+    }
+}
+
+type CheckedLookups<'a> = BTreeMap<*const CheckedPackageV2, CheckedLookup<'a>>;
+
+fn checked_lookup<'a, 'lookup>(
+    lookups: &'lookup mut CheckedLookups<'a>,
+    package: &'a CheckedPackageV2,
+) -> &'lookup mut CheckedLookup<'a> {
+    lookups
+        .entry(std::ptr::from_ref(package))
+        .or_insert_with(|| CheckedLookup::new(package))
+}
+
 /// Reuse admitted scalar graph lookups across capability items, whose boxed packages may be
 /// distinct allocations of the same admitted identity.
 pub(crate) struct ScalarFormLookups<'a> {
@@ -179,10 +271,19 @@ pub fn negotiate_kani_obligations(
 ) -> Result<KaniObligationOutcome, KaniObligationError> {
     validate_request(request)?;
     let mut scalar_lookups = BTreeMap::new();
+    let mut checked_lookups = BTreeMap::new();
     let mut states = request
         .items
         .iter()
-        .map(|item| classify(item, request.unwind, request.ceilings, &mut scalar_lookups))
+        .map(|item| {
+            classify(
+                item,
+                request.unwind,
+                request.ceilings,
+                &mut scalar_lookups,
+                &mut checked_lookups,
+            )
+        })
         .collect::<Vec<_>>();
     reject_duplicates_and_mixtures(request.items, &mut states);
     assign_names(request.items, &mut states);
@@ -431,9 +532,12 @@ fn classify<'a>(
     unwind: u32,
     ceilings: crate::kani::identity::ProofCeilings,
     scalar_lookups: &mut BTreeMap<*const ContractPackageV1, ContractLookup<'a>>,
+    checked_lookups: &mut CheckedLookups<'a>,
 ) -> ItemState<'a> {
     match *item {
-        ObligationItem::V2Clause { package, clause } => classify_v2_clause(package, clause),
+        ObligationItem::V2Clause { package, clause } => {
+            classify_v2_clause(checked_lookup(checked_lookups, package), clause)
+        }
         ObligationItem::BoundClause { package, clause } => classify_clause(package, clause),
         ObligationItem::ScalarClaim {
             package,
@@ -458,7 +562,11 @@ fn classify<'a>(
             package,
             function_id,
             node_id,
-        } => classify_collection(package, function_id, node_id),
+        } => classify_collection(
+            function_id,
+            node_id,
+            checked_lookup(checked_lookups, package),
+        ),
         ObligationItem::StateFrame {
             package,
             clause,
@@ -477,19 +585,18 @@ fn classify<'a>(
                 unwind,
             },
             role,
+            checked_lookup(checked_lookups, package),
         ),
     }
 }
 
 fn classify_v2_clause<'a>(
-    package: &'a CheckedPackageV2,
+    lookup: &mut CheckedLookup<'a>,
     clause: &'a CheckedNodeId,
 ) -> ItemState<'a> {
-    let graph_node = package
-        .graph()
-        .nodes
-        .iter()
-        .find(|node| &node.node_id == clause);
+    let package = lookup.package;
+    let view = lookup.clause();
+    let graph_node = view.node(clause);
     let kind = graph_node
         .and_then(|node| {
             node.body
@@ -518,7 +625,7 @@ fn classify_v2_clause<'a>(
                 node_id: clause.clone(),
             })
         }
-        Some(_) => match lower_v2_clause(package, clause) {
+        Some(_) => match lower_v2_clause(view, clause) {
             Ok(lowered) => Outcome::LoweredV2Clause(Box::new(lowered)),
             Err(reason) => Outcome::Unsupported(reason),
         },
@@ -527,12 +634,7 @@ fn classify_v2_clause<'a>(
         kind,
         subject: ObligationSubject::CheckedNode {
             node_id: clause.clone(),
-            source_map: package
-                .source_map()
-                .iter()
-                .filter(|entry| &entry.node_id == clause)
-                .cloned()
-                .collect(),
+            source_map: lookup.occurrences(clause),
         },
         identity: Some(ItemIdentity::V2Clause {
             package: package.package_id().digest.to_string(),
@@ -543,11 +645,12 @@ fn classify_v2_clause<'a>(
 }
 
 fn classify_collection<'a>(
-    package: &'a CheckedPackageV2,
     function_id: &'a CheckedNodeId,
     node_id: &'a CheckedNodeId,
+    lookup: &mut CheckedLookup<'a>,
 ) -> ItemState<'a> {
-    let outcome = match lower_collection_claim(package, function_id, node_id) {
+    let package = lookup.package;
+    let outcome = match lower_collection_claim(lookup.collection(), function_id, node_id) {
         Ok(lowered) => Outcome::LoweredCollection(Box::new(lowered)),
         Err(CollectionDomainRefusal::RequiresBound { unbounded_type }) => {
             Outcome::RequiresBound(unbounded_type)
@@ -570,12 +673,7 @@ fn classify_collection<'a>(
         kind: None,
         subject: ObligationSubject::CheckedNode {
             node_id: node_id.clone(),
-            source_map: package
-                .source_map()
-                .iter()
-                .filter(|entry| &entry.node_id == node_id)
-                .cloned()
-                .collect(),
+            source_map: lookup.occurrences(node_id),
         },
         identity: Some(ItemIdentity::Collection {
             package: package.package_id().digest.to_string(),
@@ -598,6 +696,7 @@ fn collection_refusal(node_id: &CheckedNodeId, reason: CollectionUnsupportedReas
 fn classify_state_frame<'a>(
     request: &StateFrameRequest<'a>,
     role: StateFrameRole,
+    lookup: &CheckedLookup<'a>,
 ) -> ItemState<'a> {
     let outcome = match generate_state_frame_role(request, role) {
         Ok(harness) => Outcome::StateFrame(Box::new(harness)),
@@ -607,13 +706,7 @@ fn classify_state_frame<'a>(
         kind: Some(role.obligation_kind()),
         subject: ObligationSubject::CheckedNode {
             node_id: request.clause.clone(),
-            source_map: request
-                .package
-                .source_map()
-                .iter()
-                .filter(|entry| &entry.node_id == request.clause)
-                .cloned()
-                .collect(),
+            source_map: lookup.occurrences(request.clause),
         },
         identity: Some(ItemIdentity::StateFrame {
             package: request.package.package_id().digest.to_string(),
@@ -1431,6 +1524,258 @@ mod tests {
     use super::*;
     use quire_contract_model::{ClauseId, RequirementRef, EXECUTABLE_PROJECTION_FORMAT};
 
+    #[test]
+    fn request_views_keep_every_original_source_occurrence_and_package_separate() {
+        let declarations = [
+            ("First", "deposit", "balance"),
+            ("Second", "deposit", "balance"),
+            ("Third", "deposit", "balance"),
+        ];
+        let (left, clause) =
+            native_twin::Twin::build(&model::GRANTED, &declarations, 0).emitted_package("First");
+        let (right, _) =
+            native_twin::Twin::build(&model::GRANTED, &declarations, 7).emitted_package("First");
+        let expected = |package: &CheckedPackageV2| {
+            package
+                .source_map()
+                .iter()
+                .filter(|entry| entry.node_id == clause)
+                .cloned()
+                .collect::<Vec<_>>()
+        };
+        let left_expected = expected(&left);
+        let right_expected = expected(&right);
+        assert!(
+            left_expected.len() > 1,
+            "deduplicated semantic body retains all authored source occurrences"
+        );
+        assert_ne!(
+            left_expected, right_expected,
+            "genuine source line shift distinguishes package source authority"
+        );
+        let mut lookups = CheckedLookups::new();
+        request_lookup_work::take();
+        request_lookup_work::take_clause_views();
+        for _ in 0..4 {
+            let left_view = checked_lookup(&mut lookups, &left);
+            assert_eq!(left_view.occurrences(&clause), left_expected);
+            assert!(std::ptr::eq(left_view.clause().package(), &left));
+            let right_view = checked_lookup(&mut lookups, &right);
+            assert_eq!(right_view.occurrences(&clause), right_expected);
+            assert!(std::ptr::eq(right_view.clause().package(), &right));
+        }
+        assert_eq!(lookups.len(), 2);
+        assert_eq!(
+            request_lookup_work::take(),
+            left.source_map().len() + right.source_map().len()
+        );
+        assert_eq!(request_lookup_work::take_clause_views(), 2);
+    }
+
+    #[trace("TC-025")]
+    #[test]
+    fn request_clause_view_preserves_supported_bytes_and_typed_refusals() {
+        let (package, clause) =
+            native_twin::Twin::with_bounded_other_precondition().emitted_package("OtherBelowLimit");
+        let non_clause = &package
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| &*node.node_tag != "state")
+            .expect("real admitted non-clause")
+            .node_id;
+        let good = ObligationItem::V2Clause {
+            package: &package,
+            clause: &clause,
+        };
+        let refused = ObligationItem::V2Clause {
+            package: &package,
+            clause: non_clause,
+        };
+        let evaluate = |items: &[ObligationItem<'_>]| {
+            negotiate_kani_obligations(&KaniObligationRequest {
+                ceilings: crate::kani::test_support::proof_ceilings::proof_ceilings(),
+                items,
+                subject_path: "crate::subject::deposit",
+                unwind: 8,
+            })
+            .unwrap()
+        };
+        let supported = evaluate(&[good]);
+        let refusal = evaluate(&[refused]);
+        assert!(matches!(
+            supported.records()[0].disposition,
+            ObligationDisposition::Supported { .. }
+        ));
+        assert!(matches!(
+            refusal.records()[0].disposition,
+            ObligationDisposition::Unsupported {
+                reason: UnsupportedObligation::UnknownNodeKind { .. }
+            }
+        ));
+        let KaniObligationOutcome::Emitted {
+            v2_clause_harnesses: expected,
+            ..
+        } = &supported
+        else {
+            panic!("supported precondition")
+        };
+        let oracle = crate::oracle::clause::generate_v2_clause_oracle(&package, &clause).unwrap();
+        assert_eq!(expected.len(), 1);
+        assert!(expected[0].rust.contents.contains(&oracle.source));
+        for items in [[good, refused], [refused, good]] {
+            let actual = evaluate(&items);
+            for (index, item) in items.iter().enumerate() {
+                let mut record = evaluate(&[*item]).records()[0].clone();
+                record.request_index = index;
+                assert_eq!(
+                    actual.records()[index],
+                    record,
+                    "exact record and source occurrence order"
+                );
+            }
+            let KaniObligationOutcome::Emitted {
+                v2_clause_harnesses,
+                ..
+            } = actual
+            else {
+                panic!("unsupported item does not reject supported sibling")
+            };
+            assert_eq!(
+                &v2_clause_harnesses, expected,
+                "identity, complete Rust and record bytes"
+            );
+        }
+        let duplicates = evaluate(&[good, good]);
+        assert!(matches!(duplicates, KaniObligationOutcome::Rejected { .. }));
+        assert!(matches!(
+            duplicates.records()[1].disposition,
+            ObligationDisposition::InvalidRequest {
+                reason: InvalidObligationItem::DuplicateItem { first_index: 0 }
+            }
+        ));
+    }
+
+    // IR-276 AC-5 work measurement, not an unrelated FR behavior trace claim.
+    #[test]
+    fn request_v2_clause_lookups_share_graph_and_source_work() {
+        let mut excessive_work = Vec::new();
+        for clause_count in [8, 16, 32] {
+            let names = (0..clause_count)
+                .map(|i| format!("Clause{i}"))
+                .collect::<Vec<_>>();
+            let declarations = names
+                .iter()
+                .map(|name| (name.as_str(), "deposit", "balance"))
+                .collect::<Vec<_>>();
+            let twin = native_twin::Twin::build(&model::GRANTED, &declarations, 0);
+            let mut source = String::from_utf8(twin.unit.clone()).unwrap();
+            for (index, name) in names.iter().enumerate() {
+                let original = format!("post {name} using v on Bank::Account::deposit {{ self.balance >= pre(self.balance) }}");
+                let distinct = format!(
+                    "post {name} using v on Bank::Account::deposit {{ self.balance >= {index} }}"
+                );
+                assert!(source.contains(&original));
+                source = source.replace(&original, &distinct);
+            }
+            let located = qsl_replay::call_site(
+                qsl_replay::SourceIdentity::new("agent-ix", "test:state-frame-twin", "git", "1"),
+                "test:state-frame-twin",
+                source.as_bytes(),
+                [twin.domain.as_slice()],
+                &qsl_replay::DependencyInput::default(),
+                &qsl_replay::ClauseName(qsl_replay::Identifier::new(&names[0]).unwrap()),
+            )
+            .expect("distinct authored QSL clauses compile through the owner");
+            let wire: serde_json::Value = serde_json::from_slice(&located.package).unwrap();
+            let digest = wire["lock"]["model_selections"][0]["digest"]
+                .as_str()
+                .unwrap();
+            let mut evidence = quire_contract_model::CheckedPackageEvidence::new();
+            evidence
+                .insert_domain_package_document(digest.to_owned(), twin.domain.clone())
+                .unwrap();
+            evidence.support_feature("quire.value.complete/v1");
+            let package = match CheckedPackageV2::read(
+                &located.package,
+                quire_contract_model::CheckedPackageReadLimits::bounded(),
+                &evidence,
+            ) {
+                quire_contract_model::CheckedPackageV2ReadResult::Admitted(package) => *package,
+                other => panic!("owner source is admitted: {other:?}"),
+            };
+            let clauses = package
+                .graph()
+                .nodes
+                .iter()
+                .filter(|node| &*node.node_tag == "state" && &*node.semantic_form == "state_clause")
+                .map(|node| &node.node_id)
+                .collect::<Vec<_>>();
+            assert_eq!(
+                clauses.len(),
+                clause_count,
+                "actual admitted authored population"
+            );
+            for count in [2, 4, 8] {
+                let items = clauses
+                    .iter()
+                    .take(count)
+                    .map(|clause| ObligationItem::V2Clause {
+                        package: &package,
+                        clause,
+                    })
+                    .collect::<Vec<_>>();
+                let request = KaniObligationRequest {
+                    ceilings: crate::kani::test_support::proof_ceilings::proof_ceilings(),
+                    items: &items,
+                    subject_path: "crate::subject::deposit",
+                    unwind: 8,
+                };
+                request_lookup_work::take();
+                request_lookup_work::take_clause_views();
+                let outcome =
+                    negotiate_kani_obligations(&request).expect("well-formed admitted request");
+                let source_visits = request_lookup_work::take();
+                let clause_views = request_lookup_work::take_clause_views();
+                let graph_size = package.graph().nodes.len();
+                let source_size = package.source_map().len();
+                assert!(source_size > 0);
+                println!("IR276_WORK K={count} R={graph_size} S={source_size} source_visits={source_visits} clause_view_builds={clause_views}");
+                assert_eq!(outcome.records().len(), count);
+                for (index, item) in items.iter().enumerate() {
+                    let single_items = [*item];
+                    let single = negotiate_kani_obligations(&KaniObligationRequest {
+                        items: &single_items,
+                        ..request
+                    })
+                    .expect("independent single-item baseline");
+                    let mut expected = single.records()[0].clone();
+                    expected.request_index = index;
+                    assert_eq!(
+                        outcome.records()[index],
+                        expected,
+                        "typed refusal, source order and role unchanged"
+                    );
+                }
+                let repeated = negotiate_kani_obligations(&request).unwrap();
+                assert_eq!(outcome, repeated, "complete deterministic output");
+                if source_visits != source_size || clause_views != 1 {
+                    excessive_work.push((
+                        count,
+                        graph_size,
+                        source_size,
+                        source_visits,
+                        clause_views,
+                    ));
+                }
+            }
+        }
+        assert!(
+            excessive_work.is_empty(),
+            "request-level graph/source scans repeat per item: {excessive_work:?}"
+        );
+    }
+
     // ---- FND-003 regression: the byte-ceiling and syntax refusals split out of `RenderFailed`
     // ----
     //
@@ -1506,6 +1851,7 @@ mod tests {
             4,
             render_probe_request(&[]).ceilings,
             &mut BTreeMap::new(),
+            &mut BTreeMap::new(),
         )
         .outcome
         else {
@@ -1580,5 +1926,279 @@ mod tests {
             render(&request, &lowered),
             Err(UnsupportedObligation::FrameNotClauseRendered)
         ));
+    }
+
+    // Fixture dependencies are upstream QSL, strict IR reader and canonical encoding only.
+    fn admitted_collection_request_fixture(
+        quantifiers: usize,
+    ) -> (CheckedPackageV2, CheckedNodeId, Vec<CheckedNodeId>) {
+        let authored = native_twin::Twin::build(&model::GRANTED, &[], 0);
+        let mut document: serde_json::Value = serde_json::from_slice(&authored.domain).unwrap();
+        let account = document["types"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|entry| entry["identity"] == "ix://test/bank/Account")
+            .unwrap();
+        let balance = account["fields"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|entry| entry["name"] == "balance")
+            .unwrap();
+        // Author a finite ordered collection over the original [0,1000] integer field type.
+        balance["multiplicity"] = json!({"lower": 0, "upper": 3, "ordered": true, "unique": false});
+        let limits = quire_canonical::Limits::new(1 << 20);
+        let domain = quire_canonical::to_vec(&document, limits).unwrap();
+        let digest = quire_canonical::sha256(&document, limits)
+            .unwrap()
+            .to_string();
+        let body = (0..quantifiers)
+            .map(|index| format!("forall(item in deref(input).balance: item >= {index})"))
+            .collect::<Vec<_>>()
+            .join(" and ");
+        let source = format!(
+            "language \"ix:native\" edition \"1-draft\";\n\
+         profile v = \"quire.model.complete/v1\";\n\
+         model Bank = \"test/bank\" version \"1.0.0\" digest \"sha256-jcs:{digest}\";\n\
+         predicate inspect using v (input: Bank::Account): Boolean {{ {body} }}\n"
+        );
+        let selection =
+            qsl_replay::QualifiedName::new(vec![qsl_replay::Identifier::new("inspect").unwrap()])
+                .unwrap();
+        let located = qsl_replay::call_site(
+            qsl_replay::SourceIdentity::new(
+                "agent-ix",
+                "ir276-collection-request",
+                "git",
+                "fixture",
+            ),
+            "ir276-collection-request",
+            source.as_bytes(),
+            [domain.as_slice()],
+            &qsl_replay::DependencyInput::default(),
+            &selection,
+        )
+        .expect("public QSL admission of authored finite collection predicate");
+        let mut evidence = quire_contract_model::CheckedPackageEvidence::new();
+        evidence
+            .insert_domain_package_document(digest, domain)
+            .unwrap();
+        evidence.support_feature("quire.value.complete/v1");
+        let package = match CheckedPackageV2::read(
+            &located.package,
+            quire_contract_model::CheckedPackageReadLimits::bounded(),
+            &evidence,
+        ) {
+            quire_contract_model::CheckedPackageV2ReadResult::Admitted(package) => *package,
+            other => panic!("owner-emitted graph admits unchanged: {other:?}"),
+        };
+        let function = package
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.node_id.digest.as_ref() == located.site.function.to_string())
+            .unwrap()
+            .node_id
+            .clone();
+        let nodes = package
+            .graph()
+            .nodes
+            .iter()
+            .filter(|node| {
+                node.body.get("operation").and_then(|op| op.get("identity"))
+                    == Some(&json!("quire.op.collection.forall"))
+            })
+            .map(|node| node.node_id.clone())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            nodes.len(),
+            quantifiers,
+            "all distinct authored quantifiers admitted"
+        );
+        (package, function, nodes)
+    }
+
+    // IR-276 AC-5 work control: no unrelated requirement trace is invented.
+    #[test]
+    fn collection_request_builds_one_real_graph_and_preserves_ordered_results() {
+        use crate::kani::generate::collection::take_collection_graph_builds;
+
+        let mut excessive_constructions = Vec::new();
+        for quantifiers in [8, 16, 32] {
+            let (package, function, nodes) = admitted_collection_request_fixture(quantifiers);
+            let evaluate = |items: &[ObligationItem<'_>]| {
+                negotiate_kani_obligations(&KaniObligationRequest {
+                    ceilings: crate::kani::test_support::proof_ceilings::proof_ceilings(),
+                    items,
+                    subject_path: "crate::unused",
+                    unwind: 8,
+                })
+                .expect("valid request receives supported and typed-refused records")
+            };
+            for k in [2, 4, 8] {
+                let good = nodes
+                    .iter()
+                    .take(k - 1)
+                    .map(|node_id| ObligationItem::CollectionClaim {
+                        package: &package,
+                        function_id: &function,
+                        node_id,
+                    })
+                    .collect::<Vec<_>>();
+                // Real admitted function id is intentionally selected in the quantifier role;
+                // the request is owned but not a collection claim. No package/key is fabricated.
+                let refused = ObligationItem::CollectionClaim {
+                    package: &package,
+                    function_id: &function,
+                    node_id: &function,
+                };
+                let mut items = good;
+                items.push(refused);
+                for reverse in [false, true] {
+                    if reverse {
+                        items.reverse();
+                    }
+                    take_collection_graph_builds();
+                    let baselines = items
+                        .iter()
+                        .map(|item| evaluate(std::slice::from_ref(item)))
+                        .collect::<Vec<_>>();
+                    assert_eq!(take_collection_graph_builds(), k, "K independent requests");
+                    let actual = evaluate(&items);
+                    let constructions = take_collection_graph_builds();
+                    let mut expected_harnesses = Vec::new();
+                    for (index, baseline) in baselines.into_iter().enumerate() {
+                        let mut record = baseline.records()[0].clone();
+                        record.request_index = index;
+                        assert_eq!(actual.records()[index], record, "complete ordered record");
+                        let KaniObligationOutcome::Emitted {
+                            collection_harnesses,
+                            ..
+                        } = baseline
+                        else {
+                            panic!("typed unsupported does not reject a healthy request");
+                        };
+                        expected_harnesses.extend(collection_harnesses);
+                    }
+                    let KaniObligationOutcome::Emitted {
+                        collection_harnesses,
+                        records,
+                        ..
+                    } = actual
+                    else {
+                        panic!("typed unsupported does not reject supported siblings");
+                    };
+                    assert_eq!(
+                        collection_harnesses.len(),
+                        k - 1,
+                        "healthy claims really generate"
+                    );
+                    assert_eq!(
+                        collection_harnesses, expected_harnesses,
+                        "full identity/source/record bytes"
+                    );
+                    let refusal_index = if reverse { 0 } else { k - 1 };
+                    assert!(matches!(
+                        records[refusal_index].disposition,
+                        ObligationDisposition::Unsupported {
+                            reason: UnsupportedObligation::CollectionClaimNotRendered {
+                                reason: CollectionUnsupportedReason::UnsupportedClaimShape,
+                                ..
+                            }
+                        }
+                    ));
+                    println!(
+                    "IR276_COLLECTION_WORK K={k} R={} constructors={constructions} reversed={reverse}",
+                    package.graph().nodes.len()
+                );
+                    if constructions != 1 {
+                        excessive_constructions.push((
+                            k,
+                            package.graph().nodes.len(),
+                            reverse,
+                            constructions,
+                        ));
+                    }
+                }
+            }
+        }
+        assert!(
+            excessive_constructions.is_empty(),
+            "one actual CollectionGraph::new for K lower calls; observed {excessive_constructions:?}"
+        );
+    }
+    #[test]
+    fn collection_request_keeps_actual_packages_separate() {
+        use crate::kani::generate::collection::take_collection_graph_builds;
+        let (left, left_function, left_nodes) = admitted_collection_request_fixture(8);
+        let (right, right_function, right_nodes) = admitted_collection_request_fixture(16);
+        assert_ne!(left.package_id(), right.package_id());
+        let items = [
+            ObligationItem::CollectionClaim {
+                package: &left,
+                function_id: &left_function,
+                node_id: &left_nodes[0],
+            },
+            ObligationItem::CollectionClaim {
+                package: &right,
+                function_id: &right_function,
+                node_id: &right_nodes[0],
+            },
+            ObligationItem::CollectionClaim {
+                package: &left,
+                function_id: &left_function,
+                node_id: &left_nodes[1],
+            },
+            ObligationItem::CollectionClaim {
+                package: &right,
+                function_id: &right_function,
+                node_id: &right_nodes[1],
+            },
+        ];
+        let evaluate = |items: &[ObligationItem<'_>]| {
+            negotiate_kani_obligations(&KaniObligationRequest {
+                ceilings: crate::kani::test_support::proof_ceilings::proof_ceilings(),
+                items,
+                subject_path: "crate::unused",
+                unwind: 8,
+            })
+            .unwrap()
+        };
+        take_collection_graph_builds();
+        let expected = items
+            .iter()
+            .map(|item| evaluate(std::slice::from_ref(item)))
+            .collect::<Vec<_>>();
+        assert_eq!(take_collection_graph_builds(), items.len());
+        let actual = evaluate(&items);
+        let constructions = take_collection_graph_builds();
+        let mut expected_harnesses = Vec::new();
+        for (index, baseline) in expected.into_iter().enumerate() {
+            let mut record = baseline.records()[0].clone();
+            record.request_index = index;
+            assert_eq!(actual.records()[index], record);
+            let KaniObligationOutcome::Emitted {
+                collection_harnesses,
+                ..
+            } = baseline
+            else {
+                panic!("healthy source collection generates");
+            };
+            assert_eq!(collection_harnesses.len(), 1);
+            expected_harnesses.extend(collection_harnesses);
+        }
+        let KaniObligationOutcome::Emitted {
+            collection_harnesses,
+            ..
+        } = actual
+        else {
+            panic!("independent packages generate");
+        };
+        assert_eq!(collection_harnesses, expected_harnesses);
+        assert_eq!(
+            constructions, 2,
+            "one actual graph per package, not per item or one shared graph"
+        );
     }
 }

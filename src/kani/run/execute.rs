@@ -541,7 +541,8 @@ fn run_single(
 ) -> Result<KaniExecutionEvidence, KaniExecutionRefusal> {
     let report_path = fresh_report_path(request.target_directory);
     remove_stale_report(&report_path)?;
-    let (arguments, mut command) = launch_command(request, &report_path);
+    let (arguments, mut command) =
+        launch_command(request, &report_path, read_only_source.is_some());
     if let Some(source) = read_only_source {
         command.read_only_bind(source);
     }
@@ -1027,15 +1028,19 @@ fn settle(launch: LaunchOutcome) -> Result<Concluded, KaniExecutionRefusal> {
 fn kani_launch_command(
     request: &KaniExecutionRequest<'_>,
 ) -> (Vec<String>, super::namespace::BackendCommand) {
-    launch_command(request, &fresh_report_path(request.target_directory))
+    launch_command(request, &fresh_report_path(request.target_directory), false)
 }
 
 fn launch_command(
     request: &KaniExecutionRequest<'_>,
     report_path: &Path,
+    library_only: bool,
 ) -> (Vec<String>, super::namespace::BackendCommand) {
     let mut arguments = vec!["kani".to_owned()];
     arguments.extend(request.harness.view().options.iter().cloned());
+    if library_only {
+        arguments.push("--lib".to_owned());
+    }
     arguments.extend([
         "-Z".to_owned(),
         "unstable-options".to_owned(),
@@ -1162,7 +1167,7 @@ mod report_fixture {
         require_in_crate(request)?;
         let report_path = fresh_report_path(request.target_directory);
         remove_stale_report(&report_path)?;
-        let (arguments, recipe) = launch_command(request, &report_path);
+        let (arguments, recipe) = launch_command(request, &report_path, false);
         let outcome = run_launcher(
             recipe.report_test_command(),
             request.harness.view().ceilings.wall_clock,
@@ -1926,7 +1931,7 @@ wait
         );
         for (group, expected) in groups.iter().zip(["a::check", "b::check"]) {
             let request = group[0].1;
-            let (arguments, _) = launch_command(request, &PathBuf::from("report.json"));
+            let (arguments, _) = launch_command(request, &PathBuf::from("report.json"), false);
             assert!(arguments
                 .windows(3)
                 .any(|selection| selection == ["--harness", expected, "--exact"]));
@@ -5567,5 +5572,34 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
                 assert_eq!(stripped[1], stripped[2]);
             }
         }
+    }
+    #[trace("FR-017-AC-52", "TC-027")]
+    #[test]
+    fn sealed_scalar_launch_selects_the_library_without_changing_proof_options() {
+        let (harness, _) =
+            crate::kani::test_support::scalar_source_fixture(Duration::from_secs(600));
+        let cancel = quire_exact::Cancel::new();
+        let installation = KaniInstallation::new("cargo-kani");
+        let request = KaniExecutionRequest {
+            cancel: &cancel,
+            installation: &installation,
+            harness: KaniExecutableHarness::Scalar(&harness),
+            crate_directory: Path::new("/crate"),
+            target_directory: Path::new("/target"),
+            home_directory: None,
+        };
+        let (arguments, _) = launch_command(&request, Path::new("/target/report.json"), true);
+        let options = request.harness.view().options;
+        assert_eq!(&arguments[1..=options.len()], options);
+        assert_eq!(arguments[options.len() + 1], "--lib");
+        assert_eq!(
+            &arguments[options.len() + 2..],
+            [
+                "-Z",
+                "unstable-options",
+                "--export-json",
+                "/target/report.json"
+            ]
+        );
     }
 }

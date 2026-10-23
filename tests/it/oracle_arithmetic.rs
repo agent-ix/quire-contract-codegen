@@ -8,6 +8,7 @@ use ix_trace_rs::trace;
 use std::{cell::Cell, fmt::Write as _, fs, path::PathBuf, process::Command};
 
 use crate::scratch_crate::{runtime_dependency, write_manifest, TemporaryDirectory};
+use quire_contract_codegen::EXACT_DEPENDENCY_SOURCE;
 use quire_contract_codegen::{
     generate_boolean_oracle, generate_kani_bundle, GenerationDiagnostic, GenerationErrorCode,
     GenerationTerminalState, KaniDiagnostic, KaniErrorCode, KaniRequest, KaniSolver, OracleRequest,
@@ -944,8 +945,8 @@ fn tc_044_a_comparison_with_an_arithmetic_operand_is_the_runtime_call() {
             assert_eq!(scanned.count(operator), 0, "`{operator}`:\n{source}");
         }
         let expected = match comparison {
-            ComparisonOperator::Equal => "equality(rt::EqualityOperator::Equal,",
-            ComparisonOperator::NotEqual => "equality(rt::EqualityOperator::NotEqual,",
+            ComparisonOperator::Equal => "equality(true,",
+            ComparisonOperator::NotEqual => "equality(false,",
             ComparisonOperator::Less => "rt::order_numbers(rt::OrderingOperator::Less,",
             ComparisonOperator::LessEqual => "rt::order_numbers(rt::OrderingOperator::LessOrEqual,",
             ComparisonOperator::Greater => "rt::order_numbers(rt::OrderingOperator::Greater,",
@@ -958,8 +959,7 @@ fn tc_044_a_comparison_with_an_arithmetic_operand_is_the_runtime_call() {
             comparison,
             ComparisonOperator::Equal | ComparisonOperator::NotEqual
         ) {
-            assert!(source.contains("check_equality("), "{source}");
-            assert!(source.contains(".evaluate("), "{source}");
+            assert!(source.contains("planned_equality("), "{source}");
         }
     }
 }
@@ -1167,7 +1167,7 @@ fn tc_044_divide_remainder_and_saturate_are_refused_by_the_bundle() {
 // ---------------------------------------------------------------------------------------------
 
 /// The unlimited meter the generated checks run under unless a test sets a limit.
-const CHECK_PRELUDE: &str = "use quire_contract_runtime::exact as rt;
+const CHECK_PRELUDE: &str = "use quire_exact as rt;
 
 const UNLIMITED: rt::ScalarLimits = rt::ScalarLimits {
     integer_bits: u64::MAX,
@@ -1191,7 +1191,7 @@ fn kind(outcome: rt::Outcome<bool>) -> u8 {
     match outcome {
         rt::Outcome::Completed(false) => 0,
         rt::Outcome::Completed(true) => 1,
-        rt::Outcome::Refused(rt::Refusal::IntegerOutOfDomain) => 2,
+        rt::Outcome::Refused(rt::Refusal::IntegerOutOfDomain { .. }) => 2,
         rt::Outcome::Incomplete(_) => 3,
         _ => 4,
     }
@@ -1227,7 +1227,7 @@ fn run_crate(label: &str, modules: &[(String, String)], checks: &str) {
     write_manifest(
         &directory.path,
         &format!(
-            "[package]\nname = \"arithmetic-{label}\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
+            "[package]\nname = \"arithmetic-{label}\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\nquire-exact = {{ {EXACT_DEPENDENCY_SOURCE}, features = [\"test-support\"] }}\n\n[workspace]\n",
             runtime_dependency(&["exact"])
         ),
     );
@@ -1304,7 +1304,7 @@ fn tc_044_overflow_under_reject_is_the_runtimes_refusal() {
             .collect::<Vec<_>>();
         writeln!(
             checks,
-            "#[test]\nfn case_{index}() {{\n    let outcome = {};\n    assert!(matches!(outcome, rt::Outcome::Refused(rt::Refusal::IntegerOutOfDomain)), \"{{outcome:?}}\");\n}}\n",
+            "#[test]\nfn case_{index}() {{\n    let outcome = {};\n    assert!(matches!(outcome, rt::Outcome::Refused(rt::Refusal::IntegerOutOfDomain {{ .. }})), \"{{outcome:?}}\");\n}}\n",
             call(&format!("crate::{module}"), &source, &arguments, "&mut meter()")
         )
         .unwrap();
@@ -1423,13 +1423,13 @@ fn tc_044_arithmetic_free_comparisons_agree_with_the_runtime() {
         let module = module_of(index, "compare");
         let runtime = match comparison {
             ComparisonOperator::Equal | ComparisonOperator::NotEqual => {
-                let operator = if comparison == ComparisonOperator::Equal {
-                    "Equal"
+                let verdict = if comparison == ComparisonOperator::Equal {
+                    "equal"
                 } else {
-                    "NotEqual"
+                    "!equal"
                 };
                 format!(
-                    "{{\n            let environment = rt::TypeEnvironment::new(core::iter::empty::<rt::CompositeDeclaration>(), core::iter::empty::<rt::ObjectTypeDeclaration>()).unwrap();\n            let checked = environment.check_equality(rt::EqualityOperator::{operator}, rt::EqualityOperand::typed(rt::ValueType::Integer), rt::EqualityOperand::typed(rt::ValueType::Integer)).unwrap();\n            checked.evaluate(&rt::Value::Integer(rt::Integer::from(left)), &rt::Value::Integer(rt::Integer::from(right)), &mut meter())\n        }}"
+                    "{{\n            match rt::planned_equality(&rt::Value::Integer(rt::Integer::from(left)), &rt::Value::Integer(rt::Integer::from(right)), &mut meter()) {{\n                rt::Outcome::Completed(equal) => rt::Outcome::Completed({verdict}),\n                other => other,\n            }}\n        }}"
                 )
             }
             _ => {
@@ -1638,6 +1638,143 @@ fn tc_044_the_first_stop_in_evaluation_order_is_the_outcome() {
         modules.push((module, source));
     }
     run_crate("stop", &modules, &checks);
+}
+
+/// A completed native connective retains its result exactly once, including a
+/// left-decided short circuit; an operand stop contributes no outer retention.
+///
+#[trace("TC-044", "FR-031-AC-26")]
+#[test]
+fn tc_044_native_connectives_retain_only_completed_results() {
+    let mut modules = Vec::new();
+    let mut checks = String::new();
+    for (index, (label, built)) in propagation_clauses().into_iter().enumerate() {
+        let (flag, x, y, expected_kind, expected_retains) = match label {
+            "left_stops" => ("false", "i64::MIN", "0", 2, 0),
+            "right_unreached" => ("false", "i64::MIN", "0", 0, 1),
+            "implication" => ("false", "i64::MIN", "0", 1, 1),
+            "or" => ("true", "i64::MIN", "0", 1, 1),
+            "not" => ("false", "3", "0", 0, 2),
+            "total_and" | "total_or" => ("false", "3", "3", 1, 3),
+            "total_with_flag" => ("false", "0", "3", 0, 2),
+            other => panic!("missing retention case for {other}"),
+        };
+        let source = built.source();
+        let module = module_of(index, "retain");
+        let arguments = [("flag_current", flag), ("x_current", x), ("y_current", y)];
+        let arguments = arguments
+            .iter()
+            .filter(|(name, _)| {
+                parameters(&source)
+                    .iter()
+                    .any(|parameter| parameter == name)
+            })
+            .copied()
+            .collect::<Vec<_>>();
+        writeln!(
+            checks,
+            "#[test]\nfn retain_{index}() {{\n    let mut meter = meter();\n    let outcome = {};\n    assert_eq!(kind(outcome), {expected_kind});\n    let retains = meter.admitted_charges().iter().filter(|charge| charge.point == rt::ChargePoint::BooleanResultRetain).count();\n    assert_eq!(retains, {expected_retains}, \"{label}\");\n}}\n",
+            call(&format!("crate::{module}"), &source, &arguments, "&mut meter")
+        )
+        .unwrap();
+        if label == "right_unreached" {
+            writeln!(
+                checks,
+                "#[test]\nfn retain_denied() {{\n    let mut meter = rt::Meter::new(rt::ScalarLimits {{ result_units: 0, ..UNLIMITED }});\n    let outcome = {};\n    match outcome {{\n        rt::Outcome::Incomplete(incomplete) => assert_eq!(incomplete.charge_point, rt::ChargePoint::BooleanResultRetain),\n        other => panic!(\"expected a denied retain charge: {{other:?}}\"),\n    }}\n    assert_eq!(meter.consumed(rt::LimitKind::ResultUnits), 0);\n    assert!(meter.admitted_charges().is_empty());\n}}\n",
+                call(&format!("crate::{module}"), &source, &arguments, "&mut meter")
+            )
+            .unwrap();
+        }
+        modules.push((module, source));
+    }
+    run_crate("retain", &modules, &checks);
+}
+
+/// Pure connective subtrees still retain when their enclosing oracle is metered.
+/// The arithmetic on the right is syntactically present but never evaluated.
+#[trace("TC-044", "FR-031-AC-26", "FR-031-AC-9")]
+#[test]
+fn tc_044_pure_connective_subtrees_retain_within_a_metered_root() {
+    let mut modules = Vec::new();
+    let mut checks = String::new();
+    for (index, (label, flag, expected_retains)) in [
+        ("not", true, 2_u64),
+        ("short_and", false, 2),
+        ("short_or", false, 2),
+        ("total_and", true, 3),
+        ("total_or", true, 4),
+        ("implication", true, 3),
+        ("comparison_leaf", true, 1),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let clause = Clause::new(0, 10, OverflowPolicy::Reject);
+        let not = || {
+            Expression::new(
+                ExpressionKind::BooleanNot {
+                    operand: Box::new(clause.flag("flag")),
+                },
+                clause.at(),
+            )
+        };
+        let left = match label {
+            "not" => not(),
+            "short_and" => clause.and(clause.flag("flag"), not()),
+            "short_or" => clause.connective(
+                BooleanOperator::ShortCircuitOr,
+                clause.flag("flag"),
+                clause.flag("flag"),
+            ),
+            "total_and" => clause.connective(BooleanOperator::TotalAnd, not(), clause.flag("flag")),
+            "total_or" => clause.connective(BooleanOperator::TotalOr, not(), not()),
+            "implication" => {
+                clause.connective(BooleanOperator::Implication, clause.flag("flag"), not())
+            }
+            "comparison_leaf" => clause.compare(
+                ComparisonOperator::Less,
+                clause.variable("x"),
+                clause.variable("x"),
+            ),
+            _ => unreachable!(),
+        };
+        let arithmetic = clause.numeric(
+            NumericOperator::Add,
+            clause.variable("x"),
+            clause.literal(0),
+        );
+        let right = clause.compare(ComparisonOperator::Equal, arithmetic, clause.variable("x"));
+        let expression = clause.and(left, right);
+        let built = Built {
+            environment: clause.environment(&["x"], &["flag"]),
+            node: expression.source().clone(),
+            expression,
+        };
+        let source = built.source();
+        let module = module_of(index, "pure_retain");
+        let arguments = [
+            ("flag_current", if flag { "true" } else { "false" }),
+            ("x_current", "i64::MIN"),
+        ];
+        let arguments = arguments
+            .iter()
+            .filter(|(name, _)| {
+                parameters(&source)
+                    .iter()
+                    .any(|parameter| parameter == name)
+            })
+            .copied()
+            .collect::<Vec<_>>();
+        let invocation = call(
+            &format!("crate::{module}"),
+            &source,
+            &arguments,
+            "&mut meter",
+        );
+        writeln!(checks, "#[test]\nfn pure_{label}() {{\n    for budget in 0..={expected_retains} {{\n        let mut meter = rt::Meter::new(rt::ScalarLimits {{ result_units: budget, ..UNLIMITED }});\n        let outcome = {invocation};\n        if budget == {expected_retains} {{\n            assert_eq!(outcome, rt::Outcome::Completed(false), \"{label}: all completed connectives retain\");\n        }} else {{\n            match outcome {{\n                rt::Outcome::Incomplete(stop) => assert_eq!(stop.charge_point, rt::ChargePoint::BooleanResultRetain),\n                other => panic!(\"{label}: budget {{budget}} must deny a connective retain: {{other:?}}\"),\n            }}\n        }}\n        assert_eq!(meter.consumed(rt::LimitKind::ResultUnits), budget, \"{label}: no retention after a child stop\");\n        assert_eq!(meter.admitted_charges().len() as u64, budget);\n        assert!(meter.admitted_charges().iter().all(|charge| charge.point == rt::ChargePoint::BooleanResultRetain), \"{label}: unreachable right arithmetic must charge nothing\");\n    }}\n}}\n").unwrap();
+        modules.push((module, source));
+    }
+    run_crate("pure-retain", &modules, &checks);
 }
 
 // ---------------------------------------------------------------------------------------------

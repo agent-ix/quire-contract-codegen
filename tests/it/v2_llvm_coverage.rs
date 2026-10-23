@@ -409,14 +409,15 @@ fn admitted_v2_oracle_is_vacuous_under_real_llvm_when_consequent_is_skipped() {
     fs::write(root.join("src/lib.rs"), inputs[0].source).unwrap();
     fs::write(
         root.join("tests/native.rs"),
-        "use quire_contract_runtime::exact as rt;\n#[test] fn skips_consequent() {\n    let limits = rt::ScalarLimits { integer_bits: 1000, decimal_digits: 1000, scale_expansion: 1000, text_input_bytes: 1000, text_scalars: 1000, normalized_scalars: 1000, unit_edges: 1000, value_occurrences: 1000, work_units: 1000, result_units: 1000 };\n    let mut meter = rt::Meter::new(limits);\n    let value = rt::Integer::from(1i64);\n    assert!(matches!(v2_coverage_native::oracle_clause(&value, &mut meter), Ok(rt::Outcome::Completed(true))));\n}\n",
+        "use quire_exact as rt;\n#[test] fn skips_consequent() {\n    let limits = rt::ScalarLimits { integer_bits: 1000, decimal_digits: 1000, scale_expansion: 1000, text_input_bytes: 1000, text_scalars: 1000, normalized_scalars: 1000, unit_edges: 1000, value_occurrences: 1000, work_units: 1000, result_units: 1000 };\n    let mut meter = rt::Meter::new(limits);\n    let value = rt::Integer::from(1i64);\n    assert!(matches!(v2_coverage_native::oracle_clause(&value, &mut meter), Ok(rt::Outcome::Completed(true))));\n}\n",
     )
     .unwrap();
     super::scratch_crate::write_manifest(
         &root,
         &format!(
-            "[package]\nname=\"v2-coverage-native\"\nversion=\"0.0.0\"\nedition=\"2021\"\n[dependencies]\n{}\n[workspace]\n",
-            super::scratch_crate::runtime_dependency(&["exact"])
+            "[package]\nname=\"v2-coverage-native\"\nversion=\"0.0.0\"\nedition=\"2021\"\n[dependencies]\n{}\nquire-exact = {{ {} }}\n[workspace]\n",
+            super::scratch_crate::runtime_dependency(&["exact"]),
+            quire_contract_codegen::EXACT_DEPENDENCY_SOURCE
         ),
     );
     let toolchain = format!("+{}", env!("CARGO_PKG_RUST_VERSION"));

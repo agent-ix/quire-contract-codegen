@@ -14,6 +14,7 @@
 //! each seeded defect is falsified for the intended property, and regenerating the frame from a
 //! mutated package turns a green proof red.
 
+use quire_contract_codegen as scalar_fixture_types;
 #[path = "../state_frame_support/model.rs"]
 pub(crate) mod model;
 #[path = "../state_frame_support/native_twin.rs"]
@@ -125,8 +126,9 @@ fn qsl_emitted_state_clause_derives_a_confirmed_field_backed_oracle() {
     super::scratch_crate::write_manifest(
         &scratch.path,
         &format!(
-            "[package]\nname = \"generated-v2-clause\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
-            super::scratch_crate::runtime_dependency(&["exact"])
+            "[package]\nname = \"generated-v2-clause\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\nquire-exact = {{ {} }}\n\n[workspace]\n",
+            super::scratch_crate::runtime_dependency(&["exact"]),
+            quire_contract_codegen::EXACT_DEPENDENCY_SOURCE
         ),
     );
     let output = std::process::Command::new(env!("CARGO"))
@@ -269,8 +271,9 @@ fn admitted_inline_clause_keeps_the_clause_identity() {
     super::scratch_crate::write_manifest(
         &scratch.path,
         &format!(
-            "[package]\nname = \"generated-v2-inline-clause\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
-            super::scratch_crate::runtime_dependency(&["exact"])
+            "[package]\nname = \"generated-v2-inline-clause\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\nquire-exact = {{ {} }}\n\n[workspace]\n",
+            super::scratch_crate::runtime_dependency(&["exact"]),
+            quire_contract_codegen::EXACT_DEPENDENCY_SOURCE
         ),
     );
     let output = std::process::Command::new(env!("CARGO"))
@@ -357,8 +360,9 @@ fn qsl_bounded_operation_parameter_becomes_a_clause_input() {
     super::scratch_crate::write_manifest(
         &scratch.path,
         &format!(
-            "[package]\nname = \"generated-v2-param-clause\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
-            super::scratch_crate::runtime_dependency(&["exact"])
+            "[package]\nname = \"generated-v2-param-clause\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\nquire-exact = {{ {} }}\n\n[workspace]\n",
+            super::scratch_crate::runtime_dependency(&["exact"]),
+            quire_contract_codegen::EXACT_DEPENDENCY_SOURCE
         ),
     );
     let output = std::process::Command::new(env!("CARGO"))
@@ -463,76 +467,103 @@ fn qsl_v2_precondition_harness_identity_tracks_request_facts() {
     assert_ne!(first.record, changed_subject.record);
 }
 
-/// Real Kani must satisfy the admitted QSL precondition. The impossible-condition cover
-/// remains separately blocked by IR-705 after exceeding the fixture's memory ceiling.
-#[trace("TC-025")]
-#[test]
-#[ignore = "kani lane: run serially through `make kani`"]
-fn tc_025_real_kani_covers_v2_parameter_precondition() {
-    let run = |twin: Twin, clause_name: &str| {
-        let (package, clause) = twin.emitted_package(clause_name);
-        let item = ObligationItem::V2Clause {
-            package: &package,
-            clause: &clause,
-        };
-        let outcome = negotiate_kani_obligations(&KaniObligationRequest {
-            ceilings: crate::common::proof_ceilings::proof_ceilings(),
-            items: std::slice::from_ref(&item),
-            subject_path: REQUEST_SUBJECT,
-            unwind: 8,
-        })
-        .expect("valid precondition request");
-        let KaniObligationOutcome::Emitted {
-            v2_clause_harnesses,
-            ..
-        } = outcome
-        else {
-            panic!("the V2 precondition is admitted");
-        };
-        let [harness] = v2_clause_harnesses.as_slice() else {
-            panic!("one V2 precondition harness");
-        };
-        let directory = scratch("v2-precondition");
-        fs::write(directory.join("src/lib.rs"), &harness.rust.contents).expect("generated crate");
-        super::scratch_crate::write_manifest(
-            &directory,
-            &format!(
-                "[package]\nname = \"generated-v2-precondition\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
-                super::scratch_crate::runtime_dependency(&["exact"])
-            ),
-        );
-        fs::write(
-            directory.join("build.rs"),
-            "fn main() { println!(\"cargo:rustc-check-cfg=cfg(kani)\"); }\n",
-        )
-        .expect("build script");
-        let target = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("v2-precondition-kani");
-        let cancel = quire_exact::Cancel::new();
-        let installation = KaniInstallation::discover().expect("cargo-kani installed");
-        let evidence = execute_kani_obligation(&KaniExecutionRequest {
-            cancel: &cancel,
-            installation: &installation,
-            harness: harness.into(),
-            crate_directory: &directory,
-            target_directory: &target,
-            home_directory: None,
-        })
-        .expect("Kani launch");
-        let _ = fs::remove_dir_all(directory);
-        assert!(
-            !matches!(evidence.outcome, KaniRunOutcome::Inconclusive { .. }),
-            "Kani gave no verdict: outcome={:?}, peak={:?}, last_check={:?}, diagnostics={:?}",
-            evidence.outcome,
-            evidence.memory.peak_resident_bytes,
-            evidence.checks.last(),
-            evidence.diagnostics
-        );
-        evidence.outcome
+fn v2_precondition_fixture_harness(
+    twin: Twin,
+    clause_name: &str,
+) -> quire_contract_codegen::KaniV2ClauseObligationHarness {
+    let (package, clause) = twin.emitted_package(clause_name);
+    let item = ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
     };
-    assert_eq!(
-        run(Twin::with_bounded_other_precondition(), "OtherBelowLimit"),
-        KaniRunOutcome::Verified
+    let outcome = negotiate_kani_obligations(&KaniObligationRequest {
+        ceilings: crate::common::proof_ceilings::proof_ceilings(),
+        items: std::slice::from_ref(&item),
+        subject_path: REQUEST_SUBJECT,
+        unwind: 8,
+    })
+    .expect("valid precondition request");
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("the V2 precondition is admitted");
+    };
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("one V2 precondition harness");
+    };
+    harness.clone()
+}
+
+fn write_v2_precondition_fixture(
+    directory: &std::path::Path,
+    harness: &quire_contract_codegen::KaniV2ClauseObligationHarness,
+) {
+    fs::write(directory.join("src/lib.rs"), &harness.rust.contents).expect("generated crate");
+    super::scratch_crate::write_manifest(
+        directory,
+        &format!(
+            "[package]\nname = \"generated-v2-precondition\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\nquire-exact = {{ {} }}\n\n[workspace]\n",
+            super::scratch_crate::runtime_dependency(&["exact"]),
+            quire_contract_codegen::EXACT_DEPENDENCY_SOURCE
+        ),
     );
+    fs::write(
+        directory.join("build.rs"),
+        "fn main() { println!(\"cargo:rustc-check-cfg=cfg(kani)\"); }\n",
+    )
+    .expect("build script");
+}
+
+#[trace("TC-025", "FR-014-AC-8")]
+#[test]
+fn tc_025_v2_precondition_fixture_compiles_with_its_direct_dependencies() {
+    let harness =
+        v2_precondition_fixture_harness(Twin::with_bounded_other_precondition(), "OtherBelowLimit");
+    let directory = scratch("v2-precondition-compile");
+    write_v2_precondition_fixture(&directory, &harness);
+    super::scratch_crate::resolve_seeded_lock(&directory);
+    eprintln!("actual V2 precondition fixture: {}", directory.display());
+    let output = std::process::Command::new(env!("CARGO"))
+        .args(["check", "--locked", "--offline", "--lib", "--quiet"])
+        .env(
+            "CARGO_TARGET_DIR",
+            PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("v2-precondition-native"),
+        )
+        .env("RUSTFLAGS", "-Dwarnings")
+        .current_dir(&directory)
+        .output()
+        .expect("compile the actual generated V2 precondition without Kani");
+    assert!(
+        output.status.success(),
+        "actual V2 precondition fixture did not compile: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let manifest = fs::read_to_string(directory.join("Cargo.toml")).expect("fixture manifest");
+    let source = syn::parse_file(&harness.rust.contents).expect("generated harness Rust");
+    let mut imports = BTreeSet::new();
+    for item in source.items {
+        if let syn::Item::Use(item) = item {
+            let root = match item.tree {
+                syn::UseTree::Path(path) => path.ident,
+                syn::UseTree::Name(name) => name.ident,
+                syn::UseTree::Rename(rename) => rename.ident,
+                _ => panic!("unexpected root import syntax"),
+            };
+            imports.insert(root.to_string().replace('_', "-"));
+        }
+    }
+    assert!(!imports.is_empty(), "the actual oracle imports its owners");
+    for dependency in imports {
+        assert!(
+            manifest
+                .lines()
+                .any(|line| line.starts_with(&format!("{dependency} = "))),
+            "fixture manifest omits imported crate {dependency}"
+        );
+    }
+    fs::remove_dir_all(directory).expect("remove the compiled fixture");
 }
 
 #[trace("FR-014-AC-38")]
@@ -594,11 +625,14 @@ fn qsl_emitted_clause_composes_boolean_and_integer_operations() {
     super::scratch_crate::write_manifest(
         &scratch.path,
         &format!(
-            "[package]\nname = \"generated-v2-clause-corpus\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
-            super::scratch_crate::runtime_dependency(&["exact"])
+            "[package]\nname = \"generated-v2-clause-corpus\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\nquire-exact = {{ {} }}\nquire-semantic-value = {{ {} }}\n\n[workspace]\n",
+            super::scratch_crate::runtime_dependency(&["exact"]),
+            quire_contract_codegen::EXACT_DEPENDENCY_SOURCE,
+            quire_contract_codegen::SEMANTIC_VALUE_DEPENDENCY_SOURCE
         ),
     );
-    let output = std::process::Command::new(env!("CARGO"))
+    let clause_corpus_cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
+    let output = std::process::Command::new(clause_corpus_cargo)
         .args(["test", "--offline", "--quiet"])
         .env("CARGO_TARGET_DIR", scratch.path.join("target"))
         .env("RUSTFLAGS", "-Dwarnings")
@@ -637,8 +671,9 @@ fn skipped_v2_clause_consequent_has_a_measured_zero_native_probe() {
     super::scratch_crate::write_manifest(
         &scratch.path,
         &format!(
-            "[package]\nname = \"generated-v2-clause-native-probe\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
-            super::scratch_crate::runtime_dependency(&["exact"])
+            "[package]\nname = \"generated-v2-clause-native-probe\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\nquire-exact = {{ {} }}\n\n[workspace]\n",
+            super::scratch_crate::runtime_dependency(&["exact"]),
+            quire_contract_codegen::EXACT_DEPENDENCY_SOURCE
         ),
     );
     let toolchain = format!("+{}", env!("CARGO_PKG_RUST_VERSION"));

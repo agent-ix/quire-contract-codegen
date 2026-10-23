@@ -163,7 +163,7 @@ pub(super) enum LetType {
 #[derive(Clone, Debug)]
 pub(super) enum Init {
     Expression(ExprText),
-    ScalarMeter(quire_contract_runtime::exact::ScalarLimits),
+    ScalarMeter(quire_exact::ScalarLimits),
 }
 #[derive(Clone, Debug)]
 pub(super) struct LetBinding {

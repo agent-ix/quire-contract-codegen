@@ -13,7 +13,7 @@ pub(crate) fn independent_digest(entries: &[(String, Vec<u8>)]) -> [u8; 32] {
         .collect::<Vec<_>>()
         .join(",");
     let bytes = format!(
-        "{{\"artifacts\":[{artifacts}],\"schema\":\"agent-ix/cg-kani-scalar-proof-content/v2\"}}"
+        "{{\"artifacts\":[{artifacts}],\"schema\":\"agent-ix/cg-kani-scalar-proof-content/v3\"}}"
     );
     Sha256::digest(bytes.as_bytes()).into()
 }

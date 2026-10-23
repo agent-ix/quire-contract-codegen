@@ -15,6 +15,19 @@ use crate::{
         },
     },
 };
+use crate::{
+    core::contract_package::{
+        routed_contract_lowering_profile, ContractDriverResultSelection, ContractRequestPosition,
+    },
+    oracle::scalar as scalar_fixture_types,
+    routed::{
+        capability::{BackendDescriptor, Candidate, ProviderOrigin},
+        generate::{
+            generate_routed, GenerationContexts, KaniGenerationContext, KindOutput,
+            RoutedGenerationItem,
+        },
+    },
+};
 use ix_trace_rs::trace;
 use package::Bound;
 #[path = "kani_scalar_native_fixture.rs"]
@@ -22,7 +35,7 @@ mod scalar_native_fixture;
 use scalar_native_fixture::routed_scalar_with_artifacts;
 use std::{fs, path::PathBuf, time::Duration};
 
-fn fixture(wall_clock: Duration) -> (KaniScalarObligationHarness, Vec<Artifact>) {
+pub(crate) fn fixture(wall_clock: Duration) -> (KaniScalarObligationHarness, Vec<Artifact>) {
     routed_scalar_with_artifacts(
         package::bounded_increment_package(),
         package::BOUNDED_INCREMENT,
@@ -32,8 +45,8 @@ fn fixture(wall_clock: Duration) -> (KaniScalarObligationHarness, Vec<Artifact>)
     )
 }
 
-fn limits() -> quire_contract_runtime::exact::ScalarLimits {
-    quire_contract_runtime::exact::ScalarLimits {
+fn limits() -> quire_exact::ScalarLimits {
+    quire_exact::ScalarLimits {
         integer_bits: 101,
         decimal_digits: 102,
         scale_expansion: 103,
@@ -304,7 +317,9 @@ fn bounded_paired_runner_propagates_the_native_helpers_oracle_stop() {
             "run",
             "--quiet",
             "--locked",
-            "--bin",
+            "--manifest-path",
+            "observer/Cargo.toml",
+            "--example",
             "ir791_native",
             "--",
             "4",
@@ -322,4 +337,30 @@ fn bounded_paired_runner_propagates_the_native_helpers_oracle_stop() {
         ]
     );
     fs::remove_dir_all(control).unwrap();
+}
+
+#[trace(
+    "FR-017-AC-29",
+    "FR-017-AC-46",
+    "FR-017-AC-48",
+    "FR-017-AC-52",
+    "FR-017-AC-53",
+    "TC-027"
+)]
+#[test]
+#[ignore = "installed Kani codegen and native compiler control: run explicitly and serially; no verification"]
+fn staged_routed_native_companion_retains_custody_and_dev_only_feature_boundary() {
+    let (harness, artifacts) = fixture(Duration::from_secs(600));
+    let cancel = quire_exact::Cancel::new();
+    let installation = KaniInstallation::discover().expect("installed Kani");
+    let target = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target");
+    crate::kani::run::scalar::qualify_staged_native_for_test(&KaniScalarNativeRequest {
+        cancel: &cancel,
+        installation: &installation,
+        harness: &harness,
+        oracle_artifacts: &artifacts,
+        operands: &[4, 1],
+        scalar_limits: limits(),
+        target_directory: &target,
+    });
 }

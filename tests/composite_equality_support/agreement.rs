@@ -1,57 +1,22 @@
 //! Agreement support for composite equality (FR-018-AC-2, AC-8, AC-9,
 //! AC-11): direct Contract Runtime execution and generated oracles.
 //!
-//! Adapted from `exact_scalar_support/agreement.rs`: a vector body is
-//! written once as unqualified calls; [`agree2!`] evaluates it with
-//! `quire_contract_runtime::exact` in scope and evaluates the generated
-//! oracle with the runtime in scope. Every evaluation is run under the same
-//! limits and then re-run with each admitted charge denied in turn. The
-//! two `Debug` renderings must be identical.
-//!
-//! The RT==QSL authority check lives in RT's `conformance/qsl-agreement`
-//! lane; this crate only checks generated==RT. QSL arch-lint T12-A confines
-//! this crate to `qsl_replay`'s public API, and none of this file's vectors
-//! are shaped as compiled source plus a witness -- they call
-//! `TypeEnvironment::check_equality` and `CheckedEquality::evaluate`
-//! directly against in-process `Value`s.
+//! Each original vector is run against an independent direct QSV environment and the
+//! actual emitted prepared oracle. The fixture recompiles its retained original source
+//! through the public replay facade solely to obtain genuine identities and complete enum
+//! membership; it does not claim a third QSL value-oracle or proof leg. Outcomes, ordered
+//! charges, every counter and every single-charge denial must agree.
 
 #![allow(dead_code, unused_imports)]
 
-use serde_json::{json, Value as JsonValue};
-
-/// The base package's `Example.Phase` enum declaration (`quire_type_id`
-/// `generated::ENUM_TYPE_DIGEST`): `ordered`, members `OPEN`/`SHUT` in
-/// declaration order.
-fn enum_status_declaration_json() -> JsonValue {
-    json!({
-        "version": "quire.enum-declaration-node/v1",
-        "owner": {"kind": "definition", "authority": "agent-ix", "identity": "example-model"},
-        "qualified_declaration": ["Example", "Phase"],
-        "ordered": true,
-        "members": ["OPEN", "SHUT"],
-    })
-}
-
-fn enum_status_member_json(case: &str) -> JsonValue {
-    json!({
-        "version": "quire.enum-member-node/v1",
-        "declaration_node_id": {
-            "domain": quire_contract_runtime::exact::NODE_KEY_DOMAIN,
-            "digest": crate::generated::ENUM_TYPE_DIGEST,
-        },
-        "case": case,
-    })
-}
-
-/// Member key for `case` of `Example.Phase`. Self-consistent within this
-/// process only (see the module doc: nothing compares this to QSL's own
-/// computation anymore), hashed directly with `sha2`.
-fn enum_status_member_key(case: &str) -> String {
-    use sha2::{Digest, Sha256};
-    format!(
-        "{:x}",
-        Sha256::digest(enum_status_member_json(case).to_string().as_bytes())
-    )
+/// The exact source case used by this scratch run, admitted independently through the public root.
+pub fn context() -> &'static qsl_replay::AdmittedContext {
+    static ORIGINAL: std::sync::OnceLock<qsl_replay::AdmittedCompilation> = std::sync::OnceLock::new();
+    ORIGINAL.get_or_init(|| {
+        let case = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/case-mode"))
+            .expect("host retained original source case");
+        crate::fixture::compile(&case)
+    }).context()
 }
 
 /// Direct runtime and generated oracle agree, including every charge and
@@ -126,7 +91,11 @@ macro_rules! shared_helpers {
                 .iter()
                 .map(|kind| meter.consumed(*kind))
                 .collect();
-            (outcome, meter.admitted_charges().to_vec(), consumed)
+            (
+                outcome,
+                meter.admitted_charges().iter().map(|charge| charge.point).collect(),
+                consumed,
+            )
         }
 
         /// Deny each admitted charge occurrence in turn, discovered
@@ -144,7 +113,7 @@ macro_rules! shared_helpers {
         ) -> Vec<(ChargePoint, u64, Outcome<bool>, Vec<u64>)> {
             let mut meter = Meter::new(limits);
             let _ = run(&mut meter);
-            let charges = meter.admitted_charges().to_vec();
+            let charges = meter.admitted_charges().iter().map(|charge| charge.point).collect::<Vec<_>>();
             let mut seen: Vec<ChargePoint> = Vec::new();
             charges
                 .into_iter()
@@ -171,14 +140,16 @@ macro_rules! shared_helpers {
         }
 
         pub fn node_key(code: u32) -> NodeKey {
-            let digest = match code {
-                super::super::package::R_POINT => crate::generated::R_POINT_DIGEST,
-                super::super::package::TUP_PAIR => crate::generated::TUP_PAIR_DIGEST,
-                super::super::package::R_SELF => crate::generated::R_SELF_DIGEST,
-                super::super::package::R_PAIR_OF_POINTS => crate::generated::R_PAIR_OF_POINTS_DIGEST,
-                other => panic!("no admitted agreement type key for code {other}"),
+            let name = match code {
+                super::super::package::R_POINT => "Point",
+                super::super::package::TUP_PAIR => "Pair",
+                super::super::package::R_SELF => "SelfRecord",
+                super::super::package::R_PAIR_OF_POINTS => "PairOfPoints",
+                other => panic!("no declared agreement type for code {other}"),
             };
-            NodeKey::from_hex(digest).unwrap()
+            super::context().composites().find(|declaration|
+                declaration.qualified_name().iter().map(|part| part.as_str()).eq([name])
+            ).expect("the selected original source declares this exact type").key()
         }
 
         pub fn composite_type(code: u32) -> ValueType {
@@ -375,7 +346,7 @@ macro_rules! shared_helpers {
             CollectionType::new(
                 CollectionKind::Sequence,
                 corpus_integer_type(),
-                CardinalityBound::new(0, 8).unwrap(),
+                Some(CardinalityBound::new(0, 8).unwrap()),
             )
         }
 
@@ -390,14 +361,22 @@ macro_rules! shared_helpers {
                 .unwrap()
         }
 
-        /// The base package's `Example.Phase` enum's `ValueType`, matching
-        /// `generated::ENUM_TYPE_DIGEST`.
+        /// The original source's complete admitted Phase shape.
         pub fn enum_status_type() -> ValueType {
-            ValueType::Enum(node_key_from_digest(crate::generated::ENUM_TYPE_DIGEST))
+            let declaration = enum_status();
+            let actual = super::context().enums().find(|item| item.qualified_name().iter().map(|part| part.as_str()).eq(["Phase"]))
+                .expect("the original enum source");
+            ValueType::Enum(EnumShape::new(actual.is_ordered(), actual.cases().iter().map(|case| declaration.member(case.case().as_str()).variant())))
         }
 
-        fn node_key_from_digest(digest: &str) -> NodeKey {
-            NodeKey::from_hex(digest).unwrap()
+        pub fn enum_members() -> quire_semantic_value::enumeration::EnumMemberIndex {
+            let mut index = quire_semantic_value::enumeration::EnumMemberIndex::default();
+            for actual in super::context().enums() {
+                let declaration = EnumDeclaration::new(actual.key(), actual.is_ordered(), actual.cases().iter().map(|case| case.case().as_str().to_owned()).collect())
+                    .expect("genuine full enum declaration");
+                for case in actual.cases() { index.record(declaration.member(case.case().as_str(), case.key()).expect("actual admitted member")); }
+            }
+            index
         }
 
         /// An operand's static type for a direct `check_equality` call: a
@@ -452,34 +431,53 @@ macro_rules! shared_helpers {
                 Some(target) => EqualityOperand::converted(right.source, target),
                 None => EqualityOperand::typed(right.source),
             };
-            let checked = match environment.check_equality(operator, left_operand, right_operand) {
+            let checked = match environment.check_equality(operator, left_operand, right_operand, &enum_members()) {
                 Ok(checked) => checked,
-                Err(_) => return Outcome::Refused(Refusal::CheckedInvariant),
+                Err(error) => {
+                    return Outcome::Refused(Refusal::CheckedInvariant {
+                        cause: quire_exact::CheckedInvariantCause::GeneratedEqualityCheckRejected {
+                            cause: error.cause,
+                        },
+                    })
+                }
             };
-            checked.evaluate(left_value, right_value, meter)
+            checked.evaluate(environment, left_value, right_value, meter)
         }
     };
 }
 
 pub mod rt_side {
-    pub use quire_contract_runtime::exact::*;
+    pub use quire_semantic_value::declaration::{
+        CompositeDeclaration, CompositeShape, EqualityOperand, EqualityOperator, FieldDeclaration,
+        ObjectTypeDeclaration, TypeEnvironment,
+    };
+    pub use quire_semantic_value::enumeration::{EnumDeclaration, EnumValue};
+    pub use quire_exact::*;
     shared_helpers!();
 
-    /// The base package's `Example.Phase` declaration, under its node key
-    /// (`generated::ENUM_TYPE_DIGEST`) and self-consistently hashed member
-    /// keys (see the module doc).
-    pub struct EnumStatus(EnumDeclaration);
+    /// Genuine original Phase declaration, including every admitted case key and canonical rank.
+    pub struct EnumStatus {
+        declaration: EnumDeclaration,
+        admitted: qsl_replay::AdmittedEnum,
+    }
 
     pub fn enum_status() -> EnumStatus {
-        let key = NodeKey::from_hex(crate::generated::ENUM_TYPE_DIGEST).unwrap();
-        EnumStatus(EnumDeclaration::new(key, true, &["OPEN", "SHUT"]).unwrap())
+        let admitted = super::context().enums().find(|item| item.qualified_name().iter().map(|part| part.as_str()).eq(["Phase"]))
+            .expect("the original source declared Phase").clone();
+        let declaration = EnumDeclaration::new(admitted.key(), admitted.is_ordered(), admitted.cases().iter().map(|case| case.case().as_str().to_owned()).collect()).expect("real original enum declaration");
+        EnumStatus { declaration, admitted }
     }
 
     impl EnumStatus {
+        pub fn member(&self, case: &str) -> EnumValue {
+            let wire = qsl_replay::WireNodeId::from_digest(*self.admitted.key().as_bytes());
+            let name = Identifier::new(case).expect("case identifier");
+            let actual = super::context().enum_case(wire, &name).expect("real admitted case");
+            self.declaration.member(case, actual.key()).expect("member belongs to original declaration")
+        }
         pub fn value(&self, case: &str) -> Value {
-            let key = super::enum_status_member_key(case);
-            let member = NodeKey::from_hex(&key).unwrap();
-            Value::Enum(self.0.member(case, member).unwrap())
+            let member = self.member(case);
+            Value::Enum(EnumMember::new(member.variant(), u32::try_from(member.position()).expect("original rank fits u32")))
         }
     }
 }

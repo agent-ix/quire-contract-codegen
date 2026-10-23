@@ -450,7 +450,7 @@ pub struct KaniScalarObligationHarness {
     generated_rust: Artifact,
     generated_record: Artifact,
     generated_artifacts: Option<Vec<Artifact>>,
-    original_scalar_limits: Option<quire_contract_runtime::exact::ScalarLimits>,
+    original_scalar_limits: Option<quire_exact::ScalarLimits>,
 }
 
 // This value compares the per-harness public output and its origin seal. The routed package seal
@@ -493,7 +493,7 @@ impl KaniScalarObligationHarness {
         identity: ScalarObligationIdentity,
         rust: Artifact,
         record: Artifact,
-        limits: quire_contract_runtime::exact::ScalarLimits,
+        limits: quire_exact::ScalarLimits,
     ) -> Self {
         let mut harness = Self::generated(identity, rust, record);
         harness.original_scalar_limits = Some(limits);
@@ -513,7 +513,7 @@ impl KaniScalarObligationHarness {
     /// retained scalar meter context.
     pub fn original_scalar_limits(
         &self,
-    ) -> Result<quire_contract_runtime::exact::ScalarLimits, ScalarOriginalLimitsError> {
+    ) -> Result<quire_exact::ScalarLimits, ScalarOriginalLimitsError> {
         if !self.has_valid_provenance() {
             return Err(ScalarOriginalLimitsError::GeneratedArtifactChanged);
         }

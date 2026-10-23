@@ -13,3 +13,10 @@ mod contract_package_tests;
 // Generation for items the driver has already settled and routed.
 // Implements: FR-022
 pub(crate) mod generate;
+
+// Private orchestration controls need routed generation and Kani execution together.
+#[cfg(all(test, target_os = "linux"))]
+#[path = "../../tests/it/kani_scalar_native_private.rs"]
+mod scalar_native_private;
+// Solver run records and evidence mapping for QSL-authored queries.
+pub mod smt;

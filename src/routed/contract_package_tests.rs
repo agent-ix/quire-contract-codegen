@@ -617,6 +617,7 @@ mod tests {
         let (_, admitted, positions, _, excluded) = excluded_fixture();
         let result = generate_composite_equality_oracles(
             &admitted,
+            None,
             &positions,
             &[1],
             &[CompositeEqualityItem {
@@ -2706,6 +2707,35 @@ mod tests {
             function same using v(a: Integer): Boolean pure { a = a }\n\
             function mixed using v(a: Int[0, 9], p: Integer): Integer pure { a + p }\n";
         let checked = admitted_source(source);
+        let genuine = qsl_replay::compile_admitted(
+            SourceIdentity::new("test", "package-items.native", "git", "fixture"),
+            "package-items.native",
+            source.as_bytes(),
+            [],
+            &DependencyInput::default(),
+            StageLimits::default(),
+            ReplayLimits::default(),
+        )
+        .expect("same original source supplies the admitted context");
+        let mut evidence = CheckedPackageEvidence::new();
+        evidence.support_feature("quire.value.complete/v1");
+        let recompiled = match CheckedPackageV2::read(
+            genuine.package().bytes(),
+            CheckedPackageReadLimits::bounded(),
+            &evidence,
+        ) {
+            CheckedPackageV2ReadResult::Admitted(package) => *package,
+            other => panic!("actual admitted facade output must read: {other:?}"),
+        };
+        assert_eq!(
+            checked, recompiled,
+            "retain the whole unchanged source package"
+        );
+        assert!(genuine
+            .context()
+            .package_id()
+            .matches(&genuine.package().package_id()));
+
         let integer = checked
             .graph()
             .nodes
@@ -2829,6 +2859,7 @@ mod tests {
         ));
         let equality = generate_composite_equality_oracles(
             &admitted,
+            Some(genuine.context()),
             &drivers(&requested),
             &[2],
             &[CompositeEqualityItem {

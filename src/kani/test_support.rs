@@ -199,3 +199,64 @@ impl<T> No for &Probe<T> {
 // Shared with the integration binary; this oracle never calls production canonicalization.
 #[path = "../../tests/it/kani_scalar_native_digest.rs"]
 pub(crate) mod scalar_native_digest;
+
+/// Literal source and identity for runner-only host checks; no generator is invoked.
+pub(crate) fn scalar_source_fixture(
+    wall_clock: std::time::Duration,
+) -> (
+    crate::kani::identity::KaniScalarObligationHarness,
+    Vec<Artifact>,
+) {
+    use crate::kani::identity::{
+        KaniScalarObligationHarness, ScalarObligationArgument, ScalarObligationIdentity,
+    };
+    let identity = ScalarObligationIdentity {
+        ceilings: proof_ceilings::proof_ceilings_with_wall_clock(wall_clock),
+        node_id: serde_json::from_value(serde_json::json!({
+            "domain": "quire.checked-semantic-node/v1", "digest": "1".repeat(64),
+        }))
+        .unwrap(),
+        operation_identity: "quire.op.integer.add".into(),
+        oracle_symbol: "oracle".into(),
+        module_symbol: ModuleSymbol::try_from("host_scalar").unwrap(),
+        harness_symbol: HarnessSymbol::try_from("check").unwrap(),
+        arguments: ["left", "right"]
+            .into_iter()
+            .map(|identifier| ScalarObligationArgument {
+                identifier: identifier.into(),
+                minimum: 0,
+                maximum: 9,
+            })
+            .collect(),
+        inferred_operands: Vec::new(),
+        solver: KaniSolver::Cadical,
+        unwind: 3,
+        options: vec![
+            "--harness".into(),
+            "host_scalar::check".into(),
+            "--unwind".into(),
+            "3".into(),
+        ],
+    };
+    let source = "pub fn oracle(left: i64, right: i64, meter: &mut ()) -> i64 { let _ = meter; left + right }\n";
+    let rust = Artifact::new("src/generated/host_scalar.rs", source);
+    let record = Artifact::new(
+        "kani-obligations/host_scalar.json",
+        serde_json::json!({
+            "identity": identity, "rustPath": rust.path,
+        })
+        .to_string(),
+    );
+    let artifacts = vec![
+        Artifact::new(
+            "Cargo.toml",
+            crate::core::profile::oracle_crate_manifest("quire-exact-scalar-oracles"),
+        ),
+        Artifact::new("src/lib.rs", source),
+        Artifact::new("claim-map.json", "{}"),
+        Artifact::new("source-maps/lib.json", "{}"),
+    ];
+    let mut harness = KaniScalarObligationHarness::generated(identity, rust, record);
+    harness.bind_artifact_package(&artifacts);
+    (harness, artifacts)
+}

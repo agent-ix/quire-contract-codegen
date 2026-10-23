@@ -491,7 +491,7 @@ fn lower(
 }
 
 const STOP_TYPE: &str = r#"
-/// A generated condition stopped or a runtime variant was not recognized.
+/// A generated condition stopped.
 #[derive(Debug)]
 pub enum ClauseStop {
     /// A typed runtime evaluation stop.
@@ -500,8 +500,6 @@ pub enum ClauseStop {
     Oracle(OracleStop),
     /// An admitted integer literal could not be represented.
     InvalidConstant,
-    /// A future runtime outcome variant was returned.
-    UnknownOutcome,
 }
 "#;
 
@@ -512,7 +510,6 @@ fn measured<T>(outcome: rt::Outcome<T>) -> Result<T, ClauseStop> {
         rt::Outcome::Undefined(reason) => Err(ClauseStop::Runtime(rt::Outcome::Undefined(reason))),
         rt::Outcome::Refused(reason) => Err(ClauseStop::Runtime(rt::Outcome::Refused(reason))),
         rt::Outcome::Incomplete(record) => Err(ClauseStop::Runtime(rt::Outcome::Incomplete(record))),
-        _ => Err(ClauseStop::UnknownOutcome),
     }
 }
 "#;
@@ -538,9 +535,24 @@ fn render_step(
     source.push_str(");\n");
     match &step.term {
         StepTerm::Boolean(value) => source.push_str(&format!("    Ok({value})\n")),
-        StepTerm::Integer(value) => source.push_str(&format!(
-            "    \"{value}\".parse().map_err(|_| ClauseStop::InvalidConstant)\n"
-        )),
+        StepTerm::Integer(value) => {
+            if let Some(integer) = value
+                .parse::<i64>()
+                .ok()
+                .filter(|integer| integer.to_string() == *value)
+            {
+                let expression = if integer == i64::MIN {
+                    "i64::MIN".to_owned()
+                } else {
+                    format!("{integer}_i64")
+                };
+                source.push_str(&format!("    Ok(rt::Integer::from({expression}))\n"));
+            } else {
+                source.push_str(&format!(
+                    "    \"{value}\".parse().map_err(|_| ClauseStop::InvalidConstant)\n"
+                ));
+            }
+        }
         StepTerm::Input(input) => source.push_str(&format!(
             "    Ok({}.clone())\n",
             names.get(input).ok_or(V2ClauseRefusal::Render)?
@@ -599,4 +611,81 @@ fn render_step(
     }
     source.push_str("}\n");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use ix_trace_rs::trace;
+
+    use super::*;
+
+    fn integer_leaf(spelling: &str) -> String {
+        let step = Step {
+            kind: ValueKind::Integer,
+            term: StepTerm::Integer(spelling.to_owned()),
+        };
+        let mut source = String::new();
+        render_step(&mut source, 0, &step, &BTreeMap::new(), "", "")
+            .expect("render a standalone integer step");
+        syn::parse_file(&source).expect("valid Rust leaf");
+        source
+    }
+
+    #[trace("TC-024", "FR-014-AC-53")]
+    #[test]
+    fn canonical_i64_leaves_use_the_public_primitive_constructor() {
+        let mut failures = Vec::new();
+        for (spelling, value) in [
+            ("-9223372036854775808", "i64::MIN"),
+            ("-9223372036854775807", "-9223372036854775807_i64"),
+            ("-17", "-17_i64"),
+            ("-1", "-1_i64"),
+            ("0", "0_i64"),
+            ("1", "1_i64"),
+            ("42", "42_i64"),
+            ("1000", "1000_i64"),
+            ("9223372036854775807", "9223372036854775807_i64"),
+        ] {
+            let source = integer_leaf(spelling);
+            if !source.contains(&format!("Ok(rt::Integer::from({value}))")) {
+                failures.push(spelling);
+            }
+            assert!(!source.contains("meter.charge"));
+        }
+        assert!(
+            failures.is_empty(),
+            "primitive constructor missing: {failures:?}"
+        );
+    }
+
+    #[trace("TC-024", "FR-014-AC-53")]
+    #[test]
+    fn every_ineligible_leaf_keeps_the_original_parse_and_typed_failure() {
+        for spelling in [
+            "-9223372036854775809",
+            "9223372036854775808",
+            "-170141183460469231731687303715884105728",
+            "170141183460469231731687303715884105727",
+            "-170141183460469231731687303715884105729",
+            "170141183460469231731687303715884105728",
+            "+1",
+            "01",
+            "-0",
+            " 1",
+            "1 ",
+            "1a",
+            "",
+            "--1",
+        ] {
+            let source = integer_leaf(spelling);
+            assert!(
+                source.contains(&format!(
+                    "\"{spelling}\".parse().map_err(|_| ClauseStop::InvalidConstant)"
+                )),
+                "original fallback changed for {spelling:?}: {source}"
+            );
+            assert!(!source.contains("Integer::from("));
+            assert!(!source.contains("meter.charge"));
+        }
+    }
 }

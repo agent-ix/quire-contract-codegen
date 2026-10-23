@@ -10,6 +10,7 @@ use serde::Serialize;
 
 use crate::{
     core::artifact::{MAX_ARTIFACTS, MAX_ARTIFACT_BYTES, MAX_BUNDLE_BYTES},
+    core::ir::clause::ClauseGraphView,
     evidence::{
         bound_coverage::{
             check_output_size, BoundAnalysisState, MAX_ANALYSIS_BYTES, MAX_SOURCE_ROOT_BYTES,
@@ -21,7 +22,8 @@ use crate::{
         },
     },
     oracle::clause::{
-        derive_v2_clause_descriptor, generate_v2_clause_oracle, V2ClauseCoverageRegion,
+        derive_v2_clause_descriptor_with_view, generate_v2_clause_oracle_with_view,
+        V2ClauseCoverageRegion,
     },
 };
 
@@ -156,6 +158,10 @@ fn analyze_inner(
         .graph()
         .nodes
         .iter()
+        .inspect(|_| {
+            #[cfg(test)]
+            request_view_tests::population_entry();
+        })
         .filter(|node| &*node.node_tag == "state" && &*node.semantic_form == "state_clause")
         .map(|node| &node.node_id)
         .collect();
@@ -222,6 +228,9 @@ fn analyze_inner(
     }
     body.population = "complete";
     body.state = BoundAnalysisState::Complete;
+    #[cfg(test)]
+    request_view_tests::shared_view();
+    let view = ClauseGraphView::new(package);
     for node_id in clauses {
         let input = by_id[&node_id];
         let root = normalize_path(input.source_root)?;
@@ -231,13 +240,14 @@ fn analyze_inner(
                 "source root must be an absolute package directory",
             ));
         }
-        let descriptor = derive_v2_clause_descriptor(package, node_id).map_err(|error| {
-            diagnostic(
-                CoverageErrorCode::PopulationMismatch,
-                format!("checked clause {node_id:?} could not be described: {error:?}"),
-            )
-        })?;
-        let generated = generate_v2_clause_oracle(package, node_id).map_err(|error| {
+        let descriptor =
+            derive_v2_clause_descriptor_with_view(node_id, &view).map_err(|error| {
+                diagnostic(
+                    CoverageErrorCode::PopulationMismatch,
+                    format!("checked clause {node_id:?} could not be described: {error:?}"),
+                )
+            })?;
+        let generated = generate_v2_clause_oracle_with_view(node_id, &view).map_err(|error| {
             diagnostic(
                 CoverageErrorCode::PopulationMismatch,
                 format!("checked clause {node_id:?} could not be generated: {error:?}"),
@@ -397,4 +407,261 @@ fn observe_clause(
         }
     }
     row
+}
+
+#[cfg(test)]
+// Admission-only fixture dependencies obey this subsystem’s production import direction.
+#[allow(dead_code, clippy::duplicate_mod)]
+#[path = "../../tests/state_frame_support/model.rs"]
+mod model;
+#[cfg(test)]
+#[allow(dead_code, clippy::duplicate_mod)]
+#[path = "../../tests/clause_admission_support/mod.rs"]
+mod native_twin;
+
+#[cfg(test)]
+mod request_view_tests {
+    use super::*;
+    use crate::oracle::clause::generate_v2_clause_oracle;
+    use ix_trace_rs::trace;
+    use serde_json::{json, Value};
+
+    std::thread_local! {
+        static WORK: std::cell::Cell<(usize, usize)> = const { std::cell::Cell::new((0, 0)) };
+    }
+    pub(super) fn population_entry() {
+        WORK.with(|work| {
+            let (population, views) = work.get();
+            work.set((population + 1, views));
+        });
+    }
+    pub(super) fn shared_view() {
+        WORK.with(|work| {
+            let (population, views) = work.get();
+            work.set((population, views + 1));
+        });
+    }
+    fn take_work() -> (usize, usize) {
+        WORK.with(|work| work.replace((0, 0)))
+    }
+
+    // IR-276 caller work only; owner graph-construction traversal has separate owner tests.
+    #[test]
+    fn llvm_batch_reuses_one_clause_view_without_standalone_per_item_builds() {
+        let (package, _) =
+            native_twin::Twin::with_mixed_coverage_clauses().emitted_package("BalanceNeverDrops");
+        let owned = artifacts(&package);
+        let inputs = owned.iter().map(ArtifactInput::input).collect::<Vec<_>>();
+        take_work();
+        let row = report(&package, &inputs);
+        let measured = take_work();
+        assert_eq!(row["population"], "complete");
+        println!(
+            "IR276_LLVM_WORK R={} K={} population_entries={} shared_view_builds={}",
+            package.graph().nodes.len(),
+            inputs.len(),
+            measured.0,
+            measured.1
+        );
+        assert_eq!(measured, (package.graph().nodes.len(), 1), "one original-order population census and one actual shared view construction; no standalone per-item index construction");
+    }
+
+    struct ArtifactInput {
+        node: CheckedNodeId,
+        source: Vec<u8>,
+        map: Vec<u8>,
+    }
+
+    impl ArtifactInput {
+        fn input(&self) -> V2ClauseCoverageInput<'_> {
+            V2ClauseCoverageInput {
+                node_id: &self.node,
+                source_root: "/native-fixture",
+                source: &self.source,
+                source_map: &self.map,
+                // These controls analyze absence/refusal; no LLVM process was executed.
+                llvm_export: None,
+            }
+        }
+    }
+
+    fn artifacts(package: &CheckedPackageV2) -> Vec<ArtifactInput> {
+        package
+            .graph()
+            .nodes
+            .iter()
+            .filter(|node| &*node.node_tag == "state" && &*node.semantic_form == "state_clause")
+            .map(|node| {
+                let oracle = generate_v2_clause_oracle(package, &node.node_id).unwrap();
+                ArtifactInput {
+                    node: node.node_id.clone(),
+                    source: oracle.source.into_bytes(),
+                    map: serde_json::to_vec(&oracle.source_map).unwrap(),
+                }
+            })
+            .collect()
+    }
+
+    fn report(package: &CheckedPackageV2, inputs: &[V2ClauseCoverageInput<'_>]) -> Value {
+        serde_json::from_slice(
+            &analyze_v2_llvm_coverage(package, inputs)
+                .to_json_bytes()
+                .unwrap(),
+        )
+        .unwrap()
+    }
+
+    #[trace("FR-004-AC-16", "FR-004-AC-23", "TC-006")]
+    #[test]
+    fn request_view_keeps_complete_population_and_report_bytes_under_input_permutation() {
+        let (package, _) =
+            native_twin::Twin::with_mixed_coverage_clauses().emitted_package("BalanceNeverDrops");
+        let owned = artifacts(&package);
+        assert_eq!(
+            owned.len(),
+            4,
+            "four semantically distinct authored clauses"
+        );
+        let mut inputs = owned.iter().map(ArtifactInput::input).collect::<Vec<_>>();
+        let expected = analyze_v2_llvm_coverage(&package, &inputs)
+            .to_json_bytes()
+            .unwrap();
+        if let Some(directory) = std::env::var_os("IR276_ARTIFACT_OUTPUT") {
+            let directory = std::path::PathBuf::from(directory);
+            std::fs::create_dir_all(&directory).unwrap();
+            for (position, input) in owned.iter().enumerate() {
+                std::fs::write(
+                    directory.join(format!("source-{position}.rs")),
+                    &input.source,
+                )
+                .unwrap();
+                std::fs::write(
+                    directory.join(format!("source-map-{position}.json")),
+                    &input.map,
+                )
+                .unwrap();
+            }
+            std::fs::write(directory.join("report.json"), &expected).unwrap();
+            let nodes = owned.iter().map(|input| &input.node).collect::<Vec<_>>();
+            std::fs::write(
+                directory.join("node-order.json"),
+                serde_json::to_vec(&nodes).unwrap(),
+            )
+            .unwrap();
+        }
+        println!(
+            "IR276_LLVM_ARTIFACTS R={} K={} source_bytes={} map_bytes={} report_bytes={}",
+            package.graph().nodes.len(),
+            owned.len(),
+            owned.iter().map(|input| input.source.len()).sum::<usize>(),
+            owned.iter().map(|input| input.map.len()).sum::<usize>(),
+            expected.len(),
+        );
+        let row: Value = serde_json::from_slice(&expected).unwrap();
+        assert_eq!(row["state"], "incomplete");
+        assert_eq!(row["population"], "complete");
+        assert_eq!(row["clauses"].as_array().unwrap().len(), 4);
+        let mut counts = Vec::new();
+        for (entry, artifact) in row["clauses"].as_array().unwrap().iter().zip(&owned) {
+            assert_eq!(
+                entry["identity"],
+                serde_json::to_value(&artifact.node).unwrap()
+            );
+            assert!(
+                entry["classification"].is_null(),
+                "missing observation grants no classification"
+            );
+            counts.push(entry["expected_consequents"].as_u64().unwrap());
+        }
+        counts.sort_unstable();
+        assert_eq!(
+            counts,
+            [0, 0, 1, 2],
+            "authored body census, not supplied artifact order"
+        );
+        for _ in 0..inputs.len() {
+            inputs.rotate_left(1);
+            assert_eq!(
+                analyze_v2_llvm_coverage(&package, &inputs)
+                    .to_json_bytes()
+                    .unwrap(),
+                expected,
+                "full report bytes remain in original checked graph order"
+            );
+        }
+        inputs.reverse();
+        assert_eq!(
+            analyze_v2_llvm_coverage(&package, &inputs)
+                .to_json_bytes()
+                .unwrap(),
+            expected
+        );
+    }
+
+    #[trace("FR-004-AC-18", "FR-004-AC-23", "FR-004-AC-24", "TC-006")]
+    #[test]
+    fn request_view_keeps_population_and_artifact_refusal_precedence_without_partial_rows() {
+        let (package, _) =
+            native_twin::Twin::with_mixed_coverage_clauses().emitted_package("BalanceNeverDrops");
+        let mut owned = artifacts(&package);
+        let check = |inputs: &[V2ClauseCoverageInput<'_>], code: &str| {
+            let row = report(&package, inputs);
+            assert_eq!(row["state"], "invalid_input", "{row}");
+            assert_eq!(row["population"], "not_emitted");
+            assert_eq!(
+                row["clauses"],
+                json!([]),
+                "no partial population survives a refusal"
+            );
+            assert_eq!(row["diagnostics"][0]["code"], code, "{row}");
+            assert_eq!(
+                row,
+                report(&package, inputs),
+                "deterministic typed refusal/report"
+            );
+        };
+        let inputs = owned.iter().map(ArtifactInput::input).collect::<Vec<_>>();
+        for omit in 0..inputs.len() {
+            let missing = inputs
+                .iter()
+                .enumerate()
+                .filter(|(index, _)| *index != omit)
+                .map(|(_, input)| V2ClauseCoverageInput { ..*input })
+                .collect::<Vec<_>>();
+            check(&missing, "population_mismatch");
+        }
+        let duplicate = [
+            owned[0].input(),
+            owned[0].input(),
+            owned[2].input(),
+            owned[3].input(),
+        ];
+        check(&duplicate, "population_mismatch");
+        let (foreign_package, _) =
+            native_twin::Twin::with_distinct_balance_clauses().emitted_package("BalanceNeverDrops");
+        let foreign = artifacts(&foreign_package);
+        check(
+            &foreign.iter().map(ArtifactInput::input).collect::<Vec<_>>(),
+            "population_mismatch",
+        );
+        owned.last_mut().unwrap().source.push(b' ');
+        check(
+            &owned.iter().map(ArtifactInput::input).collect::<Vec<_>>(),
+            "artifact_mismatch",
+        );
+        owned.last_mut().unwrap().source.pop();
+        let original = owned.last().unwrap().map.clone();
+        let mut map: Value = serde_json::from_slice(&original).unwrap();
+        map[0]["expectedConsequents"] = json!(99);
+        owned.last_mut().unwrap().map = serde_json::to_vec(&map).unwrap();
+        check(
+            &owned.iter().map(ArtifactInput::input).collect::<Vec<_>>(),
+            "map_mismatch",
+        );
+        owned.last_mut().unwrap().map = original;
+        let mut simultaneous = owned.iter().map(ArtifactInput::input).collect::<Vec<_>>();
+        simultaneous[3].source = b"changed generated bytes";
+        simultaneous[3].source_map = b"malformed";
+        check(&simultaneous, "artifact_mismatch");
+    }
 }

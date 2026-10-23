@@ -41,9 +41,10 @@ use generated::{
     text_not_equal, OracleStop,
 };
 use ix_trace_rs::trace;
-use quire_contract_runtime::exact::{
-    EnumValue, IllTyped, Integer, Meter, Outcome, Quantity, ScalarLimits, Text,
-};
+use quire_exact::Quantity;
+use quire_exact::{IllTyped, Integer, Meter, Outcome, ScalarLimits, Text};
+use quire_semantic_value::enumeration::EnumValue;
+use quire_semantic_value::quantity::{IdentifiedUnit, QuantityRefusal, UnitQuantity};
 
 /// Generated oracles in `ComparisonOperator::ALL` order.
 type Compare<T> = fn(&T, &T, &mut Meter) -> Result<Outcome<bool>, OracleStop>;
@@ -63,7 +64,12 @@ const ENUM_COMPARISONS: [Compare<EnumValue>; 6] = [
     enum_greater,
     enum_at_least,
 ];
-const QUANTITY_COMPARISONS: [Compare<Quantity>; 6] = [
+type QuantityCompare = for<'a, 'b> fn(
+    UnitQuantity<'a>,
+    UnitQuantity<'b>,
+    &mut Meter,
+) -> Result<Outcome<bool>, OracleStop>;
+const QUANTITY_COMPARISONS: [QuantityCompare; 6] = [
     quantity_equal,
     quantity_not_equal,
     quantity_less,
@@ -152,9 +158,9 @@ fn tc_024_tc192_division_and_modulus_oracles_agree() {
                 limits: UNLIMITED,
                 setup: { let (a, b) = (int(a), int(b)); },
                 direct: |m| (
-                    divide(DivisionProfile::Truncating, &a, &b, &wide(), m),
-                    divide(DivisionProfile::Floor, &a, &b, &wide(), m),
-                    divide(DivisionProfile::Euclidean, &a, &b, &wide(), m),
+                    divide(DivisionProfile::Truncating, DivisionMember::Quotient, &a, &b, &wide(), m),
+                    divide(DivisionProfile::Floor, DivisionMember::Quotient, &a, &b, &wide(), m),
+                    divide(DivisionProfile::Euclidean, DivisionMember::Quotient, &a, &b, &wide(), m),
                 ),
                 generated: |m| (
                     done(divide_truncating(&a, &b, m)),
@@ -165,7 +171,7 @@ fn tc_024_tc192_division_and_modulus_oracles_agree() {
             agree2! {
                 limits: UNLIMITED,
                 setup: { let (a, b) = (int(a), int(b)); let bounded = IntegerDomain::Bounded(IntegerInterval::new(int(-5), int(5)).unwrap()); },
-                direct: |m| divide(DivisionProfile::Truncating, &a, &b, &bounded, m),
+                direct: |m| divide(DivisionProfile::Truncating, DivisionMember::Quotient, &a, &b, &bounded, m),
                 generated: |m| done(divide_bounded(&a, &b, m)),
             };
             agree2! {
@@ -180,9 +186,9 @@ fn tc_024_tc192_division_and_modulus_oracles_agree() {
     assert_rows_agreed(&[("TC-192 generated vectors", vectors)]);
     assert_eq!(vectors, 5 * 41 * 41);
 
-    // DIV-08 exact tuple, short work, short result; DIV-11 and DIV-13.
+    // DIV-08 exact limits, short work, short result; DIV-11 and DIV-13.
     let mut named = 0_usize;
-    for (a, b, tuple) in [
+    for (a, b, limit_tuple) in [
         (7, 3, DIV_08),
         (7, 3, with(DIV_08, 8, 3)),
         (7, 3, with(DIV_08, 9, 1)),
@@ -191,15 +197,15 @@ fn tc_024_tc192_division_and_modulus_oracles_agree() {
         (7, 0, with(DIV_08, 8, 0)),
     ] {
         agree2! {
-            limits: limits(tuple),
+            limits: limits(limit_tuple),
             setup: { let (a, b) = (int(a), int(b)); },
-            direct: |m| divide(DivisionProfile::Truncating, &a, &b, &wide(), m),
+            direct: |m| divide(DivisionProfile::Truncating, DivisionMember::Quotient, &a, &b, &wide(), m),
             generated: |m| done(divide_truncating(&a, &b, m)),
         };
         named += 1;
     }
     // DIV-10, DIV-11 and DIV-12 (the modulus refused before retention).
-    for (a, b, tuple) in [
+    for (a, b, limit_tuple) in [
         (-7, 3, DIV_10),
         (7, 0, with(DIV_10, 8, 1)),
         (7, 0, with(DIV_10, 8, 0)),
@@ -207,7 +213,7 @@ fn tc_024_tc192_division_and_modulus_oracles_agree() {
         (-9, 1, with(with(DIV_10, 9, 0), 8, 2)),
     ] {
         agree2! {
-            limits: limits(tuple),
+            limits: limits(limit_tuple),
             setup: { let (a, b) = (int(a), int(b)); let bounded = IntegerDomain::Bounded(IntegerInterval::new(int(-5), int(5)).unwrap()); },
             direct: |m| modulo(&a, &b, &bounded, m),
             generated: |m| done(modulo_bounded(&a, &b, m)),
@@ -283,11 +289,11 @@ fn tc_024_tc185_decimal_oracles_agree() {
         named += 1;
     }
     let with_work = |work: u64| {
-        let mut tuple = D09;
-        tuple[8] = work;
-        tuple
+        let mut limit_tuple = D09;
+        limit_tuple[8] = work;
+        limit_tuple
     };
-    for ((ca, sa), (cb, sb), tuple) in [
+    for ((ca, sa), (cb, sb), limit_tuple) in [
         ((1, 0), (3, 0), [u64::MAX; 10]),
         ((1, 0), (0, 0), [u64::MAX; 10]),
         ((1, 0), (0, 3), [u64::MAX; 10]),
@@ -297,7 +303,7 @@ fn tc_024_tc185_decimal_oracles_agree() {
         ((1, 0), (0, 3), with_work(0)),
     ] {
         agree2! {
-            limits: limits(tuple),
+            limits: limits(limit_tuple),
             setup: { let (a, b) = (dec(ca, sa), dec(cb, sb)); let target = decimal_type(-1000, 1000, 0, 2, RoundingMode::TowardZero); },
             direct: |m| evaluate_decimal(DecimalOperation::Divide(&a, &b), &target, m),
             generated: |m| done(decimal_divide(&a, &b, m)),
@@ -321,12 +327,12 @@ fn tc_024_tc185_decimal_oracles_agree() {
             ordering += 1;
         }
     }
-    for tuple in [
+    for limit_tuple in [
         [5, 2, 1, 0, 0, 0, 0, 2, 3, 1],
         [4, 2, 1, 0, 0, 0, 0, 2, 3, 1],
     ] {
         agree2! {
-            limits: limits(tuple),
+            limits: limits(limit_tuple),
             setup: { let (a, b) = (dec(15, 1), dec(2, 0)); },
             direct: |m| order_numbers(OrderingOperator::LessOrEqual, OrderedOperands::Decimals(&a, &b), m),
             generated: |m| done(decimal_at_most(&a, &b, m)),
@@ -382,14 +388,14 @@ fn tc_024_tc186_text_and_enum_oracles_agree() {
         }
     }
     // T10 distinct profiles, T11 NFC tuple, T14 non-normalizing tuples.
-    for (left, lp, right, rp, tuple) in [
+    for (left, lp, right, rp, limit_tuple) in [
         ("abc", 1, "abc", 5, [0; 10]),
         (E_ACUTE, 1, E_COMBINING, 1, T11),
         (E_ACUTE, 0, E_COMBINING, 0, T14),
         (E_ACUTE, 5, E_COMBINING, 5, T14),
     ] {
         agree2! {
-            limits: limits(tuple),
+            limits: limits(limit_tuple),
             setup: { let (l, r) = (text(left, TextProfile::ALL[lp]), text(right, TextProfile::ALL[rp])); },
             direct: |m| compare_text(ComparisonOperator::Less, &l, &r, m),
             generated: |m| typed(text_less(&l, &r, m)),
@@ -412,9 +418,9 @@ fn tc_024_tc186_text_and_enum_oracles_agree() {
             for lc in lm {
                 for rc in rm {
                     for (o, compare) in ENUM_COMPARISONS.into_iter().enumerate() {
-                        for tuple in [[u64::MAX; 10], [0; 10]] {
+                        for limit_tuple in [[u64::MAX; 10], [0; 10]] {
                             agree2! {
-                                limits: limits(tuple),
+                                limits: limits(limit_tuple),
                                 setup: {
                                     let left = enum_declaration(ln, lo, lm).unwrap().value(lc).unwrap();
                                     let right = enum_declaration(rn, ro, rm).unwrap().value(rc).unwrap();
@@ -452,16 +458,16 @@ fn tc_024_tc187_quantity_oracles_agree() {
                     limits: UNLIMITED,
                     setup: { let f = fixture(); let (a, b) = (f.q(ratio(ln, ld), name), f.q(ratio(rn, rd), name)); },
                     direct: |m| (
-                        evaluate_quantity(QuantityOperation::Add(&a, &b), m),
-                        evaluate_quantity(QuantityOperation::Subtract(&a, &b), m),
-                        evaluate_quantity(QuantityOperation::Multiply(&a, &b), m),
-                        evaluate_quantity(QuantityOperation::Divide(&a, &b), m),
+                        evaluate_quantity_unit(QuantityOperation::Add(f.resolve(&a), f.resolve(&b)), m),
+                        evaluate_quantity_unit(QuantityOperation::Subtract(f.resolve(&a), f.resolve(&b)), m),
+                        evaluate_quantity_unit(QuantityOperation::Multiply(f.resolve(&a), f.resolve(&b)), m),
+                        evaluate_quantity_unit(QuantityOperation::Divide(f.resolve(&a), f.resolve(&b)), m),
                     ),
                     generated: |m| (
-                        typed(quantity_add(&a, &b, m)),
-                        typed(quantity_subtract(&a, &b, m)),
-                        typed(quantity_multiply(&a, &b, m)),
-                        typed(quantity_divide(&a, &b, m)),
+                        quantity_typed(quantity_add(f.resolve(&a), f.resolve(&b), m)),
+                        quantity_typed(quantity_subtract(f.resolve(&a), f.resolve(&b), m)),
+                        quantity_typed(quantity_multiply(f.resolve(&a), f.resolve(&b), m)),
+                        quantity_typed(quantity_divide(f.resolve(&a), f.resolve(&b), m)),
                     ),
                 };
                 arithmetic += 4;
@@ -469,8 +475,8 @@ fn tc_024_tc187_quantity_oracles_agree() {
                     agree2! {
                         limits: UNLIMITED,
                         setup: { let f = fixture(); let (a, b) = (f.q(ratio(ln, ld), name), f.q(ratio(rn, rd), name)); },
-                        direct: |m| compare_quantity(ComparisonOperator::ALL[o], &a, &b, m),
-                        generated: |m| typed(compare(&a, &b, m)),
+                        direct: |m| compare_quantity(ComparisonOperator::ALL[o], f.resolve(&a), f.resolve(&b), m),
+                        generated: |m| typed(compare(f.resolve(&a), f.resolve(&b), m)),
                     };
                     comparisons += 1;
                 }
@@ -479,8 +485,8 @@ fn tc_024_tc187_quantity_oracles_agree() {
                 agree2! {
                     limits: UNLIMITED,
                     setup: { let f = fixture(); let (a, n) = (f.q(ratio(ln, ld), name), big(exponent)); },
-                    direct: |m| evaluate_quantity(QuantityOperation::Power(&a, &n), m),
-                    generated: |m| typed(quantity_power(&a, &n, m)),
+                    direct: |m| evaluate_quantity_unit(QuantityOperation::Power(f.resolve(&a), &n), m),
+                    generated: |m| quantity_typed(quantity_power(f.resolve(&a), &n, m)),
                 };
                 powers += 1;
             }
@@ -501,12 +507,12 @@ fn tc_024_tc187_quantity_oracles_agree() {
     let mark = vectors_run();
 
     let run = agree_arithmetic(rt::unit_tuple([0; 6]), add, (1, "m"), (1, "s"));
-    assert_ill_typed_without_charge("U03", &run);
+    assert_arithmetic_ill_typed_without_charge("U03", &run);
     let run = agree_arithmetic(rt::unit_tuple([4, 0, 0, 2, 5, 1]), add, (2, "m"), (3, "m"));
-    assert_eq!(*completed(&run, "U19").value(), rt::ratio(5, 1));
+    assert_eq!(*completed(&run, "U19").0.magnitude(), rt::ratio(5, 1));
     let run = agree_arithmetic(rt::unit_tuple([4, 0, 0, 2, 4, 1]), add, (2, "m"), (3, "m"));
     assert_incomplete(
-        &run.0,
+        &arithmetic_outcome(&run),
         rt::LimitKind::WorkUnits,
         4,
         4,
@@ -519,7 +525,7 @@ fn tc_024_tc187_quantity_oracles_agree() {
         (1, "cm"),
         (2, "cm"),
     );
-    assert_eq!(*completed(&run, "U24").value(), rt::ratio(3, 1));
+    assert_eq!(*completed(&run, "U24").0.magnitude(), rt::ratio(3, 1));
     assert!(
         !run.1.contains(&rt::ChargePoint::UnitEdge),
         "U24 charges no edge"
@@ -535,7 +541,10 @@ fn tc_024_tc187_quantity_oracles_agree() {
         (1, "cm"),
         (1, "in"),
     );
-    assert_eq!(*completed(&run, "U28").value(), rt::ratio(127, 500_000));
+    assert_eq!(
+        *completed(&run, "U28").0.magnitude(),
+        rt::ratio(127, 500_000)
+    );
     for (bits, consumed, next) in [(13, 9, "14"), (19, 15, "20")] {
         let run = agree_arithmetic(
             rt::unit_tuple([bits, 0, 2, 2, 11, 1]),
@@ -544,7 +553,7 @@ fn tc_024_tc187_quantity_oracles_agree() {
             (1, "in"),
         );
         assert_incomplete(
-            &run.0,
+            &arithmetic_outcome(&run),
             rt::LimitKind::IntegerBits,
             bits,
             consumed,
@@ -562,7 +571,7 @@ fn tc_024_tc187_quantity_oracles_agree() {
         "18446744073709551616",
     );
     assert_incomplete(
-        &run.0,
+        &arithmetic_outcome(&run),
         rt::LimitKind::IntegerBits,
         64,
         2,
@@ -570,18 +579,18 @@ fn tc_024_tc187_quantity_oracles_agree() {
         rt::ChargePoint::UnitRationalArithmetic,
     );
     let run = agree_power(rt::unit_tuple([1, 0, 0, 1, 4, 1]), (0, "m"), "0");
-    let one = completed(&run, "U21 0^0");
-    assert_eq!(*one.value(), rt::ratio(1, 1));
-    assert!(one.unit().dimension().is_dimensionless());
+    let (one, unit) = completed(&run, "U21 0^0");
+    assert_eq!(*one.magnitude(), rt::ratio(1, 1));
+    assert!(unit.unit().dimension().is_dimensionless());
     let run = agree_power(rt::unit_tuple([1, 0, 0, 1, 1, 0]), (0, "m"), "-1");
     assert!(matches!(
         run.0,
-        Ok(Outcome::Undefined(rt::Undefined::DivisionByZero))
+        Ok((Outcome::Undefined(rt::Undefined::DivisionByZero), _))
     ));
     assert_eq!(run.1, vec![rt::ChargePoint::UnitIdentityRead]);
     let run = agree_power(rt::unit_tuple([1, 0, 0, 1, 0, 0]), (0, "m"), "-1");
     assert_incomplete(
-        &run.0,
+        &arithmetic_outcome(&run),
         rt::LimitKind::WorkUnits,
         0,
         0,
@@ -651,17 +660,19 @@ fn agree_comparison(
     agree2! {
         limits: bounds,
         setup: { let f = fixture(); let (a, b) = (f.qi(left.0, left.1), f.qi(right.0, right.1)); },
-        direct: |m| compare_quantity(operator, &a, &b, m),
-        generated: |m| typed(compare(&a, &b, m)),
+        direct: |m| compare_quantity(operator, f.resolve(&a), f.resolve(&b), m),
+        generated: |m| typed(compare(f.resolve(&a), f.resolve(&b), m)),
     };
     let f = rt::fixture();
     let (a, b) = (f.qi(left.0, left.1), f.qi(right.0, right.1));
-    rt::metered(bounds, |m| rt::compare_quantity(operator, &a, &b, m))
+    rt::metered(bounds, |m| {
+        rt::compare_quantity(operator, f.resolve(&a), f.resolve(&b), m)
+    })
 }
 
 /// The run stopped incomplete with exactly QSpec's record.
-fn assert_incomplete<T: std::fmt::Debug>(
-    result: &Result<Outcome<T>, IllTyped>,
+fn assert_incomplete<T: std::fmt::Debug, E: std::fmt::Debug>(
+    result: &Result<Outcome<T>, E>,
     limit_kind: rt::LimitKind,
     limit: u64,
     consumed: u64,
@@ -701,6 +712,32 @@ fn assert_vectors_since(row: &str, mark: usize, expected: usize) {
 }
 
 type QuantityRun<T> = (Result<Outcome<T>, IllTyped>, Vec<rt::ChargePoint>, Vec<u64>);
+type QuantityArithmetic = Result<(Outcome<Quantity>, IdentifiedUnit), QuantityRefusal>;
+type QuantityArithmeticRun = (QuantityArithmetic, Vec<rt::ChargePoint>, Vec<u64>);
+
+fn quantity_typed(
+    result: Result<(Outcome<Quantity>, IdentifiedUnit), OracleStop>,
+) -> QuantityArithmetic {
+    result.map_err(|stop| match stop {
+        OracleStop::Quantity(cause) => cause,
+        other => panic!("unexpected quantity stop: {other:?}"),
+    })
+}
+
+/// Project the outcome only for the original table's expected-disposition assertion.
+/// Direct/generated agreement above compares the complete paired unit too.
+fn arithmetic_outcome(run: &QuantityArithmeticRun) -> Result<Outcome<Quantity>, QuantityRefusal> {
+    run.0.clone().map(|(outcome, unit)| {
+        if let Outcome::Completed(value) = &outcome {
+            assert_eq!(
+                value.unit(),
+                unit.id(),
+                "result carries its paired owner unit"
+            );
+        }
+        outcome
+    })
+}
 
 #[derive(Clone, Copy)]
 enum Arithmetic {
@@ -715,11 +752,11 @@ impl Arithmetic {
 
     fn direct(
         self,
-        a: &Quantity,
-        b: &Quantity,
+        a: UnitQuantity<'_>,
+        b: UnitQuantity<'_>,
         meter: &mut Meter,
-    ) -> Result<Outcome<Quantity>, IllTyped> {
-        rt::evaluate_quantity(
+    ) -> QuantityArithmetic {
+        rt::evaluate_quantity_unit(
             match self {
                 Self::Add => rt::QuantityOperation::Add(a, b),
                 Self::Subtract => rt::QuantityOperation::Subtract(a, b),
@@ -732,11 +769,11 @@ impl Arithmetic {
 
     fn generated(
         self,
-        a: &Quantity,
-        b: &Quantity,
+        a: UnitQuantity<'_>,
+        b: UnitQuantity<'_>,
         meter: &mut Meter,
-    ) -> Result<Outcome<Quantity>, IllTyped> {
-        typed(match self {
+    ) -> QuantityArithmetic {
+        quantity_typed(match self {
             Self::Add => quantity_add(a, b, meter),
             Self::Subtract => quantity_subtract(a, b, meter),
             Self::Multiply => quantity_multiply(a, b, meter),
@@ -753,41 +790,43 @@ fn agree_arithmetic(
     operation: Arithmetic,
     left: (i64, &str),
     right: (i64, &str),
-) -> QuantityRun<Quantity> {
+) -> QuantityArithmeticRun {
     note_vector();
     agree2! {
         limits: bounds,
         setup: { let f = fixture(); let (a, b) = (f.qi(left.0, left.1), f.qi(right.0, right.1)); },
-        direct: |m| operation.direct(&a, &b, m),
-        generated: |m| operation.generated(&a, &b, m),
+        direct: |m| operation.direct(f.resolve(&a), f.resolve(&b), m),
+        generated: |m| operation.generated(f.resolve(&a), f.resolve(&b), m),
     };
     let f = rt::fixture();
     let (a, b) = (f.qi(left.0, left.1), f.qi(right.0, right.1));
-    let (outcome, charges, consumed) = rt::metered(bounds, |m| operation.direct(&a, &b, m));
+    let (outcome, charges, consumed) = rt::metered(bounds, |m| {
+        operation.direct(f.resolve(&a), f.resolve(&b), m)
+    });
     (outcome, charges, consumed)
 }
 
 /// The power counterpart of [`agree_arithmetic`].
-fn agree_power(bounds: ScalarLimits, base: (i64, &str), exponent: &str) -> QuantityRun<Quantity> {
+fn agree_power(bounds: ScalarLimits, base: (i64, &str), exponent: &str) -> QuantityArithmeticRun {
     note_vector();
     agree2! {
         limits: bounds,
         setup: { let f = fixture(); let (a, n) = (f.qi(base.0, base.1), big(exponent)); },
-        direct: |m| evaluate_quantity(QuantityOperation::Power(&a, &n), m),
-        generated: |m| typed(quantity_power(&a, &n, m)),
+        direct: |m| evaluate_quantity_unit(QuantityOperation::Power(f.resolve(&a), &n), m),
+        generated: |m| quantity_typed(quantity_power(f.resolve(&a), &n, m)),
     };
     let f = rt::fixture();
     let (a, n) = (f.qi(base.0, base.1), rt::big(exponent));
     let (outcome, charges, consumed) = rt::metered(bounds, |m| {
-        rt::evaluate_quantity(rt::QuantityOperation::Power(&a, &n), m)
+        rt::evaluate_quantity_unit(rt::QuantityOperation::Power(f.resolve(&a), &n), m)
     });
     (outcome, charges, consumed)
 }
 
 /// The vector refused `ill_typed` and admitted no charge.
-fn assert_ill_typed_without_charge(row: &str, run: &QuantityRun<Quantity>) {
+fn assert_arithmetic_ill_typed_without_charge(row: &str, run: &QuantityArithmeticRun) {
     assert!(
-        matches!(run.0, Err(IllTyped { .. })),
+        matches!(run.0, Err(QuantityRefusal::IllTyped(IllTyped { .. }))),
         "{row}: expected refused ill_typed, got {:?}",
         run.0
     );
@@ -802,8 +841,8 @@ fn assert_ill_typed_without_charge(row: &str, run: &QuantityRun<Quantity>) {
 }
 
 /// The ascending compound-unit terms of a quantity, by base-unit name.
-fn compound_terms(quantity: &Quantity) -> Vec<(rt::NodeKey, Integer)> {
-    match quantity.unit() {
+fn compound_terms(unit: &IdentifiedUnit) -> Vec<(rt::NodeKey, Integer)> {
+    match unit.unit() {
         rt::QuantityUnit::Compound(unit) => unit
             .terms()
             .map(|(key, exponent)| (key, exponent.clone()))
@@ -821,9 +860,9 @@ fn expected_terms(f: &rt::Fixture, terms: &[(&str, i64)]) -> Vec<(rt::NodeKey, I
     expected
 }
 
-fn completed(run: &QuantityRun<Quantity>, row: &str) -> Quantity {
+fn completed(run: &QuantityArithmeticRun, row: &str) -> (Quantity, IdentifiedUnit) {
     match &run.0 {
-        Ok(Outcome::Completed(quantity)) => quantity.clone(),
+        Ok((Outcome::Completed(quantity), unit)) => (quantity.clone(), unit.clone()),
         other => panic!("{row}: expected a completed quantity, got {other:?}"),
     }
 }
@@ -838,31 +877,31 @@ fn tc_024_tc187_u12_compound_unit_products_agree() {
     let mark = vectors_run();
 
     let product = agree_arithmetic(unlimited, Arithmetic::Multiply, (2, "m"), (3, "s"));
-    let quantity = completed(&product, "2 m * 3 s");
-    assert_eq!(*quantity.value(), rt::ratio(6, 1));
+    let (quantity, unit) = completed(&product, "2 m * 3 s");
+    assert_eq!(*quantity.magnitude(), rt::ratio(6, 1));
     assert_eq!(
-        compound_terms(&quantity),
+        compound_terms(&unit),
         expected_terms(&f, &[("m", 1), ("s", 1)])
     );
 
     let quotient = agree_arithmetic(unlimited, Arithmetic::Divide, (6, "m"), (2, "s"));
-    let quantity = completed(&quotient, "6 m / 2 s");
-    assert_eq!(*quantity.value(), rt::ratio(3, 1));
+    let (quantity, unit) = completed(&quotient, "6 m / 2 s");
+    assert_eq!(*quantity.magnitude(), rt::ratio(3, 1));
     assert_eq!(
-        compound_terms(&quantity),
+        compound_terms(&unit),
         expected_terms(&f, &[("m", 1), ("s", -1)])
     );
 
     let square = agree_power(unlimited, (2, "m"), "2");
-    let quantity = completed(&square, "(2 m)^2");
-    assert_eq!(*quantity.value(), rt::ratio(4, 1));
-    assert_eq!(compound_terms(&quantity), expected_terms(&f, &[("m", 2)]));
+    let (quantity, unit) = completed(&square, "(2 m)^2");
+    assert_eq!(*quantity.magnitude(), rt::ratio(4, 1));
+    assert_eq!(compound_terms(&unit), expected_terms(&f, &[("m", 2)]));
 
     let cancelled = agree_arithmetic(unlimited, Arithmetic::Divide, (5, "m"), (5, "m"));
-    let quantity = completed(&cancelled, "5 m / 5 m");
-    assert_eq!(*quantity.value(), rt::ratio(1, 1));
-    assert!(quantity.unit().dimension().is_dimensionless());
-    assert!(compound_terms(&quantity).is_empty());
+    let (quantity, unit) = completed(&cancelled, "5 m / 5 m");
+    assert_eq!(*quantity.magnitude(), rt::ratio(1, 1));
+    assert!(unit.unit().dimension().is_dimensionless());
+    assert!(compound_terms(&unit).is_empty());
     assert_vectors_since("TC-187 U12 products", mark, 4);
 }
 
@@ -872,10 +911,8 @@ fn tc_024_tc187_u12_compound_unit_products_agree() {
 #[test]
 fn tc_024_tc187_u02_dimension_normalization_agrees() {
     let f = rt::fixture();
-    let (l, t) = (
-        f.graph.dimension(f.key("L")).expect("length dimension"),
-        f.graph.dimension(f.key("T")).expect("time dimension"),
-    );
+    let (l, t) = (f.unit("m"), f.unit("s"));
+    let (l, t) = (l.unit().dimension(), t.unit().dimension());
     let normalized = l.multiply(t).divide(t);
     assert_eq!(&normalized, l);
     assert_eq!(
@@ -896,17 +933,25 @@ fn tc_024_tc187_u02_dimension_normalization_agrees() {
         limits: UNLIMITED,
         setup: { let f = fixture(); let (a, b) = (f.qi(1, "m"), f.qi(1, "s")); },
         direct: |m| {
-            let product = evaluate_quantity(QuantityOperation::Multiply(&a, &b), m);
+            let product = evaluate_quantity_unit(QuantityOperation::Multiply(f.resolve(&a), f.resolve(&b)), m);
             let quotient = match &product {
-                Ok(Outcome::Completed(p)) => Some(evaluate_quantity(QuantityOperation::Divide(p, &b), m)),
+                Ok((Outcome::Completed(p), unit)) => {
+                    let mut scope = UnitScope::new(&f.units);
+                    scope.form(unit.clone());
+                    Some(evaluate_quantity_unit(QuantityOperation::Divide(scope.resolve(p).unwrap(), scope.resolve(&b).unwrap()), m))
+                }
                 _ => None,
             };
             (product, quotient)
         },
         generated: |m| {
-            let product = typed(quantity_multiply(&a, &b, m));
+            let product = quantity_typed(quantity_multiply(f.resolve(&a), f.resolve(&b), m));
             let quotient = match &product {
-                Ok(Outcome::Completed(p)) => Some(typed(quantity_divide(p, &b, m))),
+                Ok((Outcome::Completed(p), unit)) => {
+                    let mut scope = UnitScope::new(&f.units);
+                    scope.form(unit.clone());
+                    Some(quantity_typed(quantity_divide(scope.resolve(p).unwrap(), scope.resolve(&b).unwrap(), m)))
+                }
                 _ => None,
             };
             (product, quotient)
@@ -914,26 +959,37 @@ fn tc_024_tc187_u02_dimension_normalization_agrees() {
     };
     let (a, b) = (f.qi(1, "m"), f.qi(1, "s"));
     let ((product, quotient), _, _) = rt::metered(rt::UNLIMITED, |m| {
-        let product = rt::evaluate_quantity(rt::QuantityOperation::Multiply(&a, &b), m);
+        let product = rt::evaluate_quantity_unit(
+            rt::QuantityOperation::Multiply(f.resolve(&a), f.resolve(&b)),
+            m,
+        );
         let quotient = match &product {
-            Ok(Outcome::Completed(p)) => Some(rt::evaluate_quantity(
-                rt::QuantityOperation::Divide(p, &b),
-                m,
-            )),
+            Ok((Outcome::Completed(p), unit)) => {
+                let mut scope = rt::UnitScope::new(&f.units);
+                scope.form(unit.clone());
+                Some(rt::evaluate_quantity_unit(
+                    rt::QuantityOperation::Divide(
+                        scope.resolve(p).unwrap(),
+                        scope.resolve(&b).unwrap(),
+                    ),
+                    m,
+                ))
+            }
             _ => None,
         };
         (product, quotient)
     });
-    assert!(matches!(product, Ok(Outcome::Completed(_))));
-    let Some(Ok(Outcome::Completed(quantity))) = quotient else {
+    assert!(matches!(product, Ok((Outcome::Completed(_), _))));
+    let Some(Ok((Outcome::Completed(quantity), unit))) = quotient else {
         panic!("(1 m * 1 s) / 1 s must complete");
     };
-    assert_eq!(quantity.unit().dimension(), l);
-    assert_eq!(compound_terms(&quantity), expected_terms(&f, &[("m", 1)]));
+    assert_eq!(quantity.unit(), unit.id());
+    assert_eq!(unit.unit().dimension(), l);
+    assert_eq!(compound_terms(&unit), expected_terms(&f, &[("m", 1)]));
 
     let power = agree_power(rt::UNLIMITED, (1, "m"), "0");
-    let quantity = completed(&power, "(1 m)^0");
-    assert!(quantity.unit().dimension().is_dimensionless());
+    let (_quantity, unit) = completed(&power, "(1 m)^0");
+    assert!(unit.unit().dimension().is_dimensionless());
     assert_vectors_since("TC-187 U02 normalization", mark, 2);
 }
 
@@ -950,13 +1006,13 @@ fn tc_024_tc187_u05_affine_point_arithmetic_is_refused_alike() {
     ] {
         for operation in Arithmetic::ALL {
             let run = agree_arithmetic(rt::UNLIMITED, operation, left, right);
-            assert_ill_typed_without_charge("U05 binary", &run);
+            assert_arithmetic_ill_typed_without_charge("U05 binary", &run);
         }
     }
     for unit in ["degC", "degF"] {
         for exponent in ["-1", "0", "2"] {
             let run = agree_power(rt::UNLIMITED, (3, unit), exponent);
-            assert_ill_typed_without_charge("U05 power", &run);
+            assert_arithmetic_ill_typed_without_charge("U05 power", &run);
         }
     }
     assert_vectors_since("TC-187 U05 affine points", mark, 3 * 4 + 2 * 3);
@@ -969,15 +1025,15 @@ fn tc_024_tc187_u05_affine_point_arithmetic_is_refused_alike() {
 fn tc_024_tc187_u09_a_foreign_dimension_key_is_ill_typed() {
     let mark = vectors_run();
     let run = agree_arithmetic(rt::UNLIMITED, Arithmetic::Add, (1, "m"), (1, "m_foreign"));
-    assert_ill_typed_without_charge("U09", &run);
-    let Err(refusal) = run.0 else {
+    assert_arithmetic_ill_typed_without_charge("U09", &run);
+    let Err(QuantityRefusal::IllTyped(refusal)) = run.0 else {
         unreachable!("asserted above")
     };
     assert_eq!(refusal.cause, rt::IllTypedCause::IncompatibleDimensions);
     assert_eq!(IllTyped::CODE, "ill_typed");
     // The control: the same shape under the one `L` key is accepted.
     let control = agree_arithmetic(rt::UNLIMITED, Arithmetic::Add, (1, "m"), (1, "m"));
-    assert!(matches!(control.0, Ok(Outcome::Completed(_))));
+    assert!(matches!(control.0, Ok((Outcome::Completed(_), _))));
     assert_vectors_since("TC-187 U09 foreign dimension key", mark, 2);
 }
 
@@ -996,7 +1052,7 @@ fn tc_024_tc187_u14_static_refusals_charge_nothing() {
         (Arithmetic::Add, (1, "cm"), (1, "m")),
     ] {
         let run = agree_arithmetic(zero, operation, left, right);
-        assert_ill_typed_without_charge("U14", &run);
+        assert_arithmetic_ill_typed_without_charge("U14", &run);
     }
     assert_vectors_since("TC-187 U14 static refusals", mark, 5);
 }
@@ -1009,9 +1065,9 @@ fn tc_024_tc187_u20_composed_offsets_decide_affinity() {
     let zero = rt::unit_tuple([0; 6]);
     let mark = vectors_run();
     let sum = agree_arithmetic(zero, Arithmetic::Add, (1, "u1"), (2, "u1"));
-    assert_ill_typed_without_charge("U20 u1 sum", &sum);
+    assert_arithmetic_ill_typed_without_charge("U20 u1 sum", &sum);
     let product = agree_arithmetic(zero, Arithmetic::Multiply, (1, "u3"), (1, "m"));
-    assert_ill_typed_without_charge("U20 u3 product", &product);
+    assert_arithmetic_ill_typed_without_charge("U20 u3 product", &product);
 
     let exact = agree_arithmetic(
         rt::unit_tuple([4, 0, 0, 2, 5, 1]),
@@ -1019,10 +1075,11 @@ fn tc_024_tc187_u20_composed_offsets_decide_affinity() {
         (1, "u2"),
         (2, "u2"),
     );
-    let quantity = completed(&exact, "U20 u2 sum");
-    assert_eq!(*quantity.value(), rt::ratio(3, 1));
+    let (quantity, unit) = completed(&exact, "U20 u2 sum");
+    assert_eq!(*quantity.magnitude(), rt::ratio(3, 1));
     let f = rt::fixture();
-    assert_eq!(quantity.unit(), &f.unit("u2"));
+    assert_eq!(quantity.unit(), f.unit("u2").id());
+    assert_eq!(unit, f.unit("u2"));
     assert!(
         !exact.1.contains(&rt::ChargePoint::UnitEdge),
         "u2 is not affine: no edge is charged"
@@ -1044,7 +1101,7 @@ fn tc_024_tc187_u27_division_by_zero_precedes_every_edge() {
     );
     assert!(matches!(
         undefined.0,
-        Ok(Outcome::Undefined(rt::Undefined::DivisionByZero))
+        Ok((Outcome::Undefined(rt::Undefined::DivisionByZero), _))
     ));
     assert_eq!(
         undefined.1,
@@ -1060,7 +1117,7 @@ fn tc_024_tc187_u27_division_by_zero_precedes_every_edge() {
         (1, "cm"),
         (0, "cm"),
     );
-    let Ok(Outcome::Incomplete(incomplete)) = &stopped.0 else {
+    let Ok((Outcome::Incomplete(incomplete), _)) = &stopped.0 else {
         panic!(
             "U27 under one work unit must be incomplete, got {:?}",
             stopped.0
@@ -1087,25 +1144,29 @@ fn admission_refusal(
 }
 
 fn node(n: u8) -> rt::NodeKey {
-    rt::NodeKey::from_hex(&format!("{n:064x}")).expect("a 64-digit hex key")
+    let mut bytes = [0; 32];
+    bytes[31] = n;
+    rt::NodeKey::from_digest(bytes)
 }
 
 fn declaration(
     dimension: rt::NodeKey,
     target: Option<rt::NodeKey>,
     scale: rt::Rational,
-) -> rt::UnitDeclaration {
-    rt::UnitDeclaration {
-        dimension,
-        target,
+) -> rt::UnitNode {
+    rt::UnitNode::checked(
+        *dimension.as_bytes(),
+        target.map(|key| *key.as_bytes()),
         scale,
-        offset: rt::ratio(0, 1),
-    }
+        rt::ratio(0, 1),
+        rt::NominalDeclaration::default(),
+    )
+    .unwrap()
 }
 
 /// TC-187 U06 and U11: the generated oracles take an already admitted unit graph, so these rows
-/// have no generated oracle; they run against the same graph admission every agreement vector
-/// builds its fixture through. A zero scale and each broken topology of the `L` graph is refused
+/// have no generated oracle; they exercise QSV's public low-level graph boundary separately
+/// from the compiler-admitted named fixtures. A zero scale and each broken topology of the `L` graph is refused
 /// `invalid_semantic_graph`, with its typed cause, before a quantity can exist.
 #[trace("FR-014-AC-6", "TC-024")]
 #[test]
@@ -1127,47 +1188,58 @@ fn tc_024_tc187_u06_u11_unit_graph_admission_refuses_each_malformed_graph() {
     let cause = admission_refusal(rt::admit_graph(&two_roots).map(|fixture| fixture.graph));
     assert_eq!(cause, rt::SemanticGraphCause::DuplicateRoot);
 
-    // U11, built from raw node keys, because content-hashed fixture keys cannot form a cycle,
+    // U11 uses arbitrary test labels at the low-level boundary to form cycles,
     // omit a root that a target needs, or name a target that does not exist.
     let (length, time) = (node(1), node(2));
     let (a, b, root) = (node(10), node(11), node(12));
-    let dimensions = || [(length, vec![]), (time, vec![])];
+    let dimensions = || {
+        std::collections::BTreeMap::from([
+            (
+                length,
+                rt::DimensionNode::checked(vec![], rt::NominalDeclaration::default()).unwrap(),
+            ),
+            (
+                time,
+                rt::DimensionNode::checked(vec![], rt::NominalDeclaration::default()).unwrap(),
+            ),
+        ])
+    };
     let one = || rt::ratio(1, 1);
 
-    let cause = admission_refusal(rt::UnitGraph::admit(
-        dimensions(),
-        [
+    let cause = admission_refusal(rt::UnitGraph::from_checked_nodes(
+        &dimensions(),
+        &std::collections::BTreeMap::from([
             (a, declaration(length, Some(b), one())),
             (b, declaration(length, Some(a), one())),
-        ],
+        ]),
     ));
     assert_eq!(cause, rt::SemanticGraphCause::MissingRoot);
 
-    let cause = admission_refusal(rt::UnitGraph::admit(
-        dimensions(),
-        [
+    let cause = admission_refusal(rt::UnitGraph::from_checked_nodes(
+        &dimensions(),
+        &std::collections::BTreeMap::from([
             (root, declaration(length, None, one())),
             (a, declaration(length, Some(b), one())),
-        ],
+        ]),
     ));
     assert_eq!(cause, rt::SemanticGraphCause::UnknownTarget);
 
-    let cause = admission_refusal(rt::UnitGraph::admit(
-        dimensions(),
-        [
+    let cause = admission_refusal(rt::UnitGraph::from_checked_nodes(
+        &dimensions(),
+        &std::collections::BTreeMap::from([
             (root, declaration(time, None, one())),
             (b, declaration(length, None, one())),
             (a, declaration(length, Some(root), one())),
-        ],
+        ]),
     ));
     assert_eq!(cause, rt::SemanticGraphCause::CrossDimensionTarget);
 
-    let cause = admission_refusal(rt::UnitGraph::admit(
-        dimensions(),
-        [
+    let cause = admission_refusal(rt::UnitGraph::from_checked_nodes(
+        &dimensions(),
+        &std::collections::BTreeMap::from([
             (root, declaration(length, None, one())),
             (a, declaration(length, Some(a), one())),
-        ],
+        ]),
     ));
     assert_eq!(cause, rt::SemanticGraphCause::TargetCycle);
 }
@@ -1300,7 +1372,7 @@ fn tc_024_tc193_ieee_oracles_agree() {
 #[trace("FR-014-AC-9", "TC-024")]
 #[test]
 fn tc_024_operand_width_mismatch_is_a_typed_stop_before_any_charge() {
-    use quire_contract_runtime::exact::{IeeeValue, Meter, ScalarLimits};
+    use quire_exact::{IeeeValue, Meter, ScalarLimits};
     let mut meter = Meter::new(ScalarLimits {
         integer_bits: u64::MAX,
         decimal_digits: u64::MAX,
@@ -1421,46 +1493,58 @@ fn tc_024_no_vector_here_has_an_authority_leg_and_all_agree_with_direct_runtime(
 
 /// Adapt the direct runtime conversion outcome to the oracle's quantity result.
 fn direct_conversion(
-    source: &Quantity,
-    unit: &rt::QuantityUnit,
+    source: UnitQuantity<'_>,
+    unit: &IdentifiedUnit,
     meter: &mut Meter,
 ) -> Result<Outcome<Quantity>, IllTyped> {
-    rt::convert_quantity(source, unit, &rt::QuantityTarget::Exact, meter).map(|outcome| {
+    rt::convert_quantity(source, unit.unit(), &rt::QuantityTarget::Exact, meter).map(|outcome| {
         match outcome {
             Outcome::Completed(converted) => {
                 let rt::ConvertedValue::Exact(value) = converted.value() else {
                     panic!("exact target")
                 };
-                Outcome::Completed(Quantity::new(value.clone(), converted.unit().clone()))
+                Outcome::Completed(Quantity::new(value.clone(), unit.id()))
             }
             Outcome::Undefined(reason) => Outcome::Undefined(reason),
             Outcome::Refused(reason) => Outcome::Refused(reason),
             Outcome::Incomplete(reason) => Outcome::Incomplete(reason),
-            _ => panic!("unknown outcome"),
         }
     })
 }
 
 fn conversion_fixture() -> rt::Fixture {
-    rt::admit_graph(&support::GraphSpec::conversions()).expect("conversion graph")
+    static FIXTURE: std::sync::OnceLock<rt::Fixture> = std::sync::OnceLock::new();
+    FIXTURE
+        .get_or_init(|| rt::named_fixture(&support::GraphSpec::conversions()))
+        .clone()
 }
 
-fn compound_source(f: &rt::Fixture, magnitude: i64, terms: &[(&str, i64)]) -> Quantity {
-    let mut terms = terms
-        .iter()
-        .map(|(unit, exponent)| (f.key(unit), rt::int(i128::from(*exponent))))
-        .collect::<Vec<_>>();
-    terms.sort_by_key(|(key, _)| *key);
-    Quantity::new(
-        rt::ratio(magnitude, 1),
-        rt::QuantityUnit::Compound(f.graph.compound_unit(&terms).unwrap()),
-    )
+fn compound_source(f: &mut rt::Fixture, magnitude: i64, terms: &[(&str, i64)]) -> Quantity {
+    use quire_semantic_value::quantity::{result_unit, UnitOperation};
+    let root = f.unit("m");
+    let mut unit = result_unit(UnitOperation::Divide, root.unit(), root.unit()).unwrap();
+    for (name, exponent) in terms {
+        let operand = f.unit(name);
+        let operation = if *exponent < 0 {
+            UnitOperation::Divide
+        } else {
+            UnitOperation::Multiply
+        };
+        for _ in 0..exponent.unsigned_abs() {
+            unit = result_unit(operation, &unit, operand.unit()).unwrap();
+        }
+    }
+    let id = f
+        .units
+        .insert(unit)
+        .expect("record owner-identified compound unit");
+    Quantity::new(rt::ratio(magnitude, 1), id)
 }
 
 fn agree_conversion(
     bounds: ScalarLimits,
-    source: &Quantity,
-    unit: &rt::QuantityUnit,
+    source: UnitQuantity<'_>,
+    unit: &IdentifiedUnit,
 ) -> QuantityRun<Quantity> {
     note_vector();
     agree2! {
@@ -1477,7 +1561,7 @@ fn agree_conversion(
 #[test]
 fn exact_quantity_conversion_vectors_agree() {
     let before = vectors_run();
-    let f = conversion_fixture();
+    let mut f = conversion_fixture();
     for (row, source, target, bounds, expected) in [
         (
             "U01",
@@ -1530,28 +1614,28 @@ fn exact_quantity_conversion_vectors_agree() {
         ),
         (
             "U22 m2",
-            compound_source(&f, 4, &[("m", 2)]),
+            compound_source(&mut f, 4, &[("m", 2)]),
             "m2",
             rt::unit_tuple([3, 0, 0, 1, 3, 1]),
             Some(rt::ratio(4, 1)),
         ),
         (
             "U22 cm2",
-            compound_source(&f, 4, &[("m", 2)]),
+            compound_source(&mut f, 4, &[("m", 2)]),
             "cm2",
             rt::unit_tuple([17, 0, 1, 1, 6, 1]),
             Some(rt::ratio(40000, 1)),
         ),
         (
             "U22 denied bits",
-            compound_source(&f, 4, &[("m", 2)]),
+            compound_source(&mut f, 4, &[("m", 2)]),
             "cm2",
             rt::unit_tuple([16, 0, 1, 1, 6, 1]),
             None,
         ),
         (
             "U25 second",
-            compound_source(&f, 1, &[("kg", 1), ("m", 2), ("s", -2)]),
+            compound_source(&mut f, 1, &[("kg", 1), ("m", 2), ("s", -2)]),
             "J",
             rt::unit_tuple([1, 0, 0, 1, 3, 1]),
             Some(rt::ratio(1, 1)),
@@ -1572,11 +1656,11 @@ fn exact_quantity_conversion_vectors_agree() {
         ),
     ] {
         let unit = f.unit(target);
-        let run = agree_conversion(bounds, &source, &unit);
+        let run = agree_conversion(bounds, f.resolve(&source), &unit);
         if let Some(value) = expected {
             assert_eq!(
                 run.0,
-                Ok(Outcome::Completed(Quantity::new(value, unit))),
+                Ok(Outcome::Completed(Quantity::new(value, unit.id()))),
                 "{row}"
             );
         } else {
@@ -1616,23 +1700,45 @@ fn exact_quantity_conversion_vectors_agree() {
     agree2! {
         limits: rt::UNLIMITED,
         setup: {},
-        direct: |m| match direct_conversion(&source, &unit, m) {
-            Ok(Outcome::Completed(converted)) => rt::evaluate_quantity(rt::QuantityOperation::Add(&converted, &one), m),
-            other => other,
+        direct: |m| {
+            let conversion = direct_conversion(f.resolve(&source), &unit, m);
+            let addition = match &conversion {
+                Ok(Outcome::Completed(converted)) => {
+                    let mut scope = rt::UnitScope::new(&f.units);
+                    scope.form(unit.clone());
+                    Some(rt::evaluate_quantity_unit(rt::QuantityOperation::Add(scope.resolve(converted).unwrap(), scope.resolve(&one).unwrap()), m))
+                }
+                _ => None,
+            };
+            (conversion, addition)
         },
-        generated: |m| match typed(quantity_convert(&source, &unit, m)) {
-            Ok(Outcome::Completed(converted)) => typed(quantity_add(&converted, &one, m)),
-            other => other,
+        generated: |m| {
+            let conversion = typed(quantity_convert(f.resolve(&source), &unit, m));
+            let addition = match &conversion {
+                Ok(Outcome::Completed(converted)) => {
+                    let mut scope = rt::UnitScope::new(&f.units);
+                    scope.form(unit.clone());
+                    Some(quantity_typed(quantity_add(scope.resolve(converted).unwrap(), scope.resolve(&one).unwrap(), m)))
+                }
+                _ => None,
+            };
+            (conversion, addition)
         },
     };
-    let converted = quantity_convert(&source, &unit, &mut Meter::new(rt::UNLIMITED))
+    let converted = quantity_convert(f.resolve(&source), &unit, &mut Meter::new(rt::UNLIMITED))
         .unwrap()
         .completed()
         .unwrap();
-    assert_eq!(
-        quantity_add(&converted, &one, &mut Meter::new(rt::UNLIMITED)).unwrap(),
-        Outcome::Completed(f.q(rt::ratio(7, 2), "m"))
-    );
+    let mut scope = rt::UnitScope::new(&f.units);
+    scope.form(unit.clone());
+    let (sum, result_unit) = quantity_add(
+        scope.resolve(&converted).unwrap(),
+        scope.resolve(&one).unwrap(),
+        &mut Meter::new(rt::UNLIMITED),
+    )
+    .unwrap();
+    assert_eq!(sum, Outcome::Completed(f.q(rt::ratio(7, 2), "m")));
+    assert_eq!(result_unit, unit);
     assert_ne!(
         f.unit("m_alias"),
         f.unit("m"),
@@ -1640,7 +1746,7 @@ fn exact_quantity_conversion_vectors_agree() {
     );
     let final_denial = agree_conversion(
         rt::unit_tuple([8, 0, 1, 1, 6, 0]),
-        &f.qi(100, "cm"),
+        f.resolve(&f.qi(100, "cm")),
         &f.unit("m"),
     );
     assert_incomplete(
@@ -1654,7 +1760,7 @@ fn exact_quantity_conversion_vectors_agree() {
     let unit = f.unit("m");
     let source = f.qi(100, "cm");
     let denied = rt::denials(rt::unit_tuple([8, 0, 1, 1, 6, 1]), |m| {
-        typed(quantity_convert(&source, &unit, m))
+        typed(quantity_convert(f.resolve(&source), &unit, m))
     });
     let result_units_index = rt::LimitKind::ALL
         .iter()
@@ -1673,19 +1779,23 @@ fn exact_quantity_conversion_vectors_agree() {
 #[test]
 fn quantity_conversion_ill_typed_preserves_meter() {
     let before = vectors_run();
-    let f = conversion_fixture();
+    let mut f = conversion_fixture();
     for (row, source, target) in [
         ("m to s", f.qi(1, "m"), "s"),
         ("U09", f.qi(1, "m_foreign"), "m"),
         ("U22 nominal", f.qi(1, "N_m"), "J"),
-        ("compound to m", compound_source(&f, 4, &[("m", 2)]), "m"),
+        (
+            "compound to m",
+            compound_source(&mut f, 4, &[("m", 2)]),
+            "m",
+        ),
     ] {
         let unit = f.unit(target);
-        let run = agree_conversion(rt::UNLIMITED, &source, &unit);
+        let run = agree_conversion(rt::UNLIMITED, f.resolve(&source), &unit);
         assert_ill_typed_without_charge(row, &run);
         let mut meter = Meter::new(rt::UNLIMITED);
         let seed = f.qi(100, "cm");
-        let _ = quantity_convert(&seed, &f.unit("m"), &mut meter).expect("seed");
+        let _ = quantity_convert(f.resolve(&seed), &f.unit("m"), &mut meter).expect("seed");
         let baseline = (
             meter.admitted_charges().to_vec(),
             rt::LimitKind::ALL
@@ -1694,7 +1804,7 @@ fn quantity_conversion_ill_typed_preserves_meter() {
                 .collect::<Vec<_>>(),
         );
         assert!(matches!(
-            quantity_convert(&source, &unit, &mut meter),
+            quantity_convert(f.resolve(&source), &unit, &mut meter),
             Err(OracleStop::IllTyped(_))
         ));
         assert_eq!(
@@ -1711,11 +1821,24 @@ fn quantity_conversion_ill_typed_preserves_meter() {
     assert_eq!(vectors_run() - before, 4);
 }
 
+fn assert_ill_typed_without_charge(row: &str, run: &QuantityRun<Quantity>) {
+    assert!(
+        matches!(run.0, Err(IllTyped { .. })),
+        "{row}: expected typed refusal: {:?}",
+        run.0
+    );
+    assert!(run.1.is_empty(), "{row}: no charge on refusal");
+    assert!(
+        run.2.iter().all(|value| *value == 0),
+        "{row}: unchanged counters"
+    );
+}
+
 /// A test-only faulty adapter adds arithmetic charges after an incomplete conversion,
 /// then returns the original outcome without retaining another result.
 fn conversion_with_incomplete_meter_mutation(
-    source: &Quantity,
-    unit: &rt::QuantityUnit,
+    source: UnitQuantity<'_>,
+    unit: &IdentifiedUnit,
     meter: &mut Meter,
 ) -> Result<Outcome<Quantity>, IllTyped> {
     let outcome = typed(quantity_convert(source, unit, meter));
@@ -1728,7 +1851,9 @@ fn conversion_with_incomplete_meter_mutation(
                 Some(&zero),
                 meter,
             ),
-            Outcome::Refused(rt::Refusal::IntegerOutOfDomain)
+            Outcome::Refused(rt::Refusal::IntegerOutOfDomain {
+                target: Box::new(zero.clone())
+            })
         );
     }
     outcome
@@ -1745,18 +1870,20 @@ fn denied_conversion_agreement_detects_non_result_meter_mutation() {
     let unit = f.unit("m");
     assert_eq!(
         rt::metered(rt::UNLIMITED, |meter| direct_conversion(
-            &source, &unit, meter
+            f.resolve(&source),
+            &unit,
+            meter
         )),
         rt::metered(rt::UNLIMITED, |meter| {
-            conversion_with_incomplete_meter_mutation(&source, &unit, meter)
+            conversion_with_incomplete_meter_mutation(f.resolve(&source), &unit, meter)
         }),
         "the faulty adapter changes only incomplete runs"
     );
     let direct = rt::denials(rt::UNLIMITED, |meter| {
-        direct_conversion(&source, &unit, meter)
+        direct_conversion(f.resolve(&source), &unit, meter)
     });
     let mutated = rt::denials(rt::UNLIMITED, |meter| {
-        conversion_with_incomplete_meter_mutation(&source, &unit, meter)
+        conversion_with_incomplete_meter_mutation(f.resolve(&source), &unit, meter)
     });
     assert!(!direct.is_empty(), "the control must exercise denied runs");
     let result_units_index = rt::LimitKind::ALL
@@ -1793,7 +1920,97 @@ fn denied_conversion_agreement_detects_non_result_meter_mutation() {
     agree2! {
         limits: rt::UNLIMITED,
         setup: {},
-        direct: |meter| direct_conversion(&source, &unit, meter),
-        generated: |meter| conversion_with_incomplete_meter_mutation(&source, &unit, meter),
+        direct: |meter| direct_conversion(f.resolve(&source), &unit, meter),
+        generated: |meter| conversion_with_incomplete_meter_mutation(f.resolve(&source), &unit, meter),
     };
+}
+
+/// AC52's paired carrier is retained on stops and feeds later owner-resolved operations.
+#[trace("FR-014-AC-52", "TC-024")]
+#[test]
+fn quantity_paired_result_units_survive_stops_and_feed_following_operations() {
+    let f = rt::fixture();
+    let a = f.qi(2, "m");
+    let b = f.qi(3, "s");
+    let mut stopped_meter = Meter::new(rt::unit_tuple([0; 6]));
+    let stopped = quantity_typed(quantity_multiply(
+        f.resolve(&a),
+        f.resolve(&b),
+        &mut stopped_meter,
+    ))
+    .unwrap();
+    let mut reference_meter = Meter::new(rt::unit_tuple([0; 6]));
+    let reference = rt::evaluate_quantity_unit(
+        rt::QuantityOperation::Multiply(f.resolve(&a), f.resolve(&b)),
+        &mut reference_meter,
+    )
+    .unwrap();
+    assert_eq!(
+        stopped, reference,
+        "stopped result retains the exact owner identified unit"
+    );
+    assert!(matches!(stopped.0, Outcome::Incomplete(_)));
+    assert_eq!(
+        stopped_meter.admitted_charges(),
+        reference_meter.admitted_charges()
+    );
+    for kind in rt::LimitKind::ALL {
+        assert_eq!(stopped_meter.consumed(kind), reference_meter.consumed(kind));
+    }
+
+    let mut scope = rt::UnitScope::new(&f.units);
+    let mut meter = Meter::new(rt::UNLIMITED);
+    let (product, product_unit) = quantity_typed(quantity_multiply(
+        scope.resolve(&a).unwrap(),
+        scope.resolve(&b).unwrap(),
+        &mut meter,
+    ))
+    .unwrap();
+    let product = product.completed().expect("genuine product completes");
+    assert_eq!(product.unit(), product_unit.id());
+    assert!(
+        scope.resolve(&product).is_none(),
+        "the compound result needs its returned metadata"
+    );
+    scope.form(product_unit);
+    let (quotient, quotient_unit) = quantity_typed(quantity_divide(
+        scope.resolve(&product).unwrap(),
+        scope.resolve(&b).unwrap(),
+        &mut meter,
+    ))
+    .unwrap();
+    let quotient = quotient.completed().unwrap();
+    assert_eq!(*quotient.magnitude(), rt::ratio(2, 1));
+    assert_eq!(quotient.unit(), quotient_unit.id());
+    scope.form(quotient_unit);
+    let (square, square_unit) = quantity_typed(quantity_power(
+        scope.resolve(&quotient).unwrap(),
+        &rt::int(2),
+        &mut meter,
+    ))
+    .unwrap();
+    let square = square.completed().unwrap();
+    assert_eq!(*square.magnitude(), rt::ratio(4, 1));
+    assert_eq!(square.unit(), square_unit.id());
+    scope.form(square_unit);
+    assert!(scope.resolve(&square).is_some());
+
+    let before = (
+        meter.admitted_charges().to_vec(),
+        rt::LimitKind::ALL.map(|kind| meter.consumed(kind)),
+    );
+    let cause = quantity_typed(quantity_add(f.resolve(&a), f.resolve(&b), &mut meter)).unwrap_err();
+    assert_eq!(
+        cause,
+        QuantityRefusal::IllTyped(IllTyped {
+            cause: rt::IllTypedCause::IncompatibleDimensions
+        })
+    );
+    assert_eq!(
+        before,
+        (
+            meter.admitted_charges().to_vec(),
+            rt::LimitKind::ALL.map(|kind| meter.consumed(kind))
+        )
+    );
 }

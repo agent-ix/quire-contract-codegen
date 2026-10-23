@@ -1445,6 +1445,7 @@ dependencies = [
  "quire-contract-model",
  "quire-contract-runtime",
  "quire-exact",
+ "quire-semantic-value",
  "quire-verification-contracts",
  "quote",
  "rustix",
@@ -1491,13 +1492,14 @@ dependencies = [
 [[package]]
 name = "quire-contract-runtime"
 version = "0.1.0"
-source = "git+https://github.com/agent-ix/quire-contract-runtime?branch=main#3cc88c480d4efe5179fe91acf4634def5d2d82fd"
+source = "git+https://github.com/agent-ix/quire-contract-runtime?branch=main#a60c508f3a2af230aeb51af97bdf549cd5fffa01"
 dependencies = [
  "num-bigint",
  "num-integer",
  "num-traits",
  "proptest",
  "quire-exact",
+ "quire-semantic-value",
  "unicode-normalization",
 ]
 
