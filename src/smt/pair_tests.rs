@@ -244,6 +244,19 @@ fn excess_input_and_conflicting_status_never_become_unsat_evidence() {
     assert!(!missing.process.started);
     assert_eq!(missing.query.status, SolverStatus::MissingTool);
 
+    let absent = run_solver_query(
+        QueryAssociation {
+            query_bytes: Vec::new(),
+            ..base()
+        },
+        "/usr/bin/true".into(),
+        vec![],
+        process_limits(1024),
+        Cancel::new(),
+    )
+    .expect("successful child with no response");
+    assert_eq!(absent.query.status, SolverStatus::MalformedResponse);
+
     let failed = run_solver_query(
         QueryAssociation {
             query_bytes: Vec::new(),
