@@ -18,9 +18,9 @@ use std::{
 };
 
 /// Development dependencies the agreement support modules use beyond the
-/// Contract Runtime the generated crate already depends on. Same exact
-/// versions as this repository's own manifest, so `--offline` resolves them
-/// from the lockfile copied alongside.
+/// Contract Runtime the generated crate already depends on. Matching
+/// constraints from this repository's manifest use its seeded dependency
+/// resolution before the locked native test.
 const AGREEMENT_DEV_DEPENDENCIES: &str = concat!(
     "serde_json = \"=1.0.151\"\nsha2 = \"=0.10.9\"\n",
     "ix-trace-rs = { version = \"=0.1.0\", git = \"https://github.com/agent-ix/ix-trace-rs\", branch = \"main\" }\n",
@@ -64,11 +64,10 @@ pub(super) fn run_agreement_cases<'a>(
     )
     .expect("write to String");
     fs::write(&manifest_path, manifest).expect("extend generated manifest");
-    fs::copy(repository.join("Cargo.lock"), root.join("Cargo.lock"))
-        .expect("seed the scratch crate's lockfile");
+    super::scratch_crate::resolve_seeded_lock(&root);
 
     let output = Command::new(env!("CARGO"))
-        .args(["test", "--offline", "--test", "agreement"])
+        .args(["test", "--locked", "--offline", "--test", "agreement"])
         .env("CARGO_TARGET_DIR", root.join("target"))
         .env_remove("RUSTFLAGS")
         .env_remove("CARGO_ENCODED_RUSTFLAGS")
