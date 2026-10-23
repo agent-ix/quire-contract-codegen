@@ -168,12 +168,13 @@ impl<'a> ContractLookup<'a> {
     }
 }
 
-/// Request-local source occurrences and a lazy package-bound clause view.
+/// Request-local source occurrences and lazy package-bound clause and collection views.
 /// Each borrowed package keeps its own retained graph and original source occurrence order.
 struct CheckedLookup<'a> {
     package: &'a CheckedPackageV2,
     sources: BTreeMap<&'a CheckedNodeId, Vec<&'a CheckedSourceMapEntry>>,
     clause: Option<ClauseGraphView<'a>>,
+    collection: Option<CollectionGraph<'a>>,
 }
 
 impl<'a> CheckedLookup<'a> {
@@ -188,6 +189,7 @@ impl<'a> CheckedLookup<'a> {
             package,
             sources,
             clause: None,
+            collection: None,
         }
     }
 
@@ -197,6 +199,11 @@ impl<'a> CheckedLookup<'a> {
             request_lookup_work::clause_view();
             ClauseGraphView::new(self.package)
         })
+    }
+
+    fn collection(&mut self) -> &CollectionGraph<'a> {
+        self.collection
+            .get_or_insert_with(|| CollectionGraph::new(self.package))
     }
 
     fn occurrences(&self, id: &CheckedNodeId) -> Vec<CheckedSourceMapEntry> {
@@ -556,7 +563,6 @@ fn classify<'a>(
             function_id,
             node_id,
         } => classify_collection(
-            package,
             function_id,
             node_id,
             checked_lookup(checked_lookups, package),
@@ -639,13 +645,12 @@ fn classify_v2_clause<'a>(
 }
 
 fn classify_collection<'a>(
-    package: &'a CheckedPackageV2,
     function_id: &'a CheckedNodeId,
     node_id: &'a CheckedNodeId,
-    lookup: &CheckedLookup<'a>,
+    lookup: &mut CheckedLookup<'a>,
 ) -> ItemState<'a> {
-    let graph = CollectionGraph::new(package);
-    let outcome = match lower_collection_claim(&graph, function_id, node_id) {
+    let package = lookup.package;
+    let outcome = match lower_collection_claim(lookup.collection(), function_id, node_id) {
         Ok(lowered) => Outcome::LoweredCollection(Box::new(lowered)),
         Err(CollectionDomainRefusal::RequiresBound { unbounded_type }) => {
             Outcome::RequiresBound(unbounded_type)
