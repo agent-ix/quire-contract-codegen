@@ -46,6 +46,9 @@ until specified.
   in-domain census from [FR-010](./FR-010-domain-boundary-campaigns.md).
 - The selected claim's V2 comparison oracle (FR-008), embedded in the same bundle; no V1 bound
   oracle generation output is an input.
+- The selected QSL `RequirementItem`, whose `occurrence()` has an `Ok` result from
+  `qsl_package::export_bindings`, and the admitted `CheckedPackageV2` whose `package_id`
+  identifies its revision.
 - A caller-owned proptest `TestRunner` and `quire_contract_runtime::CampaignReport`.
 - The existing campaign policy: minimum accepted, minimum rejected, and maximum discarded counts.
 
@@ -67,10 +70,13 @@ until specified.
     observation carries the runtime's invariant clause kind, which quire-contract-runtime
     implements but does not yet specify.
 - The runner shall construct each verdict through the runtime `construct_verdict` operation
-  (quire-contract-runtime interface-001) with the requirement and revision identity, the runtime
-  execution point, and the clause observations. The sources of the requirement and revision identity
-  and of the execution point are open questions (below); this requirement is not testable beyond
-  verdict construction until they are answered.
+  (quire-contract-runtime interface-001) with the selected accepted QSL item's occurrence key as
+  requirement identity and the admitted `CheckedPackageV2::package_id()` as revision identity,
+  together with the runtime execution point and clause observations. The occurrence key shall
+  retain its node, role and ordinal; the revision shall retain the complete package id, using the
+  canonical V2 rendering below at each borrowed-string runtime boundary. The
+  execution-point source remains open (below), so that part of verdict construction is not yet
+  testable. CG shall not create a separate requirement-revision artifact.
 - For a false invariant, the runner shall use the failure detail the runtime
   provides for a contract clause, because quire-contract-runtime's specification does not yet state
   the failure detail of an invariant; a runtime specification of that mapping supersedes this rule.
@@ -108,6 +114,31 @@ until specified.
 - When proptest reports a failing case, the runner shall conclude `ConformanceMismatch` after the
   discard-ceiling check, so the runner never concludes the harness `Failed`.
 
+### Canonical V2 identity rendering
+
+For a selected QSL `RequirementItem` whose occurrence was accepted by `export_bindings`, CG shall
+render its `OccurrenceKey` as
+`qocc2_<node>_<role-byte-count>_<role-hex>_<ordinal>`. `<node>` is the `WireNodeId`'s exactly 64
+lowercase hexadecimal digits. `<role-hex>` is the lowercase hexadecimal encoding of every UTF-8
+byte of `occurrence.origin().role().as_str()`, with two digits per byte; `<role-byte-count>` is the
+UTF-8 byte length in base-10 with no leading zero except `0`. `<ordinal>` is the occurrence
+ordinal in base-10 with no leading zero except `0`.
+
+CG shall render the admitted `CheckedPackageV2::package_id()` as
+`qpkg2_<domain-byte-count>_<domain-hex>_<algorithm-byte-count>_<algorithm-hex>_<digest-byte-count>_<digest-hex>`.
+Each count and hex field follows the role rule above, using the exact UTF-8 bytes of the
+`CheckedSemanticId`'s `domain`, `algorithm` and `digest` fields in that order. These encodings
+are injective and reversible; CG shall not truncate, case-fold or substitute any field, compute
+a new identity digest, or treat the digest field alone as the revision. `qocc2_` and `qpkg2_`
+separate the two identity domains. The rendered strings are the values of runtime
+`RequirementId` and `RevisionId`, respectively. Generated headers and source maps shall carry
+these same strings; generated symbol identity suffixes shall be
+`cg_<qocc2-string>_<qpkg2-string>`, where both components follow the grammar above.
+Comparisons shall use the exact typed fields before rendering or the exact canonical strings
+after rendering, rejecting malformed or noncanonical text instead of normalizing it. This is
+an in-memory/text rendering of existing identities, not a separate revision artifact or a
+producer/authentication receipt.
+
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
@@ -125,10 +156,12 @@ until specified.
   `Postcondition`), and IR main has no execution-point type, so an invariant could map to
   `initialization` or `handler`. No source is invented here. The planner is taking this to the
   owner; no FR-011 criterion depends on the answer.
-- OQ-2 (requirement and revision identity): the V1 `ClauseRef` supplied the requirement and
-  revision identity for `construct_verdict`. The V2 request (selected clause id and claim
-  occurrence) names no such source. The planner owns the answer; the V2 request shape follows the
-  interface-001 direction, which is also open.
+- OQ-2 (resolved, requirement and revision identity): the selected QSL `RequirementItem` whose occurrence was accepted by
+  `export_bindings` supplies its requirement occurrence key, including node, role and ordinal;
+  the admitted `CheckedPackageV2::package_id()` supplies the revision identity. A rebinding of
+  an abstraction relation changes the package id (QSL ADR-017 AR-4). QSL supplies no separate
+  requirement-revision artifact, and CG creates none. This identity does not authenticate the
+  producer/run/artifact association required by FR-004-AC-10 and AC-14.
 
 ## Dependencies
 

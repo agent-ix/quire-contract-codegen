@@ -20,8 +20,9 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
 - Executable clauses, execution points, state bindings, ranges, memberships, and supported relations.
 - Planned (IR-815): for the V2 harness, an admitted `CheckedPackageV2` with the clause ids of one
   selected precondition and one selected postcondition, read through Contract IR's public typed
-  API. The source of the execution point and of the requirement and revision identity for this
-  input is open (Open Questions); no V2 criterion below depends on it.
+  API. The requirement identity is each selected QSL `RequirementItem` occurrence accepted by `export_bindings`;
+  the revision identity is the admitted package's `package_id`. The execution-point source remains
+  open (Open Questions).
 
 ## Outputs
 
@@ -93,7 +94,7 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
 | FR-002-AC-9 | PLANNED (IR-815). Source inspection shows the V2 harness generator opens a `CheckedPackageV2` body only through the `core/ir/` layer of AD-004, and names no `BoundPackage`, `ClauseRef`, `quire_contract_model::TypedExpression` or `oracle::boolean_v1` item, each of which today's V1 harness names or uses. | Inspection |
 | FR-002-AC-10 | PLANNED (IR-815). A selected clause identity that is unknown, of the wrong clause kind, or the same for both selections yields a typed, located diagnostic naming the selection and no artifact. | Test (TC-004) |
 | FR-002-AC-11 | PLANNED (IR-815). A selected clause body outside the FR-014-AC-38 shape yields a structured unsupported diagnostic and no artifact, and the generator emits no filtering strategy for it. | Test (TC-004) |
-| FR-002-AC-12 | PLANNED (IR-815). Repeated V2 harness generation for the same admitted package, selected clause identities and campaign policy is byte-identical. The requirement and revision identity that the generated header, `RequirementId` and symbols carry is not an input here and waits on OQ-1. | Test (TC-004) |
+| FR-002-AC-12 | PLANNED (IR-815). Repeated V2 harness generation for the same admitted package, selected accepted requirement occurrences, selected clause identities and campaign policy is byte-identical. The generated header, `RequirementId`, `RevisionId`, source map and symbols carry the FR-011 canonical renderings of each selected accepted occurrence and the admitted package's full `package_id`; a distinct occurrence or package id yields distinct rendered identity text. | Test (TC-004) |
 | FR-002-AC-13 | PLANNED (IR-815). A seeded V2 case on which both oracles complete true runs the subject once and is a pass. | Test (TC-004) |
 | FR-002-AC-14 | PLANNED (IR-815). A seeded V2 case on which the precondition oracle completes false is a rejected precondition and the subject is not invoked. | Test (TC-004) |
 | FR-002-AC-15 | PLANNED (IR-815). A seeded V2 case on which the precondition oracle completes true and the postcondition oracle completes false is a failed postcondition. | Test (TC-004) |
@@ -103,13 +104,13 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
 
 ## Open Questions
 
-- OQ-1 (execution point and identity): the V2 source of the harness's execution point and of the
-  requirement and revision identity is the open question recorded as FR-011 OQ-1 and OQ-2, and the
-  V2 entry shape follows the open interface-001 direction. The generated harness writes the
-  requirement and revision into its header comment, its `RequirementId` and its symbol names, so
-  the final bytes of a V2 harness, FR-002-AC-12 across different identities, and the NFR-002-AC-1
-  header requirement wait on FR-011 OQ-2; FR-002-AC-7 to AC-18 are stated independently of that
-  identity and none invents a source.
+- OQ-1 (execution point): the V2 source of the harness's runtime execution point is the open
+  question recorded as FR-011 OQ-1. FR-011 OQ-2 resolves requirement identity to each selected
+  QSL `RequirementItem` occurrence accepted by `export_bindings` (node, role and ordinal), and
+  revision identity to the admitted `CheckedPackageV2::package_id()`. The generated header,
+  `RequirementId` and symbols carry the FR-011 canonical identity renderings without a separate
+  requirement-revision artifact. Their presence does not answer which execution point an
+  invariant uses.
 - OQ-2 (non-completed verdict): which runtime verdict kind carries a non-completed oracle outcome
   (FR-002-AC-16) is not decided here; the criterion fixes only that the case is not a pass and
   keeps its cause.
