@@ -11,6 +11,11 @@ extern crate self as quire_contract_codegen;
 #[path = "../tests/checked_package_support/evidence.rs"]
 pub(crate) mod checked_package_evidence;
 
+#[cfg(test)]
+#[allow(clippy::duplicate_mod)] // Reuse the existing admitted fixture in this test binary.
+#[path = "../tests/exact_function_support/package.rs"]
+pub(crate) mod ir988_function_fixture;
+
 // Private integration control needs internal generation and execution in the library test binary.
 #[cfg(test)]
 #[path = "../tests/it/kani_render_private.rs"]

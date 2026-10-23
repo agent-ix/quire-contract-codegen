@@ -1832,6 +1832,224 @@ mod ir988_source_function_tests {
     }
 }
 
+#[cfg(test)]
+mod ir988_admitted_generation_tests {
+    use super::*;
+    use ix_trace_rs::trace;
+    use serde_json::json;
+    use sha2::{Digest, Sha256};
+
+    use crate::ir988_function_fixture as fixture;
+
+    fn source_reference(code: u32) -> serde_json::Value {
+        let id = fixture::code_id(code);
+        json!({"term":"reference","target":{"domain":id.domain,"digest":id.digest}})
+    }
+
+    struct AdmittedCase {
+        contract: ContractPackageV1,
+        positions: Vec<crate::ContractRequestPosition>,
+        function_positions: Vec<usize>,
+        declarations: Vec<ExactFunctionDeclaration>,
+        item_positions: Vec<usize>,
+        items: Vec<ExactFunctionItem>,
+    }
+
+    fn admitted_case(requests: usize, function_count: usize) -> AdmittedCase {
+        use fixture::*;
+
+        let mut builder = source_bound_call_package();
+        for offset in 0..(function_count - 2) {
+            builder.code(
+                40_000 + offset as u32,
+                "function",
+                "pure_function",
+                T_INTEGER,
+                aggregate(vec![
+                    json!({"term":"binding","name":"parameters","value":aggregate(vec![
+                        source_reference(SOURCE_PARAM_A), source_reference(SOURCE_PARAM_B)])}),
+                    json!({"term":"binding","name":"body","value":source_reference(SOURCE_BODY)}),
+                ]),
+            );
+        }
+        for offset in 0..2 {
+            let parameter = 41_000 + offset;
+            builder.code(
+                parameter,
+                "value",
+                "parameter",
+                T_INTEGER,
+                aggregate(vec![
+                    bound_member("name", literal("text", &format!("p{offset}"))),
+                    bound_member("level", integer_literal(0)),
+                ]),
+            );
+        }
+        let arguments = [
+            (41_000, SOURCE_PARAM_B),
+            (41_001, SOURCE_PARAM_B),
+            (SOURCE_PARAM_A, SOURCE_PARAM_A),
+            (SOURCE_PARAM_B, SOURCE_PARAM_A),
+            (SOURCE_PARAM_B, SOURCE_PARAM_B),
+            (SOURCE_PARAM_B, 41_000),
+            (SOURCE_PARAM_B, 41_001),
+            (41_000, SOURCE_PARAM_A),
+        ];
+        for (offset, &(left, right)) in arguments.iter().take(requests).enumerate() {
+            builder.application_node(
+                42_000 + offset as u32,
+                "call",
+                &key(T_INTEGER),
+                json!({
+                    "term":"application","operator":"call",
+                    "operation":{"identity":"quire.op.function.call","laws":[],"mode":null,
+                        "member":null,"leaves":[]},
+                    "result_type":{"domain":NODE_DOMAIN,"digest":key(T_INTEGER)},
+                    "arguments":[source_reference(SOURCE_FUNCTION),
+                        source_reference(left),source_reference(right)]
+                }),
+            );
+        }
+        let (checked, ids) = builder.admit_resolved();
+        let name = format!("n{}", key(SOURCE_FUNCTION));
+        let other_name = format!("n{}", key(SOURCE_OTHER_FUNCTION));
+        let functions = vec![
+            ids.resolve_function(source_function(&name, SOURCE_BODY)),
+            ids.resolve_function(source_function(&other_name, SOURCE_OTHER_BODY)),
+        ];
+        let mut requested = functions
+            .iter()
+            .map(|function| function.node_id.clone())
+            .collect::<Vec<_>>();
+        requested.push(ids.resolve(&code_id(SOURCE_OTHER_FUNCTION)));
+        requested.extend(
+            (0..(function_count - 2)).map(|offset| ids.resolve(&code_id(40_000 + offset as u32))),
+        );
+        let function_positions = [0, 1].to_vec();
+        let mut items = Vec::new();
+        let mut item_positions = Vec::new();
+        for (offset, &(left, right)) in arguments.iter().take(requests).enumerate() {
+            let item = ExactFunctionItem {
+                call_node_id: code_id(42_000 + offset as u32),
+                function: name.clone(),
+                argument_node_ids: vec![code_id(left), code_id(right)],
+            };
+            item_positions.push(requested.len());
+            requested.push(ids.resolve(&item.call_node_id));
+            items.push(ids.resolve_call(item));
+        }
+        let mut refused = items[0].clone();
+        refused.function = other_name;
+        item_positions.push(requested.len());
+        requested.push(refused.call_node_id.clone());
+        items.push(refused);
+        let contract = admitted_function_contract(&checked, &requested);
+        let positions = driver_positions(&requested);
+        AdmittedCase {
+            contract,
+            positions,
+            function_positions,
+            declarations: functions,
+            item_positions,
+            items,
+        }
+    }
+
+    #[trace("TC-031")]
+    #[test]
+    fn ir_988_public_admitted_generation_indexes_source_once_and_preserves_outputs() {
+        for requests in [2, 4, 8] {
+            for functions in [4, 8, 16] {
+                let AdmittedCase {
+                    contract,
+                    positions,
+                    function_positions,
+                    declarations,
+                    item_positions,
+                    items,
+                } = admitted_case(requests, functions);
+                IR988_SOURCE_GRAPH_VISITS.with(|visits| visits.set(0));
+                let output = generate_exact_function_oracles(
+                    &contract,
+                    &positions,
+                    &function_positions,
+                    &declarations,
+                    &item_positions,
+                    &items,
+                )
+                .expect("admitted function generation");
+                let visits = IR988_SOURCE_GRAPH_VISITS.with(std::cell::Cell::get);
+                let graph_nodes = contract.wire().semantic_graph.nodes.len();
+                assert_eq!(
+                    contract
+                        .wire()
+                        .semantic_graph
+                        .nodes
+                        .iter()
+                        .filter(|node| node.node_tag.as_ref() == "function")
+                        .count(),
+                    functions,
+                );
+                println!("K={requests} R={functions} G={graph_nodes} visits={visits}");
+                assert_eq!(
+                    visits, graph_nodes,
+                    "one source index build per admitted batch"
+                );
+                let mut bytes = Vec::new();
+                for artifact in &output.artifacts {
+                    bytes.extend_from_slice(artifact.path.as_bytes());
+                    bytes.push(0);
+                    bytes.extend_from_slice(artifact.contents.as_bytes());
+                    bytes.push(0);
+                }
+                bytes.extend(serde_json::to_vec(&output.claim_map).unwrap());
+                bytes.extend(serde_json::to_vec(&output.location_map).unwrap());
+                let hash = format!("{:x}", Sha256::digest(&bytes));
+                let expected = match (requests, functions) {
+                    (2, 4) => "dd4eb53c79b0bbc2ec55173c69bbd28a7295b0657b729796099297920e01e571",
+                    (2, 8) => "e424682aefb3613e5b5bf901ebffdf6c81d835ab45b3221332e40423f6d26a92",
+                    (2, 16) => "68bf89b6c6c382c94cbd4e17ef9b0226b3a6bac70c56762bff0ac1d1889dd83c",
+                    (4, 4) => "4ba924b7a1040a60a914113235c1a33fb2fcf9283cfcfbd8569fd039779611e9",
+                    (4, 8) => "9d8041ef83c9a455995f3de4e291c1503e9bcbe7e0903c4b3d3aab6747ac54ae",
+                    (4, 16) => "dfebd99cda8af173215fa80b8ac63fad8cacdd91bcf832937ce599f2ba82e58d",
+                    (8, 4) => "e2643e8c6a454ca729f4f0221c434a96f15fcc1d30ca669f59b37f908256dd9d",
+                    (8, 8) => "2033925ebc3203ab4ee78009f36f8a25cb6d1e705f7283e74ba2723130fa6e17",
+                    (8, 16) => "6b758fe808ad879eabff68fe825cf1ebf2cf49056ec07fe18910c07082699aab",
+                    _ => unreachable!("fixed K/R test matrix"),
+                };
+                assert_eq!(
+                    hash, expected,
+                    "complete public output changed at K={requests} R={functions}"
+                );
+                assert_eq!(output.claim_map.items.len(), requests + 1);
+                assert_eq!(
+                    output
+                        .claim_map
+                        .items
+                        .iter()
+                        .filter(|item| matches!(item.result, ClaimDisposition::Generated(_)))
+                        .count(),
+                    requests
+                );
+                assert_eq!(
+                    output
+                        .claim_map
+                        .items
+                        .iter()
+                        .filter(|item| matches!(
+                            item.result,
+                            ClaimDisposition::Refused {
+                                refusal: ExactFunctionRefusal::BodyMismatch
+                            }
+                        ))
+                        .count(),
+                    1
+                );
+            }
+        }
+    }
+}
+
 pub(crate) fn binding_value<'a>(body: &'a CheckedTerm, name: &str) -> Option<&'a CheckedTerm> {
     aggregate_members(body)?
         .iter()
