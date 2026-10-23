@@ -458,7 +458,12 @@ impl OriginalCompositeEqContext {
                 CompositePacketMember::Package,
             ));
         }
-        if envelope.to_packet().source_digests != Some(vec![self.inputs.source.wire()]) {
+        let [source_digest] = envelope.source_digests() else {
+            return Err(CompositeBuildError::PacketMismatch(
+                CompositePacketMember::SourceDigests,
+            ));
+        };
+        if source_digest.to_wire() != self.inputs.source.wire() {
             return Err(CompositeBuildError::PacketMismatch(
                 CompositePacketMember::SourceDigests,
             ));
