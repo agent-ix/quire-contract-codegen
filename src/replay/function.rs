@@ -719,6 +719,28 @@ impl ReplayPackage {
         self.request_from_packet(packet, obligation)
     }
 
+    /// Completes a backend witness packet from this checked function selection and the retained
+    /// proving-run identity before [`Self::request`] admits it. The transcript is QSL's already
+    /// parsed witness; it is never interpreted to choose the function or declaration occurrence.
+    ///
+    /// # Errors
+    ///
+    /// [`ObligationIdentityError`] when the harness arguments do not bind to this function.
+    pub fn backend_witness_packet(
+        &self,
+        identity: &KaniObligationIdentity,
+        witness: Witness,
+    ) -> Result<WitnessPacket<NoPayload>, ObligationIdentityError> {
+        let obligation = self.obligation_identity(identity)?;
+        Ok(backend_function_packet(
+            self,
+            obligation,
+            self.site.site.function,
+            self.site.site.declaration.clone(),
+            ReplaySource::Witness(witness),
+        ))
+    }
+
     fn request_from_packet(
         &self,
         packet: WitnessPacket<NoPayload>,

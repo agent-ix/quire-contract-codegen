@@ -870,9 +870,8 @@ fn tc_035_original_composite_request_requires_its_own_packet() {
             &[],
             100_000,
         ),
-        Err(CompositeBuildError::PacketAdmission(
-            qsl_replay::WitnessRefusal::MissingMember("occurrence_key")
-        ))
+        Err(CompositeBuildError::PacketAdmission(ref cause))
+            if matches!(**cause, qsl_replay::WitnessRefusal::MissingMember("occurrence_key"))
     ));
 }
 

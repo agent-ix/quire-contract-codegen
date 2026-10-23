@@ -78,7 +78,7 @@ pub enum CompositeBuildError {
     /// The owning O-09 encoder refused the preimage.
     Identity(IdentityEncodeError),
     /// QSL refused the producer packet before request construction.
-    PacketAdmission(WitnessRefusal),
+    PacketAdmission(Box<WitnessRefusal>),
     /// An admitted packet belongs to another checked parity claim.
     PacketMismatch(CompositePacketMember),
     /// A genuine QSL report did not bind to the request actually sent.
@@ -422,7 +422,6 @@ impl OriginalCompositeEqContext {
     /// # Errors
     /// Returns a typed packet admission, claim-binding, original projection or replay setup
     /// refusal before any report or terminal value exists.
-    #[allow(clippy::result_large_err)]
     pub fn request_from_packet(
         &self,
         packet: WitnessPacket<NoPayload>,
@@ -435,7 +434,7 @@ impl OriginalCompositeEqContext {
         let selected =
             self.selected_claim(node, occurrence, operator, harness_bounds, work_limit)?;
         let envelope = WitnessEnvelope::reconstruct(packet, self.inputs.replay_limits)
-            .map_err(CompositeBuildError::PacketAdmission)?;
+            .map_err(|cause| CompositeBuildError::PacketAdmission(Box::new(cause)))?;
         if envelope.replay_target() != &ReplayTarget::function(self.selection.clone(), None) {
             return Err(CompositeBuildError::PacketMismatch(
                 CompositePacketMember::Target,
