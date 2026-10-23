@@ -62,7 +62,7 @@ fn tc_031_ac34_public_strict_reader_chain_generates_compilable_flat_schedule() {
     let int_type = key(T_INTEGER);
     // Keep one admitted ordered pair of Integer formals and bind that pair in every declaration.
     // Each of the 129 functions still has two Integer parameter slots; sharing the graph nodes
-    // avoids repeating their full node, identity-projection and source-map records in this strict
+    // avoids repeating their full node and source-map records in this strict
     // reader fixture, which must fit the unchanged 1 MiB input limit.
     for (code, name) in [(PARAM_BASE, "left"), (PARAM_BASE + 1, "right")] {
         builder.code(
@@ -217,8 +217,6 @@ fn tc_031_ac34_public_strict_reader_chain_generates_compilable_flat_schedule() {
     struct WireBytes {
         node_count: usize,
         nodes: u64,
-        projection_count: usize,
-        projections: u64,
         source_map_count: usize,
         source_maps: u64,
     }
@@ -248,22 +246,9 @@ fn tc_031_ac34_public_strict_reader_chain_generates_compilable_flat_schedule() {
         entry.node_count += 1;
         entry.nodes += serde_json::to_vec(node).expect("node bytes").len() as u64;
     }
-    let projections = wire["identity_preimage"]["identity_projection"]
-        .as_array()
-        .expect("identity projections");
-    for projection in projections {
-        let digest = projection["node_id"]["digest"]
-            .as_str()
-            .expect("projection digest");
-        let kind = category_by_digest
-            .get(digest)
-            .expect("projection corresponds to a node");
-        let entry = wire_bytes.entry(kind.clone()).or_default();
-        entry.projection_count += 1;
-        entry.projections += serde_json::to_vec(projection)
-            .expect("projection bytes")
-            .len() as u64;
-    }
+    assert!(wire["identity_preimage"]
+        .get("identity_projection")
+        .is_none());
     let source_map = wire["source_map"].as_array().expect("source map");
     for source_entry in source_map {
         let digest = source_entry["node_id"]["digest"]
@@ -280,13 +265,8 @@ fn tc_031_ac34_public_strict_reader_chain_generates_compilable_flat_schedule() {
     }
     for (kind, sizes) in &wire_bytes {
         eprintln!(
-            "AC-34 wire {kind}: nodes={}B/{} items, projections={}B/{} items, source_map={}B/{} items",
-            sizes.nodes,
-            sizes.node_count,
-            sizes.projections,
-            sizes.projection_count,
-            sizes.source_maps,
-            sizes.source_map_count,
+            "AC-34 wire {kind}: nodes={}B/{} items, source_map={}B/{} items",
+            sizes.nodes, sizes.node_count, sizes.source_maps, sizes.source_map_count,
         );
     }
     let array_bytes = |items: &[Value]| -> u64 {
@@ -297,12 +277,11 @@ fn tc_031_ac34_public_strict_reader_chain_generates_compilable_flat_schedule() {
             + 2
             + items.len().saturating_sub(1) as u64
     };
-    let section_bytes = array_bytes(nodes) + array_bytes(projections) + array_bytes(source_map);
+    let section_bytes = array_bytes(nodes) + array_bytes(source_map);
     eprintln!(
-        "AC-34 wire total={}B, node_array={}B, identity_projection_array={}B, source_map_array={}B, remainder={}B",
+        "AC-34 wire total={}B, node_array={}B, source_map_array={}B, remainder={}B",
         bytes.len(),
         array_bytes(nodes),
-        array_bytes(projections),
         array_bytes(source_map),
         bytes.len() as u64 - section_bytes,
     );
