@@ -13,3 +13,5 @@ mod contract_package_tests;
 // Generation for items the driver has already settled and routed.
 // Implements: FR-022
 pub(crate) mod generate;
+// Solver run records and evidence mapping for QSL-authored queries.
+pub mod smt;
