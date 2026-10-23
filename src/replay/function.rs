@@ -694,7 +694,8 @@ impl ReplayPackage {
         }
     }
 
-    /// The complete replay request for `counterexample`, replaying `source`.
+    /// The complete function-contract replay request from an independently supplied producer
+    /// packet. QSL admits the packet, then CG binds it to this selected function and identity.
     ///
     /// The package reference's `dependencies` are the lock's dependency selections, one entry
     /// each, and the byte provision holds the proved unit's source and every dependency source.
@@ -705,7 +706,8 @@ impl ReplayPackage {
     ///
     /// # Errors
     ///
-    /// [`ObligationIdentityError`] when `identity` has no function-contract identity.
+    /// [`FunctionPacketError`] when `identity` has no function-contract identity, QSL refuses
+    /// the packet, or an admitted packet belongs to another selected claim.
     pub fn request(
         &self,
         identity: &KaniObligationIdentity,
