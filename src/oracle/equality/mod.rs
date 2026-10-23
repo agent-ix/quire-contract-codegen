@@ -1214,7 +1214,8 @@ fn unsupported_family(node_id: &CheckedNodeId, tag: CheckedNodeTag) -> Composite
         | CheckedNodeTag::Expression
         | CheckedNodeTag::Claim
         | CheckedNodeTag::Correspondence
-        | CheckedNodeTag::Extension => CompositeEqualityRefusal::Unsupported {
+        | CheckedNodeTag::Extension
+        | CheckedNodeTag::Hybrid => CompositeEqualityRefusal::Unsupported {
             unsupported_node_id: node_id.clone(),
             node_tag: tag.as_wire(),
         },

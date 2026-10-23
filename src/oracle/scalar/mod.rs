@@ -1823,7 +1823,8 @@ fn unsupported_family(node_id: &CheckedNodeId, tag: CheckedNodeTag) -> ExactScal
         | CheckedNodeTag::Expression
         | CheckedNodeTag::Claim
         | CheckedNodeTag::Correspondence
-        | CheckedNodeTag::Extension => ExactScalarRefusal::Unsupported {
+        | CheckedNodeTag::Extension
+        | CheckedNodeTag::Hybrid => ExactScalarRefusal::Unsupported {
             unsupported_node_id: node_id.clone(),
             node_tag: tag.as_wire(),
         },
