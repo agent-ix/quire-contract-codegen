@@ -2355,6 +2355,7 @@ fn qspec_package(fixture: &str) -> CheckedPackageV2 {
     let canonical = serde_json::to_vec(&wire).expect("canonical QSpec fixture bytes");
     let mut evidence = CheckedPackageEvidence::new();
     evidence.support_feature("quire.value.complete/v1");
+    crate::checked_package_evidence::retain_selected_extensions(&root, &wire, &mut evidence);
     if let Some(selection) = wire["lock"]["model_selections"]
         .as_array()
         .and_then(|rows| rows.first())

@@ -1214,7 +1214,8 @@ fn unsupported_family(node_id: &CheckedNodeId, tag: CheckedNodeTag) -> Composite
         | CheckedNodeTag::Expression
         | CheckedNodeTag::Claim
         | CheckedNodeTag::Correspondence
-        | CheckedNodeTag::Extension => CompositeEqualityRefusal::Unsupported {
+        | CheckedNodeTag::Extension
+        | CheckedNodeTag::Hybrid => CompositeEqualityRefusal::Unsupported {
             unsupported_node_id: node_id.clone(),
             node_tag: tag.as_wire(),
         },
@@ -2340,6 +2341,19 @@ mod tests {
     use super::*;
     use ix_trace_rs::trace;
     use serde_json::json;
+
+    #[trace("FR-018-AC-1")]
+    #[test]
+    fn hybrid_family_is_unsupported_and_preserves_node_identity() {
+        let node = node_id('a');
+        assert_eq!(
+            unsupported_family(&node, CheckedNodeTag::Hybrid),
+            CompositeEqualityRefusal::Unsupported {
+                unsupported_node_id: node,
+                node_tag: "hybrid",
+            }
+        );
+    }
 
     fn test_source(source: SourceBuilder) -> String {
         source

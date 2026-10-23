@@ -23,6 +23,7 @@ confidence-threshold = 0.9
 # permissive-only.
 exceptions = [
     { allow = ["AGPL-3.0-or-later"], crate = "quire-contract-codegen" },
+    { allow = ["AGPL-3.0-or-later"], crate = "ix-cli-kit" },
     # First-party compile-time macro for production #[implements] markers. Scoped to
     # ix-trace-rs; remove this exception when CG removes those markers and the dependency.
     { allow = ["AGPL-3.0-or-later"], crate = "ix-trace-rs" },
@@ -82,6 +83,7 @@ unknown-git = "deny"
 # dependency and fails.
 allow-git = [
     "https://github.com/agent-ix/filament-core-data",
+    "https://github.com/agent-ix/ix-cli-kit",
     "https://github.com/agent-ix/ix-trace-rs",
     "https://github.com/agent-ix/quire-canonical",
     # quire-rs 0.50.1 reaches the first-party parser through quire-rust-extraction.

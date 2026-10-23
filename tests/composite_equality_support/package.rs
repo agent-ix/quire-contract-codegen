@@ -881,7 +881,9 @@ fn evidence_for_wire(wire: &Value) -> CheckedPackageEvidence {
     let mut evidence = CheckedPackageEvidence::new();
     evidence.support_feature("quire.value.complete/v1");
     if let Some(qspec_dir) = std::env::var_os("QSPEC_DIR") {
-        let root = std::path::PathBuf::from(qspec_dir).join("proposals/checked-package-v2");
+        let qspec = std::path::PathBuf::from(qspec_dir);
+        crate::checked_package_evidence::retain_selected_extensions(&qspec, wire, &mut evidence);
+        let root = qspec.join("proposals/checked-package-v2");
         if let Some(selection) = wire["lock"]["model_selections"]
             .as_array()
             .and_then(|rows| rows.iter().find(|row| row["identity"] == "acme/orders"))
