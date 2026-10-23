@@ -13,96 +13,6 @@ fn record_declaration_visit() {
     DECLARATION_VISITS.with(|visits| visits.set(visits.get() + 1));
 }
 
-#[cfg(test)]
-mod declaration_lookup_tests {
-    use super::*;
-    use ix_trace_rs::trace;
-    use quire_contract_model::{BoundPackage, EXECUTABLE_PROJECTION_FORMAT};
-    use serde_json::{json, Value};
-
-    fn span(line: u64) -> Value {
-        let source = json!({"document":"ir-988-numeric", "revision":1});
-        json!({
-            "start":{"source":source,"line":line,"column":1,"byte_offset":line - 1},
-            "end":{"source":source,"line":line,"column":2,"byte_offset":line}
-        })
-    }
-
-    fn package_with_declarations(count: usize) -> BoundPackage {
-        let owner = json!({"package":"test/ir-988","requirement":"FR-100","revision":1});
-        let anchor = json!({"kind":"post","operation":"checkAmount"});
-        let integer = json!({"kind":"integer","domain":"signed","minimum":"0",
-            "maximum":"1000","overflow":"reject"});
-        let mut values = (0..count - 1)
-            .map(|index| {
-                json!({"name":format!("filler{index}"),"kind":"state",
-                "value_type":integer,"source":span(index as u64 + 5)})
-            })
-            .collect::<Vec<_>>();
-        values.push(json!({"name":"amount","kind":"state","value_type":integer,
-            "source":span(count as u64 + 5)}));
-        let wire = json!({
-            "format": EXECUTABLE_PROJECTION_FORMAT,
-            "package":{"id":"test/ir-988","schema_version":{"major":1,"minor":1},
-                "source":{"document":"ir-988-numeric","revision":1},
-                "requirements":[{"id":"FR-100","revision":1,"source":span(1),
-                    "clauses":[{"id":"amount-check","kind":"postcondition",
-                        "anchor":anchor,"source":span(2),
-                        "body":{"node":"composite","children":[
-                            {"node":"reference","identity":{"requirement":owner,
-                                "kind":"state","observation":"post","path":["amount"]}},
-                            {"node":"reference","identity":{"requirement":owner,
-                                "kind":"state","observation":"pre","path":["amount"]}}
-                        ]}}]}]},
-            "bindings":[{"clause":{"requirement":owner,"clause":"amount-check"},
-                "expression":{"owner":owner,"types":[],"values":values,"functions":[],
-                    "expression":{"node":"compare","operator":"equal",
-                        "left":{"node":"value_reference","name":"amount",
-                            "observation":"post","source":span(3)},
-                        "right":{"node":"value_reference","name":"amount",
-                            "observation":"pre","source":span(4)},
-                        "source":span(3)},
-                    "expected_type":{"kind":"boolean"},"execution_point":anchor,
-                    "clause_root":true}}]
-        });
-        BoundPackage::from_json_bytes(&serde_json::to_vec(&wire).expect("wire bytes"))
-            .expect("admitted numeric projection")
-    }
-
-    #[trace("TC-017")]
-    #[test]
-    fn ir_988_declaration_lookups_do_not_repeat_full_scans_per_read() {
-        let mut excessive = Vec::new();
-        for requests in [2, 4, 8] {
-            for declarations in [4, 8, 16] {
-                let package = package_with_declarations(declarations);
-                let clause = &package.clauses()[0];
-                DECLARATION_VISITS.with(|visits| visits.set(0));
-                for _ in 0..requests {
-                    let declarations = BoundDeclarationIndex::new(clause);
-                    let admitted =
-                        admit_relation(clause, &declarations).expect("admitted relation");
-                    assert_eq!(admitted.primary.name, "amount");
-                    assert_eq!(admitted.primary.observation, StateObservation::Post);
-                    assert_eq!(
-                        admitted.partner.as_ref().map(|read| read.observation),
-                        Some(StateObservation::Pre)
-                    );
-                }
-                let visits = DECLARATION_VISITS.with(std::cell::Cell::get);
-                println!("K={requests} R={declarations} declaration_visits={visits}");
-                if visits > requests * (declarations + 2) {
-                    excessive.push((requests, declarations, visits));
-                }
-            }
-        }
-        assert!(
-            excessive.is_empty(),
-            "repeated declaration scans: {excessive:?}"
-        );
-    }
-}
-
 use quire_contract_model::{
     BoundClause, BoundPackage, ClauseKind, ClauseRef, ComparisonOperator as IrComparisonOperator,
     ExecutionPoint, Expression, ExpressionKind, StateObservation, ValueDeclaration,
@@ -1142,6 +1052,89 @@ mod tests {
             let refusal = checked_relation_literal(&clause, expression, literal).unwrap_err();
             assert_eq!(refusal.code, StrategyErrorCode::UnsupportedRelation);
             assert_eq!(refusal.source_span.as_deref(), Some(expression.source()));
+        }
+    }
+}
+
+#[cfg(test)]
+mod declaration_lookup_tests {
+    use super::*;
+    use ix_trace_rs::trace;
+    use quire_contract_model::{BoundPackage, EXECUTABLE_PROJECTION_FORMAT};
+    use serde_json::{json, Value};
+
+    fn span(line: u64) -> Value {
+        let source = json!({"document":"ir-988-numeric", "revision":1});
+        json!({
+            "start":{"source":source,"line":line,"column":1,"byte_offset":line - 1},
+            "end":{"source":source,"line":line,"column":2,"byte_offset":line}
+        })
+    }
+
+    fn package_with_declarations(count: usize) -> BoundPackage {
+        let owner = json!({"package":"test/ir-988","requirement":"FR-100","revision":1});
+        let anchor = json!({"kind":"post","operation":"checkAmount"});
+        let integer = json!({"kind":"integer","domain":"signed","minimum":"0",
+            "maximum":"1000","overflow":"reject"});
+        let mut values = (0..count - 1)
+            .map(|index| {
+                json!({"name":format!("filler{index}"),"kind":"state",
+                "value_type":integer,"source":span(index as u64 + 5)})
+            })
+            .collect::<Vec<_>>();
+        values.push(json!({"name":"amount","kind":"state","value_type":integer,
+            "source":span(count as u64 + 5)}));
+        let wire = json!({
+            "format": EXECUTABLE_PROJECTION_FORMAT,
+            "package":{"id":"test/ir-988","schema_version":{"major":1,"minor":1},
+                "source":{"document":"ir-988-numeric","revision":1},
+                "requirements":[{"id":"FR-100","revision":1,"source":span(1),
+                    "clauses":[{"id":"amount-check","kind":"postcondition",
+                        "anchor":anchor,"source":span(2),
+                        "body":{"node":"composite","children":[
+                            {"node":"reference","identity":{"requirement":owner,
+                                "kind":"state","observation":"post","path":["amount"]}},
+                            {"node":"reference","identity":{"requirement":owner,
+                                "kind":"state","observation":"pre","path":["amount"]}}
+                        ]}}]}]},
+            "bindings":[{"clause":{"requirement":owner,"clause":"amount-check"},
+                "expression":{"owner":owner,"types":[],"values":values,"functions":[],
+                    "expression":{"node":"compare","operator":"equal",
+                        "left":{"node":"value_reference","name":"amount",
+                            "observation":"post","source":span(3)},
+                        "right":{"node":"value_reference","name":"amount",
+                            "observation":"pre","source":span(4)},
+                        "source":span(3)},
+                    "expected_type":{"kind":"boolean"},"execution_point":anchor,
+                    "clause_root":true}}]
+        });
+        BoundPackage::from_json_bytes(&serde_json::to_vec(&wire).expect("wire bytes"))
+            .expect("admitted numeric projection")
+    }
+
+    #[trace("TC-017")]
+    #[test]
+    fn ir_988_declaration_lookups_do_not_repeat_full_scans_per_read() {
+        for requests in [2, 4, 8] {
+            for declarations in [4, 8, 16] {
+                let package = package_with_declarations(declarations);
+                let clause = &package.clauses()[0];
+                DECLARATION_VISITS.with(|visits| visits.set(0));
+                for _ in 0..requests {
+                    let declarations = BoundDeclarationIndex::new(clause);
+                    let admitted =
+                        admit_relation(clause, &declarations).expect("admitted relation");
+                    assert_eq!(admitted.primary.name, "amount");
+                    assert_eq!(admitted.primary.observation, StateObservation::Post);
+                    assert_eq!(
+                        admitted.partner.as_ref().map(|read| read.observation),
+                        Some(StateObservation::Pre)
+                    );
+                }
+                let visits = DECLARATION_VISITS.with(std::cell::Cell::get);
+                println!("K={requests} R={declarations} declaration_visits={visits}");
+                assert_eq!(visits, requests * declarations, "one pass per request");
+            }
         }
     }
 }
