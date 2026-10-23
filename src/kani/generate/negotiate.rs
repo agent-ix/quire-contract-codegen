@@ -73,7 +73,7 @@ use crate::{
     },
     kani::generate::collection::{
         collection_symbols_conflict, lower_collection_claim, render_collection,
-        CollectionDomainRefusal, LoweredCollectionClaim,
+        CollectionDomainRefusal, CollectionGraph, LoweredCollectionClaim,
     },
     kani::generate::contract::render_contract,
     kani::generate::frame::{generate_state_frame_role, StateFrameRequest},
@@ -547,7 +547,8 @@ fn classify_collection<'a>(
     function_id: &'a CheckedNodeId,
     node_id: &'a CheckedNodeId,
 ) -> ItemState<'a> {
-    let outcome = match lower_collection_claim(package, function_id, node_id) {
+    let graph = CollectionGraph::new(package);
+    let outcome = match lower_collection_claim(&graph, function_id, node_id) {
         Ok(lowered) => Outcome::LoweredCollection(Box::new(lowered)),
         Err(CollectionDomainRefusal::RequiresBound { unbounded_type }) => {
             Outcome::RequiresBound(unbounded_type)
