@@ -142,3 +142,7 @@ Plan completion: not assessed. Optional whole-repository semantic audit not requ
 ## Final PR-head recheck
 
 PASS for the CG-owned slice at exact head `a502daa91ddb6d6fb424bb80dffda0346ad97f2c`, unchanged base `aac7e5113c549fa58d59d9342e2144641369cc43`. All listed findings are fixed. Full FR-045-AC-1 remains open pending QSL FR-315 encoder and QSL settlement. Reviewer reran `cargo test --locked --lib smt::pair_tests`: 4 passed, 0 failed, and `git diff --check` passed. No aggregate gate or engine run was performed by this reviewer.
+
+## AD-004 layout disposition
+
+PASS at exact PR head `48cda22b5a384fe7c45f6396fe345bb5bc23c66c` on base `b68193997a15fd37ea3d25132c39f83138ed54dc`. The parent `1132871afe69cd255cdf0ebf1fe65fade697747b` to this head renames `src/smt/mod.rs` and `src/smt/pair_tests.rs` to `src/routed/smt/` with both file contents byte-identical; `src/routed/mod.rs` declares the module and `src/lib.rs` re-exports its public facade. No product logic or test body changed. The routed subsystem may import Kani under AD-004 L-2. Focused `cargo test --locked --test it layout::` passed all eight layout controls, including L-1 and L-2; `git diff --check` passed. The original finding rows and fixed dispositions remain unchanged. No aggregate gate or engine run is claimed by this reviewer.
