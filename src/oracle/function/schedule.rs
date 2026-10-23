@@ -1063,39 +1063,18 @@ mod tests {
         let parameter = deep_id(1);
         let declaration = deep_id(0);
         let integer_type = deep_id(CALLS + 2);
-        let reference = |target: &CheckedNodeId| {
-            serde_json::json!({
-                "term": "reference",
-                "target": {"domain": target.domain, "digest": target.digest},
-            })
+        use crate::oracle::checked_graph::fixture::Node;
+        use quire_contract_model::{ApplicationOperator, CheckedTerm};
+        let reference = |target: &CheckedNodeId| CheckedTerm::Reference {
+            target: target.clone(),
         };
         let mut source_nodes = Vec::with_capacity(CALL_COUNT + 1);
-        source_nodes.push(super::super::CheckedSemanticNodeV2 {
-            node_id: parameter.clone(),
-            schema_version: "quire.checked-semantic-graph/v2".into(),
-            node_tag: "value".into(),
-            semantic_form: "parameter".into(),
-            semantic_type: integer_type.clone(),
-            dependencies: Vec::new(),
-            occurrences: Vec::new(),
-            recursion_group: None,
-            nominal_identity_preimage: None,
-            declaration: None,
-            owner: None,
-            body: serde_json::json!({}),
-        });
-        for ordinal in 0..CALLS {
-            let node_id = deep_id(ordinal + 2);
-            let argument = if ordinal == 0 {
-                parameter.clone()
-            } else {
-                deep_id(ordinal + 1)
-            };
-            source_nodes.push(super::super::CheckedSemanticNodeV2 {
-                node_id,
+        source_nodes.push(Node::new(
+            super::super::CheckedSemanticNodeV2 {
+                node_id: parameter.clone(),
                 schema_version: "quire.checked-semantic-graph/v2".into(),
-                node_tag: "expression".into(),
-                semantic_form: "call".into(),
+                node_tag: "value".into(),
+                semantic_form: "parameter".into(),
                 semantic_type: integer_type.clone(),
                 dependencies: Vec::new(),
                 occurrences: Vec::new(),
@@ -1103,17 +1082,39 @@ mod tests {
                 nominal_identity_preimage: None,
                 declaration: None,
                 owner: None,
-                body: serde_json::json!({
-                    "term": "application",
-                    "operator": "call",
-                    "operation": {"identity": "quire.op.function.call"},
-                    "result_type": {
-                        "domain": integer_type.domain,
-                        "digest": integer_type.digest,
-                    },
-                    "arguments": [reference(&declaration), reference(&argument)],
+                body: serde_json::Value::Null,
+            },
+            None,
+        ));
+        for ordinal in 0..CALLS {
+            let node_id = deep_id(ordinal + 2);
+            let argument = if ordinal == 0 {
+                parameter.clone()
+            } else {
+                deep_id(ordinal + 1)
+            };
+            source_nodes.push(Node::new(
+                super::super::CheckedSemanticNodeV2 {
+                    node_id,
+                    schema_version: "quire.checked-semantic-graph/v2".into(),
+                    node_tag: "expression".into(),
+                    semantic_form: "call".into(),
+                    semantic_type: integer_type.clone(),
+                    dependencies: Vec::new(),
+                    occurrences: Vec::new(),
+                    recursion_group: None,
+                    nominal_identity_preimage: None,
+                    declaration: None,
+                    owner: None,
+                    body: serde_json::Value::Null,
+                },
+                Some(CheckedTerm::Application {
+                    operator: ApplicationOperator::Call,
+                    operation: serde_json::json!({"identity": "quire.op.function.call"}),
+                    result_type: integer_type.clone(),
+                    arguments: vec![reference(&declaration), reference(&argument)],
                 }),
-            });
+            ));
         }
 
         let root = deep_id(CALLS + 1);
@@ -1128,10 +1129,8 @@ mod tests {
             .name("ir496-ac7-small-stack".to_owned())
             .stack_size(512 * 1024)
             .spawn(move || {
-                let source_node_map = source_nodes
-                    .iter()
-                    .map(|node| (node.node_id.clone(), node))
-                    .collect::<BTreeMap<_, _>>();
+                let source_node_map: super::super::Graph<'_> = source_nodes
+                    .iter().map(|node| (&node.node_id, node)).collect();
                 let type_kinds = BTreeMap::from([(integer_type, ValueKind::Integer)]);
                 let mut work =
                     WorkCounter::new(REQUIRED_WORK).expect("the exact work limit is representable");

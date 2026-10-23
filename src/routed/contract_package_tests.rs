@@ -32,7 +32,7 @@ mod tests {
     use quire_contract_model::{
         CheckedNodeId, CheckedNodeTag, CheckedOccurrenceRole, CheckedPackageEvidence,
         CheckedPackageReadLimits, CheckedPackageRefusalCode, CheckedPackageV2,
-        CheckedPackageV2ReadResult, CompleteLoweringProfileV2, ContractDependencies,
+        CheckedPackageV2ReadResult, CheckedTerm, CompleteLoweringProfileV2, ContractDependencies,
         ContractDependencyInput, ContractFeatureRecordV1, ContractOccurrenceKeyV1,
         ContractPackageReadResult, ContractPackageWireV1, ContractRootViewV1, LoweringProfileRef,
     };
@@ -966,16 +966,12 @@ mod tests {
         checked: &CheckedPackageV2,
         call_id: &CheckedNodeId,
     ) -> Vec<CheckedNodeId> {
-        let call = checked
-            .graph()
-            .nodes
-            .iter()
-            .find(|node| &node.node_id == call_id)
-            .expect("checked source call");
-        call.body
-            .get("arguments")
-            .and_then(serde_json::Value::as_array)
-            .expect("source call arguments")
+        let CheckedTerm::Application { arguments, .. } =
+            checked.term(call_id).expect("checked source call")
+        else {
+            panic!("source call arguments");
+        };
+        arguments
             .iter()
             .skip(1)
             .map(|argument| {
@@ -1305,8 +1301,11 @@ mod tests {
                     })
             })
             .expect("named checked function");
-        let body = crate::oracle::function::binding_value(&function.body, "body")
-            .expect("function body binding");
+        let term = checked
+            .term(&function.node_id)
+            .expect("checked function body");
+        let body =
+            crate::oracle::function::binding_value(term, "body").expect("function body binding");
         crate::oracle::function::reference_node_id(body, checked.graph().nodes.iter())
             .expect("function body reference")
             .clone()

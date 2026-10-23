@@ -130,6 +130,7 @@ use crate::{
         StateFrameHarness,
     },
     oracle::boolean_v1::{generate_named_boolean_oracle, OracleRequest, OracleShape},
+    oracle::checked_graph::CheckedGraph,
     oracle::claim::{ClaimDisposition, ClaimMap, UpstreamBlocker},
     oracle::scalar::{operand_ranges, ExactScalarClaim, ExactScalarRefusal, OperationProvenance},
 };
@@ -137,16 +138,13 @@ use crate::{
 /// One admitted scalar package's node and source lookups, shared by its request items.
 /// A node's first graph entry and all source entries retain their original wire order.
 struct ContractLookup<'a> {
-    graph: crate::oracle::scalar::Graph<'a>,
+    graph: CheckedGraph<'a>,
     sources: BTreeMap<&'a CheckedNodeId, Vec<&'a CheckedSourceMapEntry>>,
 }
 
 impl<'a> ContractLookup<'a> {
     fn new(package: &'a ContractPackageV1) -> Self {
-        let mut graph = BTreeMap::new();
-        for node in &package.wire().semantic_graph.nodes {
-            graph.entry(&node.node_id).or_insert(node);
-        }
+        let graph = CheckedGraph::new(package);
         let mut sources = BTreeMap::<_, Vec<_>>::new();
         for entry in &package.wire().source_map.nodes {
             sources
@@ -158,7 +156,7 @@ impl<'a> ContractLookup<'a> {
     }
 
     fn node(&self, id: &CheckedNodeId) -> Option<&'a CheckedSemanticNodeV2> {
-        self.graph.get(id).copied()
+        self.graph.node(id)
     }
 
     fn occurrences(&self, id: &CheckedNodeId) -> Vec<CheckedSourceMapEntry> {
@@ -227,7 +225,7 @@ fn checked_lookup<'a, 'lookup>(
 /// Reuse admitted scalar graph lookups across capability items, whose boxed packages may be
 /// distinct allocations of the same admitted identity.
 pub(crate) struct ScalarFormLookups<'a> {
-    checked: BTreeMap<CheckedSemanticId, crate::oracle::scalar::Graph<'a>>,
+    checked: BTreeMap<CheckedSemanticId, BTreeMap<&'a CheckedNodeId, &'a CheckedSemanticNodeV2>>,
     contract: BTreeMap<CheckedSemanticId, ContractLookup<'a>>,
 }
 
@@ -1082,8 +1080,9 @@ fn classify_claim<'a>(lookup: &ContractLookup<'_>, claim: &ExactScalarClaim) -> 
                 .chain(&generated.bounds)
                 .collect::<BTreeSet<_>>();
             for bound in bound_ids.into_iter().filter_map(graph) {
-                let domain = derive_domain(bound);
-                if let Some((lower, upper)) = unsatisfiable(bound) {
+                let term = lookup.graph.term(&bound.node_id);
+                let domain = derive_domain(bound, term);
+                if let Some((lower, upper)) = unsatisfiable(bound, term) {
                     return Outcome::Unsupported(UnsupportedObligation::UnsatisfiableBound {
                         bound: bound.node_id.clone(),
                         form: bound.semantic_form.to_string(),
@@ -1173,7 +1172,9 @@ fn classify_claim<'a>(lookup: &ContractLookup<'_>, claim: &ExactScalarClaim) -> 
                 issue: *issue,
             }),
             ExactScalarRefusal::UnreadableBound { bound } => {
-                match graph(bound).and_then(|node| unsatisfiable(node).map(|pair| (node, pair))) {
+                match graph(bound).and_then(|node| {
+                    unsatisfiable(node, lookup.graph.term(&node.node_id)).map(|pair| (node, pair))
+                }) {
                     Some((node, (lower, upper))) => {
                         Outcome::Unsupported(UnsupportedObligation::UnsatisfiableBound {
                             bound: bound.clone(),

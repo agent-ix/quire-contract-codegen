@@ -31,7 +31,7 @@ use std::{num::NonZeroU64, time::Duration};
 
 use quire_contract_model::{
     CheckedMemberType, CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticNodeV2,
-    CompleteLoweringProfileV2, CompleteLoweringRecordV2,
+    CheckedTerm, CompleteLoweringProfileV2, CompleteLoweringRecordV2, LiteralKind,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -49,7 +49,7 @@ use crate::{
         StateComparison, StateFieldDomain, StateFrameHarness, StateFrameIdentity,
         StateFrameProperty, StateFrameScope, StateUnrangedField, StateUnrangedReason,
     },
-    oracle::scalar::{bound_members, literal},
+    oracle::checked_graph::{aggregate_members, bound_members, literal},
 };
 
 /// Work budget for lowering one clause and its closure.
@@ -655,16 +655,11 @@ impl ClauseShape {
             .skip(1)
             .map(|parameter| {
                 let decoded = || {
-                    let members = graph
-                        .nodes
-                        .get(parameter)?
-                        .body
-                        .get("members")?
-                        .as_array()?;
+                    let members = aggregate_members(graph.package.term(parameter))?;
                     let [name, level] = bound_members(members, ["name", "level"])?;
                     Some((
-                        literal(name, "text")?.to_owned(),
-                        literal(level, "integer")?.to_owned(),
+                        literal(name, LiteralKind::Text)?.to_owned(),
+                        literal(level, LiteralKind::Integer)?.to_owned(),
                     ))
                 };
                 decoded().ok_or_else(|| parameter.clone())
@@ -906,11 +901,11 @@ fn read_scope(graph: &Graph<'_>, anchor: &CheckedSemanticNodeV2) -> Option<State
     if &*anchor.node_tag != "state" || &*anchor.semantic_form != "operation_anchor" {
         return None;
     }
-    let members = anchor.body.get("members")?.as_array()?;
+    let members = aggregate_members(graph.package.term(&anchor.node_id))?;
     let [context, operation, frame] = bound_members(members, ["context", "operation", "frame"])?;
-    let target = |term: &Value| {
-        (term.get("term")?.as_str()? == "reference").then_some(())?;
-        node_id(term.get("target")?)
+    let target = |term: &CheckedTerm| match term {
+        CheckedTerm::Reference { target } => Some(target.clone()),
+        _ => None,
     };
     let (object, frame) = (target(context)?, target(frame)?);
     let is_frame = graph
@@ -921,7 +916,7 @@ fn read_scope(graph: &Graph<'_>, anchor: &CheckedSemanticNodeV2) -> Option<State
         return None;
     }
     Some(StateFrameScope {
-        operation: literal(operation, "text")?.to_owned(),
+        operation: literal(operation, LiteralKind::Text)?.to_owned(),
         object,
         anchor: anchor.node_id.clone(),
         frame,
