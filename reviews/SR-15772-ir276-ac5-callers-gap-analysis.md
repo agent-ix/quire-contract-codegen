@@ -3,7 +3,7 @@ id: SR-15772
 title: IR-276 CG caller pass gap analysis
 type: SpecReview
 analysis: gap-analysis
-scope: "agent-ix/quire-contract-codegen; IR-276 AC-5 caller pass; src/evidence/v2_llvm.rs; src/kani/generate/clause/v2.rs; src/kani/generate/negotiate.rs"
+scope: "agent-ix/quire-contract-codegen; IR-276 AC-5 caller pass; src/evidence/v2_llvm.rs; src/kani/generate/clause/v2.rs; src/kani/generate/negotiate.rs; tests/clause_admission_support/mod.rs"
 review_set: subset
 relationships:
   - { target: "ix://agent-ix/quire-contract-codegen/FR-004", type: references }
@@ -66,3 +66,7 @@ bindings:
   - { test_id: request_view_keeps_population_and_artifact_refusal_precedence_without_partial_rows, ac_id: FR-004-AC-18, trace: correct }
   - { test_id: request_view_keeps_population_and_artifact_refusal_precedence_without_partial_rows, ac_id: FR-004-AC-24, trace: correct }
 ```
+
+## Final PR-head recheck
+
+At PR #545 head `7b5a4ab7e2bdbb9e965941d07820ac5900c7e412`, the new admission-only fixture preserves the QSL-emitted, strict-IR-admitted test input path without adding production behavior or new trace claims. The changed Kani measurement test reads its source and domain from that fixture directly. The five examined FR-004 bindings and the counted IR-276 work checks retain the same assertions; the production patch from candidate `7f0df7c9` is byte-identical. No new test/criterion or reverse-code gap was introduced by the fixture repair. Scoped PASS carries; SR-15771's FND-001 is fixed.

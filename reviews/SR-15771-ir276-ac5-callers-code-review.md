@@ -3,7 +3,7 @@ id: SR-15771
 title: IR-276 CG caller pass code and Rust review
 type: SpecReview
 analysis: code-review
-scope: "agent-ix/quire-contract-codegen; IR-276 AC-5 caller pass; src/evidence/v2_llvm.rs; src/kani/generate/clause/v2.rs; src/kani/generate/negotiate.rs"
+scope: "agent-ix/quire-contract-codegen; IR-276 AC-5 caller pass; src/evidence/v2_llvm.rs; src/kani/generate/clause/v2.rs; src/kani/generate/negotiate.rs; tests/clause_admission_support/mod.rs"
 review_set: subset
 relationships:
   - { target: "ix://agent-ix/quire-contract-codegen/AD-004", type: references }
@@ -82,3 +82,13 @@ bindings:
   - { test_id: request_view_keeps_population_and_artifact_refusal_precedence_without_partial_rows, ac_id: FR-004-AC-23, trace: correct }
   - { test_id: request_view_keeps_population_and_artifact_refusal_precedence_without_partial_rows, ac_id: FR-004-AC-24, trace: correct }
 ```
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | PR #545 head `7b5a4ab7e2bdbb9e965941d07820ac5900c7e412` changes both new `#[path]` inclusions to `tests/clause_admission_support/mod.rs`; that admission-only fixture imports QSL and the strict Contract IR reader, and has no CG self-facade, crate-root or replay-facade import. The earlier `role_parity_tests.rs` inclusion is unchanged. |
+
+## Final verdict
+
+PASS at exact PR #545 head `7b5a4ab7e2bdbb9e965941d07820ac5900c7e412` on base `2cdce220567878a20170088606e049ed67cf9cc2`. FND-001 is fixed. The only post-review changes are two test fixture path substitutions, the Kani work test's direct use of the admission fixture's QSL unit/domain bytes, and the new admission-only fixture. All production lookups and #534 scalar/cache code remain byte-identical to the reviewed candidate. The new helper's QSL call and strict reader still produce admitted packages; its data path carries no CG root or internal replay dependency. `git diff --check` and `cargo fmt --check` passed at this head. The author reports six focused controls and Clippy clean; the reviewer did not run aggregate gates.
