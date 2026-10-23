@@ -75,7 +75,8 @@ mod tests {
     use qsl_replay::{ReplayLimits, ScalarLimits, WitnessValue, DEFAULT_REPLAY_INPUT_BYTES};
     use quire_contract_codegen::{
         decode_falsification, execute_kani_obligation, replay_counterexample, KaniExecutionRequest,
-        KaniRunOutcome, LockedSource, ReplayInputs, ReplayPackage, ReplayVerdict,
+        KaniObligationIdentity, KaniRunOutcome, LockedSource, ReplayInputs, ReplayPackage,
+        ReplayVerdict,
     };
     use std::{collections::BTreeMap, process::Command};
 
@@ -97,7 +98,7 @@ mod tests {
         )
     }
 
-    fn native_twin() -> ReplayPackage {
+    fn native_twin(identity: &KaniObligationIdentity) -> ReplayPackage {
         let source = "language \"ix:native\" edition \"1-draft\";\n\
                       profile v = \"quire.value.complete/v1\";\n\
                       function balance_never_grows using v(amount_current: Int[0, 1000], \
@@ -137,6 +138,8 @@ mod tests {
             "balance_never_grows",
         )
         .expect("native twin compiles")
+        .with_kani_identity(identity)
+        .expect("the retained proof identity binds the twin")
     }
 
     /// The observer passes through the launcher's stdout and exit status while retaining its
@@ -240,7 +243,7 @@ mod tests {
         assert!(decoded
             .iter()
             .all(|(_, value)| matches!(value, WitnessValue::Integer(_))));
-        let twin = native_twin();
+        let twin = native_twin(&harness.identity);
         assert_eq!(
             replay_counterexample(&harness.identity, &counterexample, &twin)
                 .expect("native replay settles"),
