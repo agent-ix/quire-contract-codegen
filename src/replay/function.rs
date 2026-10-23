@@ -1638,7 +1638,7 @@ mod tests {
         let obligation = ObligationIdentity::from_digest([0x35; 32]);
         let assignments = vec![CanonicalAssignment {
             parameter: package.site.site.parameters[0].1,
-            value: 4,
+            value: WitnessValue::Integer(4),
         }];
         let packet = package.value_parity_packet(obligation, assignments.clone());
         let envelope = WitnessEnvelope::reconstruct(packet.clone(), package.inputs.replay_limits)
@@ -1687,7 +1687,7 @@ mod tests {
         let obligation = ObligationIdentity::from_digest([0x35; 32]);
         let assignments = vec![CanonicalAssignment {
             parameter: package.site.site.parameters[0].1,
-            value: 4,
+            value: WitnessValue::Integer(4),
         }];
         let packet = package.value_parity_packet(obligation, assignments);
 
