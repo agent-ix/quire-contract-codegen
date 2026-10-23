@@ -3265,7 +3265,7 @@ mod tests {
             value_kind: LiteralKind::Integer,
             value: serde_json::json!("7"),
         };
-        let types = BTreeMap::from([(type_node, schedule::ValueKind::Integer)]);
+        let types = BTreeMap::from([(type_node.clone(), schedule::ValueKind::Integer)]);
         assert_eq!(
             decode_schedule_operand(&literal, &owner, &types),
             Ok(schedule::GraphOperand::Literal {
@@ -3273,11 +3273,8 @@ mod tests {
                 value: "7".to_owned(),
             })
         );
-        let CheckedTerm::Literal { type_id, .. } = &literal else {
-            panic!("literal fixture");
-        };
         let malformed = CheckedTerm::Literal {
-            type_id: type_id.clone(),
+            type_id: type_node,
             value_kind: LiteralKind::Integer,
             value: serde_json::json!("seven"),
         };

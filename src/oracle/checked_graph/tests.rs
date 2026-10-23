@@ -62,8 +62,7 @@ fn published_package(fixture: &str) -> CheckedPackageV2 {
         }
     }
     let canonical =
-        quire_canonical::to_vec(&document, quire_canonical::Limits::new(16 * 1024 * 1024))
-            .expect("canonical published fixture");
+        crate::core::canonical::content_bytes(&document).expect("canonical published fixture");
     match CheckedPackageV2::read(&canonical, CheckedPackageReadLimits::bounded(), &evidence) {
         CheckedPackageV2ReadResult::Admitted(package) => *package,
         other => panic!("unmodified published fixture {fixture} must admit: {other:?}"),
