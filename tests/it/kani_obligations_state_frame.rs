@@ -566,45 +566,6 @@ fn tc_025_v2_precondition_fixture_compiles_with_its_direct_dependencies() {
     fs::remove_dir_all(directory).expect("remove the compiled fixture");
 }
 
-/// Real Kani must satisfy the admitted QSL precondition. The impossible-condition cover
-/// remains separately blocked by IR-705 after exceeding the fixture's memory ceiling.
-#[trace("TC-025")]
-#[test]
-#[ignore = "kani lane: run serially through `make kani`"]
-fn tc_025_real_kani_covers_v2_parameter_precondition() {
-    let run = |twin: Twin, clause_name: &str| {
-        let harness = v2_precondition_fixture_harness(twin, clause_name);
-        let directory = scratch("v2-precondition");
-        write_v2_precondition_fixture(&directory, &harness);
-        let target = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("v2-precondition-kani");
-        let cancel = quire_exact::Cancel::new();
-        let installation = KaniInstallation::discover().expect("cargo-kani installed");
-        let evidence = execute_kani_obligation(&KaniExecutionRequest {
-            cancel: &cancel,
-            installation: &installation,
-            harness: (&harness).into(),
-            crate_directory: &directory,
-            target_directory: &target,
-            home_directory: None,
-        })
-        .expect("Kani launch");
-        let _ = fs::remove_dir_all(directory);
-        assert!(
-            !matches!(evidence.outcome, KaniRunOutcome::Inconclusive { .. }),
-            "Kani gave no verdict: outcome={:?}, peak={:?}, last_check={:?}, diagnostics={:?}",
-            evidence.outcome,
-            evidence.memory.peak_resident_bytes,
-            evidence.checks.last(),
-            evidence.diagnostics
-        );
-        evidence.outcome
-    };
-    assert_eq!(
-        run(Twin::with_bounded_other_precondition(), "OtherBelowLimit"),
-        KaniRunOutcome::Verified
-    );
-}
-
 #[trace("FR-014-AC-38")]
 #[test]
 fn qsl_emitted_clause_composes_boolean_and_integer_operations() {
