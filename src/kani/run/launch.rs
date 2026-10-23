@@ -3,10 +3,11 @@
 
 use std::{
     fmt, io,
-    io::Read,
+    io::{Read, Write},
     num::NonZeroUsize,
     os::{fd::AsFd, unix::process::CommandExt},
-    process::{Child, Command, Stdio},
+    path::Path,
+    process::{Child, ChildStdin, Command, Stdio},
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -26,6 +27,7 @@ use quire_exact::{Cancel, CancelCause};
 
 use rustix::{
     event::{PollFd, PollFlags},
+    fs::{fcntl_getfl, fcntl_setfl, OFlags},
     io::Errno,
     process::{kill_process_group, waitid, Pid, Signal, WaitId, WaitIdOptions},
     time::Timespec,
@@ -33,11 +35,11 @@ use rustix::{
 
 /// The launcher's two output streams, each whole, as the process wrote them.
 #[derive(Debug, Default)]
-pub(super) struct CapturedStreams {
+pub(crate) struct CapturedStreams {
     /// Everything the process wrote to stdout.
-    pub(super) stdout: Vec<u8>,
+    pub(crate) stdout: Vec<u8>,
     /// Everything the process wrote to stderr.
-    pub(super) stderr: Vec<u8>,
+    pub(crate) stderr: Vec<u8>,
 }
 
 impl CapturedStreams {
@@ -57,7 +59,7 @@ impl CapturedStreams {
 /// concluded.
 #[derive(Debug)]
 #[non_exhaustive]
-pub(super) enum LaunchOutcome {
+pub(crate) enum LaunchOutcome {
     /// The process exited on its own within the budget.
     Completed {
         /// `ExitStatus::success()`.
@@ -124,8 +126,8 @@ impl fmt::Display for CaptureStream {
 /// Why a capture thread did not return its stream.
 #[derive(Debug, Eq, PartialEq)]
 enum CaptureFailure {
-    /// More than the limit was read.
-    OverLimit,
+    /// More than the limit was read; only the bounded prefix is retained for non-Kani callers.
+    OverLimit { prefix: Vec<u8> },
     /// The pipe could not be polled or read, or its thread panicked.
     Unread { detail: String },
 }
@@ -209,9 +211,90 @@ pub(super) struct BoundedLaunch {
 }
 
 /// Refuse unavailable memory enforcement before starting a backend.
-pub(super) enum BoundedLaunchError {
+pub(crate) enum BoundedLaunchError {
     Unavailable(io::Error),
     Io(io::Error),
+}
+
+/// The operation that failed before a complete child outcome was available.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum LaunchFailurePhase {
+    Spawn,
+    Ownership,
+    CaptureSetup,
+    Startup,
+    Wait,
+}
+
+#[derive(Debug)]
+struct StagedLaunchError {
+    phase: LaunchFailurePhase,
+    source: io::Error,
+}
+
+impl fmt::Display for StagedLaunchError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.source.fmt(formatter)
+    }
+}
+
+impl std::error::Error for StagedLaunchError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.source)
+    }
+}
+
+fn staged_error(phase: LaunchFailurePhase, source: io::Error, shared_process: bool) -> io::Error {
+    if shared_process {
+        io::Error::new(source.kind(), StagedLaunchError { phase, source })
+    } else {
+        source
+    }
+}
+
+/// Inspect the typed phase without interpreting an error message.
+pub(crate) fn failure_phase(error: &io::Error) -> Option<LaunchFailurePhase> {
+    error
+        .get_ref()
+        .and_then(|cause| cause.downcast_ref::<StagedLaunchError>())
+        .map(|cause| cause.phase)
+}
+
+/// Shared run facts for a backend whose response has its own domain interpretation.
+pub(crate) struct SharedLaunch {
+    pub(crate) outcome: LaunchOutcome,
+    pub(crate) started: bool,
+    pub(crate) input_failure: Option<String>,
+    pub(crate) partial_stdout: Option<Vec<u8>>,
+    pub(crate) partial_stderr: Option<Vec<u8>>,
+}
+
+/// Run a direct selected executable through the same owned tree monitor as Kani.
+pub(crate) fn run_bounded_process_internal(
+    executable: &Path,
+    arguments: &[std::ffi::OsString],
+    input: Vec<u8>,
+    ceilings: crate::kani::identity::ProofCeilings,
+    output_limit: usize,
+    deadline: Instant,
+    cancel: &Cancel,
+) -> Result<SharedLaunch, BoundedLaunchError> {
+    let mut command = BackendCommand::new(executable);
+    for argument in arguments {
+        command.arg(argument);
+    }
+    run_bounded_shared_at(
+        command,
+        ceilings,
+        NonZeroUsize::MIN,
+        Path::new("/proc"),
+        Some(deadline),
+        cancel,
+        &LaunchOwners::real(),
+        Some(input),
+        output_limit,
+    )
+    .map(|(run, _)| run)
 }
 
 /// Run a backend with both ceilings, retaining the actual memory observations.
@@ -243,30 +326,73 @@ fn run_bounded_launcher_at(
     cancel: &Cancel,
     owners: &LaunchOwners,
 ) -> Result<BoundedLaunch, BoundedLaunchError> {
+    let (run, memory) = run_bounded_shared_at(
+        command,
+        ceilings,
+        harnesses,
+        procfs,
+        deadline,
+        cancel,
+        owners,
+        None,
+        CAPTURE_LIMIT.saturating_mul(harnesses.get()),
+    )?;
+    Ok(BoundedLaunch {
+        outcome: run.outcome,
+        memory,
+    })
+}
+
+#[allow(clippy::too_many_arguments)] // One launch has distinct ownership, limits and deadline inputs.
+fn run_bounded_shared_at(
+    command: BackendCommand,
+    ceilings: crate::kani::identity::ProofCeilings,
+    harnesses: NonZeroUsize,
+    procfs: &Path,
+    deadline: Option<Instant>,
+    cancel: &Cancel,
+    owners: &LaunchOwners,
+    input: Option<Vec<u8>>,
+    output_limit: usize,
+) -> Result<(SharedLaunch, MemoryObservation), BoundedLaunchError> {
     let mut observer = MemoryObserver::prepare(procfs).map_err(BoundedLaunchError::Unavailable)?;
     if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
-        return Ok(BoundedLaunch {
-            outcome: LaunchOutcome::TimedOut,
-            memory: observer.observation(),
-        });
+        return Ok((
+            SharedLaunch {
+                outcome: LaunchOutcome::TimedOut,
+                started: false,
+                input_failure: None,
+                partial_stdout: None,
+                partial_stderr: None,
+            },
+            observer.observation(),
+        ));
     }
     if let Some(source) = observed_cancellation(cancel) {
-        return Ok(BoundedLaunch {
-            outcome: LaunchOutcome::Cancelled { source },
-            memory: observer.observation(),
-        });
+        return Ok((
+            SharedLaunch {
+                outcome: LaunchOutcome::Cancelled { source },
+                started: false,
+                input_failure: None,
+                partial_stdout: None,
+                partial_stderr: None,
+            },
+            observer.observation(),
+        ));
     }
     let (command, owner) = NamespaceOwner::prepare(command, Arc::clone(&owners.confirmation))
         .map_err(BoundedLaunchError::Unavailable)?;
-    let outcome = run_monitored(
+    let run = run_monitored_with(
         command,
         ceilings.wall_clock,
-        harnesses,
         Some((&mut observer, ceilings.memory_bytes.get())),
         Some(owner),
         deadline,
         cancel,
         owners,
+        input,
+        output_limit,
+        harnesses,
     )
     .map_err(|error| {
         if error.kind() == io::ErrorKind::Unsupported || error.kind() == io::ErrorKind::NotFound {
@@ -275,37 +401,90 @@ fn run_bounded_launcher_at(
             BoundedLaunchError::Io(error)
         }
     })?;
-    Ok(BoundedLaunch {
-        outcome,
-        memory: observer.observation(),
-    })
+    Ok((run, observer.observation()))
 }
 
+#[cfg(test)]
 fn run_monitored(
-    mut command: Command,
+    command: Command,
     timeout: Duration,
     harnesses: NonZeroUsize,
+    memory: Option<(&mut MemoryObserver, u64)>,
+    namespace: Option<NamespaceOwner>,
+    supplied_deadline: Option<Instant>,
+    cancel: &Cancel,
+    owners: &LaunchOwners,
+) -> io::Result<LaunchOutcome> {
+    run_monitored_with(
+        command,
+        timeout,
+        memory,
+        namespace,
+        supplied_deadline,
+        cancel,
+        owners,
+        None,
+        CAPTURE_LIMIT.saturating_mul(harnesses.get()),
+        harnesses,
+    )
+    .map(|run| run.outcome)
+}
+
+#[allow(clippy::too_many_arguments)] // Existing launch owners and resource boundaries stay explicit.
+fn run_monitored_with(
+    mut command: Command,
+    timeout: Duration,
     mut memory: Option<(&mut MemoryObserver, u64)>,
     mut namespace: Option<NamespaceOwner>,
     supplied_deadline: Option<Instant>,
     cancel: &Cancel,
     owners: &LaunchOwners,
-) -> io::Result<LaunchOutcome> {
+    input: Option<Vec<u8>>,
+    limit: usize,
+    harnesses: NonZeroUsize,
+) -> io::Result<SharedLaunch> {
+    let shared_process = input.is_some();
     command
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .process_group(0);
+    if input.is_some() {
+        command.stdin(Stdio::piped());
+    }
     let deadline = supplied_deadline.or_else(|| Instant::now().checked_add(timeout));
     if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
-        return Ok(LaunchOutcome::TimedOut);
+        return Ok(SharedLaunch {
+            outcome: LaunchOutcome::TimedOut,
+            started: false,
+            input_failure: None,
+            partial_stdout: None,
+            partial_stderr: None,
+        });
     }
     if let Some(source) = observed_cancellation(cancel) {
-        return Ok(LaunchOutcome::Cancelled { source });
+        return Ok(SharedLaunch {
+            outcome: LaunchOutcome::Cancelled { source },
+            started: false,
+            input_failure: None,
+            partial_stdout: None,
+            partial_stderr: None,
+        });
     }
-    let mut child = command.spawn()?;
+    let mut child = command
+        .spawn()
+        .map_err(|error| staged_error(LaunchFailurePhase::Spawn, error, shared_process))?;
     drop(command); // Close the parent copies of child-only control descriptors before reading EOF.
     if let Some(owner) = &mut namespace {
-        owner.attach(&child)?;
+        if let Err(error) = owner.attach(&child) {
+            // The startup gate is still closed, but the wrapper is already a live child.
+            kill_process_tree(&mut child);
+            let _ = reap_stopped_launcher(&mut child);
+            return Err(staged_error(
+                LaunchFailurePhase::Ownership,
+                error,
+                shared_process,
+            ));
+        }
     }
     let (Some(stdout), Some(stderr)) = (child.stdout.take(), child.stderr.take()) else {
         if let Some(owner) = &mut namespace {
@@ -314,15 +493,40 @@ fn run_monitored(
             kill_process_tree(&mut child);
         }
         let _ = reap_stopped_launcher(&mut child);
-        return Err(io::Error::other("a piped standard stream was not captured"));
+        return Err(staged_error(
+            LaunchFailurePhase::CaptureSetup,
+            io::Error::other("a piped standard stream was not captured"),
+            shared_process,
+        ));
     };
-    let limit = CAPTURE_LIMIT.saturating_mul(harnesses.get());
     let flags = CaptureFlags {
         stop: Arc::new(AtomicBool::new(false)),
         failed: Arc::new(AtomicBool::new(false)),
     };
     let stdout_reader = spawn_capture(stdout, &flags, limit, Arc::clone(&owners.stdout));
     let stderr_reader = spawn_capture(stderr, &flags, limit, Arc::clone(&owners.stderr));
+    let input_stop = Arc::new(AtomicBool::new(false));
+    let (input_writer, mut input_failure) = match input {
+        Some(bytes) => match child.stdin.take() {
+            Some(pipe) => match spawn_input(
+                pipe,
+                bytes,
+                Arc::clone(&input_stop),
+                Arc::clone(&flags.failed),
+            ) {
+                Ok(writer) => (Some(writer), None),
+                Err(error) => {
+                    flags.failed.store(true, Ordering::Release);
+                    (None, Some(error.to_string()))
+                }
+            },
+            None => {
+                flags.failed.store(true, Ordering::Release);
+                (None, Some("piped stdin was not captured".to_owned()))
+            }
+        },
+        None => (None, None),
+    };
 
     let startup = match &mut namespace {
         Some(owner) => match &mut memory {
@@ -344,6 +548,7 @@ fn run_monitored(
         Err(error) if error.kind() == io::ErrorKind::TimedOut => Ok(WaitConclusion::TimedOut),
         Err(_) => Err(io::Error::other("namespace startup refused")), // Refusal is returned after owned cleanup.
     };
+    input_stop.store(true, Ordering::Release);
     let cleanup = match &mut namespace {
         Some(owner) => owner.cleanup(),
         None => {
@@ -355,49 +560,111 @@ fn run_monitored(
     flags.stop.store(true, Ordering::Release);
     let stdout_bytes = finish_capture(stdout_reader);
     let stderr_bytes = finish_capture(stderr_reader);
+    let (mut partial_stdout, stdout_failure) = match stdout_bytes {
+        Ok(bytes) => (Some(bytes), None),
+        Err(CaptureFailure::OverLimit { prefix }) => (
+            Some(prefix),
+            Some(CaptureFailure::OverLimit { prefix: Vec::new() }),
+        ),
+        Err(failure) => (None, Some(failure)),
+    };
+    let (mut partial_stderr, stderr_failure) = match stderr_bytes {
+        Ok(bytes) => (Some(bytes), None),
+        Err(CaptureFailure::OverLimit { prefix }) => (
+            Some(prefix),
+            Some(CaptureFailure::OverLimit { prefix: Vec::new() }),
+        ),
+        Err(failure) => (None, Some(failure)),
+    };
+    if let Some(writer) = input_writer {
+        match writer.join() {
+            Ok(Err(error)) => input_failure = Some(error.to_string()),
+            Err(_) => input_failure = Some("the stdin writer panicked".to_owned()),
+            Ok(Ok(false)) if matches!(exited.as_ref(), Ok(WaitConclusion::Completed)) => {
+                input_failure = Some("stdin was not written whole before process exit".to_owned());
+            }
+            Ok(Ok(_)) => {}
+        }
+    }
     if let Err(error) = cleanup {
-        return Ok(LaunchOutcome::MemoryUnobserved {
-            detail: format!("namespace cleanup failed: {error}"),
+        return Ok(SharedLaunch {
+            outcome: LaunchOutcome::MemoryUnobserved {
+                detail: format!("namespace cleanup failed: {error}"),
+            },
+            started: true,
+            input_failure,
+            partial_stdout,
+            partial_stderr,
         });
     }
     if let Err(error) = startup {
         if error.kind() != io::ErrorKind::TimedOut {
-            return Err(io::Error::new(
-                io::ErrorKind::Unsupported,
-                format!("namespace startup refused: {error}"),
+            return Err(staged_error(
+                LaunchFailurePhase::Startup,
+                io::Error::new(
+                    io::ErrorKind::Unsupported,
+                    format!("namespace startup refused: {error}"),
+                ),
+                shared_process,
             ));
         }
     }
-    let exited = exited?;
-    let reaped = reaped?;
+    let exited =
+        exited.map_err(|error| staged_error(LaunchFailurePhase::Wait, error, shared_process))?;
+    let reaped =
+        reaped.map_err(|error| staged_error(LaunchFailurePhase::Wait, error, shared_process))?;
 
     // A measured memory stop owns the conclusion even if a pipe failed at the same time.
     // Neither a partial stream nor a backend report can turn this stop into a verdict.
     match exited {
-        WaitConclusion::MemoryExhausted => return Ok(LaunchOutcome::MemoryExhausted),
+        WaitConclusion::MemoryExhausted => {
+            return Ok(SharedLaunch {
+                outcome: LaunchOutcome::MemoryExhausted,
+                started: true,
+                input_failure,
+                partial_stdout,
+                partial_stderr,
+            })
+        }
         WaitConclusion::MemoryUnobserved { detail } => {
-            return Ok(LaunchOutcome::MemoryUnobserved { detail })
+            return Ok(SharedLaunch {
+                outcome: LaunchOutcome::MemoryUnobserved { detail },
+                started: true,
+                input_failure,
+                partial_stdout,
+                partial_stderr,
+            })
         }
         WaitConclusion::Completed | WaitConclusion::TimedOut | WaitConclusion::Cancelled { .. } => {
         }
     }
 
-    let stdout_bytes = match stream_bytes(CaptureStream::Stdout, stdout_bytes, limit, harnesses) {
-        Ok(bytes) => bytes,
-        Err(refusal) => return Ok(refusal),
-    };
-    let stderr_bytes = match stream_bytes(CaptureStream::Stderr, stderr_bytes, limit, harnesses) {
-        Ok(bytes) => bytes,
-        Err(refusal) => return Ok(refusal),
-    };
+    for (stream, failure) in [
+        (CaptureStream::Stdout, stdout_failure),
+        (CaptureStream::Stderr, stderr_failure),
+    ] {
+        if let Some(failure) = failure {
+            return Ok(SharedLaunch {
+                outcome: capture_failure_outcome(stream, failure, limit, harnesses),
+                started: true,
+                input_failure,
+                partial_stdout,
+                partial_stderr,
+            });
+        }
+    }
 
     let outcome = match exited {
         WaitConclusion::Completed => LaunchOutcome::Completed {
             exited_successfully: reaped.success(),
             exit_code: reaped.code(),
             streams: CapturedStreams {
-                stdout: stdout_bytes,
-                stderr: stderr_bytes,
+                stdout: partial_stdout
+                    .take()
+                    .ok_or_else(|| io::Error::other("stdout capture missing"))?,
+                stderr: partial_stderr
+                    .take()
+                    .ok_or_else(|| io::Error::other("stderr capture missing"))?,
             },
         },
         WaitConclusion::TimedOut => LaunchOutcome::TimedOut,
@@ -405,7 +672,13 @@ fn run_monitored(
         WaitConclusion::MemoryExhausted => LaunchOutcome::MemoryExhausted,
         WaitConclusion::MemoryUnobserved { detail } => LaunchOutcome::MemoryUnobserved { detail },
     };
-    Ok(outcome)
+    Ok(SharedLaunch {
+        outcome,
+        started: true,
+        input_failure,
+        partial_stdout,
+        partial_stderr,
+    })
 }
 
 /// Reap only after observing exit; never turn unconfirmed kernel teardown into an unbounded wait.
@@ -433,20 +706,30 @@ fn reap_stopped_launcher(child: &mut Child) -> io::Result<std::process::ExitStat
 
 /// The bytes of `stream`, or the outcome that refuses the run because they were not all read or
 /// were more than `limit`.
+#[cfg(test)]
 fn stream_bytes(
     stream: CaptureStream,
     captured: Captured,
     limit: usize,
     harnesses: NonZeroUsize,
 ) -> Result<Vec<u8>, LaunchOutcome> {
-    captured.map_err(|failure| match failure {
-        CaptureFailure::OverLimit => LaunchOutcome::OutputOverLimit {
+    captured.map_err(|failure| capture_failure_outcome(stream, failure, limit, harnesses))
+}
+
+fn capture_failure_outcome(
+    stream: CaptureStream,
+    failure: CaptureFailure,
+    limit: usize,
+    harnesses: NonZeroUsize,
+) -> LaunchOutcome {
+    match failure {
+        CaptureFailure::OverLimit { .. } => LaunchOutcome::OutputOverLimit {
             stream,
             limit,
             harnesses: harnesses.get(),
         },
         CaptureFailure::Unread { detail } => LaunchOutcome::OutputUnread { stream, detail },
-    })
+    }
 }
 
 /// The two flags the capture threads and the run share.
@@ -568,6 +851,50 @@ where
     })
 }
 
+/// Write exact input on a nonblocking pipe so a child that never reads stdin cannot hold cleanup.
+fn spawn_input(
+    mut pipe: ChildStdin,
+    bytes: Vec<u8>,
+    stop: Arc<AtomicBool>,
+    failed: Arc<AtomicBool>,
+) -> io::Result<thread::JoinHandle<io::Result<bool>>> {
+    let flags = fcntl_getfl(&pipe)?;
+    fcntl_setfl(&pipe, flags | OFlags::NONBLOCK)?;
+    Ok(thread::spawn(move || {
+        let mut failure = FlagOnFailure {
+            flag: failed,
+            failed: true,
+        };
+        let mut offset = 0;
+        let result = loop {
+            if offset == bytes.len() {
+                break Ok(true);
+            }
+            if stop.load(Ordering::Acquire) {
+                break Ok(false);
+            }
+            let end = bytes.len().min(offset.saturating_add(64 * 1024));
+            match pipe.write(&bytes[offset..end]) {
+                Ok(0) => break Err(io::Error::from(io::ErrorKind::WriteZero)),
+                Ok(written) => offset += written,
+                Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+                    let mut ready = [PollFd::new(&pipe, PollFlags::OUT)];
+                    let wait = Timespec::try_from(LAUNCHER_POLL_INTERVAL).unwrap_or_default();
+                    match rustix::event::poll(&mut ready, Some(&wait)) {
+                        Ok(_) | Err(Errno::INTR) => {}
+                        Err(error) => break Err(error.into()),
+                    }
+                }
+                Err(_) if stop.load(Ordering::Acquire) => break Ok(false),
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+                Err(error) => break Err(error),
+            }
+        };
+        failure.failed = result.is_err();
+        result
+    }))
+}
+
 /// Sets `flag` when dropped while `failed`, which a capture thread is until it has returned its
 /// stream: a thread that panics unwinds through this and so stops the run's wait too, instead of
 /// leaving the run waiting on a launcher whose output nobody reads.
@@ -598,9 +925,9 @@ fn finish_capture(reader: thread::JoinHandle<Captured>) -> Captured {
 /// `drain_limit` has passed, returning every byte read. Everything written before `stop` was set
 /// is already in the pipe when the flag is seen, so the drain after it loses none of it.
 ///
-/// More than `limit` bytes is [`CaptureFailure::OverLimit`] and exactly `limit` is returned
-/// whole; a failed poll or read is [`CaptureFailure::Unread`]. Nothing is truncated and nothing
-/// that failed is returned as what had been read so far.
+/// More than `limit` bytes is [`CaptureFailure::OverLimit`] with only the bounded prefix, and
+/// exactly `limit` is returned whole. A failed poll or read is [`CaptureFailure::Unread`]. Kani
+/// never treats an over-limit prefix as complete output or proof evidence.
 fn capture<R: Read + AsFd>(
     mut pipe: R,
     stop: &AtomicBool,
@@ -643,9 +970,10 @@ fn capture<R: Read + AsFd>(
         match pipe.read(&mut chunk) {
             Ok(0) => break,
             Ok(read) => {
-                kept.extend(chunk.iter().take(read));
-                if kept.len() > limit {
-                    return Err(CaptureFailure::OverLimit);
+                let remaining = limit.saturating_sub(kept.len());
+                kept.extend(chunk.iter().take(read.min(remaining)));
+                if read > remaining {
+                    return Err(CaptureFailure::OverLimit { prefix: kept });
                 }
             }
             Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
@@ -665,7 +993,7 @@ fn capture<R: Read + AsFd>(
 /// does not leave its descendants behind: Kani's launcher
 /// forks `kani-driver`, which forks CBMC, and CBMC is the solver a budget most needs to stop. A
 /// `child.kill()` alone would leave it running after the launcher is gone. The launcher is started
-/// as the leader of its own process group ([`run_monitored`]), every descendant
+/// as the leader of its own process group ([`run_monitored_with`]), every descendant
 /// inherits that group, and one signal to the group reaches them all, however deep, with no
 /// snapshot of the process tree that could miss a process forked a moment later.
 ///
@@ -1044,7 +1372,9 @@ mod tests {
             producer.join().unwrap();
             match (expected, captured) {
                 (true, Ok(kept)) => assert_eq!(kept.len(), limit, "exactly the limit is whole"),
-                (false, Err(CaptureFailure::OverLimit)) => {}
+                (false, Err(CaptureFailure::OverLimit { prefix })) => {
+                    assert_eq!(prefix.len(), limit);
+                }
                 (_, other) => panic!("{written} bytes against a limit of {limit}: {other:?}"),
             }
         }
@@ -1391,7 +1721,7 @@ mod tests {
         assert!(matches!(
             stream_bytes(
                 CaptureStream::Stdout,
-                Err(CaptureFailure::OverLimit),
+                Err(CaptureFailure::OverLimit { prefix: vec![] }),
                 5,
                 one
             ),
