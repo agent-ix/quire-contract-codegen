@@ -11,13 +11,14 @@
 use std::{collections::BTreeMap, fmt};
 
 use qsl_replay::{
-    call_site, replay, ByteDigest, CallSite, CallSiteRefusal, Category, DeclaredDomain,
-    DependencyEntryWire, DependencyInput, DependencyInputRefusal, DigestDomain, DigestRecord,
-    DisagreementCause, FunctionSite, Identifier, MalformedTranscript, ObligationIdentity,
-    OccurrenceKey, QualifiedName, ReplayLimits, ReplayRefusal, ReplayRequestWire, ReplayResult,
-    ReplaySource, ScalarLimits, SourceIdentity, StateEnvironment, SuppliedLibrary, WireNodeId,
+    call_site, replay, ByteDigest, CallSite, CallSiteRefusal, DeclaredDomain, DependencyEntryWire,
+    DependencyInput, DependencyInputRefusal, DigestDomain, DigestRecord, DisagreementCause,
+    FunctionSite, Identifier, MalformedTranscript, ObligationIdentity, OccurrenceKey,
+    QualifiedName, ReplayLimits, ReplayRefusal, ReplayRequestWire, ReplayResult, ReplaySource,
+    RequestTargetWire, ScalarLimits, SourceIdentity, StateEnvironment, SuppliedLibrary, WireNodeId,
     Witness, WitnessArmResult, WitnessSettlement, WitnessValue,
 };
+use quire_semantic_value::catalog::Category;
 
 use crate::{
     kani::generate::corpus::bounded_kani_corpus::BoundedCorpusCase,
@@ -448,7 +449,7 @@ impl ReplayInputs {
     pub(crate) fn wire(
         &self,
         package_id: DigestRecord,
-        selected: QualifiedName,
+        replay_target: RequestTargetWire,
         source: ReplaySource,
         obligation_identity: [u8; 32],
         documents: &[(DigestRecord, &[u8])],
@@ -494,7 +495,7 @@ impl ReplayInputs {
             ),
             source_digests: vec![self.source.wire()],
             dependencies,
-            selected_function: selected,
+            replay_target,
             source,
             obligation_identity,
             backend: BACKEND_IDENTITY.to_owned(),
@@ -660,7 +661,7 @@ impl ReplayPackage {
     ) -> ReplayRequestWire {
         self.inputs.wire(
             self.site.package_id,
-            self.selection.clone(),
+            RequestTargetWire::function(self.selection.clone(), self.site.site.declaration.clone()),
             source,
             *obligation.as_bytes(),
             &[],
@@ -1186,7 +1187,7 @@ mod tests {
         identity::ObligationBinding,
     };
     use ix_trace_rs::trace;
-    use qsl_replay::{OccurrenceKey, WireNodeId};
+    use qsl_replay::{OccurrenceKey, ReplayRequest, ReplayRequestRefusal, WireNodeId};
     use quire_contract_model::{IntegerDomain, OverflowPolicy};
 
     const UNIT: &str = "language \"ix:native\" edition \"1-draft\";\n\
@@ -1244,6 +1245,62 @@ mod tests {
                 overflow: OverflowPolicy::Reject,
             }),
             dependencies: Vec::new(),
+        }
+    }
+
+    /// The function request carries QSL's selected declaration occurrence.
+    /// Packet-sourced provenance is a separate FR-024-AC-43 obligation.
+    #[trace("TC-035")]
+    #[test]
+    fn tc_035_function_request_carries_selected_site_and_occurrence() {
+        let package = package();
+        let obligation = package
+            .obligation_identity_for(
+                crate::kani::identity::ObligationKind::Postcondition,
+                &[binding("a"), binding("b")],
+            )
+            .expect("both arguments bind");
+        let request = package.request_for(obligation, ReplaySource::Input(Vec::new()));
+        assert_eq!(
+            request.replay_target.members.function.as_ref(),
+            Some(&package.selection)
+        );
+        assert!(request.replay_target.members.frame_operation.is_none());
+        assert!(request.replay_target.members.state_clause.is_none());
+        assert_eq!(
+            request.replay_target.occurrence_key.as_ref(),
+            Some(&package.site.site.declaration)
+        );
+    }
+
+    /// QSL rejects a missing function occurrence before checking provided bytes.
+    #[trace("FR-024-AC-45", "TC-035")]
+    #[test]
+    fn tc_035_missing_function_request_occurrence_refuses_before_byte_provision() {
+        let package = package();
+        let obligation = package
+            .obligation_identity_for(
+                crate::kani::identity::ObligationKind::Postcondition,
+                &[binding("a"), binding("b")],
+            )
+            .expect("both arguments bind");
+        let request = package.request_for(obligation, ReplaySource::Input(Vec::new()));
+        assert!(!request.byte_provision.is_empty());
+        for drop_bytes in [false, true] {
+            let mut missing = request.clone();
+            missing.replay_target.occurrence_key = None;
+            if drop_bytes {
+                missing.byte_provision.clear();
+            }
+            let refusal = ReplayRequest::decode(missing, package.inputs.replay_limits)
+                .expect_err("missing occurrence must refuse before replay");
+            assert!(matches!(
+                &refusal,
+                ReplayRequestRefusal::MissingOccurrenceKey
+            ));
+            assert_eq!(refusal.code(), qsl_replay::Code::InvalidRuntimeInput);
+            assert_eq!(refusal.cause(), Some("missing-member"));
+            assert_eq!(refusal.pointer(), Some("/replay/occurrence_key"));
         }
     }
 
@@ -1373,8 +1430,9 @@ mod tests {
     #[test]
     fn only_a_reproduced_violation_reproduces() {
         use WitnessSettlement::{Inconclusive, ReproducedWithEvaluatedWitness as Reproduced};
+        let category: quire_semantic_value::catalog::Category = Category::Violation;
         assert_eq!(
-            verdict_of(Reproduced, Category::Violation, None),
+            verdict_of(Reproduced, category, None),
             ReplayVerdict::Reproduced
         );
         for (settlement, category) in [

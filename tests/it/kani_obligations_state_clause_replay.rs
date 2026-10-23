@@ -13,10 +13,10 @@
 use std::cell::RefCell;
 
 use qsl_replay::{
-    replay_state_clause, CallSiteRefusal, Category, ClauseName, ClauseSelectionInput,
-    DisagreementCause, DomainKey, DomainKind, EvaluatedValue, FiniteBound, Identifier, Integer,
-    ReplayRequestWire, ReplayResult, ReplaySource, StateClauseReplayResult, TerminalValue, Verdict,
-    WireNodeId, WitnessEnvelope, WitnessPacket, WitnessRefusal, WitnessSettlement,
+    replay_state_clause, CallSiteRefusal, ClauseName, ClauseSelectionInput, DisagreementCause,
+    DomainKey, DomainKind, EvaluatedValue, FiniteBound, Identifier, Integer, ReplayRequestWire,
+    ReplayResult, ReplaySource, ReplayTargetMembers, StateClauseReplayResult, TerminalValue,
+    Verdict, WireNodeId, WitnessEnvelope, WitnessPacket, WitnessRefusal, WitnessSettlement,
 };
 use quire_contract_codegen::{
     run_terminal_value, DocumentLabel, KaniRunOutcome, OperationDeclaration,
@@ -24,6 +24,7 @@ use quire_contract_codegen::{
     StateClauseReplayError, StateClauseReplayInputs, StateComparison, StateFrameProperty,
     StateObjectAddress,
 };
+use quire_semantic_value::catalog::Category;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
@@ -512,7 +513,11 @@ fn tc_035_replay_returns_the_direct_result_and_replay_through_returns_the_execut
         .replay_through(|wire: ReplayRequestWire, envelope| {
             *seen.borrow_mut() = Some((
                 wire.package_id.clone(),
-                envelope.family_payload().clause.clone(),
+                envelope
+                    .replay_target()
+                    .as_state_clause()
+                    .expect("state-clause target")
+                    .to_string(),
                 envelope.clause_node(),
             ));
             Ok(sentinel)
@@ -524,7 +529,7 @@ fn tc_035_replay_returns_the_direct_result_and_replay_through_returns_the_execut
         panic!("the executor was called");
     };
     assert_eq!(package_id, expected_package);
-    assert_eq!(clause.as_str(), BALANCE);
+    assert_eq!(clause, BALANCE);
     assert_eq!(
         node,
         twin.clause_site(BALANCE)
@@ -559,7 +564,22 @@ fn tc_035_missing_packet_members_stop_before_replay() {
     missing_member!(obligation_identity);
     missing_member!(occurrence_key);
     missing_member!(clause_node);
-    missing_member!(selected_function);
+    {
+        let mut replay = built(&twin, &fixture, BALANCE, VIOLATING.0, VIOLATING.1);
+        replay.packet.replay_target = ReplayTargetMembers::default();
+        let mut calls = 0;
+        let result = replay.replay_through(|_, _| {
+            calls += 1;
+            panic!("a missing replay target reached the executor")
+        });
+        assert!(matches!(
+            result,
+            Err(StateClauseReplayError::Envelope(
+                WitnessRefusal::MissingMember("replay_target")
+            ))
+        ));
+        assert_eq!(calls, 0);
+    }
     missing_member!(package_id);
     missing_member!(source_digests);
     missing_member!(profile_selections);
@@ -575,7 +595,7 @@ fn tc_035_missing_packet_members_stop_before_replay() {
         obligation_identity: _,
         occurrence_key: _,
         clause_node: _,
-        selected_function: _,
+        replay_target: _,
         package_id: _,
         source_digests: _,
         profile_selections: _,
@@ -598,10 +618,31 @@ fn tc_035_missing_packet_members_stop_before_replay() {
     assert_eq!(calls, 1);
 }
 
-/// The payload names its clause and the `Invocation` arm, the envelope's identities are the
+/// Two selected target families refuse before the replay executor is invoked.
+#[trace("FR-024-AC-42", "TC-035")]
+#[test]
+fn tc_035_conflicting_replay_targets_stop_before_replay() {
+    let (twin, fixture) = (Twin::new(), healthy());
+    let mut replay = built(&twin, &fixture, BALANCE, VIOLATING.0, VIOLATING.1);
+    replay.packet.replay_target.function = replay.packet.replay_target.state_clause.clone();
+    let mut calls = 0;
+    let result = replay.replay_through(|_, _| {
+        calls += 1;
+        panic!("a conflicting target reached the executor")
+    });
+    assert!(matches!(
+        result,
+        Err(StateClauseReplayError::Envelope(
+            WitnessRefusal::ConflictingTarget { .. }
+        ))
+    ));
+    assert_eq!(calls, 0);
+}
+
+/// The replay target names its clause and the payload holds the `Invocation` arm; the envelope's identities are the
 /// `ClauseSite`'s that `call_site` names, two clauses carry their own, and an undeclared clause is
 /// refused by the call site when the request is built.
-#[trace("FR-024-AC-12", "TC-035")]
+#[trace("FR-024-AC-12", "FR-024-AC-41", "TC-035")]
 #[test]
 fn tc_035_the_envelope_carries_the_call_sites_clause_identities() {
     let twin = Twin::new();
@@ -611,8 +652,25 @@ fn tc_035_the_envelope_carries_the_call_sites_clause_identities() {
         let replay = built(&twin, &fixture, clause, RESPECTING.0, RESPECTING.1);
         let site = twin.clause_site(clause).expect("the clause is declared");
         let payload = replay.packet.family_payload.as_ref().expect("a payload");
-        assert_eq!(payload.clause.as_str(), clause);
+        assert_eq!(
+            replay
+                .packet
+                .replay_target
+                .state_clause
+                .as_ref()
+                .expect("state-clause target")
+                .to_string(),
+            clause
+        );
         assert_eq!(site.name.as_str(), clause);
+        assert!(replay.packet.replay_target.function.is_none());
+        assert!(replay.packet.replay_target.frame_operation.is_none());
+        assert_eq!(
+            replay.wire.replay_target.members,
+            replay.packet.replay_target
+        );
+        assert!(!replay.wire.replay_target.arguments);
+        assert!(replay.wire.replay_target.occurrence_key.is_none());
         assert!(matches!(
             payload.observation,
             ClauseSelectionInput::Invocation { .. }

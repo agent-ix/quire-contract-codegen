@@ -985,9 +985,8 @@ impl PackageBuilder {
     /// `dependencies` edge list without changing its builder-side id. The
     /// reader may require a different final id after this change; `wire()`
     /// resolves it through the reader's typed stale-key refusal and rebuilds
-    /// `identity_preimage.identity_projection` fresh from the current node
-    /// objects on every call, so the appended edge is reflected consistently
-    /// by the next `wire()`/`admit()`.
+    /// package identity from the current node objects on every call, so the appended edge is
+    /// reflected consistently by the next `wire()`/`admit()`.
     pub fn add_dependency(&mut self, target: &str, dependency: &str) -> &mut Self {
         let nodes = self.value["semantic_graph"]["nodes"]
             .as_array_mut()

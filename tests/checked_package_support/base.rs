@@ -83,8 +83,8 @@ fn base_node_ids() -> BaseNodeIds {
 /// The base CheckedPackage V2 wire document: an ordered enum `Example.Phase { OPEN, SHUT }`, its
 /// `OPEN` member, a `Distance` dimension and a `pace` unit of it, each keyed by the digest of its
 /// nominal identity preimage. The builder appends its own nodes and re-derives
-/// `identity_preimage.identity_projection` and `package_id` from the finished graph (`wire()`), so
-/// both start empty here.
+/// `package_id` from the finished graph (`wire()`); the IR reader derives the graph projection
+/// from those nodes, so the preimage retains only its seven selections.
 fn base_package() -> serde_json::Value {
     const GRAPH: &str = "quire.checked-semantic-graph/v2";
     let ids = base_node_ids();
@@ -168,7 +168,6 @@ fn base_package() -> serde_json::Value {
             "model_selections": [],
             "required_features": ["quire.value.complete/v1"],
             "dependency_selections": [],
-            "identity_projection": [],
         },
         "package_id": {"domain": "quire.package.semantic/v2", "algorithm": "sha256", "digest": ""},
         "lock": {

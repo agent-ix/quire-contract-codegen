@@ -34,6 +34,9 @@
 //! `exact_function_support/package.rs` is likewise `mod`-included by two former top-level files
 //! and kept duplicated, but for uniformity with the pattern above, not the same reason: it holds
 //! no process-global state, so nothing forces the duplication here -- it is not load-bearing.
+#[path = "../checked_package_support/evidence.rs"]
+pub(crate) mod checked_package_evidence;
+
 #[path = "../common/mod.rs"]
 pub(crate) mod common;
 

@@ -5,10 +5,10 @@ use qsl_replay::{
     replay_composite_parity, settle_verified_shadow, Certification, CompositeEvidence,
     CompositeIdentity, CompositeParityClaim, CompositeParityResult, DigestDomain, DigestRecord,
     EqualityOperator, EqualityOutcome, FalsifiedParity, Identifier, InconclusiveCause, Integer,
-    NativeParityObservation, ObligationIdentity, Origin, ProofBasis, Refinement, ReplayLimits,
-    ReplayRefusal, ReplayRequest, ReplayRequestRefusal, ReplayRequestWire, ReplaySource, Role,
-    ScalarLimits, StateEnvironment, TerminalValue, VerifiedShadow, VerifiedShadowResult,
-    WireNodeId, WitnessValue,
+    NativeParityObservation, ObligationIdentity, OccurrenceKey, Origin, ProofBasis, Refinement,
+    ReplayLimits, ReplayRefusal, ReplayRequest, ReplayRequestRefusal, ReplayRequestWire,
+    ReplaySource, RequestTargetWire, Role, ScalarLimits, StateEnvironment, TerminalValue,
+    VerifiedShadow, VerifiedShadowResult, WireNodeId, WitnessValue,
 };
 use quire_contract_codegen::{
     composite_parity_terminal_value, verified_shadow_terminal_value, CompositeReportError,
@@ -215,8 +215,10 @@ fn public_composite_fixture() -> PublicCompositeFixture {
             digest.hex(),
         )],
         dependencies: Vec::new(),
-        selected_function: qsl_replay::QualifiedName::new(vec![Identifier::new("f").unwrap()])
-            .unwrap(),
+        replay_target: RequestTargetWire::function(
+            qsl_replay::QualifiedName::new(vec![Identifier::new("f").unwrap()]).unwrap(),
+            OccurrenceKey::new(preimage.node, preimage.occurrence.clone()),
+        ),
         source: ReplaySource::Input(Vec::new()),
         obligation_identity: *obligation.as_bytes(),
         backend: "test-backend".to_owned(),

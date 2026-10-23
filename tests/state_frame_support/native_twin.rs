@@ -18,14 +18,16 @@ use qsl_replay::{
     OperationName, OperationSite, ReplayLimits, ReplayRefusal, ScalarLimits, SelectedObject,
     SourceIdentity, WitnessEnvelope, DEFAULT_REPLAY_INPUT_BYTES,
 };
+use quire_canonical::{sha256, Limits};
 use quire_contract_codegen::{
     DependencyLock, DocumentLabel, FrameReplay, FrameReplayError, FrameReplayInputs, LockedSource,
     ProvidedDocument, ReplayInputs, StateClauseReplayInputs, StateFrameIdentity,
     StateObjectAddress,
 };
 use quire_contract_model::{
-    CheckedNodeId, CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2,
-    CheckedPackageV2ReadResult,
+    CheckedNodeId, CheckedPackageEvidence, CheckedPackageIdentityPreimageRefV2,
+    CheckedPackageIdentityPreimageV2, CheckedPackageReadLimits, CheckedPackageV2,
+    CheckedPackageV2ReadResult, CheckedSemanticNodeV2,
 };
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -799,8 +801,25 @@ impl Twin {
             wire["lock"]["model_selections"][0]["digest"] = json!(digest);
             wire["identity_preimage"]["model_selections"] =
                 wire["lock"]["model_selections"].clone();
-            let preimage = serde_json::to_vec(&wire["identity_preimage"]).expect("preimage");
-            wire["package_id"]["digest"] = json!(hex(&jcs_digest(&preimage)));
+            let selections: CheckedPackageIdentityPreimageV2 =
+                serde_json::from_value(wire["identity_preimage"].clone())
+                    .expect("typed package selections");
+            let nodes: Vec<CheckedSemanticNodeV2> =
+                serde_json::from_value(wire["semantic_graph"]["nodes"].clone())
+                    .expect("typed package graph");
+            let preimage = CheckedPackageIdentityPreimageRefV2 {
+                version: &selections.version,
+                edition: &selections.edition,
+                profile_selections: &selections.profile_selections,
+                definition_selections: &selections.definition_selections,
+                model_selections: &selections.model_selections,
+                required_features: &selections.required_features,
+                dependency_selections: &selections.dependency_selections,
+                identity_projection: &nodes,
+            };
+            wire["package_id"]["digest"] = json!(sha256(&preimage, Limits::new(u64::MAX))
+                .expect("canonical package identity")
+                .to_string());
         }
         let bytes = wire.to_string().into_bytes();
         let mut evidence = CheckedPackageEvidence::new();

@@ -24,15 +24,16 @@
 use std::{collections::BTreeMap, fmt};
 
 use qsl_replay::{
-    call_site, replay_state_clause, CallSiteRefusal, Category, ClauseName, ClauseSelectionInput,
+    call_site, replay_state_clause, CallSiteRefusal, ClauseName, ClauseSelectionInput,
     DeclaredDomain, DigestDomain, DigestRecord, DocumentRef, DomainKey, DomainKind,
     EmptyQualifiedName, FiniteBound, Integer, MalformedTranscript, OperationName, ProofBound,
     ProofBoundRefusal, QualifiedName, ReplayRefusal, ReplayRequestWire, ReplayResult, ReplaySource,
-    StateClauseCounterexample, StateClauseReplayResult, WireNodeId, WitnessEnvelope, WitnessPacket,
-    WitnessRefusal, WitnessSettlement, WitnessValue,
+    ReplayTargetMembers, RequestTargetWire, StateClauseCounterexample, StateClauseReplayResult,
+    WireNodeId, WitnessEnvelope, WitnessPacket, WitnessRefusal, WitnessSettlement, WitnessValue,
 };
 use quire_canonical::{Encode, FixedShape};
 use quire_contract_model::{CheckedModelFieldsError, CheckedNodeId, CheckedPackageV2};
+use quire_semantic_value::catalog::Category;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -666,8 +667,8 @@ impl StateClauseReplay {
             .map_err(|cause| StateClauseReplayError::Document(DocumentError::Encode(cause)))?;
         let invocation = invocation_label.reference(invocation_encoded.digest);
 
-        let selected = QualifiedName::new(vec![operation.operation.clone()])
-            .map_err(StateClauseReplayError::Name)?;
+        let selected =
+            QualifiedName::new(vec![site.name.clone()]).map_err(StateClauseReplayError::Name)?;
         let bindings = pre
             .iter()
             .map(|(field, value)| (field.as_str(), i128::from(*value)))
@@ -675,7 +676,6 @@ impl StateClauseReplay {
         let witness = render_witness(&operation.to_string(), clause.0.as_str(), &bindings)
             .map_err(StateClauseReplayError::Transcript)?;
         let payload = StateClauseCounterexample {
-            clause: clause.0.clone(),
             observation: ClauseSelectionInput::Invocation { invocation },
             witness: None,
         };
@@ -696,7 +696,7 @@ impl StateClauseReplay {
             .collect::<Vec<_>>();
         let wire = run.wire(
             package_id,
-            selected.clone(),
+            RequestTargetWire::state_clause(selected.clone()),
             ReplaySource::Witness(witness.clone()),
             obligation_identity,
             &documents,
@@ -705,7 +705,7 @@ impl StateClauseReplay {
             obligation_identity: Some(obligation_identity),
             occurrence_key: Some(site.occurrence),
             clause_node: Some(site.node),
-            selected_function: Some(selected),
+            replay_target: ReplayTargetMembers::state_clause(selected),
             package_id: Some(wire.package_id.clone()),
             source_digests: Some(wire.source_digests.clone()),
             profile_selections: Some(Vec::new()),
