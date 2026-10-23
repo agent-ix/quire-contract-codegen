@@ -3680,13 +3680,12 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
         assert_eq!(first.calls().len(), 2);
     }
 
-    /// A batch of N is bounded by N times T, not by T: four members at T = 3 s run for eight
-    /// seconds, longer than T and than N times T halved (6 s), and inside N times T (12 s), and
+    /// A batch of N is bounded by N times T, not by T: four members at T = 20 s run for 41
+    /// seconds, longer than T and than N times T halved (40 s), and inside N times T (80 s), and
     /// complete with every member verified.
     ///
     /// The stand-in's sleep never ends early, so it outlasts T and N times T halved however the
-    /// scheduler treats the test; only the 4 s between it and the 12 s bound can be eaten by a
-    /// loaded host (an earlier 1 s / 2 s / 4 s version left 2 s and flaked on a loaded runner).
+    /// scheduler treats the test; the 39 s between it and the 80 s bound tolerate host load.
     // Exercises the real Linux namespace/procfs bounded execution API.
     #[trace("FR-017-AC-21", "FR-028-AC-12", "TC-039", "TC-043")]
     #[cfg(target_os = "linux")]
@@ -3694,13 +3693,13 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
     fn tc_043_a_batch_may_run_longer_than_t_when_it_is_inside_n_times_t() {
         let stand_in = StandIn::running(
             "inside-n-times-t",
-            &format!("sleep 8\n{VERIFY_EVERY_HARNESS}"),
+            &format!("sleep 41\n{VERIFY_EVERY_HARNESS}"),
         )
         .with_preconfirmed_cleanup();
         let harnesses: Vec<_> = (0..4)
             .map(|index| member(&format!("m{index}"), "check", 4))
             .collect();
-        let evidence = only_group(stand_in.batch(&harnesses, Duration::from_secs(3))).unwrap();
+        let evidence = only_group(stand_in.batch(&harnesses, Duration::from_secs(20))).unwrap();
         assert_eq!(
             outcomes(&evidence),
             vec![KaniRunOutcome::Verified; 4],
@@ -3708,8 +3707,8 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
         );
     }
 
-    /// Two members at T = 20 s complete after 30 s: beyond (N - 1) times T (20 s), with
-    /// ten seconds left before N times T (40 s). The real batch launch must count both members.
+    /// Two members at T = 45 s complete after 46 s: beyond (N - 1) times T (45 s), with
+    /// 44 seconds left before N times T (90 s). The real batch launch must count both members.
     // Exercises the real Linux namespace/procfs bounded execution API.
     #[trace("FR-017-AC-21", "FR-028-AC-12", "TC-039", "TC-043")]
     #[cfg(target_os = "linux")]
@@ -3717,11 +3716,11 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
     fn a_batch_finishes_between_one_fewer_members_bound_and_its_full_bound() {
         let stand_in = StandIn::running(
             "full-member-count-bound",
-            &format!("sleep 30\n{VERIFY_EVERY_HARNESS}"),
+            &format!("sleep 46\n{VERIFY_EVERY_HARNESS}"),
         )
         .with_preconfirmed_cleanup();
-        let evidence = only_group(stand_in.batch(&pair(), Duration::from_secs(20)))
-            .expect("both members must finish before their full 40-second batch bound");
+        let evidence = only_group(stand_in.batch(&pair(), Duration::from_secs(45)))
+            .expect("both members must finish before their full 90-second batch bound");
         assert_eq!(
             outcomes(&evidence),
             vec![KaniRunOutcome::Verified; 2],
