@@ -2060,11 +2060,11 @@ exit 0
                     }),
                     stdout: std::sync::Arc::new(SystemPoll),
                     stderr: std::sync::Arc::new(SystemPoll),
-                    confirmation: std::sync::Arc::new(ControlledPoll {
+                    confirmation: std::sync::Arc::new(PreconfirmedPoll(ControlledPoll {
                         ready: None,
                         gate: cleanup,
                         fail: false,
-                    }),
+                    })),
                 }),
             );
             (observation, confirmation)
@@ -2711,6 +2711,127 @@ exec sleep 45
             }
             Ok(observed)
         }
+    }
+
+    /// Batch-order tests first wait for genuine pidfd readiness, so host scheduling does not
+    /// consume the production owner's single five-second confirmation poll.
+    #[cfg(target_os = "linux")]
+    #[derive(Debug)]
+    struct PreconfirmedPoll(ControlledPoll);
+
+    #[cfg(target_os = "linux")]
+    impl super::super::owners::PollOperation for PreconfirmedPoll {
+        fn poll(
+            &self,
+            fds: &mut [rustix::event::PollFd<'_>],
+            timeout: Option<&rustix::time::Timespec>,
+        ) -> Result<usize, rustix::io::Errno> {
+            let ready = rustix::event::poll(
+                fds,
+                Some(&rustix::time::Timespec {
+                    tv_sec: 30,
+                    tv_nsec: 0,
+                }),
+            )?;
+            if ready == 0
+                || !fds
+                    .iter()
+                    .any(|fd| fd.revents().contains(rustix::event::PollFlags::IN))
+            {
+                return Err(rustix::io::Errno::TIMEDOUT);
+            }
+            for fd in fds.iter_mut() {
+                fd.clear_revents();
+            }
+            super::super::owners::PollOperation::poll(&self.0, fds, timeout)
+        }
+    }
+
+    /// Confirm the real pidfd first, then omit only the first result delivered to its owner.
+    /// The owner's Drop retry receives the real result from the same descriptor.
+    #[cfg(target_os = "linux")]
+    #[derive(Debug, Default)]
+    struct OmittedReadyPoll {
+        calls: std::sync::atomic::AtomicUsize,
+    }
+
+    #[cfg(target_os = "linux")]
+    impl super::super::owners::PollOperation for OmittedReadyPoll {
+        fn poll(
+            &self,
+            fds: &mut [rustix::event::PollFd<'_>],
+            timeout: Option<&rustix::time::Timespec>,
+        ) -> Result<usize, rustix::io::Errno> {
+            if self.calls.fetch_add(1, std::sync::atomic::Ordering::AcqRel) == 0 {
+                let ready = rustix::event::poll(
+                    fds,
+                    Some(&rustix::time::Timespec {
+                        tv_sec: 30,
+                        tv_nsec: 0,
+                    }),
+                )?;
+                if ready == 0
+                    || !fds
+                        .iter()
+                        .any(|fd| fd.revents().contains(rustix::event::PollFlags::IN))
+                {
+                    return Err(rustix::io::Errno::TIMEDOUT);
+                }
+                for fd in fds.iter_mut() {
+                    fd.clear_revents();
+                }
+                let observed = rustix::event::poll(fds, timeout)?;
+                if observed == 0
+                    || !fds
+                        .iter()
+                        .any(|fd| fd.revents().contains(rustix::event::PollFlags::IN))
+                {
+                    return Err(rustix::io::Errno::TIMEDOUT);
+                }
+                for fd in fds.iter_mut() {
+                    fd.clear_revents();
+                }
+                return Ok(0);
+            }
+            rustix::event::poll(fds, timeout)
+        }
+    }
+
+    /// Missing readiness from the owned pidfd still refuses public evidence after real teardown.
+    #[trace("FR-017-AC-24", "FR-040-AC-4")]
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn omitted_namespace_confirmation_refuses_public_evidence() {
+        use super::super::owners::{LaunchOwners, ProcessMemory, SystemPoll};
+
+        let harness = member("omitted_cleanup", "check", 4);
+        let body = format!(
+            "printf '%s' \"$(readlink /proc/self/ns/pid)\" > \"$CALLS.namespace\"\nprintf '%s' \"$$\" > \"$CALLS.child\"\n{VERIFY_EVERY_HARNESS}"
+        );
+        let mut stand_in = StandIn::running("omitted-cleanup-confirmation", &body);
+        stand_in.containing(&[&harness]);
+        let omission = std::sync::Arc::new(OmittedReadyPoll::default());
+        stand_in.installation = KaniInstallation::with_owners(
+            stand_in.installation.launcher.clone(),
+            std::sync::Arc::new(LaunchOwners {
+                memory: std::sync::Arc::new(ProcessMemory),
+                stdout: std::sync::Arc::new(SystemPoll),
+                stderr: std::sync::Arc::new(SystemPoll),
+                confirmation: omission.clone(),
+            }),
+        );
+        let refusal = execute_kani_obligation(&stand_in.request(&harness, T)).unwrap_err();
+        assert!(
+            matches!(
+                refusal,
+                KaniExecutionRefusal::MemoryObservationFailed { ref detail }
+                    if detail.contains("namespace cleanup failed: namespace teardown was not confirmed")
+            ),
+            "{refusal:?}"
+        );
+        assert_eq!(omission.calls.load(std::sync::atomic::Ordering::Acquire), 2);
+        assert_eq!(stand_in.calls().len(), 1);
+        recorded_process_gone(&stand_in.directory.join("calls.child"));
     }
 
     /// A failed real RSS observation owns the public refusal even if a cause is already recorded.

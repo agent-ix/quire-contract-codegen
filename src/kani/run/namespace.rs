@@ -489,7 +489,7 @@ mod tests {
     use std::process::Stdio;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
-    /// An empty first observation models a delayed pidfd readiness report under load.
+    /// An empty first observation cannot establish teardown, even if a later poll can.
     #[derive(Debug, Default)]
     struct DelayedConfirmation {
         observations: AtomicUsize,
@@ -508,10 +508,10 @@ mod tests {
         }
     }
 
-    /// A first empty readiness sample must not turn confirmed teardown into a refusal.
+    /// The first empty sample refuses; a separate subsequent owner call may confirm teardown.
     #[trace("FR-017-AC-24", "FR-040-AC-4")]
     #[test]
-    fn delayed_namespace_confirmation_retries_before_accepting_teardown() {
+    fn empty_namespace_confirmation_refuses_before_later_real_confirmation() {
         let confirmation = Arc::new(DelayedConfirmation::default());
         let (mut command, mut owner) =
             NamespaceOwner::prepare(BackendCommand::new("true"), confirmation.clone()).unwrap();
@@ -527,9 +527,15 @@ mod tests {
         owner
             .dispatch(Some(Instant::now() + Duration::from_secs(5)), &mut observer)
             .unwrap();
+        let error = owner
+            .cleanup()
+            .expect_err("an empty first sample cannot confirm teardown");
+        assert_eq!(error.to_string(), "namespace teardown was not confirmed");
+        assert_eq!(confirmation.observations.load(Ordering::Acquire), 1);
+        assert!(!owner.cleaned);
         owner
             .cleanup()
-            .expect("the delayed observation still confirms teardown");
+            .expect("a separate real poll confirms teardown");
         assert!(confirmation.observations.load(Ordering::Acquire) >= 2);
         assert!(ready(&owner.init.as_ref().unwrap().2));
         child.wait().unwrap();
