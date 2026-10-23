@@ -5,7 +5,7 @@ use std::{
     fmt, io,
     num::{NonZeroU64, NonZeroUsize},
     path::PathBuf,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use crate::kani::{
@@ -104,9 +104,9 @@ pub struct ProcessRun {
     pub limits: ProcessLimits,
     /// Whether a child was spawned before the outcome.
     pub started: bool,
-    /// Bounded raw stdout, including bytes captured before a stopped run; absent if unread or over limit.
+    /// Bounded raw stdout, including a prefix on a stopped or over-limit run; absent if unread.
     pub stdout: Option<Vec<u8>>,
-    /// Bounded raw stderr, including bytes captured before a stopped run; absent if unread or over limit.
+    /// Bounded raw stderr, including a prefix on a stopped or over-limit run; absent if unread.
     pub stderr: Option<Vec<u8>>,
     /// Typed completion or refusal.
     pub outcome: ProcessOutcome,
@@ -214,6 +214,15 @@ pub fn run_bounded_process(request: ProcessRequest) -> Result<ProcessRun, Proces
             })
         }
     }
+    let deadline = Instant::now()
+        .checked_add(limits.wall_clock)
+        .ok_or_else(|| ProcessError::Io {
+            phase: ProcessFailurePhase::Selection,
+            source: io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "wall-clock limit cannot be represented",
+            ),
+        })?;
     let run = run_bounded_process_internal(
         &executable,
         &arguments,
@@ -223,6 +232,7 @@ pub fn run_bounded_process(request: ProcessRequest) -> Result<ProcessRun, Proces
             wall_clock: limits.wall_clock,
         },
         limits.output_bytes.get(),
+        deadline,
         &cancel,
     )
     .map_err(|error| match error {
@@ -378,7 +388,7 @@ mod tests {
 
     #[trace("FR-045-AC-3")]
     #[test]
-    fn output_excess_stops_without_returning_truncated_solver_bytes() {
+    fn output_excess_stops_with_only_a_bounded_raw_prefix() {
         let run = run_bounded_process(ProcessRequest {
             executable: "/usr/bin/yes".into(),
             arguments: vec![],
@@ -394,7 +404,11 @@ mod tests {
                 stream: CaptureStream::Stdout
             }
         ));
-        assert!(run.stdout.is_none());
+        assert_eq!(run.stdout.as_ref().map(Vec::len), Some(64));
+        assert!(run
+            .stdout
+            .as_ref()
+            .is_some_and(|bytes| bytes.starts_with(b"y\n")));
     }
 
     #[trace("FR-045-AC-3")]
@@ -471,6 +485,27 @@ mod tests {
         .unwrap();
         assert!(run.started);
         assert!(matches!(run.outcome, ProcessOutcome::TimedOut));
+    }
+
+    #[trace("FR-045-AC-3")]
+    #[test]
+    fn overflowing_wall_clock_limit_refuses_before_spawn() {
+        let marker = std::env::temp_dir().join(format!("cg-ir974-overflow-{}", std::process::id()));
+        let mut bounds = limits(1, 64);
+        bounds.wall_clock = Duration::MAX;
+        let result = run_bounded_process(ProcessRequest {
+            executable: "/usr/bin/touch".into(),
+            arguments: vec![marker.as_os_str().to_owned()],
+            stdin: vec![],
+            limits: bounds,
+            cancel: Cancel::new(),
+        });
+        assert!(matches!(
+            result,
+            Err(ProcessError::Io { phase: ProcessFailurePhase::Selection, source })
+                if source.kind() == io::ErrorKind::InvalidInput
+        ));
+        assert!(!marker.exists());
     }
 
     #[trace("FR-045-AC-3")]

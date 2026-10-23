@@ -126,8 +126,8 @@ impl fmt::Display for CaptureStream {
 /// Why a capture thread did not return its stream.
 #[derive(Debug, Eq, PartialEq)]
 enum CaptureFailure {
-    /// More than the limit was read.
-    OverLimit,
+    /// More than the limit was read; only the bounded prefix is retained for non-Kani callers.
+    OverLimit { prefix: Vec<u8> },
     /// The pipe could not be polled or read, or its thread panicked.
     Unread { detail: String },
 }
@@ -276,6 +276,7 @@ pub(crate) fn run_bounded_process_internal(
     input: Vec<u8>,
     ceilings: crate::kani::identity::ProofCeilings,
     output_limit: usize,
+    deadline: Instant,
     cancel: &Cancel,
 ) -> Result<SharedLaunch, BoundedLaunchError> {
     let mut command = BackendCommand::new(executable);
@@ -287,7 +288,7 @@ pub(crate) fn run_bounded_process_internal(
         ceilings,
         NonZeroUsize::MIN,
         Path::new("/proc"),
-        None,
+        Some(deadline),
         cancel,
         &LaunchOwners::real(),
         Some(input),
@@ -561,10 +562,18 @@ fn run_monitored_with(
     let stderr_bytes = finish_capture(stderr_reader);
     let (mut partial_stdout, stdout_failure) = match stdout_bytes {
         Ok(bytes) => (Some(bytes), None),
+        Err(CaptureFailure::OverLimit { prefix }) => (
+            Some(prefix),
+            Some(CaptureFailure::OverLimit { prefix: Vec::new() }),
+        ),
         Err(failure) => (None, Some(failure)),
     };
     let (mut partial_stderr, stderr_failure) = match stderr_bytes {
         Ok(bytes) => (Some(bytes), None),
+        Err(CaptureFailure::OverLimit { prefix }) => (
+            Some(prefix),
+            Some(CaptureFailure::OverLimit { prefix: Vec::new() }),
+        ),
         Err(failure) => (None, Some(failure)),
     };
     if let Some(writer) = input_writer {
@@ -714,7 +723,7 @@ fn capture_failure_outcome(
     harnesses: NonZeroUsize,
 ) -> LaunchOutcome {
     match failure {
-        CaptureFailure::OverLimit => LaunchOutcome::OutputOverLimit {
+        CaptureFailure::OverLimit { .. } => LaunchOutcome::OutputOverLimit {
             stream,
             limit,
             harnesses: harnesses.get(),
@@ -916,9 +925,9 @@ fn finish_capture(reader: thread::JoinHandle<Captured>) -> Captured {
 /// `drain_limit` has passed, returning every byte read. Everything written before `stop` was set
 /// is already in the pipe when the flag is seen, so the drain after it loses none of it.
 ///
-/// More than `limit` bytes is [`CaptureFailure::OverLimit`] and exactly `limit` is returned
-/// whole; a failed poll or read is [`CaptureFailure::Unread`]. Nothing is truncated and nothing
-/// that failed is returned as what had been read so far.
+/// More than `limit` bytes is [`CaptureFailure::OverLimit`] with only the bounded prefix, and
+/// exactly `limit` is returned whole. A failed poll or read is [`CaptureFailure::Unread`]. Kani
+/// never treats an over-limit prefix as complete output or proof evidence.
 fn capture<R: Read + AsFd>(
     mut pipe: R,
     stop: &AtomicBool,
@@ -961,9 +970,10 @@ fn capture<R: Read + AsFd>(
         match pipe.read(&mut chunk) {
             Ok(0) => break,
             Ok(read) => {
-                kept.extend(chunk.iter().take(read));
-                if kept.len() > limit {
-                    return Err(CaptureFailure::OverLimit);
+                let remaining = limit.saturating_sub(kept.len());
+                kept.extend(chunk.iter().take(read.min(remaining)));
+                if read > remaining {
+                    return Err(CaptureFailure::OverLimit { prefix: kept });
                 }
             }
             Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
@@ -1362,7 +1372,9 @@ mod tests {
             producer.join().unwrap();
             match (expected, captured) {
                 (true, Ok(kept)) => assert_eq!(kept.len(), limit, "exactly the limit is whole"),
-                (false, Err(CaptureFailure::OverLimit)) => {}
+                (false, Err(CaptureFailure::OverLimit { prefix })) => {
+                    assert_eq!(prefix.len(), limit);
+                }
                 (_, other) => panic!("{written} bytes against a limit of {limit}: {other:?}"),
             }
         }
@@ -1709,7 +1721,7 @@ mod tests {
         assert!(matches!(
             stream_bytes(
                 CaptureStream::Stdout,
-                Err(CaptureFailure::OverLimit),
+                Err(CaptureFailure::OverLimit { prefix: vec![] }),
                 5,
                 one
             ),
