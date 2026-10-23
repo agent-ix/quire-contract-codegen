@@ -1487,28 +1487,20 @@ fn selected_scalar_key(
     else {
         return Some(SelectedScalarKey::NotApplicable(node_id.clone()));
     };
-    let sources = &package.wire().source_map.nodes;
-    sources
-        .iter()
-        .find(|source| source.node_id == *node_id)?
-        .occurrences
-        .iter()
-        .find(|source| {
-            application.node_id == *node_id
-                && application.role == CheckedOccurrenceRole::Expression
-                && source.role == application.role
-                && source.ordinal == application.ordinal
-        })?;
+    package.source_occurrences(node_id)?.iter().find(|source| {
+        application.node_id == *node_id
+            && application.role == CheckedOccurrenceRole::Expression
+            && source.role == application.role
+            && source.ordinal == application.ordinal
+    })?;
     if let Some(conversion) = conversion {
         if conversion.role != CheckedOccurrenceRole::Expression
             || !items.has_context_root(request_index, &conversion.node_id)
         {
             return None;
         }
-        sources
-            .iter()
-            .find(|entry| entry.node_id == conversion.node_id)?
-            .occurrences
+        package
+            .source_occurrences(&conversion.node_id)?
             .iter()
             .find(|entry| entry.role == conversion.role && entry.ordinal == conversion.ordinal)?;
     }
