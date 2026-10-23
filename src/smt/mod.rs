@@ -3,7 +3,13 @@
 //! This module classifies only the producer's two associated solver records.
 //! QSL owns the query encoder, inductive method outcome and terminal record.
 
-use std::{ffi::OsString, path::PathBuf};
+use std::{
+    ffi::OsString,
+    fmt,
+    num::NonZeroU64,
+    path::PathBuf,
+    sync::atomic::{AtomicU64, Ordering},
+};
 
 use quire_exact::Cancel;
 
@@ -45,14 +51,13 @@ pub enum SolverStatus {
     Cancelled,
 }
 
-/// The exact QSL-owned selection and query bytes an invocation represents.
+/// The exact QSL-owned selection and query bytes requested by the caller.
 ///
 /// The caller supplies authoritative identity types for product, item,
 /// instance and query kind. CG retains them without deriving or hashing an
-/// identity, and this type requires the exact query bytes and nonzero depth.
-/// CG assigns a distinct attempt number before each process invocation.
+/// identity. The selected depth is nonzero and the exact bytes are retained.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct QueryAssociation<Product, Item, Instance, Kind> {
+pub struct QuerySelection<Product, Item, Instance, Kind> {
     /// The selected HP-2 product identity.
     pub product: Product,
     /// The selected safety item identity.
@@ -65,14 +70,28 @@ pub struct QueryAssociation<Product, Item, Instance, Kind> {
     pub kind: Kind,
     /// The exact QSL-authored query bytes sent to the solver.
     pub query_bytes: Vec<u8>,
-    /// CG's run-local identity for this distinct process invocation.
-    pub attempt: std::num::NonZeroU64,
+}
+
+/// A QSL selection paired with CG's distinct process-attempt identity.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct QueryAssociation<Product, Item, Instance, Kind> {
+    /// The QSL-owned selection sent to the solver.
+    pub selection: QuerySelection<Product, Item, Instance, Kind>,
+    attempt: NonZeroU64,
+}
+
+impl<Product, Item, Instance, Kind> QueryAssociation<Product, Item, Instance, Kind> {
+    /// Return the CG-assigned identity of this invocation.
+    #[must_use]
+    pub fn attempt(&self) -> NonZeroU64 {
+        self.attempt
+    }
 }
 
 /// One solver response paired with its QSL-supplied query association.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct QueryRun<Product, Item, Instance, Kind> {
-    /// Exact association supplied for this invocation.
+    /// Exact selection and CG-assigned attempt for this invocation.
     pub association: QueryAssociation<Product, Item, Instance, Kind>,
     /// The solver response or typed non-success.
     pub status: SolverStatus,
@@ -85,28 +104,103 @@ pub struct QueryRun<Product, Item, Instance, Kind> {
 #[derive(Debug)]
 pub struct SolverExecution<Product, Item, Instance, Kind> {
     /// The typed query identity and non-proof or response status.
-    pub query: QueryRun<Product, Item, Instance, Kind>,
+    query: QueryRun<Product, Item, Instance, Kind>,
     /// The exact owned child invocation record.
-    pub process: ProcessRun,
+    process: ProcessRun,
+}
+
+impl<Product, Item, Instance, Kind> SolverExecution<Product, Item, Instance, Kind> {
+    /// Return the CG-authenticated query identity and solver status.
+    #[must_use]
+    pub fn query(&self) -> &QueryRun<Product, Item, Instance, Kind> {
+        &self.query
+    }
+
+    /// Return the selected invocation and actual bounded process result.
+    #[must_use]
+    pub fn process(&self) -> &ProcessRun {
+        &self.process
+    }
+}
+
+/// Why CG could not produce an authenticated solver execution record.
+#[derive(Debug)]
+pub enum SolverRunError {
+    /// The process-wide attempt counter cannot issue another distinct identity.
+    AttemptExhausted,
+    /// The bounded child mechanism failed before a trustworthy process result.
+    Process(ProcessError),
+}
+
+impl fmt::Display for SolverRunError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::AttemptExhausted => write!(formatter, "solver attempt identities exhausted"),
+            Self::Process(error) => write!(formatter, "solver process: {error}"),
+        }
+    }
+}
+
+impl std::error::Error for SolverRunError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::AttemptExhausted => None,
+            Self::Process(error) => Some(error),
+        }
+    }
+}
+
+impl From<ProcessError> for SolverRunError {
+    fn from(error: ProcessError) -> Self {
+        Self::Process(error)
+    }
+}
+
+// Only uniqueness is published. No process result is synchronized through this counter.
+static NEXT_ATTEMPT: AtomicU64 = AtomicU64::new(1);
+
+fn next_attempt() -> Result<NonZeroU64, SolverRunError> {
+    let value = NEXT_ATTEMPT
+        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
+            value.checked_add(1)
+        })
+        .map_err(|_| SolverRunError::AttemptExhausted)?;
+    NonZeroU64::new(value).ok_or(SolverRunError::AttemptExhausted)
 }
 
 /// Invoke the selected solver directly for exactly one QSL-authored query.
 ///
 /// This records a solver response; it never constructs a QSL outcome.
 pub fn run_solver_query<Product, Item, Instance, Kind>(
-    association: QueryAssociation<Product, Item, Instance, Kind>,
+    selection: QuerySelection<Product, Item, Instance, Kind>,
     executable: PathBuf,
     arguments: Vec<OsString>,
     limits: ProcessLimits,
     cancel: Cancel,
-) -> Result<SolverExecution<Product, Item, Instance, Kind>, ProcessError> {
-    let process = run_bounded_process(ProcessRequest {
-        executable,
-        arguments,
-        stdin: association.query_bytes.clone(),
-        limits,
-        cancel,
-    })?;
+) -> Result<SolverExecution<Product, Item, Instance, Kind>, SolverRunError> {
+    let association = QueryAssociation {
+        selection,
+        attempt: next_attempt()?,
+    };
+    let process = if association.selection.query_bytes.len() > limits.input_bytes.get() {
+        ProcessRun {
+            executable,
+            arguments,
+            limits,
+            started: false,
+            stdout: None,
+            stderr: None,
+            outcome: ProcessOutcome::InputOverLimit,
+        }
+    } else {
+        run_bounded_process(ProcessRequest {
+            executable,
+            arguments,
+            stdin: association.selection.query_bytes.clone(),
+            limits,
+            cancel,
+        })?
+    };
     let status = match &process.outcome {
         ProcessOutcome::MissingTool => SolverStatus::MissingTool,
         ProcessOutcome::InputOverLimit => SolverStatus::Stopped(ReachedLimit::InputBytes),
@@ -133,30 +227,109 @@ pub fn run_solver_query<Product, Item, Instance, Kind>(
 }
 
 fn parse_solver_status(stdout: &[u8]) -> SolverStatus {
-    let mut status = None;
-    for line in stdout.split(|byte| *byte == b'\n') {
+    let mut offset = 0;
+    for line in stdout.split_inclusive(|byte| *byte == b'\n') {
+        offset += line.len();
         let line = line.trim_ascii();
         if line.is_empty() || line.starts_with(b";") || line == b"success" {
             continue;
         }
-        if line.starts_with(b"(error") {
-            return SolverStatus::MalformedResponse;
-        }
-        let response = match line {
-            b"sat" => Some(SolverStatus::Sat),
-            b"unsat" => Some(SolverStatus::Unsat),
-            b"unknown" => Some(SolverStatus::Unknown),
-            _ => None,
+        let status = match line {
+            b"sat" => SolverStatus::Sat,
+            b"unsat" => SolverStatus::Unsat,
+            b"unknown" => SolverStatus::Unknown,
+            _ => return SolverStatus::MalformedResponse,
         };
-        if let Some(response) = response {
-            if status.replace(response).is_some() {
-                return SolverStatus::MalformedResponse;
+        return if valid_solver_tail(&stdout[offset..]) {
+            status
+        } else {
+            SolverStatus::MalformedResponse
+        };
+    }
+    SolverStatus::MalformedResponse
+}
+
+// Model and proof output is retained raw. Only its outer SMT-LIB response
+// framing is checked: comments, success notices and balanced S-expressions.
+fn valid_solver_tail(bytes: &[u8]) -> bool {
+    let mut index = 0;
+    while index < bytes.len() {
+        match bytes[index] {
+            byte if byte.is_ascii_whitespace() => index += 1,
+            b';' => {
+                while index < bytes.len() && bytes[index] != b'\n' {
+                    index += 1;
+                }
             }
-        } else if status.is_none() {
-            return SolverStatus::MalformedResponse;
+            b's' if bytes[index..].starts_with(b"success")
+                && bytes.get(index + 7).is_none_or(u8::is_ascii_whitespace) =>
+            {
+                index += 7;
+            }
+            b'(' => {
+                if solver_error_head(&bytes[index..]) {
+                    return false;
+                }
+                let Some(end) = sexpr_end(bytes, index) else {
+                    return false;
+                };
+                index = end;
+            }
+            _ => return false,
         }
     }
-    status.unwrap_or(SolverStatus::MalformedResponse)
+    true
+}
+
+fn solver_error_head(bytes: &[u8]) -> bool {
+    let after_open = bytes[1..].trim_ascii_start();
+    after_open.starts_with(b"error")
+        && after_open
+            .get(5)
+            .is_some_and(|byte| byte.is_ascii_whitespace() || *byte == b')')
+}
+
+fn sexpr_end(bytes: &[u8], start: usize) -> Option<usize> {
+    enum Quote {
+        Plain,
+        String,
+        Symbol,
+        Comment,
+    }
+    let mut depth = 0usize;
+    let mut quote = Quote::Plain;
+    let mut index = start;
+    while index < bytes.len() {
+        let byte = bytes[index];
+        match quote {
+            Quote::Plain => match byte {
+                b'(' => depth = depth.checked_add(1)?,
+                b')' => {
+                    depth = depth.checked_sub(1)?;
+                    if depth == 0 {
+                        return Some(index + 1);
+                    }
+                }
+                b'"' => quote = Quote::String,
+                b'|' => quote = Quote::Symbol,
+                b';' => quote = Quote::Comment,
+                _ => {}
+            },
+            Quote::String if byte == b'"' => {
+                if bytes.get(index + 1) == Some(&b'"') {
+                    index += 1;
+                } else {
+                    quote = Quote::Plain;
+                }
+            }
+            Quote::Symbol if byte == b'\\' => index += 1,
+            Quote::Symbol if byte == b'|' => quote = Quote::Plain,
+            Quote::Comment if byte == b'\n' => quote = Quote::Plain,
+            _ => {}
+        }
+        index += 1;
+    }
+    None
 }
 
 /// CG's assessment of a base/step pair as run evidence only.
@@ -187,19 +360,37 @@ pub enum PairEvidence {
 pub fn classify_pair<Product: Eq, Item: Eq, Instance: Eq, Kind: Eq>(
     expected_base: &QueryAssociation<Product, Item, Instance, Kind>,
     expected_step: &QueryAssociation<Product, Item, Instance, Kind>,
-    base: Option<&QueryRun<Product, Item, Instance, Kind>>,
-    step: Option<&QueryRun<Product, Item, Instance, Kind>>,
+    base: Option<&SolverExecution<Product, Item, Instance, Kind>>,
+    step: Option<&SolverExecution<Product, Item, Instance, Kind>>,
 ) -> PairEvidence {
     let (Some(base), Some(step)) = (base, step) else {
         return PairEvidence::MissingResponse;
     };
-    if &base.association != expected_base || &step.association != expected_step {
+    if expected_base.attempt == expected_step.attempt
+        || expected_base.selection.kind == expected_step.selection.kind
+        || &base.query.association != expected_base
+        || &step.query.association != expected_step
+    {
         return PairEvidence::AssociationMismatch;
     }
-    for status in [base.status, step.status] {
+    for execution in [base, step] {
+        if matches!(
+            execution.query.status,
+            SolverStatus::Sat | SolverStatus::Unsat | SolverStatus::Unknown
+        ) && (!execution.process.started
+            || !matches!(
+                execution.process.outcome,
+                ProcessOutcome::Completed { success: true, .. }
+            ))
+        {
+            return PairEvidence::NonProof(SolverStatus::ProcessFailed);
+        }
+    }
+    for status in [base.query.status, step.query.status] {
         if matches!(
             status,
-            SolverStatus::MissingTool
+            SolverStatus::Unknown
+                | SolverStatus::MissingTool
                 | SolverStatus::Stopped(_)
                 | SolverStatus::MalformedResponse
                 | SolverStatus::ProcessFailed
@@ -208,7 +399,7 @@ pub fn classify_pair<Product: Eq, Item: Eq, Instance: Eq, Kind: Eq>(
             return PairEvidence::NonProof(status);
         }
     }
-    match (base.status, step.status) {
+    match (base.query.status, step.query.status) {
         (SolverStatus::Unsat, SolverStatus::Unsat) => PairEvidence::InductionEligible,
         (SolverStatus::Sat, _) => PairEvidence::BaseSatCandidate,
         (SolverStatus::Unsat, SolverStatus::Sat) => PairEvidence::StepSatNotClosed,

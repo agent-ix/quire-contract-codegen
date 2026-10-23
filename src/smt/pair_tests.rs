@@ -1,97 +1,127 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::num::NonZeroU64;
-use std::{num::NonZeroUsize, time::Duration};
+use std::{
+    num::{NonZeroU64, NonZeroUsize},
+    time::Duration,
+};
 
 use ix_trace_rs::trace;
 use quire_exact::Cancel;
 
 use super::{
-    classify_pair, run_solver_query, PairEvidence, QueryAssociation, QueryRun, ReachedLimit,
-    SolverStatus,
+    classify_pair, run_solver_query, PairEvidence, QueryAssociation, QuerySelection, ReachedLimit,
+    SolverExecution, SolverStatus,
 };
 use crate::kani::run::process::{ProcessLimits, ProcessOutcome};
 
+type Selection = QuerySelection<&'static str, &'static str, &'static str, &'static str>;
 type Association = QueryAssociation<&'static str, &'static str, &'static str, &'static str>;
-type Run = QueryRun<&'static str, &'static str, &'static str, &'static str>;
+type Execution = SolverExecution<&'static str, &'static str, &'static str, &'static str>;
 
-fn base() -> Association {
-    QueryAssociation {
+fn selection(kind: &'static str, query_bytes: &[u8]) -> Selection {
+    QuerySelection {
         product: "product-a",
         item: "item-a",
         instance: "instance-v",
         depth: NonZeroU64::MIN,
-        kind: "base",
-        query_bytes: b"(check-sat)\n".to_vec(),
-        attempt: NonZeroU64::MIN,
+        kind,
+        query_bytes: query_bytes.to_vec(),
     }
 }
 
-fn step() -> Association {
-    QueryAssociation {
-        kind: "step",
-        attempt: NonZeroU64::new(2).expect("two is nonzero"),
-        ..base()
+fn limits(input_bytes: usize) -> ProcessLimits {
+    ProcessLimits {
+        input_bytes: NonZeroUsize::new(input_bytes).expect("nonzero"),
+        wall_clock: Duration::from_secs(5),
+        memory_bytes: NonZeroU64::new(128 * 1024 * 1024).expect("nonzero"),
+        output_bytes: NonZeroUsize::new(1024).expect("nonzero"),
     }
 }
 
-fn record(association: Association, status: SolverStatus) -> Run {
-    QueryRun {
-        association,
-        status,
-    }
+fn run(selected: Selection) -> Execution {
+    run_solver_query(
+        selected,
+        "/usr/bin/cat".into(),
+        vec![],
+        limits(1024),
+        Cancel::new(),
+    )
+    .expect("bounded direct child")
 }
 
-#[trace("TC-059", "FR-045-AC-1", "FR-045-AC-2")]
+fn association(execution: &Execution) -> &Association {
+    &execution.query().association
+}
+
+// Full AC-1 needs QSL FR-315's encoder; these are CG runner checks only.
+#[trace("TC-059", "FR-045-AC-2", "FR-045-AC-3")]
 #[test]
-fn two_unsat_records_need_exact_base_and_step_association() {
-    let base_run = record(base(), SolverStatus::Unsat);
-    let step_run = record(step(), SolverStatus::Unsat);
+fn two_real_unsat_processes_need_distinct_exact_associations() {
+    let base = run(selection("base", b"unsat\n"));
+    let step = run(selection("step", b"unsat\n"));
+    assert!(base.process().started && step.process().started);
+    assert_ne!(association(&base).attempt(), association(&step).attempt());
     assert_eq!(
-        classify_pair(&base(), &step(), Some(&base_run), Some(&step_run)),
+        classify_pair(
+            association(&base),
+            association(&step),
+            Some(&base),
+            Some(&step)
+        ),
         PairEvidence::InductionEligible
     );
     assert_eq!(
-        classify_pair(&base(), &step(), Some(&step_run), Some(&base_run)),
+        classify_pair(
+            association(&base),
+            association(&step),
+            Some(&step),
+            Some(&base)
+        ),
         PairEvidence::AssociationMismatch
     );
-    for changed_base in [
-        QueryAssociation {
-            product: "product-b",
-            ..base()
+    let stale = run(selection("base", b"unsat\n"));
+    assert_ne!(association(&base).attempt(), association(&stale).attempt());
+    assert_eq!(
+        classify_pair(
+            association(&base),
+            association(&step),
+            Some(&stale),
+            Some(&step)
+        ),
+        PairEvidence::AssociationMismatch
+    );
+    for changed in [
+        Selection {
+            product: "other",
+            ..association(&base).selection.clone()
         },
-        QueryAssociation {
-            item: "item-b",
-            ..base()
+        Selection {
+            item: "other",
+            ..association(&base).selection.clone()
         },
-        QueryAssociation {
-            instance: "instance-w",
-            ..base()
+        Selection {
+            instance: "other",
+            ..association(&base).selection.clone()
         },
-        QueryAssociation {
-            depth: NonZeroU64::new(2).expect("two is nonzero"),
-            ..base()
+        Selection {
+            depth: NonZeroU64::new(2).expect("nonzero"),
+            ..association(&base).selection.clone()
         },
-        QueryAssociation {
+        Selection {
             kind: "step",
-            ..base()
+            ..association(&base).selection.clone()
         },
-        QueryAssociation {
-            query_bytes: b"(check-sat) \n".to_vec(),
-            ..base()
-        },
-        QueryAssociation {
-            attempt: NonZeroU64::new(3).expect("three is nonzero"),
-            ..base()
+        Selection {
+            query_bytes: b"unsat \n".to_vec(),
+            ..association(&base).selection.clone()
         },
     ] {
+        let expected = Association {
+            selection: changed,
+            ..association(&base).clone()
+        };
         assert_eq!(
-            classify_pair(
-                &base(),
-                &step(),
-                Some(&record(changed_base, SolverStatus::Unsat)),
-                Some(&step_run)
-            ),
+            classify_pair(&expected, association(&step), Some(&base), Some(&step)),
             PairEvidence::AssociationMismatch
         );
     }
@@ -99,178 +129,153 @@ fn two_unsat_records_need_exact_base_and_step_association() {
 
 #[trace("TC-059", "FR-045-AC-2")]
 #[test]
-fn solver_responses_do_not_become_terminal_proof_or_refutation() {
-    let step_unsat = record(step(), SolverStatus::Unsat);
+fn responses_remain_nonterminal_evidence() {
+    let base_sat = run(selection("base", b"sat\n"));
+    let base_unsat = run(selection("base", b"unsat\n"));
+    let base_unknown = run(selection("base", b"unknown\n"));
+    let step_unsat = run(selection("step", b"unsat\n"));
+    let step_sat = run(selection("step", b"sat\n"));
+    let step_unknown = run(selection("step", b"unknown\n"));
+    let classify = |base: &Execution, step: &Execution| {
+        classify_pair(association(base), association(step), Some(base), Some(step))
+    };
     assert_eq!(
-        classify_pair(
-            &base(),
-            &step(),
-            Some(&record(base(), SolverStatus::Sat)),
-            Some(&step_unsat)
-        ),
+        classify(&base_sat, &step_unsat),
         PairEvidence::BaseSatCandidate
     );
     assert_eq!(
-        classify_pair(
-            &base(),
-            &step(),
-            Some(&record(base(), SolverStatus::Unsat)),
-            Some(&record(step(), SolverStatus::Sat))
-        ),
+        classify(&base_unsat, &step_sat),
         PairEvidence::StepSatNotClosed
     );
-    for status in [
-        SolverStatus::Unknown,
-        SolverStatus::MissingTool,
-        SolverStatus::Stopped(ReachedLimit::WallClock),
-        SolverStatus::MalformedResponse,
-        SolverStatus::ProcessFailed,
-    ] {
-        assert_eq!(
-            classify_pair(
-                &base(),
-                &step(),
-                Some(&record(base(), status)),
-                Some(&step_unsat)
-            ),
-            PairEvidence::NonProof(status)
-        );
-    }
     assert_eq!(
-        classify_pair(&base(), &step(), None, Some(&step_unsat)),
-        PairEvidence::MissingResponse
+        classify(&base_unknown, &step_unsat),
+        PairEvidence::NonProof(SolverStatus::Unknown)
+    );
+    assert_eq!(
+        classify(&base_sat, &step_unknown),
+        PairEvidence::NonProof(SolverStatus::Unknown)
     );
     assert_eq!(
         classify_pair(
-            &base(),
-            &step(),
-            Some(&record(base(), SolverStatus::Sat)),
-            Some(&record(
-                step(),
-                SolverStatus::Stopped(ReachedLimit::MemoryBytes)
-            ))
+            association(&base_unsat),
+            association(&step_unsat),
+            None,
+            Some(&step_unsat)
         ),
-        PairEvidence::NonProof(SolverStatus::Stopped(ReachedLimit::MemoryBytes))
+        PairEvidence::MissingResponse
     );
-}
-
-fn process_limits(input_bytes: usize) -> ProcessLimits {
-    ProcessLimits {
-        input_bytes: NonZeroUsize::new(input_bytes).expect("finite input limit"),
-        wall_clock: Duration::from_secs(5),
-        memory_bytes: NonZeroU64::new(128 * 1024 * 1024).expect("finite memory limit"),
-        output_bytes: NonZeroUsize::new(1024).expect("finite capture limit"),
-    }
+    let stopped = run_solver_query(
+        selection("base", b"unsat\n"),
+        "/usr/bin/cat".into(),
+        vec![],
+        limits(1),
+        Cancel::new(),
+    )
+    .expect("typed input refusal");
+    assert_eq!(
+        classify_pair(
+            association(&stopped),
+            association(&step_unsat),
+            Some(&stopped),
+            Some(&step_unsat)
+        ),
+        PairEvidence::NonProof(SolverStatus::Stopped(ReachedLimit::InputBytes))
+    );
 }
 
 #[trace("TC-059", "FR-045-AC-2", "FR-045-AC-3")]
 #[test]
-fn completed_solver_run_keeps_exact_query_and_bounded_raw_response() {
-    let association = QueryAssociation {
-        query_bytes: b"unsat\n".to_vec(),
-        ..base()
-    };
-    let execution = run_solver_query(
-        association.clone(),
-        "/usr/bin/cat".into(),
-        vec![],
-        process_limits(1024),
-        Cancel::new(),
-    )
-    .expect("owned direct child");
-    assert_eq!(execution.query.association, association);
-    assert_eq!(execution.query.status, SolverStatus::Unsat);
-    assert!(execution.process.started);
+fn completed_run_retains_exact_selection_limits_and_raw_output() {
+    let selected = selection("base", b"unsat\n");
+    let execution = run(selected.clone());
+    assert_eq!(execution.query().association.selection, selected);
+    assert_eq!(execution.query().status, SolverStatus::Unsat);
+    assert!(execution.process().started);
     assert!(matches!(
-        execution.process.outcome,
+        execution.process().outcome,
         ProcessOutcome::Completed {
             success: true,
             exit_code: Some(0)
         }
     ));
     assert_eq!(
-        execution.process.stdout.as_deref(),
+        execution.process().stdout.as_deref(),
         Some(b"unsat\n".as_slice())
     );
-    assert_eq!(execution.process.stderr.as_deref(), Some(b"".as_slice()));
+    assert_eq!(execution.process().stderr.as_deref(), Some(b"".as_slice()));
+    assert_eq!(
+        execution.process().executable.to_str(),
+        Some("/usr/bin/cat")
+    );
+    assert_eq!(execution.process().limits, limits(1024));
 }
 
 #[trace("TC-059", "FR-045-AC-2", "FR-045-AC-3")]
 #[test]
-fn excess_input_and_conflicting_status_never_become_unsat_evidence() {
+fn excess_input_and_malformed_output_never_become_unsat() {
     let blocked = run_solver_query(
-        base(),
+        selection("base", &vec![b'x'; 1024 * 1024]),
         "/usr/bin/cat".into(),
         vec![],
-        process_limits(1),
+        limits(1),
         Cancel::new(),
     )
     .expect("input preflight");
-    assert!(!blocked.process.started);
+    assert!(!blocked.process().started);
     assert_eq!(
-        blocked.query.status,
+        blocked.query().status,
         SolverStatus::Stopped(ReachedLimit::InputBytes)
     );
     assert!(matches!(
-        blocked.process.outcome,
+        blocked.process().outcome,
         ProcessOutcome::InputOverLimit
     ));
-
-    let conflicting = run_solver_query(
-        QueryAssociation {
-            query_bytes: b"unsat\nsat\n".to_vec(),
-            ..base()
-        },
-        "/usr/bin/cat".into(),
-        vec![],
-        process_limits(1024),
-        Cancel::new(),
-    )
-    .expect("completed direct child");
-    assert_eq!(conflicting.query.status, SolverStatus::MalformedResponse);
+    for output in [
+        b"unsat\nsat\n".as_slice(),
+        b"unsat\njunk\n",
+        b"unsat\n(error \"bad\")\n",
+    ] {
+        let malformed = run(selection("base", output));
+        assert_eq!(malformed.query().status, SolverStatus::MalformedResponse);
+        assert_eq!(malformed.process().stdout.as_deref(), Some(output));
+    }
+    let model_bytes = b"unsat\n(model (define-fun x () String \"(\"))\n";
+    let model = run(selection("base", model_bytes));
+    assert_eq!(model.query().status, SolverStatus::Unsat);
     assert_eq!(
-        conflicting.process.stdout.as_deref(),
-        Some(b"unsat\nsat\n".as_slice())
+        model.process().stdout.as_deref(),
+        Some(model_bytes.as_slice())
     );
-
     let missing = run_solver_query(
-        base(),
+        selection("base", b"unsat\n"),
         "/nonexistent/cg-ir974-solver".into(),
         vec![],
-        process_limits(1024),
+        limits(1024),
         Cancel::new(),
     )
-    .expect("missing executable is a typed result");
-    assert!(!missing.process.started);
-    assert_eq!(missing.query.status, SolverStatus::MissingTool);
-
+    .expect("missing executable is typed");
+    assert!(!missing.process().started);
+    assert_eq!(missing.query().status, SolverStatus::MissingTool);
     let absent = run_solver_query(
-        QueryAssociation {
-            query_bytes: Vec::new(),
-            ..base()
-        },
+        selection("base", b""),
         "/usr/bin/true".into(),
         vec![],
-        process_limits(1024),
+        limits(1024),
         Cancel::new(),
     )
     .expect("successful child with no response");
-    assert_eq!(absent.query.status, SolverStatus::MalformedResponse);
-
+    assert_eq!(absent.query().status, SolverStatus::MalformedResponse);
     let failed = run_solver_query(
-        QueryAssociation {
-            query_bytes: Vec::new(),
-            ..base()
-        },
+        selection("base", b""),
         "/usr/bin/false".into(),
         vec![],
-        process_limits(1024),
+        limits(1024),
         Cancel::new(),
     )
-    .expect("nonzero exit is a typed result");
-    assert_eq!(failed.query.status, SolverStatus::ProcessFailed);
+    .expect("nonzero exit is typed");
+    assert_eq!(failed.query().status, SolverStatus::ProcessFailed);
     assert!(matches!(
-        failed.process.outcome,
+        failed.process().outcome,
         ProcessOutcome::Completed {
             success: false,
             exit_code: Some(1)
