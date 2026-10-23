@@ -1531,11 +1531,12 @@ pub(crate) fn qualify_staged_native_for_test(request: &KaniScalarNativeRequest<'
     }
     seal_snapshot(root).unwrap();
     let run = |directory: &Path, arguments: &[String]| {
+        let qualification_cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
         eprintln!(
             "native qualification cargo {arguments:?} in {}",
             directory.display()
         );
-        let output = Command::new(env!("CARGO"))
+        let output = Command::new(qualification_cargo)
             .args(arguments)
             .current_dir(directory)
             .env("CARGO_TARGET_DIR", request.target_directory)
@@ -1692,9 +1693,9 @@ mod tests {
         .unwrap();
         write_observer("oracle", 1, root).unwrap();
 
-        let cargo = env!("CARGO");
         let run = |directory: &Path, args: &[&str]| {
-            let output = Command::new(cargo)
+            let observer_cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
+            let output = Command::new(observer_cargo)
                 .args(args)
                 .current_dir(directory)
                 .env(

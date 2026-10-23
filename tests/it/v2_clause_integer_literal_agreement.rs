@@ -185,7 +185,8 @@ fn case_{index}() {{
     scratch_crate::write_manifest(&scratch.path, &manifest);
     fs::write(scratch.path.join("src/lib.rs"), source).expect("write public native agreement");
     scratch_crate::resolve_seeded_lock(&scratch.path);
-    let output = Command::new(env!("CARGO"))
+    let agreement_cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
+    let output = Command::new(agreement_cargo)
         .args([
             "test",
             "--locked",

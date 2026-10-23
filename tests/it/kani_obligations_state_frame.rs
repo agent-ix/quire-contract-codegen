@@ -670,7 +670,8 @@ fn qsl_emitted_clause_composes_boolean_and_integer_operations() {
             quire_contract_codegen::SEMANTIC_VALUE_DEPENDENCY_SOURCE
         ),
     );
-    let output = std::process::Command::new(env!("CARGO"))
+    let clause_corpus_cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
+    let output = std::process::Command::new(clause_corpus_cargo)
         .args(["test", "--offline", "--quiet"])
         .env("CARGO_TARGET_DIR", scratch.path.join("target"))
         .env("RUSTFLAGS", "-Dwarnings")
