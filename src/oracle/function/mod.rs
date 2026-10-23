@@ -1698,7 +1698,10 @@ fn source_function_node_id<'a>(
     name: &str,
     body_node_id: &CheckedNodeId,
 ) -> Option<&'a CheckedNodeId> {
-    let mut matching = graph.nodes().filter(|node| {
+    let mut matching = graph.nodes().inspect(|_| {
+        #[cfg(test)]
+        IR988_SOURCE_GRAPH_VISITS.with(|visits| visits.set(visits.get() + 1));
+    }).filter(|node| {
         if &*node.node_tag != "function" || &*node.semantic_form != "pure_function" {
             return false;
         }
@@ -1713,6 +1716,94 @@ fn source_function_node_id<'a>(
     });
     let node = matching.next()?;
     matching.next().is_none().then_some(&node.node_id)
+}
+
+#[cfg(test)]
+thread_local! {
+    static IR988_SOURCE_GRAPH_VISITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+mod ir988_source_function_tests {
+    use super::*;
+    use ix_trace_rs::trace;
+    use quire_contract_model::CheckedDeclaration;
+    use serde_json::json;
+
+    fn id(value: u64) -> CheckedNodeId {
+        serde_json::from_value(json!({
+            "domain":"quire.checked-semantic-node/v1",
+            "digest":format!("{value:064x}")
+        }))
+        .expect("synthetic node key")
+    }
+
+    fn node(value: u64, name: Option<String>, body: &CheckedNodeId) -> crate::oracle::checked_graph::fixture::Node {
+        let metadata = CheckedSemanticNodeV2 {
+            node_id: id(value),
+            owner: None,
+            schema_version: "quire.checked-semantic-graph/v2".into(),
+            node_tag: if name.is_some() {
+                "function"
+            } else {
+                "expression"
+            }
+            .into(),
+            semantic_form: if name.is_some() {
+                "pure_function"
+            } else {
+                "binary"
+            }
+            .into(),
+            semantic_type: body.clone(),
+            dependencies: Vec::new(),
+            occurrences: Vec::new(),
+            recursion_group: None,
+            nominal_identity_preimage: None,
+            declaration: name.map(|name| CheckedDeclaration {
+                qualified_name: vec![name.into()],
+            }),
+            body: serde_json::Value::Null,
+        };
+        crate::oracle::checked_graph::fixture::Node::new(
+            metadata,
+            Some(CheckedTerm::Aggregate {
+                members: vec![CheckedTerm::Binding {
+                    name: "body".into(),
+                    value: Box::new(CheckedTerm::Reference { target: body.clone() }),
+                }],
+            }),
+        )
+    }
+
+    #[trace("TC-031")]
+    #[test]
+    fn ir_988_source_function_lookup_builds_once_for_repeated_items() {
+        let mut excessive = Vec::new();
+        for requests in [2, 4, 8] {
+            for functions in [4, 8, 16] {
+                let body = id(10_000);
+                let mut nodes = vec![node(10_000, None, &body)];
+                nodes.extend(
+                    (0..functions)
+                        .map(|index| node(index as u64 + 1, Some(format!("f{index}")), &body)),
+                );
+                let graph: Graph<'_> = nodes.iter().map(|node| (&node.node_id, node)).collect();
+                IR988_SOURCE_GRAPH_VISITS.with(|visits| visits.set(0));
+                for _ in 0..requests {
+                    let found =
+                        source_function_node_id(&graph, &format!("f{}", functions - 1), &body);
+                    assert_eq!(found, Some(&id(functions as u64)));
+                }
+                let visits = IR988_SOURCE_GRAPH_VISITS.with(std::cell::Cell::get);
+                println!("K={requests} R={functions} source_graph_visits={visits}");
+                if visits > functions + requests + 1 {
+                    excessive.push((requests, functions, visits));
+                }
+            }
+        }
+        assert!(excessive.is_empty(), "per-item graph scans: {excessive:?}");
+    }
 }
 
 pub(crate) fn binding_value<'a>(body: &'a CheckedTerm, name: &str) -> Option<&'a CheckedTerm> {
