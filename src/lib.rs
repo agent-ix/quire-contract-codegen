@@ -30,6 +30,8 @@ mod kani;
 pub mod oracle;
 // The publication subsystem.
 mod publication;
+// Shared bounded child execution for proof backends and SMT solvers.
+pub mod process;
 // The routed subsystem.
 mod routed;
 // The replay subsystem.

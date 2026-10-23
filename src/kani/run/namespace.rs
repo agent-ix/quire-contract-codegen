@@ -63,7 +63,6 @@ impl BackendCommand {
             read_only_binds: Vec::new(),
         }
     }
-    #[cfg(test)]
     pub(super) fn arg(&mut self, argument: impl AsRef<OsStr>) -> &mut Self {
         self.arguments.push(argument.as_ref().to_owned());
         self
