@@ -58,7 +58,7 @@ pub enum CompositeBuildError {
     /// QSL's public request decoder refused the original wire before recompilation.
     RequestDecode(Box<ReplayRequestRefusal>),
     /// IR refused the recompiled checked package.
-    PackageRead(CheckedPackageRefusal),
+    PackageRead(Box<CheckedPackageRefusal>),
     /// IR reached a checked-package read ceiling.
     PackageReadLimit(CheckedPackageIncomplete),
     /// The original application has no complete admitted structural equality operand projection.
@@ -77,7 +77,7 @@ pub enum CompositeBuildError {
     /// The owning O-09 encoder refused the preimage.
     Identity(IdentityEncodeError),
     /// QSL refused the producer packet before request construction.
-    PacketAdmission(WitnessRefusal),
+    PacketAdmission(Box<WitnessRefusal>),
     /// An admitted packet belongs to another checked parity claim.
     PacketMismatch(CompositePacketMember),
     /// A genuine QSL report did not bind to the request actually sent.
@@ -421,7 +421,6 @@ impl OriginalCompositeEqContext {
     /// # Errors
     /// Returns a typed packet admission, claim-binding, original projection or replay setup
     /// refusal before any report or terminal value exists.
-    #[allow(clippy::result_large_err)]
     pub fn request_from_packet(
         &self,
         packet: WitnessPacket<NoPayload>,
@@ -434,7 +433,7 @@ impl OriginalCompositeEqContext {
         let selected =
             self.selected_claim(node, occurrence, operator, harness_bounds, work_limit)?;
         let envelope = WitnessEnvelope::reconstruct(packet, self.inputs.replay_limits)
-            .map_err(CompositeBuildError::PacketAdmission)?;
+            .map_err(|cause| CompositeBuildError::PacketAdmission(Box::new(cause)))?;
         if envelope.replay_target() != &ReplayTarget::function(self.selection.clone(), None) {
             return Err(CompositeBuildError::PacketMismatch(
                 CompositePacketMember::Target,
@@ -551,7 +550,7 @@ impl OriginalCompositeEqContext {
         {
             CheckedPackageV2ReadResult::Admitted(package) => package,
             CheckedPackageV2ReadResult::Refused(cause) => {
-                return Err(CompositeBuildError::PackageRead(cause))
+                return Err(CompositeBuildError::PackageRead(Box::new(cause)))
             }
             CheckedPackageV2ReadResult::Incomplete(cause) => {
                 return Err(CompositeBuildError::PackageReadLimit(cause))

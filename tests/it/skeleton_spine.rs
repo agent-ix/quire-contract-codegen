@@ -19,7 +19,6 @@
 use ix_trace_rs::trace;
 use std::{collections::BTreeMap, path::PathBuf};
 
-use qsl_replay::WitnessValue;
 use qsl_replay::{
     call_site, ByteDigest, CallSiteRefusal, CanonicalAssignment, Code, DeclaredDomain,
     DependencyInput, DependencyInputRefusal, DependencySelectionsCause, DigestDomain, DigestRecord,
@@ -28,6 +27,7 @@ use qsl_replay::{
     ScalarLimits, SourceIdentity, Verdict, WireNodeId, WitnessSettlement,
     DEFAULT_REPLAY_INPUT_BYTES,
 };
+use qsl_replay::{Witness, WitnessValue};
 use quire_contract_codegen::{
     decode_falsification, execute_kani_obligation, replay_counterexample,
     replay_counterexample_through, replay_falsification, DependencyLock, DependencyLockError,
@@ -122,9 +122,21 @@ fn request_of(package: &ReplayPackage, source: ReplaySource) -> qsl_replay::Repl
             ..template.clone()
         })
         .collect();
-    package
-        .request(&identity, source)
-        .expect("every parameter has a bound harness argument")
+    let witness = match &source {
+        ReplaySource::Witness(witness) => witness.clone(),
+        ReplaySource::Input(_) => {
+            Witness::parse("<<<assertion|h|c|>>>").expect("the fixture witness parses")
+        }
+    };
+    let packet = package
+        .backend_witness_packet(&identity, witness)
+        .expect("every parameter has a bound harness argument");
+    let mut request = package
+        .request(&identity, packet)
+        .expect("the selected function admits its backend packet");
+    // Input-arm cases below exercise QSL's generic request behavior after CG's packet boundary.
+    request.source = source;
+    request
 }
 
 /// Compiles the hand-mirrored native twin `source` and locates `function` in it.
@@ -804,9 +816,15 @@ fn tc_026_the_request_slot_is_the_recomputed_function_contract_digest() {
     assert_eq!(harness.identity.kind, ObligationKind::Postcondition);
     let source = identity_unit("");
     let package = compile_native_twin(&source, FUNCTION);
-    let wire = package
-        .request(&harness.identity, ReplaySource::Input(Vec::new()))
+    let packet = package
+        .backend_witness_packet(
+            &harness.identity,
+            Witness::parse("<<<assertion|h|c|>>>").expect("the fixture witness parses"),
+        )
         .expect("the identity is built");
+    let wire = package
+        .request(&harness.identity, packet)
+        .expect("the selected function admits its backend packet");
     let expected = recomputed(
         &site_of(&source, FUNCTION),
         "postcondition",
@@ -1081,16 +1099,20 @@ fn tc_026_function_replay_refuses_poisoned_suffixes_at_both_decode_bounds() {
     separate.replay_limits = ReplayLimits::default().with_input_bytes(1);
     let separate = ReplayPackage::new(separate, FUNCTION).expect("native twin compiles");
     let mut calls = 0;
-    let _ = replay_counterexample_through(&harness.identity, &transcript, &separate, |_| {
+    let refused = replay_counterexample_through(&harness.identity, &transcript, &separate, |_| {
         calls += 1;
         Err(ReplayRefusal::Fault(InternalFault::new(
             "replay",
             "stop after decode",
         )))
     });
+    assert!(
+        matches!(refused, Err(SpineReplayError::Packet(_))),
+        "QSL's input_bytes bound must not limit CG decoding: {refused:?}"
+    );
     assert_eq!(
-        calls, 1,
-        "QSL's input_bytes bound must not limit CG decoding"
+        calls, 0,
+        "packet admission must reject the small QSL input_bytes bound before execution"
     );
     for (poisoned, limits, code) in [
         (
