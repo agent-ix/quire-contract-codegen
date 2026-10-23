@@ -1599,6 +1599,9 @@ fn residual_strategy_kr_families_preserve_complete_selected_artifacts() {
 #[test]
 fn residual_strategy_keeps_unknown_selection_and_refused_sibling_precedence() {
     let mut projection = residual_strategy_projection(4);
+    // The adverse sibling must be admitted by IR before CG can reject its body.
+    // A symmetric sibling domain admits negation; the selected healthy domain stays 0..1000.
+    projection["bindings"][1]["expression"]["values"][0]["value_type"]["minimum"] = json!("-1000");
     let read = projection["bindings"][1]["expression"]["expression"]["left"].clone();
     projection["bindings"][1]["expression"]["expression"]["left"] =
         json!({"node":"numeric_negate", "operand":read, "source":span(4)});
