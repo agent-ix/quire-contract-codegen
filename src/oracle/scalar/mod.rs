@@ -22,10 +22,10 @@
 //! [`UpstreamBlocker::OperationIdentityNotConsumed`]; the cases that reach it
 //! are enumerated on that variant. This
 //! generator's shape classifiers (`Shape::of`, `application_arguments`)
-//! still classify a body from its `term`/`operator`/`arguments` and the
-//! request item's own descriptor, not from `operation.identity` -- reading
-//! the confirmed identity changes what a claim reports, not how its code is
-//! generated.
+//! match the owner's retained `CheckedTerm` and closed `ApplicationOperator`,
+//! borrowing typed arguments through the shared checked-graph view. They
+//! cross-check the request item's descriptor; the preserved catalog identity
+//! determines the claim's provenance rather than a second term decoder.
 //!
 //! V2 does not define a normative body for `bounded_domain` nodes. This
 //! generator reads exactly one encoding and refuses anything else as
