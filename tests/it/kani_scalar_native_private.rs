@@ -4,8 +4,10 @@ mod package;
 use crate::{
     core::artifact::Artifact,
     kani::{
+        classify::KaniRunOutcome,
         identity::KaniScalarObligationHarness,
         run::{
+            execute::{execute_kani_obligation, KaniExecutionRequest},
             scalar::{execute_with_cleanup, KaniScalarNativeRequest},
             tool::KaniInstallation,
         },
@@ -32,8 +34,114 @@ use ix_trace_rs::trace;
 use package::Bound;
 #[path = "kani_scalar_native_fixture.rs"]
 mod scalar_native_fixture;
-use scalar_native_fixture::routed_scalar_with_artifacts;
+use scalar_native_fixture::{routed_native_scalar_with_artifacts, routed_scalar_with_artifacts};
 use std::{fs, path::PathBuf, time::Duration};
+
+struct NativeMutationScratch(PathBuf);
+
+impl NativeMutationScratch {
+    fn create() -> Self {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join(format!(
+                "ir705-native-mutant-{}-{nonce}",
+                std::process::id()
+            ));
+        fs::create_dir_all(path.join("src")).expect("scratch directory");
+        Self(path)
+    }
+}
+
+impl Drop for NativeMutationScratch {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
+
+#[trace("FR-015-AC-126", "TC-025")]
+#[test]
+#[ignore = "real Kani qualification: run after independent review at the original 16 GiB ceiling"]
+fn native_tc025_arithmetic_mutant_falsifies() {
+    let (healthy, artifacts) = routed_native_scalar_with_artifacts(
+        package::bounded_increment_package(),
+        package::BOUNDED_INCREMENT,
+        49_100,
+        Bound::Integer(0, 9),
+        Duration::from_secs(600),
+    );
+    let manifest = artifacts
+        .iter()
+        .find(|artifact| artifact.path == "Cargo.toml")
+        .expect("original dependency manifest");
+    let original = "nx::NativeIntegerOperation::Add {";
+    assert_eq!(healthy.rust.contents.matches(original).count(), 1);
+    let mut rust = healthy.rust.clone();
+    rust.contents = rust
+        .contents
+        .replace(original, "nx::NativeIntegerOperation::Subtract {");
+    // This private test deliberately seals its one fault injection; production callers cannot
+    // re-seal a changed harness and the normal execution path still enforces provenance.
+    let mutant = KaniScalarObligationHarness::generated(
+        healthy.identity.clone(),
+        rust,
+        healthy.record.clone(),
+    );
+    let scratch = NativeMutationScratch::create();
+    fs::write(scratch.0.join("Cargo.toml"), &manifest.contents).unwrap();
+    fs::copy(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("Cargo.lock"),
+        scratch.0.join("Cargo.lock"),
+    )
+    .unwrap();
+    fs::write(scratch.0.join("src/lib.rs"), &mutant.rust.contents).unwrap();
+    fs::write(
+        scratch.0.join("build.rs"),
+        "fn main() { println!(\"cargo:rustc-check-cfg=cfg(kani)\"); }\n",
+    )
+    .unwrap();
+    let metadata = std::process::Command::new(env!("CARGO"))
+        .args(["metadata", "--offline", "--format-version", "1"])
+        .env(
+            "CARGO_TARGET_DIR",
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target"),
+        )
+        .current_dir(&scratch.0)
+        .output()
+        .expect("resolve seeded dependency lock");
+    assert!(
+        metadata.status.success(),
+        "seeded dependency lock failed: {}",
+        String::from_utf8_lossy(&metadata.stderr)
+    );
+    let installation = KaniInstallation::discover().expect("cargo-kani is installed");
+    let cancel = quire_exact::Cancel::new();
+    let evidence = execute_kani_obligation(&KaniExecutionRequest {
+        cancel: &cancel,
+        installation: &installation,
+        harness: (&mutant).into(),
+        crate_directory: &scratch.0,
+        target_directory: &PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("target/ir705-native-scalar-kani"),
+        home_directory: None,
+    })
+    .expect("the private mutation preserves the execution module's bounded launch");
+    let KaniRunOutcome::Falsified { counterexample } = evidence.outcome else {
+        panic!("the original-domain arithmetic mutant must falsify: {evidence:?}");
+    };
+    let witness =
+        crate::replay::scalar::decode_scalar_falsification(&mutant.identity, &counterexample)
+            .expect("actual backend witness decodes against original intervals");
+    let [left, right] = witness.as_slice() else {
+        panic!("two original symbolic integer draws: {witness:?}");
+    };
+    assert!((0..=9).contains(left));
+    assert_eq!(*right, 1);
+    assert_ne!(i128::from(*left) + 1, i128::from(*left) - 1);
+}
 
 pub(crate) fn fixture(wall_clock: Duration) -> (KaniScalarObligationHarness, Vec<Artifact>) {
     routed_scalar_with_artifacts(

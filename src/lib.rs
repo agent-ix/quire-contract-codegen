@@ -211,17 +211,23 @@ pub use crate::core::artifact::{
 pub use crate::core::diagnostic::{
     GenerationDiagnostic, GenerationErrorCode, GenerationTerminalState,
 };
+pub use crate::core::native_integer::{
+    NativeIntegerCapacityPolicy, NativeIntegerIntervalDecision, NativeIntegerOperationDecision,
+    NativeIntegerSelection,
+};
 pub use crate::core::source_map::{SourceProbe, SourceRegion};
 pub use crate::oracle::clause::{
-    derive_v2_clause_descriptor, generate_v2_clause_claim_map, generate_v2_clause_oracle,
-    ClauseOracleInput, V2ClauseClaim, V2ClauseCoverageRegion, V2ClauseDescriptor, V2ClauseOracle,
-    V2ClauseRefusal,
+    derive_v2_clause_descriptor, generate_v2_clause_claim_map, generate_v2_clause_native_oracle,
+    generate_v2_clause_oracle, ClauseOracleInput, NativeClauseCapabilityReason, V2ClauseClaim,
+    V2ClauseCoverageRegion, V2ClauseDescriptor, V2ClauseOracle, V2ClauseRefusal,
 };
 pub use core::canonical::DigestError;
 pub use kani::generate::frame::{
     generate_state_frame_obligations, StateFrameObligations, StateFrameRequest,
 };
-pub use kani::generate::negotiate::negotiate_kani_obligations;
+pub use kani::generate::negotiate::{
+    negotiate_kani_native_obligations, negotiate_kani_obligations,
+};
 pub use kani::generate::outcome::{
     BoundNotResolvedCause, CollectionUnsupportedReason, DerivedDomain, InvalidObligationItem,
     KaniObligationError, KaniObligationOutcome, KaniObligationRequest, ModelMemberRangeReason,
@@ -233,10 +239,11 @@ pub use kani::identity::{
     CollectionElementIdentity, CollectionKindIdentity, CollectionObligationIdentity,
     CollectionPredicateIdentity, EmbeddedOracle, KaniCollectionObligationHarness,
     KaniObligationHarness, KaniObligationIdentity, KaniScalarObligationHarness,
-    KaniV2ClauseObligationHarness, ObligationBinding, ObligationKind, ScalarObligationArgument,
-    ScalarObligationIdentity, ScalarOriginalLimitsError, StateComparison, StateFieldDomain,
-    StateFrameHarness, StateFrameIdentity, StateFrameProperty, StateFrameRecordError,
-    StateFrameScope, StateUnrangedField, StateUnrangedReason, V2ClauseObligationIdentity,
+    KaniV2ClauseObligationHarness, ObligationBinding, ObligationKind, ScalarIntegerRepresentation,
+    ScalarObligationArgument, ScalarObligationIdentity, ScalarOriginalLimitsError, StateComparison,
+    StateFieldDomain, StateFrameHarness, StateFrameIdentity, StateFrameProperty,
+    StateFrameRecordError, StateFrameScope, StateUnrangedField, StateUnrangedReason,
+    V2ClauseObligationIdentity,
 };
 pub use kani::output::playback::DecodeFailure;
 pub use publication::publish::{write_bundle_atomic, PublishedBundleIdentity};
@@ -264,7 +271,9 @@ pub use replay::state_clause::{
     StateClauseModelFieldsCause, StateClauseReplay, StateClauseReplayError,
     StateClauseReplayInputs, StateObjectAddress,
 };
-pub use replay::witness::{decode_falsification, WitnessDecodeLimits};
+pub use replay::witness::{
+    decode_falsification, decode_v2_clause_falsification, WitnessDecodeLimits,
+};
 pub use strategy::campaign::{
     generate_enum_strategy, generate_i64_strategy, EnumStrategyCampaign, EnumStrategyRequest,
     StrategyCampaign, StrategyConstraint, StrategyDiagnostic, StrategyErrorCode, StrategyRequest,

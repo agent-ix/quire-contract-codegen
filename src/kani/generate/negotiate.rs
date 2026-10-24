@@ -267,6 +267,23 @@ impl<'a> ScalarFormLookups<'a> {
 pub fn negotiate_kani_obligations(
     request: &KaniObligationRequest<'_>,
 ) -> Result<KaniObligationOutcome, KaniObligationError> {
+    negotiate_integer_policy(request, false)
+}
+
+/// Negotiate checked integer claims through the exact kernel's admitted native route.
+///
+/// A capacity failure stays a typed unsupported disposition with the source
+/// identity and complete operand intervals; it never narrows symbolic inputs.
+pub fn negotiate_kani_native_obligations(
+    request: &KaniObligationRequest<'_>,
+) -> Result<KaniObligationOutcome, KaniObligationError> {
+    negotiate_integer_policy(request, true)
+}
+
+fn negotiate_integer_policy(
+    request: &KaniObligationRequest<'_>,
+    native: bool,
+) -> Result<KaniObligationOutcome, KaniObligationError> {
     validate_request(request)?;
     let mut scalar_lookups = BTreeMap::new();
     let mut checked_lookups = BTreeMap::new();
@@ -280,9 +297,26 @@ pub fn negotiate_kani_obligations(
                 request.ceilings,
                 &mut scalar_lookups,
                 &mut checked_lookups,
+                native,
             )
         })
         .collect::<Vec<_>>();
+    if native {
+        for (item, state) in request.items.iter().zip(&mut states) {
+            if let Outcome::LoweredScalar(lowered) = &mut state.outcome {
+                if let Err(reason) = lowered.select_native_integer() {
+                    state.outcome = Outcome::Unsupported(reason);
+                }
+            }
+            if let (ObligationItem::V2Clause { package, .. }, Outcome::LoweredV2Clause(lowered)) =
+                (item, &mut state.outcome)
+            {
+                if let Err(reason) = lowered.select_native_integer(package) {
+                    state.outcome = Outcome::Unsupported(reason);
+                }
+            }
+        }
+    }
     reject_duplicates_and_mixtures(request.items, &mut states);
     assign_names(request.items, &mut states);
     resolve_assumptions(&mut states);
@@ -531,10 +565,11 @@ fn classify<'a>(
     ceilings: crate::kani::identity::ProofCeilings,
     scalar_lookups: &mut BTreeMap<*const ContractPackageV1, ContractLookup<'a>>,
     checked_lookups: &mut CheckedLookups<'a>,
+    native: bool,
 ) -> ItemState<'a> {
     match *item {
         ObligationItem::V2Clause { package, clause } => {
-            classify_v2_clause(checked_lookup(checked_lookups, package), clause)
+            classify_v2_clause(checked_lookup(checked_lookups, package), clause, native)
         }
         ObligationItem::BoundClause { package, clause } => classify_clause(package, clause),
         ObligationItem::ScalarClaim {
@@ -591,6 +626,7 @@ fn classify<'a>(
 fn classify_v2_clause<'a>(
     lookup: &mut CheckedLookup<'a>,
     clause: &'a CheckedNodeId,
+    native: bool,
 ) -> ItemState<'a> {
     let package = lookup.package;
     let view = lookup.clause();
@@ -617,12 +653,15 @@ fn classify_v2_clause<'a>(
                 semantic_form: node.semantic_form.to_string(),
             })
         }
-        Some(_) if kind != Some(ObligationKind::Precondition) => {
+        Some(_)
+            if kind != Some(ObligationKind::Precondition)
+                && !(native && kind == Some(ObligationKind::Postcondition)) =>
+        {
             Outcome::Unsupported(UnsupportedObligation::V2ClauseConditionNotRendered {
                 node_id: clause.clone(),
             })
         }
-        Some(_) => match lower_v2_clause(view, clause) {
+        Some(_) => match lower_v2_clause(view, clause, kind.expect("guarded clause kind")) {
             Ok(lowered) => Outcome::LoweredV2Clause(Box::new(lowered)),
             Err(reason) => Outcome::Unsupported(reason),
         },
@@ -1852,6 +1891,7 @@ mod tests {
             render_probe_request(&[]).ceilings,
             &mut BTreeMap::new(),
             &mut BTreeMap::new(),
+            false,
         )
         .outcome
         else {

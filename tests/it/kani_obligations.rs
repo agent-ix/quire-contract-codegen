@@ -25,7 +25,7 @@ use quire_contract_codegen::{
     RoutedGenerationItem,
 };
 use scalar_native_digest::independent_digest;
-use scalar_native_fixture::routed_scalar_with_artifacts;
+use scalar_native_fixture::{routed_native_scalar_with_artifacts, routed_scalar_with_artifacts};
 
 use std::{
     fs,
@@ -2968,6 +2968,136 @@ fn routed_scalar_increment_with_artifacts() -> (
         Bound::Integer(0, 9),
         REAL_KANI_TIMEOUT,
     )
+}
+
+fn native_scalar_increment() -> (KaniScalarObligationHarness, Artifact) {
+    let (harness, artifacts) = routed_native_scalar_with_artifacts(
+        package::bounded_increment_package(),
+        package::BOUNDED_INCREMENT,
+        49_100,
+        Bound::Integer(0, 9),
+        REAL_KANI_TIMEOUT,
+    );
+    let [manifest] = artifacts.as_slice() else {
+        panic!("the original dependency manifest");
+    };
+    (harness, manifest.clone())
+}
+
+#[trace("FR-015-AC-125", "TC-027")]
+#[test]
+fn native_scalar_increment_keeps_original_profile_and_checked_capacity() {
+    let (native, _) = native_scalar_increment();
+    let (general, _) = routed_scalar_increment();
+    assert_eq!(native.identity.node_id, general.identity.node_id);
+    assert_eq!(
+        native.identity.operation_identity,
+        general.identity.operation_identity
+    );
+    assert_eq!(native.identity.arguments, general.identity.arguments);
+    assert_eq!(native.identity.unwind, general.identity.unwind);
+    assert_eq!(native.identity.ceilings, general.identity.ceilings);
+    assert_eq!(native.identity.solver, KaniSolver::Cadical);
+    assert_eq!(
+        native.identity.integer_representation,
+        quire_contract_codegen::ScalarIntegerRepresentation::Native
+    );
+    let selected = native
+        .identity
+        .native_integer_selection
+        .as_ref()
+        .expect("native selection is recorded");
+    let [operation] = selected.operations.as_slice() else {
+        panic!("one checked Add plan");
+    };
+    assert_eq!(operation.node_id, native.identity.node_id);
+    assert_eq!(operation.operation_identity, "quire.op.integer.add");
+    let endpoints = |interval: &quire_contract_codegen::NativeIntegerIntervalDecision| {
+        (
+            interval.lower.parse::<i128>().unwrap(),
+            interval.upper.parse::<i128>().unwrap(),
+        )
+    };
+    assert_eq!(
+        operation.operands.iter().map(endpoints).collect::<Vec<_>>(),
+        [(0, 9), (1, 1)]
+    );
+    assert_eq!(endpoints(operation.capacity.as_ref().unwrap()), (1, 10));
+    assert_eq!(
+        endpoints(operation.semantic_domain.as_ref().unwrap()),
+        (0, 9)
+    );
+    assert!(native.rust.contents.contains("nx::NativeIntegerPlan::new"));
+    assert!(native
+        .rust
+        .contents
+        .contains("nx::evaluate_native_integer_arithmetic"));
+    assert!(!general.rust.contents.contains("nx::NativeIntegerPlan::new"));
+}
+
+#[trace("FR-015-AC-126", "TC-027")]
+#[test]
+fn native_scalar_false_bound_control_keeps_original_draws() {
+    let (mutant, _) = routed_native_scalar_with_artifacts(
+        package::bounded_increment_package(),
+        package::BOUNDED_INCREMENT,
+        49_100,
+        Bound::Integer(0, 5),
+        REAL_KANI_TIMEOUT,
+    );
+    assert_eq!(mutant.identity.arguments[0].minimum, 0);
+    assert_eq!(mutant.identity.arguments[0].maximum, 9);
+    assert_eq!(mutant.identity.arguments[1].minimum, 1);
+    assert_eq!(mutant.identity.arguments[1].maximum, 1);
+    assert_eq!(mutant.identity.unwind, 3);
+    assert_eq!(mutant.identity.solver, KaniSolver::Cadical);
+    assert_eq!(
+        mutant.identity.ceilings.memory_bytes.get(),
+        16 * 1024 * 1024 * 1024
+    );
+    assert!(mutant.rust.contents.contains("exact <= i128::from(5_i64);"));
+}
+
+#[trace("FR-015-AC-126", "TC-027")]
+#[test]
+#[ignore = "real Kani qualification: run after independent review at the original 16 GiB ceiling"]
+fn native_original_tc027_increment_verifies() {
+    let (harness, manifest) = native_scalar_increment();
+    let evidence = run_scalar_under_real_kani("native-original-tc027", &harness, &manifest);
+    assert_eq!(evidence.outcome, KaniRunOutcome::Verified, "{evidence:?}");
+}
+
+#[trace("FR-015-AC-126", "TC-027")]
+#[test]
+#[ignore = "real Kani qualification: run after independent review at the original 16 GiB ceiling"]
+fn native_original_tc027_false_bound_falsifies() {
+    let (mutant, artifacts) = routed_native_scalar_with_artifacts(
+        package::bounded_increment_package(),
+        package::BOUNDED_INCREMENT,
+        49_100,
+        Bound::Integer(0, 5),
+        REAL_KANI_TIMEOUT,
+    );
+    let manifest = artifacts
+        .into_iter()
+        .find(|artifact| artifact.path == "Cargo.toml")
+        .expect("mutant manifest");
+    assert_eq!(mutant.identity.arguments[0].minimum, 0);
+    assert_eq!(mutant.identity.arguments[0].maximum, 9);
+    assert!(mutant.rust.contents.contains("exact <= i128::from(5_i64);"));
+    let evidence = run_scalar_under_real_kani("native-bound-mutant", &mutant, &manifest);
+    let KaniRunOutcome::Falsified { counterexample } = evidence.outcome else {
+        panic!("the unchanged-domain bound mutant must falsify: {evidence:?}");
+    };
+    let witness =
+        quire_contract_codegen::decode_scalar_falsification(&mutant.identity, &counterexample)
+            .expect("actual backend witness decodes against original intervals");
+    let [left, right] = witness.as_slice() else {
+        panic!("two original symbolic integer draws: {witness:?}");
+    };
+    assert!((0..=9).contains(left));
+    assert_eq!(*right, 1);
+    assert!(i128::from(*left) + 1 > 5);
 }
 
 fn routed_scalar_binary_subtraction_with_artifacts() -> (
