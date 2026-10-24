@@ -46,3 +46,25 @@ Disposition pass 1 at exact head `b7dedc2776608b5f84941af3ff609d9a2b78433a` (par
 ## Review ID correction
 
 This artifact supersedes the same-method IR-645 CG #561 reviewer record originally labeled with a colliding SR id. The finding and disposition substance is unchanged; only the review ids and cross-references were reissued.
+
+## New findings (disposition pass 2)
+
+At exact head `701558b382b8b9090349caac0a2807a199885e6d`, the only delta from reviewed custody head `e5528ea7` is `src/kani/terminal.rs` (4 insertions, 1 deletion). The new typed error replaces the panic on a missing retained proof count, and all valid IR-outcome behavior remains as previously reviewed.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-002 | low | The public `ir_outcome_terminal_value` now returns `TerminalPairError::MissingProvedCount` if `success_checks()` is absent, but its `# Errors` documentation still enumerates only settlement errors and proof-count overflow. Name the new defensive error in the public function contract; it does not change FR-030's valid-input mapping. | src/kani/terminal.rs:185-203 |
+
+## Narrow delta verdict
+
+**CONDITIONAL** pending FND-002 documentation. The defensive branch itself is sound: it returns a typed error rather than panicking, does not certify a missing count, and leaves the checked `u32` conversion and existing terminal mapping unchanged. The author reports focused TC-042 1/1, terminal map 32/32, scoped Clippy and fmt; no aggregate gate was run by this reviewer.
+
+## Dispositions, pass 3
+
+Exact head `0e5f278386e81f58cc9e33c0ef61de25c1d4a3b2`, parent `701558b382b8b9090349caac0a2807a199885e6d`.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-002 | fixed | The sole delta is the public `ir_outcome_terminal_value` `# Errors` sentence, which now names a proved outcome with no retained count alongside missing/unexpected settlement and overflow. No implementation, test, spec, or lock bytes changed. |
+
+**PASS** for the narrow documentation fix. FND-001 remains fixed from disposition pass 1; no open findings remain in this code-review record. This review makes no new aggregate-gate claim.
