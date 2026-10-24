@@ -31,8 +31,8 @@ use quire_contract_model::{
 /// lowered case root is unsupported as an expression rather than a mismatched scalar/equality/
 /// function form. Keep this shape check narrow: other FR-330 `Unsupported` records retain their
 /// package accounting outcome.
-pub(crate) fn direct_unsupported_form(
-    node: &CheckedSemanticNodeV2,
+pub(crate) fn direct_unsupported_form<Body>(
+    node: &CheckedSemanticNodeV2<Body>,
     term: Option<&CheckedTerm>,
 ) -> Option<&'static str> {
     match CheckedNodeTag::from_wire(&node.node_tag) {

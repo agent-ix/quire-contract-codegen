@@ -518,21 +518,19 @@ pub(super) fn direct_source_item(
         .iter()
         .find(|node| node.node_id == node_id)
         .expect("actual expression");
-    let arguments = expression
-        .body
-        .get("arguments")
-        .and_then(serde_json::Value::as_array)
-        .expect("actual binary arguments");
+    let quire_contract_model::CheckedTerm::Application { arguments, .. } = &expression.body else {
+        panic!("actual binary application");
+    };
     assert_eq!(arguments.len(), 2);
     let operand = |position: usize| {
-        assert_eq!(arguments[position]["term"], "reference");
-        let target: CheckedNodeId = serde_json::from_value(arguments[position]["target"].clone())
-            .expect("actual IR reference ID, never a reconstructed semantic key");
+        let quire_contract_model::CheckedTerm::Reference { target } = &arguments[position] else {
+            panic!("actual IR reference ID, never a reconstructed semantic key");
+        };
         let parameter = package
             .graph()
             .nodes
             .iter()
-            .find(|node| node.node_id == target)
+            .find(|node| &node.node_id == target)
             .expect("original source parameter");
         assert_ne!(parameter.semantic_form.as_ref(), "conversion");
         EqualityOperandDescriptor::typed(parameter.semantic_type.clone())

@@ -20,8 +20,15 @@ use quire_contract_codegen::{
 use quire_contract_model::{
     CheckedCompositeOperandDomain, CheckedCompositeOperandError, CheckedNodeId, CheckedOccurrence,
     CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2, CheckedPackageV2ReadResult,
-    CheckedScalarOperandChild,
+    CheckedScalarOperandChild, CheckedTerm,
 };
+
+fn checked_operation_identity(body: &CheckedTerm) -> Option<&str> {
+    let CheckedTerm::Application { operation, .. } = body else {
+        return None;
+    };
+    operation.get("identity")?.as_str()
+}
 
 const SOURCE: &str = "language \"ix:native\" edition \"1-draft\";\n\
     profile v = \"quire.value.complete/v1\";\n\
@@ -206,10 +213,7 @@ fn application_with_operator(
         .nodes
         .iter()
         .find(|node| {
-            node.body
-                .pointer("/operation/identity")
-                .and_then(serde_json::Value::as_str)
-                == Some(operator)
+            checked_operation_identity(&node.body) == Some(operator)
                 && package
                     .source_map()
                     .iter()
@@ -890,10 +894,7 @@ fn tc_035_original_composite_packets_bind_distinct_real_occurrences() {
         .nodes
         .iter()
         .find(|node| {
-            node.body
-                .pointer("/operation/identity")
-                .and_then(serde_json::Value::as_str)
-                == Some("quire.op.structural.eq")
+            checked_operation_identity(&node.body) == Some("quire.op.structural.eq")
                 && node.occurrences.len() >= 2
         })
         .expect("QSL emits one structural equality node with two actual occurrences");

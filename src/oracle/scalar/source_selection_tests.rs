@@ -11,9 +11,27 @@ use crate::oracle::claim::ClaimDisposition;
 use qsl_replay::{compile_package, DependencyInput, ReplayLimits, SourceIdentity, StageLimits};
 use quire_contract_model::{
     CheckedNodeId, CheckedOccurrenceRole, CheckedPackageEvidence, CheckedPackageReadLimits,
-    CheckedPackageV2, CheckedPackageV2ReadResult, ContractDependencies, ContractOccurrenceKeyV1,
-    ContractPackageReadResult, ContractPackageV1, ContractPackageWireV1,
+    CheckedPackageV2, CheckedPackageV2ReadResult, CheckedSemanticNodeV2, CheckedTerm,
+    ContractDependencies, ContractOccurrenceKeyV1, ContractPackageReadResult, ContractPackageV1,
+    ContractPackageWireV1,
 };
+
+fn application_identity(node: &CheckedSemanticNodeV2) -> Option<&str> {
+    let CheckedTerm::Application { operation, .. } = &node.body else {
+        return None;
+    };
+    operation.get("identity")?.as_str()
+}
+
+fn first_reference(node: &CheckedSemanticNodeV2) -> Option<&CheckedNodeId> {
+    let CheckedTerm::Application { arguments, .. } = &node.body else {
+        return None;
+    };
+    match arguments.first()? {
+        CheckedTerm::Reference { target } => Some(target),
+        _ => None,
+    }
+}
 
 fn admitted_source(source: &str) -> CheckedPackageV2 {
     let compiled = compile_package(
@@ -92,12 +110,7 @@ fn admitted_case(
         .graph()
         .nodes
         .iter()
-        .filter(|node| {
-            node.body
-                .pointer("/operation/identity")
-                .and_then(serde_json::Value::as_str)
-                == Some("quire.op.integer.add")
-        })
+        .filter(|node| application_identity(node) == Some("quire.op.integer.add"))
         .collect::<Vec<_>>();
     assert_eq!(applications.len(), requests);
     let mut positions = Vec::new();
@@ -107,12 +120,8 @@ fn admitted_case(
             .nodes
             .iter()
             .filter(|node| {
-                node.body
-                    .pointer("/operation/identity")
-                    .and_then(serde_json::Value::as_str)
-                    == Some("quire.op.numeric.narrow")
-                    && node.body.pointer("/arguments/0/target")
-                        == Some(&serde_json::to_value(&application.node_id).expect("key"))
+                application_identity(node) == Some("quire.op.numeric.narrow")
+                    && first_reference(node) == Some(&application.node_id)
             })
             .collect::<Vec<_>>();
         let [conversion] = conversions.as_slice() else {

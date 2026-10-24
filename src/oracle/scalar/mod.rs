@@ -743,7 +743,10 @@ struct PendingOraclePlan {
     expected_consequents: u32,
 }
 
-fn node_implication_count(graph: &Graph<'_>, node: &CheckedSemanticNodeV2) -> u32 {
+fn node_implication_count<Body: GraphBody, NodeBody>(
+    graph: &Graph<'_, Body>,
+    node: &CheckedSemanticNodeV2<NodeBody>,
+) -> u32 {
     u32::from(
         graph
             .operation(&node.node_id)
@@ -1646,7 +1649,7 @@ fn contract_checked_operation<'a>(
 
 fn contract_scalar_shape(
     graph: &Graph<'_>,
-    node: &CheckedSemanticNodeV2,
+    node: &CheckedSemanticNodeV2<Value>,
     operation: &ExactScalarOperation,
 ) -> Result<Result<(), ExactScalarRefusal>, OracleGenerationError> {
     let shape = Shape::of(operation)?;
@@ -1691,7 +1694,7 @@ fn scalar_profile() -> CompleteLoweringProfileV2 {
 
 use crate::oracle::checked_graph::{
     aggregate_members, bound_members, literal, literal_count, literal_integer, term_name,
-    CheckedGraph as Graph,
+    CheckedGraph as Graph, GraphBody,
 };
 
 /// The lowered node and the bounds its descriptor was checked against.
@@ -1713,8 +1716,8 @@ impl From<ExactScalarRefusal> for ItemCheckError {
     }
 }
 
-fn check_item<'r>(
-    graph: &Graph<'_>,
+fn check_item<'r, Body: GraphBody>(
+    graph: &Graph<'_, Body>,
     requested_node_id: &CheckedNodeId,
     record: &'r CompleteLoweringRecordV2,
     operation: &ExactScalarOperation,
@@ -1878,6 +1881,7 @@ fn unsupported_family(node_id: &CheckedNodeId, tag: CheckedNodeTag) -> ExactScal
         CheckedNodeTag::State
         | CheckedNodeTag::Temporal
         | CheckedNodeTag::Protocol
+        | CheckedNodeTag::TimedModel
         | CheckedNodeTag::ScalarType
         | CheckedNodeTag::CompositeType
         | CheckedNodeTag::BoundedDomain
@@ -1907,7 +1911,7 @@ fn application_arguments<'a>(
     }
 }
 
-fn type_form(graph: &Graph<'_>, type_id: &CheckedNodeId) -> Option<String> {
+fn type_form<Body: GraphBody>(graph: &Graph<'_, Body>, type_id: &CheckedNodeId) -> Option<String> {
     let node = graph.node(type_id)?;
     (&*node.node_tag == CheckedNodeTag::ScalarType.as_wire())
         .then(|| node.semantic_form.to_string())
@@ -1916,8 +1920,8 @@ fn type_form(graph: &Graph<'_>, type_id: &CheckedNodeId) -> Option<String> {
 /// An operand is a literal classified by its value kind, or a reference
 /// classified by its target's scalar type. A literal carries no unit, so it is
 /// never a quantity; any other term is refused as unsupported.
-fn check_operand(
-    graph: &Graph<'_>,
+fn check_operand<Body: GraphBody>(
+    graph: &Graph<'_, Body>,
     position: usize,
     term: &CheckedTerm,
     expected: ScalarForm,
@@ -1954,7 +1958,7 @@ fn literal_form(term: &CheckedTerm) -> Option<String> {
 }
 
 /// Classify only the owner's literal and reference variants.
-fn operand_form(graph: &Graph<'_>, term: &CheckedTerm) -> Option<String> {
+fn operand_form<Body: GraphBody>(graph: &Graph<'_, Body>, term: &CheckedTerm) -> Option<String> {
     match term {
         CheckedTerm::Literal { .. } => literal_form(term),
         CheckedTerm::Reference { .. } => reference_form(graph, term),
@@ -1962,7 +1966,7 @@ fn operand_form(graph: &Graph<'_>, term: &CheckedTerm) -> Option<String> {
     }
 }
 
-fn reference_form(graph: &Graph<'_>, term: &CheckedTerm) -> Option<String> {
+fn reference_form<Body: GraphBody>(graph: &Graph<'_, Body>, term: &CheckedTerm) -> Option<String> {
     let target = reference_target(term)?;
     scalar_type_form(graph, &graph.node(&target)?.semantic_type)
 }
@@ -1971,7 +1975,10 @@ fn reference_form(graph: &Graph<'_>, term: &CheckedTerm) -> Option<String> {
 /// `Int[0, 9]` is typed by a `bounded_domain` whose own `semantic_type` is its base scalar type:
 /// QSL emits a bounded domain directly over its scalar base, so one step reaches the type the form
 /// is read from. A node's result typed by a bounded domain reads the same way.
-fn scalar_type_form(graph: &Graph<'_>, type_id: &CheckedNodeId) -> Option<String> {
+fn scalar_type_form<Body: GraphBody>(
+    graph: &Graph<'_, Body>,
+    type_id: &CheckedNodeId,
+) -> Option<String> {
     let node = graph.node(type_id)?;
     if is_bounded_domain(node) {
         type_form(graph, &node.semantic_type)
@@ -1980,16 +1987,16 @@ fn scalar_type_form(graph: &Graph<'_>, type_id: &CheckedNodeId) -> Option<String
     }
 }
 
-fn is_bounded_domain(node: &CheckedSemanticNodeV2) -> bool {
+fn is_bounded_domain<Body>(node: &CheckedSemanticNodeV2<Body>) -> bool {
     &*node.node_tag == CheckedNodeTag::BoundedDomain.as_wire()
 }
 
 /// The `bounded_domain` node that types a `reference` operand's target: the operand's own bound.
 /// A literal, a reference typed by a scalar type, or any other term has none.
-fn operand_own_bound<'g>(
-    graph: &Graph<'g>,
+fn operand_own_bound<'g, Body: GraphBody>(
+    graph: &Graph<'g, Body>,
     term: &CheckedTerm,
-) -> Option<&'g CheckedSemanticNodeV2> {
+) -> Option<&'g CheckedSemanticNodeV2<Body>> {
     let target = reference_target(term)?;
     let typing = graph.node(&graph.node(&target)?.semantic_type)?;
     is_bounded_domain(typing).then_some(typing)
@@ -2002,7 +2009,10 @@ fn operand_own_bound<'g>(
 /// literal and whose type is the plain scalar type. That is a constant, like an inline literal,
 /// and is decided by the referenced node's body, never by its type: a `value` node with any other
 /// body (a parameter) and a plain type is an unbounded operand.
-fn plain_reference_type(graph: &Graph<'_>, term: &CheckedTerm) -> Option<CheckedNodeId> {
+fn plain_reference_type<Body: GraphBody>(
+    graph: &Graph<'_, Body>,
+    term: &CheckedTerm,
+) -> Option<CheckedNodeId> {
     if operand_own_bound(graph, term).is_some() {
         return None;
     }
@@ -2011,7 +2021,10 @@ fn plain_reference_type(graph: &Graph<'_>, term: &CheckedTerm) -> Option<Checked
 }
 
 /// A `value` node whose body is a literal: the node QSL emits for a literal operand.
-fn is_literal_value(graph: &Graph<'_>, node: &CheckedSemanticNodeV2) -> bool {
+fn is_literal_value<Body: GraphBody>(
+    graph: &Graph<'_, Body>,
+    node: &CheckedSemanticNodeV2<Body>,
+) -> bool {
     &*node.node_tag == CheckedNodeTag::Value.as_wire()
         && matches!(graph.term(&node.node_id), Some(CheckedTerm::Literal { .. }))
 }
@@ -2020,18 +2033,18 @@ fn is_literal_value(graph: &Graph<'_>, node: &CheckedSemanticNodeV2) -> bool {
 const NARROW_IDENTITY: &str = "quire.op.numeric.narrow";
 
 /// How the nodes that consume a scalar-typed node bound its result.
-enum Narrowing<'g> {
+enum Narrowing<'g, Body> {
     /// No narrowing conversion consumes the node.
     Unnarrowed,
     /// Only narrowing conversions consume the node: the `bounded_domain` nodes they are typed by,
     /// ascending and deduplicated (empty where none is typed by a `bounded_domain`).
-    To(Vec<&'g CheckedSemanticNodeV2>),
+    To(Vec<&'g CheckedSemanticNodeV2<Body>>),
     /// A narrowing conversion consumes the node and so does a node that is not one: the narrow's
     /// bound does not bound every use of the node's result.
     Mixed,
 }
 
-impl Narrowing<'_> {
+impl<Body> Narrowing<'_, Body> {
     /// Whether a consuming conversion narrows the node's result, so the package bounds it.
     fn narrowed(&self) -> bool {
         match self {
@@ -2045,7 +2058,11 @@ impl Narrowing<'_> {
 /// Whether `consumer` is a narrowing conversion of the node `id`: an `expression` of form
 /// `conversion` whose body is a `convert` application with the catalogued identity
 /// `quire.op.numeric.narrow` and exactly one argument, a `reference` to `id`.
-fn narrows(graph: &Graph<'_>, consumer: &CheckedSemanticNodeV2, id: &CheckedNodeId) -> bool {
+fn narrows<Body: GraphBody>(
+    graph: &Graph<'_, Body>,
+    consumer: &CheckedSemanticNodeV2<Body>,
+    id: &CheckedNodeId,
+) -> bool {
     &*consumer.node_tag == CheckedNodeTag::Expression.as_wire()
         && &*consumer.semantic_form == "conversion"
         && graph
@@ -2084,7 +2101,10 @@ fn references(term: Option<&CheckedTerm>, id: &CheckedNodeId) -> bool {
 
 /// How the consumers of the node `id` narrow it. A consumer is any other node whose body holds a
 /// `reference` to `id`; a narrowing conversion is one [`narrows`] accepts.
-fn narrowing<'g>(graph: &Graph<'g>, id: &CheckedNodeId) -> Narrowing<'g> {
+fn narrowing<'g, Body: GraphBody>(
+    graph: &Graph<'g, Body>,
+    id: &CheckedNodeId,
+) -> Narrowing<'g, Body> {
     let mut bounds = BTreeMap::new();
     let (mut narrowed, mut other) = (false, false);
     for consumer in graph.nodes() {
@@ -2118,10 +2138,10 @@ fn reference_target(term: &CheckedTerm) -> Option<CheckedNodeId> {
     }
 }
 
-fn own_bounds<'a>(
-    graph: &Graph<'a>,
+fn own_bounds<'a, Body: GraphBody>(
+    graph: &Graph<'a, Body>,
     body: Option<&CheckedTerm>,
-) -> Vec<Option<&'a CheckedSemanticNodeV2>> {
+) -> Vec<Option<&'a CheckedSemanticNodeV2<Body>>> {
     let arguments = match body {
         Some(CheckedTerm::Application { arguments, .. }) => arguments.as_slice(),
         _ => &[],
@@ -2132,7 +2152,10 @@ fn own_bounds<'a>(
         .collect()
 }
 
-fn operand_literal<'a>(graph: &Graph<'a>, term: &'a CheckedTerm) -> Option<&'a CheckedTerm> {
+fn operand_literal<'a, Body: GraphBody>(
+    graph: &Graph<'a, Body>,
+    term: &'a CheckedTerm,
+) -> Option<&'a CheckedTerm> {
     if matches!(term, CheckedTerm::Literal { .. }) {
         return Some(term);
     }
@@ -2210,13 +2233,13 @@ const OPERAND_RANGE_MAX_DEPTH: u64 = 64;
 const OPERAND_RANGE_MAX_WORK: u64 = 4096;
 const OPERAND_RANGE_MAX_ENDPOINT_BITS: u64 = 4096;
 
-fn infer_integer_range(
-    graph: &Graph<'_>,
+fn infer_integer_range<Body: GraphBody>(
+    graph: &Graph<'_, Body>,
     node_id: &CheckedNodeId,
     position: usize,
 ) -> Result<(String, String), ExactScalarRefusal> {
-    fn visit(
-        graph: &Graph<'_>,
+    fn visit<Body: GraphBody>(
+        graph: &Graph<'_, Body>,
         node_id: &CheckedNodeId,
         position: usize,
         active: &mut BTreeSet<CheckedNodeId>,
@@ -2459,17 +2482,17 @@ fn check_operand_endpoint_bits(
 /// Check every descriptor parameter the IR carries against the node's result bound of its form,
 /// returning the bounds checked: the result bound first, then, for integer arithmetic, division
 /// and modulo, each operand's own bound. Only the result bound is compared with the descriptor.
-fn check_parameters(
-    graph: &Graph<'_>,
+fn check_parameters<Body: GraphBody>(
+    graph: &Graph<'_, Body>,
     node: &CompleteContractNodeV2,
     operation: &ExactScalarOperation,
 ) -> Result<Vec<CheckedNodeId>, ItemCheckError> {
     check_parameters_from_view(graph, BoundView::complete(node), operation)
 }
 
-fn check_parameters_from_view(
-    graph: &Graph<'_>,
-    node: BoundView<'_>,
+fn check_parameters_from_view<Body: GraphBody, NodeBody>(
+    graph: &Graph<'_, Body>,
+    node: BoundView<'_, NodeBody>,
     operation: &ExactScalarOperation,
 ) -> Result<Vec<CheckedNodeId>, ItemCheckError> {
     let bounds = Bounds { graph, node };
@@ -2522,12 +2545,22 @@ fn check_parameters_from_view(
 
 /// The bound inputs shared by old lowering records and admitted FR-330 closures.
 /// No per-node IR identity is reconstructed for the package path.
-#[derive(Clone)]
-struct BoundView<'n> {
-    root: &'n CheckedSemanticNodeV2,
+struct BoundView<'n, Body = CheckedTerm> {
+    root: &'n CheckedSemanticNodeV2<Body>,
     semantic_type: CheckedNodeId,
     bounds: Vec<CheckedNodeId>,
     selected: Option<SelectedResult<'n>>,
+}
+
+impl<Body> Clone for BoundView<'_, Body> {
+    fn clone(&self) -> Self {
+        Self {
+            root: self.root,
+            semantic_type: self.semantic_type.clone(),
+            bounds: self.bounds.clone(),
+            selected: self.selected.clone(),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -2537,7 +2570,7 @@ struct SelectedResult<'a> {
     conversion: Option<&'a ContractOccurrenceKeyV1>,
 }
 
-impl<'n> BoundView<'n> {
+impl<'n> BoundView<'n, CheckedTerm> {
     fn complete(node: &'n CompleteContractNodeV2) -> Self {
         Self {
             root: &node.node,
@@ -2546,7 +2579,9 @@ impl<'n> BoundView<'n> {
             selected: None,
         }
     }
+}
 
+impl<'n> BoundView<'n, Value> {
     fn admitted(
         closure: &'n quire_contract_model::ContractReachedClosureV1<'_>,
         selected: SelectedResult<'n>,
@@ -2560,12 +2595,12 @@ impl<'n> BoundView<'n> {
     }
 }
 
-struct Bounds<'g, 'n> {
-    graph: &'g Graph<'g>,
-    node: BoundView<'n>,
+struct Bounds<'g, 'n, Body: GraphBody = Value, NodeBody = CheckedTerm> {
+    graph: &'g Graph<'g, Body>,
+    node: BoundView<'n, NodeBody>,
 }
 
-impl Bounds<'_, '_> {
+impl<Body: GraphBody, NodeBody> Bounds<'_, '_, Body, NodeBody> {
     /// Read the result bound of `form`: the one selector both [`Self::equal`] and
     /// [`derive_exact_scalar_items`] use. Returns the bound's node and the value it reads as.
     ///
@@ -2644,7 +2679,7 @@ impl Bounds<'_, '_> {
     /// type. QSL wraps an expression in a bounded context in a narrowing `conversion` typed by the
     /// bound, and IR's forward-only `bounds` closure never reaches it from the expression, so the
     /// enclosing conversion is where the result bound is named.
-    fn narrowing(&self) -> Narrowing<'_> {
+    fn narrowing(&self) -> Narrowing<'_, Body> {
         narrowing(self.graph, &self.node.root.node_id)
     }
 
@@ -2660,7 +2695,7 @@ impl Bounds<'_, '_> {
     fn scalar_result_bound(
         &self,
         form: BoundForm,
-    ) -> Result<&CheckedSemanticNodeV2, ExactScalarRefusal> {
+    ) -> Result<&CheckedSemanticNodeV2<Body>, ExactScalarRefusal> {
         let bounded_type = &self.node.semantic_type;
         let narrowing = self.narrowing();
         let narrowed = match &narrowing {
@@ -3155,8 +3190,8 @@ fn refused_claim(
 /// never receive a node for which this member is absent. It is another
 /// crate's invariant, not this one's, so a violation is reported rather than
 /// panicked on.
-fn catalogued_operation_identity(
-    graph: &Graph<'_>,
+fn catalogued_operation_identity<Body: GraphBody>(
+    graph: &Graph<'_, Body>,
     node: &CompleteContractNodeV2,
 ) -> Result<String, ExactScalarRefusal> {
     graph
@@ -3404,8 +3439,8 @@ fn comparison_identity(
 /// no more than one catalogued law definition (`ieee_profile`,
 /// `text_profile`) or none at all, so its shape and identity/mode checks are
 /// already the whole story for it.
-fn operation_confirmed(
-    graph: &Graph<'_>,
+fn operation_confirmed<Body: GraphBody>(
+    graph: &Graph<'_, Body>,
     node: &CompleteContractNodeV2,
     operation: &ExactScalarOperation,
 ) -> Result<bool, OracleGenerationError> {
@@ -4250,14 +4285,20 @@ fn profile_path(profile: TextProfile) -> Result<&'static str, OracleGenerationEr
 /// The operation identity of a quantity conversion.
 pub(crate) const QUANTITY_CONVERT_IDENTITY: &str = "quire.op.quantity.convert";
 
-fn conversion_target(graph: &Graph<'_>, node: &CheckedSemanticNodeV2) -> Option<CheckedNodeId> {
+fn conversion_target<Body: GraphBody, NodeBody>(
+    graph: &Graph<'_, Body>,
+    node: &CheckedSemanticNodeV2<NodeBody>,
+) -> Option<CheckedNodeId> {
     let payload = graph.operation(&node.node_id)?;
     (payload["identity"].as_str() == Some(QUANTITY_CONVERT_IDENTITY))
         .then(|| serde_json::from_value(payload["member"]["declaration"].clone()).ok())
         .flatten()
 }
 
-fn quantity_conversion_target_is_unit(graph: &Graph<'_>, node: &CheckedSemanticNodeV2) -> bool {
+fn quantity_conversion_target_is_unit<Body: GraphBody, NodeBody>(
+    graph: &Graph<'_, Body>,
+    node: &CheckedSemanticNodeV2<NodeBody>,
+) -> bool {
     conversion_target(graph, node)
         .and_then(|id| graph.node(&id))
         .is_some_and(|target| {
@@ -4518,14 +4559,21 @@ pub(crate) fn take_scalar_derive_graph_visits() -> usize {
 }
 
 /// What the derivation reads about one node.
-struct Derivation<'a, 'g, 'n> {
-    graph: &'a Graph<'g>,
-    node: &'g CheckedSemanticNodeV2,
-    bounds: BoundView<'n>,
+struct Derivation<
+    'a,
+    'g,
+    'n,
+    Body: GraphBody = Value,
+    NodeBody = CheckedTerm,
+    BoundBody = CheckedTerm,
+> {
+    graph: &'a Graph<'g, Body>,
+    node: &'g CheckedSemanticNodeV2<NodeBody>,
+    bounds: BoundView<'n, BoundBody>,
     identity: &'a str,
 }
 
-impl Derivation<'_, '_, '_> {
+impl<Body: GraphBody, NodeBody, BoundBody> Derivation<'_, '_, '_, Body, NodeBody, BoundBody> {
     fn right_may_stop(&self) -> bool {
         let Some(right) = self
             .graph
@@ -4673,8 +4721,8 @@ impl Derivation<'_, '_, '_> {
     }
 }
 
-fn derive_operation(
-    graph: &Graph<'_>,
+fn derive_operation<Body: GraphBody>(
+    graph: &Graph<'_, Body>,
     node_id: &CheckedNodeId,
     record: &CompleteLoweringRecordV2,
 ) -> Result<ExactScalarOperation, ExactScalarRefusal> {
@@ -4687,10 +4735,10 @@ fn derive_operation(
     derive_operation_from_view(graph, node, BoundView::complete(lowered))
 }
 
-fn derive_operation_from_view<'g>(
-    graph: &Graph<'g>,
-    node: &'g CheckedSemanticNodeV2,
-    bounds: BoundView<'_>,
+fn derive_operation_from_view<'g, Body: GraphBody, NodeBody, BoundBody>(
+    graph: &Graph<'g, Body>,
+    node: &'g CheckedSemanticNodeV2<NodeBody>,
+    bounds: BoundView<'_, BoundBody>,
 ) -> Result<ExactScalarOperation, ExactScalarRefusal> {
     use ExactScalarOperation as Op;
     if &*node.node_tag != CheckedNodeTag::Expression.as_wire()
@@ -4820,6 +4868,7 @@ fn derive_operation_from_view<'g>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    type Graph<'a> = crate::oracle::checked_graph::CheckedGraph<'a, CheckedTerm>;
     use crate::oracle::checked_graph::fixture::Node as FixtureNode;
     use ix_trace_rs::trace;
     use quire_contract_model::{CheckedPackageIncomplete, CheckedPackageLimit};
@@ -4873,7 +4922,7 @@ mod tests {
                 recursion_group: None,
                 nominal_identity_preimage: None,
                 declaration: None,
-                body: Value::Null,
+                body: CheckedTerm::aggregate(Vec::new()),
             },
             body.into(),
         )

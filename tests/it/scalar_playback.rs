@@ -15,11 +15,18 @@ use quire_contract_codegen::{
 };
 use quire_contract_model::{
     CheckedOccurrenceRole, CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2,
-    CheckedPackageV2ReadResult, ContractDependencies, ContractOccurrenceKeyV1,
+    CheckedPackageV2ReadResult, CheckedTerm, ContractDependencies, ContractOccurrenceKeyV1,
     ContractPackageReadResult, ContractPackageWireV1,
 };
 
 const PLAYBACK_BYTES: usize = 8 * 1024 * 1024;
+
+fn operation_identity(body: &CheckedTerm) -> Option<&str> {
+    let CheckedTerm::Application { operation, .. } = body else {
+        return None;
+    };
+    operation.get("identity")?.as_str()
+}
 
 fn harness(
     operation: &str,
@@ -54,12 +61,7 @@ fn harness(
         .graph()
         .nodes
         .iter()
-        .filter(|node| {
-            node.body
-                .pointer("/operation/identity")
-                .and_then(serde_json::Value::as_str)
-                == Some(operation)
-        })
+        .filter(|node| operation_identity(&node.body) == Some(operation))
         .collect::<Vec<_>>();
     let [application] = applications.as_slice() else {
         panic!("one authored scalar application")
@@ -70,12 +72,9 @@ fn harness(
         .nodes
         .iter()
         .find(|node| {
-            node.body
-                .pointer("/operation/identity")
-                .and_then(serde_json::Value::as_str)
-                == Some("quire.op.numeric.narrow")
-                && node.body.pointer("/arguments/0/target")
-                    == Some(&serde_json::to_value(&node_id).unwrap())
+            operation_identity(&node.body) == Some("quire.op.numeric.narrow")
+                && matches!(&node.body, CheckedTerm::Application { arguments, .. }
+                    if matches!(arguments.first(), Some(CheckedTerm::Reference { target }) if target == &node_id))
         })
         .expect("authored result narrowing");
     let occurrence = |node_id: &quire_contract_model::CheckedNodeId| {

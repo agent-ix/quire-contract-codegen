@@ -4500,7 +4500,7 @@ pub fn golden_items() -> Vec<ExactScalarItem> {
 
 #[cfg(test)]
 mod bound_tests {
-    use super::{aggregate, key, node_ref, Bound, PackageBuilder, DEC, INT, TEXT, T_INTEGER};
+    use super::{aggregate, key, Bound, PackageBuilder, DEC, INT, TEXT, T_INTEGER};
     use ix_trace_rs::trace;
     use quire_contract_model::CheckedPackageV2ReadResult;
     use serde_json::json;
@@ -4543,11 +4543,17 @@ mod bound_tests {
             .find(|node| node.node_id == range)
             .expect("admitted integer range");
         assert_eq!(checked_range.semantic_type, anonymous);
-        for member in checked_range.body["members"]
-            .as_array()
-            .expect("admitted bounds")
-        {
-            assert_eq!(member["value"]["type"], node_ref(&anonymous.digest));
+        let quire_contract_model::CheckedTerm::Aggregate { members } = &checked_range.body else {
+            panic!("admitted bounds are an aggregate");
+        };
+        for member in members {
+            let quire_contract_model::CheckedTerm::Binding { value, .. } = member else {
+                panic!("admitted bound member is a binding");
+            };
+            let quire_contract_model::CheckedTerm::Literal { type_id, .. } = value.as_ref() else {
+                panic!("admitted bound value is a literal");
+            };
+            assert_eq!(type_id, &anonymous);
         }
     }
 

@@ -13,10 +13,10 @@ use quire_contract_codegen::{
     GenerationContexts, KaniGenerationContext, KindOutput, ProviderOrigin, RoutedGenerationItem,
 };
 use quire_contract_model::{
-    CheckedNodeId, CheckedOccurrenceRole, CheckedPackageEvidence, CheckedPackageReadLimits,
+    CheckedOccurrenceRole, CheckedPackageEvidence, CheckedPackageReadLimits,
     CheckedPackageV2, CheckedPackageV2ReadResult, CheckedScalarOperandChild,
-    CheckedScalarOperandRange, CheckedSemanticNodeV2, ContractDependencies,
-    ContractOccurrenceKeyV1, ContractPackageReadResult, ContractPackageWireV1,
+    CheckedScalarOperandRange, CheckedSemanticNodeV2, CheckedTerm, ContractDependencies,
+    ContractOccurrenceKeyV1, ContractPackageReadResult, ContractPackageWireV1, LiteralKind,
 };
 
 fn compiled(parameters: &str, result: &str, expression: &str) -> CheckedPackageV2 {
@@ -52,12 +52,26 @@ fn application<'a>(package: &'a CheckedPackageV2, identity: &str) -> &'a Checked
         .graph()
         .nodes
         .iter()
-        .filter(|node| node.body["operation"]["identity"].as_str() == Some(identity))
+        .filter(|node| operation_identity(node) == Some(identity))
         .collect::<Vec<_>>();
     let [node] = nodes.as_slice() else {
         panic!("one authored {identity} application: {nodes:?}");
     };
     node
+}
+
+fn application_arguments(node: &CheckedSemanticNodeV2) -> &[CheckedTerm] {
+    let CheckedTerm::Application { arguments, .. } = &node.body else {
+        panic!("selected node is an application");
+    };
+    arguments
+}
+
+fn operation_identity(node: &CheckedSemanticNodeV2) -> Option<&str> {
+    let CheckedTerm::Application { operation, .. } = &node.body else {
+        return None;
+    };
+    operation.get("identity")?.as_str()
 }
 
 fn assert_generated(
@@ -81,9 +95,11 @@ fn assert_generated(
         }
     };
     let conversion = package.graph().nodes.iter().find(|candidate| {
-        candidate.body["operation"]["identity"] == "quire.op.numeric.narrow"
-            && candidate.body["arguments"][0]["target"]
-                == serde_json::to_value(&node.node_id).unwrap()
+        operation_identity(candidate) == Some("quire.op.numeric.narrow")
+            && matches!(
+                application_arguments(candidate).first(),
+                Some(CheckedTerm::Reference { target }) if target == &node.node_id
+            )
     });
     let selection = ContractDriverResultSelection::OwnResult {
         application: occurrence(node),
@@ -176,7 +192,10 @@ fn assert_generated(
         );
     };
     assert_eq!(claim.node_id, node.node_id);
-    assert_eq!(claim.operation.identity, node.body["operation"]["identity"]);
+    assert_eq!(
+        Some(claim.operation.identity.as_str()),
+        operation_identity(node)
+    );
     assert!(generated.oracle_source.contains(&generated.symbol));
     generated.clone()
 }
@@ -187,25 +206,24 @@ fn assert_inline(
     ordinal: usize,
     value: i128,
 ) {
-    let argument = &node.body["arguments"][ordinal];
-    assert_eq!(
-        argument["term"], "literal",
-        "inline literal, never a graph reference"
-    );
-    assert_eq!(argument["value_kind"], "integer");
-    assert_eq!(argument["value"], value.to_string());
-    assert!(argument.get("target").is_none());
-    let type_id: CheckedNodeId = serde_json::from_value(argument["type"].clone())
-        .expect("inline literal has its builtin Integer type");
+    let Some(CheckedTerm::Literal {
+        type_id,
+        value_kind: LiteralKind::Integer,
+        value: literal,
+    }) = application_arguments(node).get(ordinal)
+    else {
+        panic!("inline integer literal, never a graph reference");
+    };
+    assert_eq!(literal, &value.to_string());
     let integer = package
         .graph()
         .nodes
         .iter()
-        .find(|node| node.node_id == type_id)
+        .find(|node| &node.node_id == type_id)
         .expect("literal type belongs to the checked graph");
     assert_eq!(integer.node_tag.as_ref(), "scalar_type");
     assert_eq!(integer.semantic_form.as_ref(), "integer");
-    if node.body["operation"]["identity"] != "quire.op.integer.eq" {
+    if operation_identity(node) != Some("quire.op.integer.eq") {
         let [occurrence] = node.occurrences.as_slice() else {
             panic!("one authentic application occurrence");
         };
@@ -264,23 +282,28 @@ fn negate_keeps_the_plain_literal_inline_through_scalar_generation() {
 fn equality_with_a_bounded_peer_keeps_the_narrowed_literal_as_a_graph_child() {
     let package = compiled("x: Int[0, 9]", "Boolean", "x = 1");
     let eq = application(&package, "quire.op.integer.eq");
-    let argument = &eq.body["arguments"][1];
-    assert_eq!(argument["term"], "reference");
-    let child: CheckedNodeId = serde_json::from_value(argument["target"].clone()).unwrap();
+    let Some(CheckedTerm::Reference { target: child }) = application_arguments(eq).get(1) else {
+        panic!("bounded equality operand is a graph reference");
+    };
     let narrow = application(&package, "quire.op.numeric.narrow");
     assert_eq!(
-        child, narrow.node_id,
+        child, &narrow.node_id,
         "the operand is the composite narrowing application"
     );
-    let literal_id: CheckedNodeId =
-        serde_json::from_value(narrow.body["arguments"][0]["target"].clone()).unwrap();
+    let Some(CheckedTerm::Reference { target: literal_id }) = application_arguments(narrow).first()
+    else {
+        panic!("narrowed literal is a graph reference");
+    };
     let literal = package
         .graph()
         .nodes
         .iter()
-        .find(|node| node.node_id == literal_id)
+        .find(|node| &node.node_id == literal_id)
         .expect("narrow's literal child");
-    assert_eq!(literal.body["value"], "1");
+    let CheckedTerm::Literal { value, .. } = &literal.body else {
+        panic!("narrow's child is a literal");
+    };
+    assert_eq!(value, "1");
     let generated = assert_generated(&package, eq, None);
     assert!(
         generated.checked_bounds.is_empty(),

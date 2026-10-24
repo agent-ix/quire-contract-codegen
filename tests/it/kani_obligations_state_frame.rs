@@ -63,7 +63,7 @@ use quire_contract_codegen::{
 };
 use quire_contract_codegen::{HarnessSymbol, StateFrameRecordError};
 use quire_contract_model::{
-    CheckedMemberType, CheckedNodeId, CheckedPackageReadLimits, CheckedPackageV2,
+    CheckedMemberType, CheckedNodeId, CheckedPackageReadLimits, CheckedPackageV2, CheckedTerm,
 };
 use quire_semantic_value::catalog::Category;
 use serde_json::{json, Value};
@@ -157,8 +157,16 @@ fn clause_claim_map_carries_the_derived_descriptor_and_typed_disposition() {
         .find(|node| node.node_id == clause)
         .unwrap()
         .body;
-    let condition_node: CheckedNodeId =
-        serde_json::from_value(clause_body["arguments"][2]["target"].clone()).unwrap();
+    let CheckedTerm::Application { arguments, .. } = clause_body else {
+        panic!("state clause is an application");
+    };
+    let CheckedTerm::Reference {
+        target: condition_node,
+    } = &arguments[2]
+    else {
+        panic!("state clause names a condition node");
+    };
+    let condition_node = condition_node.clone();
     let map = generate_v2_clause_claim_map(&package, &clause);
     assert_eq!(&map.package_id, package.package_id());
     assert_eq!(map.items.len(), 1);
@@ -1604,7 +1612,9 @@ fn tc_025_frame_grants_rekey_to_admitted_order_without_dropping_effects() {
             .iter()
             .find(|node| node.node_id == frame)
             .expect("frame admitted");
-        let modifies = node.body["modifies"].as_array().expect("frame grants");
+        let CheckedTerm::Frame { modifies, .. } = &node.body else {
+            panic!("frame grants are typed");
+        };
         assert_eq!(
             modifies.len(),
             2,
@@ -1619,7 +1629,7 @@ fn tc_025_frame_grants_rekey_to_admitted_order_without_dropping_effects() {
         assert_eq!(
             modifies
                 .iter()
-                .filter(|entry| entry["kind"] == "field" && entry["declaration"] == json!(object))
+                .filter(|entry| matches!(entry, quire_contract_model::CheckedFrameModification::Field { declaration, .. } if declaration == &object))
                 .count(),
             1,
             "the ordinary field grant remains"
@@ -1627,7 +1637,21 @@ fn tc_025_frame_grants_rekey_to_admitted_order_without_dropping_effects() {
         assert_eq!(
             modifies
                 .iter()
-                .filter(|entry| entry["kind"] == kind && entry["declaration"] == json!(added))
+                .filter(|entry| match (kind, entry) {
+                    (
+                        "field",
+                        quire_contract_model::CheckedFrameModification::Field {
+                            declaration, ..
+                        },
+                    ) => declaration == &added,
+                    (
+                        "relationship",
+                        quire_contract_model::CheckedFrameModification::Relationship {
+                            declaration,
+                        },
+                    ) => declaration == &added,
+                    _ => false,
+                })
                 .count(),
             1,
             "the frame keeps its {kind} grant by declaration"
@@ -4297,16 +4321,19 @@ fn tc_035_the_node_ids_of_the_package_qsl_emits_are_the_ids_call_site_names() {
     let frame = node_of("frame");
     assert_eq!(*anchor.node_id.digest, *site.anchor.to_string());
     assert_eq!(*frame.node_id.digest, *site.frame.to_string());
-    let bound_frame = anchor
-        .body
-        .get("members")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .find(|member| member.get("name").and_then(Value::as_str) == Some("frame"))
-        .and_then(|member| member.pointer("/value/target/digest"))
-        .and_then(Value::as_str);
-    assert_eq!(bound_frame, Some(&*frame.node_id.digest));
+    let bound_frame = match &anchor.body {
+        CheckedTerm::Aggregate { members } => members.iter().find_map(|member| match member {
+            CheckedTerm::Binding { name, value } if name.as_ref() == "frame" => {
+                match value.as_ref() {
+                    CheckedTerm::Reference { target } => Some(target),
+                    _ => None,
+                }
+            }
+            _ => None,
+        }),
+        _ => None,
+    };
+    assert_eq!(bound_frame, Some(&frame.node_id));
     let fixture_scope =
         generated_from_twin(&twin, "BalanceNeverDrops", &STATE_FIELDS, SUBJECT_PATH)
             .frame
@@ -4330,11 +4357,10 @@ fn tc_025_the_generator_uses_model_fields_of_the_package_qsl_emits() {
         .find(|node| &*node.semantic_form == "object_type")
         .expect("the package holds the object type");
     assert_eq!(
-        object
-            .body
-            .get("members")
-            .and_then(Value::as_array)
-            .map(Vec::len),
+        match &object.body {
+            CheckedTerm::Aggregate { members } => Some(members.len()),
+            _ => None,
+        },
         Some(0),
         "QSL emits the object type with no members in its body"
     );

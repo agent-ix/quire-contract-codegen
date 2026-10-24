@@ -982,6 +982,7 @@ pub(crate) fn field_range(
             | CheckedMemberType::String
             | CheckedMemberType::Uuid
             | CheckedMemberType::Timestamp
+            | CheckedMemberType::Clock
             | CheckedMemberType::Quantity(_)
             | CheckedMemberType::Reference(_)
             | CheckedMemberType::Record(_)

@@ -155,7 +155,7 @@ impl<'a> ContractLookup<'a> {
         Self { graph, sources }
     }
 
-    fn node(&self, id: &CheckedNodeId) -> Option<&'a CheckedSemanticNodeV2> {
+    fn node(&self, id: &CheckedNodeId) -> Option<&'a CheckedSemanticNodeV2<serde_json::Value>> {
         self.graph.node(id)
     }
 
@@ -1044,8 +1044,8 @@ pub(crate) enum ScalarFormAssessment {
 /// `expression`-tagged nodes), and that reason is more specific than this one -- this ground
 /// exists for the gap those checks do not cover: a node this generator would otherwise have
 /// accounted as `Supported` with a null `kind`.
-fn refuse_unknown_node_kind<'a>(
-    graph_node: Option<&CheckedSemanticNodeV2>,
+fn refuse_unknown_node_kind<'a, Body>(
+    graph_node: Option<&CheckedSemanticNodeV2<Body>>,
     kind: Option<ObligationKind>,
     outcome: Outcome<'a>,
 ) -> Outcome<'a> {
@@ -2006,8 +2006,12 @@ mod tests {
             .nodes
             .iter()
             .filter(|node| {
-                node.body.get("operation").and_then(|op| op.get("identity"))
-                    == Some(&json!("quire.op.collection.forall"))
+                matches!(
+                    &node.body,
+                    CheckedTerm::Application { operation, .. }
+                        if operation.get("identity")
+                            == Some(&json!("quire.op.collection.forall"))
+                )
             })
             .map(|node| node.node_id.clone())
             .collect::<Vec<_>>();

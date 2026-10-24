@@ -129,8 +129,13 @@ mod tests {
             wire["semantic_graph"]["nodes"].as_array().unwrap().len()
         );
         assert_eq!(package.graph().nodes[34].node_tag.as_ref(), "extension");
+        let quire_contract_model::CheckedTerm::ExtensionForm { definition, .. } =
+            &package.graph().nodes[34].body
+        else {
+            panic!("published extension retains its selected definition");
+        };
         assert_eq!(
-            package.graph().nodes[34].body["definition"],
+            serde_json::to_value(definition).unwrap(),
             wire["semantic_graph"]["nodes"][34]["body"]["definition"]
         );
     }

@@ -1082,7 +1082,7 @@ mod tests {
                 nominal_identity_preimage: None,
                 declaration: None,
                 owner: None,
-                body: serde_json::Value::Null,
+                body: CheckedTerm::aggregate(Vec::new()),
             },
             None,
         ));
@@ -1106,7 +1106,7 @@ mod tests {
                     nominal_identity_preimage: None,
                     declaration: None,
                     owner: None,
-                    body: serde_json::Value::Null,
+                    body: CheckedTerm::aggregate(Vec::new()),
                 },
                 Some(CheckedTerm::Application {
                     operator: ApplicationOperator::Call,
@@ -1129,7 +1129,7 @@ mod tests {
             .name("ir496-ac7-small-stack".to_owned())
             .stack_size(512 * 1024)
             .spawn(move || {
-                let source_node_map: super::super::Graph<'_> = source_nodes
+                let source_node_map: super::super::CheckedGraph<'_, CheckedTerm> = source_nodes
                     .iter().map(|node| (&node.node_id, node)).collect();
                 let type_kinds = BTreeMap::from([(integer_type, ValueKind::Integer)]);
                 let mut work =

@@ -75,7 +75,7 @@ use crate::core::contract_package::{
 use crate::core::naming::unique_names;
 use crate::core::profile::equality_oracle_crate_manifest;
 use crate::oracle::checked_graph::{
-    aggregate_members, bound_members, literal_count, CheckedGraph as Graph,
+    aggregate_members, bound_members, literal_count, CheckedGraph as Graph, GraphBody,
 };
 use crate::oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
 use crate::oracle::direct_unsupported_form;
@@ -696,7 +696,10 @@ pub fn generate_composite_equality_oracles(
         ));
     }
     let graph = Graph::new(package);
-    let mut bounds_by_type: BTreeMap<&CheckedNodeId, Vec<&CheckedSemanticNodeV2>> = BTreeMap::new();
+    let mut bounds_by_type: BTreeMap<
+        &CheckedNodeId,
+        Vec<&CheckedSemanticNodeV2<serde_json::Value>>,
+    > = BTreeMap::new();
     for node in package.wire().semantic_graph.nodes.iter() {
         if CheckedNodeTag::from_wire(&node.node_tag) == Some(CheckedNodeTag::BoundedDomain) {
             bounds_by_type
@@ -1030,11 +1033,11 @@ impl From<OracleGenerationError> for ItemCheckError {
     }
 }
 
-fn check_item(
+fn check_item<Body: GraphBody>(
     admitted: Option<&qsl_replay::AdmittedContext>,
-    graph: &Graph<'_>,
-    bounds_by_type: &BTreeMap<&CheckedNodeId, Vec<&CheckedSemanticNodeV2>>,
-    node: &CheckedSemanticNodeV2,
+    graph: &Graph<'_, Body>,
+    bounds_by_type: &BTreeMap<&CheckedNodeId, Vec<&CheckedSemanticNodeV2<Body>>>,
+    node: &CheckedSemanticNodeV2<Body>,
     item: &CompositeEqualityItem,
     type_resolution_work_units: u64,
 ) -> Result<CheckedItem, ItemCheckError> {
@@ -1197,9 +1200,10 @@ fn unsupported_family(node_id: &CheckedNodeId, tag: CheckedNodeTag) -> Composite
             blocked(UpstreamBlocker::QuireSpecLanguage120)
         }
         CheckedNodeTag::Function => blocked(UpstreamBlocker::QuireContractRuntime34),
-        CheckedNodeTag::State | CheckedNodeTag::Temporal | CheckedNodeTag::Protocol => {
-            blocked(UpstreamBlocker::QuireSpecLanguage121)
-        }
+        CheckedNodeTag::State
+        | CheckedNodeTag::Temporal
+        | CheckedNodeTag::Protocol
+        | CheckedNodeTag::TimedModel => blocked(UpstreamBlocker::QuireSpecLanguage121),
         CheckedNodeTag::ScalarType
         | CheckedNodeTag::CompositeType
         | CheckedNodeTag::BoundedDomain
@@ -1233,7 +1237,10 @@ fn application_arguments(body: Option<&CheckedTerm>) -> Option<&[CheckedTerm]> {
 /// its descriptor's arity or operand types"): the type used to build the runtime call always
 /// comes from the descriptor, never from this value, so disagreement here is refused before
 /// either operand's type is resolved.
-fn operand_type_id(graph: &Graph<'_>, term: &CheckedTerm) -> Option<CheckedNodeId> {
+fn operand_type_id<Body: GraphBody>(
+    graph: &Graph<'_, Body>,
+    term: &CheckedTerm,
+) -> Option<CheckedNodeId> {
     let mut term = term;
     // Each step follows one reference to a distinct-or-repeated node; the graph's size bounds a
     // chain that does not cycle, and a cycle of conversions reads as no type.
@@ -1268,8 +1275,8 @@ fn application_of(
 
 /// Compare each body operand's declared type against the descriptor's for
 /// that position, left then right, refusing at the first disagreement.
-fn check_operand_types(
-    graph: &Graph<'_>,
+fn check_operand_types<Body: GraphBody>(
+    graph: &Graph<'_, Body>,
     arguments: &[CheckedTerm],
     item: &CompositeEqualityItem,
 ) -> Result<(), CompositeEqualityRefusal> {
@@ -1318,10 +1325,10 @@ impl Default for TypeClosure {
     }
 }
 
-fn lookup<'g>(
-    graph: &Graph<'g>,
+fn lookup<'g, Body: GraphBody>(
+    graph: &Graph<'g, Body>,
     node_id: &CheckedNodeId,
-) -> Result<&'g CheckedSemanticNodeV2, CompositeEqualityRefusal> {
+) -> Result<&'g CheckedSemanticNodeV2<Body>, CompositeEqualityRefusal> {
     graph
         .node(node_id)
         .ok_or_else(|| CompositeEqualityRefusal::UnknownTypeNode {
@@ -1358,17 +1365,17 @@ fn read_record_field(term: &CheckedTerm) -> Option<(String, CheckedNodeId, bool)
     (wrapper_name == "optional").then_some((name.to_string(), target, true))
 }
 
-fn is_option_node(node: &CheckedSemanticNodeV2) -> bool {
+fn is_option_node<Body>(node: &CheckedSemanticNodeV2<Body>) -> bool {
     CheckedNodeTag::from_wire(&node.node_tag) == Some(CheckedNodeTag::CompositeType)
         && &*node.semantic_form == "option"
 }
 
 /// Resolve `type_id` to a `ValueType`, registering every reachable
 /// nominal composite declaration into `closure`.
-fn resolve_type(
+fn resolve_type<Body: GraphBody>(
     admitted: Option<&qsl_replay::AdmittedContext>,
-    graph: &Graph<'_>,
-    bounds_by_type: &BTreeMap<&CheckedNodeId, Vec<&CheckedSemanticNodeV2>>,
+    graph: &Graph<'_, Body>,
+    bounds_by_type: &BTreeMap<&CheckedNodeId, Vec<&CheckedSemanticNodeV2<Body>>>,
     closure: &mut TypeClosure,
     type_id: &CheckedNodeId,
 ) -> Result<ValueType, ItemCheckError> {
@@ -1378,13 +1385,13 @@ fn resolve_type(
 /// Resolve a scalar type: `node` is the base `scalar_type` and `bounds` the `bounded_domain`
 /// nodes that bound it for this reference (every one over the scalar, or the one the member
 /// names); `type_id` is the member's type node, for refusals.
-fn resolve_scalar(
+fn resolve_scalar<Body: GraphBody>(
     admitted: Option<&qsl_replay::AdmittedContext>,
-    graph: &Graph<'_>,
+    graph: &Graph<'_, Body>,
     closure: &mut TypeClosure,
-    bounds: &[&CheckedSemanticNodeV2],
+    bounds: &[&CheckedSemanticNodeV2<Body>],
     type_id: &CheckedNodeId,
-    node: &CheckedSemanticNodeV2,
+    node: &CheckedSemanticNodeV2<Body>,
 ) -> Result<ValueType, ItemCheckError> {
     let bound = |form: &'static str| -> Result<&[CheckedTerm], CompositeEqualityRefusal> {
         let candidates: Vec<_> = bounds
@@ -2338,6 +2345,7 @@ fn profile_path(profile: TextProfile) -> Result<&'static str, OracleGenerationEr
 #[cfg(test)]
 mod tests {
     use super::*;
+    type Graph<'a> = crate::oracle::checked_graph::CheckedGraph<'a, CheckedTerm>;
     use crate::oracle::checked_graph::fixture::Node as FixtureNode;
     use ix_trace_rs::trace;
     use quire_contract_model::LiteralKind;
