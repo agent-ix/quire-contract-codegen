@@ -1795,7 +1795,7 @@ fn refusal_variant_name(refusal: &ExactScalarRefusal) -> &'static str {
 /// `InvalidBody`/`BodyIncomplete` through the real `lowered()`, and
 /// `tc_024_catalogued_operation_identity_refuses_a_node_whose_operation_has_no_identity`
 /// drives `MissingOperationIdentity` through the real
-/// `catalogued_operation_identity` (both in `src/oracle/scalar/mod.rs`, both
+/// `catalogued_operation_identity` (both in `src/oracle/scalar/lower.rs`, both
 /// private to `quire_contract_codegen` and so unreachable from here). The
 /// four assertions below construct each variant directly instead; they only
 /// exercise `refusal_variant_name`'s own match arms for these four variants
@@ -3578,12 +3578,19 @@ fn last() { c.unwrap_or(1) }
 #[test]
 fn tc_024_ac39_scalar_generator_and_generated_crates_hold_no_panic_site() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let source = fs::read_to_string(root.join("src/oracle/scalar/mod.rs")).expect("read generator");
-    assert_eq!(
-        panic_tokens_in(&non_test_code(&source)),
-        Vec::<String>::new(),
-        "src/oracle/scalar/mod.rs"
-    );
+    for path in [
+        "src/oracle/scalar/mod.rs",
+        "src/oracle/scalar/derive.rs",
+        "src/oracle/scalar/lower.rs",
+        "src/oracle/scalar/render.rs",
+    ] {
+        let source = fs::read_to_string(root.join(path)).expect("read generator");
+        assert_eq!(
+            panic_tokens_in(&non_test_code(&source)),
+            Vec::<String>::new(),
+            "{path}"
+        );
+    }
     let oracles = corpus_oracles();
     assert_eq!(
         panic_tokens_in(contents(&oracles, "src/lib.rs")),
@@ -3614,12 +3621,26 @@ fn tc_024_ac42_only_the_shared_classifier_reads_a_failed_records_limit_kind() {
         "the shared module owns the classifier"
     );
 
+    let scalar = [
+        "src/oracle/scalar/mod.rs",
+        "src/oracle/scalar/derive.rs",
+        "src/oracle/scalar/lower.rs",
+        "src/oracle/scalar/render.rs",
+    ]
+    .into_iter()
+    .map(code_of)
+    .collect::<String>();
+
     for path in [
         "src/oracle/scalar/mod.rs",
         "src/oracle/equality/mod.rs",
         "src/oracle/function/mod.rs",
     ] {
-        let code = code_of(path);
+        let code = if path == "src/oracle/scalar/mod.rs" {
+            scalar.clone()
+        } else {
+            code_of(path)
+        };
         assert!(
             !code.contains("CheckedPackageLimit"),
             "{path} names a limit kind type"
@@ -3728,6 +3749,9 @@ fn oracle_generators_have_no_panicking_arms() {
     let mut offending = Vec::new();
     for (file, whole_file) in [
         ("src/oracle/scalar/mod.rs", false),
+        ("src/oracle/scalar/derive.rs", false),
+        ("src/oracle/scalar/lower.rs", false),
+        ("src/oracle/scalar/render.rs", false),
         ("src/oracle/equality/mod.rs", false),
         ("src/oracle/function/mod.rs", true),
     ] {

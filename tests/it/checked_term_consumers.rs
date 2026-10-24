@@ -8,10 +8,13 @@ use ix_trace_rs::trace;
 use std::path::Path;
 use syn::visit::{self, Visit};
 
-const CONSUMERS: [&str; 3] = [
+const CONSUMERS: [&str; 6] = [
     "src/oracle/equality/mod.rs",
     "src/oracle/function/mod.rs",
     "src/oracle/scalar/mod.rs",
+    "src/oracle/scalar/derive.rs",
+    "src/oracle/scalar/lower.rs",
+    "src/oracle/scalar/render.rs",
 ];
 
 fn test_only(attributes: &[syn::Attribute]) -> bool {

@@ -19,8 +19,10 @@ use crate::{
     },
     oracle::checked_graph::{aggregate_members, bound_members, literal_count, literal_integer},
     oracle::scalar::{
-        ExactScalarClaim, GeneratedScalarClaim, OperandRange, COLLECTION_BOUNDS_MEMBERS,
-        INTEGER_RANGE_MEMBERS, TEXT_BOUNDS_MEMBERS,
+        lower::{
+            OperandRange, COLLECTION_BOUNDS_MEMBERS, INTEGER_RANGE_MEMBERS, TEXT_BOUNDS_MEMBERS,
+        },
+        ExactScalarClaim, GeneratedScalarClaim,
     },
 };
 

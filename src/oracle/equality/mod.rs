@@ -79,7 +79,7 @@ use crate::oracle::checked_graph::{
 };
 use crate::oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
 use crate::oracle::direct_unsupported_form;
-use crate::oracle::scalar::{
+use crate::oracle::scalar::lower::{
     read_decimal_range, read_integer_range, read_rational_range, read_text_bounds,
     COLLECTION_BOUNDS_MEMBERS,
 };
