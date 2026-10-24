@@ -88,8 +88,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use quire_contract_model::{
     BoundClause, BoundPackage, CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticId,
-    CheckedSemanticNodeV2, CheckedSourceMapEntry, ClauseKind, ClauseRef, ContractPackageV1,
-    ExecutionPoint,
+    CheckedSemanticNodeV2, CheckedSourceMapEntry, CheckedTerm, ClauseKind, ClauseRef,
+    ContractPackageV1, ExecutionPoint,
 };
 
 use crate::{
@@ -595,14 +595,13 @@ fn classify_v2_clause<'a>(
     let package = lookup.package;
     let view = lookup.clause();
     let graph_node = view.node(clause);
-    let kind = graph_node
-        .and_then(|node| {
-            node.body
-                .get("operation")?
-                .get("member")?
-                .get("clause")?
-                .as_str()
+    let kind = package
+        .term(clause)
+        .and_then(|term| match term {
+            CheckedTerm::Application { operation, .. } => operation.get("member"),
+            _ => None,
         })
+        .and_then(|member| member.get("clause")?.as_str())
         .and_then(|name| match name {
             "precondition" => Some(ObligationKind::Precondition),
             "postcondition" => Some(ObligationKind::Postcondition),

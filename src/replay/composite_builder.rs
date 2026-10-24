@@ -7,7 +7,7 @@
 //! O-09 arguments. It binds the caller's retained proof-content identity; it does not authenticate
 //! a generated artifact, run a native observation, or establish a backend proof strength.
 
-use std::{collections::BTreeMap, fmt};
+use std::fmt;
 
 use qsl_replay::{
     compile_admitted, parity_obligation, settle_verified_shadow, AdmittedCompilation,
@@ -23,7 +23,7 @@ use quire_contract_model::{
     CheckedCompositeOperandDomain, CheckedCompositeOperandError, CheckedCompositeOperands,
     CheckedNodeId, CheckedOccurrence, CheckedOccurrenceRole, CheckedPackageEvidence,
     CheckedPackageIncomplete, CheckedPackageReadLimits, CheckedPackageRefusal, CheckedPackageV2,
-    CheckedPackageV2ReadResult, CheckedScalarOperandChild, CheckedSourceRef,
+    CheckedPackageV2ReadResult, CheckedScalarOperandChild, CheckedSourceRef, CheckedTerm,
 };
 
 use super::{
@@ -176,7 +176,6 @@ impl std::error::Error for CompositeBuildError {}
 #[derive(Debug)]
 pub struct OriginalCompositeEqContext {
     original: CheckedPackageV2,
-    node_positions: BTreeMap<CheckedNodeId, usize>,
     inputs: ReplayInputs,
     dependencies: DependencyInput,
     selection: QualifiedName,
@@ -266,15 +265,8 @@ impl OriginalCompositeEqContext {
                     })
             })
             .ok_or(CompositeBuildError::UnknownFunction)?;
-        let mut node_positions = BTreeMap::new();
-        for (position, node) in original.graph().nodes.iter().enumerate() {
-            node_positions
-                .entry(node.node_id.clone())
-                .or_insert(position);
-        }
         Ok(Self {
             original,
-            node_positions,
             inputs,
             dependencies,
             selection,
@@ -316,10 +308,12 @@ impl OriginalCompositeEqContext {
         // IR's operand projection validates Eq/Ne but does not return a typed operator yet.
         // Read the selected node identity until the IR API carries that operation (IR-803).
         let actual = self
-            .node_positions
-            .get(node)
-            .and_then(|position| self.original.graph().nodes.get(*position))
-            .and_then(|entry| entry.body.pointer("/operation/identity"))
+            .original
+            .term(node)
+            .and_then(|term| match term {
+                CheckedTerm::Application { operation, .. } => operation.get("identity"),
+                _ => None,
+            })
             .and_then(serde_json::Value::as_str);
         let actual = node_equality_operator(actual)?;
         if actual != operator {

@@ -1720,7 +1720,7 @@ fn check_item<'r>(
     operation: &ExactScalarOperation,
 ) -> Result<CheckedItem<'r>, ItemCheckError> {
     if let Some(node) = graph.node(requested_node_id) {
-        if let Some(node_tag) = direct_unsupported_form(node) {
+        if let Some(node_tag) = direct_unsupported_form(node, graph.term(requested_node_id)) {
             return Err(ExactScalarRefusal::Unsupported {
                 unsupported_node_id: requested_node_id.clone(),
                 node_tag,
@@ -1734,7 +1734,7 @@ fn check_item<'r>(
     } = record
     {
         if let Some(node) = graph.node(unsupported_node_id) {
-            if let Some(node_tag) = direct_unsupported_form(node) {
+            if let Some(node_tag) = direct_unsupported_form(node, graph.term(unsupported_node_id)) {
                 return Err(ExactScalarRefusal::Unsupported {
                     unsupported_node_id: unsupported_node_id.clone(),
                     node_tag,

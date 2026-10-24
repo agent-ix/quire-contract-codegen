@@ -6,7 +6,7 @@
 
 use quire_contract_model::{
     CheckedCollectionKind, CheckedMemberType, CheckedNodeId, CheckedNodeTag, CheckedPackageV2,
-    CheckedSemanticNodeV2,
+    CheckedSemanticNodeV2, CheckedTerm, LiteralKind,
 };
 use serde_json::Value;
 use std::{borrow::Borrow, collections::BTreeMap};
@@ -92,6 +92,7 @@ pub(super) struct CollectionGraph<'a> {
 }
 
 struct CollectionNodeIndex<'a> {
+    package: Option<&'a CheckedPackageV2>,
     by_id: FirstMatchIndex<&'a CheckedNodeId, &'a CheckedSemanticNodeV2>,
     by_digest: FirstMatchIndex<&'a str, &'a CheckedSemanticNodeV2>,
 }
@@ -135,10 +136,9 @@ impl<'a> CollectionGraph<'a> {
     pub(super) fn new(package: &'a CheckedPackageV2) -> Self {
         #[cfg(test)]
         COLLECTION_GRAPH_BUILD_COUNT.with(|count| count.set(count.get() + 1));
-        Self {
-            package,
-            index: CollectionNodeIndex::from_nodes(package.graph().nodes.iter()),
-        }
+        let mut index = CollectionNodeIndex::from_nodes(package.graph().nodes.iter());
+        index.package = Some(package);
+        Self { package, index }
     }
 }
 
@@ -152,7 +152,11 @@ impl<'a> CollectionNodeIndex<'a> {
             by_id.insert_first(&node.node_id, node);
             by_digest.insert_first(node.node_id.digest.as_ref(), node);
         }
-        Self { by_id, by_digest }
+        Self {
+            package: None,
+            by_id,
+            by_digest,
+        }
     }
 
     fn node(&self, id: &CheckedNodeId) -> Option<&'a CheckedSemanticNodeV2> {
@@ -161,6 +165,10 @@ impl<'a> CollectionNodeIndex<'a> {
 
     fn declaration(&self, digest: &str) -> Option<&'a CheckedSemanticNodeV2> {
         self.by_digest.get(digest).copied()
+    }
+
+    fn term(&self, node: &CheckedSemanticNodeV2) -> Option<&'a CheckedTerm> {
+        self.package?.term(&node.node_id)
     }
 }
 
@@ -460,16 +468,10 @@ fn resolve_collection_field(
     if CheckedNodeTag::from_wire(&function.node_tag) != Some(CheckedNodeTag::Function) {
         return Err(CollectionDomainRefusal::UnsupportedShape);
     }
-    let function_body = function
-        .body
-        .get("members")
-        .and_then(Value::as_array)
-        .and_then(|members| {
-            members
-                .iter()
-                .find(|member| member.get("name").and_then(Value::as_str) == Some("body"))
-        })
-        .and_then(|member| member.get("value"))
+    let function_body = graph
+        .term(function)
+        .and_then(aggregate_members)
+        .and_then(|members| binding(members, "body"))
         .and_then(term_target)
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
     if !is_top_level_conjunct(graph, &function_body, &quantifier.node_id) {
@@ -480,12 +482,11 @@ fn resolve_collection_field(
     {
         return Err(CollectionDomainRefusal::UnsupportedShape);
     }
-    let arguments = quantifier
-        .body
-        .get("arguments")
-        .and_then(Value::as_array)
+    let arguments = graph
+        .term(quantifier)
+        .and_then(application_arguments)
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
-    let quantifier_operation = operation_identity(quantifier)
+    let quantifier_operation = operation_identity(graph, quantifier)
         .filter(|identity| {
             matches!(
                 *identity,
@@ -505,23 +506,25 @@ fn resolve_collection_field(
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
     if CheckedNodeTag::from_wire(&collection.node_tag) != Some(CheckedNodeTag::Expression)
         || collection.semantic_form.as_ref() != "query"
-        || operation_identity(collection) != Some("quire.op.record.project")
+        || operation_identity(graph, collection) != Some("quire.op.record.project")
     {
         return Err(CollectionDomainRefusal::UnsupportedShape);
     }
-    let field_name = collection
-        .body
-        .get("operation")
-        .and_then(|operation| operation.get("member"))
+    let CheckedTerm::Application { operation, .. } = graph
+        .term(collection)
+        .ok_or(CollectionDomainRefusal::UnsupportedShape)?
+    else {
+        return Err(CollectionDomainRefusal::UnsupportedShape);
+    };
+    let field_name = operation
+        .get("member")
         .filter(|member| member.get("kind").and_then(Value::as_str) == Some("field"))
         .and_then(|member| member.get("name"))
         .and_then(Value::as_str)
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?
         .to_owned();
-    let declaration_digest = collection
-        .body
-        .get("operation")
-        .and_then(|operation| operation.get("member"))
+    let declaration_digest = operation
+        .get("member")
         .and_then(|member| member.get("declaration"))
         .and_then(|declaration| declaration.get("digest"))
         .and_then(Value::as_str)
@@ -568,20 +571,15 @@ fn resolve_collection_field(
     if minimum_length > maximum_length {
         return Err(CollectionDomainRefusal::UnsupportedFieldType);
     }
-    let predicate_binding = arguments
-        .get(1)
-        .filter(|argument| argument.get("term").and_then(Value::as_str) == Some("binding"))
-        .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
-    let binder_name = predicate_binding
-        .get("name")
-        .and_then(Value::as_str)
-        .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
-    let predicate_id = term_target(
-        predicate_binding
-            .get("value")
-            .ok_or(CollectionDomainRefusal::UnsupportedShape)?,
-    )
-    .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
+    let Some(CheckedTerm::Binding {
+        name: binder_name,
+        value: predicate_value,
+    }) = arguments.get(1)
+    else {
+        return Err(CollectionDomainRefusal::UnsupportedShape);
+    };
+    let predicate_id =
+        term_target(predicate_value).ok_or(CollectionDomainRefusal::UnsupportedShape)?;
     let predicate_node = graph
         .node(&predicate_id)
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
@@ -611,15 +609,22 @@ fn resolve_collection_field(
 
 /// The operation identity of a `binary` expression predicate. Any other form, a quantity
 /// conversion included, is an unsupported shape.
-fn binary_predicate_operation(
+fn binary_predicate_operation<'a>(
     predicate: &CheckedSemanticNodeV2,
-) -> Result<&str, CollectionDomainRefusal> {
+    term: Option<&'a CheckedTerm>,
+) -> Result<&'a str, CollectionDomainRefusal> {
     if CheckedNodeTag::from_wire(&predicate.node_tag) != Some(CheckedNodeTag::Expression)
         || predicate.semantic_form.as_ref() != "binary"
     {
         return Err(CollectionDomainRefusal::UnsupportedShape);
     }
-    operation_identity(predicate).ok_or(CollectionDomainRefusal::UnsupportedShape)
+    let Some(CheckedTerm::Application { operation, .. }) = term else {
+        return Err(CollectionDomainRefusal::UnsupportedShape);
+    };
+    operation
+        .get("identity")
+        .and_then(Value::as_str)
+        .ok_or(CollectionDomainRefusal::UnsupportedShape)
 }
 
 fn resolve_predicate(
@@ -630,23 +635,23 @@ fn resolve_predicate(
     element: CollectionElementDomain,
     element_type: &CheckedNodeId,
 ) -> Result<CollectionPredicateIdentity, CollectionDomainRefusal> {
-    let operation = binary_predicate_operation(predicate)?;
-    let arguments = predicate
-        .body
-        .get("arguments")
-        .and_then(Value::as_array)
+    let operation = binary_predicate_operation(predicate, graph.term(predicate))?;
+    let arguments = graph
+        .term(predicate)
+        .and_then(application_arguments)
         .filter(|arguments| arguments.len() == 2)
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
-    let parameter_count = function
-        .body
-        .get("members")
-        .and_then(Value::as_array)
+    let parameter_count = graph
+        .term(function)
+        .and_then(aggregate_members)
         .and_then(|members| members.first())
-        .filter(|member| member.get("name").and_then(Value::as_str) == Some("parameters"))
-        .and_then(|parameters| parameters.get("value"))
-        .and_then(|value| value.get("members"))
-        .and_then(Value::as_array)
-        .map(Vec::len)
+        .and_then(|member| match member {
+            CheckedTerm::Binding { name, value } if name.as_ref() == "parameters" => {
+                aggregate_members(value)
+            }
+            _ => None,
+        })
+        .map(|members| members.len())
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
     let selected_parameter = arguments
         .iter()
@@ -654,8 +659,8 @@ fn resolve_predicate(
         .filter_map(|id| graph.node(&id))
         .find(|node| {
             node.semantic_form.as_ref() == "parameter"
-                && parameter_name(node) == Some(binder_name)
-                && parameter_level(node) == Some(parameter_count as u64)
+                && parameter_name(graph, node) == Some(binder_name)
+                && parameter_level(graph, node) == Some(parameter_count as u64)
                 && &node.semantic_type == element_type
         })
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
@@ -703,10 +708,9 @@ fn sequence_element_type(
         _ => None,
     }
     .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
-    let members = sequence
-        .body
-        .get("members")
-        .and_then(Value::as_array)
+    let members = graph
+        .term(sequence)
+        .and_then(aggregate_members)
         .filter(|members| members.len() == 1)
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
     term_target(
@@ -723,33 +727,32 @@ fn verify_function_receiver(
     projection: &CheckedSemanticNodeV2,
     declaration: &CheckedNodeId,
 ) -> Result<(), CollectionDomainRefusal> {
-    let parameters = function
-        .body
-        .get("members")
-        .and_then(Value::as_array)
+    let parameters = graph
+        .term(function)
+        .and_then(aggregate_members)
         .and_then(|members| members.first())
-        .filter(|member| member.get("name").and_then(Value::as_str) == Some("parameters"))
-        .and_then(|member| member.get("value"))
-        .and_then(|value| value.get("members"))
-        .and_then(Value::as_array)
+        .and_then(|member| match member {
+            CheckedTerm::Binding { name, value } if name.as_ref() == "parameters" => {
+                aggregate_members(value)
+            }
+            _ => None,
+        })
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
     let parameter_ids = parameters
         .iter()
         .filter_map(term_target)
         .collect::<std::collections::BTreeSet<_>>();
-    let receiver = projection
-        .body
-        .get("arguments")
-        .and_then(Value::as_array)
+    let receiver = graph
+        .term(projection)
+        .and_then(application_arguments)
         .and_then(|arguments| arguments.first())
         .and_then(term_target)
         .and_then(|id| graph.node(&id))
-        .filter(|node| operation_identity(node) == Some("quire.op.model.deref"))
+        .filter(|node| operation_identity(graph, node) == Some("quire.op.model.deref"))
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
-    let parameter_id = receiver
-        .body
-        .get("arguments")
-        .and_then(Value::as_array)
+    let parameter_id = graph
+        .term(receiver)
+        .and_then(application_arguments)
         .and_then(|arguments| arguments.first())
         .and_then(term_target)
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
@@ -770,33 +773,28 @@ fn verify_function_receiver(
     Ok(())
 }
 
-fn parameter_name(node: &CheckedSemanticNodeV2) -> Option<&str> {
-    node.body
-        .get("members")?
-        .as_array()?
-        .iter()
-        .find(|member| member.get("name").and_then(Value::as_str) == Some("name"))?
-        .get("value")?
-        .get("value")?
-        .as_str()
+fn parameter_name<'a>(
+    graph: &CollectionNodeIndex<'a>,
+    node: &CheckedSemanticNodeV2,
+) -> Option<&'a str> {
+    let members = aggregate_members(graph.term(node)?)?;
+    let CheckedTerm::Literal { value, .. } = binding(members, "name")? else {
+        return None;
+    };
+    value.as_str()
 }
 
-fn parameter_level(node: &CheckedSemanticNodeV2) -> Option<u64> {
-    node.body
-        .get("members")?
-        .as_array()?
-        .iter()
-        .find(|member| member.get("name").and_then(Value::as_str) == Some("level"))?
-        .get("value")?
-        .get("value")?
-        .as_str()?
-        .parse()
-        .ok()
+fn parameter_level(graph: &CollectionNodeIndex<'_>, node: &CheckedSemanticNodeV2) -> Option<u64> {
+    let members = aggregate_members(graph.term(node)?)?;
+    let CheckedTerm::Literal { value, .. } = binding(members, "level")? else {
+        return None;
+    };
+    value.as_str()?.parse().ok()
 }
 
 fn integer_literal(
     graph: &CollectionNodeIndex<'_>,
-    term: &Value,
+    term: &CheckedTerm,
     element_type: &CheckedNodeId,
 ) -> Result<i64, CollectionDomainRefusal> {
     let id = term_target(term).ok_or(CollectionDomainRefusal::UnsupportedShape)?;
@@ -805,14 +803,13 @@ fn integer_literal(
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
     let literal = if node.semantic_form.as_ref() == "literal" {
         node
-    } else if operation_identity(node) == Some("quire.op.numeric.narrow")
+    } else if operation_identity(graph, node) == Some("quire.op.numeric.narrow")
         && node.semantic_form.as_ref() == "conversion"
         && &node.semantic_type == element_type
     {
-        let source = node
-            .body
-            .get("arguments")
-            .and_then(Value::as_array)
+        let source = graph
+            .term(node)
+            .and_then(application_arguments)
             .and_then(|arguments| arguments.first())
             .and_then(term_target)
             .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
@@ -823,13 +820,16 @@ fn integer_literal(
     } else {
         return Err(CollectionDomainRefusal::UnsupportedShape);
     };
-    if literal.body.get("value_kind").and_then(Value::as_str) != Some("integer") {
+    let Some(CheckedTerm::Literal {
+        value_kind: LiteralKind::Integer,
+        value,
+        ..
+    }) = graph.term(literal)
+    else {
         return Err(CollectionDomainRefusal::UnsupportedShape);
-    }
-    let value = literal
-        .body
-        .get("value")
-        .and_then(Value::as_str)
+    };
+    let value = value
+        .as_str()
         .and_then(|value| value.parse().ok())
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
     // Literals outside the admitted element interval remain representable in the claim. The
@@ -851,12 +851,12 @@ fn is_top_level_conjunct(
     let Some(node) = graph.node(root) else {
         return false;
     };
-    if operation_identity(node) != Some("quire.op.boolean.and") {
+    if operation_identity(graph, node) != Some("quire.op.boolean.and") {
         return false;
     }
-    node.body
-        .get("arguments")
-        .and_then(Value::as_array)
+    graph
+        .term(node)
+        .and_then(application_arguments)
         .is_some_and(|arguments| {
             arguments
                 .iter()
@@ -867,20 +867,23 @@ fn is_top_level_conjunct(
 
 fn boolean_literal(
     graph: &CollectionNodeIndex<'_>,
-    term: &Value,
+    term: &CheckedTerm,
 ) -> Result<bool, CollectionDomainRefusal> {
     let id = term_target(term).ok_or(CollectionDomainRefusal::UnsupportedShape)?;
     let literal = graph
         .node(&id)
         .filter(|node| node.semantic_form.as_ref() == "literal")
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
-    if literal.body.get("value_kind").and_then(Value::as_str) != Some("boolean") {
+    let Some(CheckedTerm::Literal {
+        value_kind: LiteralKind::Boolean,
+        value,
+        ..
+    }) = graph.term(literal)
+    else {
         return Err(CollectionDomainRefusal::UnsupportedShape);
-    }
-    literal
-        .body
-        .get("value")
-        .and_then(Value::as_bool)
+    };
+    value
+        .as_bool()
         .ok_or(CollectionDomainRefusal::UnsupportedShape)
 }
 
@@ -905,25 +908,52 @@ fn depends_on(
     false
 }
 
-fn operation_identity(node: &CheckedSemanticNodeV2) -> Option<&str> {
-    node.body
-        .get("operation")
-        .and_then(|operation| operation.get("identity"))
-        .and_then(Value::as_str)
+fn aggregate_members(term: &CheckedTerm) -> Option<&[CheckedTerm]> {
+    match term {
+        CheckedTerm::Aggregate { members } => Some(members),
+        _ => None,
+    }
 }
 
-fn term_target(term: &Value) -> Option<CheckedNodeId> {
-    let target = term.get("target")?;
-    Some(CheckedNodeId {
-        domain: target.get("domain")?.as_str()?.into(),
-        digest: target.get("digest")?.as_str()?.into(),
+fn binding<'a>(members: &'a [CheckedTerm], name: &str) -> Option<&'a CheckedTerm> {
+    members.iter().find_map(|member| match member {
+        CheckedTerm::Binding {
+            name: actual,
+            value,
+        } if actual.as_ref() == name => Some(value.as_ref()),
+        _ => None,
     })
+}
+
+fn application_arguments(term: &CheckedTerm) -> Option<&[CheckedTerm]> {
+    match term {
+        CheckedTerm::Application { arguments, .. } => Some(arguments),
+        _ => None,
+    }
+}
+
+fn operation_identity<'a>(
+    graph: &CollectionNodeIndex<'a>,
+    node: &CheckedSemanticNodeV2,
+) -> Option<&'a str> {
+    let CheckedTerm::Application { operation, .. } = graph.term(node)? else {
+        return None;
+    };
+    operation.get("identity")?.as_str()
+}
+
+fn term_target(term: &CheckedTerm) -> Option<CheckedNodeId> {
+    match term {
+        CheckedTerm::Reference { target } => Some(target.clone()),
+        _ => None,
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use ix_trace_rs::trace;
+    use quire_contract_model::ApplicationOperator;
     use std::{cell::Cell, cmp::Ordering, rc::Rc};
 
     #[derive(Clone)]
@@ -1279,12 +1309,29 @@ mod tests {
             }))
             .expect("a checked expression node")
         };
+        let term = |operator, identity| CheckedTerm::Application {
+            operator,
+            operation: serde_json::json!({"identity": identity}),
+            result_type: CheckedNodeId {
+                domain: "quire.checked-semantic-node/v1".into(),
+                digest: "2".repeat(64).into(),
+            },
+            arguments: Vec::new(),
+        };
+        let conversion = term(ApplicationOperator::Convert, "quire.op.quantity.convert");
+        let binary = term(ApplicationOperator::Binary, "quire.op.integer.ge");
         assert_eq!(
-            binary_predicate_operation(&node("conversion", "convert", "quire.op.quantity.convert")),
+            binary_predicate_operation(
+                &node("conversion", "convert", "quire.op.quantity.convert"),
+                Some(&conversion),
+            ),
             Err(CollectionDomainRefusal::UnsupportedShape)
         );
         assert_eq!(
-            binary_predicate_operation(&node("binary", "binary", "quire.op.integer.ge")),
+            binary_predicate_operation(
+                &node("binary", "binary", "quire.op.integer.ge"),
+                Some(&binary),
+            ),
             Ok("quire.op.integer.ge")
         );
     }
