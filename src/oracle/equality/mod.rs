@@ -756,7 +756,10 @@ pub fn generate_composite_equality_oracles(
             ClaimDisposition::Refused {
                 refusal: CompositeEqualityRefusal::DuplicateRequest,
             }
-        } else if let Some(node_tag) = graph.node(&item.node_id).and_then(direct_unsupported_form) {
+        } else if let Some(node_tag) = graph
+            .node(&item.node_id)
+            .and_then(|node| direct_unsupported_form(node, graph.term(&item.node_id)))
+        {
             ClaimDisposition::Refused {
                 refusal: CompositeEqualityRefusal::Unsupported {
                     unsupported_node_id: item.node_id.clone(),
@@ -1035,7 +1038,7 @@ fn check_item(
     item: &CompositeEqualityItem,
     type_resolution_work_units: u64,
 ) -> Result<CheckedItem, ItemCheckError> {
-    if let Some(node_tag) = direct_unsupported_form(node) {
+    if let Some(node_tag) = direct_unsupported_form(node, graph.term(&node.node_id)) {
         return Err(CompositeEqualityRefusal::Unsupported {
             unsupported_node_id: node.node_id.clone(),
             node_tag,

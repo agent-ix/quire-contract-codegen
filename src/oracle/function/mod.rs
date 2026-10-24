@@ -2394,6 +2394,7 @@ fn check_position(
 
 fn admitted_binary_body<'a>(
     item: PackageItem<'a>,
+    graph: &Graph<'_>,
 ) -> Result<(ContractReachedClosureV1<'a>, &'a [CheckedSourceMapEntry]), ExactFunctionRefusal> {
     let (closure, occurrences) = match item {
         PackageItem::Refused {
@@ -2442,7 +2443,8 @@ fn admitted_binary_body<'a>(
                 .collect(),
         });
     }
-    if let Some(node_tag) = direct_unsupported_form(closure.root) {
+    if let Some(node_tag) = direct_unsupported_form(closure.root, graph.term(&closure.root.node_id))
+    {
         return Err(ExactFunctionRefusal::Unsupported {
             unsupported_node_id: closure.root.node_id.clone(),
             node_tag,
@@ -2795,7 +2797,7 @@ pub fn generate_exact_function_oracles(
                     capability: capability.clone(),
                 });
             }
-            let (closure, _) = admitted_binary_body(admitted)?;
+            let (closure, _) = admitted_binary_body(admitted, graph)?;
             let body =
                 classify_body_shape(closure.root, graph.term(&closure.root.node_id), declaration)?;
             let mut parameter_kinds = Vec::with_capacity(declaration.parameters.len());
@@ -2988,7 +2990,7 @@ pub fn generate_exact_function_oracles(
             }
         } else if let Some(node_tag) = graph
             .node(&item.call_node_id)
-            .and_then(direct_unsupported_form)
+            .and_then(|node| direct_unsupported_form(node, graph.term(&item.call_node_id)))
         {
             ClaimDisposition::Refused {
                 refusal: ExactFunctionRefusal::Unsupported {
@@ -3203,7 +3205,7 @@ fn item_disposition<'a>(
 > {
     let (package, source_index) = source;
     let graph = &source_index.graph;
-    let (closure, occurrences) = admitted_binary_body(admitted)?;
+    let (closure, occurrences) = admitted_binary_body(admitted, graph)?;
     let node = closure.root;
     if &*node.semantic_form != "call" {
         return Err(ExactFunctionRefusal::FormMismatch {

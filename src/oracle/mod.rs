@@ -23,14 +23,18 @@ pub(crate) mod scalar;
 pub mod operator_catalog;
 
 use quire_contract_model::{
-    CheckedNodeTag, CheckedPackageLimit, CheckedSemanticNodeV2, CompleteLoweringRecordV2,
+    ApplicationOperator, CheckedNodeTag, CheckedPackageLimit, CheckedSemanticNodeV2, CheckedTerm,
+    CompleteLoweringRecordV2,
 };
 
 /// Direct formula and fairness roots are unsupported as temporal operations, and a directly
 /// lowered case root is unsupported as an expression rather than a mismatched scalar/equality/
 /// function form. Keep this shape check narrow: other FR-330 `Unsupported` records retain their
 /// package accounting outcome.
-pub(crate) fn direct_unsupported_form(node: &CheckedSemanticNodeV2) -> Option<&'static str> {
+pub(crate) fn direct_unsupported_form(
+    node: &CheckedSemanticNodeV2,
+    term: Option<&CheckedTerm>,
+) -> Option<&'static str> {
     match CheckedNodeTag::from_wire(&node.node_tag) {
         Some(CheckedNodeTag::Temporal)
             if matches!(node.semantic_form.as_ref(), "formula" | "fairness") =>
@@ -39,11 +43,13 @@ pub(crate) fn direct_unsupported_form(node: &CheckedSemanticNodeV2) -> Option<&'
         }
         Some(CheckedNodeTag::Expression)
             if &*node.semantic_form == "case"
-                || node
-                    .body
-                    .get("operator")
-                    .and_then(serde_json::Value::as_str)
-                    == Some("case") =>
+                || matches!(
+                    term,
+                    Some(CheckedTerm::Application {
+                        operator: ApplicationOperator::Case,
+                        ..
+                    })
+                ) =>
         {
             Some("expression")
         }

@@ -3,7 +3,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use quire_contract_model::{
-    CheckedMemberType, CheckedNodeId, CheckedPackageV2, CheckedSemanticNodeV2,
+    ApplicationOperator, CheckedMemberType, CheckedNodeId, CheckedPackageV2, CheckedSemanticNodeV2,
+    CheckedTerm, LiteralKind,
 };
 use serde_json::Value;
 
@@ -46,18 +47,29 @@ fn node_id(value: &Value) -> Option<CheckedNodeId> {
     serde_json::from_value(value.clone()).ok()
 }
 
-fn reference(value: &Value) -> Option<CheckedNodeId> {
-    (value.get("term")?.as_str()? == "reference")
-        .then(|| node_id(value.get("target")?))
-        .flatten()
+fn reference(value: &CheckedTerm) -> Option<CheckedNodeId> {
+    match value {
+        CheckedTerm::Reference { target } => Some(target.clone()),
+        _ => None,
+    }
 }
 
-fn arguments<'a>(value: &'a Value, operator: &str, identity: &str) -> Option<&'a Vec<Value>> {
-    (value.get("term")?.as_str()? == "application"
-        && value.get("operator")?.as_str()? == operator
-        && value.get("operation")?.get("identity")?.as_str()? == identity)
-        .then(|| value.get("arguments")?.as_array())
-        .flatten()
+fn arguments<'a>(
+    value: &'a CheckedTerm,
+    operator: ApplicationOperator,
+    identity: &str,
+) -> Option<&'a [CheckedTerm]> {
+    match value {
+        CheckedTerm::Application {
+            operator: actual,
+            operation,
+            arguments,
+            ..
+        } if *actual == operator && operation.get("identity")?.as_str()? == identity => {
+            Some(arguments)
+        }
+        _ => None,
+    }
 }
 
 /// First occurrence of each checked graph node, retained for repeated clause lookups.
@@ -121,14 +133,14 @@ impl Reader<'_, '_> {
         self.nodes.node(id)
     }
 
-    fn term(&mut self, value: &Value, side: ClauseInputSide) -> Option<ClauseTerm> {
+    fn term(&mut self, value: &CheckedTerm, side: ClauseInputSide) -> Option<ClauseTerm> {
         self.visits = self.visits.checked_add(1)?;
         if self.visits > MAX_CONDITION_TERMS {
             return None;
         }
-        match value.get("term")?.as_str()? {
-            "reference" => {
-                let id = reference(value)?;
+        match value {
+            CheckedTerm::Reference { target } => {
+                let id = target.clone();
                 if !self.visiting.insert(id.clone()) {
                     return None;
                 }
@@ -149,7 +161,7 @@ impl Reader<'_, '_> {
                     self.visiting.remove(&id);
                     return Some(ClauseTerm::Input(input));
                 }
-                let body = node.body.clone();
+                let body = self.package.term(&id)?.clone();
                 let result_bound = self.bound(&node.semantic_type);
                 let result = self.term_with_bound(&body, side, result_bound);
                 self.visiting.remove(&id);
@@ -164,51 +176,64 @@ impl Reader<'_, '_> {
         if &*node.node_tag != "bounded_domain" || &*node.semantic_form != "integer_range" {
             return None;
         }
-        let members = node.body.get("members")?.as_array()?;
+        let CheckedTerm::Aggregate { members } = self.package.term(id)? else {
+            return None;
+        };
         let number = |name| -> Option<i128> {
-            members
-                .iter()
-                .find(|entry| entry.get("name").and_then(Value::as_str) == Some(name))?
-                .get("value")?
-                .get("value")?
-                .as_str()?
-                .parse()
-                .ok()
+            let value = members.iter().find_map(|entry| match entry {
+                CheckedTerm::Binding {
+                    name: actual,
+                    value,
+                } if actual.as_ref() == name => Some(value.as_ref()),
+                _ => None,
+            })?;
+            let CheckedTerm::Literal { value, .. } = value else {
+                return None;
+            };
+            value.as_str()?.parse().ok()
         };
         Some((number("min")?, number("max")?))
     }
 
     fn term_with_bound(
         &mut self,
-        value: &Value,
+        value: &CheckedTerm,
         side: ClauseInputSide,
         result_bound: Option<(i128, i128)>,
     ) -> Option<ClauseTerm> {
-        match value.get("term")?.as_str()? {
-            "literal" => match value.get("value_kind")?.as_str()? {
-                "boolean" => match value.get("value")?.as_str()? {
+        match value {
+            CheckedTerm::Literal {
+                value_kind, value, ..
+            } => match value_kind {
+                LiteralKind::Boolean => match value.as_str()? {
                     "true" => Some(ClauseTerm::Boolean(true)),
                     "false" => Some(ClauseTerm::Boolean(false)),
                     _ => None,
                 },
-                "integer" => Some(ClauseTerm::Integer(
-                    value.get("value")?.as_str()?.to_owned(),
-                )),
+                LiteralKind::Integer => Some(ClauseTerm::Integer(value.as_str()?.to_owned())),
                 _ => None,
             },
-            "application" => {
-                let identity = value.get("operation")?.get("identity")?.as_str()?;
-                let args = value.get("arguments")?.as_array()?;
+            CheckedTerm::Application {
+                operation,
+                arguments: args,
+                ..
+            } => {
+                let identity = operation.get("identity")?.as_str()?;
                 match identity {
                     "quire.op.state.pre" if args.len() == 1 => {
                         let read = self.term_body(&args[0])?;
-                        if read.get("term")?.as_str()? != "application"
-                            || read.get("operation")?.get("identity")?.as_str()?
-                                != "quire.op.record.project"
-                        {
+                        let CheckedTerm::Application {
+                            operation,
+                            arguments,
+                            ..
+                        } = &read
+                        else {
+                            return None;
+                        };
+                        if operation.get("identity")?.as_str()? != "quire.op.record.project" {
                             return None;
                         }
-                        let [deref] = read.get("arguments")?.as_array()?.as_slice() else {
+                        let [deref] = arguments.as_slice() else {
                             return None;
                         };
                         self.field(&read, deref, ClauseInputSide::Pre)
@@ -235,36 +260,30 @@ impl Reader<'_, '_> {
 
     fn field(
         &mut self,
-        project: &Value,
-        deref: &Value,
+        project: &CheckedTerm,
+        deref: &CheckedTerm,
         side: ClauseInputSide,
     ) -> Option<ClauseTerm> {
-        let declaration = node_id(
-            project
-                .get("operation")?
-                .get("member")?
-                .get("declaration")?,
-        )?;
-        let name = project
-            .get("operation")?
-            .get("member")?
-            .get("name")?
-            .as_str()?;
-        if project
-            .get("operation")?
-            .get("member")?
-            .get("kind")?
-            .as_str()?
-            != "field"
+        let CheckedTerm::Application { operation, .. } = project else {
+            return None;
+        };
+        let member = operation.get("member")?;
+        let declaration = node_id(member.get("declaration")?)?;
+        let name = member.get("name")?.as_str()?;
+        if member.get("kind")?.as_str()? != "field"
             || !matches!(side, ClauseInputSide::Current | ClauseInputSide::Pre)
         {
             return None;
         }
         let deref = self.term_body(deref)?;
-        if node_id(deref.get("result_type")?)? != declaration {
+        let CheckedTerm::Application { result_type, .. } = &deref else {
+            return None;
+        };
+        if result_type != &declaration {
             return None;
         }
-        let [subject] = arguments(&deref, "deref", "quire.op.model.deref")?.as_slice() else {
+        let [subject] = arguments(&deref, ApplicationOperator::Deref, "quire.op.model.deref")?
+        else {
             return None;
         };
         if reference(subject)? != self.self_id {
@@ -285,9 +304,9 @@ impl Reader<'_, '_> {
         Some(ClauseTerm::Input(input))
     }
 
-    fn term_body(&self, value: &Value) -> Option<Value> {
+    fn term_body(&self, value: &CheckedTerm) -> Option<CheckedTerm> {
         match reference(value) {
-            Some(id) => Some(self.node(&id)?.body.clone()),
+            Some(id) => Some(self.package.term(&id)?.clone()),
             None => Some(value.clone()),
         }
     }
@@ -302,12 +321,17 @@ pub(crate) fn read_clause(
     if &*clause.node_tag != "state" || &*clause.semantic_form != "state_clause" {
         return None;
     }
-    let [parameters, _anchor, condition] =
-        arguments(&clause.body, "state_clause", "quire.op.state.clause")?.as_slice()
+    let [parameters, _anchor, condition] = arguments(
+        package.term(id)?,
+        ApplicationOperator::StateClause,
+        "quire.op.state.clause",
+    )?
     else {
         return None;
     };
-    let declared = parameters.get("members")?.as_array()?;
+    let CheckedTerm::Aggregate { members: declared } = parameters else {
+        return None;
+    };
     let self_id = declared.first().and_then(reference)?;
     if package.parameter_declaration(&self_id).ok()?.name.as_ref() != "self" {
         return None;

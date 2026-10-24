@@ -14,7 +14,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use qsl_replay::{DomainKey, DomainKind, ProofBound};
-use quire_contract_model::ClauseKind;
+use quire_contract_model::{ApplicationOperator, CheckedTerm, ClauseKind};
 use quire_contract_model::{
     CheckedNodeId, CheckedPackageIncomplete, CheckedPackageLimit, CheckedPackageRefusal,
     CheckedPackageRefusalCause, CheckedPackageRefusalCode, CheckedSemanticId, ContractPackageV1,
@@ -619,6 +619,35 @@ fn scalar_family_from_item(item: crate::oracle::scalar::ExactScalarItem) -> Kani
     }
 }
 
+fn checked_operation<'a>(
+    package: &'a quire_contract_model::CheckedPackageV2,
+    node_id: &CheckedNodeId,
+) -> Option<&'a serde_json::Value> {
+    match package.term(node_id)? {
+        CheckedTerm::Application { operation, .. } => Some(operation),
+        _ => None,
+    }
+}
+
+fn checked_operation_identity<'a>(
+    package: &'a quire_contract_model::CheckedPackageV2,
+    node_id: &CheckedNodeId,
+) -> Option<&'a str> {
+    checked_operation(package, node_id)?
+        .get("identity")?
+        .as_str()
+}
+
+fn checked_state_clause_role<'a>(
+    package: &'a quire_contract_model::CheckedPackageV2,
+    node_id: &CheckedNodeId,
+) -> Option<&'a str> {
+    checked_operation(package, node_id)?
+        .get("member")?
+        .get("clause")?
+        .as_str()
+}
+
 fn checked_node_family<'a>(
     package: &'a quire_contract_model::CheckedPackageV2,
     node_id: &CheckedNodeId,
@@ -629,7 +658,7 @@ fn checked_node_family<'a>(
     }
     let identity = lookups
         .checked_node(package, node_id)
-        .and_then(|node| node.body.get("operation")?.get("identity")?.as_str());
+        .and_then(|_| checked_operation_identity(package, node_id));
     match identity {
         Some(
             "quire.op.boolean.and"
@@ -654,6 +683,7 @@ fn checked_node_family<'a>(
 }
 
 fn checked_function_call_matches(
+    package: &quire_contract_model::CheckedPackageV2,
     graph: &crate::oracle::function::FunctionPreflightGraph<'_>,
     function_node_id: &quire_contract_model::CheckedNodeId,
     call_node_id: &quire_contract_model::CheckedNodeId,
@@ -665,25 +695,24 @@ fn checked_function_call_matches(
     if &*function.node_tag != "function" || &*function.semantic_form != "pure_function" {
         return false;
     }
-    let Some(function_members) = function
-        .body
-        .get("members")
-        .and_then(serde_json::Value::as_array)
+    let Some(CheckedTerm::Aggregate {
+        members: function_members,
+    }) = package.term(function_node_id)
     else {
         return false;
     };
     let binding = |name: &str| {
-        function_members
-            .iter()
-            .find(|member| {
-                member.get("term").and_then(serde_json::Value::as_str) == Some("binding")
-                    && member.get("name").and_then(serde_json::Value::as_str) == Some(name)
-            })
-            .and_then(|member| member.get("value"))
+        function_members.iter().find_map(|member| match member {
+            CheckedTerm::Binding {
+                name: actual,
+                value,
+            } if actual.as_ref() == name => Some(value.as_ref()),
+            _ => None,
+        })
     };
-    let Some(parameters) = binding("parameters")
-        .and_then(|term| term.get("members"))
-        .and_then(serde_json::Value::as_array)
+    let Some(CheckedTerm::Aggregate {
+        members: parameters,
+    }) = binding("parameters")
     else {
         return false;
     };
@@ -700,71 +729,47 @@ fn checked_function_call_matches(
     let Some(call) = graph.get(call_node_id) else {
         return false;
     };
-    if &*call.node_tag != "expression"
-        || &*call.semantic_form != "call"
-        || call.body.get("term").and_then(serde_json::Value::as_str) != Some("application")
-        || call
-            .body
-            .get("operator")
-            .and_then(serde_json::Value::as_str)
-            != Some("call")
-        || call
-            .body
-            .pointer("/operation/identity")
-            .and_then(serde_json::Value::as_str)
-            != Some("quire.op.function.call")
-    {
+    if &*call.node_tag != "expression" || &*call.semantic_form != "call" {
         return false;
     }
-    let Some(arguments) = call
-        .body
-        .get("arguments")
-        .and_then(serde_json::Value::as_array)
+    let Some(CheckedTerm::Application {
+        operator: ApplicationOperator::Call,
+        operation,
+        arguments,
+        ..
+    }) = package.term(call_node_id)
     else {
         return false;
     };
+    if operation
+        .get("identity")
+        .and_then(serde_json::Value::as_str)
+        != Some("quire.op.function.call")
+    {
+        return false;
+    }
     if arguments.len() != argument_node_ids.len() + 1 || parameters.len() != argument_node_ids.len()
     {
         return false;
     }
     let expected = std::iter::once(function_node_id).chain(argument_node_ids.iter());
     arguments.iter().zip(expected).all(|(term, expected)| {
-        let Some(target) = term
-            .get("term")
-            .filter(|term| term.as_str() == Some("reference"))
-            .and_then(|_| term.get("target"))
-        else {
+        let CheckedTerm::Reference { target } = term else {
             return false;
         };
-        let Some(digest) = target.get("digest").and_then(serde_json::Value::as_str) else {
-            return false;
-        };
-        let Some(domain) = target.get("domain").and_then(serde_json::Value::as_str) else {
-            return false;
-        };
-        let target = CheckedNodeId {
-            domain: domain.into(),
-            digest: digest.into(),
-        };
-        let actual = graph.get(&target);
+        let actual = graph.get(target);
         actual.is_some_and(|node| node.node_id == *expected)
     })
 }
 
 fn resolve_checked_reference<'a>(
     graph: &crate::oracle::function::FunctionPreflightGraph<'a>,
-    term: &serde_json::Value,
+    term: &CheckedTerm,
 ) -> Option<&'a quire_contract_model::CheckedSemanticNodeV2> {
-    if term.get("term").and_then(serde_json::Value::as_str) != Some("reference") {
+    let CheckedTerm::Reference { target } = term else {
         return None;
-    }
-    let target = term.get("target")?;
-    let digest = target.get("digest")?.as_str()?;
-    let domain = target.get("domain")?.as_str()?;
-    graph.get(&CheckedNodeId {
-        domain: domain.into(),
-        digest: digest.into(),
-    })
+    };
+    graph.get(target)
 }
 
 impl KaniForm {
@@ -787,20 +792,14 @@ impl KaniForm {
             } => {
                 let operation_identity = lookups
                     .checked_node(package, node_id)
-                    .and_then(|node| node.body.get("operation")?.get("identity")?.as_str())
+                    .and_then(|_| checked_operation_identity(package, node_id))
                     .map(str::to_owned);
                 let state_clause_role = lookups
                     .checked_node(package, node_id)
                     .filter(|node| {
                         &*node.node_tag == "state" && &*node.semantic_form == "state_clause"
                     })
-                    .and_then(|node| {
-                        node.body
-                            .get("operation")?
-                            .get("member")?
-                            .get("clause")?
-                            .as_str()
-                    });
+                    .and_then(|_| checked_state_clause_role(package, node_id));
                 let identity_family = checked_node_family(package, node_id, lookups);
                 KaniFormIdentity {
                     family: if state_clause_role.is_some() {
@@ -824,7 +823,7 @@ impl KaniForm {
                 form: KaniFormName::V2StateFrame,
                 operation_identity: lookups
                     .checked_node(package, clause)
-                    .and_then(|node| node.body.get("operation")?.get("identity")?.as_str())
+                    .and_then(|_| checked_operation_identity(package, clause))
                     .map(str::to_owned),
                 role: Some(*role),
                 state_frame_role: Some(match role {
@@ -845,7 +844,7 @@ impl KaniForm {
                 operation_identity: lookups
                     .function_graph(package)
                     .get(call_node_id)
-                    .and_then(|node| node.body.get("operation")?.get("identity")?.as_str())
+                    .and_then(|_| checked_operation_identity(package, call_node_id))
                     .map(str::to_owned),
                 role: None,
                 state_frame_role: None,
@@ -939,13 +938,9 @@ impl KaniForm {
                 subject_path,
             } => {
                 use crate::kani::generate::outcome::StateFrameRole;
-                let actual_clause = lookups.checked_node(package, clause).and_then(|node| {
-                    node.body
-                        .get("operation")?
-                        .get("member")?
-                        .get("clause")?
-                        .as_str()
-                });
+                let actual_clause = lookups
+                    .checked_node(package, clause)
+                    .and_then(|_| checked_state_clause_role(package, clause));
                 let role = match role {
                     KaniObligationRole::Postcondition => StateFrameRole::Contract,
                     KaniObligationRole::Frame => StateFrameRole::Frame,
@@ -992,6 +987,7 @@ impl KaniForm {
             } => {
                 let graph = lookups.function_graph(package);
                 let source_matches = checked_function_call_matches(
+                    package,
                     graph,
                     function_node_id,
                     call_node_id,
