@@ -1278,7 +1278,7 @@ mod tests {
                 item(&checked, function),
             ],
         };
-        let _ = crate::oracle::scalar::take_scalar_derive_graph_visits();
+        let _ = crate::oracle::scalar::derive::take_scalar_derive_graph_visits();
         let _ = crate::oracle::function::take_function_preflight_graph_visits();
         let settled = negotiate_backend_provider(&envelope).expect("valid capability envelope");
         assert_eq!(settled.len(), 5);
@@ -1304,7 +1304,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            crate::oracle::scalar::take_scalar_derive_graph_visits(),
+            crate::oracle::scalar::derive::take_scalar_derive_graph_visits(),
             node_count
         );
         assert_eq!(
