@@ -1006,12 +1006,10 @@ impl BoundedCorpusCase {
         let identity = package
             .harness_identity(None, self.harness_symbol.clone(), Vec::new())
             .map_err(|error| BoundedCorpusReplayError::Replay(SpineReplayError::Identity(error)))?;
-        let claim = self.outcome.boolean_claim();
+        let expected = self.expectation.expected_assertion_holds();
         Ok(package.parameters().is_empty()
             && identity.matches_package(&package)
-            && claim.is_some_and(|claim| {
-                package.evaluate_boolean_function(&identity).ok() == Some(claim)
-            }))
+            && package.evaluate_boolean_function(&identity).ok() == Some(expected))
     }
 
     #[cfg(test)]

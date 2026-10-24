@@ -260,8 +260,8 @@ mod tests {
         )
         .expect_err("the other branch consumes the third expansion");
         let outcome = exhausted;
-        assert_eq!(outcome.kind, KaniOutcomeKind::ResourceExhausted);
-        assert_eq!(outcome.code.as_str(), "kani_graph_expansion_exhausted");
+        assert_eq!(outcome.kind(), KaniOutcomeKind::ResourceExhausted);
+        assert_eq!(outcome.code().as_str(), "kani_graph_expansion_exhausted");
 
         // The second graph has both a back edge and a cross edge into an already pending
         // identity. Neither revisits an expanded identity or consumes another expansion.

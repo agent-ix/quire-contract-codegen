@@ -28,12 +28,14 @@ rejected certificates to their distinct terminal results and certification.
    `Cancelled { source: Deadline }`, changing the latter two outcomes' `code`, `source_id` and
    `context` independently. This is a map-unit control; [TC-055](./TC-055-cancellation-producer.md)
    owns the live producer path.
-4. Map `Proved` with a transcript count of three SUCCESS checks and with a count of zero, and map
-   `Counterexample` with a reproduced replay. Inspect the basis, certification and category of
-   both proof payloads, and confirm the counterexample has no proof fields.
-5. Map `Inconclusive` with cause `kani_vacuous_proof`, and with another cause.
-6. Map `Unavailable` with cause `kani_checker_absent`, with `kani_backend_absent`, and with another
-   cause.
+4. Map `Proved` with three retained SUCCESS checks and no separate caller count; attempt a
+   zero-check `Proved` through Contract IR and a retained count above QSL's `u32` range. Map
+   `Counterexample` with a reproduced replay. Inspect the proof basis and certification, the
+   two typed refusals, and confirm the counterexample has no proof fields.
+5. Map `Inconclusive` with cause `kani_vacuous_proof`; ask Contract IR to construct one with
+   another cause and inspect its refusal.
+6. Map `Unavailable` with cause `kani_checker_absent` and with `kani_backend_absent`; ask
+   Contract IR to construct one with another cause and inspect its refusal.
 7. Inspect the map's source for a wildcard arm (inspection step, FR-030-AC-7).
 8. Map `Counterexample` with a replay disagreement, and with a non-fault `ReplayRefusal`.
 9. Map `Counterexample` with a fault in each position FR-029-AC-10 lists, and with each CG-raised
@@ -83,18 +85,21 @@ rejected certificates to their distinct terminal results and certification.
 
 ## Expected Results
 
-1. Exactly one value per expressible pair, and none is `Tested` (FR-030-AC-1, FR-030-AC-6).
+1. Exactly one value per expressible pair with a representable proof count, a typed refusal for
+   an out-of-range proof count, and no `Tested` value (FR-030-AC-1, FR-030-AC-6).
 2. `Declined` with three distinct causes, each carrying the outcome's code unchanged as
    `DeclineCode::Std001`, the unregistered code included (FR-030-AC-2).
 3. `Incomplete` with `TimedOut`, `ResourceExhausted` and both typed `Cancelled` sources;
    changing outcome metadata does not change either cancellation source (FR-030-AC-3).
-4. `Proved { basis: Checks { success_checks: 3 }, certification: Certified }`, a zero-check
-   `Proved { basis: Checks { success_checks: 0 }, certification: Certified }` read as
-   inconclusive/vacuous, and `Refuted` without proof fields (FR-030-AC-4, FR-030-AC-18).
-5. The zero-check `Proved` payload with `Checks`/`Certified` and inconclusive/vacuous category,
-   then `Failed` with no proof fields (FR-030-AC-5, FR-030-AC-18).
-6. `Unsupported(SolverAbsent)`, `Unsupported(BackendAbsent)` and `Unsupported(BackendAbsent)`
-   (FR-030-AC-8).
+4. `Proved { basis: Checks { success_checks: 3 }, certification: Certified }` from the IR
+   outcome's retained count, typed refusal for a zero-check IR proof, typed
+   `ProvedCountOutOfRange` with no terminal value for a count above `u32`, and `Refuted`
+   without proof fields (FR-030-AC-4, FR-030-AC-18).
+5. The vacuous outcome's zero-check `Proved` payload with `Checks`/`Certified` and
+   inconclusive/vacuous category, then IR's typed refusal of another `Inconclusive` cause
+   (FR-030-AC-5, FR-030-AC-18).
+6. `Unsupported(SolverAbsent)`, `Unsupported(BackendAbsent)` and IR's typed refusal of another
+   `Unavailable` cause (FR-030-AC-8).
 7. The `match` over the pair has no wildcard arm (FR-030-AC-7).
 8. `Inconclusive(ReplayParity)`, and `Inconclusive(ReplayRefused)` carrying the refusal's catalog
    code (FR-030-AC-9).

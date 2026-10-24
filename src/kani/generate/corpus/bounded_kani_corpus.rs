@@ -337,13 +337,54 @@ impl CaseIdentity<'_> {
     }
 }
 
+/// Predicted result of one generated corpus assertion, before a Kani run.
+///
+/// This is deliberately distinct from Contract IR's run outcome: a caller cannot
+/// pass this value to the public terminal mapper as an observed proof.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BoundedCorpusExpectation {
+    assertion_holds: bool,
+    source_id: String,
+    context: String,
+}
+
+impl BoundedCorpusExpectation {
+    /// Whether the finite oracle predicts the generated assertion will hold.
+    #[must_use]
+    pub const fn expected_assertion_holds(&self) -> bool {
+        self.assertion_holds
+    }
+
+    /// Predicted SUCCESS checks for this harness's one assertion, never an observed run count.
+    #[must_use]
+    pub const fn expected_success_checks(&self) -> usize {
+        if self.assertion_holds {
+            1
+        } else {
+            0
+        }
+    }
+
+    /// Source identity of the finite request that formed the expectation.
+    #[must_use]
+    pub fn source_id(&self) -> &str {
+        &self.source_id
+    }
+
+    /// Revision of the selected profile that formed the expectation.
+    #[must_use]
+    pub fn context(&self) -> &str {
+        &self.context
+    }
+}
+
 /// Complete codegen result for one supported corpus case.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BoundedCorpusCase {
     /// Semantic family selected before lowering.
     pub family: BoundedCorpusFamily,
-    /// Exact Contract IR outcome shared by native/oracle/strategy/Kani case execution.
-    pub outcome: KaniOutcome,
+    /// Finite oracle prediction, distinct from a run-authenticated Kani outcome.
+    pub expectation: BoundedCorpusExpectation,
     /// The exact Kani symbol whose playback is joined to this case's QSL source.
     pub(crate) harness_symbol: HarnessSymbol,
     /// Generated roles derived from the same profile and finite input selection.
@@ -504,16 +545,10 @@ pub fn generate_bounded_kani_corpus_case(
             )
         }
     };
-    let outcome = if value {
-        KaniOutcome::proved(
-            request_source_id.clone(),
-            profile.selection().revision.clone(),
-        )
-    } else {
-        KaniOutcome::counterexample(
-            request_source_id.clone(),
-            profile.selection().revision.clone(),
-        )
+    let expectation = BoundedCorpusExpectation {
+        assertion_holds: value,
+        source_id: request_source_id.clone(),
+        context: profile.selection().revision.clone(),
     };
     // Rendered before the identity is claimed, so a refused rendering records nothing.
     let name = format!("{}_{identity}", family.label());
@@ -549,7 +584,7 @@ pub fn generate_bounded_kani_corpus_case(
     }
     Ok(BoundedCorpusCase {
         family,
-        outcome,
+        expectation,
         harness_symbol,
         artifacts,
     })
@@ -1243,7 +1278,7 @@ mod tests {
             )
             .unwrap();
             assert_eq!(first, second);
-            assert_eq!(first.outcome.boolean_claim(), Some(true));
+            assert!(first.expectation.expected_assertion_holds());
             assert!(!first
                 .artifacts
                 .kani_harness
@@ -1354,8 +1389,8 @@ mod tests {
             &mut emitted,
         )
         .unwrap_err();
-        assert_eq!(error.kind, KaniOutcomeKind::InvalidInput);
-        assert_eq!(error.code, std001_code!("kani_corpus_dependency_invalid"));
+        assert_eq!(error.kind(), KaniOutcomeKind::InvalidInput);
+        assert_eq!(error.code(), std001_code!("kani_corpus_dependency_invalid"));
         assert!(emitted.0.is_empty());
         let retry = generate_bounded_kani_corpus_case(
             crate::kani::test_support::proof_ceilings::proof_ceilings(),
@@ -1393,21 +1428,21 @@ mod tests {
             &mut emitted,
         )
         .unwrap_err();
-        assert_eq!(error.kind, KaniOutcomeKind::InvalidInput);
-        assert_eq!(error.code, std001_code!("kani_profile_input_mismatch"));
-        assert_eq!(error.source_id, "mismatched-profile");
-        assert_eq!(error.context, "r1");
+        assert_eq!(error.kind(), KaniOutcomeKind::InvalidInput);
+        assert_eq!(error.code(), std001_code!("kani_profile_input_mismatch"));
+        assert_eq!(error.source_id(), "mismatched-profile");
+        assert_eq!(error.context(), "r1");
         assert!(
             emitted.0.is_empty(),
             "the refused case must claim no identity in the registry"
         );
     }
 
-    /// The profile's revision is the context of every outcome the corpus returns: a proved case,
-    /// a counterexample, and an invalid census refusal.
+    /// The profile's revision is the context of each passing and failing expectation, and of
+    /// an invalid census refusal.
     #[trace("TC-023")]
     #[test]
-    fn tc_023_outcomes_and_refusals_carry_the_profile_revision_as_context() {
+    fn tc_023_expectations_and_refusals_carry_the_profile_revision_as_context() {
         let (profile, dispatch, input) =
             fixture_with(|selection| selection.revision = "rev-7".to_owned(), |_| {});
         let proved = generate_bounded_kani_corpus_case(
@@ -1420,8 +1455,8 @@ mod tests {
             &mut EmittedCorpusIdentities::new(),
         )
         .unwrap();
-        assert_eq!(proved.outcome.kind, KaniOutcomeKind::Proved);
-        assert_eq!(proved.outcome.context, "rev-7");
+        assert!(proved.expectation.expected_assertion_holds());
+        assert_eq!(proved.expectation.context(), "rev-7");
         let falsified = generate_bounded_kani_corpus_case(
             crate::kani::test_support::proof_ceilings::proof_ceilings(),
             &profile,
@@ -1437,8 +1472,8 @@ mod tests {
             &mut EmittedCorpusIdentities::new(),
         )
         .unwrap();
-        assert_eq!(falsified.outcome.kind, KaniOutcomeKind::Counterexample);
-        assert_eq!(falsified.outcome.context, "rev-7");
+        assert!(!falsified.expectation.expected_assertion_holds());
+        assert_eq!(falsified.expectation.context(), "rev-7");
         let duplicate = ProofDependencyRequest {
             proof_id: "upstream-lemma",
             kind: ProofDependencyKind::Required,
@@ -1456,8 +1491,11 @@ mod tests {
             &mut EmittedCorpusIdentities::new(),
         )
         .unwrap_err();
-        assert_eq!(refused.code, std001_code!("kani_corpus_dependency_invalid"));
-        assert_eq!(refused.context, "rev-7");
+        assert_eq!(
+            refused.code(),
+            std001_code!("kani_corpus_dependency_invalid")
+        );
+        assert_eq!(refused.context(), "rev-7");
     }
 
     /// This corpus's generated harnesses render no `// proof-dependency-site:` marker, no
@@ -1485,8 +1523,8 @@ mod tests {
             &mut emitted,
         )
         .unwrap_err();
-        assert_eq!(error.kind, KaniOutcomeKind::InvalidInput);
-        assert_eq!(error.code, std001_code!("kani_corpus_dependency_invalid"));
+        assert_eq!(error.kind(), KaniOutcomeKind::InvalidInput);
+        assert_eq!(error.code(), std001_code!("kani_corpus_dependency_invalid"));
         assert!(emitted.0.is_empty());
         let retry = generate_bounded_kani_corpus_case(
             crate::kani::test_support::proof_ceilings::proof_ceilings(),
@@ -1523,10 +1561,11 @@ mod tests {
             &mut EmittedCorpusIdentities::new(),
         )
         .unwrap_err();
-        assert_eq!(error.kind, KaniOutcomeKind::ResourceExhausted);
+        assert_eq!(error.kind(), KaniOutcomeKind::ResourceExhausted);
         assert_eq!(error.boolean_claim(), None);
         assert_eq!(
-            error.context, "r1",
+            error.context(),
+            "r1",
             "a lowering refusal returned through the corpus carries the profile revision"
         );
     }
@@ -1551,8 +1590,8 @@ mod tests {
             &mut EmittedCorpusIdentities::new(),
         )
         .unwrap();
-        assert_eq!(generated.outcome.kind, KaniOutcomeKind::Counterexample);
-        assert_eq!(generated.outcome.boolean_claim(), Some(false));
+        assert!(!generated.expectation.expected_assertion_holds());
+        assert_eq!(generated.expectation.expected_success_checks(), 0);
     }
 
     #[trace("TC-023")]
@@ -1664,9 +1703,9 @@ mod tests {
         let source_id = "x".repeat(1 << 20);
         let refusal = emit(&fixture, collection(3, &source_id), &[], &mut emitted)
             .expect_err("oversized preimage must refuse");
-        assert_eq!(refusal.kind, KaniOutcomeKind::InvalidInput);
+        assert_eq!(refusal.kind(), KaniOutcomeKind::InvalidInput);
         assert_eq!(
-            refusal.code,
+            refusal.code(),
             std001_code!("kani_corpus_identity_unencodable")
         );
         assert!(emitted.0.is_empty());
@@ -1756,9 +1795,12 @@ mod tests {
         let first = emit(&fixture, collection(3, "same"), &[], &mut emitted).unwrap();
         for _ in 0..2 {
             let refusal = emit(&fixture, collection(3, "same"), &[], &mut emitted).unwrap_err();
-            assert_eq!(refusal.kind, KaniOutcomeKind::InvalidInput);
-            assert_eq!(refusal.code, std001_code!("kani_corpus_identity_collision"));
-            assert_eq!(refusal.context, "r1");
+            assert_eq!(refusal.kind(), KaniOutcomeKind::InvalidInput);
+            assert_eq!(
+                refusal.code(),
+                std001_code!("kani_corpus_identity_collision")
+            );
+            assert_eq!(refusal.context(), "r1");
         }
         let again = emit(
             &fixture,
@@ -1994,7 +2036,10 @@ mod tests {
         let mut emitted = EmittedCorpusIdentities::new();
         emit(&forward, request(), &[], &mut emitted).unwrap();
         let refusal = emit(&permuted, request(), &[], &mut emitted).unwrap_err();
-        assert_eq!(refusal.code, std001_code!("kani_corpus_identity_collision"));
+        assert_eq!(
+            refusal.code(),
+            std001_code!("kani_corpus_identity_collision")
+        );
     }
 
     /// Extracts the `#[kani::proof]` function's name from generated harness source, verbatim.

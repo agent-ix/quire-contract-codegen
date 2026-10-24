@@ -184,10 +184,10 @@ mod tests {
     }
 
     fn assert_refusal(outcome: KaniOutcome, code: Std001Code) {
-        assert_eq!(outcome.kind, KaniOutcomeKind::Refused);
-        assert_eq!(outcome.code, code);
-        assert_eq!(outcome.source_id, "source:family");
-        assert_eq!(outcome.context, "profile-r1");
+        assert_eq!(outcome.kind(), KaniOutcomeKind::Refused);
+        assert_eq!(outcome.code(), code);
+        assert_eq!(outcome.source_id(), "source:family");
+        assert_eq!(outcome.context(), "profile-r1");
         assert_eq!(outcome.boolean_claim(), None);
     }
 

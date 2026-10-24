@@ -2290,7 +2290,7 @@ exec sleep 45
                 assert_eq!(evidence.exit_code, None);
                 assert!(stand_in.calls().is_empty());
                 let (ir, terminal) = evidence.cancellation_terminal_value().unwrap().unwrap();
-                assert_eq!(ir.kind, KaniOutcomeKind::Cancelled { source });
+                assert_eq!(ir.kind(), KaniOutcomeKind::Cancelled { source });
                 assert_eq!(
                     terminal,
                     qsl_replay::TerminalValue::Incomplete(qsl_replay::IncompleteCause::Cancelled {
@@ -3096,7 +3096,7 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
             assert!(evidence.checks.is_empty());
             assert!(evidence.memory.peak_resident_bytes.is_some());
             let (ir, terminal) = evidence.cancellation_terminal_value().unwrap().unwrap();
-            assert_eq!(ir.kind, KaniOutcomeKind::Cancelled { source: expected });
+            assert_eq!(ir.kind(), KaniOutcomeKind::Cancelled { source: expected });
             assert_eq!(ir.boolean_claim(), None);
             assert_eq!(
                 terminal,

@@ -167,7 +167,7 @@ mod tests {
             },
         )
         .expect_err("one-past bound must not lower");
-        assert_eq!(exhausted.kind, KaniOutcomeKind::ResourceExhausted);
+        assert_eq!(exhausted.kind(), KaniOutcomeKind::ResourceExhausted);
         assert_eq!(exhausted.boolean_claim(), None);
     }
 
