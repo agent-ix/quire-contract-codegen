@@ -22,6 +22,8 @@ pub(crate) mod ir;
 // Bounded readable name components, unique names and symbol derivation.
 // Implements: FR-022
 pub(crate) mod naming;
+// Selected native integer capacity and interval decisions.
+pub(crate) mod native_integer;
 // The version profile: the emitted oracle crate manifest, written once.
 pub(crate) mod profile;
 // Header identity for each generated Rust artifact.

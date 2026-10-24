@@ -32,6 +32,7 @@ pub(super) struct LoweredScalarClaim {
     /// The oracle's own self-contained source (`GeneratedScalarClaim::oracle_source`), embedded
     /// verbatim ahead of the harness module, exactly as a V1 harness embeds its `ClauseOracle`s.
     oracle_source: String,
+    native_integer_selection: Option<crate::core::native_integer::NativeIntegerSelection>,
     oracle_symbol: String,
     boolean_right_may_stop: bool,
     operation: ScalarOperation,
@@ -233,6 +234,7 @@ pub(super) fn lower_scalar_claim(
             node_id: claim.node_id.clone(),
             operation_identity: claim.operation.identity.clone(),
             oracle_source: generated.oracle_source.clone(),
+            native_integer_selection: None,
             oracle_symbol: generated.symbol.clone(),
             boolean_right_may_stop: generated.boolean_right_may_stop,
             operation,
@@ -318,6 +320,7 @@ pub(super) fn lower_scalar_claim(
         node_id: claim.node_id.clone(),
         operation_identity: claim.operation.identity.clone(),
         oracle_source: generated.oracle_source.clone(),
+        native_integer_selection: None,
         oracle_symbol: generated.symbol.clone(),
         boolean_right_may_stop: false,
         operation,
@@ -328,6 +331,207 @@ pub(super) fn lower_scalar_claim(
         module_symbol,
         harness_symbol,
     })
+}
+
+impl LoweredScalarClaim {
+    /// Select the exact kernel's native route only after its complete operand
+    /// intervals and semantic domain pass the production plan constructor.
+    pub(super) fn select_native_integer(&mut self) -> Result<(), UnsupportedObligation> {
+        use quire_exact::{NativeIntegerInterval, NativeIntegerOperation, NativeIntegerPlan};
+
+        if self.operation == ScalarOperation::Implies {
+            return Ok(());
+        }
+        let refusal = || UnsupportedObligation::NativeIntegerCapacity {
+            node_id: self.node_id.clone(),
+            operation_identity: self.operation_identity.clone(),
+            operands: self
+                .operands
+                .iter()
+                .map(
+                    |(lower, upper)| crate::core::native_integer::NativeIntegerIntervalDecision {
+                        lower: lower.to_string(),
+                        upper: upper.to_string(),
+                    },
+                )
+                .collect(),
+        };
+        let interval = |position: usize| {
+            self.operands
+                .get(position)
+                .ok_or_else(refusal)
+                .and_then(|&(lower, upper)| {
+                    NativeIntegerInterval::new(i128::from(lower), i128::from(upper))
+                        .map_err(|_| refusal())
+                })
+        };
+        let left = interval(0)?;
+        let (operation, variant) = match self.operation {
+            ScalarOperation::Add => (
+                NativeIntegerOperation::Add {
+                    left,
+                    right: interval(1)?,
+                },
+                "Add",
+            ),
+            ScalarOperation::Subtract => (
+                NativeIntegerOperation::Subtract {
+                    left,
+                    right: interval(1)?,
+                },
+                "Subtract",
+            ),
+            ScalarOperation::Multiply => (
+                NativeIntegerOperation::Multiply {
+                    left,
+                    right: interval(1)?,
+                },
+                "Multiply",
+            ),
+            ScalarOperation::Negate => (NativeIntegerOperation::Negate { operand: left }, "Negate"),
+            ScalarOperation::Implies => return Ok(()),
+        };
+        let domain = NativeIntegerInterval::new(i128::from(self.lower), i128::from(self.upper))
+            .map_err(|_| refusal())?;
+        let plan = NativeIntegerPlan::new(operation, Some(domain)).map_err(|_| refusal())?;
+        let operands = if self.operation == ScalarOperation::Negate {
+            vec![left.into()]
+        } else {
+            vec![left.into(), interval(1)?.into()]
+        };
+        let mut selected = crate::core::native_integer::NativeIntegerSelection::new();
+        selected.operations.push(
+            crate::core::native_integer::NativeIntegerOperationDecision {
+                node_id: self.node_id.clone(),
+                step: 0,
+                operation_identity: self.operation_identity.clone(),
+                operands,
+                capacity: Some(plan.capacity().into()),
+                semantic_domain: Some(domain.into()),
+            },
+        );
+        let interval_source = |value: NativeIntegerInterval| {
+            format!(
+                "nx::NativeIntegerInterval::new({}_i128, {}_i128).map_err(OracleStop::NativeAdmission)?",
+                value.lower(), value.upper()
+            )
+        };
+        let (parameters, descriptor, payloads) = if self.operation == ScalarOperation::Negate {
+            (
+                "operand: &nx::NativeInteger".to_owned(),
+                format!(
+                    "nx::NativeIntegerOperation::Negate {{ operand: {} }}",
+                    interval_source(left)
+                ),
+                "nx::NativeIntegerOperands::Unary { operand: *operand }",
+            )
+        } else {
+            (
+                "left: &nx::NativeInteger, right: &nx::NativeInteger".to_owned(),
+                format!(
+                    "nx::NativeIntegerOperation::{variant} {{ left: {}, right: {} }}",
+                    interval_source(left),
+                    interval_source(interval(1)?)
+                ),
+                "nx::NativeIntegerOperands::Binary { left: *left, right: *right }",
+            )
+        };
+        self.oracle_source = format!(
+            "// @generated by quire-contract-codegen. Do not edit.\nuse quire_exact as rt;\nuse quire_exact as nx;\n\n/// Why native admission stopped.\n#[derive(Debug)]\npub enum OracleStop {{\n    /// The exact kernel rejected the plan or operand membership.\n    NativeAdmission(nx::NativeIntegerAdmissionError),\n}}\n\n/// Admitted checked `{}` operation.\npub fn {}({parameters}, meter: &mut rt::Meter) -> Result<rt::Outcome<nx::NativeInteger>, OracleStop> {{\n    let plan = nx::NativeIntegerPlan::new({descriptor}, Some({})).map_err(OracleStop::NativeAdmission)?;\n    let admitted = plan.admit({payloads}).map_err(OracleStop::NativeAdmission)?;\n    Ok(nx::evaluate_native_integer_arithmetic(admitted, meter))\n}}\n",
+            self.operation_identity,
+            self.oracle_symbol,
+            interval_source(domain)
+        );
+        self.oracle_source.push_str(
+            &selected
+                .annotation()
+                .ok_or(UnsupportedObligation::RenderFailed)?,
+        );
+        self.native_integer_selection = Some(selected);
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod native_selection_tests {
+    use super::{LoweredScalarClaim, ScalarOperation};
+    use crate::kani::generate::outcome::UnsupportedObligation;
+    use ix_trace_rs::trace;
+
+    fn lowered(operation: ScalarOperation, operands: Vec<(i64, i64)>) -> LoweredScalarClaim {
+        LoweredScalarClaim {
+            node_id: serde_json::from_value(serde_json::json!({
+                "domain": "quire.checked-semantic-node/v1",
+                "digest": "2".repeat(64),
+            }))
+            .expect("checked node identity"),
+            operation_identity: match operation {
+                ScalarOperation::Add => "quire.op.integer.add",
+                ScalarOperation::Subtract => "quire.op.integer.sub",
+                ScalarOperation::Multiply => "quire.op.integer.mul",
+                ScalarOperation::Negate => "quire.op.integer.negate",
+                ScalarOperation::Implies => "quire.op.boolean.implies",
+            }
+            .to_owned(),
+            oracle_source: String::new(),
+            native_integer_selection: None,
+            oracle_symbol: "checked_oracle".to_owned(),
+            boolean_right_may_stop: false,
+            operation,
+            operands,
+            inferred_operands: Vec::new(),
+            lower: -100,
+            upper: 100,
+            module_symbol: "native_plan".to_owned(),
+            harness_symbol: "check".to_owned(),
+        }
+    }
+
+    #[trace("FR-015-AC-125", "TC-025")]
+    #[test]
+    fn native_selection_uses_owner_plan_for_all_arithmetic_operations() {
+        for (operation, operands, capacity) in [
+            (ScalarOperation::Add, vec![(-2, 3), (4, 5)], (2, 8)),
+            (ScalarOperation::Subtract, vec![(-2, 3), (4, 5)], (-7, -1)),
+            (ScalarOperation::Multiply, vec![(-2, 3), (4, 5)], (-10, 15)),
+            (ScalarOperation::Negate, vec![(-2, 3)], (-3, 2)),
+        ] {
+            let mut claim = lowered(operation, operands.clone());
+            claim.select_native_integer().unwrap();
+            let selection = claim.native_integer_selection.unwrap();
+            let [decision] = selection.operations.as_slice() else {
+                panic!("one selected kernel plan");
+            };
+            let actual = decision.capacity.as_ref().unwrap();
+            assert_eq!(
+                (
+                    actual.lower.parse::<i128>().unwrap(),
+                    actual.upper.parse::<i128>().unwrap()
+                ),
+                capacity
+            );
+            assert_eq!(decision.operands.len(), operands.len());
+            assert!(claim.oracle_source.contains("nx::NativeIntegerPlan::new"));
+            assert!(claim
+                .oracle_source
+                .contains("nx::evaluate_native_integer_arithmetic"));
+        }
+    }
+
+    #[trace("FR-015-AC-125", "TC-025")]
+    #[test]
+    fn native_selection_refuses_complete_multiply_population_outside_signed32() {
+        let mut claim = lowered(
+            ScalarOperation::Multiply,
+            vec![(0, i64::from(i32::MAX) + 1), (0, 0)],
+        );
+        assert!(matches!(
+            claim.select_native_integer(),
+            Err(UnsupportedObligation::NativeIntegerCapacity { .. })
+        ));
+        assert!(claim.native_integer_selection.is_none());
+        assert!(claim.oracle_source.is_empty());
+    }
 }
 
 pub(super) fn derive_domain<Body>(
@@ -448,7 +652,11 @@ pub(super) fn render_scalar(
                 binding(
                     name,
                     None,
-                    Init::Expression(expr(format!("rt::Integer::from({name})"))?),
+                    Init::Expression(expr(if lowered.native_integer_selection.is_some() {
+                        format!("nx::NativeInteger::new(i128::from({name}))")
+                    } else {
+                        format!("rt::Integer::from({name})")
+                    })?),
                 ),
             ],
         });
@@ -485,7 +693,12 @@ pub(super) fn render_scalar(
             i64_literal(lowered.upper)
         ))?),
     )));
-    body.push(Statement::Let(binding("sound", None, Init::Expression(expr("match &outcome {\nOk(rt::Outcome::Completed(value)) => admitted && *value == rt::Integer::from(exact),\nOk(rt::Outcome::Refused(_)) => !admitted,\n_ => false,\n}".to_owned())?))));
+    let completed_value = if lowered.native_integer_selection.is_some() {
+        "value.value() == exact"
+    } else {
+        "*value == rt::Integer::from(exact)"
+    };
+    body.push(Statement::Let(binding("sound", None, Init::Expression(expr(format!("match &outcome {{\nOk(rt::Outcome::Completed(value)) => admitted && {completed_value},\nOk(rt::Outcome::Refused(_)) => !admitted,\n_ => false,\n}}"))?))));
     body.push(Statement::Assert { condition: expr("sound".to_owned())?, message: format!("the oracle must complete with exactly the native {} result when it lies in the checked domain, and refuse otherwise", lowered.operation_identity) });
     body.push(Statement::Let(binding(
         "completed",
@@ -503,6 +716,12 @@ pub(super) fn render_scalar(
     )?;
     let rust = super::render::render(&spec)?;
     let identity = ScalarObligationIdentity {
+        integer_representation: if lowered.native_integer_selection.is_some() {
+            crate::kani::identity::ScalarIntegerRepresentation::Native
+        } else {
+            crate::kani::identity::ScalarIntegerRepresentation::General
+        },
+        native_integer_selection: lowered.native_integer_selection.clone(),
         ceilings: request.ceilings,
         node_id: lowered.node_id.clone(),
         operation_identity: lowered.operation_identity.clone(),
@@ -617,6 +836,8 @@ fn render_boolean_implies(
     )?;
     let rust = super::render::render(&spec)?;
     let identity = ScalarObligationIdentity {
+        integer_representation: crate::kani::identity::ScalarIntegerRepresentation::General,
+        native_integer_selection: None,
         ceilings: request.ceilings,
         node_id: lowered.node_id.clone(),
         operation_identity: lowered.operation_identity.clone(),
@@ -658,6 +879,7 @@ pub(super) fn false_bound_harness_for_test(
     let lowered = LoweredScalarClaim {
         node_id: identity.node_id.clone(),
         operation_identity: identity.operation_identity.clone(),
+        native_integer_selection: None,
         oracle_source: artifacts
             .iter()
             .find(|artifact| artifact.path == "src/lib.rs")
@@ -774,6 +996,8 @@ mod {module} {{\n\
         operation = lowered.operation_identity,
     );
     let identity = ScalarObligationIdentity {
+        integer_representation: crate::kani::identity::ScalarIntegerRepresentation::General,
+        native_integer_selection: None,
         ceilings: request.ceilings,
         node_id: lowered.node_id.clone(),
         operation_identity: lowered.operation_identity.clone(),
@@ -1242,6 +1466,7 @@ mod tests {
                             node_id: checked_node_id("2"),
                             operation_identity: identity.into(),
                             oracle_source: "fn oracle_test() {}".into(),
+                            native_integer_selection: None,
                             oracle_symbol: "oracle_test".into(),
                             boolean_right_may_stop: false,
                             operation,
@@ -1334,6 +1559,7 @@ mod tests {
                 node_id: checked_node_id("2"),
                 operation_identity: "quire.op.integer.add".into(),
                 oracle_source,
+                native_integer_selection: None,
                 oracle_symbol: "oracle_test".into(),
                 boolean_right_may_stop: false,
                 operation: ScalarOperation::Add,

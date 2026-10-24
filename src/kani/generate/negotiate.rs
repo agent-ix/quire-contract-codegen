@@ -267,6 +267,23 @@ impl<'a> ScalarFormLookups<'a> {
 pub fn negotiate_kani_obligations(
     request: &KaniObligationRequest<'_>,
 ) -> Result<KaniObligationOutcome, KaniObligationError> {
+    negotiate_integer_policy(request, false)
+}
+
+/// Negotiate checked integer claims through the exact kernel's admitted native route.
+///
+/// A capacity failure stays a typed unsupported disposition with the source
+/// identity and complete operand intervals; it never narrows symbolic inputs.
+pub fn negotiate_kani_native_obligations(
+    request: &KaniObligationRequest<'_>,
+) -> Result<KaniObligationOutcome, KaniObligationError> {
+    negotiate_integer_policy(request, true)
+}
+
+fn negotiate_integer_policy(
+    request: &KaniObligationRequest<'_>,
+    native: bool,
+) -> Result<KaniObligationOutcome, KaniObligationError> {
     validate_request(request)?;
     let mut scalar_lookups = BTreeMap::new();
     let mut checked_lookups = BTreeMap::new();
@@ -283,6 +300,15 @@ pub fn negotiate_kani_obligations(
             )
         })
         .collect::<Vec<_>>();
+    if native {
+        for state in &mut states {
+            if let Outcome::LoweredScalar(lowered) = &mut state.outcome {
+                if let Err(reason) = lowered.select_native_integer() {
+                    state.outcome = Outcome::Unsupported(reason);
+                }
+            }
+        }
+    }
     reject_duplicates_and_mixtures(request.items, &mut states);
     assign_names(request.items, &mut states);
     resolve_assumptions(&mut states);
