@@ -1104,8 +1104,7 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
      returns no proof verdict (FR-015-AC-95); the installed backend supplies one under FR-017.
      L-3 lands after 4f, 4g and 4h. IR-347 moved the Kani family lowerings
      into CG; IR removal follows this consumer change. FR-015-AC-109 has retired CG's
-     arithmetic lowerer, so the current CG lowerer set is collection and graph.
-     Arithmetic retirement (FR-015-AC-109) is implemented. The collection and graph
+     arithmetic lowerer, so the current CG lowerer set is collection and graph. The collection and graph
      corpus arms, replay and shared auxiliaries remain; this does not complete step 4g.
    - 4h: the collection family. `kani/generate/collection.rs` lowers an admitted model-field
      collection claim to a `HarnessSpec` and `render.rs` renders it under the cover rule, so the
@@ -1409,7 +1408,7 @@ Each is a place where the target of this AD is not yet true, stated so that no s
 | The shared V1 clause lowering and the V1 arm (`ObligationItem::BoundClause` in `outcome.rs`, `classify_clause` in `negotiate.rs`) | `kani/generate/clause.rs`, `outcome.rs`, `negotiate.rs` | step 4c reshapes the lowering for the V2 input; 4f deletes the V1 arm |
 | The persisted-record helpers | `kani/generate/record.rs` | not scheduled; `artifact` by step 1a |
 | Each family renders its own template; the corpus keeps its own, with its cover after the assertion (FR-015-AC-55) | `scalar.rs`, `precondition.rs`, `contract.rs`, `frame.rs`, `collection.rs`, `corpus/bounded_kani_corpus.rs` | 4b, 4c, 4d; 4h for collection; 4g for the corpus |
-| The semantic-family forwarding modules at step 2f | At step 2f: `kani/generate/lower/{definedness_arithmetic,bounded_collections,finite_reference_graphs}.rs`; now only the collection and graph files | IR-347 replaced the forwarders with CG-owned lowerings and request/result types; IR removes its former exports afterwards. FR-015-AC-109 has retired arithmetic; collection and graph remain until FR-015-AC-110 and FR-015-AC-111. |
+| The remaining collection and graph finite lowerers | `kani/generate/lower/{bounded_collections,finite_reference_graphs}.rs` | IR-347 replaced the step-2f forwarders with CG-owned lowerings and request/result types; IR removes its former exports afterwards. FR-015-AC-109 has retired arithmetic; collection and graph remain until FR-015-AC-110 and FR-015-AC-111. |
 | `generate_state_frame_obligations` is a second public entry beside `negotiate_kani_obligations` | `kani/generate/frame.rs` | step 4d |
 
 #### Item tables
