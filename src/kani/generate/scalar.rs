@@ -411,9 +411,17 @@ impl LoweredScalarClaim {
             },
         );
         let interval_source = |value: NativeIntegerInterval| {
+            let literal = |endpoint: i128| {
+                if endpoint == i128::MIN {
+                    "i128::MIN".to_owned()
+                } else {
+                    format!("{endpoint}_i128")
+                }
+            };
             format!(
-                "nx::NativeIntegerInterval::new({}_i128, {}_i128).map_err(OracleStop::NativeAdmission)?",
-                value.lower(), value.upper()
+                "nx::NativeIntegerInterval::new({}, {}).map_err(OracleStop::NativeAdmission)?",
+                literal(value.lower()),
+                literal(value.upper())
             )
         };
         let (parameters, descriptor, payloads) = if self.operation == ScalarOperation::Negate {

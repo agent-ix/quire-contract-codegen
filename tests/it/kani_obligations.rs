@@ -3035,6 +3035,71 @@ fn native_scalar_increment_keeps_original_profile_and_checked_capacity() {
     assert!(!general.rust.contents.contains("nx::NativeIntegerPlan::new"));
 }
 
+#[trace("FR-015-AC-126", "TC-027")]
+#[test]
+fn native_scalar_false_bound_control_keeps_original_draws() {
+    let (mutant, _) = routed_native_scalar_with_artifacts(
+        package::bounded_increment_package(),
+        package::BOUNDED_INCREMENT,
+        49_100,
+        Bound::Integer(0, 5),
+        REAL_KANI_TIMEOUT,
+    );
+    assert_eq!(mutant.identity.arguments[0].minimum, 0);
+    assert_eq!(mutant.identity.arguments[0].maximum, 9);
+    assert_eq!(mutant.identity.arguments[1].minimum, 1);
+    assert_eq!(mutant.identity.arguments[1].maximum, 1);
+    assert_eq!(mutant.identity.unwind, 3);
+    assert_eq!(mutant.identity.solver, KaniSolver::Cadical);
+    assert_eq!(
+        mutant.identity.ceilings.memory_bytes.get(),
+        16 * 1024 * 1024 * 1024
+    );
+    assert!(mutant.rust.contents.contains("exact <= i128::from(5_i64);"));
+}
+
+#[trace("FR-015-AC-126", "TC-027")]
+#[test]
+#[ignore = "real Kani qualification: run after independent review at the original 16 GiB ceiling"]
+fn native_original_tc027_increment_verifies() {
+    let (harness, manifest) = native_scalar_increment();
+    let evidence = run_scalar_under_real_kani("native-original-tc027", &harness, &manifest);
+    assert_eq!(evidence.outcome, KaniRunOutcome::Verified, "{evidence:?}");
+}
+
+#[trace("FR-015-AC-126", "TC-027")]
+#[test]
+#[ignore = "real Kani qualification: run after independent review at the original 16 GiB ceiling"]
+fn native_original_tc027_false_bound_falsifies() {
+    let (mutant, artifacts) = routed_native_scalar_with_artifacts(
+        package::bounded_increment_package(),
+        package::BOUNDED_INCREMENT,
+        49_100,
+        Bound::Integer(0, 5),
+        REAL_KANI_TIMEOUT,
+    );
+    let manifest = artifacts
+        .into_iter()
+        .find(|artifact| artifact.path == "Cargo.toml")
+        .expect("mutant manifest");
+    assert_eq!(mutant.identity.arguments[0].minimum, 0);
+    assert_eq!(mutant.identity.arguments[0].maximum, 9);
+    assert!(mutant.rust.contents.contains("exact <= i128::from(5_i64);"));
+    let evidence = run_scalar_under_real_kani("native-bound-mutant", &mutant, &manifest);
+    let KaniRunOutcome::Falsified { counterexample } = evidence.outcome else {
+        panic!("the unchanged-domain bound mutant must falsify: {evidence:?}");
+    };
+    let witness =
+        quire_contract_codegen::decode_scalar_falsification(&mutant.identity, &counterexample)
+            .expect("actual backend witness decodes against original intervals");
+    let [left, right] = witness.as_slice() else {
+        panic!("two original symbolic integer draws: {witness:?}");
+    };
+    assert!((0..=9).contains(left));
+    assert_eq!(*right, 1);
+    assert!(i128::from(*left) + 1 > 5);
+}
+
 fn routed_scalar_binary_subtraction_with_artifacts() -> (
     KaniScalarObligationHarness,
     Vec<quire_contract_codegen::Artifact>,

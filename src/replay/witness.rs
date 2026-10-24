@@ -36,8 +36,8 @@ use qsl_replay::WitnessValue;
 
 use crate::kani::{
     abi::{KaniBindingRole, KaniPrimitiveType},
-    identity::ObligationBinding,
-    output::playback::{Playback, PlaybackRefusal},
+    identity::{KaniV2ClauseObligationHarness, ObligationBinding},
+    output::playback::{parse_assertion_playback, Playback, PlaybackRefusal},
 };
 
 /// Why a persisted argument schema could not type a Kani playback.
@@ -171,6 +171,70 @@ pub fn decode_falsification(
 ) -> Result<Vec<(String, WitnessValue)>, DecodeFailure> {
     decode_playback(harness_symbol, module_symbol, arguments, playback, limits)
         .map(|decoded| decoded.values)
+}
+
+/// Decode a sealed V2 clause harness's typed parameter playback and enforce its original bounds.
+///
+/// # Errors
+///
+/// Returns [`DecodeFailure`] for changed harness provenance, malformed playback, or a value
+/// outside the checked clause's inclusive parameter domain.
+pub fn decode_v2_clause_falsification(
+    harness: &KaniV2ClauseObligationHarness,
+    transcript: &str,
+    limits: WitnessDecodeLimits,
+) -> Result<Vec<(String, WitnessValue)>, DecodeFailure> {
+    let identity = &harness.identity;
+    if !harness.has_valid_provenance() {
+        return Err(DecodeFailure::new(
+            "cg_witness_harness_provenance_mismatch",
+            identity.harness_symbol.as_str(),
+            identity.module_symbol.as_str(),
+        ));
+    }
+    let bindings = identity
+        .arguments
+        .iter()
+        .map(|argument| ObligationBinding {
+            identifier: argument.identifier.clone(),
+            role: KaniBindingRole::Argument,
+            primitive_type: KaniPrimitiveType::I64,
+            integer_bounds: None,
+            dependencies: Vec::new(),
+        })
+        .collect::<Vec<_>>();
+    let parsed = parse_assertion_playback(
+        transcript,
+        identity.harness_symbol.as_str(),
+        identity.module_symbol.as_str(),
+        limits.bytes,
+        limits.values,
+    )
+    .map_err(DecodeFailure::from)?;
+    let decoded = decode_falsification(
+        identity.harness_symbol.as_str(),
+        identity.module_symbol.as_str(),
+        &bindings,
+        &parsed,
+        limits,
+    )?;
+    for ((name, value), argument) in decoded.iter().zip(&identity.arguments) {
+        let WitnessValue::Integer(value) = value else {
+            return Err(DecodeFailure::new(
+                "cg_witness_type_mismatch",
+                name,
+                identity.module_symbol.as_str(),
+            ));
+        };
+        if !(i128::from(argument.minimum)..=i128::from(argument.maximum)).contains(value) {
+            return Err(DecodeFailure::new(
+                "cg_witness_out_of_domain",
+                name,
+                identity.module_symbol.as_str(),
+            ));
+        }
+    }
+    Ok(decoded)
 }
 
 /// A decoded playback: the values, and the check text the playback's own assertion block names.

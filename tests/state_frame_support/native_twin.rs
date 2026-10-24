@@ -442,6 +442,36 @@ impl Twin {
         twin
     }
 
+    /// Source-authored condition over the existing `Int[0, 1000]` parameter.
+    pub fn with_bounded_amount_condition(condition: &str) -> Self {
+        let mut twin = Self::with_bounded_other_condition();
+        let mut domain: Value = serde_json::from_slice(&twin.domain).expect("domain document");
+        let account = domain["types"]
+            .as_array_mut()
+            .expect("types")
+            .iter_mut()
+            .find(|ty| ty["identity"] == account_type())
+            .expect("account type");
+        let deposit = account["operations"]
+            .as_array_mut()
+            .expect("operations")
+            .iter_mut()
+            .find(|operation| operation["name"] == "deposit")
+            .expect("deposit operation");
+        deposit["params"][0]["name"] = json!("amount");
+        deposit["params"][0]["identity"] = json!(format!("{}/deposit/amount", account_type()));
+        twin.domain = domain.to_string().into_bytes();
+        twin.unit = unit_source(&hex(&jcs_digest(&twin.domain)), &[CLAUSES[0]], 0)
+            .replace("self.balance >= pre(self.balance)", condition)
+            .into_bytes();
+        twin
+    }
+
+    /// The original guarded arithmetic condition with the same declared bounds.
+    pub fn with_bounded_amount_implication() -> Self {
+        Self::with_bounded_amount_condition("amount < 1000 implies amount + 1 <= 1000")
+    }
+
     /// QSL-emitted postcondition package whose operation declares a Boolean result.
     pub fn with_deposit_result() -> Self {
         Self::with_deposit_declaration(false, true)

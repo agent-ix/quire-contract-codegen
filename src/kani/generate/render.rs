@@ -23,6 +23,11 @@ fn binding(source: &mut String, binding: &LetBinding) {
     };
     let init = match &binding.init {
         Init::Expression(expression) => expression.as_str().to_owned(),
+        Init::NativeAdmission { checked, stage } => format!(
+            "match {} {{ Ok(value) => value, Err(_) => panic!(\"{}\") }}",
+            checked.as_str(),
+            stage.message(),
+        ),
         Init::ScalarMeter(limits) => {
             let fields = [
                 ("integer_bits", limits.integer_bits),
