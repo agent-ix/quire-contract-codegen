@@ -19,7 +19,6 @@
 use ix_trace_rs::trace;
 use std::{collections::BTreeMap, path::PathBuf};
 
-use qsl_replay::WitnessValue;
 use qsl_replay::{
     call_site, ByteDigest, CallSiteRefusal, CanonicalAssignment, Code, DeclaredDomain,
     DependencyInput, DependencyInputRefusal, DependencySelectionsCause, DigestDomain, DigestRecord,
@@ -28,6 +27,7 @@ use qsl_replay::{
     ScalarLimits, SourceIdentity, Verdict, WireNodeId, WitnessSettlement,
     DEFAULT_REPLAY_INPUT_BYTES,
 };
+use qsl_replay::{Witness, WitnessValue};
 use quire_contract_codegen::{
     decode_falsification, execute_kani_obligation, replay_counterexample,
     replay_counterexample_through, replay_falsification, DependencyLock, DependencyLockError,
@@ -122,15 +122,38 @@ fn request_of(package: &ReplayPackage, source: ReplaySource) -> qsl_replay::Repl
             ..template.clone()
         })
         .collect();
-    package
-        .request(&identity, source)
-        .expect("every parameter has a bound harness argument")
+    let witness = match &source {
+        ReplaySource::Witness(witness) => witness.clone(),
+        ReplaySource::Input(_) => {
+            Witness::parse("<<<assertion|h|c|>>>").expect("the fixture witness parses")
+        }
+    };
+    let package = package
+        .clone()
+        .with_kani_identity(&identity)
+        .expect("the test's selected function binds its harness identity");
+    let packet = package
+        .backend_witness_packet(&identity, witness)
+        .expect("every parameter has a bound harness argument");
+    let mut request = package
+        .request(&identity, packet)
+        .expect("the selected function admits its backend packet");
+    // Input-arm cases below exercise QSL's generic request behavior after CG's packet boundary.
+    request.source = source;
+    request
 }
 
 /// Compiles the hand-mirrored native twin `source` and locates `function` in it.
 fn compile_native_twin(source: &str, function: &str) -> ReplayPackage {
-    ReplayPackage::new(inputs(source, Vec::new()), function)
-        .expect("the native twin compiles and declares the function")
+    let package = ReplayPackage::new(inputs(source, Vec::new()), function)
+        .expect("the native twin compiles and declares the function");
+    if function == FUNCTION {
+        package
+            .with_kani_identity(&spine_harness().identity)
+            .expect("the retained proof identity binds the native twin")
+    } else {
+        package
+    }
 }
 
 /// Replays `values` against `native`, the QSL source compiled and recompiled.
@@ -804,9 +827,15 @@ fn tc_026_the_request_slot_is_the_recomputed_function_contract_digest() {
     assert_eq!(harness.identity.kind, ObligationKind::Postcondition);
     let source = identity_unit("");
     let package = compile_native_twin(&source, FUNCTION);
-    let wire = package
-        .request(&harness.identity, ReplaySource::Input(Vec::new()))
+    let packet = package
+        .backend_witness_packet(
+            &harness.identity,
+            Witness::parse("<<<assertion|h|c|>>>").expect("the fixture witness parses"),
+        )
         .expect("the identity is built");
+    let wire = package
+        .request(&harness.identity, packet)
+        .expect("the selected function admits its backend packet");
     let expected = recomputed(
         &site_of(&source, FUNCTION),
         "postcondition",
@@ -848,6 +877,40 @@ fn tc_026_the_request_replay_counterexample_sends_carries_the_recomputed_digest(
         &golden_arguments(&harness.identity),
     );
     assert_eq!(sent, vec![expected]);
+}
+
+/// Playback for a different retained proving-run function cannot be replayed through the
+/// previously bound QSL twin merely because its argument names have the same shape.
+#[trace("FR-024-AC-43", "FR-024-AC-46", "TC-035")]
+#[test]
+fn tc_035_function_replay_refuses_another_proving_run_identity_before_execution() {
+    let harness = spine_harness();
+    let package = compile_native_twin(&native_source(VIOLATING_TWIN), FUNCTION);
+    let mut other = harness.identity.clone();
+    other.contract_symbol = Some("other_function_contract".to_owned());
+    other.subject_path = Some("crate::subject::other_function".to_owned());
+    let packet = package
+        .backend_witness_packet(
+            &harness.identity,
+            Witness::parse("<<<assertion|h|c|>>>").expect("the fixture witness parses"),
+        )
+        .expect("the retained proof identity binds the twin");
+    assert!(matches!(
+        package.request(&other, packet),
+        Err(quire_contract_codegen::FunctionPacketError::ProvingRunMismatch)
+    ));
+    let mut calls = 0;
+    let verdict =
+        replay_counterexample_through(&other, &playback(&harness, 1, 5), &package, |_| {
+            calls += 1;
+            panic!("a different proving-run identity must not reach QSL");
+        })
+        .expect("a mismatched identity is an evidence failure");
+    assert_eq!(
+        verdict,
+        ReplayVerdict::EvidenceFailure(EvidenceFailureCause::PackageIdentity)
+    );
+    assert_eq!(calls, 0);
 }
 
 /// A Boolean argument has its own golden spelling, and the arguments are ordered by identifier
@@ -1069,7 +1132,10 @@ fn tc_026_function_replay_refuses_poisoned_suffixes_at_both_decode_bounds() {
     let make_package = |limits| {
         let mut run = inputs(&source, Vec::new());
         run.decode_limits = limits;
-        ReplayPackage::new(run, FUNCTION).expect("native twin compiles")
+        ReplayPackage::new(run, FUNCTION)
+            .expect("native twin compiles")
+            .with_kani_identity(&harness.identity)
+            .expect("the retained proof identity binds the twin")
     };
     let package = make_package(limits);
     assert_eq!(
@@ -1079,18 +1145,25 @@ fn tc_026_function_replay_refuses_poisoned_suffixes_at_both_decode_bounds() {
     let mut separate = inputs(&source, Vec::new());
     separate.decode_limits = limits;
     separate.replay_limits = ReplayLimits::default().with_input_bytes(1);
-    let separate = ReplayPackage::new(separate, FUNCTION).expect("native twin compiles");
+    let separate = ReplayPackage::new(separate, FUNCTION)
+        .expect("native twin compiles")
+        .with_kani_identity(&harness.identity)
+        .expect("the retained proof identity binds the twin");
     let mut calls = 0;
-    let _ = replay_counterexample_through(&harness.identity, &transcript, &separate, |_| {
+    let refused = replay_counterexample_through(&harness.identity, &transcript, &separate, |_| {
         calls += 1;
         Err(ReplayRefusal::Fault(InternalFault::new(
             "replay",
             "stop after decode",
         )))
     });
+    assert!(
+        matches!(refused, Err(SpineReplayError::Packet(_))),
+        "QSL's input_bytes bound must not limit CG decoding: {refused:?}"
+    );
     assert_eq!(
-        calls, 1,
-        "QSL's input_bytes bound must not limit CG decoding"
+        calls, 0,
+        "packet admission must reject the small QSL input_bytes bound before execution"
     );
     for (poisoned, limits, code) in [
         (
