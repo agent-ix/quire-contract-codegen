@@ -180,9 +180,9 @@ pub fn ir_outcome_terminal_value(
     use KaniOutcomeKind as Kind;
     let declined = |cause| TerminalValue::Declined {
         cause,
-        code: DeclineCode::Std001(outcome.code),
+        code: DeclineCode::Std001(outcome.code()),
     };
-    Ok(match (&outcome.kind, settlement) {
+    Ok(match (&outcome.kind(), settlement) {
         (Kind::Proved, None) => TerminalValue::Proved {
             basis: ProofBasis::Checks { success_checks },
             certification: Certification::Certified,
@@ -192,17 +192,17 @@ pub fn ir_outcome_terminal_value(
         (Kind::Refused, None) => declined(ProofRefusalCause::Refused),
         (Kind::InvalidInput, None) => declined(ProofRefusalCause::InvalidInput),
         (Kind::IncompleteInput, None) => declined(ProofRefusalCause::IncompleteInput),
-        (Kind::Unavailable, None) if outcome.code == Std001Code::KANI_CHECKER_ABSENT => {
+        (Kind::Unavailable, None) if outcome.code() == Std001Code::KANI_CHECKER_ABSENT => {
             TerminalValue::Unsupported(UnavailabilityCause::SolverAbsent)
         }
-        // `kani_backend_absent` and every other cause: FR-030's table sends both here.
+        // IR admits `kani_backend_absent` here. The fallback keeps this match exhaustive.
         (Kind::Unavailable, None) => TerminalValue::Unsupported(UnavailabilityCause::BackendAbsent),
         (Kind::TimedOut, None) => TerminalValue::Incomplete(IncompleteCause::TimedOut),
         (Kind::ResourceExhausted, None) => {
             TerminalValue::Incomplete(IncompleteCause::ResourceExhausted)
         }
         (Kind::Cancelled { source }, None) => cancelled_value(*source),
-        (Kind::Inconclusive, None) if outcome.code == Std001Code::KANI_VACUOUS_PROOF => {
+        (Kind::Inconclusive, None) if outcome.code() == Std001Code::KANI_VACUOUS_PROOF => {
             TerminalValue::Proved {
                 basis: ProofBasis::Checks { success_checks: 0 },
                 certification: Certification::Certified,

@@ -166,7 +166,7 @@ fn tc_023_public_corpus_uses_the_validated_profile_boundary() {
         &mut emitted,
     )
     .unwrap_err();
-    assert_eq!(exhausted.kind, KaniOutcomeKind::ResourceExhausted);
+    assert_eq!(exhausted.kind(), KaniOutcomeKind::ResourceExhausted);
     assert_eq!(exhausted.boolean_claim(), None);
 
     let counterexample = generate_bounded_kani_corpus_case(
@@ -275,7 +275,7 @@ fn tc_023_branching_graph_oracle_preserves_native_expansion_budget() {
         &mut EmittedCorpusIdentities::new(),
     )
     .expect_err("the third expansion enters the other branch");
-    assert_eq!(exhausted.code.as_str(), "kani_graph_expansion_exhausted");
+    assert_eq!(exhausted.code().as_str(), "kani_graph_expansion_exhausted");
 }
 
 /// Raw identity ordering must survive Rust literal escaping in the generated graph oracle.
@@ -876,10 +876,10 @@ fn assert_direct_refusal(
     code: Std001Code,
     source: &str,
 ) {
-    assert_eq!(outcome.kind, kind);
-    assert_eq!(outcome.code, code);
-    assert_eq!(outcome.source_id, source);
-    assert_eq!(outcome.context, "r1");
+    assert_eq!(outcome.kind(), kind);
+    assert_eq!(outcome.code(), code);
+    assert_eq!(outcome.source_id(), source);
+    assert_eq!(outcome.context(), "r1");
     assert_eq!(outcome.boolean_claim(), None);
 }
 
@@ -910,8 +910,9 @@ fn public_family_and_corpus_results_have_direct_ir_errors_and_unchanged_successe
     );
     let corpus = corpus.expect("all corpus artifacts are retained");
     assert_eq!(corpus.outcome.boolean_claim(), Some(true));
-    assert_eq!(corpus.outcome.source_id, "source:direct");
-    assert_eq!(corpus.outcome.context, "r1");
+    assert_eq!(corpus.outcome.success_checks(), Some(1));
+    assert_eq!(corpus.outcome.source_id(), "source:direct");
+    assert_eq!(corpus.outcome.context(), "r1");
     assert!(corpus
         .artifacts
         .oracle
@@ -1115,13 +1116,13 @@ fn direct_corpus_refusals_preserve_earliest_failure_and_identity_transactions() 
         &mut emitted,
     )
     .unwrap_err();
-    assert_eq!(mismatch_error.kind, KaniOutcomeKind::InvalidInput);
+    assert_eq!(mismatch_error.kind(), KaniOutcomeKind::InvalidInput);
     assert_eq!(
-        mismatch_error.code,
+        mismatch_error.code(),
         std001_code!("kani_profile_input_mismatch")
     );
-    assert_eq!(mismatch_error.source_id, "source:direct");
-    assert_eq!(mismatch_error.context, "r2");
+    assert_eq!(mismatch_error.source_id(), "source:direct");
+    assert_eq!(mismatch_error.context(), "r2");
     assert_eq!(mismatch_error.boolean_claim(), None);
     let oversized_source = "x".repeat(1 << 20);
     let oversized = generate_bounded_kani_corpus_case(

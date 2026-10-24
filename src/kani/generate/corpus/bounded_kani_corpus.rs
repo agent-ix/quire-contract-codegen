@@ -505,10 +505,14 @@ pub fn generate_bounded_kani_corpus_case(
         }
     };
     let outcome = if value {
+        // One expected case assertion is emitted by this generated harness. This is not
+        // an observed Kani transcript count; IR-1002 tracks the pre-run proof claim.
         KaniOutcome::proved(
+            1,
             request_source_id.clone(),
             profile.selection().revision.clone(),
         )
+        .expect("one emitted case assertion is nonzero")
     } else {
         KaniOutcome::counterexample(
             request_source_id.clone(),
@@ -1354,8 +1358,8 @@ mod tests {
             &mut emitted,
         )
         .unwrap_err();
-        assert_eq!(error.kind, KaniOutcomeKind::InvalidInput);
-        assert_eq!(error.code, std001_code!("kani_corpus_dependency_invalid"));
+        assert_eq!(error.kind(), KaniOutcomeKind::InvalidInput);
+        assert_eq!(error.code(), std001_code!("kani_corpus_dependency_invalid"));
         assert!(emitted.0.is_empty());
         let retry = generate_bounded_kani_corpus_case(
             crate::kani::test_support::proof_ceilings::proof_ceilings(),
@@ -1393,10 +1397,10 @@ mod tests {
             &mut emitted,
         )
         .unwrap_err();
-        assert_eq!(error.kind, KaniOutcomeKind::InvalidInput);
-        assert_eq!(error.code, std001_code!("kani_profile_input_mismatch"));
-        assert_eq!(error.source_id, "mismatched-profile");
-        assert_eq!(error.context, "r1");
+        assert_eq!(error.kind(), KaniOutcomeKind::InvalidInput);
+        assert_eq!(error.code(), std001_code!("kani_profile_input_mismatch"));
+        assert_eq!(error.source_id(), "mismatched-profile");
+        assert_eq!(error.context(), "r1");
         assert!(
             emitted.0.is_empty(),
             "the refused case must claim no identity in the registry"
@@ -1420,8 +1424,8 @@ mod tests {
             &mut EmittedCorpusIdentities::new(),
         )
         .unwrap();
-        assert_eq!(proved.outcome.kind, KaniOutcomeKind::Proved);
-        assert_eq!(proved.outcome.context, "rev-7");
+        assert_eq!(proved.outcome.kind(), KaniOutcomeKind::Proved);
+        assert_eq!(proved.outcome.context(), "rev-7");
         let falsified = generate_bounded_kani_corpus_case(
             crate::kani::test_support::proof_ceilings::proof_ceilings(),
             &profile,
@@ -1437,8 +1441,8 @@ mod tests {
             &mut EmittedCorpusIdentities::new(),
         )
         .unwrap();
-        assert_eq!(falsified.outcome.kind, KaniOutcomeKind::Counterexample);
-        assert_eq!(falsified.outcome.context, "rev-7");
+        assert_eq!(falsified.outcome.kind(), KaniOutcomeKind::Counterexample);
+        assert_eq!(falsified.outcome.context(), "rev-7");
         let duplicate = ProofDependencyRequest {
             proof_id: "upstream-lemma",
             kind: ProofDependencyKind::Required,
@@ -1456,8 +1460,11 @@ mod tests {
             &mut EmittedCorpusIdentities::new(),
         )
         .unwrap_err();
-        assert_eq!(refused.code, std001_code!("kani_corpus_dependency_invalid"));
-        assert_eq!(refused.context, "rev-7");
+        assert_eq!(
+            refused.code(),
+            std001_code!("kani_corpus_dependency_invalid")
+        );
+        assert_eq!(refused.context(), "rev-7");
     }
 
     /// This corpus's generated harnesses render no `// proof-dependency-site:` marker, no
@@ -1485,8 +1492,8 @@ mod tests {
             &mut emitted,
         )
         .unwrap_err();
-        assert_eq!(error.kind, KaniOutcomeKind::InvalidInput);
-        assert_eq!(error.code, std001_code!("kani_corpus_dependency_invalid"));
+        assert_eq!(error.kind(), KaniOutcomeKind::InvalidInput);
+        assert_eq!(error.code(), std001_code!("kani_corpus_dependency_invalid"));
         assert!(emitted.0.is_empty());
         let retry = generate_bounded_kani_corpus_case(
             crate::kani::test_support::proof_ceilings::proof_ceilings(),
@@ -1523,10 +1530,11 @@ mod tests {
             &mut EmittedCorpusIdentities::new(),
         )
         .unwrap_err();
-        assert_eq!(error.kind, KaniOutcomeKind::ResourceExhausted);
+        assert_eq!(error.kind(), KaniOutcomeKind::ResourceExhausted);
         assert_eq!(error.boolean_claim(), None);
         assert_eq!(
-            error.context, "r1",
+            error.context(),
+            "r1",
             "a lowering refusal returned through the corpus carries the profile revision"
         );
     }
@@ -1551,7 +1559,7 @@ mod tests {
             &mut EmittedCorpusIdentities::new(),
         )
         .unwrap();
-        assert_eq!(generated.outcome.kind, KaniOutcomeKind::Counterexample);
+        assert_eq!(generated.outcome.kind(), KaniOutcomeKind::Counterexample);
         assert_eq!(generated.outcome.boolean_claim(), Some(false));
     }
 
@@ -1664,9 +1672,9 @@ mod tests {
         let source_id = "x".repeat(1 << 20);
         let refusal = emit(&fixture, collection(3, &source_id), &[], &mut emitted)
             .expect_err("oversized preimage must refuse");
-        assert_eq!(refusal.kind, KaniOutcomeKind::InvalidInput);
+        assert_eq!(refusal.kind(), KaniOutcomeKind::InvalidInput);
         assert_eq!(
-            refusal.code,
+            refusal.code(),
             std001_code!("kani_corpus_identity_unencodable")
         );
         assert!(emitted.0.is_empty());
@@ -1756,9 +1764,12 @@ mod tests {
         let first = emit(&fixture, collection(3, "same"), &[], &mut emitted).unwrap();
         for _ in 0..2 {
             let refusal = emit(&fixture, collection(3, "same"), &[], &mut emitted).unwrap_err();
-            assert_eq!(refusal.kind, KaniOutcomeKind::InvalidInput);
-            assert_eq!(refusal.code, std001_code!("kani_corpus_identity_collision"));
-            assert_eq!(refusal.context, "r1");
+            assert_eq!(refusal.kind(), KaniOutcomeKind::InvalidInput);
+            assert_eq!(
+                refusal.code(),
+                std001_code!("kani_corpus_identity_collision")
+            );
+            assert_eq!(refusal.context(), "r1");
         }
         let again = emit(
             &fixture,
@@ -1994,7 +2005,10 @@ mod tests {
         let mut emitted = EmittedCorpusIdentities::new();
         emit(&forward, request(), &[], &mut emitted).unwrap();
         let refusal = emit(&permuted, request(), &[], &mut emitted).unwrap_err();
-        assert_eq!(refusal.code, std001_code!("kani_corpus_identity_collision"));
+        assert_eq!(
+            refusal.code(),
+            std001_code!("kani_corpus_identity_collision")
+        );
     }
 
     /// Extracts the `#[kani::proof]` function's name from generated harness source, verbatim.

@@ -856,7 +856,9 @@ fn tc_040_the_state_clause_replay_reads_as_fr029_ac16() {
 /// An IR outcome of `kind` carrying `code`, built by IR's own constructors.
 fn ir(kind: KaniOutcomeKind, code: Std001Code) -> KaniOutcome {
     match kind {
-        KaniOutcomeKind::Proved => KaniOutcome::proved("source", "context"),
+        KaniOutcomeKind::Proved => {
+            KaniOutcome::proved(1, "source", "context").expect("one proved check")
+        }
         KaniOutcomeKind::Counterexample => KaniOutcome::counterexample("source", "context"),
         other => KaniOutcome::non_success(other, code, "source", "context")
             .expect("a non-success kind builds"),
@@ -918,7 +920,7 @@ fn map_ir_settled<'a>(settlement: impl Into<ReplaySettlement<'a>>) -> TerminalVa
 fn tc_041_every_expressible_pair_maps_to_one_value() {
     let mut values = Vec::new();
     for outcome in ir_outcomes() {
-        if outcome.kind == KaniOutcomeKind::Counterexample {
+        if outcome.kind() == KaniOutcomeKind::Counterexample {
             values.push(map_ir_settled(ReplaySettlement::Reproduced));
         } else {
             values.push(map_ir(&outcome));
@@ -937,7 +939,7 @@ fn tc_041_a_settlement_accompanies_a_counterexample_only() {
     for outcome in ir_outcomes() {
         let bare = ir_outcome_terminal_value(&outcome, 3, None);
         let settled = ir_outcome_terminal_value(&outcome, 3, Some(ReplaySettlement::Reproduced));
-        if outcome.kind == KaniOutcomeKind::Counterexample {
+        if outcome.kind() == KaniOutcomeKind::Counterexample {
             assert_eq!(bare, Err(TerminalPairError::MissingSettlement));
             assert_eq!(settled, Ok(TerminalValue::Refuted));
         } else {
@@ -945,9 +947,9 @@ fn tc_041_a_settlement_accompanies_a_counterexample_only() {
                 settled,
                 Err(TerminalPairError::UnexpectedSettlement),
                 "{:?}",
-                outcome.kind
+                outcome.kind()
             );
-            assert!(bare.is_ok(), "{:?}", outcome.kind);
+            assert!(bare.is_ok(), "{:?}", outcome.kind());
         }
     }
 }
@@ -1049,10 +1051,10 @@ fn tc_041_a_proof_carries_its_check_count_and_a_reproduced_counterexample_refute
 }
 
 /// `Inconclusive` with `kani_vacuous_proof` is a certified `Proved` with zero checks whatever
-/// count the caller passes; with any other code it is `Failed`.
+/// count the caller passes; IR refuses any other `Inconclusive` cause.
 #[trace("FR-030-AC-5", "FR-030-AC-18", "TC-041")]
 #[test]
-fn tc_041_a_vacuous_proof_is_proved_with_zero_checks_and_other_inconclusive_is_failed() {
+fn tc_041_a_vacuous_proof_is_proved_with_zero_checks_and_other_inconclusive_is_refused() {
     let outcome = |code| ir(KaniOutcomeKind::Inconclusive, code);
     assert_eq!(
         map_ir(&outcome(Std001Code::KANI_VACUOUS_PROOF)),
@@ -1065,7 +1067,10 @@ fn tc_041_a_vacuous_proof_is_proved_with_zero_checks_and_other_inconclusive_is_f
         Std001Code::KANI_BOUND_INVALID,
         std001_code!("kani_no_interpretation"),
     ] {
-        assert_eq!(map_ir(&outcome(code)), TerminalValue::Failed);
+        assert!(
+            KaniOutcome::non_success(KaniOutcomeKind::Inconclusive, code, "source", "context")
+                .is_err()
+        );
     }
 }
 
@@ -1075,7 +1080,7 @@ fn tc_041_a_vacuous_proof_is_proved_with_zero_checks_and_other_inconclusive_is_f
 fn tc_041_no_outcome_maps_to_tested() {
     let mut values: Vec<TerminalValue> = ir_outcomes()
         .iter()
-        .filter(|outcome| outcome.kind != KaniOutcomeKind::Counterexample)
+        .filter(|outcome| outcome.kind() != KaniOutcomeKind::Counterexample)
         .map(map_ir)
         .collect();
     values.push(map_ir_settled(ReplaySettlement::Reproduced));
@@ -1206,8 +1211,8 @@ fn tc_041_the_map_is_one_match_over_the_pair_with_no_wildcard_arm() {
     assert_eq!(named, expected);
 }
 
-/// `Unavailable` with `kani_checker_absent` is `Unsupported(SolverAbsent)`; with
-/// `kani_backend_absent` or any other code it is `Unsupported(BackendAbsent)`.
+/// `Unavailable` with `kani_checker_absent` is `Unsupported(SolverAbsent)` and
+/// `kani_backend_absent` is `Unsupported(BackendAbsent)`; IR refuses other causes.
 #[trace("FR-030-AC-8", "TC-041")]
 #[test]
 fn tc_041_an_absent_solver_or_backend_is_unsupported_with_its_cause() {
@@ -1216,15 +1221,17 @@ fn tc_041_an_absent_solver_or_backend_is_unsupported_with_its_cause() {
         map_ir(&outcome(Std001Code::KANI_CHECKER_ABSENT)),
         TerminalValue::Unsupported(UnavailabilityCause::SolverAbsent)
     );
-    for code in [
-        Std001Code::KANI_BACKEND_ABSENT,
+    assert_eq!(
+        map_ir(&outcome(Std001Code::KANI_BACKEND_ABSENT)),
+        TerminalValue::Unsupported(UnavailabilityCause::BackendAbsent)
+    );
+    assert!(KaniOutcome::non_success(
+        KaniOutcomeKind::Unavailable,
         Std001Code::KANI_CAPABILITY_MISSING,
-    ] {
-        assert_eq!(
-            map_ir(&outcome(code)),
-            TerminalValue::Unsupported(UnavailabilityCause::BackendAbsent)
-        );
-    }
+        "source",
+        "context"
+    )
+    .is_err());
 }
 
 /// A `Counterexample` with a replay disagreement is `Inconclusive(ReplayParity)` carrying its

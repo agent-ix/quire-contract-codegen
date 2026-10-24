@@ -229,8 +229,8 @@ fn classify_success(report: &KaniHarnessReport, kind: Option<ObligationKind>) ->
             "kani_execution::classify_kani_run",
             "report_checks",
         );
-        if checks_outcome.kind == KaniOutcomeKind::Inconclusive
-            && checks_outcome.code == Std001Code::KANI_VACUOUS_PROOF
+        if checks_outcome.kind() == KaniOutcomeKind::Inconclusive
+            && checks_outcome.code() == Std001Code::KANI_VACUOUS_PROOF
         {
             return inconclusive(KaniInconclusiveReason::VacuousProof);
         }

@@ -183,10 +183,10 @@ mod tests {
             .expect_err("a construct absent from the matrix must not be classified");
 
         assert_eq!(
-            outcome.kind,
+            outcome.kind(),
             quire_contract_ir::kani::KaniOutcomeKind::Refused
         );
-        assert_eq!(outcome.code, Std001Code::KANI_CAPABILITY_MISSING);
+        assert_eq!(outcome.code(), Std001Code::KANI_CAPABILITY_MISSING);
     }
 
     #[trace("TC-023", "FR-015-AC-82")]
@@ -236,12 +236,12 @@ mod tests {
             )
             .expect_err("invalid names cannot return a partial census");
             assert_eq!(
-                failure.kind,
+                failure.kind(),
                 quire_contract_ir::kani::KaniOutcomeKind::Refused
             );
-            assert_eq!(failure.code, Std001Code::KANI_CAPABILITY_REQUEST_INVALID);
-            assert_eq!(failure.source_id, "source:invalid");
-            assert_eq!(failure.context, "profile-r1");
+            assert_eq!(failure.code(), Std001Code::KANI_CAPABILITY_REQUEST_INVALID);
+            assert_eq!(failure.source_id(), "source:invalid");
+            assert_eq!(failure.context(), "profile-r1");
             assert_eq!(failure.boolean_claim(), None);
         }
     }
