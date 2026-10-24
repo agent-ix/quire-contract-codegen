@@ -38,4 +38,4 @@ The code generator SHALL use the nine CG-owned causes in the second cause table 
 
 ## Status
 
-PLANNED: IR-709 owns generated producer and consumer changes and tests. The former unit-variant removal is gated on the IR-497 coordinated cutover and the dependency bump that supplies the typed payload.
+PLANNED: Seven of the nine CG-owned typed cause producers have landed. IR-709 still owns `GeneratedUnexpectedOutcome` and `GeneratedEnvironmentRejected`, alignment of the former unit-constructor text in FR-018 AC-8 and AC-17, and TC-057 tagged verification of all nine constructors, nested `IllTypedCause`, and charge/failure behavior. QSL owns replay-consumer verification.

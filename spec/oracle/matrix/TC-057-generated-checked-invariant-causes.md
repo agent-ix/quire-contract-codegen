@@ -10,7 +10,7 @@ relationships:
 
 ## Description
 
-Planned owner control for FR-042-AC-1 after the IR-497 typed-payload cutover and IR-709 producer migration.
+Planned owner control for FR-042-AC-1's IR-709 generated producer migration.
 
 ## Test Procedure
 
@@ -24,4 +24,4 @@ Every CG constructor retains the table cause and original nested payload without
 
 ## Status
 
-PLANNED under IR-709 after the IR-497 cutover.
+PLANNED under IR-709.
