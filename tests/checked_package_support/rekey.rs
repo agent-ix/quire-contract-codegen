@@ -496,11 +496,13 @@ mod tests {
         };
         let raw = json!({"semantic_graph": {"nodes": [
             node(9, "scalar_type", "integer", json!({"term": "aggregate", "members": []})),
-            node(4, "expression", "binary", json!({"term": "application", "arguments": [
-                {"term": "literal", "value_kind": "integer", "value": "1"}
+            node(4, "expression", "binary", json!({"term": "application",
+                "operator": "binary", "operation": {}, "result_type": key(9), "arguments": [
+                {"term": "literal", "type": key(9), "value_kind": "integer", "value": "1"}
             ]})),
             node(3, "function", "pure_function", reference(&key(4))),
-            node(2, "expression", "call", json!({"term": "application", "arguments": [
+            node(2, "expression", "call", json!({"term": "application",
+                "operator": "call", "operation": {}, "result_type": key(9), "arguments": [
                 reference(&key(3))
             ]})),
             node(1, "function", "pure_function", reference(&key(2))),
@@ -545,13 +547,16 @@ mod tests {
         };
         let first = node(
             &"1".repeat(64),
-            json!({"term": "application", "operator": "call", "arguments": []}),
+            json!({"term": "application", "operator": "call", "operation": {},
+                   "result_type": node_ref(&"a".repeat(64)), "arguments": []}),
         );
         let second = node(
             &"2".repeat(64),
             json!({
                 "term": "application",
                 "operator": "call",
+                "operation": {},
+                "result_type": node_ref(&"a".repeat(64)),
                 "arguments": [
                     {"term": "reference", "target": node_ref(&"1".repeat(64))},
                     {"term": "reference", "target": node_ref(&"3".repeat(64))},
@@ -617,7 +622,8 @@ mod tests {
                 "recursion_group": "group",
                 "dependencies": [],
                 "occurrences": [],
-                "body": {"term": "application", "operator": "call", "arguments": []}
+                "body": {"term": "application", "operator": "call", "operation": {},
+                         "result_type": node_ref(&"a".repeat(64)), "arguments": []}
             },
             {
                 "node_id": node_ref(&"2".repeat(64)),
@@ -628,7 +634,8 @@ mod tests {
                 "recursion_group": "group",
                 "dependencies": [],
                 "occurrences": [],
-                "body": {"term": "application", "operator": "call", "arguments": [
+                "body": {"term": "application", "operator": "call", "operation": {},
+                         "result_type": node_ref(&"a".repeat(64)), "arguments": [
                     {"term": "reference", "target": node_ref(&"1".repeat(64))}
                 ]}
             }
@@ -737,7 +744,8 @@ mod tests {
         let mut nodes = Vec::new();
         for (position, node_id) in provisional.iter().enumerate() {
             let argument = if position == 0 {
-                json!({"term": "literal", "value_kind": "integer", "value": "1"})
+                json!({"term": "literal", "type": key(9),
+                       "value_kind": "integer", "value": "1"})
             } else {
                 reference(&provisional[position - 1])
             };
@@ -749,7 +757,8 @@ mod tests {
                 "semantic_type": key(9),
                 "dependencies": [],
                 "occurrences": [],
-                "body": {"term": "application", "arguments": [argument]},
+                "body": {"term": "application", "operator": "binary", "operation": {},
+                         "result_type": key(9), "arguments": [argument]},
             }));
         }
         let raw = json!({"semantic_graph": {"nodes": nodes}});

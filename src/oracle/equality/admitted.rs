@@ -51,10 +51,10 @@ pub(super) fn require_context<'ctx>(
     })
 }
 
-pub(super) fn resolve_enum(
+pub(super) fn resolve_enum<Body>(
     admitted: &AdmittedContext,
     closure: &mut TypeClosure,
-    node: &CheckedSemanticNodeV2,
+    node: &CheckedSemanticNodeV2<Body>,
 ) -> Result<ValueType, ItemCheckError> {
     let mismatch = || CompositeEqualityRefusal::EnumContextMismatch {
         declaration: node.node_id.clone(),
@@ -159,10 +159,10 @@ pub(super) fn composite_lookup_refusal(cause: AdmittedLookupRefusal) -> Composit
     }
 }
 
-pub(super) fn resolve_composite(
+pub(super) fn resolve_composite<Body>(
     admitted: &AdmittedContext,
     closure: &mut TypeClosure,
-    node: &CheckedSemanticNodeV2,
+    node: &CheckedSemanticNodeV2<Body>,
 ) -> Result<NodeKey, CompositeEqualityRefusal> {
     let mismatch = || CompositeEqualityRefusal::CompositeContextMismatch {
         declaration: node.node_id.clone(),

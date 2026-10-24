@@ -109,8 +109,9 @@ fn public_composite_fixture() -> PublicCompositeFixture {
             .expect("named declaration in compiled package")
     };
     let function = named("f");
+    let function_body = serde_json::to_value(&function.body).expect("typed body serializes");
     let binding = |name: &str| {
-        function.body["members"]
+        function_body["members"]
             .as_array()
             .unwrap()
             .iter()
@@ -129,7 +130,8 @@ fn public_composite_fixture() -> PublicCompositeFixture {
         .iter()
         .find(|node| {
             node.node_tag.as_ref() == "expression"
-                && node.body["operation"]["identity"] == "quire.op.structural.eq"
+                && matches!(&node.body, quire_contract_model::CheckedTerm::Application { operation, .. }
+                    if operation.get("identity").and_then(serde_json::Value::as_str) == Some("quire.op.structural.eq"))
         })
         .expect("compiled structural equality");
     let node = WireNodeId::from_hex(&application.node_id.digest).unwrap();

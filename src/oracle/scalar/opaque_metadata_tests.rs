@@ -138,8 +138,9 @@ fn opaque_operation_member_does_not_add_a_consumer_to_true_narrowing() {
             n.node_tag.as_ref() == "bounded_domain" && n.semantic_form.as_ref() == "integer_range"
         })
         .unwrap();
-    assert_eq!(bound.body["members"][0]["value"]["value"], "-9");
-    assert_eq!(bound.body["members"][1]["value"]["value"], "9");
+    let bound_body = serde_json::to_value(&bound.body).unwrap();
+    assert_eq!(bound_body["members"][0]["value"]["value"], "-9");
+    assert_eq!(bound_body["members"][1]["value"]["value"], "9");
     let catalogue: Value = serde_json::from_str(
         quire_verification_contracts::operation_catalog::CHECKED_OPERATION_CATALOG_V1,
     )
@@ -162,7 +163,10 @@ fn opaque_operation_member_does_not_add_a_consumer_to_true_narrowing() {
         .graph()
         .nodes
         .iter()
-        .filter_map(|n| n.body.get("operation").and_then(|op| op.get("member")))
+        .filter_map(|n| match &n.body {
+            CheckedTerm::Application { operation, .. } => operation.get("member"),
+            _ => None,
+        })
         .find(|m| m["kind"] == entry["member"])
         .unwrap()
         .clone();
@@ -170,12 +174,13 @@ fn opaque_operation_member_does_not_add_a_consumer_to_true_narrowing() {
     let mut narrow = target.clone();
     narrow.semantic_form = "conversion".into();
     narrow.semantic_type = bound.node_id.clone();
-    narrow.body = json!({
+    narrow.body = serde_json::from_value(json!({
         "term": "application", "operator": entry["operator"],
         "operation": {"identity": entry["identity"], "laws": entry["laws"],
             "mode": entry["mode"], "member": member, "leaves": []},
         "result_type": bound.node_id, "arguments": [{"term":"reference", "target":target.node_id}]
-    });
+    }))
+    .expect("authored narrowing is a typed checked term");
     narrow.dependencies = vec![target.node_id.clone(), bound.node_id.clone()];
     narrow.dependencies.sort();
     // The source key here is only a provisional selector on a detached draft.
@@ -208,7 +213,10 @@ fn opaque_operation_member_does_not_add_a_consumer_to_true_narrowing() {
     let baseline = read(&baseline_bytes, &evidence, "TRUE_NARROW_BASELINE");
     let opaque_node = baseline.graph().nodes.iter().find(|n| matches!(baseline.term(&n.node_id),
         Some(CheckedTerm::Application { operation, .. }) if operation["identity"] == "quire.op.integer.add")).unwrap();
-    assert!(opaque_node.body["operation"]["member"].is_null());
+    let CheckedTerm::Application { operation, .. } = &opaque_node.body else {
+        panic!("admitted opaque node is an application");
+    };
+    assert!(operation["member"].is_null());
     let node = wire["semantic_graph"]["nodes"]
         .as_array_mut()
         .unwrap()

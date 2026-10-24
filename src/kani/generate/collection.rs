@@ -1018,7 +1018,8 @@ mod tests {
                 "schema_version": "quire.checked-semantic-graph/v2",
                 "node_tag": "expression", "semantic_form": "literal",
                 "semantic_type": id("3"), "dependencies": [], "occurrences": [],
-                "body": {"value_kind": "boolean", "value": true},
+                "body": {"term": "literal", "type": id("3"),
+                         "value_kind": "boolean", "value": true},
             }))
             .expect("checked node")
         };

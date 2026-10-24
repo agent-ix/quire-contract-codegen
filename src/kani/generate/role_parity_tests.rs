@@ -22,7 +22,7 @@ use crate::kani::generate::outcome::{
 };
 use crate::kani::identity::StateFrameHarness;
 use ix_trace_rs::trace;
-use quire_contract_model::{CheckedNodeId, CheckedSemanticNodeV2};
+use quire_contract_model::{CheckedNodeId, CheckedSemanticNodeV2, CheckedTerm};
 use std::cell::Cell;
 
 use crate::core::ir::clause::{ClauseGraphView, ClauseNodeIndex};
@@ -55,7 +55,7 @@ fn clause_test_node(number: u8, label: &str) -> CheckedSemanticNodeV2 {
         nominal_identity_preimage: None,
         declaration: None,
         owner: None,
-        body: serde_json::json!({"label": label}),
+        body: CheckedTerm::literal_text(clause_test_id(0), label),
     }
 }
 
@@ -88,14 +88,18 @@ fn clause_node_index_preserves_first_node_and_reuses_one_walk() {
         visits.set(visits.get() + 1);
     }));
     for _ in 0..3 {
-        assert_eq!(
-            index.node(&clause_test_id(1)).unwrap().body["label"],
-            "first"
-        );
-        assert_eq!(
-            index.node(&clause_test_id(2)).unwrap().body["label"],
-            "other"
-        );
+        let Some(CheckedTerm::Literal { value: first, .. }) =
+            index.node(&clause_test_id(1)).map(|node| &node.body)
+        else {
+            panic!("first node is a literal");
+        };
+        assert_eq!(first, "first");
+        let Some(CheckedTerm::Literal { value: other, .. }) =
+            index.node(&clause_test_id(2)).map(|node| &node.body)
+        else {
+            panic!("other node is a literal");
+        };
+        assert_eq!(other, "other");
         assert!(index.node(&clause_test_id(3)).is_none());
     }
     assert_eq!(visits.get(), graph.len());

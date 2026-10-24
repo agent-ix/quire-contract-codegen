@@ -158,6 +158,7 @@ pub(super) fn original_item(
     use quire_contract_codegen::{
         CompositeEqualityItem, EqualityOperandDescriptor, EqualityOperatorKind,
     };
+    use quire_contract_model::{ApplicationOperator, CheckedTerm};
     let node_id = super::admitted_enum_equality::application(package, "f");
     let expression = package
         .graph()
@@ -165,13 +166,15 @@ pub(super) fn original_item(
         .iter()
         .find(|node| node.node_id == node_id)
         .expect("original equality");
-    let arguments = expression.body["arguments"]
-        .as_array()
-        .expect("original two operands");
+    let CheckedTerm::Application { arguments, .. } = &expression.body else {
+        panic!("original equality application");
+    };
     assert_eq!(arguments.len(), 2);
-    let source_type = |term: &serde_json::Value| {
-        let mut target: quire_contract_model::CheckedNodeId =
-            serde_json::from_value(term["target"].clone()).expect("original reference id");
+    let source_type = |term: &CheckedTerm| {
+        let CheckedTerm::Reference { target } = term else {
+            panic!("original operand reference");
+        };
+        let mut target = target.clone();
         let mut visited = std::collections::BTreeSet::new();
         loop {
             assert!(
@@ -184,14 +187,21 @@ pub(super) fn original_item(
                 .iter()
                 .find(|node| node.node_id == target)
                 .expect("original operand node");
-            if node.node_tag.as_ref() != "expression"
-                || node.body["term"] != "application"
-                || node.body["operator"] != "convert"
-            {
+            let CheckedTerm::Application {
+                operator: ApplicationOperator::Convert,
+                arguments,
+                ..
+            } = &node.body
+            else {
+                break node.semantic_type.clone();
+            };
+            if node.node_tag.as_ref() != "expression" {
                 break node.semantic_type.clone();
             }
-            target = serde_json::from_value(node.body["arguments"][0]["target"].clone())
-                .expect("original conversion operand reference");
+            let Some(CheckedTerm::Reference { target: next }) = arguments.first() else {
+                panic!("original conversion operand reference");
+            };
+            target = next.clone();
         }
     };
     let left = source_type(&arguments[0]);

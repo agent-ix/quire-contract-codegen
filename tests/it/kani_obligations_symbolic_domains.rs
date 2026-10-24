@@ -23,7 +23,8 @@ use quire_contract_codegen::{
 };
 use quire_contract_model::{
     CheckedMemberType, CheckedModelObjectFields, CheckedNodeId, CheckedPackageEvidence,
-    CheckedPackageReadLimits, CheckedPackageV2, CheckedPackageV2ReadResult,
+    CheckedPackageReadLimits, CheckedPackageV2, CheckedPackageV2ReadResult, CheckedSemanticNodeV2,
+    CheckedTerm,
 };
 use quire_semantic_value::catalog::Category;
 use serde_json::{json, Value};
@@ -34,6 +35,36 @@ const SMALL_ID: &str = "ix://ir268.test/domain/SmallInt";
 const POPULATION_ID: &str = "ix://ir268.test/domain/CollectionNodes";
 const SOURCE_ID: &str = "ix://ir268.test/spec";
 const ZERO_SHA256: &str = "sha256:0000000000000000000000000000000000000000000000000000000000000000";
+
+fn application_identity(node: &CheckedSemanticNodeV2) -> Option<&str> {
+    let CheckedTerm::Application { operation, .. } = &node.body else {
+        return None;
+    };
+    operation.get("identity")?.as_str()
+}
+
+fn argument_target(node: &CheckedSemanticNodeV2, index: usize) -> Option<&CheckedNodeId> {
+    let CheckedTerm::Application { arguments, .. } = &node.body else {
+        return None;
+    };
+    match arguments.get(index)? {
+        CheckedTerm::Reference { target } => Some(target),
+        _ => None,
+    }
+}
+
+fn named_member<'a>(node: &'a CheckedSemanticNodeV2, name: &str) -> Option<&'a CheckedTerm> {
+    let CheckedTerm::Aggregate { members } = &node.body else {
+        return None;
+    };
+    members.iter().find_map(|member| match member {
+        CheckedTerm::Binding {
+            name: member_name,
+            value,
+        } if member_name.as_ref() == name => Some(value.as_ref()),
+        _ => None,
+    })
+}
 
 fn model_document() -> Value {
     let field = |name: &str,
@@ -218,13 +249,7 @@ fn collection_identity(
         .graph()
         .nodes
         .iter()
-        .find(|node| {
-            node.body
-                .get("operation")
-                .and_then(|value| value.get("identity"))
-                .and_then(Value::as_str)
-                == Some(operation)
-        })
+        .find(|node| application_identity(node) == Some(operation))
         .unwrap()
         .node_id
         .clone();
@@ -266,13 +291,7 @@ fn collection_harness(fixture: &Emitted, operation: &str) -> KaniCollectionOblig
         .graph()
         .nodes
         .iter()
-        .find(|node| {
-            node.body
-                .get("operation")
-                .and_then(|value| value.get("identity"))
-                .and_then(Value::as_str)
-                == Some(operation)
-        })
+        .find(|node| application_identity(node) == Some(operation))
         .unwrap()
         .node_id
         .clone();
@@ -329,13 +348,7 @@ fn collection_item_outcome(
         .graph()
         .nodes
         .iter()
-        .find(|node| {
-            node.body
-                .get("operation")
-                .and_then(|value| value.get("identity"))
-                .and_then(Value::as_str)
-                == Some(operation)
-        })
+        .find(|node| application_identity(node) == Some(operation))
         .expect("selected quantifier exists")
         .node_id
         .clone();
@@ -712,36 +725,19 @@ fn qsl_emits_and_ir_admits_the_authored_collection_and_reference_shapes() {
         .graph()
         .nodes
         .iter()
-        .find(|node| {
-            node.body
-                .get("operation")
-                .and_then(|operation| operation.get("identity"))
-                .and_then(Value::as_str)
-                == Some("quire.op.collection.forall")
-        })
+        .find(|node| application_identity(node) == Some("quire.op.collection.forall"))
         .expect("QSL lowered the source forall to its catalogued operation");
     let exists = fixture
         .package
         .graph()
         .nodes
         .iter()
-        .find(|node| {
-            node.body
-                .get("operation")
-                .and_then(|operation| operation.get("identity"))
-                .and_then(Value::as_str)
-                == Some("quire.op.collection.exists")
-        })
+        .find(|node| application_identity(node) == Some("quire.op.collection.exists"))
         .expect("QSL lowered the source exists to its catalogued operation");
-    let collection_digest = forall
-        .body
-        .get("arguments")
-        .and_then(Value::as_array)
-        .and_then(|args| args.first())
-        .and_then(|arg| arg.get("target"))
-        .and_then(|target| target.get("digest"))
-        .and_then(Value::as_str)
-        .expect("forall collection operand identity");
+    let collection_digest = argument_target(forall, 0)
+        .expect("forall collection operand identity")
+        .digest
+        .as_ref();
     let collection_node = fixture
         .package
         .graph()
@@ -756,15 +752,10 @@ fn qsl_emits_and_ir_admits_the_authored_collection_and_reference_shapes() {
         .iter()
         .find(|node| node.node_id == collection_node.semantic_type)
         .expect("the collection operand type resolves in the admitted graph");
-    let exists_collection_digest = exists
-        .body
-        .get("arguments")
-        .and_then(Value::as_array)
-        .and_then(|args| args.first())
-        .and_then(|arg| arg.get("target"))
-        .and_then(|target| target.get("digest"))
-        .and_then(Value::as_str)
-        .expect("exists collection operand identity");
+    let exists_collection_digest = argument_target(exists, 0)
+        .expect("exists collection operand identity")
+        .digest
+        .as_ref();
     let exists_collection = fixture
         .package
         .graph()
@@ -785,10 +776,13 @@ fn qsl_emits_and_ir_admits_the_authored_collection_and_reference_shapes() {
     );
     assert_eq!(collection_node.node_tag.as_ref(), "expression");
     assert_eq!(collection_node.semantic_form.as_ref(), "query");
-    let projection = collection_node
-        .body
-        .get("operation")
-        .expect("forall operand is a model-field projection");
+    let CheckedTerm::Application {
+        operation: projection,
+        ..
+    } = &collection_node.body
+    else {
+        panic!("forall operand is a model-field projection");
+    };
     assert_eq!(
         projection.get("identity").and_then(Value::as_str),
         Some("quire.op.record.project")
@@ -816,15 +810,10 @@ fn qsl_emits_and_ir_admits_the_authored_collection_and_reference_shapes() {
         Some(fixture.object_type.digest.as_ref()),
         "projection declaration is the admitted model object containing items"
     );
-    let receiver_digest = collection_node
-        .body
-        .get("arguments")
-        .and_then(Value::as_array)
-        .and_then(|arguments| arguments.first())
-        .and_then(|argument| argument.get("target"))
-        .and_then(|target| target.get("digest"))
-        .and_then(Value::as_str)
-        .expect("projection receiver identity");
+    let receiver_digest = argument_target(collection_node, 0)
+        .expect("projection receiver identity")
+        .digest
+        .as_ref();
     let receiver = fixture
         .package
         .graph()
@@ -832,15 +821,10 @@ fn qsl_emits_and_ir_admits_the_authored_collection_and_reference_shapes() {
         .iter()
         .find(|node| node.node_id.digest.as_ref() == receiver_digest)
         .expect("projection receiver resolves in admitted graph");
-    let parameter_digest = receiver
-        .body
-        .get("arguments")
-        .and_then(Value::as_array)
-        .and_then(|arguments| arguments.first())
-        .and_then(|argument| argument.get("target"))
-        .and_then(|target| target.get("digest"))
-        .and_then(Value::as_str)
-        .expect("deref receiver parameter identity");
+    let parameter_digest = argument_target(receiver, 0)
+        .expect("deref receiver parameter identity")
+        .digest
+        .as_ref();
     let parameter = fixture
         .package
         .graph()
@@ -851,18 +835,10 @@ fn qsl_emits_and_ir_admits_the_authored_collection_and_reference_shapes() {
     assert_eq!(parameter.node_tag.as_ref(), "value");
     assert_eq!(parameter.semantic_form.as_ref(), "parameter");
     assert!(
-        parameter
-            .body
-            .get("members")
-            .and_then(Value::as_array)
-            .is_some_and(|members| members.iter().any(|member| {
-                member.get("name").and_then(Value::as_str) == Some("name")
-                    && member
-                        .get("value")
-                        .and_then(|value| value.get("value"))
-                        .and_then(Value::as_str)
-                        == Some("input")
-            })),
+        matches!(
+            named_member(parameter, "name"),
+            Some(CheckedTerm::Literal { value, .. }) if value.as_str() == Some("input")
+        ),
         "the projection receiver is the source function's model-typed input"
     );
     assert_eq!(type_node.semantic_form.as_ref(), "collection_bounds");
@@ -874,20 +850,9 @@ fn qsl_emits_and_ir_admits_the_authored_collection_and_reference_shapes() {
         .find(|node| node.node_id == type_node.semantic_type)
         .expect("sequence type resolves in admitted graph");
     assert_eq!(sequence_type.semantic_form.as_ref(), "sequence");
-    let bound = |name: &str| {
-        type_node
-            .body
-            .get("members")
-            .and_then(Value::as_array)
-            .and_then(|members| {
-                members
-                    .iter()
-                    .find(|member| member.get("name").and_then(Value::as_str) == Some(name))
-            })
-            .and_then(|member| member.get("value"))
-            .and_then(|value| value.get("value"))
-            .and_then(Value::as_str)
-            .and_then(|value| value.parse::<u64>().ok())
+    let bound = |name: &str| match named_member(type_node, name) {
+        Some(CheckedTerm::Literal { value, .. }) => value.as_str()?.parse::<u64>().ok(),
+        _ => None,
     };
     assert_eq!(bound("min"), Some(0));
     assert_eq!(bound("max"), Some(3));
@@ -898,20 +863,10 @@ fn qsl_emits_and_ir_admits_the_authored_collection_and_reference_shapes() {
         .iter()
         .find(|node| node.node_id.digest.as_ref() == fixture.function_digest)
         .expect("QSL FunctionSite identity names an admitted function node");
-    let function_body = function
-        .body
-        .get("members")
-        .and_then(Value::as_array)
-        .and_then(|members| {
-            members
-                .iter()
-                .find(|member| member.get("name").and_then(Value::as_str) == Some("body"))
-        })
-        .and_then(|member| member.get("value"))
-        .and_then(|value| value.get("target"))
-        .and_then(|target| target.get("digest"))
-        .and_then(Value::as_str)
-        .expect("the admitted function body has a target identity");
+    let Some(CheckedTerm::Reference { target }) = named_member(function, "body") else {
+        panic!("the admitted function body has a target identity");
+    };
+    let function_body = target.digest.as_ref();
     let body_node = fixture
         .package
         .graph()
@@ -1001,13 +956,7 @@ fn negotiation_renders_the_selected_sequence_claims_deterministically() {
             .graph()
             .nodes
             .iter()
-            .find(|node| {
-                node.body
-                    .get("operation")
-                    .and_then(|value| value.get("identity"))
-                    .and_then(Value::as_str)
-                    == Some(operation)
-            })
+            .find(|node| application_identity(node) == Some(operation))
             .expect("the selected QSL quantifier exists")
             .node_id
             .clone();
@@ -1322,13 +1271,7 @@ fn boolean_sequence_uses_symbolic_slots_for_both_boolean_values() {
         .graph()
         .nodes
         .iter()
-        .find(|node| {
-            node.body
-                .get("operation")
-                .and_then(|value| value.get("identity"))
-                .and_then(Value::as_str)
-                == Some("quire.op.collection.forall")
-        })
+        .find(|node| application_identity(node) == Some("quire.op.collection.forall"))
         .unwrap()
         .node_id
         .clone();
@@ -1525,13 +1468,7 @@ fn ordered_set_shape_is_refused_without_erasing_its_uniqueness_semantics() {
         .graph()
         .nodes
         .iter()
-        .find(|node| {
-            node.body
-                .get("operation")
-                .and_then(|value| value.get("identity"))
-                .and_then(Value::as_str)
-                == Some("quire.op.collection.forall")
-        })
+        .find(|node| application_identity(node) == Some("quire.op.collection.forall"))
         .unwrap()
         .node_id
         .clone();
@@ -1589,13 +1526,7 @@ fn unsupported_collection_predicate_is_refused_without_harness() {
         .graph()
         .nodes
         .iter()
-        .find(|node| {
-            node.body
-                .get("operation")
-                .and_then(|value| value.get("identity"))
-                .and_then(Value::as_str)
-                == Some("quire.op.collection.forall")
-        })
+        .find(|node| application_identity(node) == Some("quire.op.collection.forall"))
         .unwrap()
         .node_id
         .clone();
@@ -1650,13 +1581,7 @@ fn collection_domain_larger_than_the_request_memory_ceiling_is_refused_without_h
         .graph()
         .nodes
         .iter()
-        .find(|node| {
-            node.body
-                .get("operation")
-                .and_then(|value| value.get("identity"))
-                .and_then(Value::as_str)
-                == Some("quire.op.collection.forall")
-        })
+        .find(|node| application_identity(node) == Some("quire.op.collection.forall"))
         .unwrap()
         .node_id
         .clone();
@@ -1767,26 +1692,14 @@ fn qsl_admitted_collection_without_an_upper_bound_requires_bound_without_harness
         .graph()
         .nodes
         .iter()
-        .find(|node| {
-            node.body
-                .get("operation")
-                .and_then(|value| value.get("identity"))
-                .and_then(Value::as_str)
-                == Some("quire.op.collection.forall")
-        })
+        .find(|node| application_identity(node) == Some("quire.op.collection.forall"))
         .unwrap();
     let projected_type = fixture
         .package
         .graph()
         .nodes
         .iter()
-        .find(|node| {
-            node.body
-                .get("operation")
-                .and_then(|value| value.get("identity"))
-                .and_then(Value::as_str)
-                == Some("quire.op.record.project")
-        })
+        .find(|node| application_identity(node) == Some("quire.op.record.project"))
         .unwrap()
         .semantic_type
         .clone();
@@ -1947,26 +1860,14 @@ fn finite_sequence_of_unbounded_integer_elements_requires_bound_when_qsl_admits_
         .graph()
         .nodes
         .iter()
-        .find(|node| {
-            node.body
-                .get("operation")
-                .and_then(|value| value.get("identity"))
-                .and_then(Value::as_str)
-                == Some("quire.op.collection.forall")
-        })
+        .find(|node| application_identity(node) == Some("quire.op.collection.forall"))
         .unwrap();
     let projection = fixture
         .package
         .graph()
         .nodes
         .iter()
-        .find(|node| {
-            node.body
-                .get("operation")
-                .and_then(|value| value.get("identity"))
-                .and_then(Value::as_str)
-                == Some("quire.op.record.project")
-        })
+        .find(|node| application_identity(node) == Some("quire.op.record.project"))
         .unwrap();
     let collection_type = fixture
         .package
@@ -1982,11 +1883,16 @@ fn finite_sequence_of_unbounded_integer_elements_requires_bound_when_qsl_admits_
         .iter()
         .find(|node| node.node_id == collection_type.semantic_type)
         .unwrap();
-    let element_target = sequence_type.body["members"][0]["target"].clone();
-    let element_type = CheckedNodeId {
-        domain: element_target["domain"].as_str().unwrap().into(),
-        digest: element_target["digest"].as_str().unwrap().into(),
+    let CheckedTerm::Aggregate { members } = &sequence_type.body else {
+        panic!("sequence type has a typed element member");
     };
+    let Some(CheckedTerm::Reference {
+        target: element_type,
+    }) = members.first()
+    else {
+        panic!("sequence type element references its type");
+    };
+    let element_type = element_type.clone();
     let item = ObligationItem::CollectionClaim {
         package: &fixture.package,
         function_id: &function_id,
@@ -2159,13 +2065,7 @@ fn collection_negotiation_accounts_for_each_supported_or_refused_item() {
         .graph()
         .nodes
         .iter()
-        .find(|node| {
-            node.body
-                .get("operation")
-                .and_then(|value| value.get("identity"))
-                .and_then(Value::as_str)
-                == Some("quire.op.collection.forall")
-        })
+        .find(|node| application_identity(node) == Some("quire.op.collection.forall"))
         .expect("the source forall exists")
         .node_id
         .clone();

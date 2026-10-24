@@ -17,8 +17,8 @@ use quire_contract_codegen::{
 };
 use quire_contract_model::{
     CheckedNodeId, CheckedOccurrenceRole, CheckedPackageEvidence, CheckedPackageReadLimits,
-    CheckedPackageV2, CheckedPackageV2ReadResult, ContractDependencies, ContractOccurrenceKeyV1,
-    ContractPackageReadResult, ContractPackageWireV1, JsonPointer,
+    CheckedPackageV2, CheckedPackageV2ReadResult, CheckedTerm, ContractDependencies,
+    ContractOccurrenceKeyV1, ContractPackageReadResult, ContractPackageWireV1, JsonPointer,
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -30,6 +30,26 @@ use std::{
 #[allow(clippy::duplicate_mod)]
 #[path = "../exact_function_support/package.rs"]
 mod exact_function_fixture;
+
+fn checked_operation_identity(body: &CheckedTerm) -> Option<&str> {
+    let CheckedTerm::Application { operation, .. } = body else {
+        return None;
+    };
+    operation.get("identity")?.as_str()
+}
+
+fn function_body_target(body: &CheckedTerm) -> Option<&CheckedNodeId> {
+    let CheckedTerm::Aggregate { members } = body else {
+        return None;
+    };
+    members.iter().find_map(|member| match member {
+        CheckedTerm::Binding { name, value } if name.as_ref() == "body" => match value.as_ref() {
+            CheckedTerm::Reference { target } => Some(target),
+            _ => None,
+        },
+        _ => None,
+    })
+}
 
 fn kani(advertised: Vec<(CapabilityKind, Mode)>) -> BackendDescriptor {
     BackendDescriptor {
@@ -266,20 +286,14 @@ fn oversized_admitted_function_read_stops_the_envelope() {
         SOURCE_PARAM_B,
     };
     let (package, ids) = oversized_source_bound_call_package();
-    let body_id = package
+    let body_id = &package
         .graph()
         .nodes
         .iter()
         .find(|node| node.node_id == ids.resolve(&code_id(SOURCE_FUNCTION)))
         .expect("resolved function")
-        .body["members"]
-        .as_array()
-        .expect("members")
-        .iter()
-        .find(|member| member["name"] == "body")
-        .expect("body binding")["value"]["target"]
-        .clone();
-    let body_id: CheckedNodeId = serde_json::from_value(body_id).expect("body id");
+        .body;
+    let body_id = function_body_target(body_id).expect("body binding").clone();
     let call_id = ids.resolve(&code_id(SOURCE_CALL));
     let lowered = package.lower(
         &[body_id, call_id.clone()],
@@ -353,23 +367,18 @@ fn genuine_function_backend_refusals_stay_item_level() {
         "function".to_owned(),
     ]);
     let too_large_to_render = source_bound_call_package_with_name_len(450_000);
-    let body_id: CheckedNodeId = serde_json::from_value(
-        too_large_to_render
+    let body_id = function_body_target(
+        &too_large_to_render
             .0
             .graph()
             .nodes
             .iter()
             .find(|node| node.node_id == too_large_to_render.1.resolve(&code_id(SOURCE_FUNCTION)))
             .expect("resolved function")
-            .body["members"]
-            .as_array()
-            .expect("members")
-            .iter()
-            .find(|member| member["name"] == "body")
-            .expect("body binding")["value"]["target"]
-            .clone(),
+            .body,
     )
-    .expect("body id");
+    .expect("body id")
+    .clone();
     let lowered = too_large_to_render.0.lower(
         &[
             body_id,
@@ -535,12 +544,9 @@ fn selected_scalar_form(package: CheckedPackageV2, node_id: CheckedNodeId) -> Ka
         .nodes
         .iter()
         .find(|node| {
-            node.body
-                .pointer("/operation/identity")
-                .and_then(serde_json::Value::as_str)
-                == Some("quire.op.numeric.narrow")
-                && node.body.pointer("/arguments/0/target")
-                    == Some(&serde_json::to_value(&node_id).expect("typed key"))
+            checked_operation_identity(&node.body) == Some("quire.op.numeric.narrow")
+                && matches!(&node.body, CheckedTerm::Application { arguments, .. }
+                    if matches!(arguments.first(), Some(CheckedTerm::Reference { target }) if target == &node_id))
         })
         .map(|node| node.node_id.clone());
     let selection = application.map_or(ContractDriverResultSelection::NotApplicable, |entry| {
@@ -629,12 +635,7 @@ fn integer_scalar(operation_identity: &str) -> KaniForm {
             .graph()
             .nodes
             .iter()
-            .find(|node| {
-                node.body
-                    .pointer("/operation/identity")
-                    .and_then(serde_json::Value::as_str)
-                    == Some(operation_identity)
-            })
+            .find(|node| checked_operation_identity(&node.body) == Some(operation_identity))
             .expect("QSL add node")
             .node_id
             .clone();
@@ -645,13 +646,7 @@ fn integer_scalar(operation_identity: &str) -> KaniForm {
         .graph()
         .nodes
         .iter()
-        .find(|node| {
-            node.body
-                .get("operation")
-                .and_then(|op| op.get("identity"))
-                .and_then(serde_json::Value::as_str)
-                == Some(operation_identity)
-        })
+        .find(|node| checked_operation_identity(&node.body) == Some(operation_identity))
         .expect("checked scalar fixture carries the selected operation")
         .node_id
         .clone();
@@ -729,13 +724,7 @@ fn kani_supported_bounded_request_keeps_exact_proof_bound_input() {
         .graph()
         .nodes
         .iter()
-        .find(|node| {
-            node.body
-                .get("operation")
-                .and_then(|operation| operation.get("identity"))
-                .and_then(serde_json::Value::as_str)
-                == Some("quire.op.integer.add")
-        })
+        .find(|node| checked_operation_identity(&node.body) == Some("quire.op.integer.add"))
         .expect("checked source carries integer addition")
         .node_id
         .clone();
@@ -2051,13 +2040,7 @@ fn source_derived_division_refusal() -> UnsupportedObligation {
         .graph()
         .nodes
         .iter()
-        .find(|node| {
-            node.body
-                .get("operation")
-                .and_then(|operation| operation.get("identity"))
-                .and_then(serde_json::Value::as_str)
-                == Some("quire.op.integer.div")
-        })
+        .find(|node| checked_operation_identity(&node.body) == Some("quire.op.integer.div"))
         .expect("checked scalar fixture carries integer division")
         .node_id
         .clone();
@@ -2553,7 +2536,7 @@ fn kani_state_frame_refusal_identity_keeps_operation_and_contract_frame_role() {
             .nodes
             .iter()
             .find(|node| node.node_id == fixture.clause)
-            .and_then(|node| node.body.get("operation")?.get("identity")?.as_str())
+            .and_then(|node| checked_operation_identity(&node.body))
             .expect("checked state clause has an operation identity")
             .to_owned();
         let settlement = settle_one(
@@ -2801,7 +2784,7 @@ fn kani_scalar_path_requires_selected_result_for_nonderivable_nodes() {
         .nodes
         .iter()
         .find(|node| node.node_id == state.clause)
-        .and_then(|node| node.body.get("operation")?.get("identity")?.as_str())
+        .and_then(|node| checked_operation_identity(&node.body))
         .expect("checked state clause has an operation identity")
         .to_owned();
     let state_settlement = settle_one(

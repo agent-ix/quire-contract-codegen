@@ -667,11 +667,12 @@ fn tc_029_public_qsl_recursive_items_generate_through_reader() {
 /// It is never rewritten into a package authenticated by a QSL context.
 fn assert_recursive_fixture_shapes(package: &CheckedPackageV2) {
     use quire_contract_model::CheckedNodeId;
-    fn members(node: &CheckedSemanticNodeV2) -> &[serde_json::Value] {
-        assert_eq!(node.body["term"], "aggregate");
-        node.body["members"]
+    fn members(node: &CheckedSemanticNodeV2) -> Vec<serde_json::Value> {
+        let body = serde_json::to_value(&node.body).expect("typed original body serializes");
+        body["members"]
             .as_array()
             .expect("original aggregate members")
+            .clone()
     }
     fn reference(term: &serde_json::Value) -> CheckedNodeId {
         assert_eq!(term["term"], "reference");
@@ -996,7 +997,10 @@ fn tc_029_admitted_one_reference_sequence_resolves_its_separate_bound() {
     let bound_node = graph.iter().find(|node| node.node_id == bound).unwrap();
     assert_eq!(sequence_node.semantic_form.as_ref(), "sequence");
     assert_eq!(
-        sequence_node.body["members"].as_array().unwrap().len(),
+        match &sequence_node.body {
+            quire_contract_model::CheckedTerm::Aggregate { members } => members.len(),
+            _ => panic!("reader-admitted sequence is an aggregate"),
+        },
         1,
         "reader-admitted sequence has one element reference"
     );

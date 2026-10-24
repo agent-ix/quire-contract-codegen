@@ -138,7 +138,7 @@ use crate::core::contract_package::{
 };
 use crate::core::naming::{bounded_readable_component, unique_names};
 use crate::core::profile::oracle_crate_manifest;
-use crate::oracle::checked_graph::{aggregate_members, CheckedGraph};
+use crate::oracle::checked_graph::{aggregate_members, CheckedGraph, GraphBody};
 use crate::oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
 use crate::oracle::equality::EqualityOperatorKind;
 use crate::oracle::operator_catalog::IntegerOperator;
@@ -844,7 +844,7 @@ fn render_schedule_source(
 }
 
 fn project_body_graph(
-    source_nodes: &Graph<'_>,
+    source_nodes: &CheckedGraph<'_, CheckedTerm>,
     type_kinds: &BTreeMap<CheckedNodeId, schedule::ValueKind>,
     root: &CheckedNodeId,
     work: &mut schedule::WorkCounter,
@@ -904,8 +904,8 @@ fn project_body_graph(
     Ok(projected)
 }
 
-fn project_function_node(
-    source: &CheckedSemanticNodeV2,
+fn project_function_node<Body>(
+    source: &CheckedSemanticNodeV2<Body>,
     body: Option<&CheckedTerm>,
     type_kinds: &BTreeMap<CheckedNodeId, schedule::ValueKind>,
 ) -> Result<
@@ -1051,7 +1051,7 @@ fn decode_reference(
 }
 
 fn validate_schedule_item(
-    source_nodes: &Graph<'_>,
+    source_nodes: &CheckedGraph<'_, CheckedTerm>,
     type_kinds: &BTreeMap<CheckedNodeId, schedule::ValueKind>,
     item: &FunctionScheduleItem,
     binding: &schedule::FunctionBinding,
@@ -1123,7 +1123,7 @@ fn validate_schedule_item(
 
 fn schedule_term_value_kind(
     term: &CheckedTerm,
-    source_nodes: &Graph<'_>,
+    source_nodes: &CheckedGraph<'_, CheckedTerm>,
     type_kinds: &BTreeMap<CheckedNodeId, schedule::ValueKind>,
     owner: &CheckedNodeId,
 ) -> Result<schedule::ValueKind, schedule::ScheduleRefusal> {
@@ -1574,12 +1574,16 @@ impl PartialOrd for IndexedNodeId {
 
 /// Keep source-call matching identical for borrowed generation graphs and preflight indexes.
 trait NodeLookup<'a> {
-    fn get_node(&self, node_id: &CheckedNodeId) -> Option<&'a CheckedSemanticNodeV2>;
+    type Body: 'a;
+
+    fn get_node(&self, node_id: &CheckedNodeId) -> Option<&'a CheckedSemanticNodeV2<Self::Body>>;
     fn get_term(&self, node_id: &CheckedNodeId) -> Option<&'a CheckedTerm>;
 }
 
-impl<'a> NodeLookup<'a> for Graph<'a> {
-    fn get_node(&self, node_id: &CheckedNodeId) -> Option<&'a CheckedSemanticNodeV2> {
+impl<'a, Body: GraphBody + 'a> NodeLookup<'a> for CheckedGraph<'a, Body> {
+    type Body = Body;
+
+    fn get_node(&self, node_id: &CheckedNodeId) -> Option<&'a CheckedSemanticNodeV2<Self::Body>> {
         self.node(node_id)
     }
     fn get_term(&self, node_id: &CheckedNodeId) -> Option<&'a CheckedTerm> {
@@ -1634,6 +1638,8 @@ impl<'a> FunctionPreflightGraph<'a> {
 }
 
 impl<'a> NodeLookup<'a> for FunctionPreflightGraph<'a> {
+    type Body = CheckedTerm;
+
     fn get_node(&self, node_id: &CheckedNodeId) -> Option<&'a CheckedSemanticNodeV2> {
         self.get(node_id)
     }
@@ -1693,13 +1699,13 @@ fn source_call_matches<'a>(
     }) && expected.next().is_none()
 }
 
-struct FunctionSourceIndex<'a> {
-    graph: Graph<'a>,
+struct FunctionSourceIndex<'a, Body: GraphBody = serde_json::Value> {
+    graph: CheckedGraph<'a, Body>,
     by_name_body: BTreeMap<(&'a str, &'a CheckedNodeId), Option<&'a CheckedNodeId>>,
 }
 
-impl<'a> FunctionSourceIndex<'a> {
-    fn new(graph: Graph<'a>) -> Self {
+impl<'a, Body: GraphBody> FunctionSourceIndex<'a, Body> {
+    fn new(graph: CheckedGraph<'a, Body>) -> Self {
         let mut by_name_body = BTreeMap::new();
         for node in graph.nodes() {
             #[cfg(test)]
@@ -1792,7 +1798,7 @@ mod ir988_source_function_tests {
             declaration: name.map(|name| CheckedDeclaration {
                 qualified_name: vec![name.into()],
             }),
-            body: serde_json::Value::Null,
+            body: CheckedTerm::aggregate(Vec::new()),
         };
         crate::oracle::checked_graph::fixture::Node::new(
             metadata,
@@ -1819,7 +1825,8 @@ mod ir988_source_function_tests {
                     (0..functions)
                         .map(|index| node(index as u64 + 1, Some(format!("f{index}")), &body)),
                 );
-                let graph: Graph<'_> = nodes.iter().map(|node| (&node.node_id, node)).collect();
+                let graph: CheckedGraph<'_, CheckedTerm> =
+                    nodes.iter().map(|node| (&node.node_id, node)).collect();
                 IR988_SOURCE_GRAPH_VISITS.with(|visits| visits.set(0));
                 let index = FunctionSourceIndex::new(graph);
                 for _ in 0..requests {
@@ -2585,8 +2592,8 @@ fn application_arguments(body: &CheckedTerm) -> Option<&[CheckedTerm]> {
 /// node, independent of any other function (Stage 1, non-`Call` bodies), and
 /// return the body with its operator resolved: the one place a scalar operator
 /// is checked, so the rendered body cannot disagree with the refusal.
-fn classify_body_shape<'r>(
-    node: &CheckedSemanticNodeV2,
+fn classify_body_shape<'r, Body>(
+    node: &CheckedSemanticNodeV2<Body>,
     body: Option<&CheckedTerm>,
     declaration: &'r ExactFunctionDeclaration,
 ) -> Result<ClassifiedBody<'r>, ExactFunctionRefusal> {
@@ -3499,6 +3506,7 @@ fn render_body(body: &ClassifiedBody<'_>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    type Graph<'a> = crate::oracle::checked_graph::CheckedGraph<'a, CheckedTerm>;
     use crate::oracle::failed_records::{failed_record, unrecognised_kinds};
     use ix_trace_rs::trace;
     use quire_contract_model::CheckedPackageLimit;
@@ -3523,7 +3531,7 @@ mod tests {
                 nominal_identity_preimage: None,
                 declaration: None,
                 owner: None,
-                body: serde_json::json!({}),
+                body: CheckedTerm::aggregate(Vec::new()),
             }
         };
         let mut nodes = (0..32).map(node).collect::<Vec<_>>();
@@ -3642,7 +3650,7 @@ mod tests {
                 nominal_identity_preimage: None,
                 declaration: None,
                 owner: None,
-                body: serde_json::Value::Null,
+                body: CheckedTerm::aggregate(Vec::new()),
             },
             body,
         )

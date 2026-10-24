@@ -32,12 +32,43 @@ mod tests {
     use quire_contract_model::{
         CheckedNodeId, CheckedNodeTag, CheckedOccurrenceRole, CheckedPackageEvidence,
         CheckedPackageReadLimits, CheckedPackageRefusalCode, CheckedPackageV2,
-        CheckedPackageV2ReadResult, CheckedTerm, CompleteLoweringProfileV2, ContractDependencies,
-        ContractDependencyInput, ContractFeatureRecordV1, ContractOccurrenceKeyV1,
-        ContractPackageReadResult, ContractPackageWireV1, ContractRootViewV1, LoweringProfileRef,
+        CheckedPackageV2ReadResult, CheckedSemanticNodeV2, CheckedTerm, CompleteLoweringProfileV2,
+        ContractDependencies, ContractDependencyInput, ContractFeatureRecordV1,
+        ContractOccurrenceKeyV1, ContractPackageReadResult, ContractPackageWireV1,
+        ContractRootViewV1, LoweringProfileRef,
     };
 
     use super::exact_function_fixture;
+
+    fn application_identity(node: &CheckedSemanticNodeV2) -> Option<&str> {
+        let CheckedTerm::Application { operation, .. } = &node.body else {
+            return None;
+        };
+        operation.get("identity")?.as_str()
+    }
+
+    fn argument_target(node: &CheckedSemanticNodeV2, index: usize) -> Option<&CheckedNodeId> {
+        let CheckedTerm::Application { arguments, .. } = &node.body else {
+            return None;
+        };
+        match arguments.get(index)? {
+            CheckedTerm::Reference { target } => Some(target),
+            _ => None,
+        }
+    }
+
+    fn bound_member_literal(node: &CheckedSemanticNodeV2, index: usize) -> Option<&str> {
+        let CheckedTerm::Aggregate { members } = &node.body else {
+            return None;
+        };
+        let CheckedTerm::Binding { value, .. } = members.get(index)? else {
+            return None;
+        };
+        let CheckedTerm::Literal { value, .. } = value.as_ref() else {
+            return None;
+        };
+        value.as_str()
+    }
 
     fn oversized_function_item() -> RequestItem {
         use exact_function_fixture::{
@@ -225,37 +256,32 @@ mod tests {
             })
             .expect("q function");
         let function_id = function.node_id.clone();
-        let body_id = function.body["members"]
-            .as_array()
-            .expect("function body members")
+        let CheckedTerm::Aggregate { members } = &function.body else {
+            panic!("function body members");
+        };
+        let body_id = members
             .iter()
-            .find(|member| member["name"] == "body")
-            .expect("body binding")["value"]["target"]
-            .clone();
-        let body_id: CheckedNodeId = serde_json::from_value(body_id).expect("body node id");
+            .find_map(|member| match member {
+                CheckedTerm::Binding { name, value } if name.as_ref() == "body" => {
+                    match value.as_ref() {
+                        CheckedTerm::Reference { target } => Some(target.clone()),
+                        _ => None,
+                    }
+                }
+                _ => None,
+            })
+            .expect("body binding references a node");
         let call = checked
             .graph()
             .nodes
             .iter()
             .find(|node| {
-                node.body
-                    .pointer("/operation/identity")
-                    .and_then(serde_json::Value::as_str)
-                    == Some("quire.op.function.call")
-                    && node
-                        .body
-                        .pointer("/arguments/0/target")
-                        .and_then(|target| {
-                            serde_json::from_value::<CheckedNodeId>(target.clone()).ok()
-                        })
-                        .as_ref()
-                        == Some(&function_id)
+                application_identity(node) == Some("quire.op.function.call")
+                    && argument_target(node, 0) == Some(&function_id)
             })
             .expect("r calls q");
         let call_id = call.node_id.clone();
-        let argument_id: CheckedNodeId =
-            serde_json::from_value(call.body["arguments"][1]["target"].clone())
-                .expect("call argument id");
+        let argument_id = argument_target(call, 1).expect("call argument id").clone();
         (
             checked,
             vec![function_id, body_id, call_id, argument_id],
@@ -1666,12 +1692,7 @@ mod tests {
                 .graph()
                 .nodes
                 .iter()
-                .find(|node| {
-                    node.body
-                        .pointer("/operation/identity")
-                        .and_then(serde_json::Value::as_str)
-                        == Some(operation)
-                })
+                .find(|node| application_identity(node) == Some(operation))
                 .expect("QSL integer ordering node")
                 .node_id
                 .clone();
@@ -1802,12 +1823,7 @@ mod tests {
             .graph()
             .nodes
             .iter()
-            .find(|node| {
-                node.body
-                    .pointer("/operation/identity")
-                    .and_then(serde_json::Value::as_str)
-                    == Some("quire.op.integer.lt")
-            })
+            .find(|node| application_identity(node) == Some("quire.op.integer.lt"))
             .expect("QSL ordering application")
             .node_id
             .clone();
@@ -1893,12 +1909,7 @@ mod tests {
             .graph()
             .nodes
             .iter()
-            .filter(|node| {
-                node.body
-                    .pointer("/operation/identity")
-                    .and_then(serde_json::Value::as_str)
-                    == Some("quire.op.integer.add")
-            })
+            .filter(|node| application_identity(node) == Some("quire.op.integer.add"))
             .collect::<Vec<_>>();
         let [add] = adds.as_slice() else {
             panic!("RR-16 must share one addition node");
@@ -1923,12 +1934,8 @@ mod tests {
             .nodes
             .iter()
             .filter(|node| {
-                node.body
-                    .pointer("/operation/identity")
-                    .and_then(serde_json::Value::as_str)
-                    == Some("quire.op.numeric.narrow")
-                    && node.body.pointer("/arguments/0/target")
-                        == Some(&serde_json::to_value(&add).expect("typed key"))
+                application_identity(node) == Some("quire.op.numeric.narrow")
+                    && argument_target(node, 0) == Some(&add)
             })
             .map(|node| {
                 let bound = checked
@@ -1937,11 +1944,7 @@ mod tests {
                     .iter()
                     .find(|bound| bound.node_id == node.semantic_type)
                     .expect("narrow target bound");
-                let maximum = bound
-                    .body
-                    .pointer("/members/1/value/value")
-                    .and_then(serde_json::Value::as_str)
-                    .expect("integer upper endpoint");
+                let maximum = bound_member_literal(bound, 1).expect("integer upper endpoint");
                 (
                     maximum.to_owned(),
                     node.node_id.clone(),
@@ -2438,12 +2441,7 @@ mod tests {
             .graph()
             .nodes
             .iter()
-            .find(|node| {
-                node.body
-                    .pointer("/operation/identity")
-                    .and_then(serde_json::Value::as_str)
-                    == Some("quire.op.integer.add")
-            })
+            .find(|node| application_identity(node) == Some("quire.op.integer.add"))
             .expect("QSL integer addition")
             .node_id
             .clone();
@@ -2452,12 +2450,8 @@ mod tests {
             .nodes
             .iter()
             .filter(|node| {
-                node.body
-                    .pointer("/operation/identity")
-                    .and_then(serde_json::Value::as_str)
-                    == Some("quire.op.numeric.narrow")
-                    && node.body.pointer("/arguments/0/target")
-                        == Some(&serde_json::to_value(&expression).expect("typed key"))
+                application_identity(node) == Some("quire.op.numeric.narrow")
+                    && argument_target(node, 0) == Some(&expression)
             })
             .collect::<Vec<_>>();
         let [conversion] = conversions.as_slice() else {
@@ -2524,12 +2518,7 @@ mod tests {
             .graph()
             .nodes
             .iter()
-            .find(|node| {
-                node.body
-                    .pointer("/operation/identity")
-                    .and_then(serde_json::Value::as_str)
-                    == Some("quire.op.integer.add")
-            })
+            .find(|node| application_identity(node) == Some("quire.op.integer.add"))
             .expect("QSL integer addition")
             .node_id
             .clone();
@@ -2538,12 +2527,8 @@ mod tests {
             .nodes
             .iter()
             .filter(|node| {
-                node.body
-                    .pointer("/operation/identity")
-                    .and_then(serde_json::Value::as_str)
-                    == Some("quire.op.numeric.narrow")
-                    && node.body.pointer("/arguments/0/target")
-                        == Some(&serde_json::to_value(&expression).expect("typed key"))
+                application_identity(node) == Some("quire.op.numeric.narrow")
+                    && argument_target(node, 0) == Some(&expression)
             })
             .collect::<Vec<_>>();
         let [conversion] = conversions.as_slice() else {
@@ -2721,12 +2706,7 @@ mod tests {
             .graph()
             .nodes
             .iter()
-            .find(|node| {
-                node.body
-                    .pointer("/operation/identity")
-                    .and_then(serde_json::Value::as_str)
-                    == Some("quire.op.integer.eq")
-            })
+            .find(|node| application_identity(node) == Some("quire.op.integer.eq"))
             .expect("QSL equality expression")
             .node_id
             .clone();
@@ -2788,12 +2768,7 @@ mod tests {
             .graph()
             .nodes
             .iter()
-            .find(|node| {
-                node.body
-                    .pointer("/operation/identity")
-                    .and_then(serde_json::Value::as_str)
-                    == Some("quire.op.integer.add")
-            })
+            .find(|node| application_identity(node) == Some("quire.op.integer.add"))
             .expect("QSL addition body")
             .node_id
             .clone();
@@ -2956,29 +2931,16 @@ mod tests {
             .nodes
             .iter()
             .find(|node| {
-                node.body
-                    .pointer("/operation/identity")
-                    .and_then(serde_json::Value::as_str)
-                    == Some("quire.op.integer.add")
-                    && node
-                        .body
-                        .pointer("/arguments/1/target")
-                        .and_then(|target| {
-                            serde_json::from_value::<CheckedNodeId>(target.clone()).ok()
-                        })
+                application_identity(node) == Some("quire.op.integer.add")
+                    && argument_target(node, 1)
                         .and_then(|target| {
                             checked
                                 .graph()
                                 .nodes
                                 .iter()
-                                .find(|operand| operand.node_id == target)
+                                .find(|operand| &operand.node_id == target)
                         })
-                        .and_then(|operand| {
-                            operand
-                                .body
-                                .pointer("/members/0/value/value")
-                                .and_then(serde_json::Value::as_str)
-                        })
+                        .and_then(|operand| bound_member_literal(operand, 0))
                         == Some("p")
             })
             .expect("mixed addition with plain parameter p")
@@ -2998,12 +2960,7 @@ mod tests {
             .graph()
             .nodes
             .iter()
-            .find(|node| {
-                node.body
-                    .pointer("/operation/identity")
-                    .and_then(serde_json::Value::as_str)
-                    == Some("quire.op.integer.eq")
-            })
+            .find(|node| application_identity(node) == Some("quire.op.integer.eq"))
             .expect("QSL integer equality")
             .node_id
             .clone();

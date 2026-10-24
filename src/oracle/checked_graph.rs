@@ -5,28 +5,83 @@ use quire_contract_model::{
     ContractPackageV1, LiteralKind,
 };
 use quire_exact::Integer;
+use serde_json::Value;
+
+pub(crate) trait GraphBody: Sized {
+    type Owner;
+
+    fn nodes(owner: &Self::Owner) -> &[CheckedSemanticNodeV2<Self>];
+    fn node<'a>(
+        owner: &'a Self::Owner,
+        ordered: &[&'a CheckedSemanticNodeV2<Self>],
+        key: &CheckedNodeId,
+    ) -> Option<&'a CheckedSemanticNodeV2<Self>>;
+    fn term<'a>(owner: &'a Self::Owner, key: &CheckedNodeId) -> Option<&'a CheckedTerm>;
+}
+
+impl GraphBody for Value {
+    type Owner = ContractPackageV1;
+
+    fn nodes(owner: &Self::Owner) -> &[CheckedSemanticNodeV2<Self>] {
+        &owner.wire().semantic_graph.nodes
+    }
+
+    fn node<'a>(
+        owner: &'a Self::Owner,
+        _: &[&'a CheckedSemanticNodeV2<Self>],
+        key: &CheckedNodeId,
+    ) -> Option<&'a CheckedSemanticNodeV2<Self>> {
+        owner.node(key)
+    }
+
+    fn term<'a>(owner: &'a Self::Owner, key: &CheckedNodeId) -> Option<&'a CheckedTerm> {
+        owner.term(key)
+    }
+}
+
+impl GraphBody for CheckedTerm {
+    type Owner = CheckedPackageV2;
+
+    fn nodes(owner: &Self::Owner) -> &[CheckedSemanticNodeV2<Self>] {
+        &owner.graph().nodes
+    }
+
+    fn node<'a>(
+        _: &'a Self::Owner,
+        ordered: &[&'a CheckedSemanticNodeV2<Self>],
+        key: &CheckedNodeId,
+    ) -> Option<&'a CheckedSemanticNodeV2<Self>> {
+        ordered
+            .binary_search_by(|node| node.node_id.cmp(key))
+            .ok()
+            .and_then(|position| ordered.get(position).copied())
+    }
+
+    fn term<'a>(owner: &'a Self::Owner, key: &CheckedNodeId) -> Option<&'a CheckedTerm> {
+        owner.term(key)
+    }
+}
 
 /// A view of one admitted lowered package, retaining the consumers' key-ordered walks.
 /// Keyed queries use the IR owner's retained index rather than rebuilding a node map.
-pub(crate) struct CheckedGraph<'a> {
-    package: Package<'a>,
-    ordered: Vec<&'a CheckedSemanticNodeV2>,
+pub(crate) struct CheckedGraph<'a, Body: GraphBody = Value> {
+    package: Package<'a, Body>,
+    ordered: Vec<&'a CheckedSemanticNodeV2<Body>>,
 }
 
-enum Package<'a> {
-    Lowered(&'a ContractPackageV1),
-    Checked(&'a CheckedPackageV2),
+enum Package<'a, Body: GraphBody> {
+    Owner(&'a Body::Owner),
     #[cfg(test)]
-    Fixture(Vec<(&'a CheckedNodeId, &'a fixture::Node)>),
+    Fixture(Vec<(&'a CheckedNodeId, &'a fixture::Node<Body>)>),
 }
 
-impl<'a> CheckedGraph<'a> {
+impl<'a> CheckedGraph<'a, Value> {
     /// Borrow the admitted package and order its node references once.
     pub(crate) fn new(package: &'a ContractPackageV1) -> Self {
-        let mut ordered: Vec<_> = package.wire().semantic_graph.nodes.iter().collect();
+        let mut ordered: Vec<_> = Value::nodes(package).iter().collect();
         ordered.sort_unstable_by(|left, right| left.node_id.cmp(&right.node_id));
         Self {
-            package: Package::Lowered(package),
+            package: Package::Owner(package),
             ordered,
         }
     }
@@ -34,7 +89,7 @@ impl<'a> CheckedGraph<'a> {
     /// Borrow an original admitted source for generators that inspect its full graph.
     /// The source exposes keyed terms but no public keyed-node accessor, so the
     /// same ordered references also support binary node lookup in this case.
-    pub(crate) fn from_checked(package: &'a CheckedPackageV2) -> Self {
+    pub(crate) fn from_checked(package: &'a CheckedPackageV2) -> CheckedGraph<'a, CheckedTerm> {
         Self::from_checked_with_node_visit(package, || {})
     }
 
@@ -42,24 +97,24 @@ impl<'a> CheckedGraph<'a> {
     pub(crate) fn from_checked_with_node_visit(
         package: &'a CheckedPackageV2,
         mut visit: impl FnMut(),
-    ) -> Self {
-        let mut ordered: Vec<_> = package.graph().nodes.iter().inspect(|_| visit()).collect();
+    ) -> CheckedGraph<'a, CheckedTerm> {
+        let mut ordered: Vec<_> = CheckedTerm::nodes(package)
+            .iter()
+            .inspect(|_| visit())
+            .collect();
         ordered.sort_unstable_by(|left, right| left.node_id.cmp(&right.node_id));
-        Self {
-            package: Package::Checked(package),
+        CheckedGraph {
+            package: Package::Owner(package),
             ordered,
         }
     }
+}
 
+impl<'a, Body: GraphBody> CheckedGraph<'a, Body> {
     /// The represented node selected by its complete admitted key.
-    pub(crate) fn node(&self, key: &CheckedNodeId) -> Option<&'a CheckedSemanticNodeV2> {
+    pub(crate) fn node(&self, key: &CheckedNodeId) -> Option<&'a CheckedSemanticNodeV2<Body>> {
         match self.package {
-            Package::Lowered(package) => package.node(key),
-            Package::Checked(_) => self
-                .ordered
-                .binary_search_by(|node| node.node_id.cmp(key))
-                .ok()
-                .and_then(|position| self.ordered.get(position).copied()),
+            Package::Owner(package) => Body::node(package, &self.ordered, key),
             #[cfg(test)]
             Package::Fixture(ref nodes) => nodes
                 .binary_search_by(|(candidate, _)| (*candidate).cmp(key))
@@ -71,21 +126,20 @@ impl<'a> CheckedGraph<'a> {
     /// The IR owner's retained typed body of that same node.
     pub(crate) fn term(&self, key: &CheckedNodeId) -> Option<&'a CheckedTerm> {
         match self.package {
-            Package::Lowered(package) => package.term(key),
-            Package::Checked(package) => package.term(key),
+            Package::Owner(package) => Body::term(package, key),
             #[cfg(test)]
             Package::Fixture(ref nodes) => {
                 let position = nodes
                     .binary_search_by(|(candidate, _)| (*candidate).cmp(key))
                     .ok()?;
-                let node: &'a fixture::Node = nodes.get(position)?.1;
+                let node: &'a fixture::Node<Body> = nodes.get(position)?.1;
                 node.body.as_ref()
             }
         }
     }
 
     /// Iterate in the same key order as the consumers' former node maps.
-    pub(crate) fn nodes(&self) -> impl Iterator<Item = &'a CheckedSemanticNodeV2> + '_ {
+    pub(crate) fn nodes(&self) -> impl Iterator<Item = &'a CheckedSemanticNodeV2<Body>> + '_ {
         self.ordered.iter().copied()
     }
 
@@ -202,12 +256,12 @@ pub(crate) mod fixture {
     use super::*;
 
     #[derive(Clone)]
-    pub(crate) struct Node {
-        pub(crate) metadata: CheckedSemanticNodeV2,
+    pub(crate) struct Node<Body: GraphBody = CheckedTerm> {
+        pub(crate) metadata: CheckedSemanticNodeV2<Body>,
         pub(crate) body: Option<CheckedTerm>,
     }
 
-    impl Node {
+    impl Node<CheckedTerm> {
         pub(crate) fn new(metadata: CheckedSemanticNodeV2, body: Option<CheckedTerm>) -> Self {
             let mut node = Self { metadata, body };
             node.sync_body();
@@ -225,29 +279,27 @@ pub(crate) mod fixture {
         }
 
         pub(crate) fn sync_body(&mut self) {
-            self.metadata.body = self
-                .body
-                .as_ref()
-                .map(|term| serde_json::to_value(term).expect("typed fixture serializes"))
-                .unwrap_or(serde_json::Value::Null);
+            if let Some(body) = &self.body {
+                self.metadata.body = body.clone();
+            }
         }
     }
 
-    impl std::ops::Deref for Node {
-        type Target = CheckedSemanticNodeV2;
+    impl<Body: GraphBody> std::ops::Deref for Node<Body> {
+        type Target = CheckedSemanticNodeV2<Body>;
 
         fn deref(&self) -> &Self::Target {
             &self.metadata
         }
     }
 
-    impl std::ops::DerefMut for Node {
+    impl<Body: GraphBody> std::ops::DerefMut for Node<Body> {
         fn deref_mut(&mut self) -> &mut Self::Target {
             &mut self.metadata
         }
     }
 
-    impl<'a> FromIterator<(&'a CheckedNodeId, &'a Node)> for CheckedGraph<'a> {
+    impl<'a> FromIterator<(&'a CheckedNodeId, &'a Node)> for CheckedGraph<'a, CheckedTerm> {
         fn from_iter<T: IntoIterator<Item = (&'a CheckedNodeId, &'a Node)>>(input: T) -> Self {
             let unique: std::collections::BTreeMap<_, _> = input.into_iter().collect();
             let nodes: Vec<_> = unique.into_iter().collect();

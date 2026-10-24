@@ -16,8 +16,9 @@ use quire_contract_codegen::{
 };
 use quire_contract_model::{
     CheckedNodeId, CheckedOccurrenceRole, CheckedPackageEvidence, CheckedPackageReadLimits,
-    CheckedPackageV2, CheckedPackageV2ReadResult, ContractDependencies, ContractFeatureRecordV1,
-    ContractOccurrenceKeyV1, ContractPackageReadResult, ContractPackageV1, ContractPackageWireV1,
+    CheckedPackageV2, CheckedPackageV2ReadResult, CheckedTerm, ContractDependencies,
+    ContractFeatureRecordV1, ContractOccurrenceKeyV1, ContractPackageReadResult, ContractPackageV1,
+    ContractPackageWireV1,
 };
 
 use qsl_replay::{compile_package, DependencyInput, ReplayLimits, SourceIdentity, StageLimits};
@@ -25,6 +26,27 @@ use qsl_replay::{compile_package, DependencyInput, ReplayLimits, SourceIdentity,
 use crate::kani_obligations::{
     admitted_scalar_claims, package, routed_scalar_package, scalar_package,
 };
+
+fn application_arguments(body: &CheckedTerm) -> Option<&[CheckedTerm]> {
+    match body {
+        CheckedTerm::Application { arguments, .. } => Some(arguments),
+        _ => None,
+    }
+}
+
+fn reference_target(term: &CheckedTerm) -> Option<&CheckedNodeId> {
+    match term {
+        CheckedTerm::Reference { target } => Some(target),
+        _ => None,
+    }
+}
+
+fn operation_identity(body: &CheckedTerm) -> Option<&str> {
+    let CheckedTerm::Application { operation, .. } = body else {
+        return None;
+    };
+    operation.get("identity")?.as_str()
+}
 
 const RENDERED: [&str; 3] = [
     "quire.op.integer.add",
@@ -145,12 +167,11 @@ fn admitted_routing_input_with_limits(
             source.node_id == node_id && source.role == CheckedOccurrenceRole::Expression
         });
         let conversion = checked.graph().nodes.iter().find(|node| {
-            node.body
-                .pointer("/operation/identity")
-                .and_then(serde_json::Value::as_str)
-                == Some("quire.op.numeric.narrow")
-                && node.body.pointer("/arguments/0/target")
-                    == Some(&serde_json::to_value(&node_id).expect("typed fixture key"))
+            operation_identity(&node.body) == Some("quire.op.numeric.narrow")
+                && application_arguments(&node.body)
+                    .and_then(|arguments| arguments.first())
+                    .and_then(reference_target)
+                    == Some(&node_id)
         });
         let selection =
             application.map_or(ContractDriverResultSelection::NotApplicable, |source| {
@@ -1632,12 +1653,19 @@ fn qsl_function_application(package: &CheckedPackageV2, function: &str) -> Check
             })
         })
         .unwrap_or_else(|| panic!("QSL output declares {function}"));
-    let body = declaration.body["members"]
-        .as_array()
-        .and_then(|members| members.iter().find(|member| member["name"] == "body"))
-        .unwrap_or_else(|| panic!("QSL function {function} has a body binding"));
-    let body_id: CheckedNodeId = serde_json::from_value(body["value"]["target"].clone())
-        .unwrap_or_else(|error| panic!("QSL function {function} body is a reference: {error}"));
+    let CheckedTerm::Aggregate { members } = &declaration.body else {
+        panic!("QSL function {function} has aggregate members");
+    };
+    let body_id = members
+        .iter()
+        .find_map(|member| match member {
+            CheckedTerm::Binding { name, value } if name.as_ref() == "body" => {
+                reference_target(value)
+            }
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("QSL function {function} has a body binding"))
+        .clone();
     let body_node = package
         .graph()
         .nodes
@@ -1645,8 +1673,11 @@ fn qsl_function_application(package: &CheckedPackageV2, function: &str) -> Check
         .find(|node| node.node_id == body_id)
         .unwrap_or_else(|| panic!("QSL function {function} body is in the graph"));
     if body_node.semantic_form.as_ref() == "conversion" {
-        serde_json::from_value(body_node.body["arguments"][0]["target"].clone())
-            .unwrap_or_else(|error| panic!("QSL narrowing references its application: {error}"))
+        application_arguments(&body_node.body)
+            .and_then(|arguments| arguments.first())
+            .and_then(reference_target)
+            .unwrap_or_else(|| panic!("QSL narrowing references its application"))
+            .clone()
     } else {
         body_id
     }
@@ -1763,8 +1794,11 @@ fn tc_033_qsl_emitted_nested_integer_operands_are_bounded_or_require_bounds() {
             .find(|node| node.node_id == harness.identity.node_id)
             .expect("routed node is in the admitted graph");
         assert_eq!(
-            serde_json::to_value(&inferred.source_node_id).expect("serialize source identity"),
-            outer.body["arguments"][inferred_position]["target"],
+            &inferred.source_node_id,
+            application_arguments(&outer.body)
+                .and_then(|arguments| arguments.get(inferred_position))
+                .and_then(reference_target)
+                .expect("outer body references its direct nested expression"),
             "{function} identity names the direct nested expression"
         );
         assert!(
@@ -1878,9 +1912,11 @@ fn tc_033_qsl_nested_operand_depth_limit_is_typed_and_keeps_sibling_supported() 
         .iter()
         .map(|node| (&node.node_id, node))
         .collect::<std::collections::BTreeMap<_, _>>();
-    let operand: CheckedNodeId =
-        serde_json::from_value(graph[&work_node].body["arguments"][0]["target"].clone())
-            .expect("work fixture has a referenced inference operand");
+    let operand = application_arguments(&graph[&work_node].body)
+        .and_then(|arguments| arguments.first())
+        .and_then(reference_target)
+        .expect("work fixture has a referenced inference operand")
+        .clone();
     let mut pending = vec![operand];
     let mut visited = std::collections::BTreeSet::new();
     while let Some(node_id) = pending.pop() {
@@ -1890,12 +1926,9 @@ fn tc_033_qsl_nested_operand_depth_limit_is_typed_and_keeps_sibling_supported() 
         let node = graph
             .get(&node_id)
             .expect("operand belongs to the checked graph");
-        for argument in node.body["arguments"].as_array().into_iter().flatten() {
-            if argument["term"] == "reference" {
-                pending.push(
-                    serde_json::from_value(argument["target"].clone())
-                        .expect("authentic graph reference"),
-                );
+        for argument in application_arguments(&node.body).into_iter().flatten() {
+            if let Some(target) = reference_target(argument) {
+                pending.push(target.clone());
             }
         }
     }

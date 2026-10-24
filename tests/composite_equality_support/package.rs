@@ -915,6 +915,16 @@ pub fn read_mutated_wire(mut wire: Value) -> CheckedPackageV2ReadResult {
     )
 }
 
+/// Submit a deliberately malformed body before typed identity construction is possible.
+pub fn read_malformed_body_wire(wire: Value) -> CheckedPackageV2ReadResult {
+    let bytes = serde_json::to_vec(&wire).expect("malformed fixture wire");
+    CheckedPackageV2::read(
+        &bytes,
+        CheckedPackageReadLimits::bounded(),
+        &evidence_for_wire(&wire),
+    )
+}
+
 // ---------------------------------------------------------------------------
 // The composite/structural corpus (codes in `codes.rs`)
 // ---------------------------------------------------------------------------

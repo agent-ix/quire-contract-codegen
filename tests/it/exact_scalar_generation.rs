@@ -23,9 +23,9 @@ use quire_contract_codegen::{
 };
 use quire_contract_model::{
     derive_application_node_id, derive_structural_candidates, ApplicationNodeDraft,
-    CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageRefusalCause,
-    CheckedPackageRefusalCode, CheckedPackageV2, CheckedPackageV2ReadResult, CheckedSemanticNodeV2,
-    StructuralCandidateError,
+    ApplicationOperator, CheckedPackageEvidence, CheckedPackageReadLimits,
+    CheckedPackageRefusalCause, CheckedPackageRefusalCode, CheckedPackageV2,
+    CheckedPackageV2ReadResult, CheckedSemanticNodeV2, CheckedTerm, StructuralCandidateError,
 };
 use quire_exact::{ComparisonOperator, DivisionProfile, Integer, IntegerDomain, IntegerInterval};
 use serde_json::{json, Value};
@@ -2034,12 +2034,17 @@ fn tc_024_corpus_reader_admits_anonymous_integer_ranges() {
         .find(|node| node.node_id == rounded)
         .expect("admitted nearest-away decimal conversion");
     assert_eq!(conversion.semantic_type, result_type);
+    let CheckedTerm::Application {
+        result_type: body_type,
+        operation,
+        ..
+    } = &conversion.body
+    else {
+        panic!("admitted conversion is an application");
+    };
+    assert_eq!(body_type, &result_type);
     assert_eq!(
-        conversion.body["result_type"],
-        serde_json::to_value(&result_type).expect("type id serializes")
-    );
-    assert_eq!(
-        conversion.body["operation"]["mode"],
+        operation["mode"],
         json!({"kind": "rounding", "value": "nearest-away"})
     );
 }
@@ -2312,7 +2317,13 @@ fn tc_024_ac44_direct_temporal_formula_is_unsupported() {
         .iter()
         .find(|node| {
             node.semantic_form.as_ref() == "formula"
-                && node.body.get("operator").and_then(Value::as_str) == Some("temporal_formula")
+                && matches!(
+                    &node.body,
+                    CheckedTerm::Application {
+                        operator: ApplicationOperator::TemporalFormula,
+                        ..
+                    }
+                )
         })
         .expect("QSpec fixture has an admitted temporal_formula root");
     let requested_id = node.node_id.clone();
@@ -2396,7 +2407,13 @@ fn tc_024_ac44_direct_control_case_is_unsupported() {
         .iter()
         .find(|node| {
             node.semantic_form.as_ref() == "case"
-                && node.body.get("operator").and_then(Value::as_str) == Some("case")
+                && matches!(
+                    &node.body,
+                    CheckedTerm::Application {
+                        operator: ApplicationOperator::Case,
+                        ..
+                    }
+                )
         })
         .expect("QSpec fixture has an admitted case root");
     let requested_id = node.node_id.clone();
@@ -2446,7 +2463,13 @@ fn tc_031_ac33_direct_control_case_is_unsupported() {
         .iter()
         .find(|node| {
             node.semantic_form.as_ref() == "case"
-                && node.body.get("operator").and_then(Value::as_str) == Some("case")
+                && matches!(
+                    &node.body,
+                    CheckedTerm::Application {
+                        operator: ApplicationOperator::Case,
+                        ..
+                    }
+                )
         })
         .expect("admitted case root");
     let id = case.node_id.clone();
@@ -3770,9 +3793,11 @@ fn quantity_conversion_derives_and_preserves_target_provenance() {
             .iter()
             .find(|node| node.node_id == claim.node_id)
             .expect("node");
+        let CheckedTerm::Application { operation, .. } = &node.body else {
+            panic!("quantity conversion is an application");
+        };
         let target: quire_contract_model::CheckedNodeId =
-            serde_json::from_value(node.body["operation"]["member"]["declaration"].clone())
-                .expect("target");
+            serde_json::from_value(operation["member"]["declaration"].clone()).expect("target");
         assert_eq!(generated.quantity_conversion_target.as_ref(), Some(&target));
         assert_eq!(
             serde_json::to_value(generated).unwrap()["quantity_conversion_target"],

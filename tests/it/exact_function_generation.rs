@@ -2213,29 +2213,28 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
         "unmodified authoritative QSpec fixture must admit with the same runtime evidence"
     );
 
-    // Reproduce the original bad incremental mutation: indexing an absent operation/laws path
-    // inserts null members into node 0's existing body. The reader must reject that malformed
-    // body, demonstrating why the candidate builder below uses checked object traversal.
+    // Indexing an absent operation/laws path adds an invalid member to node 0's aggregate body.
+    // The typed identity encoder cannot mint an identity for that shape, so the reader rejects
+    // the unchanged package identity before reaching graph validation. The candidate below uses
+    // checked object traversal so it never creates that shape.
     let mut first_bad_mutation = wire.clone();
     assert!(
         first_bad_mutation["semantic_graph"]["nodes"][0]["body"]["operation"]["laws"]
             .as_array_mut()
             .is_none()
     );
-    let refusal = read_mutated_wire(first_bad_mutation);
+    let refusal = read_malformed_body_wire(first_bad_mutation);
     let refusal = match refusal {
         quire_contract_model::CheckedPackageV2ReadResult::Refused(refusal) => refusal,
         other => panic!("malformed first mutation unexpectedly admitted: {other:?}"),
     };
-    let refusal_debug = format!("{refusal:?}");
-    eprintln!("first malformed mutation refusal: {refusal_debug}");
-    assert!(
-        refusal_debug.contains("InvalidSemanticGraph"),
-        "{refusal_debug}"
+    assert_eq!(
+        refusal.code,
+        quire_contract_model::CheckedPackageRefusalCode::StaleDependency
     );
-    assert!(
-        refusal_debug.contains("/semantic_graph/nodes/0/body"),
-        "{refusal_debug}"
+    assert_eq!(
+        refusal.cause,
+        Some(quire_contract_model::CheckedPackageRefusalCause::ContentMismatch)
     );
 
     let nodes = wire["semantic_graph"]["nodes"].as_array().unwrap();

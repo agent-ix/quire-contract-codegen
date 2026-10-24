@@ -116,7 +116,11 @@ fn assert_associations(source: &CheckedPackageV2, package: &ContractPackageV1) {
             .iter()
             .find(|original| &original.node_id == key)
             .expect("represented key must exist in the original admitted source");
-        assert_eq!(node, original, "complete metadata association for {key:?}");
+        assert_eq!(
+            serde_json::to_value(node).expect("lowered node serializes"),
+            serde_json::to_value(original).expect("source node serializes"),
+            "complete metadata association for {key:?}"
+        );
         let selected = graph.node(key).expect("iterated key is queryable");
         assert!(
             ptr::eq(selected, node),

@@ -330,8 +330,8 @@ pub(super) fn lower_scalar_claim(
     })
 }
 
-pub(super) fn derive_domain(
-    bound: &CheckedSemanticNodeV2,
+pub(super) fn derive_domain<Body>(
+    bound: &CheckedSemanticNodeV2<Body>,
     term: Option<&CheckedTerm>,
 ) -> DerivedDomain {
     let members = aggregate_members(term);
@@ -352,7 +352,7 @@ pub(super) fn derive_domain(
     }
 }
 
-fn not_symbolic(bound: &CheckedSemanticNodeV2) -> DerivedDomain {
+fn not_symbolic<Body>(bound: &CheckedSemanticNodeV2<Body>) -> DerivedDomain {
     DerivedDomain::NotSymbolic {
         bound: bound.node_id.clone(),
         form: bound.semantic_form.to_string(),
@@ -360,8 +360,8 @@ fn not_symbolic(bound: &CheckedSemanticNodeV2) -> DerivedDomain {
 }
 
 /// The canonical inclusive limits of a range bound that admits no value.
-pub(super) fn unsatisfiable(
-    bound: &CheckedSemanticNodeV2,
+pub(super) fn unsatisfiable<Body>(
+    bound: &CheckedSemanticNodeV2<Body>,
     term: Option<&CheckedTerm>,
 ) -> Option<(String, String)> {
     let members = aggregate_members(term)?;

@@ -4,8 +4,8 @@ use super::{
     aggregate_members, bound_members, is_option_node, literal_count, lookup, read_record_field,
     read_reference, resolve_scalar, CardinalityBound, CheckedNodeId, CheckedNodeTag,
     CheckedSemanticNodeV2, CollectionKind, CollectionType, CompositeDeclaration,
-    CompositeEqualityRefusal, CompositeShape, FieldDeclaration, Graph, ItemCheckError, NodeKey,
-    Presence, TypeClosure, ValueType, COLLECTION_BOUNDS_MEMBERS,
+    CompositeEqualityRefusal, CompositeShape, FieldDeclaration, Graph, GraphBody, ItemCheckError,
+    NodeKey, Presence, TypeClosure, ValueType, COLLECTION_BOUNDS_MEMBERS,
 };
 use quire_contract_model::CheckedTerm;
 use std::collections::{BTreeMap, BTreeSet};
@@ -65,13 +65,13 @@ fn entered(
     Ok(())
 }
 
-fn collection_parts(
-    graph: &Graph<'_>,
-    bounds_by_type: &BTreeMap<&CheckedNodeId, Vec<&CheckedSemanticNodeV2>>,
+fn collection_parts<Body: GraphBody>(
+    graph: &Graph<'_, Body>,
+    bounds_by_type: &BTreeMap<&CheckedNodeId, Vec<&CheckedSemanticNodeV2<Body>>>,
     closure: &mut TypeClosure,
     id: &CheckedNodeId,
-    node: &CheckedSemanticNodeV2,
-    external_bound: Option<&CheckedSemanticNodeV2>,
+    node: &CheckedSemanticNodeV2<Body>,
+    external_bound: Option<&CheckedSemanticNodeV2<Body>>,
 ) -> Result<(CheckedNodeId, CollectionKind, CardinalityBound), CompositeEqualityRefusal> {
     let malformed = || CompositeEqualityRefusal::MalformedComposite {
         composite: id.clone(),
@@ -135,10 +135,10 @@ fn collection_parts(
 }
 
 /// Resolve a root within the item's shared closure and work counter.
-pub(super) fn resolve_type(
+pub(super) fn resolve_type<Body: GraphBody>(
     admitted: Option<&qsl_replay::AdmittedContext>,
-    graph: &Graph<'_>,
-    bounds_by_type: &BTreeMap<&CheckedNodeId, Vec<&CheckedSemanticNodeV2>>,
+    graph: &Graph<'_, Body>,
+    bounds_by_type: &BTreeMap<&CheckedNodeId, Vec<&CheckedSemanticNodeV2<Body>>>,
     closure: &mut TypeClosure,
     type_id: &CheckedNodeId,
 ) -> Result<ValueType, ItemCheckError> {
