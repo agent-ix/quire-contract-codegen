@@ -23,10 +23,9 @@ use quire_contract_codegen::{
 };
 use quire_contract_model::{
     derive_application_node_id, derive_structural_candidates, ApplicationNodeDraft,
-    ApplicationOperator,
-    CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageRefusalCause,
-    CheckedPackageRefusalCode, CheckedPackageV2, CheckedPackageV2ReadResult, CheckedSemanticNodeV2,
-    CheckedTerm, StructuralCandidateError,
+    ApplicationOperator, CheckedPackageEvidence, CheckedPackageReadLimits,
+    CheckedPackageRefusalCause, CheckedPackageRefusalCode, CheckedPackageV2,
+    CheckedPackageV2ReadResult, CheckedSemanticNodeV2, CheckedTerm, StructuralCandidateError,
 };
 use quire_exact::{ComparisonOperator, DivisionProfile, Integer, IntegerDomain, IntegerInterval};
 use serde_json::{json, Value};
@@ -2318,7 +2317,13 @@ fn tc_024_ac44_direct_temporal_formula_is_unsupported() {
         .iter()
         .find(|node| {
             node.semantic_form.as_ref() == "formula"
-                && matches!(&node.body, CheckedTerm::Application { operator: ApplicationOperator::TemporalFormula, .. })
+                && matches!(
+                    &node.body,
+                    CheckedTerm::Application {
+                        operator: ApplicationOperator::TemporalFormula,
+                        ..
+                    }
+                )
         })
         .expect("QSpec fixture has an admitted temporal_formula root");
     let requested_id = node.node_id.clone();
@@ -2402,7 +2407,13 @@ fn tc_024_ac44_direct_control_case_is_unsupported() {
         .iter()
         .find(|node| {
             node.semantic_form.as_ref() == "case"
-                && matches!(&node.body, CheckedTerm::Application { operator: ApplicationOperator::Case, .. })
+                && matches!(
+                    &node.body,
+                    CheckedTerm::Application {
+                        operator: ApplicationOperator::Case,
+                        ..
+                    }
+                )
         })
         .expect("QSpec fixture has an admitted case root");
     let requested_id = node.node_id.clone();
@@ -2452,7 +2463,13 @@ fn tc_031_ac33_direct_control_case_is_unsupported() {
         .iter()
         .find(|node| {
             node.semantic_form.as_ref() == "case"
-                && matches!(&node.body, CheckedTerm::Application { operator: ApplicationOperator::Case, .. })
+                && matches!(
+                    &node.body,
+                    CheckedTerm::Application {
+                        operator: ApplicationOperator::Case,
+                        ..
+                    }
+                )
         })
         .expect("admitted case root");
     let id = case.node_id.clone();

@@ -293,9 +293,7 @@ fn oversized_admitted_function_read_stops_the_envelope() {
         .find(|node| node.node_id == ids.resolve(&code_id(SOURCE_FUNCTION)))
         .expect("resolved function")
         .body;
-    let body_id = function_body_target(body_id)
-        .expect("body binding")
-        .clone();
+    let body_id = function_body_target(body_id).expect("body binding").clone();
     let call_id = ids.resolve(&code_id(SOURCE_CALL));
     let lowered = package.lower(
         &[body_id, call_id.clone()],

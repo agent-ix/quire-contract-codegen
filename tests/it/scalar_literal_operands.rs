@@ -13,10 +13,10 @@ use quire_contract_codegen::{
     GenerationContexts, KaniGenerationContext, KindOutput, ProviderOrigin, RoutedGenerationItem,
 };
 use quire_contract_model::{
-    CheckedOccurrenceRole, CheckedPackageEvidence, CheckedPackageReadLimits,
-    CheckedPackageV2, CheckedPackageV2ReadResult, CheckedScalarOperandChild,
-    CheckedScalarOperandRange, CheckedSemanticNodeV2, CheckedTerm, ContractDependencies,
-    ContractOccurrenceKeyV1, ContractPackageReadResult, ContractPackageWireV1, LiteralKind,
+    CheckedOccurrenceRole, CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2,
+    CheckedPackageV2ReadResult, CheckedScalarOperandChild, CheckedScalarOperandRange,
+    CheckedSemanticNodeV2, CheckedTerm, ContractDependencies, ContractOccurrenceKeyV1,
+    ContractPackageReadResult, ContractPackageWireV1, LiteralKind,
 };
 
 fn compiled(parameters: &str, result: &str, expression: &str) -> CheckedPackageV2 {
