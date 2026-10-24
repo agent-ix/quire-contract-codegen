@@ -49,3 +49,7 @@ bindings: []
 ## Same-reviewer carry at 67891d3b
 
 PASS — the repair adds typed decoder fields to existing traced fixtures only. The changed tests retain their prior assertions and source-to-test bindings; the scalar refusal control still uses an operation with no identity, and the rekey controls still compare produced candidate keys. No test is removed, ignored or made tautological. The review files in the parent custody commit are byte-exact copies of the original held artifacts. The prior full gate at that parent was red on fixture shape; the author ran the repaired library suite and selected integration controls, while final-head aggregate and Kani remain pending. No new incremental gap or finding.
+
+## Same-reviewer carry at 5122b1ff
+
+PASS — the changed negative control still fails if the malformed bytes admit or if the reader returns a cause other than identity content mismatch. The same traced FR-021-AC-33/TC-031 test still requires a genuinely admitted fairness node to keep its identity and typed refusal while a healthy function sibling generates byte-identically. This avoids counting an identity-first refusal as graph-shape coverage, and does not weaken the criterion's fairness/sibling oracle. No test, trace binding or assertion for that primary oracle was removed. The final-head aggregate and Kani results remain pending. No new incremental gap or finding.
