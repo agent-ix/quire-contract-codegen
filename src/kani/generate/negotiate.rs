@@ -132,7 +132,9 @@ use crate::{
     oracle::boolean_v1::{generate_named_boolean_oracle, OracleRequest, OracleShape},
     oracle::checked_graph::CheckedGraph,
     oracle::claim::{ClaimDisposition, ClaimMap, UpstreamBlocker},
-    oracle::scalar::{operand_ranges, ExactScalarClaim, ExactScalarRefusal, OperationProvenance},
+    oracle::scalar::{
+        lower::operand_ranges, ExactScalarClaim, ExactScalarRefusal, OperationProvenance,
+    },
 };
 
 /// One admitted scalar package's node and source lookups, shared by its request items.

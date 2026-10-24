@@ -77,12 +77,12 @@ mod scalar_cache_tests {
                 scalar_families: BTreeMap::new(),
                 functions: BTreeMap::new(),
             };
-            let _ = crate::oracle::scalar::take_scalar_derive_graph_visits();
+            let _ = crate::oracle::scalar::derive::take_scalar_derive_graph_visits();
             for (node_id, expected) in order {
                 assert_eq!(lookups.scalar_family(&package, node_id), Some(expected));
             }
             assert_eq!(
-                crate::oracle::scalar::take_scalar_derive_graph_visits(),
+                crate::oracle::scalar::derive::take_scalar_derive_graph_visits(),
                 package.graph().nodes.len(),
                 "both exact targets must share one scalar graph walk"
             );
@@ -140,11 +140,13 @@ impl<'a> CapabilityLookups<'a> {
                     .into_iter()
                     .flat_map(|targets| targets.iter().cloned())
                     .collect::<Vec<_>>();
-                crate::oracle::scalar::derive_exact_scalar_items_independent(package, &node_ids)
-                    .into_iter()
-                    .zip(node_ids)
-                    .map(|(result, id)| (id, result.ok().map(scalar_family_from_item)))
-                    .collect()
+                crate::oracle::scalar::derive::derive_exact_scalar_items_independent(
+                    package, &node_ids,
+                )
+                .into_iter()
+                .zip(node_ids)
+                .map(|(result, id)| (id, result.ok().map(scalar_family_from_item)))
+                .collect()
             });
         families.get(node_id).copied().flatten()
     }

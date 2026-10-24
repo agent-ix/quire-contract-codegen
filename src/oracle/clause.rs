@@ -12,9 +12,10 @@ use crate::core::ir::clause::{
 use crate::core::source_map::SourceProbe;
 
 use super::claim::{ClaimDisposition, ClaimMap};
+use super::scalar::render::{clause_scalar_operation, render_clause_operation_helpers};
 use super::scalar::{
-    clause_scalar_operation, render_clause_operation_helpers, BooleanOperator, EqualityOperandKind,
-    ExactScalarOperation, OperationProvenance, OrderingOperandKind,
+    BooleanOperator, EqualityOperandKind, ExactScalarOperation, OperationProvenance,
+    OrderingOperandKind,
 };
 
 /// A state field or bounded operation value supplied to one generated clause oracle.
