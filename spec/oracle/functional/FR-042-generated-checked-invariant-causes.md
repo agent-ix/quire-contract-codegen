@@ -38,4 +38,4 @@ The code generator SHALL use the nine CG-owned causes in the second cause table 
 
 ## Status
 
-PLANNED: IR-709 owns generated producer and consumer changes and tests. The former unit-variant removal is gated on the IR-497 coordinated cutover and the dependency bump that supplies the typed payload.
+PLANNED: IR-709 owns generated producer and consumer changes and tests, including removal of the former unit constructor. The shared typed cause vocabulary is specified by quire-exact FR-369; the generated constructors and their verification remain open.
