@@ -386,6 +386,8 @@ pub(super) mod tests {
         );
         let rust = render(&spec).unwrap();
         let identity = ScalarObligationIdentity {
+                integer_representation: crate::kani::identity::ScalarIntegerRepresentation::General,
+                native_integer_selection: None,
             ceilings: crate::kani::test_support::proof_ceilings::proof_ceilings(),
             node_id: serde_json::from_value(serde_json::json!({"domain":"quire.checked-semantic-node/v1", "digest":"1".repeat(64)})).unwrap(),
             operation_identity: "independent.control".into(), oracle_symbol: "probe".into(),

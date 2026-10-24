@@ -251,12 +251,35 @@ pub struct InferredScalarOperand {
     pub upper: String,
 }
 
+/// The integer representation selected for a scalar proof.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ScalarIntegerRepresentation {
+    /// Arbitrary-precision exact integers.
+    #[default]
+    General,
+    /// Admitted native integers evaluated by the exact kernel.
+    Native,
+}
+
+impl ScalarIntegerRepresentation {
+    fn is_general(&self) -> bool {
+        *self == Self::General
+    }
+}
+
 /// What a V2 scalar obligation harness proves and how it is run. Parallel to [`KaniObligationIdentity`] but for an IR-confirmed exact-scalar claim,
 /// which has no QSL clause or declaration -- a node id and its confirmed operation identity
 /// stand in their place. Boolean implication additionally calls the compiled runtime subject.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ScalarObligationIdentity {
+    /// Selected integer ABI; omitted from general-route records.
+    #[serde(skip_serializing_if = "ScalarIntegerRepresentation::is_general")]
+    pub integer_representation: ScalarIntegerRepresentation,
+    /// Native capacity policy and checked intervals, when selected.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub native_integer_selection: Option<crate::core::native_integer::NativeIntegerSelection>,
     /// Request resource ceilings the backend must run under.
     pub ceilings: ProofCeilings,
     /// The claimed node.

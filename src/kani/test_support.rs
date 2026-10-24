@@ -211,6 +211,8 @@ pub(crate) fn scalar_source_fixture(
         KaniScalarObligationHarness, ScalarObligationArgument, ScalarObligationIdentity,
     };
     let identity = ScalarObligationIdentity {
+        integer_representation: crate::kani::identity::ScalarIntegerRepresentation::General,
+        native_integer_selection: None,
         ceilings: proof_ceilings::proof_ceilings_with_wall_clock(wall_clock),
         node_id: serde_json::from_value(serde_json::json!({
             "domain": "quire.checked-semantic-node/v1", "digest": "1".repeat(64),

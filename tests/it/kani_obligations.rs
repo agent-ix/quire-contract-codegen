@@ -25,7 +25,7 @@ use quire_contract_codegen::{
     RoutedGenerationItem,
 };
 use scalar_native_digest::independent_digest;
-use scalar_native_fixture::routed_scalar_with_artifacts;
+use scalar_native_fixture::{routed_native_scalar_with_artifacts, routed_scalar_with_artifacts};
 
 use std::{
     fs,
@@ -2968,6 +2968,71 @@ fn routed_scalar_increment_with_artifacts() -> (
         Bound::Integer(0, 9),
         REAL_KANI_TIMEOUT,
     )
+}
+
+fn native_scalar_increment() -> (KaniScalarObligationHarness, Artifact) {
+    let (harness, artifacts) = routed_native_scalar_with_artifacts(
+        package::bounded_increment_package(),
+        package::BOUNDED_INCREMENT,
+        49_100,
+        Bound::Integer(0, 9),
+        REAL_KANI_TIMEOUT,
+    );
+    let [manifest] = artifacts.as_slice() else {
+        panic!("the original dependency manifest");
+    };
+    (harness, manifest.clone())
+}
+
+#[trace("FR-015-AC-125", "TC-027")]
+#[test]
+fn native_scalar_increment_keeps_original_profile_and_checked_capacity() {
+    let (native, _) = native_scalar_increment();
+    let (general, _) = routed_scalar_increment();
+    assert_eq!(native.identity.node_id, general.identity.node_id);
+    assert_eq!(
+        native.identity.operation_identity,
+        general.identity.operation_identity
+    );
+    assert_eq!(native.identity.arguments, general.identity.arguments);
+    assert_eq!(native.identity.unwind, general.identity.unwind);
+    assert_eq!(native.identity.ceilings, general.identity.ceilings);
+    assert_eq!(native.identity.solver, KaniSolver::Cadical);
+    assert_eq!(
+        native.identity.integer_representation,
+        quire_contract_codegen::ScalarIntegerRepresentation::Native
+    );
+    let selected = native
+        .identity
+        .native_integer_selection
+        .as_ref()
+        .expect("native selection is recorded");
+    let [operation] = selected.operations.as_slice() else {
+        panic!("one checked Add plan");
+    };
+    assert_eq!(operation.node_id, native.identity.node_id);
+    assert_eq!(operation.operation_identity, "quire.op.integer.add");
+    let endpoints = |interval: &quire_contract_codegen::NativeIntegerIntervalDecision| {
+        (
+            interval.lower.parse::<i128>().unwrap(),
+            interval.upper.parse::<i128>().unwrap(),
+        )
+    };
+    assert_eq!(
+        operation.operands.iter().map(endpoints).collect::<Vec<_>>(),
+        [(0, 9), (1, 1)]
+    );
+    assert_eq!(endpoints(operation.capacity.as_ref().unwrap()), (1, 10));
+    assert_eq!(
+        endpoints(operation.semantic_domain.as_ref().unwrap()),
+        (0, 9)
+    );
+    assert!(native.rust.contents.contains("nx::NativeIntegerPlan::new"));
+    assert!(native
+        .rust
+        .contents
+        .contains("nx::evaluate_native_integer_arithmetic"));
+    assert!(!general.rust.contents.contains("nx::NativeIntegerPlan::new"));
 }
 
 fn routed_scalar_binary_subtraction_with_artifacts() -> (

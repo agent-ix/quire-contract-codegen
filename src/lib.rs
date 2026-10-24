@@ -211,6 +211,10 @@ pub use crate::core::artifact::{
 pub use crate::core::diagnostic::{
     GenerationDiagnostic, GenerationErrorCode, GenerationTerminalState,
 };
+pub use crate::core::native_integer::{
+    NativeIntegerCapacityPolicy, NativeIntegerIntervalDecision, NativeIntegerOperationDecision,
+    NativeIntegerSelection,
+};
 pub use crate::core::source_map::{SourceProbe, SourceRegion};
 pub use crate::oracle::clause::{
     derive_v2_clause_descriptor, generate_v2_clause_claim_map, generate_v2_clause_oracle,
@@ -221,7 +225,9 @@ pub use core::canonical::DigestError;
 pub use kani::generate::frame::{
     generate_state_frame_obligations, StateFrameObligations, StateFrameRequest,
 };
-pub use kani::generate::negotiate::negotiate_kani_obligations;
+pub use kani::generate::negotiate::{
+    negotiate_kani_native_obligations, negotiate_kani_obligations,
+};
 pub use kani::generate::outcome::{
     BoundNotResolvedCause, CollectionUnsupportedReason, DerivedDomain, InvalidObligationItem,
     KaniObligationError, KaniObligationOutcome, KaniObligationRequest, ModelMemberRangeReason,
@@ -233,10 +239,11 @@ pub use kani::identity::{
     CollectionElementIdentity, CollectionKindIdentity, CollectionObligationIdentity,
     CollectionPredicateIdentity, EmbeddedOracle, KaniCollectionObligationHarness,
     KaniObligationHarness, KaniObligationIdentity, KaniScalarObligationHarness,
-    KaniV2ClauseObligationHarness, ObligationBinding, ObligationKind, ScalarObligationArgument,
-    ScalarObligationIdentity, ScalarOriginalLimitsError, StateComparison, StateFieldDomain,
-    StateFrameHarness, StateFrameIdentity, StateFrameProperty, StateFrameRecordError,
-    StateFrameScope, StateUnrangedField, StateUnrangedReason, V2ClauseObligationIdentity,
+    KaniV2ClauseObligationHarness, ObligationBinding, ObligationKind, ScalarIntegerRepresentation,
+    ScalarObligationArgument, ScalarObligationIdentity, ScalarOriginalLimitsError, StateComparison,
+    StateFieldDomain, StateFrameHarness, StateFrameIdentity, StateFrameProperty,
+    StateFrameRecordError, StateFrameScope, StateUnrangedField, StateUnrangedReason,
+    V2ClauseObligationIdentity,
 };
 pub use kani::output::playback::{
     parse_assertion_playback, select_counterexample, CounterexamplePlayback, Playback,
