@@ -31,3 +31,12 @@ Ticket: IR-347 (paired with IR-348). Independent spec review of the diff at exac
 ## Verdict
 
 **PASS with two low findings.** Neither blocks the merge. The narrow correction is accurate. Remaining work stays visible: IR export removal, AC-110, AC-111, step 4g incomplete and AC-95 PLANNED. No acceptance criterion is narrowed and no new implementation claim is made. Observation outside the diff, not a finding: the unchanged AD-004 step 4g text at line 1092 still says the graph slice removes "the generation-time `KaniOutcome`". FR-015-AC-111 describes this as the generation-time expectation plus the typed refusal `KaniOutcome`.
+
+## Dispositions
+
+Round 1, verified against fix commit `d0727fe87f4dad1f077d50d37ea4b2092b0b1c26` (parent `036539b6`), which is the PR head. The fix changes only these two places in `spec/assurance/AD-004-cg-crate-layout.md` and adds the three reviewer artifacts under `reviews/`, each byte-identical to the original. The fix introduces no regression. FR-015-AC-109, AC-110 and AC-111 and all other FR/AC text are untouched.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The repeated sentence "Arithmetic retirement (FR-015-AC-109) is implemented." is removed; the retirement is stated once (AD-004:1106-1107) |
+| FND-002 | fixed | The interim-exception row is now titled "The remaining collection and graph finite lowerers", names the current files and keeps the IR export removal and AC-110/AC-111 work (AD-004:1411) |
