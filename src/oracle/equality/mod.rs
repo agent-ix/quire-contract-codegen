@@ -3128,7 +3128,9 @@ mod tests {
                 "semantic_type": left.source_type,
                 "dependencies": [],
                 "occurrences": [],
-                "body": {"term": "application", "operator": "binary", "arguments": [
+                "body": {"term": "application", "operator": "binary",
+                         "operation": {}, "result_type": left.source_type,
+                         "arguments": [
                     {"term": "reference", "target": left_id},
                     {"term": "reference", "target": right_id}
                 ]},

@@ -5379,7 +5379,13 @@ mod tests {
             // admission is supposed to make impossible.
             "body": {
                 "term": "application",
+                "operator": "binary",
                 "operation": { "mode": { "kind": "rounding", "value": "truncate" } },
+                "result_type": {
+                    "domain": "quire.checked-semantic-node/v1",
+                    "digest": "e".repeat(64),
+                },
+                "arguments": [],
             },
         }))
         .expect("a node whose operation carries no identity");
