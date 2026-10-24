@@ -96,7 +96,7 @@ impl KaniInstallation {
     }
 
     /// Test-only installation for the start-signalled cancellation and timeout control.
-    /// Confirmation still polls the genuine owned pidfd, with no host-load timeout.
+    /// Confirmation still polls the genuine owned pidfd, with a finite host-load allowance.
     #[cfg(test)]
     pub(crate) fn with_test_only_patient_pidfd_confirmation(launcher: PathBuf) -> Self {
         Self::with_owners(

@@ -42,7 +42,7 @@ impl PollOperation for SystemPoll {
     }
 }
 
-/// Test-only confirmation that waits for the real owned pidfd without a wall-clock cutoff.
+/// Test-only confirmation that gives the real owned pidfd more time under host load.
 #[cfg(test)]
 #[derive(Debug)]
 struct TestOnlyPatientPidfdPoll;
@@ -50,7 +50,13 @@ struct TestOnlyPatientPidfdPoll;
 #[cfg(test)]
 impl PollOperation for TestOnlyPatientPidfdPoll {
     fn poll(&self, fds: &mut [PollFd<'_>], _timeout: Option<&Timespec>) -> Result<usize, Errno> {
-        poll(fds, None)
+        poll(
+            fds,
+            Some(&Timespec {
+                tv_sec: 30,
+                tv_nsec: 0,
+            }),
+        )
     }
 }
 
@@ -78,7 +84,7 @@ impl LaunchOwners {
     }
 
     /// Keep genuine process observation and pidfd confirmation for the cancellation test while
-    /// removing the production five-second confirmation cutoff from that test alone.
+    /// relaxing the production five-second confirmation cutoff for that test alone.
     #[cfg(test)]
     pub(super) fn test_only_patient_pidfd_confirmation() -> Arc<Self> {
         Arc::new(Self {
