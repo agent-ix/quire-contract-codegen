@@ -1693,26 +1693,367 @@ fn source_call_matches<'a>(
     }) && expected.next().is_none()
 }
 
-fn source_function_node_id<'a>(
-    graph: &Graph<'a>,
-    name: &str,
-    body_node_id: &CheckedNodeId,
-) -> Option<&'a CheckedNodeId> {
-    let mut matching = graph.nodes().filter(|node| {
-        if &*node.node_tag != "function" || &*node.semantic_form != "pure_function" {
-            return false;
+struct FunctionSourceIndex<'a> {
+    graph: Graph<'a>,
+    by_name_body: BTreeMap<(&'a str, &'a CheckedNodeId), Option<&'a CheckedNodeId>>,
+}
+
+impl<'a> FunctionSourceIndex<'a> {
+    fn new(graph: Graph<'a>) -> Self {
+        let mut by_name_body = BTreeMap::new();
+        for node in graph.nodes() {
+            #[cfg(test)]
+            IR988_SOURCE_GRAPH_VISITS.with(|visits| visits.set(visits.get() + 1));
+            if &*node.node_tag != "function" || &*node.semantic_form != "pure_function" {
+                continue;
+            }
+            let Some(name) = node.declaration.as_ref().and_then(|declaration| {
+                (declaration.qualified_name.len() == 1)
+                    .then(|| declaration.qualified_name[0].as_ref())
+            }) else {
+                continue;
+            };
+            let Some(body) = graph
+                .term(&node.node_id)
+                .and_then(|body| binding_value(body, "body"))
+                .and_then(|term| reference_in_graph(term, &graph))
+            else {
+                continue;
+            };
+            by_name_body
+                .entry((name, body))
+                .and_modify(|matching| *matching = None)
+                .or_insert(Some(&node.node_id));
         }
-        let has_name = node.declaration.as_ref().is_some_and(|declaration| {
-            declaration.qualified_name.len() == 1 && declaration.qualified_name[0].as_ref() == name
-        });
-        let body = graph
-            .get_term(&node.node_id)
-            .and_then(|body| binding_value(body, "body"))
-            .and_then(|term| reference_in_graph(term, graph));
-        has_name && body == Some(body_node_id)
-    });
-    let node = matching.next()?;
-    matching.next().is_none().then_some(&node.node_id)
+        Self {
+            graph,
+            by_name_body,
+        }
+    }
+
+    fn source_function_node_id(
+        &self,
+        name: &str,
+        body_node_id: &CheckedNodeId,
+    ) -> Option<&'a CheckedNodeId> {
+        self.by_name_body
+            .get(&(name, body_node_id))
+            .copied()
+            .flatten()
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    static IR988_SOURCE_GRAPH_VISITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+mod ir988_source_function_tests {
+    use super::*;
+    use ix_trace_rs::trace;
+    use quire_contract_model::CheckedDeclaration;
+    use serde_json::json;
+
+    fn id(value: u64) -> CheckedNodeId {
+        serde_json::from_value(json!({
+            "domain":"quire.checked-semantic-node/v1",
+            "digest":format!("{value:064x}")
+        }))
+        .expect("synthetic node key")
+    }
+
+    fn node(
+        value: u64,
+        name: Option<String>,
+        body: &CheckedNodeId,
+    ) -> crate::oracle::checked_graph::fixture::Node {
+        let metadata = CheckedSemanticNodeV2 {
+            node_id: id(value),
+            owner: None,
+            schema_version: "quire.checked-semantic-graph/v2".into(),
+            node_tag: if name.is_some() {
+                "function"
+            } else {
+                "expression"
+            }
+            .into(),
+            semantic_form: if name.is_some() {
+                "pure_function"
+            } else {
+                "binary"
+            }
+            .into(),
+            semantic_type: body.clone(),
+            dependencies: Vec::new(),
+            occurrences: Vec::new(),
+            recursion_group: None,
+            nominal_identity_preimage: None,
+            declaration: name.map(|name| CheckedDeclaration {
+                qualified_name: vec![name.into()],
+            }),
+            body: serde_json::Value::Null,
+        };
+        crate::oracle::checked_graph::fixture::Node::new(
+            metadata,
+            Some(CheckedTerm::Aggregate {
+                members: vec![CheckedTerm::Binding {
+                    name: "body".into(),
+                    value: Box::new(CheckedTerm::Reference {
+                        target: body.clone(),
+                    }),
+                }],
+            }),
+        )
+    }
+
+    #[trace("TC-031")]
+    #[test]
+    fn ir_988_source_function_lookup_builds_once_for_repeated_items() {
+        let mut excessive = Vec::new();
+        for requests in [2, 4, 8] {
+            for functions in [4, 8, 16] {
+                let body = id(10_000);
+                let mut nodes = vec![node(10_000, None, &body)];
+                nodes.extend(
+                    (0..functions)
+                        .map(|index| node(index as u64 + 1, Some(format!("f{index}")), &body)),
+                );
+                let graph: Graph<'_> = nodes.iter().map(|node| (&node.node_id, node)).collect();
+                IR988_SOURCE_GRAPH_VISITS.with(|visits| visits.set(0));
+                let index = FunctionSourceIndex::new(graph);
+                for _ in 0..requests {
+                    let found =
+                        index.source_function_node_id(&format!("f{}", functions - 1), &body);
+                    assert_eq!(found, Some(&id(functions as u64)));
+                }
+                let visits = IR988_SOURCE_GRAPH_VISITS.with(std::cell::Cell::get);
+                println!("K={requests} R={functions} source_graph_visits={visits}");
+                if visits > functions + requests + 1 {
+                    excessive.push((requests, functions, visits));
+                }
+            }
+        }
+        assert!(excessive.is_empty(), "per-item graph scans: {excessive:?}");
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::duplicate_mod)] // Reuse the admitted fixture in this test binary.
+#[path = "../../../tests/exact_function_support/package.rs"]
+mod ir988_function_fixture;
+
+#[cfg(test)]
+mod ir988_admitted_generation_tests {
+    use super::*;
+    use ix_trace_rs::trace;
+    use serde_json::json;
+
+    use super::ir988_function_fixture as fixture;
+
+    fn source_reference(code: u32) -> serde_json::Value {
+        let id = fixture::code_id(code);
+        json!({"term":"reference","target":{"domain":id.domain,"digest":id.digest}})
+    }
+
+    struct AdmittedCase {
+        contract: ContractPackageV1,
+        positions: Vec<ContractRequestPosition>,
+        function_positions: Vec<usize>,
+        declarations: Vec<ExactFunctionDeclaration>,
+        item_positions: Vec<usize>,
+        items: Vec<ExactFunctionItem>,
+    }
+
+    fn admitted_case(requests: usize, function_count: usize) -> AdmittedCase {
+        use fixture::*;
+
+        let mut builder = source_bound_call_package();
+        for offset in 0..(function_count - 2) {
+            builder.code(
+                40_000 + offset as u32,
+                "function",
+                "pure_function",
+                T_INTEGER,
+                aggregate(vec![
+                    json!({"term":"binding","name":"parameters","value":aggregate(vec![
+                        source_reference(SOURCE_PARAM_A), source_reference(SOURCE_PARAM_B)])}),
+                    json!({"term":"binding","name":"body","value":source_reference(SOURCE_BODY)}),
+                ]),
+            );
+        }
+        for offset in 0..2 {
+            let parameter = 41_000 + offset;
+            builder.code(
+                parameter,
+                "value",
+                "parameter",
+                T_INTEGER,
+                aggregate(vec![
+                    bound_member("name", literal("text", &format!("p{offset}"))),
+                    bound_member("level", integer_literal(0)),
+                ]),
+            );
+        }
+        let arguments = [
+            (41_000, SOURCE_PARAM_B),
+            (41_001, SOURCE_PARAM_B),
+            (SOURCE_PARAM_A, SOURCE_PARAM_A),
+            (SOURCE_PARAM_B, SOURCE_PARAM_A),
+            (SOURCE_PARAM_B, SOURCE_PARAM_B),
+            (SOURCE_PARAM_B, 41_000),
+            (SOURCE_PARAM_B, 41_001),
+            (41_000, SOURCE_PARAM_A),
+        ];
+        for (offset, &(left, right)) in arguments.iter().take(requests).enumerate() {
+            builder.application_node(
+                42_000 + offset as u32,
+                "call",
+                &key(T_INTEGER),
+                json!({
+                    "term":"application","operator":"call",
+                    "operation":{"identity":"quire.op.function.call","laws":[],"mode":null,
+                        "member":null,"leaves":[]},
+                    "result_type":{"domain":NODE_DOMAIN,"digest":key(T_INTEGER)},
+                    "arguments":[source_reference(SOURCE_FUNCTION),
+                        source_reference(left),source_reference(right)]
+                }),
+            );
+        }
+        let (checked, ids) = builder.admit_resolved();
+        let name = format!("n{}", key(SOURCE_FUNCTION));
+        let other_name = format!("n{}", key(SOURCE_OTHER_FUNCTION));
+        let functions = vec![
+            ids.resolve_function(source_function(&name, SOURCE_BODY)),
+            ids.resolve_function(source_function(&other_name, SOURCE_OTHER_BODY)),
+        ];
+        let mut requested = functions
+            .iter()
+            .map(|function| function.node_id.clone())
+            .collect::<Vec<_>>();
+        requested.push(ids.resolve(&code_id(SOURCE_OTHER_FUNCTION)));
+        requested.extend(
+            (0..(function_count - 2)).map(|offset| ids.resolve(&code_id(40_000 + offset as u32))),
+        );
+        let function_positions = [0, 1].to_vec();
+        let mut items = Vec::new();
+        let mut item_positions = Vec::new();
+        for (offset, &(left, right)) in arguments.iter().take(requests).enumerate() {
+            let item = ExactFunctionItem {
+                call_node_id: code_id(42_000 + offset as u32),
+                function: name.clone(),
+                argument_node_ids: vec![code_id(left), code_id(right)],
+            };
+            item_positions.push(requested.len());
+            requested.push(ids.resolve(&item.call_node_id));
+            items.push(ids.resolve_call(item));
+        }
+        let mut refused = items[0].clone();
+        refused.function = other_name;
+        item_positions.push(requested.len());
+        requested.push(refused.call_node_id.clone());
+        items.push(refused);
+        let contract = admitted_function_contract(&checked, &requested);
+        let positions = driver_positions(&requested);
+        AdmittedCase {
+            contract,
+            positions,
+            function_positions,
+            declarations: functions,
+            item_positions,
+            items,
+        }
+    }
+
+    #[trace("TC-031")]
+    #[test]
+    fn ir_988_public_admitted_generation_indexes_source_once_and_preserves_outputs() {
+        for requests in [2, 4, 8] {
+            for functions in [4, 8, 16] {
+                let AdmittedCase {
+                    contract,
+                    positions,
+                    function_positions,
+                    declarations,
+                    item_positions,
+                    items,
+                } = admitted_case(requests, functions);
+                IR988_SOURCE_GRAPH_VISITS.with(|visits| visits.set(0));
+                let output = generate_exact_function_oracles(
+                    &contract,
+                    &positions,
+                    &function_positions,
+                    &declarations,
+                    &item_positions,
+                    &items,
+                )
+                .expect("admitted function generation");
+                let visits = IR988_SOURCE_GRAPH_VISITS.with(std::cell::Cell::get);
+                let graph_nodes = contract.wire().semantic_graph.nodes.len();
+                assert_eq!(
+                    contract
+                        .wire()
+                        .semantic_graph
+                        .nodes
+                        .iter()
+                        .filter(|node| node.node_tag.as_ref() == "function")
+                        .count(),
+                    functions,
+                );
+                println!("K={requests} R={functions} G={graph_nodes} visits={visits}");
+                assert_eq!(
+                    visits, graph_nodes,
+                    "one source index build per admitted batch"
+                );
+                let repeated = generate_exact_function_oracles(
+                    &contract,
+                    &positions,
+                    &function_positions,
+                    &declarations,
+                    &item_positions,
+                    &items,
+                )
+                .expect("repeat generation from the same admitted package");
+                assert_eq!(
+                    output, repeated,
+                    "complete output changed across repeat runs"
+                );
+                if let Some(directory) = std::env::var_os("IR988_OUTPUT_DIR") {
+                    let directory = std::path::PathBuf::from(directory);
+                    std::fs::create_dir_all(&directory).expect("evidence directory");
+                    std::fs::write(
+                        directory.join(format!("k{requests}-r{functions}.txt")),
+                        format!("{output:#?}"),
+                    )
+                    .expect("full output evidence");
+                }
+                assert_eq!(output.claim_map.items.len(), requests + 1);
+                assert_eq!(
+                    output
+                        .claim_map
+                        .items
+                        .iter()
+                        .filter(|item| matches!(item.result, ClaimDisposition::Generated(_)))
+                        .count(),
+                    requests
+                );
+                assert_eq!(
+                    output
+                        .claim_map
+                        .items
+                        .iter()
+                        .filter(|item| matches!(
+                            item.result,
+                            ClaimDisposition::Refused {
+                                refusal: ExactFunctionRefusal::BodyMismatch
+                            }
+                        ))
+                        .count(),
+                    1
+                );
+            }
+        }
+    }
 }
 
 pub(crate) fn binding_value<'a>(body: &'a CheckedTerm, name: &str) -> Option<&'a CheckedTerm> {
@@ -2403,7 +2744,8 @@ pub fn generate_exact_function_oracles(
     for (item, &position) in items.iter().zip(item_positions) {
         check_position(&accounting, position, &item.call_node_id)?;
     }
-    let graph = Graph::new(package);
+    let source_index = FunctionSourceIndex::new(Graph::new(package));
+    let graph = &source_index.graph;
 
     // Order declared functions by declaring node id (digest domain, then
     // digest), the same total order FR-014 already uses.
@@ -2458,9 +2800,9 @@ pub fn generate_exact_function_oracles(
                 classify_body_shape(closure.root, graph.term(&closure.root.node_id), declaration)?;
             let mut parameter_kinds = Vec::with_capacity(declaration.parameters.len());
             for parameter in &declaration.parameters {
-                parameter_kinds.push(resolve_operand_type(&graph, &parameter.type_node_id)?);
+                parameter_kinds.push(resolve_operand_type(graph, &parameter.type_node_id)?);
             }
-            let result_kind = resolve_operand_type(&graph, &declaration.result_type)?;
+            let result_kind = resolve_operand_type(graph, &declaration.result_type)?;
             validate_signature(declaration, &parameter_kinds, result_kind)?;
             Ok(Stage1Shape {
                 body,
@@ -2562,10 +2904,10 @@ pub fn generate_exact_function_oracles(
         })
         .collect();
 
-    let function_index: BTreeMap<&CheckedNodeId, usize> = classified
+    let survivor_index: BTreeMap<&CheckedNodeId, (usize, &ExactFunctionDeclaration)> = classified
         .iter()
         .enumerate()
-        .map(|(index, function)| (&function.declaration.node_id, index))
+        .map(|(index, function)| (&function.declaration.node_id, (index, function.declaration)))
         .collect();
 
     let package_check = rt::PackageDeclarations {
@@ -2590,7 +2932,7 @@ pub fn generate_exact_function_oracles(
     // about the request, independent of admission (AC-15).
     let mut location_map = Vec::with_capacity(survivors.len());
     for declaration in &survivors {
-        let index = function_index[&declaration.node_id];
+        let index = survivor_index[&declaration.node_id].0;
         let call_point = match &declaration.body {
             ExactFunctionBody::Scalar { .. } => CallPointKind::ScalarOperator,
             ExactFunctionBody::CompositeEquality { .. } => CallPointKind::EqualityEvaluation,
@@ -2661,28 +3003,15 @@ pub fn generate_exact_function_oracles(
             match item_disposition(
                 &names,
                 &resolved,
-                &survivors,
-                &function_index,
+                &survivor_index,
                 &package_refusal,
-                (package, &graph),
+                (package, &source_index),
                 item,
                 admitted,
             ) {
-                Ok((stem, claim)) => {
-                    match survivors
-                        .iter()
-                        .find(|declaration| declaration.name == item.function)
-                    {
-                        Some(declaration) => {
-                            pending.push((claims.len(), stem, key.clone(), *declaration));
-                            ClaimDisposition::Generated(Box::new(claim))
-                        }
-                        None => ClaimDisposition::Refused {
-                            refusal: ExactFunctionRefusal::UnknownFunction {
-                                name: item.function.clone(),
-                            },
-                        },
-                    }
+                Ok((stem, claim, declaration)) => {
+                    pending.push((claims.len(), stem, key.clone(), declaration));
+                    ClaimDisposition::Generated(Box::new(claim))
                 }
                 Err(refusal) => ClaimDisposition::Refused { refusal },
             }
@@ -2856,17 +3185,24 @@ impl<'a> FunctionNames<'a> {
     }
 }
 
-fn item_disposition(
+fn item_disposition<'a>(
     names: &FunctionNames<'_>,
     resolved: &BTreeMap<&CheckedNodeId, Result<(), ExactFunctionRefusal>>,
-    survivors: &[&ExactFunctionDeclaration],
-    function_index: &BTreeMap<&CheckedNodeId, usize>,
+    survivor_index: &BTreeMap<&CheckedNodeId, (usize, &'a ExactFunctionDeclaration)>,
     package_refusal: &Option<String>,
-    source: (&ContractPackageV1, &Graph<'_>),
+    source: (&ContractPackageV1, &FunctionSourceIndex<'_>),
     item: &ExactFunctionItem,
     admitted: PackageItem<'_>,
-) -> Result<(String, GeneratedExactFunctionClaim), ExactFunctionRefusal> {
-    let (package, graph) = source;
+) -> Result<
+    (
+        String,
+        GeneratedExactFunctionClaim,
+        &'a ExactFunctionDeclaration,
+    ),
+    ExactFunctionRefusal,
+> {
+    let (package, source_index) = source;
+    let graph = &source_index.graph;
     let (closure, occurrences) = admitted_binary_body(admitted)?;
     let node = closure.root;
     if &*node.semantic_form != "call" {
@@ -2886,10 +3222,7 @@ fn item_disposition(
     if let Some(Err(refusal)) = resolved.get(function_node_id) {
         return Err(refusal.clone());
     }
-    let Some(declaration) = survivors
-        .iter()
-        .find(|declaration| &declaration.node_id == function_node_id)
-    else {
+    let Some(&(index, declaration)) = survivor_index.get(function_node_id) else {
         return Err(ExactFunctionRefusal::UnknownFunction {
             name: item.function.clone(),
         });
@@ -2901,9 +3234,9 @@ fn item_disposition(
         });
     }
     if graph.operator(&node.node_id) == Some(ApplicationOperator::Call) {
-        let source_function_id =
-            source_function_node_id(graph, &declaration.name, &declaration.node_id)
-                .ok_or(ExactFunctionRefusal::BodyMismatch)?;
+        let source_function_id = source_index
+            .source_function_node_id(&declaration.name, &declaration.node_id)
+            .ok_or(ExactFunctionRefusal::BodyMismatch)?;
         if !source_call_matches(
             graph
                 .term(&node.node_id)
@@ -2931,7 +3264,6 @@ fn item_disposition(
         };
         resolve_operand_type(graph, type_node_id)?;
     }
-    let index = function_index[&declaration.node_id];
     if let Some(cause) = package_refusal {
         return Err(ExactFunctionRefusal::PackageRefused {
             function_index: Some(index),
@@ -2964,6 +3296,7 @@ fn item_disposition(
             },
             declaration_keys: Vec::new(),
         },
+        declaration,
     ))
 }
 
@@ -3417,19 +3750,22 @@ mod tests {
             .into_iter()
             .map(|node| (&node.node_id, node))
             .collect();
+        let index = FunctionSourceIndex::new(graph);
+        let graph = &index.graph;
         assert_eq!(
-            source_function_node_id(&graph, "same", &body.node_id),
+            index.source_function_node_id("same", &body.node_id),
             Some(&first.node_id)
         );
-        assert_eq!(source_function_node_id(&graph, "Same", &body.node_id), None);
+        assert_eq!(index.source_function_node_id("Same", &body.node_id), None);
         let duplicate = function(22, &body.node_id);
         let nodes = [&body, &other, &first, &same_name_other_body, &duplicate];
         let ambiguous: Graph<'_> = nodes
             .into_iter()
             .map(|node| (&node.node_id, node))
             .collect();
+        let ambiguous_index = FunctionSourceIndex::new(ambiguous);
         assert_eq!(
-            source_function_node_id(&ambiguous, "same", &body.node_id),
+            ambiguous_index.source_function_node_id("same", &body.node_id),
             None
         );
         let malformed_first = CheckedTerm::Aggregate {
@@ -3444,7 +3780,7 @@ mod tests {
         };
         assert_eq!(
             binding_value(&malformed_first, "body")
-                .and_then(|term| reference_in_graph(term, &graph)),
+                .and_then(|term| reference_in_graph(term, graph)),
             None
         );
         let mut malformed_function = function(23, &body.node_id);
@@ -3453,8 +3789,9 @@ mod tests {
             .into_iter()
             .map(|node| (&node.node_id, node))
             .collect();
+        let damaged_index = FunctionSourceIndex::new(damaged);
         assert_eq!(
-            source_function_node_id(&damaged, "same", &body.node_id),
+            damaged_index.source_function_node_id("same", &body.node_id),
             None
         );
 
@@ -3467,11 +3804,10 @@ mod tests {
             ],
         };
         assert_eq!(
-            binding_value(&first_dangling, "body")
-                .and_then(|term| reference_in_graph(term, &graph)),
+            binding_value(&first_dangling, "body").and_then(|term| reference_in_graph(term, graph)),
             None
         );
-        assert_eq!(reference_in_graph(&reference(&foreign), &graph), None);
+        assert_eq!(reference_in_graph(&reference(&foreign), graph), None);
         assert_eq!(reference_node_id(&reference(&foreign), graph.nodes()), None);
         assert_eq!(
             reference_node_id(&reference(&body.node_id), graph.nodes()),

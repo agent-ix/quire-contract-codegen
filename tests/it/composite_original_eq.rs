@@ -954,3 +954,104 @@ fn original_request_preserves_the_above_reader_resource_refusal() {
             if matches!(*cause, qsl_replay::AdmittedRefusal::Resource(qsl_replay::AdmittedResource::AboveReader(_))))
     );
 }
+
+/// Reusing an admitted context preserves all publicly observable construction data.
+/// This is native construction evidence, not supplied backend or verified-shadow evidence.
+#[trace("FR-033-AC-1", "TC-048")]
+#[test]
+fn retained_context_kr_families_preserve_complete_request_outputs_and_refused_siblings() {
+    for unrelated in [4, 8, 16] {
+        let mut source = SOURCE.to_owned();
+        for index in 0..unrelated {
+            source.push_str(&format!(
+                "function unrelated{index} using v(a: Integer): Integer pure {{ a }}\n"
+            ));
+        }
+        let mut expected_across_request_counts = None;
+        for requests in [2, 4, 8] {
+            let package = checked(&source);
+            let graph_nodes = package.graph().nodes.len();
+            let original_package_id = package.package_id().clone();
+            let (equal_node, equal_occurrence) = application(&package, "f");
+            let (not_equal_node, not_equal_occurrence) =
+                application_with_operator(&package, "n", "quire.op.structural.ne");
+            let retained = OriginalCompositeEqContext::new(
+                package,
+                inputs(&source),
+                "f",
+                content_identity(),
+                CheckedPackageReadLimits::bounded(),
+            )
+            .expect("authentic source supplies one retained context");
+            let mut expected_in_context = None;
+            for _ in 0..requests {
+                let equal = retained
+                    .request(
+                        &equal_node,
+                        &equal_occurrence,
+                        EqualityOperator::Equal,
+                        &[],
+                        100_000,
+                    )
+                    .expect("equal request from the original admitted package");
+                let not_equal = retained
+                    .request(
+                        &not_equal_node,
+                        &not_equal_occurrence,
+                        EqualityOperator::NotEqual,
+                        &[],
+                        100_000,
+                    )
+                    .expect("not-equal request retains its original operation");
+                for request in [&equal, &not_equal] {
+                    let actual = request.admitted_context().package_id().record();
+                    assert_eq!(
+                        actual.domain().as_str(),
+                        original_package_id.domain.as_ref()
+                    );
+                    assert_eq!(actual.hex(), original_package_id.digest.as_ref());
+                }
+                let refusal = retained
+                    .request(
+                        &equal_node,
+                        &equal_occurrence,
+                        EqualityOperator::NotEqual,
+                        &[],
+                        100_000,
+                    )
+                    .expect_err(
+                        "a wrong operator must not inherit a healthy sibling's disposition",
+                    );
+                assert!(matches!(
+                    refusal,
+                    CompositeBuildError::OperatorMismatch {
+                        requested: EqualityOperator::NotEqual,
+                        actual: EqualityOperator::Equal
+                    }
+                ));
+                // Typed equality checks include every positional operand and consumed_work.
+                // Debug additionally retains the private claim/limits in the native snapshot;
+                // it is neither wire serialization nor an assertion of solver origin.
+                let snapshot = (
+                    equal.preimage().clone(),
+                    equal.operands().clone(),
+                    not_equal.preimage().clone(),
+                    not_equal.operands().clone(),
+                    format!("{equal:?}"),
+                    format!("{not_equal:?}"),
+                );
+                if let Some(expected) = &expected_in_context {
+                    assert_eq!(&snapshot, expected);
+                } else {
+                    expected_in_context = Some(snapshot);
+                }
+            }
+            if let Some(expected) = &expected_across_request_counts {
+                assert_eq!(&expected_in_context, expected);
+            } else {
+                expected_across_request_counts = Some(expected_in_context);
+            }
+            println!("retained composite baseline K={requests} R={unrelated} G={graph_nodes}: Eq/Ne outputs, original package identities and typed refused siblings preserved");
+        }
+    }
+}

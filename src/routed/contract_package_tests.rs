@@ -2508,6 +2508,211 @@ mod tests {
             .contains("rt::IntegerArithmetic::Add"));
     }
 
+    fn repeated_bounded_scalar_fixture(
+        maximum: u32,
+    ) -> (
+        quire_contract_model::ContractPackageV1,
+        Vec<ContractRequestPosition>,
+        CheckedNodeId,
+    ) {
+        let source = SOURCE.replace(
+            "Boolean pure { a = a }",
+            &format!("Int[0, {maximum}] pure {{ a + a }}"),
+        );
+        let checked = admitted_source(&source);
+        let expression = checked
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| {
+                node.body
+                    .pointer("/operation/identity")
+                    .and_then(serde_json::Value::as_str)
+                    == Some("quire.op.integer.add")
+            })
+            .expect("QSL integer addition")
+            .node_id
+            .clone();
+        let conversions = checked
+            .graph()
+            .nodes
+            .iter()
+            .filter(|node| {
+                node.body
+                    .pointer("/operation/identity")
+                    .and_then(serde_json::Value::as_str)
+                    == Some("quire.op.numeric.narrow")
+                    && node.body.pointer("/arguments/0/target")
+                        == Some(&serde_json::to_value(&expression).expect("typed key"))
+            })
+            .collect::<Vec<_>>();
+        let [conversion] = conversions.as_slice() else {
+            panic!("QSL must retain one direct result narrow");
+        };
+        let pair = [
+            ContractRequestPosition::DriverItem {
+                node_id: expression.clone(),
+                result_selection: own_result(&checked, &expression, Some(&conversion.node_id)),
+            },
+            ContractRequestPosition::ContextRoot {
+                node_id: conversion.node_id.clone(),
+            },
+        ];
+        let positions = pair.iter().chain(&pair).cloned().collect::<Vec<_>>();
+        let roots = positions
+            .iter()
+            .map(|position| position.node_id().clone())
+            .collect::<Vec<_>>();
+        let lowered = checked.lower(&roots, &routed_contract_lowering_profile());
+        let admitted = match ContractPackageWireV1::read(
+            lowered.package.canonical_bytes().expect("FR-330 bytes"),
+            CheckedPackageReadLimits::bounded(),
+            &ContractDependencies::new(),
+        ) {
+            ContractPackageReadResult::Admitted(package) => *package,
+            other => panic!("repeated bounded scalar package must admit: {other:?}"),
+        };
+        (admitted, positions, expression)
+    }
+
+    #[trace("FR-039-AC-2", "FR-049-AC-1", "TC-053")]
+    #[test]
+    fn scalar_selected_occurrence_refusals_preserve_generated_sibling() {
+        use crate::oracle::claim::ClaimDisposition;
+        use crate::oracle::scalar::{generate_contract_scalar_oracles, ExactScalarRefusal};
+
+        let (admitted, positions, _) = repeated_bounded_scalar_fixture(18);
+        let (baseline, baseline_indexes) =
+            generate_contract_scalar_oracles(&admitted, &positions, &[0])
+                .expect("one selected scalar baseline");
+        assert!(matches!(
+            baseline.claim_map.items[baseline_indexes[0]].result,
+            ClaimDisposition::Generated(_)
+        ));
+        for (case, change_conversion, change_role) in [
+            ("application role", false, true),
+            ("application ordinal", false, false),
+            ("conversion role", true, true),
+            ("conversion ordinal", true, false),
+        ] {
+            let mut changed = positions.clone();
+            let ContractRequestPosition::DriverItem {
+                result_selection:
+                    ContractDriverResultSelection::OwnResult {
+                        application,
+                        conversion: Some(conversion),
+                    },
+                ..
+            } = &mut changed[2]
+            else {
+                panic!("second driver selects its application and conversion");
+            };
+            let selected = if change_conversion {
+                conversion
+            } else {
+                application
+            };
+            if change_role {
+                selected.role = CheckedOccurrenceRole::Type;
+            } else {
+                selected.ordinal = u64::MAX;
+            }
+            let (generated, indexes) =
+                generate_contract_scalar_oracles(&admitted, &changed, &[0, 1])
+                    .expect("malformed selection is a per-item refusal");
+            assert_eq!(generated.claim_map.items.len(), 2, "{case}");
+            assert_eq!(
+                generated.claim_map.items[indexes[0]],
+                baseline.claim_map.items[baseline_indexes[0]],
+                "{case} preserves the complete generated sibling"
+            );
+            assert!(
+                matches!(
+                    generated.claim_map.items[indexes[1]].result,
+                    ClaimDisposition::Refused {
+                        refusal: ExactScalarRefusal::IncompleteContext
+                    }
+                ),
+                "{case}: {:?}",
+                generated.claim_map.items[indexes[1]].result
+            );
+            let library = generated
+                .artifacts
+                .iter()
+                .find(|artifact| artifact.path == "src/lib.rs")
+                .expect("generated sibling library");
+            assert_eq!(
+                library.contents.matches("\npub fn oracle_").count(),
+                1,
+                "{case}"
+            );
+        }
+    }
+
+    #[trace("FR-039-AC-7", "FR-049-AC-1", "TC-053")]
+    #[test]
+    fn scalar_selected_occurrences_remain_package_local() {
+        use crate::oracle::claim::ClaimDisposition;
+        use crate::oracle::scalar::generate_contract_scalar_oracles;
+
+        let (first, first_positions, first_expression) = repeated_bounded_scalar_fixture(18);
+        let (second, second_positions, second_expression) = repeated_bounded_scalar_fixture(19);
+        assert_eq!(
+            first_expression, second_expression,
+            "shared application identity"
+        );
+        assert_ne!(
+            first.identity(),
+            second.identity(),
+            "distinct admitted authorities"
+        );
+        let generate = |package: &quire_contract_model::ContractPackageV1,
+                        positions: &[ContractRequestPosition]| {
+            let (generated, indexes) = generate_contract_scalar_oracles(package, positions, &[0])
+                .expect("selected package-local scalar");
+            let claim = &generated.claim_map.items[indexes[0]];
+            let ClaimDisposition::Generated(value) = &claim.result else {
+                panic!("package-local scalar must generate: {:?}", claim.result);
+            };
+            assert_eq!(&value.contract_package_identity, package.identity());
+            assert_eq!(value.node_id, first_expression);
+            assert_eq!(
+                value.source_map,
+                package
+                    .source_occurrences(&first_expression)
+                    .expect("admitted sources")
+            );
+            let conversion = positions[1].node_id();
+            let target = package
+                .wire()
+                .semantic_graph
+                .nodes
+                .iter()
+                .find(|node| &node.node_id == conversion)
+                .expect("admitted result conversion")
+                .semantic_type
+                .clone();
+            assert_eq!(value.checked_bounds.first(), Some(&target));
+            generated
+        };
+        let first_output = generate(&first, &first_positions);
+        let second_output = generate(&second, &second_positions);
+        let first_again = generate(&first, &first_positions);
+        assert_ne!(
+            first_output.claim_map.items[0].result, second_output.claim_map.items[0].result,
+            "the shared application retains each package's result bound and authority"
+        );
+        let (ClaimDisposition::Generated(first_claim), ClaimDisposition::Generated(second_claim)) = (
+            &first_output.claim_map.items[0].result,
+            &second_output.claim_map.items[0].result,
+        ) else {
+            panic!("both admitted authorities must generate");
+        };
+        assert_ne!(first_claim.checked_bounds, second_claim.checked_bounds);
+        assert_ne!(first_claim.oracle_source, second_claim.oracle_source);
+        assert_eq!(first_output, first_again, "B cannot contaminate A's lookup");
+    }
+
     #[trace("FR-039-AC-6", "TC-053")]
     #[test]
     fn admitted_failed_accounting_refuses_without_an_oracle() {

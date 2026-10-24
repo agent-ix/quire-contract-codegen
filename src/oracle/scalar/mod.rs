@@ -1473,6 +1473,61 @@ pub(crate) fn valid_selected_scalar_result(
         && selected_scalar_key(package, items, request_index, node_id, selection).is_some()
 }
 
+#[cfg(test)]
+mod source_selection_tests;
+
+#[cfg(test)]
+mod source_selection_work {
+    use std::cell::Cell;
+
+    #[derive(Clone, Copy, Debug, Default)]
+    pub(super) struct Work {
+        pub(super) whole_map_visits: usize,
+        pub(super) indexed_lookups: usize,
+        pub(super) application_occurrences: usize,
+        pub(super) conversion_occurrences: usize,
+    }
+
+    thread_local! {
+        static WORK: Cell<Work> = const { Cell::new(Work {
+            whole_map_visits: 0,
+            indexed_lookups: 0,
+            application_occurrences: 0,
+            conversion_occurrences: 0,
+        }) };
+    }
+
+    // The historical qualification attaches false to each executed whole-map
+    // predicate; the retained path attaches true to each indexed API call.
+    pub(super) fn source(indexed: bool) {
+        WORK.with(|work| {
+            let mut current = work.get();
+            if indexed {
+                current.indexed_lookups += 1;
+            } else {
+                current.whole_map_visits += 1;
+            }
+            work.set(current);
+        });
+    }
+
+    pub(super) fn occurrence(conversion: bool) {
+        WORK.with(|work| {
+            let mut current = work.get();
+            if conversion {
+                current.conversion_occurrences += 1;
+            } else {
+                current.application_occurrences += 1;
+            }
+            work.set(current);
+        });
+    }
+
+    pub(super) fn take() -> Work {
+        WORK.with(|work| work.replace(Work::default()))
+    }
+}
+
 fn selected_scalar_key(
     package: &ContractPackageV1,
     items: &PackageItems<'_>,
@@ -1487,30 +1542,32 @@ fn selected_scalar_key(
     else {
         return Some(SelectedScalarKey::NotApplicable(node_id.clone()));
     };
-    let sources = &package.wire().source_map.nodes;
-    sources
-        .iter()
-        .find(|source| source.node_id == *node_id)?
-        .occurrences
-        .iter()
-        .find(|source| {
-            application.node_id == *node_id
-                && application.role == CheckedOccurrenceRole::Expression
-                && source.role == application.role
-                && source.ordinal == application.ordinal
-        })?;
+    #[cfg(test)]
+    source_selection_work::source(true);
+    package.source_occurrences(node_id)?.iter().find(|source| {
+        #[cfg(test)]
+        source_selection_work::occurrence(false);
+        application.node_id == *node_id
+            && application.role == CheckedOccurrenceRole::Expression
+            && source.role == application.role
+            && source.ordinal == application.ordinal
+    })?;
     if let Some(conversion) = conversion {
         if conversion.role != CheckedOccurrenceRole::Expression
             || !items.has_context_root(request_index, &conversion.node_id)
         {
             return None;
         }
-        sources
+        #[cfg(test)]
+        source_selection_work::source(true);
+        package
+            .source_occurrences(&conversion.node_id)?
             .iter()
-            .find(|entry| entry.node_id == conversion.node_id)?
-            .occurrences
-            .iter()
-            .find(|entry| entry.role == conversion.role && entry.ordinal == conversion.ordinal)?;
+            .find(|entry| {
+                #[cfg(test)]
+                source_selection_work::occurrence(true);
+                entry.role == conversion.role && entry.ordinal == conversion.ordinal
+            })?;
     }
     let ContractResultViewV1::Lowered(view) = package
         .result_context(
