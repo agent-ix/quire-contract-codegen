@@ -52,3 +52,11 @@ Disposition pass 1 at exact head `b7dedc2776608b5f84941af3ff609d9a2b78433a` (par
 ## Review ID correction
 
 This artifact supersedes the same-method IR-645 CG #561 reviewer record originally labeled with a colliding SR id. The finding and disposition substance is unchanged; only the review ids and cross-references were reissued.
+
+## Narrow gate-fix delta, pass 4
+
+At exact head `fc896ff69dd767101e608d712f60f6055faca3bc`, the FR-017-AC-42 cancellation/timeout control still uses the real launch, pidfd, memory and capture path, and no trace tag was added or removed. The test-only confirmation poll's unbounded wait creates the observability defect recorded as SR-17000 FND-003: a failed cleanup can hang the test rather than produce the required fault evidence. No spec text changed. Plan completion: not assessed; no full-repository coverage claim.
+
+## Narrow gate-fix disposition, pass 5
+
+**PASS** at exact head `3355357e9be50ba3dfa305202704dc14046be1fe`. The test-only pidfd confirmation now has a finite 30-second wait, so the same AC-42 control can return a typed unconfirmed-teardown error if cleanup fails. The real process observation and the ordinary production five-second confirmation are unchanged. SR-17000 FND-003 is fixed. Plan completion: not assessed; no full-repository coverage claim.

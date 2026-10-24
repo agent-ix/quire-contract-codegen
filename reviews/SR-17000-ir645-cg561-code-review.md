@@ -68,3 +68,25 @@ Exact head `0e5f278386e81f58cc9e33c0ef61de25c1d4a3b2`, parent `701558b382b8b9090
 | FND-002 | fixed | The sole delta is the public `ir_outcome_terminal_value` `# Errors` sentence, which now names a proved outcome with no retained count alongside missing/unexpected settlement and overflow. No implementation, test, spec, or lock bytes changed. |
 
 **PASS** for the narrow documentation fix. FND-001 remains fixed from disposition pass 1; no open findings remain in this code-review record. This review makes no new aggregate-gate claim.
+
+## New findings (disposition pass 4)
+
+Exact head `fc896ff69dd767101e608d712f60f6055faca3bc`, parent reviewed custody head `10b19eba`. The only delta is a test-only pidfd-confirmation owner constructor in `src/kani/run/owners.rs` and `tool.rs`, used by the unignored FR-017-AC-42 cancellation/timeout control. Normal `LaunchOwners::real` and the ordinary 5-second cleanup boundary are unchanged; memory and stream owners remain real in the test helper.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | medium | `TestOnlyPatientPidfdPoll::poll` discards the owner's finite confirmation timeout and calls `poll(fds, None)`. `NamespaceOwner::cleanup` can therefore block indefinitely if a teardown regression leaves the owned pidfd unreadable. The unignored cancellation/timeout test then hangs the library suite instead of observing a typed cleanup refusal. Use a finite, host-tolerant test confirmation bound longer than the production 5 seconds; a timeout must still return control to the test. | src/kani/run/owners.rs:49-55, src/kani/run/namespace.rs:364-375, tests/it/kani_scalar_native_private.rs:124-218 |
+
+## Narrow delta verdict, pass 4
+
+**CONDITIONAL** pending FND-003. The private helper's other substitutions are confined to the test build and preserve genuine process memory, stdout, stderr and owned pidfd observation. The author reports focused AC-42 1/1, under-load control, AC-55 2/2, scoped Clippy and fmt; no aggregate gate was run in this review lane.
+
+## Dispositions, pass 5
+
+Exact head `3355357e9be50ba3dfa305202704dc14046be1fe`, parent `fc896ff69dd767101e608d712f60f6055faca3bc`.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-003 | fixed | The test-only confirmation now polls the genuine owned pidfd once with a finite 30-second timeout. If it remains unreadable, `NamespaceOwner::cleanup` receives a zero-ready result and returns its existing typed unconfirmed-teardown error. Normal `SystemPoll` and production's five-second timeout remain unchanged. The helper stays behind `#[cfg(test)]`; no test assertions or production bytes changed in this fix. |
+
+**PASS** for the narrow two-file fix. All prior findings remain fixed. The author's focused AC-42 1/1, AC-55 2/2, scoped Clippy and fmt claims remain subject to the final-head gate; this reviewer did not run an aggregate gate.
