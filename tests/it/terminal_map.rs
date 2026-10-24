@@ -1042,7 +1042,10 @@ fn tc_041_a_proof_carries_its_check_count_and_a_reproduced_counterexample_refute
         map_ir_settled(ReplaySettlement::Reproduced),
         TerminalValue::Refuted
     );
-    assert!(KaniOutcome::proved(0, "source", "context").is_err());
+    let zero = KaniOutcome::proved(0, "source", "context").unwrap_err();
+    assert_eq!(*zero.requested_kind(), KaniOutcomeKind::Proved);
+    assert_eq!(zero.requested_code(), Std001Code::KANI_PROVED);
+    assert_eq!(zero.rejected_success_checks(), Some(0));
     #[cfg(target_pointer_width = "64")]
     {
         let above_qsl = u32::MAX as usize + 1;
@@ -1074,10 +1077,12 @@ fn tc_041_a_vacuous_proof_is_proved_with_zero_checks_and_other_inconclusive_is_r
         Std001Code::KANI_BOUND_INVALID,
         std001_code!("kani_no_interpretation"),
     ] {
-        assert!(
+        let error =
             KaniOutcome::non_success(KaniOutcomeKind::Inconclusive, code, "source", "context")
-                .is_err()
-        );
+                .unwrap_err();
+        assert_eq!(*error.requested_kind(), KaniOutcomeKind::Inconclusive);
+        assert_eq!(error.requested_code(), code);
+        assert_eq!(error.rejected_success_checks(), None);
     }
 }
 
@@ -1232,13 +1237,19 @@ fn tc_041_an_absent_solver_or_backend_is_unsupported_with_its_cause() {
         map_ir(&outcome(Std001Code::KANI_BACKEND_ABSENT)),
         TerminalValue::Unsupported(UnavailabilityCause::BackendAbsent)
     );
-    assert!(KaniOutcome::non_success(
+    let invalid = KaniOutcome::non_success(
         KaniOutcomeKind::Unavailable,
         Std001Code::KANI_CAPABILITY_MISSING,
         "source",
-        "context"
+        "context",
     )
-    .is_err());
+    .unwrap_err();
+    assert_eq!(*invalid.requested_kind(), KaniOutcomeKind::Unavailable);
+    assert_eq!(
+        invalid.requested_code(),
+        Std001Code::KANI_CAPABILITY_MISSING
+    );
+    assert_eq!(invalid.rejected_success_checks(), None);
 }
 
 /// A `Counterexample` with a replay disagreement is `Inconclusive(ReplayParity)` carrying its

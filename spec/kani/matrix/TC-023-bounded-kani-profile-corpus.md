@@ -136,11 +136,13 @@ leaves no artifact. A finite input validated under a different profile
 selection than the profile offered with it is refused with a typed
 `InvalidInput` `kani_profile_input_mismatch` result naming the request's
 source id, leaves no artifact and records no case identity in the registry
-(FR-015-AC-51). The context of every typed outcome and refusal the corpus
-returns (proved, counterexample, dependency-invalid, identity-collision,
+(FR-015-AC-51). The context of every successful expectation and typed refusal the corpus
+returns (assertion-expected-to-pass, assertion-expected-to-fail, dependency-invalid, identity-collision,
 a lowering refusal and the mismatch refusal) is the revision of the profile
-selection while the hand-built path remains (FR-015-AC-52); its `Proved` and
-`Counterexample` values classify generated cases rather than Kani runs.
+selection while the hand-built path remains (FR-015-AC-52). The expectation
+retains one or zero predicted SUCCESS checks for its one assertion and cannot
+enter the public terminal mapper as a run-authenticated `KaniOutcome`
+(FR-015-AC-91).
 
 Implemented (IR-464; arithmetic corpus retired by IR-598 AC-109): the harness
 every retained graph and collection corpus case emits, ends with exactly one `kani::cover!` after its assertion of the
