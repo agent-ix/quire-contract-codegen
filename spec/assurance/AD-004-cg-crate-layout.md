@@ -235,9 +235,10 @@ src/
                               and `deterministic_json`; the corpus calls them. Survives 4f; deleted
                               with the corpus lowerer at 4g or by the V2 census input, and
                               `deterministic_json` by step 1a
-      lower/                  the Kani family lowerings CG takes over from IR, and the profile admission
+      lower/                  the Kani family lowerings CG took over from IR, and the profile admission
                               (at 2f: bounded_kani_profile.rs, bounded_collections.rs,
-                              definedness_arithmetic.rs, finite_reference_graphs.rs, old names kept)
+                              definedness_arithmetic.rs, finite_reference_graphs.rs, old names kept;
+                              definedness_arithmetic.rs retired by FR-015-AC-109)
       corpus/                 corpus family (at 2f: bounded_kani_corpus.rs, old name kept, unsplit);
                               renders through render.rs from step 4g
     output/                   the one reader of Kani output
@@ -311,7 +312,7 @@ Migration order, not moved.
 | `kani_obligations` (the rest) | kani | `kani/generate/{negotiate,outcome,record,clause,scalar,precondition,contract}.rs` | split (step 2f), item by item as the step 2f item map says; it adds `outcome.rs`, `record.rs` and `clause.rs` to the four files this row first named, because the items the families share need a home below all of them |
 | `state_frame` | kani | `kani/generate/frame.rs`; `StateFrameHarness`, `StateFrameProperty` to `kani/identity.rs` | moved whole at step 2f, unsplit; one entry with `negotiate` at step 4d |
 | `bounded_kani_corpus` | kani | `kani/generate/corpus/bounded_kani_corpus.rs` | moved whole at step 2f, old file name kept, no split; its package lowerer retires at step 4g only after the admitted V2 arithmetic, symbolic collection and symbolic graph cases meet FR-015-AC-95 to FR-015-AC-102, including the typed graph population prerequisite and shared renderer. QSL-353 supplies emission-to-admission coverage, not that replacement. |
-| `bounded_kani_profile`, `bounded_collections`, `definedness_arithmetic`, `finite_reference_graphs` | kani | `kani/generate/lower/{bounded_kani_profile,bounded_collections,definedness_arithmetic,finite_reference_graphs}.rs` | moved whole at step 2f, old file names kept; CG owns the three semantic-family lowerings and their request/result types. Its corpus consumes them directly and retains IR-owned profile, dispatch, validated finite input and typed outcome interfaces. IR-347 removes the former IR exports after the CG consumer move |
+| `bounded_kani_profile`, `bounded_collections`, `definedness_arithmetic`, `finite_reference_graphs` | kani | At step 2f: `kani/generate/lower/{bounded_kani_profile,bounded_collections,definedness_arithmetic,finite_reference_graphs}.rs`; now the same directory without `definedness_arithmetic.rs` | Historical move: CG took ownership of three semantic-family lowerings and their request/result types; IR export removal follows the CG consumer move (IR-347). FR-015-AC-109 later retired the arithmetic lowerer and corpus arm. The collection and graph lowerers remain until FR-015-AC-110 and FR-015-AC-111. The corpus retains IR-owned profile, dispatch, validated finite input and typed outcome interfaces. |
 | `kani_execution` | kani | `kani/run/{tool,harness,launch,report_file,execute}.rs`, `kani/classify.rs` | split (step 2f): classification to `classify.rs`, everything that launches or reads a file to `run/` |
 | `kani_transcript` | kani | `kani/output/report.rs`, `kani/output/playback.rs` | split (step 2f): `counterexample_playback` and its four `PLAYBACK_*` constants to `playback.rs`, the typed report parse to `report.rs`. PR 210 (merged) put the report parse here |
 | `kani_witness_join` | replay | `kani/output/playback.rs` (the block scan and `DecodeFailure`, step 2f); `replay/witness.rs` (the decode, step 2g) | split across two steps; the item map says which item goes where |
@@ -708,7 +709,7 @@ What happens to the other generators:
 | `generate_kani_bundle` | Deleted at step 4f, after step 4e, the QSL-owned move of the QI exemplars and the control passing on the V2 contract arm (4c). Its public entry leaves `interface-001`. FR-003's optional stubbing was dropped by the IR-311 ruling. |
 | `kani_obligations` scalar, precondition, contract renderers | Become family lowerers; the template text moves into `render.rs`. Until 4c the precondition and contract families keep their V1 input. |
 | `state_frame` renderers | Become the frame lowerer. |
-| `bounded_kani_corpus` renderer | Keeps its own template until step 4g (an interim exception to L-3; its cover is FR-015-AC-55, IR-464). QSL-353 supplies emission-to-admission evidence but does not itself supply a symbolic corpus. Step 4g waits for the V2 arithmetic, collection and graph cases and the typed model-derived symbolic domains of FR-015-AC-96 to AC-102, then retires the hand-built lowerer and renders admitted cases through `HarnessSpec` and `render.rs`. Before step 4g, the hand-built path returns a generated-case `KaniOutcome` classification under FR-015-AC-91, never a run verdict. After step 4g, corpus generation returns no `KaniOutcome`: a verdict comes only from a run (FR-015-AC-95). |
+| `bounded_kani_corpus` renderer | Keeps its own template until step 4g (an interim exception to L-3; its cover is FR-015-AC-55, IR-464). QSL-353 supplies emission-to-admission evidence but does not itself supply a symbolic corpus. Step 4g retires the hand-built lowerer by family as the V2 arithmetic, collection and graph cases and the typed model-derived symbolic domains of FR-015-AC-96 to AC-102 are backed; FR-015-AC-109 has retired arithmetic, while collection and graph remain under FR-015-AC-110 and FR-015-AC-111. Admitted cases render through `HarnessSpec` and `render.rs`. Until the final slice, the hand-built path returns a generated-case `BoundedCorpusExpectation` under FR-015-AC-91, never a run verdict. After step 4g, corpus generation returns no `KaniOutcome`: a verdict comes only from a run (FR-015-AC-95). |
 
 **Requirement (regression test the one generator must keep passing).** QSL's real-Kani arithmetic
 control, recorded as QSL-342 QI #10, passes at every step of the migration, on the path that
@@ -1101,8 +1102,9 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
      cannot replace it. The admitted symbolic cases render through `HarnessSpec` and `render.rs`
      under the cover rule; a case with no symbolic input does not render a proof. Generation
      returns no proof verdict (FR-015-AC-95); the installed backend supplies one under FR-017.
-     L-3 lands after 4f, 4g and 4h. The Kani family lowerings
-     are implemented in CG by IR-347; IR removal follows this consumer change.
+     L-3 lands after 4f, 4g and 4h. IR-347 moved the Kani family lowerings
+     into CG; IR removal follows this consumer change. FR-015-AC-109 has retired CG's
+     arithmetic lowerer, so the current CG lowerer set is collection and graph.
      Arithmetic retirement (FR-015-AC-109) is implemented. The collection and graph
      corpus arms, replay and shared auxiliaries remain; this does not complete step 4g.
    - 4h: the collection family. `kani/generate/collection.rs` lowers an admitted model-field
@@ -1407,7 +1409,7 @@ Each is a place where the target of this AD is not yet true, stated so that no s
 | The shared V1 clause lowering and the V1 arm (`ObligationItem::BoundClause` in `outcome.rs`, `classify_clause` in `negotiate.rs`) | `kani/generate/clause.rs`, `outcome.rs`, `negotiate.rs` | step 4c reshapes the lowering for the V2 input; 4f deletes the V1 arm |
 | The persisted-record helpers | `kani/generate/record.rs` | not scheduled; `artifact` by step 1a |
 | Each family renders its own template; the corpus keeps its own, with its cover after the assertion (FR-015-AC-55) | `scalar.rs`, `precondition.rs`, `contract.rs`, `frame.rs`, `collection.rs`, `corpus/bounded_kani_corpus.rs` | 4b, 4c, 4d; 4h for collection; 4g for the corpus |
-| The three semantic-family forwarding modules | `kani/generate/lower/{definedness_arithmetic,bounded_collections,finite_reference_graphs}.rs` | IR-347 replaces the forwarders with CG-owned lowerings and request/result types; IR removes its former exports afterwards |
+| The semantic-family forwarding modules at step 2f | At step 2f: `kani/generate/lower/{definedness_arithmetic,bounded_collections,finite_reference_graphs}.rs`; now only the collection and graph files | IR-347 replaced the forwarders with CG-owned lowerings and request/result types; IR removes its former exports afterwards. FR-015-AC-109 has retired arithmetic; collection and graph remain until FR-015-AC-110 and FR-015-AC-111. |
 | `generate_state_frame_obligations` is a second public entry beside `negotiate_kani_obligations` | `kani/generate/frame.rs` | step 4d |
 
 #### Item tables
@@ -1569,8 +1571,9 @@ assigned to that one file. The names are the full item list.
 - `bounded_collections.rs` to `kani/generate/lower/bounded_collections.rs` (1 production, 2
   tests). Production: `prepare_bounded_collection_query`. Tests: `fixture`,
   `tc_023_collection_order_duplicates_and_bounds_remain_exact`.
-- `definedness_arithmetic.rs` to `kani/generate/lower/definedness_arithmetic.rs` (1 production, 2
-  tests). Production: `prepare_checked_arithmetic`. Tests:
+- At step 2f, `definedness_arithmetic.rs` moved to
+  `kani/generate/lower/definedness_arithmetic.rs` (1 production, 2 tests); FR-015-AC-109 later
+  retired this file and its tests. The historical production item was `prepare_checked_arithmetic`; tests:
   `tc_023_division_by_zero_remains_a_typed_refusal`,
   `tc_023_checked_domain_admits_exact_values_and_refuses_outside_results`.
 - `finite_reference_graphs.rs` to `kani/generate/lower/finite_reference_graphs.rs` (1 production,
