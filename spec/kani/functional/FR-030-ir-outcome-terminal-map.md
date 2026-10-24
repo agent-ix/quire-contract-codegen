@@ -24,9 +24,10 @@ relationships:
 
 ## Description
 
-The generator shall map every Contract IR `KaniOutcome`, paired with the settlement of its replay, to
-exactly one `qsl_replay::TerminalValue`. The map is total over the pair (outcome, replay
-settlement), not over the outcome alone, and it preserves the outcome's refusal cause: the outcome
+The generator shall map every Contract IR `KaniOutcome`, paired with the settlement of its replay,
+to exactly one `qsl_replay::TerminalValue` when its retained proof count fits QSL's `u32` range;
+an unrepresentable count receives a typed refusal. The map is total over the valid pair and
+representable count, not over the outcome alone, and it preserves the outcome's refusal cause: the outcome
 kinds that QSL's terminal value collapses into one variant stay distinguishable through that
 variant's typed cause. This is QSL ADR-013 C-09 as merged, whose two inputs are the IR `KaniOutcome`
 and, for a `Counterexample`, the result of its replay. The replay settlement, its six readings and
@@ -54,12 +55,10 @@ Kani path and cannot relabel a Kani result as an SMT proof.
 
 ## Inputs
 
-- One `quire_contract_ir::kani::KaniOutcome`: its closed `KaniOutcomeKind` and its stable cause
-  `code`. The IR outcome carries kind, `code`, `source_id` and `context`; its `Cancelled` kind
-  additionally carries `KaniCancellationSource`. It has no SUCCESS-check count.
-- For a `Proved` outcome, the SUCCESS-check count taken from the Kani transcript this generator
-  parsed, passed to the map as an explicit input, as [FR-029](./FR-029-run-outcome-terminal-record.md)
-  takes it.
+- One `quire_contract_ir::kani::KaniOutcome`: its closed `KaniOutcomeKind` and stable cause
+  `code`. The IR outcome carries kind, `code`, `source_id` and `context`; its `Proved` kind
+  retains a positive SUCCESS-check count, and its `Cancelled` kind carries
+  `KaniCancellationSource`. The map takes no separate caller-supplied check count.
 - For a `Counterexample` outcome, the replay settlement of its counterexample, as
   [FR-029](./FR-029-run-outcome-terminal-record.md) states it. No other kind takes a settlement.
 - IR-666 direct report converter; IR-806 original-artifact invocation planned: for an IR `Counterexample` that represents a falsified composite
@@ -77,7 +76,8 @@ Kani path and cannot relabel a Kani result as an SMT proof.
 - One `qsl_replay::TerminalValue`.
 - A typed refusal, `TerminalPairError`, for a pair the map's input does not express: a
   `Counterexample` with no replay settlement (`MissingSettlement`), or any other kind with one
-  (`UnexpectedSettlement`).
+  (`UnexpectedSettlement`), or a retained proof count exceeding QSL's `u32` range
+  (`ProvedCountOutOfRange`).
 - IR-666 direct report converter; IR-806 original-artifact invocation planned: the terminal value and report result of the same-claim composite
   parity settlement, or its typed claim-binding refusal with no value.
 - For an SMT item, one FR-331 terminal result with its proof basis and exactly one certification
@@ -93,8 +93,8 @@ Kani path and cannot relabel a Kani result as an SMT proof.
 
   | Contract IR kind | Result | Proof basis / certification |
   |---|---|---|
-  | `Proved`, with `n` SUCCESS checks from the transcript, `n` at least one | `Proved { basis: ProofBasis::Checks { success_checks: n }, certification: Certification::Certified }` | `Checks { success_checks: n }` / `Certified` |
-  | `Proved`, with zero SUCCESS checks from the transcript | `Proved { basis: ProofBasis::Checks { success_checks: 0 }, certification: Certification::Certified }`; QSL reports inconclusive/vacuous | `Checks { success_checks: 0 }` / `Certified` |
+  | `Proved`, with retained positive SUCCESS-check count `n` in QSL's `u32` range | `Proved { basis: ProofBasis::Checks { success_checks: n }, certification: Certification::Certified }` | `Checks { success_checks: n }` / `Certified` |
+  | `Proved`, with retained count above QSL's `u32` range | Typed `ProvedCountOutOfRange` refusal; no terminal value | none / none |
   | `Counterexample`, with a reproduced replay | `Refuted` | none / none |
   | `Counterexample`, with a replay disagreement | `Inconclusive(InconclusiveCause::ReplayParity)` | none / none |
   | `Counterexample`, with a non-fault replay refusal | `Inconclusive(InconclusiveCause::ReplayRefused)` carrying the refusal's QSL catalog code | none / none |
@@ -105,17 +105,19 @@ Kani path and cannot relabel a Kani result as an SMT proof.
   | `IncompleteInput` | `Declined { cause: ProofRefusalCause::IncompleteInput, code: DeclineCode::Std001(c) }`, `c` the outcome's `Std001Code` | none / none |
   | `Unavailable` with cause `kani_checker_absent` | `Unsupported(UnavailabilityCause::SolverAbsent)` | none / none |
   | `Unavailable` with cause `kani_backend_absent` | `Unsupported(UnavailabilityCause::BackendAbsent)` | none / none |
-  | `Unavailable`, any other cause | `Unsupported(UnavailabilityCause::BackendAbsent)` | none / none |
   | `TimedOut` | `Incomplete(IncompleteCause::TimedOut)` | none / none |
   | `ResourceExhausted` | `Incomplete(IncompleteCause::ResourceExhausted)` | none / none |
   | `Cancelled { source: Requested }` | `Incomplete(IncompleteCause::Cancelled { source: quire_exact::CancelCause::Requested })` | none / none |
   | `Cancelled { source: Deadline }` | `Incomplete(IncompleteCause::Cancelled { source: quire_exact::CancelCause::Deadline })` | none / none |
   | `Inconclusive` with cause `kani_vacuous_proof` | `Proved { basis: ProofBasis::Checks { success_checks: 0 }, certification: Certification::Certified }`; QSL reports inconclusive/vacuous | `Checks { success_checks: 0 }` / `Certified` |
-  | `Inconclusive`, any other cause | `Failed` | none / none |
+
+Contract IR refuses a zero-check `Proved`, an `Inconclusive` cause other than
+`kani_vacuous_proof`, and an `Unavailable` cause other than `kani_checker_absent`
+or `kani_backend_absent` before this map receives an outcome.
 
 The Kani rows are a qualified-core prove path (QSL FR-127); every `Proved` payload they
-produce carries `ProofBasis::Checks` and `Certification::Certified`, including a zero-check
-payload whose *category* is inconclusive. A non-`Proved` terminal value carries neither proof
+produce carries `ProofBasis::Checks` and `Certification::Certified`, including the vacuous
+`Inconclusive` outcome's zero-check payload whose *category* is inconclusive. A non-`Proved` terminal value carries neither proof
 basis nor certification. The map SHALL NOT infer either field from a result label alone.
 
 For an accepted item routed to the registered SMT backend, the generator SHALL map the backend
@@ -216,14 +218,14 @@ composite facade. QSL #645 owns these rows. IR-666 tests their public reports th
 
 | ID | Criteria | Verification |
 |----|----------|--------------|
-| FR-030-AC-1 | Every pair (`KaniOutcomeKind`, replay settlement) that the map's input can express maps to exactly one `TerminalValue`. | Test (TC-041) |
+| FR-030-AC-1 | Every pair (`KaniOutcomeKind`, replay settlement) that the map's input can express and whose retained proof count fits QSL's `u32` range maps to exactly one `TerminalValue`; an out-of-range proof count returns only typed `ProvedCountOutOfRange`. | Test (TC-041) |
 | FR-030-AC-2 | `Refused`, `InvalidInput` and `IncompleteInput` map to `Declined` with `ProofRefusalCause::Refused`, `InvalidInput` and `IncompleteInput` respectively, so no refusal cause is lost, and each carries the outcome's `Std001Code` unchanged as `DeclineCode::Std001`, including a code STD-001 does not register. | Test (TC-041) |
 | FR-030-AC-3 | `TimedOut` and `ResourceExhausted` map to their distinct `Incomplete` causes. `Cancelled { source: Requested }` and `Cancelled { source: Deadline }` map to `IncompleteCause::Cancelled` carrying the corresponding `quire_exact::CancelCause`, with no source inferred from `code`, `source_id`, `context` or elapsed time. | Test (TC-041) |
-| FR-030-AC-4 | `Proved` with three SUCCESS checks maps to `Proved { basis: Checks { success_checks: 3 }, certification: Certified }`, zero checks maps to `Proved { basis: Checks { success_checks: 0 }, certification: Certified }` (category inconclusive/vacuous), and `Counterexample` with reproduced replay maps to `Refuted`. | Test (TC-041) |
-| FR-030-AC-5 | `Inconclusive` with cause `kani_vacuous_proof` maps to `Proved { basis: Checks { success_checks: 0 }, certification: Certified }` (category inconclusive/vacuous), and `Inconclusive` with any other cause maps to `Failed`. | Test (TC-041) |
+| FR-030-AC-4 | `Proved` with three retained SUCCESS checks maps to `Proved { basis: Checks { success_checks: 3 }, certification: Certified }` without a separate caller count; a retained count exceeding QSL's `u32` range returns typed `ProvedCountOutOfRange` with no terminal value; `Counterexample` with reproduced replay maps to `Refuted`. Contract IR refuses a zero-check `Proved`. | Test (TC-041) |
+| FR-030-AC-5 | `Inconclusive` with cause `kani_vacuous_proof` maps to `Proved { basis: Checks { success_checks: 0 }, certification: Certified }` (category inconclusive/vacuous); Contract IR refuses every other `Inconclusive` cause before mapping. | Test (TC-041) |
 | FR-030-AC-6 | No outcome maps to `Tested`. | Test (TC-041) |
 | FR-030-AC-7 | The map is one `match` over the pair (`KaniOutcomeKind`, replay settlement) with no wildcard arm. | Inspection (TC-041) |
-| FR-030-AC-8 | `Unavailable` with cause `kani_checker_absent` maps to `Unsupported(SolverAbsent)`; with `kani_backend_absent` or any other cause it maps to `Unsupported(BackendAbsent)`. | Test (TC-041) |
+| FR-030-AC-8 | `Unavailable` with cause `kani_checker_absent` maps to `Unsupported(SolverAbsent)` and with `kani_backend_absent` maps to `Unsupported(BackendAbsent)`; Contract IR refuses every other `Unavailable` cause before mapping. | Test (TC-041) |
 | FR-030-AC-9 | `Counterexample` with a replay disagreement maps to `Inconclusive(ReplayParity)`, and with a non-fault `ReplayRefusal` maps to `Inconclusive(ReplayRefused)` carrying `ReplayRefusal::code()` of that refusal. | Test (TC-041) |
 | FR-030-AC-10 | `Counterexample` with a fault, walked through every wrapper FR-029-AC-10 lists, and with each CG-raised failure FR-029-AC-11 lists, maps to `Failed`. | Test (TC-041) |
 | FR-030-AC-11 | Across every replay settlement other than reproduced, `Counterexample` maps to a value other than `Refuted`. | Test (TC-041) |
@@ -233,7 +235,7 @@ composite facade. QSL #645 owns these rows. IR-666 tests their public reports th
 | FR-030-AC-15 | PARTIAL (IR-666 direct public report controls; IR-806 must reach the same rows from a CG-built request over the original proving context). For an identity-valid IR `Counterexample` composite claim, F-1 Disagreed yields Failed/CgDefect even with a native fault or invalid operand; without Disagreed, native Incomplete and ExecutionFault each yield a binding-checked GeneratedFault/Failed report with the actual NativeCause even when an operand would refuse, admission or exact limits would stop, or refinement is CeilingReached. CG asserts the typed result and terminal value; QSL FR-358 owns the internal F-2 no-admission/no-exact-evaluation rule. | Test |
 | FR-030-AC-16 | PARTIAL (IR-666 direct public report controls; IR-806 must reach the same rows from a CG-built request over the original proving context). With valid identity, no Disagreed and Completed native, an out-of-domain operand yields F-3 RefusedInput/ReplayRefused with its index and QSL code even with CeilingReached; a request accounting limit reached during admission yields F-4 Incomplete(ResourceExhausted)/Admission with the counter; an exact limit reached after admission yields F-5 Incomplete(ResourceExhausted)/ExactEvaluation even with CeilingReached; with sufficient limits, CeilingReached yields F-6 Incomplete(ResourceExhausted)/RefinementCeiling. CG asserts the distinct report stages and their terminal values; QSL FR-358 owns the internal F-4 no-exact-evaluation rule. No case becomes Tested or Refuted. | Test |
 | FR-030-AC-17 | PARTIAL (IR-666 F-7 and binding controls; IR-806 original-artifact path planned). With valid identity and all earlier rows absent, changing only the retained shadow verdict or pair count yields F-7 Diverged/Failed/CgDefect; agreement yields Inconclusive(ScalarAgrees) with the CompositeEquality claim and Equality outcome. A binding-valid QSL `prepare` non-fault `Refused` report precedes Disagreed and yields Inconclusive(ReplayRefused) with QSL's code. `Refused` from later admission or exact comparison follows Disagreed; if QSL returns `Fault` or `Admission(Fault)`, its bound report yields Failed as FR-029-AC-28 states. CG prechecks, an absent report or a mismatched full `CompositeIdentity` yield no terminal value under FR-033-AC-9. The ordinary source-predicate MissingSettlement/UnexpectedSettlement rule does not reject a valid typed composite report. | Test |
-| FR-030-AC-18 | Every Kani `Proved` row carries `ProofBasis::Checks` with the transcript count and `Certification::Certified`, including the zero-check row; zero checks remain category inconclusive/vacuous. No Kani non-`Proved` row carries basis or certification. | Test (TC-041) |
+| FR-030-AC-18 | Every mapped Kani `Proved` outcome carries `ProofBasis::Checks` with its retained positive count and `Certification::Certified`; the `Inconclusive(kani_vacuous_proof)` outcome carries zero checks with the inconclusive/vacuous category. No other Kani outcome carries basis or certification. | Test (TC-041) |
 | FR-030-AC-19 | For both `BoundedComplete { depth }` and `Inductive { depth }`, an SMT proof whose certificate FR-314 verifies maps to `Proved` with the same basis/depth and `Certified`; no certificate or an `Unverifiable` unchecked rule maps to `Proved` with the same basis/depth and `Uncertified`, retaining the unverifiable locus when present. No SMT proof maps to `Trusted`. | Test (TC-041) |
 | FR-030-AC-20 | For either SMT basis, a foreign query, wrong certificate shape, invalid checked proof step or missing final empty clause rejected by FR-314 maps to `Inconclusive(CertificateRejected { rule, at })` retaining the exact rejection; none produces `Proved`, basis or certification. When cvc5 and Z3 also disagree, `CertificateRejected` remains the one terminal cause while the parity failure and both verdicts are retained alongside it. | Test (TC-041) |
 | FR-030-AC-21 | SMT/cross-check disagreement without certificate rejection keeps both verdicts and settles inconclusive; agreement does not change certification; missing Z3 retains its warning and cvc5 settlement. An SMT counterexample becomes `Refuted` only after FR-197 replay reproduces it; replay disagreement, non-fault refusal and fault map to their distinct non-proof results. | Test (TC-041) |

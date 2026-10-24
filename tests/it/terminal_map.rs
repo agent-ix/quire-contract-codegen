@@ -903,13 +903,13 @@ fn counterexample() -> KaniOutcome {
     )
 }
 
-/// An outcome that takes no settlement, mapped with three SUCCESS checks.
+/// An outcome that takes no settlement, using any check count retained in IR.
 fn map_ir(outcome: &KaniOutcome) -> TerminalValue {
-    ir_outcome_terminal_value(outcome, 3, None).expect("a well-paired outcome maps")
+    ir_outcome_terminal_value(outcome, None).expect("a well-paired outcome maps")
 }
 
 fn map_ir_settled<'a>(settlement: impl Into<ReplaySettlement<'a>>) -> TerminalValue {
-    ir_outcome_terminal_value(&counterexample(), 3, Some(settlement.into()))
+    ir_outcome_terminal_value(&counterexample(), Some(settlement.into()))
         .expect("a counterexample with a settlement maps")
 }
 
@@ -937,8 +937,8 @@ fn tc_041_every_expressible_pair_maps_to_one_value() {
 #[test]
 fn tc_041_a_settlement_accompanies_a_counterexample_only() {
     for outcome in ir_outcomes() {
-        let bare = ir_outcome_terminal_value(&outcome, 3, None);
-        let settled = ir_outcome_terminal_value(&outcome, 3, Some(ReplaySettlement::Reproduced));
+        let bare = ir_outcome_terminal_value(&outcome, None);
+        let settled = ir_outcome_terminal_value(&outcome, Some(ReplaySettlement::Reproduced));
         if outcome.kind() == KaniOutcomeKind::Counterexample {
             assert_eq!(bare, Err(TerminalPairError::MissingSettlement));
             assert_eq!(settled, Ok(TerminalValue::Refuted));
@@ -1026,21 +1026,15 @@ fn tc_041_a_limit_or_a_cancellation_is_incomplete_with_its_cause() {
 
 /// `Proved` carries the transcript's SUCCESS check count, zero included, and a `Counterexample`
 /// with a reproduced replay is `Refuted`.
-#[trace("FR-030-AC-4", "FR-030-AC-18", "TC-041")]
+#[trace("FR-030-AC-1", "FR-030-AC-4", "FR-030-AC-18", "TC-041")]
 #[test]
 fn tc_041_a_proof_carries_its_check_count_and_a_reproduced_counterexample_refutes() {
-    let proved = ir(KaniOutcomeKind::Proved, Std001Code::KANI_PROVED);
+    let proved = KaniOutcome::proved(3, "source", "context").expect("three proved checks");
+    assert_eq!(proved.success_checks(), Some(3));
     assert_eq!(
-        ir_outcome_terminal_value(&proved, 3, None),
+        ir_outcome_terminal_value(&proved, None),
         Ok(TerminalValue::Proved {
             basis: ProofBasis::Checks { success_checks: 3 },
-            certification: Certification::Certified,
-        })
-    );
-    assert_eq!(
-        ir_outcome_terminal_value(&proved, 0, None),
-        Ok(TerminalValue::Proved {
-            basis: ProofBasis::Checks { success_checks: 0 },
             certification: Certification::Certified,
         })
     );
@@ -1048,6 +1042,19 @@ fn tc_041_a_proof_carries_its_check_count_and_a_reproduced_counterexample_refute
         map_ir_settled(ReplaySettlement::Reproduced),
         TerminalValue::Refuted
     );
+    assert!(KaniOutcome::proved(0, "source", "context").is_err());
+    #[cfg(target_pointer_width = "64")]
+    {
+        let above_qsl = u32::MAX as usize + 1;
+        let proved = KaniOutcome::proved(above_qsl, "source", "context")
+            .expect("IR accepts a positive count above QSL's range");
+        assert_eq!(
+            ir_outcome_terminal_value(&proved, None),
+            Err(TerminalPairError::ProvedCountOutOfRange {
+                success_checks: above_qsl,
+            })
+        );
+    }
 }
 
 /// `Inconclusive` with `kani_vacuous_proof` is a certified `Proved` with zero checks whatever
@@ -1263,14 +1270,14 @@ fn tc_041_a_counterexample_disagreement_or_refusal_is_inconclusive_with_its_caus
 fn tc_041_a_counterexample_with_a_fault_or_a_cg_defect_is_failed() {
     let faults = for_each_fault(|settlement| {
         assert_eq!(
-            ir_outcome_terminal_value(&counterexample(), 3, Some(settlement)),
+            ir_outcome_terminal_value(&counterexample(), Some(settlement)),
             Ok(TerminalValue::Failed)
         );
     });
     assert_eq!(faults, 1 + 2 * 4 + 4, "every named wrapper is exercised");
     for_each_cg_failure(|settlement| {
         assert_eq!(
-            ir_outcome_terminal_value(&counterexample(), 3, Some(settlement)),
+            ir_outcome_terminal_value(&counterexample(), Some(settlement)),
             Ok(TerminalValue::Failed)
         );
     });

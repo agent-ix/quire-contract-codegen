@@ -58,6 +58,11 @@ pub enum TerminalPairError {
     /// An outcome other than falsified with a replay settlement: only a counterexample is
     /// replayed.
     UnexpectedSettlement,
+    /// IR's nonzero proof count exceeds QSL's `u32` terminal count.
+    ProvedCountOutOfRange {
+        /// The retained count that cannot fit QSL's terminal value.
+        success_checks: usize,
+    },
     /// The owning IR constructor refused cancellation execution evidence.
     InvalidCancellation(KaniOutcomeError),
 }
@@ -71,6 +76,12 @@ impl std::fmt::Display for TerminalPairError {
             Self::InvalidCancellation(error) => std::fmt::Display::fmt(error, f),
             Self::UnexpectedSettlement => {
                 f.write_str("only a falsified run carries a replay settlement")
+            }
+            Self::ProvedCountOutOfRange { success_checks } => {
+                write!(
+                    f,
+                    "IR proof check count {success_checks} exceeds QSL's u32 limit"
+                )
             }
         }
     }
@@ -157,9 +168,9 @@ pub fn run_terminal_value(
     })
 }
 
-/// Maps one Contract IR [`KaniOutcome`] that arrived from Contract IR, with the SUCCESS check
-/// count its transcript reports and, for a `Counterexample`, its replay settlement, to QSL's
-/// terminal value (FR-030).
+/// Maps one Contract IR [`KaniOutcome`] that arrived from Contract IR, using its retained
+/// SUCCESS-check count and, for a `Counterexample`, its replay settlement, to QSL's terminal
+/// value (FR-030).
 ///
 /// This is not applied to an outcome derived from a run this repository executed: that run's
 /// value is [`run_terminal_value`]'s (FR-030 precedence). The map reads the kind, and the `code`
@@ -171,10 +182,10 @@ pub fn run_terminal_value(
 ///
 /// # Errors
 ///
-/// [`TerminalPairError`] when a `Counterexample` has no settlement, or another kind has one.
+/// [`TerminalPairError`] when a `Counterexample` has no settlement, another kind has one,
+/// or the retained proof count exceeds QSL's `u32` range.
 pub fn ir_outcome_terminal_value(
     outcome: &KaniOutcome,
-    success_checks: u32,
     settlement: Option<ReplaySettlement<'_>>,
 ) -> Result<TerminalValue, TerminalPairError> {
     use KaniOutcomeKind as Kind;
@@ -183,10 +194,20 @@ pub fn ir_outcome_terminal_value(
         code: DeclineCode::Std001(outcome.code()),
     };
     Ok(match (&outcome.kind(), settlement) {
-        (Kind::Proved, None) => TerminalValue::Proved {
-            basis: ProofBasis::Checks { success_checks },
-            certification: Certification::Certified,
-        },
+        (Kind::Proved, None) => {
+            let retained_count = outcome
+                .success_checks()
+                .expect("IR Proved always retains a nonzero check count");
+            let success_checks = u32::try_from(retained_count).map_err(|_| {
+                TerminalPairError::ProvedCountOutOfRange {
+                    success_checks: retained_count,
+                }
+            })?;
+            TerminalValue::Proved {
+                basis: ProofBasis::Checks { success_checks },
+                certification: Certification::Certified,
+            }
+        }
         (Kind::Counterexample, Some(settlement)) => settled(settlement),
         (Kind::Counterexample, None) => return Err(TerminalPairError::MissingSettlement),
         (Kind::Refused, None) => declined(ProofRefusalCause::Refused),
@@ -270,7 +291,7 @@ impl KaniExecutionEvidence {
             &self.launcher_path,
         )
         .map_err(TerminalPairError::InvalidCancellation)?;
-        let terminal = ir_outcome_terminal_value(&outcome, 0, None)?;
+        let terminal = ir_outcome_terminal_value(&outcome, None)?;
         Ok(Some((outcome, terminal)))
     }
 }
