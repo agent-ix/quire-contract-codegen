@@ -217,9 +217,9 @@ pub use crate::core::native_integer::{
 };
 pub use crate::core::source_map::{SourceProbe, SourceRegion};
 pub use crate::oracle::clause::{
-    derive_v2_clause_descriptor, generate_v2_clause_claim_map, generate_v2_clause_oracle,
-    ClauseOracleInput, V2ClauseClaim, V2ClauseCoverageRegion, V2ClauseDescriptor, V2ClauseOracle,
-    V2ClauseRefusal,
+    derive_v2_clause_descriptor, generate_v2_clause_claim_map, generate_v2_clause_native_oracle,
+    generate_v2_clause_oracle, ClauseOracleInput, NativeClauseCapabilityReason, V2ClauseClaim,
+    V2ClauseCoverageRegion, V2ClauseDescriptor, V2ClauseOracle, V2ClauseRefusal,
 };
 pub use core::canonical::DigestError;
 pub use kani::generate::frame::{
@@ -271,7 +271,9 @@ pub use replay::state_clause::{
     StateClauseModelFieldsCause, StateClauseReplay, StateClauseReplayError,
     StateClauseReplayInputs, StateObjectAddress,
 };
-pub use replay::witness::{decode_falsification, WitnessDecodeLimits};
+pub use replay::witness::{
+    decode_falsification, decode_v2_clause_falsification, WitnessDecodeLimits,
+};
 pub use strategy::campaign::{
     generate_enum_strategy, generate_i64_strategy, EnumStrategyCampaign, EnumStrategyRequest,
     StrategyCampaign, StrategyConstraint, StrategyDiagnostic, StrategyErrorCode, StrategyRequest,

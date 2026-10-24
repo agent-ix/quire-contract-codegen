@@ -297,13 +297,21 @@ fn negotiate_integer_policy(
                 request.ceilings,
                 &mut scalar_lookups,
                 &mut checked_lookups,
+                native,
             )
         })
         .collect::<Vec<_>>();
     if native {
-        for state in &mut states {
+        for (item, state) in request.items.iter().zip(&mut states) {
             if let Outcome::LoweredScalar(lowered) = &mut state.outcome {
                 if let Err(reason) = lowered.select_native_integer() {
+                    state.outcome = Outcome::Unsupported(reason);
+                }
+            }
+            if let (ObligationItem::V2Clause { package, .. }, Outcome::LoweredV2Clause(lowered)) =
+                (item, &mut state.outcome)
+            {
+                if let Err(reason) = lowered.select_native_integer(package) {
                     state.outcome = Outcome::Unsupported(reason);
                 }
             }
@@ -557,10 +565,11 @@ fn classify<'a>(
     ceilings: crate::kani::identity::ProofCeilings,
     scalar_lookups: &mut BTreeMap<*const ContractPackageV1, ContractLookup<'a>>,
     checked_lookups: &mut CheckedLookups<'a>,
+    native: bool,
 ) -> ItemState<'a> {
     match *item {
         ObligationItem::V2Clause { package, clause } => {
-            classify_v2_clause(checked_lookup(checked_lookups, package), clause)
+            classify_v2_clause(checked_lookup(checked_lookups, package), clause, native)
         }
         ObligationItem::BoundClause { package, clause } => classify_clause(package, clause),
         ObligationItem::ScalarClaim {
@@ -617,6 +626,7 @@ fn classify<'a>(
 fn classify_v2_clause<'a>(
     lookup: &mut CheckedLookup<'a>,
     clause: &'a CheckedNodeId,
+    native: bool,
 ) -> ItemState<'a> {
     let package = lookup.package;
     let view = lookup.clause();
@@ -643,12 +653,15 @@ fn classify_v2_clause<'a>(
                 semantic_form: node.semantic_form.to_string(),
             })
         }
-        Some(_) if kind != Some(ObligationKind::Precondition) => {
+        Some(_)
+            if kind != Some(ObligationKind::Precondition)
+                && !(native && kind == Some(ObligationKind::Postcondition)) =>
+        {
             Outcome::Unsupported(UnsupportedObligation::V2ClauseConditionNotRendered {
                 node_id: clause.clone(),
             })
         }
-        Some(_) => match lower_v2_clause(view, clause) {
+        Some(_) => match lower_v2_clause(view, clause, kind.expect("guarded clause kind")) {
             Ok(lowered) => Outcome::LoweredV2Clause(Box::new(lowered)),
             Err(reason) => Outcome::Unsupported(reason),
         },
@@ -1878,6 +1891,7 @@ mod tests {
             render_probe_request(&[]).ceilings,
             &mut BTreeMap::new(),
             &mut BTreeMap::new(),
+            false,
         )
         .outcome
         else {

@@ -164,6 +164,27 @@ pub(super) enum LetType {
 pub(super) enum Init {
     Expression(ExprText),
     ScalarMeter(quire_exact::ScalarLimits),
+    NativeAdmission {
+        checked: ExprText,
+        stage: NativeAdmissionStage,
+    },
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(super) enum NativeAdmissionStage {
+    OperandInterval,
+    PlanCapacity,
+    OperandPopulation,
+}
+
+impl NativeAdmissionStage {
+    pub(super) fn message(self) -> &'static str {
+        match self {
+            Self::OperandInterval => "checked operand interval",
+            Self::PlanCapacity => "checked native capacity",
+            Self::OperandPopulation => "original admitted operand population",
+        }
+    }
 }
 #[derive(Clone, Debug)]
 pub(super) struct LetBinding {

@@ -24,7 +24,7 @@ use crate::{
     },
     kani::{
         classify::{KaniInconclusiveReason, KaniRunOutcome},
-        identity::KaniScalarObligationHarness,
+        identity::{KaniScalarObligationHarness, ScalarIntegerRepresentation},
         output::report::KaniFailureCause,
         run::{
             execute::{
@@ -443,6 +443,8 @@ pub enum ScalarOracleStopKind {
     InvalidConstant,
     /// An IEEE operand width did not match.
     OperandWidth,
+    /// The native kernel rejected plan or operand admission.
+    NativeAdmission,
 }
 
 impl fmt::Display for KaniScalarNativeError {
@@ -471,6 +473,7 @@ pub(crate) fn execute_with_cleanup(
     write_observer(
         &request.harness.identity.oracle_symbol,
         request.harness.identity.arguments.len(),
+        request.harness.identity.integer_representation,
         snapshot.path(),
     )?;
     generate_lockfile(request, snapshot.path())?;
@@ -842,15 +845,29 @@ fn limits_array(limits: ScalarLimits) -> [u64; 10] {
 fn write_observer(
     oracle_symbol: &str,
     argument_count: usize,
+    representation: ScalarIntegerRepresentation,
     root: &Path,
 ) -> Result<(), KaniScalarNativeError> {
     let operand_bindings = (0..argument_count)
         .map(|index| format!(" let operand_{index} = next_i64(&mut arguments)?;"))
         .collect::<String>();
     let parameters = (0..argument_count)
-        .map(|index| format!("&rt::Integer::from(operand_{index})"))
+        .map(|index| match representation {
+            ScalarIntegerRepresentation::General => format!("&rt::Integer::from(operand_{index})"),
+            ScalarIntegerRepresentation::Native => {
+                format!("&rt::NativeInteger::new(i128::from(operand_{index}))")
+            }
+        })
         .collect::<Vec<_>>()
         .join(", ");
+    let completed_value = match representation {
+        ScalarIntegerRepresentation::General => "value",
+        ScalarIntegerRepresentation::Native => "value.value()",
+    };
+    let stop_arms = match representation {
+        ScalarIntegerRepresentation::General => "   Err(generated::OracleStop::IllTyped(_)) => println!(\"IR791_NATIVE_V1\\toracle_stop\\till_typed\"),\n   Err(generated::OracleStop::InvalidConstant) => println!(\"IR791_NATIVE_V1\\toracle_stop\\tinvalid_constant\"),\n   Err(generated::OracleStop::OperandWidth) => println!(\"IR791_NATIVE_V1\\toracle_stop\\toperand_width\"),",
+        ScalarIntegerRepresentation::Native => "   Err(generated::OracleStop::NativeAdmission(_)) => println!(\"IR791_NATIVE_V1\\toracle_stop\\tnative_admission\"),",
+    };
     let limits = [
         "integer_bits",
         "decimal_digits",
@@ -889,7 +906,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {{
  let mut meter = rt::Meter::new(limits);
  let result = generated::{}({}, &mut meter);
  match result {{
-   Ok(rt::Outcome::Completed(value)) => println!("IR791_NATIVE_V1\tcompleted\t{{}}", value),
+   Ok(rt::Outcome::Completed(value)) => println!("IR791_NATIVE_V1\tcompleted\t{{}}", {completed_value}),
    Ok(rt::Outcome::Undefined(rt::Undefined::DivisionByZero)) => println!("IR791_NATIVE_V1\tundefined\tdivision_by_zero"),
    Ok(rt::Outcome::Undefined(rt::Undefined::IeeeNotFinite)) => println!("IR791_NATIVE_V1\tundefined\tieee_not_finite"),
    Ok(rt::Outcome::Undefined(rt::Undefined::EmptyReduction)) => println!("IR791_NATIVE_V1\tundefined\tempty_reduction"),
@@ -897,9 +914,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {{
    Ok(rt::Outcome::Refused(rt::Refusal::IntegerOutOfDomain {{ target }})) => println!("IR791_NATIVE_V1\trefused\tinteger_out_of_domain\t{{}}\t{{}}", target.lower(), target.upper()),
    Ok(rt::Outcome::Incomplete(value)) => println!("IR791_NATIVE_V1\tincomplete\t{{}}\t{{}}\t{{}}\t{{}}\t{{}}", value.limit_kind.as_str(), value.limit, value.consumed, value.next_charge, value.charge_point.as_str()),
    Ok(_) => println!("IR791_NATIVE_V1\tunsupported"),
-   Err(generated::OracleStop::IllTyped(_)) => println!("IR791_NATIVE_V1\toracle_stop\till_typed"),
-   Err(generated::OracleStop::InvalidConstant) => println!("IR791_NATIVE_V1\toracle_stop\tinvalid_constant"),
-   Err(generated::OracleStop::OperandWidth) => println!("IR791_NATIVE_V1\toracle_stop\toperand_width"),
+{stop_arms}
  }}
  let used = meter.limits();
  println!("IR791_LIMITS_V1\t{{}}\t{{}}\t{{}}\t{{}}\t{{}}\t{{}}\t{{}}\t{{}}\t{{}}\t{{}}", used.integer_bits, used.decimal_digits, used.scale_expansion, used.text_input_bytes, used.text_scalars, used.normalized_scalars, used.unit_edges, used.value_occurrences, used.work_units, used.result_units);
@@ -1068,6 +1083,11 @@ fn decode_native_output(
         ["IR791_NATIVE_V1", "oracle_stop", "operand_width"] => {
             return Err(KaniScalarNativeError::OracleStop(
                 ScalarOracleStopKind::OperandWidth,
+            ))
+        }
+        ["IR791_NATIVE_V1", "oracle_stop", "native_admission"] => {
+            return Err(KaniScalarNativeError::OracleStop(
+                ScalarOracleStopKind::NativeAdmission,
             ))
         }
         ["IR791_NATIVE_V1", "unsupported"] => {
@@ -1496,6 +1516,7 @@ pub(crate) fn qualify_staged_native_for_test(request: &KaniScalarNativeRequest<'
     write_observer(
         &request.harness.identity.oracle_symbol,
         request.operands.len(),
+        request.harness.identity.integer_representation,
         root,
     )
     .unwrap();
@@ -1611,6 +1632,7 @@ pub(crate) fn qualify_staged_native_for_test(request: &KaniScalarNativeRequest<'
     write_observer(
         &request.harness.identity.oracle_symbol,
         request.operands.len(),
+        request.harness.identity.integer_representation,
         negative.path(),
     )
     .unwrap();
@@ -1672,6 +1694,28 @@ mod tests {
     use ix_trace_rs::trace;
     use std::process::Command;
 
+    #[trace("FR-015-AC-125", "FR-015-AC-127")]
+    #[test]
+    fn native_observer_preserves_native_operands_result_and_admission_stop() {
+        let snapshot = PrivateSnapshot::create().unwrap();
+        fs::create_dir_all(snapshot.path().join("src/bin")).unwrap();
+        fs::create_dir_all(snapshot.path().join("observer")).unwrap();
+        write_observer(
+            "checked_oracle",
+            2,
+            ScalarIntegerRepresentation::Native,
+            snapshot.path(),
+        )
+        .unwrap();
+        let source = fs::read_to_string(snapshot.path().join("src/bin/ir791_native.rs")).unwrap();
+        assert!(source.contains("rt::NativeInteger::new(i128::from(operand_0))"));
+        assert!(source.contains("rt::NativeInteger::new(i128::from(operand_1))"));
+        assert!(source.contains("value.value()"));
+        assert!(source.contains("generated::OracleStop::NativeAdmission(_)"));
+        assert!(!source.contains("generated::OracleStop::IllTyped(_)"));
+        syn::parse_file(&source).expect("the native observer is valid Rust syntax");
+    }
+
     #[trace("FR-014-AC-8", "FR-017-AC-27", "FR-017-AC-30", "TC-024", "TC-027")]
     #[test]
     fn tc_027_staged_native_observer_compiles_with_locked_kernel_and_charge_log() {
@@ -1691,7 +1735,7 @@ mod tests {
              Ok(quire_exact::Outcome::Completed(value.clone())) }\n",
         )
         .unwrap();
-        write_observer("oracle", 1, root).unwrap();
+        write_observer("oracle", 1, ScalarIntegerRepresentation::General, root).unwrap();
 
         let run = |directory: &Path, args: &[&str]| {
             let observer_cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
@@ -2544,6 +2588,7 @@ mod tests {
         write_observer(
             &harness.identity.oracle_symbol,
             harness.identity.arguments.len(),
+            harness.identity.integer_representation,
             snapshot.path(),
         )
         .unwrap();

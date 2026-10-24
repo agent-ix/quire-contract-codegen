@@ -159,6 +159,12 @@ pub struct KaniObligationHarness {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct V2ClauseObligationIdentity {
+    /// Selected integer ABI; absent on the general route.
+    #[serde(skip_serializing_if = "ScalarIntegerRepresentation::is_general")]
+    pub integer_representation: ScalarIntegerRepresentation,
+    /// Checked native capacity decisions, when selected.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub native_integer_selection: Option<crate::core::native_integer::NativeIntegerSelection>,
     /// Backend resource ceilings.
     pub ceilings: ProofCeilings,
     /// Admitted package identity.
