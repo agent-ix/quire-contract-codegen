@@ -45,3 +45,7 @@ scope:
     excerpt: "A malformed or noncanonical FR-330 wire, wrong version, invalid accounting/source map, stale semantic identity or incomplete reader result reaches no CG consumer and emits no artifact."
 bindings: []
 ```
+
+## Same-reviewer carry at 67891d3b
+
+PASS — the review-only custody commit `7d896d69` copied this file and SR-16531 byte-exact from the held artifacts. The following `67891d3b` changes only four test/fixture files. It adds required typed `literal.type` and `application.operator`, `operation`, `result_type` and `arguments` members to fixture JSON so the merged IR reader decodes the authored terms. The equality fixture's typed term and JSON metadata still agree; the scalar malformed-operation test still deliberately lacks `operation.identity`; the rekey tests retain the same key-change, ordering and refusal assertions. No production path, lock, specification, trace tag, test assertion or gate definition changed. `git diff --check` passed. The prior full gate at `7d896d69` stopped after library tests on fixture failures; author logs show 472 library tests passing at the repair head and three selected integration controls passing, plus scoped Clippy. A full final-head gate is still required. No new finding.

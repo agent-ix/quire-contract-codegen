@@ -45,3 +45,7 @@ scope:
     excerpt: "A malformed or noncanonical FR-330 wire, wrong version, invalid accounting/source map, stale semantic identity or incomplete reader result reaches no CG consumer and emits no artifact."
 bindings: []
 ```
+
+## Same-reviewer carry at 67891d3b
+
+PASS — the repair adds typed decoder fields to existing traced fixtures only. The changed tests retain their prior assertions and source-to-test bindings; the scalar refusal control still uses an operation with no identity, and the rekey controls still compare produced candidate keys. No test is removed, ignored or made tautological. The review files in the parent custody commit are byte-exact copies of the original held artifacts. The prior full gate at that parent was red on fixture shape; the author ran the repaired library suite and selected integration controls, while final-head aggregate and Kani remain pending. No new incremental gap or finding.
