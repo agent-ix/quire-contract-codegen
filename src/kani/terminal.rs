@@ -58,6 +58,8 @@ pub enum TerminalPairError {
     /// An outcome other than falsified with a replay settlement: only a counterexample is
     /// replayed.
     UnexpectedSettlement,
+    /// A proved IR outcome lacks its retained nonzero check count.
+    MissingProvedCount,
     /// IR's nonzero proof count exceeds QSL's `u32` terminal count.
     ProvedCountOutOfRange {
         /// The retained count that cannot fit QSL's terminal value.
@@ -77,6 +79,7 @@ impl std::fmt::Display for TerminalPairError {
             Self::UnexpectedSettlement => {
                 f.write_str("only a falsified run carries a replay settlement")
             }
+            Self::MissingProvedCount => f.write_str("IR proof has no retained check count"),
             Self::ProvedCountOutOfRange { success_checks } => {
                 write!(
                     f,
@@ -197,7 +200,7 @@ pub fn ir_outcome_terminal_value(
         (Kind::Proved, None) => {
             let retained_count = outcome
                 .success_checks()
-                .expect("IR Proved always retains a nonzero check count");
+                .ok_or(TerminalPairError::MissingProvedCount)?;
             let success_checks = u32::try_from(retained_count).map_err(|_| {
                 TerminalPairError::ProvedCountOutOfRange {
                     success_checks: retained_count,
