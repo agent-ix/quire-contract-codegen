@@ -42,6 +42,18 @@ impl PollOperation for SystemPoll {
     }
 }
 
+/// Test-only confirmation that waits for the real owned pidfd without a wall-clock cutoff.
+#[cfg(test)]
+#[derive(Debug)]
+struct TestOnlyPatientPidfdPoll;
+
+#[cfg(test)]
+impl PollOperation for TestOnlyPatientPidfdPoll {
+    fn poll(&self, fds: &mut [PollFd<'_>], _timeout: Option<&Timespec>) -> Result<usize, Errno> {
+        poll(fds, None)
+    }
+}
+
 /// Construction-time composition; clones retain the same dependencies and grouping identity.
 #[derive(Debug)]
 pub(super) struct LaunchOwners {
@@ -63,5 +75,17 @@ impl LaunchOwners {
                 confirmation: Arc::new(SystemPoll),
             })
         }))
+    }
+
+    /// Keep genuine process observation and pidfd confirmation for the cancellation test while
+    /// removing the production five-second confirmation cutoff from that test alone.
+    #[cfg(test)]
+    pub(super) fn test_only_patient_pidfd_confirmation() -> Arc<Self> {
+        Arc::new(Self {
+            memory: Arc::new(ProcessMemory),
+            stdout: Arc::new(SystemPoll),
+            stderr: Arc::new(SystemPoll),
+            confirmation: Arc::new(TestOnlyPatientPidfdPoll),
+        })
     }
 }

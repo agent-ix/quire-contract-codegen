@@ -166,7 +166,7 @@ fn bounded_single_run_preserves_cancelled_with_start_signal_and_timeout_without_
         };
         fs::write(&launcher, script).unwrap();
         fs::set_permissions(&launcher, fs::Permissions::from_mode(0o700)).unwrap();
-        let installation = KaniInstallation::new(launcher);
+        let installation = KaniInstallation::with_test_only_patient_pidfd_confirmation(launcher);
         let cancel = quire_exact::Cancel::new();
         let target = control.join("target");
         let completed = AtomicBool::new(false);

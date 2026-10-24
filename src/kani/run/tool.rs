@@ -95,6 +95,16 @@ impl KaniInstallation {
         }
     }
 
+    /// Test-only installation for the start-signalled cancellation and timeout control.
+    /// Confirmation still polls the genuine owned pidfd, with no host-load timeout.
+    #[cfg(test)]
+    pub(crate) fn with_test_only_patient_pidfd_confirmation(launcher: PathBuf) -> Self {
+        Self::with_owners(
+            launcher,
+            LaunchOwners::test_only_patient_pidfd_confirmation(),
+        )
+    }
+
     // The native program is an immutable dependency, separate from the proof launcher.
     pub(super) fn scalar_native_launcher(&self) -> &Path {
         &self.scalar_native_launcher
