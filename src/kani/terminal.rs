@@ -186,7 +186,7 @@ pub fn run_terminal_value(
 /// # Errors
 ///
 /// [`TerminalPairError`] when a `Counterexample` has no settlement, another kind has one,
-/// or the retained proof count exceeds QSL's `u32` range.
+/// a proved outcome has no retained count, or the retained proof count exceeds QSL's `u32` range.
 pub fn ir_outcome_terminal_value(
     outcome: &KaniOutcome,
     settlement: Option<ReplaySettlement<'_>>,
