@@ -4,8 +4,8 @@
 use quire_exact::{NativeIntegerInterval, NativeIntegerOperation, NativeIntegerPlan};
 
 use super::{
-    native_literal, render_clause_operation_helpers, ExactScalarOperation,
-    NativeClauseCapabilityReason, Step, StepTerm, V2ClauseRefusal,
+    native_literal, ExactScalarOperation, NativeClauseCapabilityReason, Step, StepTerm,
+    V2ClauseRefusal,
 };
 use crate::core::native_integer::{NativeIntegerOperationDecision, NativeIntegerSelection};
 use crate::oracle::operator_catalog::IntegerOperator;
@@ -58,13 +58,9 @@ pub(super) fn helpers(
             _ => None,
         })
         .collect::<Vec<_>>();
-    let mut source =
-        render_clause_operation_helpers(&booleans).map_err(|_| V2ClauseRefusal::Render)?;
+    let mut source = crate::oracle::scalar::render_clause_native_operation_helpers(&booleans)
+        .map_err(|_| V2ClauseRefusal::Render)?;
     source.push_str("\nuse quire_exact as nx;\n");
-    source = source.replace(
-        "    OperandWidth,",
-        "    OperandWidth,\n    /// The production kernel rejected native interval or operand admission.\n    NativeAdmission(nx::NativeIntegerAdmissionError),",
-    );
     let mut selected = NativeIntegerSelection::new();
     let mut ranges = Vec::<Option<NativeIntegerInterval>>::with_capacity(plan.len());
     for (index, step) in plan.iter().enumerate() {
@@ -262,7 +258,7 @@ mod tests {
         }
     }
 
-    #[trace("FR-015-AC-125", "FR-015-AC-127")]
+    #[trace("FR-015-AC-125")]
     #[test]
     fn completed_prefix_bounds_preserve_the_original_semantic_refusal() {
         let maximum = i128::from(i32::MAX);

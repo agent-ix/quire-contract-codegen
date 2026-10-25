@@ -1,0 +1,124 @@
+#[path = "../lib.rs"]
+mod generated;
+
+use quire_exact::{
+    Cancel, CancelCause, ChargePoint, InjectedDenial, Integer, IntegerArithmetic,
+    IntegerInterval, LimitKind, Meter, NativeInteger, Outcome, Refusal, ScalarLimits,
+};
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc, OnceLock,
+};
+
+fn limits() -> ScalarLimits {
+    ScalarLimits {
+        integer_bits: u64::MAX, decimal_digits: u64::MAX,
+        scale_expansion: u64::MAX, text_input_bytes: u64::MAX,
+        text_scalars: u64::MAX, normalized_scalars: u64::MAX,
+        unit_edges: u64::MAX, value_occurrences: u64::MAX,
+        work_units: u64::MAX, result_units: u64::MAX,
+    }
+}
+
+fn evaluate(
+    left: i64,
+    native_meter: &mut Meter,
+    general_meter: &mut Meter,
+) -> (Outcome<NativeInteger>, Outcome<Integer>) {
+    let native = generated::__ORACLE__(
+        &NativeInteger::new(i128::from(left)),
+        &NativeInteger::new(1),
+        native_meter,
+    )
+    .expect("original operands remain admitted");
+    let left = Integer::from(left);
+    let one = Integer::from(1_i64);
+    let bound = IntegerInterval::new(Integer::from(0_i64), Integer::from(9_i64))
+        .expect("original result domain");
+    let general = quire_exact::evaluate_integer_arithmetic(
+        IntegerArithmetic::Add(&left, &one),
+        Some(&bound),
+        general_meter,
+    );
+    for kind in LimitKind::ALL {
+        assert_eq!(
+            native_meter.consumed(kind), general_meter.consumed(kind),
+            "counter {}", kind.as_str()
+        );
+    }
+    assert_eq!(
+        native_meter.admission_count(),
+        general_meter.admission_count(),
+    );
+    (native, general)
+}
+
+fn cancelling(charge: usize) -> (Cancel, Meter) {
+    let slot = Arc::new(OnceLock::<Cancel>::new());
+    let seen = Arc::new(AtomicUsize::new(0));
+    let observed_slot = Arc::clone(&slot);
+    let observed_count = Arc::clone(&seen);
+    let cancel = Cancel::observing(move || {
+        if observed_count.fetch_add(1, Ordering::SeqCst) + 1 == charge {
+            observed_slot.get().expect("installed handle").cancel(CancelCause::Requested);
+        }
+    });
+    slot.set(cancel.clone()).expect("one handle");
+    let meter = Meter::new(limits()).with_cancel(cancel.clone());
+    (cancel, meter)
+}
+
+fn main() {
+    let points = [
+        ChargePoint::IntegerArithmeticOperands,
+        ChargePoint::IntegerArithmeticArithmetic,
+        ChargePoint::IntegerArithmeticResultRetain,
+    ];
+    let (native, general) = evaluate(4, &mut Meter::new(limits()), &mut Meter::new(limits()));
+    assert!(matches!(native, Outcome::Completed(value) if value.value() == 5));
+    assert!(matches!(general, Outcome::Completed(value) if value == Integer::from(5_i64)));
+    let mut native_meter = Meter::new(limits());
+    let mut general_meter = Meter::new(limits());
+    let (native, general) = evaluate(9, &mut native_meter, &mut general_meter);
+    assert_eq!(native_meter.admission_count(), 2);
+    assert_eq!(native_meter.consumed(LimitKind::ResultUnits), 0);
+    assert!(matches!(native, Outcome::Refused(Refusal::IntegerOutOfDomain { target })
+        if target.lower() == &Integer::from(0_i64) && target.upper() == &Integer::from(9_i64)));
+    assert!(matches!(general, Outcome::Refused(Refusal::IntegerOutOfDomain { target })
+        if target.lower() == &Integer::from(0_i64) && target.upper() == &Integer::from(9_i64)));
+    for (index, point) in points.into_iter().enumerate() {
+        let denial = InjectedDenial {
+            point,
+            occurrence: std::num::NonZeroU64::MIN,
+        };
+        let mut native_meter = Meter::new(limits()).with_injected_denial(denial);
+        let mut general_meter = Meter::new(limits()).with_injected_denial(denial);
+        let (native, general) = evaluate(4, &mut native_meter, &mut general_meter);
+        assert_eq!(native_meter.admission_count(), index as u64);
+        let (Outcome::Incomplete(native), Outcome::Incomplete(general)) = (native, general) else {
+            panic!("both evaluators must stop at the injected charge");
+        };
+        assert_eq!(native, general);
+        assert_eq!(native.charge_point, point);
+        assert_eq!(native.limit_kind, LimitKind::WorkUnits);
+        assert_eq!(native.limit, native.consumed);
+
+        let (native_cancel, mut native_meter) = cancelling(index + 1);
+        let (general_cancel, mut general_meter) = cancelling(index + 1);
+        let _native_count = native_cancel.count_charges();
+        let _general_count = general_cancel.count_charges();
+        let (native, general) = evaluate(4, &mut native_meter, &mut general_meter);
+        assert_eq!(native_meter.admission_count(), index as u64);
+        let (Outcome::Incomplete(native), Outcome::Incomplete(general)) = (native, general) else {
+            panic!("both evaluators must stop at the cancelled charge");
+        };
+        assert_eq!(native, general);
+        assert_eq!(native.charge_point, point);
+        assert_eq!(native.limit_kind, LimitKind::WorkUnits);
+        assert_eq!(native.limit, native.consumed);
+        assert_eq!(native_cancel.tripped(), Some(CancelCause::Requested));
+        assert_eq!(general_cancel.tripped(), Some(CancelCause::Requested));
+        assert_eq!(native_cancel.charges(), (index + 1) as u32);
+        assert_eq!(general_cancel.charges(), (index + 1) as u32);
+    }
+}

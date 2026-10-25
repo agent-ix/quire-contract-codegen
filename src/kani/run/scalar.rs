@@ -885,6 +885,7 @@ fn write_observer(
     .collect::<String>();
     let helper = format!(
         r#"
+#[allow(dead_code)]
 #[path = "../lib.rs"] mod generated;
 use quire_exact as rt;
 fn next_argument(arguments: &mut impl Iterator<Item = String>) -> Result<String, std::io::Error> {{
@@ -1694,7 +1695,7 @@ mod tests {
     use ix_trace_rs::trace;
     use std::process::Command;
 
-    #[trace("FR-015-AC-125", "FR-015-AC-127")]
+    #[trace("FR-015-AC-125")]
     #[test]
     fn native_observer_preserves_native_operands_result_and_admission_stop() {
         let snapshot = PrivateSnapshot::create().unwrap();
@@ -1714,6 +1715,65 @@ mod tests {
         assert!(source.contains("generated::OracleStop::NativeAdmission(_)"));
         assert!(!source.contains("generated::OracleStop::IllTyped(_)"));
         syn::parse_file(&source).expect("the native observer is valid Rust syntax");
+        let node_id = serde_json::from_value(serde_json::json!({
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "2".repeat(64),
+        }))
+        .expect("checked source key");
+        let (oracle, _) = crate::oracle::scalar::native::select(
+            &node_id,
+            "quire.op.integer.add",
+            "checked_oracle",
+            crate::oracle::operator_catalog::IntegerOperator::Add,
+            &[(0, 9), (1, 1)],
+            (0, 9),
+        )
+        .expect("original native scalar plan");
+        fs::write(
+            snapshot.path().join("Cargo.toml"),
+            oracle_crate_manifest(EXACT_SCALAR_CRATE_NAME),
+        )
+        .expect("production manifest");
+        fs::write(snapshot.path().join("src/lib.rs"), oracle).expect("production oracle");
+        let owner_lock = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.lock");
+        for directory in [snapshot.path().to_owned(), snapshot.path().join("observer")] {
+            fs::copy(&owner_lock, directory.join("Cargo.lock")).expect("seeded owner lock");
+            let output = Command::new(env!("CARGO"))
+                .args(["metadata", "--offline", "--format-version", "1"])
+                .env(
+                    "CARGO_TARGET_DIR",
+                    Path::new(env!("CARGO_MANIFEST_DIR")).join("target"),
+                )
+                .current_dir(&directory)
+                .output()
+                .expect("resolve observer lock");
+            assert!(
+                output.status.success(),
+                "seeded observer metadata: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+        let output = Command::new(env!("CARGO"))
+            .args([
+                "check",
+                "--offline",
+                "--locked",
+                "--example",
+                "ir791_native",
+            ])
+            .env("RUSTFLAGS", "-Dwarnings")
+            .env(
+                "CARGO_TARGET_DIR",
+                Path::new(env!("CARGO_MANIFEST_DIR")).join("target"),
+            )
+            .current_dir(snapshot.path().join("observer"))
+            .output()
+            .expect("typecheck native observer");
+        assert!(
+            output.status.success(),
+            "native observer failed typecheck: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 
     #[trace("FR-014-AC-8", "FR-017-AC-27", "FR-017-AC-30", "TC-024", "TC-027")]

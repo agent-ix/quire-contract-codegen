@@ -1,7 +1,9 @@
 //! The scalar family: lowering an IR-confirmed V2 exact-scalar claim and rendering its Kani
 //! harness (FR-015).
 
-use crate::oracle::operator_catalog::{Operator as CatalogOperator, ScalarKaniOperator};
+use crate::oracle::operator_catalog::{
+    IntegerOperator, Operator as CatalogOperator, ScalarKaniOperator,
+};
 use quire_contract_model::{CheckedNodeId, CheckedSemanticNodeV2, CheckedTerm};
 
 #[cfg(test)]
@@ -334,14 +336,15 @@ pub(super) fn lower_scalar_claim(
 }
 
 impl LoweredScalarClaim {
-    /// Select the exact kernel's native route only after its complete operand
-    /// intervals and semantic domain pass the production plan constructor.
+    /// Select the exact kernel native route from the full original operand intervals.
     pub(super) fn select_native_integer(&mut self) -> Result<(), UnsupportedObligation> {
-        use quire_exact::{NativeIntegerInterval, NativeIntegerOperation, NativeIntegerPlan};
-
-        if self.operation == ScalarOperation::Implies {
-            return Ok(());
-        }
+        let operator = match self.operation {
+            ScalarOperation::Add => IntegerOperator::Add,
+            ScalarOperation::Subtract => IntegerOperator::Subtract,
+            ScalarOperation::Multiply => IntegerOperator::Multiply,
+            ScalarOperation::Negate => IntegerOperator::Negate,
+            ScalarOperation::Implies => return Ok(()),
+        };
         let refusal = || UnsupportedObligation::NativeIntegerCapacity {
             node_id: self.node_id.clone(),
             operation_identity: self.operation_identity.clone(),
@@ -356,105 +359,16 @@ impl LoweredScalarClaim {
                 )
                 .collect(),
         };
-        let interval = |position: usize| {
-            self.operands
-                .get(position)
-                .ok_or_else(refusal)
-                .and_then(|&(lower, upper)| {
-                    NativeIntegerInterval::new(i128::from(lower), i128::from(upper))
-                        .map_err(|_| refusal())
-                })
-        };
-        let left = interval(0)?;
-        let (operation, variant) = match self.operation {
-            ScalarOperation::Add => (
-                NativeIntegerOperation::Add {
-                    left,
-                    right: interval(1)?,
-                },
-                "Add",
-            ),
-            ScalarOperation::Subtract => (
-                NativeIntegerOperation::Subtract {
-                    left,
-                    right: interval(1)?,
-                },
-                "Subtract",
-            ),
-            ScalarOperation::Multiply => (
-                NativeIntegerOperation::Multiply {
-                    left,
-                    right: interval(1)?,
-                },
-                "Multiply",
-            ),
-            ScalarOperation::Negate => (NativeIntegerOperation::Negate { operand: left }, "Negate"),
-            ScalarOperation::Implies => return Ok(()),
-        };
-        let domain = NativeIntegerInterval::new(i128::from(self.lower), i128::from(self.upper))
-            .map_err(|_| refusal())?;
-        let plan = NativeIntegerPlan::new(operation, Some(domain)).map_err(|_| refusal())?;
-        let operands = if self.operation == ScalarOperation::Negate {
-            vec![left.into()]
-        } else {
-            vec![left.into(), interval(1)?.into()]
-        };
-        let mut selected = crate::core::native_integer::NativeIntegerSelection::new();
-        selected.operations.push(
-            crate::core::native_integer::NativeIntegerOperationDecision {
-                node_id: self.node_id.clone(),
-                step: 0,
-                operation_identity: self.operation_identity.clone(),
-                operands,
-                capacity: Some(plan.capacity().into()),
-                semantic_domain: Some(domain.into()),
-            },
-        );
-        let interval_source = |value: NativeIntegerInterval| {
-            let literal = |endpoint: i128| {
-                if endpoint == i128::MIN {
-                    "i128::MIN".to_owned()
-                } else {
-                    format!("{endpoint}_i128")
-                }
-            };
-            format!(
-                "nx::NativeIntegerInterval::new({}, {}).map_err(OracleStop::NativeAdmission)?",
-                literal(value.lower()),
-                literal(value.upper())
-            )
-        };
-        let (parameters, descriptor, payloads) = if self.operation == ScalarOperation::Negate {
-            (
-                "operand: &nx::NativeInteger".to_owned(),
-                format!(
-                    "nx::NativeIntegerOperation::Negate {{ operand: {} }}",
-                    interval_source(left)
-                ),
-                "nx::NativeIntegerOperands::Unary { operand: *operand }",
-            )
-        } else {
-            (
-                "left: &nx::NativeInteger, right: &nx::NativeInteger".to_owned(),
-                format!(
-                    "nx::NativeIntegerOperation::{variant} {{ left: {}, right: {} }}",
-                    interval_source(left),
-                    interval_source(interval(1)?)
-                ),
-                "nx::NativeIntegerOperands::Binary { left: *left, right: *right }",
-            )
-        };
-        self.oracle_source = format!(
-            "// @generated by quire-contract-codegen. Do not edit.\nuse quire_exact as rt;\nuse quire_exact as nx;\n\n/// Why native admission stopped.\n#[derive(Debug)]\npub enum OracleStop {{\n    /// The exact kernel rejected the plan or operand membership.\n    NativeAdmission(nx::NativeIntegerAdmissionError),\n}}\n\n/// Admitted checked `{}` operation.\npub fn {}({parameters}, meter: &mut rt::Meter) -> Result<rt::Outcome<nx::NativeInteger>, OracleStop> {{\n    let plan = nx::NativeIntegerPlan::new({descriptor}, Some({})).map_err(OracleStop::NativeAdmission)?;\n    let admitted = plan.admit({payloads}).map_err(OracleStop::NativeAdmission)?;\n    Ok(nx::evaluate_native_integer_arithmetic(admitted, meter))\n}}\n",
-            self.operation_identity,
-            self.oracle_symbol,
-            interval_source(domain)
-        );
-        self.oracle_source.push_str(
-            &selected
-                .annotation()
-                .ok_or(UnsupportedObligation::RenderFailed)?,
-        );
+        let (source, selected) = crate::oracle::scalar::native::select(
+            &self.node_id,
+            &self.operation_identity,
+            &self.oracle_symbol,
+            operator,
+            &self.operands,
+            (self.lower, self.upper),
+        )
+        .ok_or_else(refusal)?;
+        self.oracle_source = source;
         self.native_integer_selection = Some(selected);
         Ok(())
     }

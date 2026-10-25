@@ -115,6 +115,11 @@ impl LoweredV2Clause {
     ) -> Result<(), UnsupportedObligation> {
         let oracle = generate_v2_clause_native_oracle(package, &self.node_id)
             .map_err(|refusal| UnsupportedObligation::NativeV2ClauseCapability { refusal })?;
+        let selection = oracle
+            .native_integer_selection
+            .as_ref()
+            .ok_or(UnsupportedObligation::RenderFailed)?;
+        bind_native_arithmetic_probes(&mut self.arithmetic, selection)?;
         self.oracle = oracle;
         self.native_integer = true;
         Ok(())
@@ -300,14 +305,29 @@ fn render_postcondition(
             false,
         ),
     ];
+    let mut completed_prefix = "true".to_owned();
     for (index, probe) in lowered.arithmetic.iter().enumerate() {
+        let guard = format!("({}) && ({completed_prefix})", probe.guard);
+        let mut probe_body = Vec::new();
+        let expected = native_expected_expression(&probe.expected)?;
+        let in_domain = probe.semantic_domain.map_or_else(
+            || "true".to_owned(),
+            |(lower, upper)| {
+                format!(
+                    "({expected} >= {} && {expected} <= {})",
+                    i128_literal(lower),
+                    i128_literal(upper)
+                )
+            },
+        );
+
         let mut operands = Vec::new();
         let mut intervals = Vec::new();
         for (position, (operand, (lower, upper))) in
             probe.operands.iter().zip(&probe.operand_bounds).enumerate()
         {
             let value = format!("arithmetic_operand_{index}_{position}");
-            body.push(binding(
+            probe_body.push(binding(
                 &value,
                 Init::Expression(expression(format!(
                     "nx::NativeInteger::new(i128::from({operand}))"
@@ -316,7 +336,7 @@ fn render_postcondition(
             ));
             operands.push(value);
             let interval = format!("arithmetic_interval_{index}_{position}");
-            body.push(binding(
+            probe_body.push(binding(
                 &interval,
                 Init::NativeAdmission {
                     checked: expression(format!(
@@ -352,17 +372,29 @@ fn render_postcondition(
                 format!("nx::NativeIntegerOperands::Binary {{ left: {left}, right: {right} }}"),
             )
         };
+        let domain = probe.semantic_domain.map_or_else(
+            || "None".to_owned(),
+            |(lower, upper)| {
+                format!(
+                    "Some(nx::NativeIntegerInterval::new({}, {}).expect(\"selected semantic domain\"))",
+                    i128_literal(lower),
+                    i128_literal(upper)
+                )
+            },
+        );
         let plan = format!("arithmetic_plan_{index}");
-        body.push(binding(
+        probe_body.push(binding(
             &plan,
             Init::NativeAdmission {
-                checked: expression(format!("nx::NativeIntegerPlan::new({descriptor}, None)"))?,
+                checked: expression(format!(
+                    "nx::NativeIntegerPlan::new({descriptor}, {domain})"
+                ))?,
                 stage: NativeAdmissionStage::PlanCapacity,
             },
             false,
         ));
         let admitted = format!("arithmetic_admitted_{index}");
-        body.push(binding(
+        probe_body.push(binding(
             &admitted,
             Init::NativeAdmission {
                 checked: expression(format!("{plan}.admit({payload})"))?,
@@ -371,40 +403,49 @@ fn render_postcondition(
             false,
         ));
         let meter = format!("arithmetic_meter_{index}");
-        body.push(binding(
+        probe_body.push(binding(
             &meter,
             Init::ScalarMeter(crate::kani::abi::SCALAR_HARNESS_LIMITS),
             true,
         ));
         let outcome = format!("arithmetic_outcome_{index}");
-        body.push(binding(
+        probe_body.push(binding(
             &outcome,
             Init::Expression(expression(format!(
                 "nx::evaluate_native_integer_arithmetic({admitted}, &mut {meter})"
             ))?),
             false,
         ));
-        let expected = native_expected_expression(&probe.expected)?;
-        body.push(Statement::Assert {
+        probe_body.push(Statement::Assert {
             condition: expression(format!(
-                "match &{outcome} {{ rt::Outcome::Completed(value) => value.value() == {expected}, _ => false }}"
+                "match &{outcome} {{ rt::Outcome::Completed(value) => ({in_domain}) && value.value() == {expected}, rt::Outcome::Refused(rt::Refusal::IntegerOutOfDomain {{ .. }}) => !({in_domain}), _ => false }}"
             ))?,
             message: "arithmetic subterm agrees with independent i128 expectation".to_owned(),
         });
+        body.push(Statement::ConditionalProbe {
+            condition: expression(guard)?,
+            body: probe_body,
+        });
+        completed_prefix = format!(
+            "({completed_prefix}) && (!({}) || ({in_domain}))",
+            probe.guard
+        );
     }
     body.extend([
         Statement::Assert {
-            condition: expression("matches!(&outcome, Ok(rt::Outcome::Completed(_)))")?,
-            message: "the clause oracle completes within the admitted parameter domain".to_owned(),
+            condition: expression(format!(
+                "(({completed_prefix}) && matches!(&outcome, Ok(rt::Outcome::Completed(_)))) || (!({completed_prefix}) && matches!(&outcome, Ok(rt::Outcome::Refused(rt::Refusal::IntegerOutOfDomain {{ .. }}))))"
+            ))?,
+            message: "the clause oracle preserves completed and refused semantic domains".to_owned(),
         },
         Statement::Assert {
-            condition: expression(
-                "matches!(&outcome, Ok(rt::Outcome::Completed(true))) == expected",
-            )?,
+            condition: expression(format!(
+                "!({completed_prefix}) || (matches!(&outcome, Ok(rt::Outcome::Completed(true))) == expected)"
+            ))?,
             message: "the clause oracle agrees with the independent checked condition".to_owned(),
         },
         Statement::Assert {
-            condition: expression("subject == expected")?,
+            condition: expression(format!("!({completed_prefix}) || subject == expected"))?,
             message: "the compiled subject agrees with the checked condition".to_owned(),
         },
     ]);
@@ -418,7 +459,9 @@ fn render_postcondition(
         ProofKind::Proof,
         body,
         vec![Cover {
-            condition: expression("matches!(outcome, Ok(rt::Outcome::Completed(_)))")?,
+            condition: expression(format!(
+                "({completed_prefix}) && matches!(outcome, Ok(rt::Outcome::Completed(_)))"
+            ))?,
             message: "the original V2 condition completes on an admitted parameter".to_owned(),
         }],
         request.unwind,
@@ -461,10 +504,65 @@ enum NativeTerm {
 }
 
 struct ArithmeticProbe {
+    operation_identity: String,
     operation: &'static str,
     operands: Vec<String>,
     expected: String,
     operand_bounds: Vec<(i128, i128)>,
+    semantic_domain: Option<(i128, i128)>,
+    guard: String,
+}
+
+fn bind_native_arithmetic_probes(
+    probes: &mut [ArithmeticProbe],
+    selection: &crate::core::native_integer::NativeIntegerSelection,
+) -> Result<(), UnsupportedObligation> {
+    let decisions = selection
+        .operations
+        .iter()
+        .filter(|decision| decision.capacity.is_some())
+        .collect::<Vec<_>>();
+    if decisions.len() != probes.len() {
+        return Err(UnsupportedObligation::RenderFailed);
+    }
+    for (probe, decision) in probes.iter_mut().zip(decisions) {
+        if probe.operation_identity != decision.operation_identity {
+            return Err(UnsupportedObligation::RenderFailed);
+        }
+        probe.operand_bounds = decision
+            .operands
+            .iter()
+            .map(|interval| {
+                Ok::<_, UnsupportedObligation>((
+                    interval
+                        .lower
+                        .parse()
+                        .map_err(|_| UnsupportedObligation::RenderFailed)?,
+                    interval
+                        .upper
+                        .parse()
+                        .map_err(|_| UnsupportedObligation::RenderFailed)?,
+                ))
+            })
+            .collect::<Result<Vec<_>, UnsupportedObligation>>()?;
+        probe.semantic_domain = decision
+            .semantic_domain
+            .as_ref()
+            .map(|interval| {
+                Ok::<_, UnsupportedObligation>((
+                    interval
+                        .lower
+                        .parse()
+                        .map_err(|_| UnsupportedObligation::RenderFailed)?,
+                    interval
+                        .upper
+                        .parse()
+                        .map_err(|_| UnsupportedObligation::RenderFailed)?,
+                ))
+            })
+            .transpose()?;
+    }
+    Ok(())
 }
 
 impl NativeTerm {
@@ -473,6 +571,73 @@ impl NativeTerm {
             Self::Boolean(expression) => Some(expression),
             Self::Integer { .. } => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod native_probe_tests {
+    use super::{bind_native_arithmetic_probes, ArithmeticProbe};
+    use crate::core::native_integer::{
+        NativeIntegerIntervalDecision as Interval, NativeIntegerOperationDecision as Decision,
+        NativeIntegerSelection,
+    };
+    use ix_trace_rs::trace;
+
+    #[trace("FR-015-AC-125", "TC-025")]
+    #[test]
+    fn bounded_add_feeding_multiply_uses_the_typed_completed_interval() {
+        let node_id: quire_contract_model::CheckedNodeId =
+            serde_json::from_value(serde_json::json!({
+                "domain": "quire.checked-semantic-node/v1",
+                "digest": "2".repeat(64),
+            }))
+            .expect("checked clause key");
+        let interval = |lower: i128, upper: i128| Interval {
+            lower: lower.to_string(),
+            upper: upper.to_string(),
+        };
+        let mut selection = NativeIntegerSelection::new();
+        selection.operations = vec![
+            Decision {
+                node_id: node_id.clone(),
+                step: 0,
+                operation_identity: "quire.op.integer.add".to_owned(),
+                operands: vec![interval(0, 1000), interval(1, 1)],
+                capacity: Some(interval(1, 1001)),
+                semantic_domain: Some(interval(0, 1000)),
+            },
+            Decision {
+                node_id,
+                step: 1,
+                operation_identity: "quire.op.integer.mul".to_owned(),
+                operands: vec![interval(1, 1000), interval(2, 2)],
+                capacity: Some(interval(2, 2000)),
+                semantic_domain: None,
+            },
+        ];
+        let mut probes = vec![
+            ArithmeticProbe {
+                operation_identity: "quire.op.integer.add".to_owned(),
+                operation: "Add",
+                operands: vec!["amount".to_owned(), "1".to_owned()],
+                expected: "amount + 1".to_owned(),
+                operand_bounds: vec![(0, 1000), (1, 1)],
+                semantic_domain: None,
+                guard: "true".to_owned(),
+            },
+            ArithmeticProbe {
+                operation_identity: "quire.op.integer.mul".to_owned(),
+                operation: "Multiply",
+                operands: vec!["amount + 1".to_owned(), "2".to_owned()],
+                expected: "(amount + 1) * 2".to_owned(),
+                operand_bounds: vec![(1, 1001), (2, 2)],
+                semantic_domain: None,
+                guard: "true".to_owned(),
+            },
+        ];
+        bind_native_arithmetic_probes(&mut probes, &selection).expect("admitted typed plan");
+        assert_eq!(probes[0].semantic_domain, Some((0, 1000)));
+        assert_eq!(probes[1].operand_bounds, [(1, 1000), (2, 2)]);
     }
 }
 
@@ -514,6 +679,35 @@ fn native_term(
             arguments,
             ..
         } => {
+            if let [left, right] = arguments.as_slice() {
+                let gate = match identity.as_str() {
+                    "quire.op.boolean.and" | "quire.op.boolean.implies" => Some(false),
+                    "quire.op.boolean.or" => Some(true),
+                    _ => None,
+                };
+                if let Some(invert) = gate {
+                    let left = native_term(left, input_name, symbolic_name, arithmetic)?
+                        .clone_boolean()?;
+                    let first_right = arithmetic.len();
+                    let right = native_term(right, input_name, symbolic_name, arithmetic)?
+                        .clone_boolean()?;
+                    let condition = if invert {
+                        format!("!({left})")
+                    } else {
+                        left.clone()
+                    };
+                    for probe in &mut arithmetic[first_right..] {
+                        probe.guard = format!("({}) && ({condition})", probe.guard);
+                    }
+                    let expression = match identity.as_str() {
+                        "quire.op.boolean.and" => format!("({left} && {right})"),
+                        "quire.op.boolean.or" => format!("({left} || {right})"),
+                        "quire.op.boolean.implies" => format!("(!{left} || {right})"),
+                        _ => return None,
+                    };
+                    return Some(NativeTerm::Boolean(expression));
+                }
+            }
             let values = arguments
                 .iter()
                 .map(|argument| native_term(argument, input_name, symbolic_name, arithmetic))
@@ -555,10 +749,13 @@ fn native_term(
                         expression
                     };
                     arithmetic.push(ArithmeticProbe {
+                        operation_identity: identity.clone(),
                         operation: "Negate",
                         operand_bounds,
                         operands: vec![operand],
                         expected: expected.clone(),
+                        semantic_domain: None,
+                        guard: "true".to_owned(),
                     });
                     Some(NativeTerm::Integer {
                         expression: expected,
@@ -611,10 +808,13 @@ fn native_term(
                         vec![a, b]
                     };
                     arithmetic.push(ArithmeticProbe {
+                        operation_identity: identity.clone(),
                         operation,
                         operand_bounds: vec![(al, ah), (bl, bh)],
                         operands,
                         expected: expected.clone(),
+                        semantic_domain: None,
+                        guard: "true".to_owned(),
                     });
                     Some(NativeTerm::Integer {
                         expression: expected,

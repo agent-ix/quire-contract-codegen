@@ -32,6 +32,8 @@ use crate::{
 };
 use ix_trace_rs::trace;
 use package::Bound;
+#[path = "kani_scalar_native_meter.rs"]
+mod native_meter;
 #[path = "kani_scalar_native_fixture.rs"]
 mod scalar_native_fixture;
 use scalar_native_fixture::{routed_native_scalar_with_artifacts, routed_scalar_with_artifacts};
@@ -90,6 +92,56 @@ fn native_tc025_arithmetic_mutant_falsifies() {
         rust,
         healthy.record.clone(),
     );
+    let counterexample = run_mutant(&mutant, manifest);
+    let witness =
+        crate::replay::scalar::decode_scalar_falsification(&mutant.identity, &counterexample)
+            .expect("actual backend witness decodes against original intervals");
+    let [left, right] = witness.as_slice() else {
+        panic!("two original symbolic integer draws: {witness:?}");
+    };
+    assert!((0..=9).contains(left));
+    assert_eq!(*right, 1);
+}
+
+#[trace("FR-015-AC-126", "TC-027")]
+#[test]
+#[ignore = "real Kani qualification: run after independent review at the original 16 GiB ceiling"]
+fn native_original_tc027_false_bound_falsifies() {
+    let (healthy, artifacts) = routed_native_scalar_with_artifacts(
+        package::bounded_increment_package(),
+        package::BOUNDED_INCREMENT,
+        49_100,
+        Bound::Integer(0, 9),
+        Duration::from_secs(600),
+    );
+    let manifest = artifacts
+        .iter()
+        .find(|artifact| artifact.path == "Cargo.toml")
+        .expect("original dependency manifest");
+    let original = "exact <= i128::from(9_i64);";
+    assert_eq!(healthy.rust.contents.matches(original).count(), 1);
+    let mut rust = healthy.rust.clone();
+    rust.contents = rust
+        .contents
+        .replacen(original, "exact <= i128::from(5_i64);", 1);
+    let mutant = KaniScalarObligationHarness::generated(
+        healthy.identity.clone(),
+        rust,
+        healthy.record.clone(),
+    );
+    let counterexample = run_mutant(&mutant, manifest);
+    let witness =
+        crate::replay::scalar::decode_scalar_falsification(&mutant.identity, &counterexample)
+            .expect("actual backend witness decodes against original intervals");
+    let [left, right] = witness.as_slice() else {
+        panic!("two original symbolic integer draws: {witness:?}");
+    };
+    assert!((0..=9).contains(left));
+    assert_eq!(*right, 1);
+    assert!(i128::from(*left) + 1 > 5);
+}
+
+fn run_mutant(mutant: &KaniScalarObligationHarness, manifest: &Artifact) -> String {
     let scratch = NativeMutationScratch::create();
     fs::write(scratch.0.join("Cargo.toml"), &manifest.contents).unwrap();
     fs::copy(
@@ -122,7 +174,7 @@ fn native_tc025_arithmetic_mutant_falsifies() {
     let evidence = execute_kani_obligation(&KaniExecutionRequest {
         cancel: &cancel,
         installation: &installation,
-        harness: (&mutant).into(),
+        harness: mutant.into(),
         crate_directory: &scratch.0,
         target_directory: &PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("target/ir705-native-scalar-kani"),
@@ -130,17 +182,14 @@ fn native_tc025_arithmetic_mutant_falsifies() {
     })
     .expect("the private mutation preserves the execution module's bounded launch");
     let KaniRunOutcome::Falsified { counterexample } = evidence.outcome else {
-        panic!("the original-domain arithmetic mutant must falsify: {evidence:?}");
+        panic!("the original-domain native mutant must falsify: {evidence:?}");
     };
-    let witness =
-        crate::replay::scalar::decode_scalar_falsification(&mutant.identity, &counterexample)
-            .expect("actual backend witness decodes against original intervals");
-    let [left, right] = witness.as_slice() else {
-        panic!("two original symbolic integer draws: {witness:?}");
-    };
-    assert!((0..=9).contains(left));
-    assert_eq!(*right, 1);
-    assert_ne!(i128::from(*left) + 1, i128::from(*left) - 1);
+    assert!(
+        counterexample.contains("Check for `assertion`")
+            && counterexample.contains("the oracle must complete with exactly the native quire.op.integer.add result when it lies in the checked domain, and refuse otherwise"),
+        "the generated sound assertion must fail: {counterexample}"
+    );
+    counterexample
 }
 
 pub(crate) fn fixture(wall_clock: Duration) -> (KaniScalarObligationHarness, Vec<Artifact>) {

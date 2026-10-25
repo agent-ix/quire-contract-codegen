@@ -26,7 +26,7 @@ use crate::{
         PackageItem, PackageItems, PackageRequestError,
     },
     core::identity::{HarnessPath, HarnessSymbol},
-    kani::generate::negotiate::negotiate_kani_obligations,
+    kani::generate::negotiate::{negotiate_kani_native_obligations, negotiate_kani_obligations},
     kani::generate::outcome::{
         InvalidObligationItem, KaniObligationError, KaniObligationOutcome, KaniObligationRequest,
         ObligationDisposition, ObligationItem, ObligationRecord,
@@ -34,7 +34,8 @@ use crate::{
     kani::identity::KaniScalarObligationHarness,
     oracle::claim::ClaimMap,
     oracle::scalar::{
-        generate_contract_scalar_oracles, ContractScalarError, ExactScalarClaim, ExactScalarOracles,
+        generate_contract_scalar_oracles, publish_native_scalar_artifacts, ContractScalarError,
+        ExactScalarClaim, ExactScalarOracles,
     },
     routed::capability::{BackendDescriptor, BackendKind, Candidate},
 };
@@ -305,6 +306,29 @@ pub fn generate_routed(
     routed: &[RoutedGenerationItem],
     contexts: &GenerationContexts<'_>,
 ) -> Result<RoutedGeneration, RoutedGenerationError> {
+    generate_routed_with_integer_policy(package, positions, routed, contexts, false)
+}
+
+/// Generate routed Kani scalar claims with the kernel-admitted native integer
+/// policy. Capacity ineligibility retains a typed unsupported disposition.
+///
+/// Trace: FR-015-AC-125
+pub fn generate_routed_native(
+    package: &ContractPackageV1,
+    positions: &[ContractRequestPosition],
+    routed: &[RoutedGenerationItem],
+    contexts: &GenerationContexts<'_>,
+) -> Result<RoutedGeneration, RoutedGenerationError> {
+    generate_routed_with_integer_policy(package, positions, routed, contexts, true)
+}
+
+fn generate_routed_with_integer_policy(
+    package: &ContractPackageV1,
+    positions: &[ContractRequestPosition],
+    routed: &[RoutedGenerationItem],
+    contexts: &GenerationContexts<'_>,
+    native: bool,
+) -> Result<RoutedGeneration, RoutedGenerationError> {
     let mut ordered = routed.iter().collect::<Vec<_>>();
     ordered.sort_by(|a, b| {
         (a.request_index, &a.backend, a.kind.index()).cmp(&(
@@ -392,7 +416,7 @@ pub fn generate_routed(
         let arm = match &kind {
             BackendKind::Kani => {
                 let (arm, kani_claim_map, kani_artifacts) =
-                    generate_kani(package, positions, &group, contexts)?;
+                    generate_kani(package, positions, &group, contexts, native)?;
                 claim_map = Some(kani_claim_map);
                 oracle_artifacts = Some(kani_artifacts);
                 arm
@@ -482,6 +506,7 @@ fn generate_kani(
     positions: &[ContractRequestPosition],
     group: &[&RoutedGenerationItem],
     contexts: &GenerationContexts<'_>,
+    native: bool,
 ) -> Result<(ArmOutput, ClaimMap<ExactScalarClaim>, Vec<Artifact>), RoutedGenerationError> {
     let Some(context) = contexts.kani else {
         return Err(RoutedGenerationError::MissingKindContext {
@@ -490,8 +515,8 @@ fn generate_kani(
     };
     let (
         ExactScalarOracles {
-            claim_map,
-            artifacts,
+            mut claim_map,
+            mut artifacts,
         },
         claim_indexes,
     ) = generate_contract_scalar_oracles(
@@ -515,7 +540,7 @@ fn generate_kani(
         .collect::<Vec<_>>();
     let items = group
         .iter()
-        .zip(claim_indexes)
+        .zip(&claim_indexes)
         .map(|(item, claim_index)| {
             let result_selection = driver_selections
                 .get(item.request_index)
@@ -530,17 +555,22 @@ fn generate_kani(
                 package,
                 claim_map: &claim_map,
                 node_id: &item.node_id,
-                claim_index,
+                claim_index: *claim_index,
                 result_selection,
             })
         })
         .collect::<Result<Vec<_>, RoutedGenerationError>>()?;
-    let outcome = negotiate_kani_obligations(&KaniObligationRequest {
+    let request = KaniObligationRequest {
         ceilings: context.ceilings,
         items: &items,
         subject_path: context.subject_path,
         unwind: context.unwind,
-    })
+    };
+    let outcome = if native {
+        negotiate_kani_native_obligations(&request)
+    } else {
+        negotiate_kani_obligations(&request)
+    }
     .map_err(RoutedGenerationError::Kani)?;
 
     // FR-015 reports exactly one record per item, numbered by position in `group` (the loop index
@@ -551,7 +581,33 @@ fn generate_kani(
             records,
             scalar_harnesses,
             ..
-        } => (records, index_harnesses(scalar_harnesses)?, false),
+        } => {
+            if native {
+                let mut selections = BTreeMap::new();
+                for ((record, claim_index), item) in records.iter().zip(&claim_indexes).zip(&items)
+                {
+                    if !matches!(item, ObligationItem::ScalarClaim { .. }) {
+                        continue;
+                    }
+                    let ObligationDisposition::Supported { harness_symbol } = &record.disposition
+                    else {
+                        continue;
+                    };
+                    let selection = scalar_harnesses
+                        .iter()
+                        .find(|harness| harness.identity.harness_symbol == *harness_symbol)
+                        .and_then(|harness| harness.identity.native_integer_selection.clone());
+                    if let Some(selection) = selection {
+                        selections.insert(*claim_index, selection);
+                    }
+                }
+                publish_native_scalar_artifacts(&mut claim_map, &mut artifacts, &selections)
+                    .map_err(|error| {
+                        RoutedGenerationError::ContractScalar(ContractScalarError::Oracle(error))
+                    })?;
+            }
+            (records, index_harnesses(scalar_harnesses)?, false)
+        }
         KaniObligationOutcome::Rejected { records } => (records, BTreeMap::new(), true),
     };
     for harness in harnesses.values_mut() {

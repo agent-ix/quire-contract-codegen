@@ -24,7 +24,7 @@ use quire_exact::{
     IntegerInterval, OrderingOperator, RoundingMode, TextProfile,
 };
 use quire_semantic_value::declaration::EqualityOperator;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 pub(super) fn standalone_oracle_source(
@@ -58,6 +58,7 @@ pub enum OracleStop {
     InvalidConstant,
     /// An IEEE operand does not have the declared width.
     OperandWidth,
+    /* native refusal */
     /* quantity refusal */
 }
 ";
@@ -83,6 +84,7 @@ pub(super) struct SourceBuilder {
     functions: String,
     needs_integer: bool,
     needs_width: bool,
+    needs_native_admission: bool,
 }
 
 /// Render scalar operation helpers for a checked clause condition using the same
@@ -91,6 +93,19 @@ pub(crate) fn render_clause_operation_helpers(
     operations: &[(String, String, ExactScalarOperation)],
 ) -> Result<String, OracleGenerationError> {
     let mut source = SourceBuilder::default();
+    for (symbol, identity, operation) in operations {
+        source.oracle(symbol, identity, operation)?;
+    }
+    Ok(source.finish())
+}
+
+pub(crate) fn render_clause_native_operation_helpers(
+    operations: &[(String, String, ExactScalarOperation)],
+) -> Result<String, OracleGenerationError> {
+    let mut source = SourceBuilder {
+        needs_native_admission: true,
+        ..SourceBuilder::default()
+    };
     for (symbol, identity, operation) in operations {
         source.oracle(symbol, identity, operation)?;
     }
@@ -162,6 +177,17 @@ impl SourceBuilder {
             ""
         };
         let mut source = SOURCE_HEADER.replace("/* quantity refusal */", quantity_refusal);
+        let (before_native, after_native) = source
+            .split_once("/* native refusal */")
+            .expect("the scalar source header declares its native refusal insertion point");
+        source = format!(
+            "{before_native}{}{after_native}",
+            if self.needs_native_admission {
+                "/// The production kernel rejected native interval or operand admission.\n    NativeAdmission(rt::NativeIntegerAdmissionError),"
+            } else {
+                ""
+            }
+        );
         if self.functions.contains("quantity_owner::") {
             source.push_str("use quire_semantic_value::quantity as quantity_owner;\n");
         }
@@ -646,17 +672,121 @@ fn profile_path(profile: TextProfile) -> Result<&'static str, OracleGenerationEr
 
 /// Executable source region for one V2 scalar claim. The node id identifies the checked
 /// expression directly: a V2 expression carries no V1 requirement-clause key.
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct ScalarCoverageRegion {
-    artifact_path: &'static str,
+    artifact_path: String,
     node_id: CheckedNodeId,
-    role: &'static str,
+    role: String,
     start_line: u32,
     end_line: u32,
     probe: SourceProbe,
     #[serde(skip_serializing_if = "Option::is_none")]
     expected_consequents: Option<u32>,
+}
+
+/// Publish the selected native functions in the routed oracle crate. The exact
+/// same standalone bytes are embedded by the Kani renderer.
+pub(crate) fn publish_native_scalar_artifacts(
+    claim_map: &mut ClaimMap<ExactScalarClaim>,
+    artifacts: &mut [Artifact],
+    selections: &BTreeMap<usize, crate::core::native_integer::NativeIntegerSelection>,
+) -> Result<(), OracleGenerationError> {
+    if selections.is_empty() {
+        return Ok(());
+    }
+    let old_source = artifacts
+        .iter()
+        .find(|artifact| artifact.path == "src/lib.rs")
+        .ok_or(OracleGenerationError::InvalidPlanState)?
+        .contents
+        .clone();
+    let old_map = artifacts
+        .iter()
+        .find(|artifact| artifact.path == "source-maps/lib.json")
+        .ok_or(OracleGenerationError::InvalidPlanState)?;
+    let mut regions: Vec<ScalarCoverageRegion> = serde_json::from_str(&old_map.contents)
+        .map_err(|_| OracleGenerationError::LocationMapSerialization)?;
+    let mut functions = Vec::new();
+    for (index, claim) in claim_map.items.iter_mut().enumerate() {
+        let ClaimDisposition::Generated(generated) = &mut claim.result else {
+            continue;
+        };
+        if let Some(selection) = selections.get(&index) {
+            generated.oracle_source =
+                super::native::render(&generated.symbol, &claim.operation.identity, selection)
+                    .ok_or(OracleGenerationError::InvalidPlanState)?;
+        }
+        functions.push((generated.symbol.clone(), generated.oracle_source.clone()));
+    }
+    let source = if let [(_, source)] = functions.as_slice() {
+        source.clone()
+    } else {
+        let mut source = String::new();
+        for (index, (symbol, function)) in functions.iter().enumerate() {
+            source.push_str(&format!(
+                "mod oracle_{index} {{\n{function}\n}}\npub use oracle_{index}::{symbol};\n"
+            ));
+        }
+        source
+    };
+    if source.len() > MAX_GENERATED_SOURCE_BYTES {
+        return Err(OracleGenerationError::SourceTooLarge {
+            bytes: source.len(),
+            limit: MAX_GENERATED_SOURCE_BYTES,
+            setting: "cg.scalar.source_bytes",
+        });
+    }
+    let declarations = |source: &str| {
+        source
+            .lines()
+            .enumerate()
+            .filter_map(|(line, text)| {
+                text.strip_prefix("pub fn ")
+                    .and_then(|rest| rest.split_once('('))
+                    .map(|(symbol, _)| (symbol.to_owned(), line + 1))
+            })
+            .collect::<BTreeMap<_, _>>()
+    };
+    let old = declarations(&old_source);
+    let new = declarations(&source);
+    for region in &mut regions {
+        let old_line = usize::try_from(region.start_line)
+            .map_err(|_| OracleGenerationError::InvalidPlanState)?;
+        let (symbol, &old_declaration) = old
+            .iter()
+            .filter(|(_, line)| **line <= old_line)
+            .max_by_key(|(_, line)| *line)
+            .ok_or(OracleGenerationError::InvalidPlanState)?;
+        let new_declaration = *new
+            .get(symbol)
+            .ok_or(OracleGenerationError::InvalidPlanState)?;
+        let offset = i64::try_from(new_declaration)
+            .and_then(|new_line| i64::try_from(old_declaration).map(|old_line| new_line - old_line))
+            .map_err(|_| OracleGenerationError::InvalidPlanState)?;
+        let shifted = |line: u32| {
+            u32::try_from(i64::from(line) + offset)
+                .map_err(|_| OracleGenerationError::InvalidPlanState)
+        };
+        region.start_line = shifted(region.start_line)?;
+        region.end_line = shifted(region.end_line)?;
+        region.probe.line = shifted(region.probe.line)?;
+    }
+    let mut text = serde_json::to_string_pretty(&regions)
+        .map_err(|_| OracleGenerationError::LocationMapSerialization)?;
+    text.push('\n');
+    artifacts
+        .iter_mut()
+        .find(|artifact| artifact.path == "src/lib.rs")
+        .ok_or(OracleGenerationError::InvalidPlanState)?
+        .contents = source;
+    artifacts
+        .iter_mut()
+        .find(|artifact| artifact.path == "source-maps/lib.json")
+        .ok_or(OracleGenerationError::InvalidPlanState)?
+        .contents = text;
+    Ok(())
 }
 
 pub(super) fn scalar_coverage_regions<'a>(
@@ -691,9 +821,9 @@ pub(super) fn scalar_coverage_regions<'a>(
         let entry_column =
             u32::try_from(entry_column + 1).map_err(|_| OracleGenerationError::InvalidPlanState)?;
         let entry = ScalarCoverageRegion {
-            artifact_path: "src/lib.rs",
+            artifact_path: "src/lib.rs".to_owned(),
             node_id: claim.node_id.clone(),
-            role: "oracle_evaluation",
+            role: "oracle_evaluation".to_owned(),
             start_line: entry_line,
             end_line: entry_line,
             probe: SourceProbe {
@@ -733,9 +863,9 @@ pub(super) fn scalar_coverage_regions<'a>(
             let column =
                 u32::try_from(column + 1).map_err(|_| OracleGenerationError::InvalidPlanState)?;
             regions.push(ScalarCoverageRegion {
-                artifact_path: "src/lib.rs",
+                artifact_path: "src/lib.rs".to_owned(),
                 node_id: claim.node_id.clone(),
-                role: "implication_consequent",
+                role: "implication_consequent".to_owned(),
                 start_line: line,
                 end_line: line,
                 probe: SourceProbe {

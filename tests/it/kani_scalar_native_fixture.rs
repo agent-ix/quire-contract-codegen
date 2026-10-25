@@ -7,6 +7,7 @@ use super::{
 };
 use super::{package, proof_ceilings_with_wall_clock};
 use package::Bound;
+use quire_contract_codegen::generate_routed_native;
 use quire_contract_model::{
     CheckedPackageReadLimits, ContractDependencies, ContractPackageReadResult,
     ContractPackageWireV1,
@@ -110,7 +111,12 @@ fn scalar_with_policy(
         },
         ContractRequestPosition::ContextRoot { node_id: narrow_id },
     ];
-    let generation = generate_routed(
+    let generate = if route == ScalarRoute::Native {
+        generate_routed_native
+    } else {
+        generate_routed
+    };
+    let generation = generate(
         &admitted,
         &positions,
         &[RoutedGenerationItem::from_descriptor(
@@ -147,51 +153,6 @@ fn scalar_with_policy(
         },
     )
     .expect("routed generation succeeds");
-    if route == ScalarRoute::Native {
-        let claim_map = generation.claim_map.as_ref().expect("checked claim map");
-        let claim_index = claim_map
-            .items
-            .iter()
-            .position(|claim| claim.node_id == node_id)
-            .expect("selected checked claim");
-        let ContractRequestPosition::DriverItem {
-            result_selection, ..
-        } = &positions[0]
-        else {
-            panic!("selected driver result");
-        };
-        let item = quire_contract_codegen::ObligationItem::ScalarClaim {
-            package: &admitted,
-            claim_map,
-            node_id: &node_id,
-            claim_index,
-            result_selection,
-        };
-        let quire_contract_codegen::KaniObligationOutcome::Emitted {
-            mut scalar_harnesses,
-            records,
-            ..
-        } = quire_contract_codegen::negotiate_kani_native_obligations(
-            &quire_contract_codegen::KaniObligationRequest {
-                ceilings: proof_ceilings_with_wall_clock(wall_clock),
-                items: &[item],
-                subject_path: "crate::subject",
-                unwind: 3,
-            },
-        )
-        .expect("native negotiation")
-        else {
-            panic!("original scalar claim is admitted");
-        };
-        assert_eq!(scalar_harnesses.len(), 1, "{records:?}");
-        let manifest = generation
-            .oracle_artifacts
-            .expect("dependency manifest")
-            .into_iter()
-            .find(|artifact| artifact.path == "Cargo.toml")
-            .expect("dependency manifest");
-        return (scalar_harnesses.remove(0), vec![manifest]);
-    }
     let artifacts = generation.oracle_artifacts.expect("a Kani group ran");
     let [item] = generation.items.as_slice() else {
         panic!("one routed item, got {:?}", generation.items);

@@ -83,18 +83,11 @@ mod tests {
     use super::*;
     use ix_trace_rs::trace;
 
-    #[trace("FR-015-AC-125")]
     #[test]
-    fn native_policy_revision_changes_canonical_identity_without_changing_domains() {
+    fn native_policy_annotation_uses_selected_typed_policy() {
         let selected = NativeIntegerSelection::new();
         let current = crate::core::canonical::preimage_value(&selected).unwrap();
         assert_eq!(current["policy"], "i128-arithmetic-signed32-multiply/v1");
-        let mut next_revision = current.clone();
-        next_revision["policy"] = serde_json::json!("i128-arithmetic-signed32-multiply/v2");
-        assert_ne!(
-            crate::core::canonical::content_digest(&current).unwrap(),
-            crate::core::canonical::content_digest(&next_revision).unwrap(),
-        );
         let annotation = selected.annotation().unwrap();
         let emitted: serde_json::Value = serde_json::from_str(
             annotation

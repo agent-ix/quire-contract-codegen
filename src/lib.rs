@@ -197,8 +197,9 @@ pub use routed::capability::{
     BACKEND_PROVIDER_CONTRACT, CAPABILITY_VOCABULARY,
 };
 pub use routed::generate::{
-    generate_routed, GenerationContexts, KaniGenerationContext, KindOutput, RoutedGeneration,
-    RoutedGenerationError, RoutedGenerationItem, RoutedItemConstructionError, RoutedItemOutput,
+    generate_routed, generate_routed_native, GenerationContexts, KaniGenerationContext, KindOutput,
+    RoutedGeneration, RoutedGenerationError, RoutedGenerationItem, RoutedItemConstructionError,
+    RoutedItemOutput,
 };
 pub use strategy::harness::{
     generate_tristate_harness, HarnessDiagnostic, HarnessErrorCode, HarnessRequest,

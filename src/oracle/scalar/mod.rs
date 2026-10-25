@@ -50,6 +50,7 @@ use super::operator_catalog::IntegerOperator;
 
 pub(crate) mod derive;
 pub(crate) mod lower;
+pub(crate) mod native;
 pub(crate) mod render;
 
 use crate::core::artifact::Artifact;
@@ -838,6 +839,9 @@ pub fn generate_exact_scalar_oracles(
 ) -> Result<ExactScalarOracles, OracleGenerationError> {
     render_exact_scalar_plan(plan_exact_scalar_oracles(package, items)?)
 }
+
+pub(crate) use render::publish_native_scalar_artifacts;
+pub(crate) use render::render_clause_native_operation_helpers;
 
 /// A whole-call failure before admitted scalar claims can be published.
 #[derive(Clone, Debug, Eq, PartialEq)]

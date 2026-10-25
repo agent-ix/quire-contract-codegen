@@ -226,6 +226,11 @@ pub(super) enum Statement {
         condition: ExprText,
         message: String,
     },
+    /// A post-call probe executes only on the checked short-circuit path.
+    ConditionalProbe {
+        condition: ExprText,
+        body: Vec<Statement>,
+    },
 }
 #[derive(Clone, Debug)]
 pub(super) struct Cover {
@@ -378,6 +383,21 @@ impl HarnessSpec {
                         return Err(HarnessSpecError::AssertBeforeCall);
                     }
                     message(text)?;
+                }
+                Statement::ConditionalProbe { body, .. } => {
+                    if !called {
+                        return Err(HarnessSpecError::AssertBeforeCall);
+                    }
+                    let mut local = BTreeSet::new();
+                    for item in body {
+                        match item {
+                            Statement::Let(binding) => {
+                                bind(&mut local, &binding.name)?;
+                            }
+                            Statement::Assert { message: text, .. } => message(text)?,
+                            _ => return Err(HarnessSpecError::InvalidExpression),
+                        }
+                    }
                 }
             }
         }
