@@ -49,6 +49,8 @@ exceptions = [
     { allow = ["AGPL-3.0-or-later"], crate = "quire-canonical-derive" },
     { allow = ["AGPL-3.0-or-later"], crate = "quire-checked" },
     { allow = ["AGPL-3.0-or-later"], crate = "quire-exact" },
+    # QSL's FR-484 replay dependency reaches this first-party checked-term crate from quire-eval.
+    { allow = ["AGPL-3.0-or-later"], crate = "quire-checked" },
     { allow = ["AGPL-3.0-or-later"], crate = "quire-eval" },
     { allow = ["AGPL-3.0-or-later"], crate = "quire-semantic-value" },
     { allow = ["AGPL-3.0-or-later"], crate = "quire-walk" },
