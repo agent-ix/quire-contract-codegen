@@ -548,14 +548,7 @@ impl StateClauseReplayInputs<'_> {
         .map_err(StateClauseReplayError::Decode)?;
         let expected =
             postcondition_check_text(&harness.scope.operation, field, *comparison, *left_is_pre);
-        // Kani prints the source arguments of our `assert!(..., "{}", message)` inside
-        // outer quotes. Its first quoted segment is empty to the generic witness reader.
-        let generated_clause = format!(": \"\"{{}}\",\n{expected:?}\"");
-        let generated_check = decoded
-            .check_clause
-            .strip_prefix(&generated_clause)
-            .is_some_and(|rest| rest.starts_with('\n'));
-        if !generated_check {
+        if !parsed.matches_generated_postcondition(&expected) {
             return Err(StateClauseReplayError::AssertionMismatch);
         }
         self.playback = decoded

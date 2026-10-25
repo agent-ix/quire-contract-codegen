@@ -174,11 +174,9 @@ pub fn decode_falsification(
 }
 
 /// A decoded playback: the values, and the check text the playback's own assertion block names.
-pub(crate) struct DecodedPlayback<'a> {
+pub(crate) struct DecodedPlayback {
     /// The text of the assertion Kani reports as failed.
     pub(crate) check_text: String,
-    /// The selected check clause as printed, including format arguments when present.
-    pub(crate) check_clause: &'a str,
     /// The decoded values, named by their bindings, in binding order.
     pub(crate) values: Vec<(String, WitnessValue)>,
 }
@@ -189,13 +187,13 @@ pub(crate) struct DecodedPlayback<'a> {
 /// # Errors
 ///
 /// The [`DecodeFailure`] [`decode_falsification`] names.
-pub(crate) fn decode_playback<'a>(
+pub(crate) fn decode_playback(
     harness_symbol: &str,
     module_symbol: &str,
     arguments: &[ObligationBinding],
-    playback: &Playback<'a>,
+    playback: &Playback<'_>,
     limits: WitnessDecodeLimits,
-) -> Result<DecodedPlayback<'a>, DecodeFailure> {
+) -> Result<DecodedPlayback, DecodeFailure> {
     if playback.source_len > limits.bytes {
         return Err(DecodeFailure::new(
             "cg_witness_decode_bytes_limit",
@@ -243,7 +241,6 @@ pub(crate) fn decode_playback<'a>(
     }
     Ok(DecodedPlayback {
         check_text: playback.check_text.to_owned(),
-        check_clause: playback.check_clause,
         values: decode_values(playback, &schema)?,
     })
 }

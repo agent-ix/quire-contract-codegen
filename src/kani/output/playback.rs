@@ -196,6 +196,17 @@ pub struct Playback<'a> {
     pub(crate) entries: Vec<(RenderedValue, Vec<u8>)>,
 }
 
+impl Playback<'_> {
+    /// Whether Kani printed the generated postcondition assertion for `message`.
+    /// The output reader owns Kani's quoting and format-argument syntax.
+    pub(crate) fn matches_generated_postcondition(&self, message: &str) -> bool {
+        let clause = format!(": \"\"{{}}\",\n{message:?}\"");
+        self.check_clause
+            .strip_prefix(&clause)
+            .is_some_and(|rest| rest.starts_with('\n'))
+    }
+}
+
 /// A value rendered in Kani's decoded-value comment. The numeric spellings `0` and `1`
 /// can denote either a Boolean or an integer; both interpretations are retained until the
 /// persisted binding supplies the primitive type.
@@ -478,6 +489,19 @@ mod tests {
                 .code,
             PlaybackRefusalCode::CheckTextMissing
         );
+    }
+
+    #[trace("FR-024-AC-13", "TC-035")]
+    #[test]
+    fn generated_postcondition_check_is_interpreted_in_output_reader() {
+        let message = "operation `deposit`: postcondition `post.balance >= pre.balance` failed";
+        let transcript = format!(
+            "/// Test generated for harness `m::h`\n/// Check for `assertion`: \"\"{{}}\",\n{message:?}\"\nlet concrete_vals: Vec<Vec<u8>> = vec![];"
+        );
+        let playback = parse_assertion_playback(&transcript, "h", "m", 4096, 0)
+            .expect("generated assertion parses");
+        assert!(playback.matches_generated_postcondition(message));
+        assert!(!playback.matches_generated_postcondition("another postcondition"));
     }
 
     #[trace("FR-017-AC-5", "FR-017-AC-12", "TC-027")]
