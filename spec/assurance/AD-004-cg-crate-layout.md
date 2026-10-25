@@ -453,7 +453,8 @@ Rules, each checkable:
 - `serde_json::Value` is named only in `core/ir`, `core/canonical` and the report parser. No other
   file reads a field of a body term.
 - `BoundPackage` and `BoundClause` are named only in `strategy/`, `evidence/`, `oracle/boolean_v1.rs`,
-  `oracle/bound_v1.rs` and the V1 arm that step 4f deletes. After step 4f none is named in `kani/`,
+  `oracle/bound_v1.rs`, the V1 Kani arm and `routed/capability.rs`'s public V1 clause form and
+  preflight. Step 4f deletes the V1 Kani and routed paths. After step 4f none is named in `kani/`,
   `routed/` or `replay/`.
 
 ### The one Kani generator
@@ -950,8 +951,11 @@ requirement is authored.
 - L-12. `BoundPackage` and `BoundClause` are named nowhere in `kani/`, `routed/` or `replay/`, and
   after the last V1 reader is replaced nowhere. Until step 4f the interim exceptions, listed by
   file, are the V1 arm: `kani/generate/outcome.rs` (`ObligationItem::BoundClause` holds a
-  `&BoundPackage`), `negotiate.rs` (including its test fixture) and `clause.rs`; each entry is
-  removed with its step.
+  `&BoundPackage`), `negotiate.rs` (including its test fixture) and `clause.rs`; and
+  `routed/capability.rs` (`KaniForm::V1BoundClause` holds a `BoundClause`, with its
+  `KaniFormName::V1BoundClause` identity and V1 clause preflight). Step 4f removes these V1
+  paths and their V1-only tests after the V2 contract-family replacement is live; the L-12
+  end-state remains absolute.
 
 ### Migration order
 
@@ -1063,11 +1067,23 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
      `generate_state_frame_obligations` becoming an `ObligationItem` arm.
    - 4e: **CG's one public generator entry exists** (`negotiate_kani_obligations` with the scalar,
      contract and frame arms, the public path for everything `generate_kani_bundle` served). This
-     is the step the leader reports to the planner when it lands. A QSL-owned follow-up then moves
-     QSL's quire-integration exemplars, which call `generate_kani_bundle` today, onto that entry;
-     it is a QSL ticket, not CG work.
+     step also adds the routed public V2 contract-clause `KaniForm`, its typed form identity,
+     preflight and tests in `routed/capability.rs`. The form takes an admitted
+     `CheckedPackageV2`, the selected checked clause node and its obligation role; preflight
+     authenticates that selection and role against the checked graph and uses the 4c V2
+     contract-family lowering and its typed refusal. It does not accept a `BoundClause` or
+     repackage the V1 arm. The preceding spec change must cover FR-019's routed form and
+     retain the precondition, postcondition and invariant obligations of FR-019-AC-25,
+     AC-26 and AC-33 while assigning their V2 representation. The V2 route and its tests
+     must pass before the QSL-owned follow-up moves its control and before 4f removes V1.
+     This is the step the leader reports to the planner when it lands. A QSL-owned follow-up
+     then moves QSL's quire-integration exemplars, which call `generate_kani_bundle` today,
+     onto that entry; it is a QSL ticket, not CG work.
    - 4f: deletion of `generate_kani_bundle`, `KaniArtifactBundle`, `ProofDependencyGraph`, the V1
-     obligation arm and bundle validation, with the matching `interface-001` edit. The census types
+     obligation arm and bundle validation, with the matching `interface-001` edit. Also remove
+     `routed/capability.rs`'s public `KaniForm::V1BoundClause`, its `KaniFormName` identity and
+     V1 clause preflight, plus their V1-only tests, when the V2 contract-family form replaces
+     that route. The census types
      in `kani/census.rs` stay: the V2 census input needs them, and the corpus imports them until
      4g. `validate_dependencies` (census validation, and the `KaniDiagnostic` it returns with the
      identity and path helpers it uses) is not bundle validation for this purpose: the corpus calls
@@ -1408,6 +1424,7 @@ Each is a place where the target of this AD is not yet true, stated so that no s
 | The V1 bundle generator, still live | `kani/generate/v1_bundle.rs` | step 4f deletes the file |
 | `validate_dependencies`, the V1 error type it returns and `deterministic_json` | `kani/generate/census_validation.rs` | 4g or the V2 census input for the first two; step 1a for `deterministic_json` |
 | The shared V1 clause lowering and the V1 arm (`ObligationItem::BoundClause` in `outcome.rs`, `classify_clause` in `negotiate.rs`) | `kani/generate/clause.rs`, `outcome.rs`, `negotiate.rs` | step 4c reshapes the lowering for the V2 input; 4f deletes the V1 arm |
+| The public V1 clause form (`KaniForm::V1BoundClause`), its `KaniFormName` identity and V1 clause preflight | `routed/capability.rs` | step 4f removes them after step 4e's routed V2 contract-clause form, identity, preflight and tests are live |
 | The persisted-record helpers | `kani/generate/record.rs` | not scheduled; `artifact` by step 1a |
 | Each family renders its own template; the corpus keeps its own, with its cover after the assertion (FR-015-AC-55) | `scalar.rs`, `precondition.rs`, `contract.rs`, `frame.rs`, `collection.rs`, `corpus/bounded_kani_corpus.rs` | 4b, 4c, 4d; 4h for collection; 4g for the corpus |
 | The remaining collection and graph finite lowerers | `kani/generate/lower/{bounded_collections,finite_reference_graphs}.rs` | IR-347 replaced the step-2f forwarders with CG-owned lowerings and request/result types; IR removes its former exports afterwards. FR-015-AC-109 has retired arithmetic; collection and graph remain until FR-015-AC-110 and FR-015-AC-111. |
