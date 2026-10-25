@@ -63,6 +63,14 @@ Found at head `cb2c12e004002c2d08752d666c5c59486a4d9dc4` in the fix-round commit
 | FND-010 | low | `generate_routed_native` adds a `/// Trace: FR-015-AC-125` doc line. `Trace:` doc lines are a deprecated binding convention, and ix-trace-rs `#[trace]` on tests is the binding the matrix reads. The new line adds an unmeasured claim. | src/routed/generate.rs:315 |
 | FND-011 | low | `oracle::scalar::native::render` chooses the native variant by matching identity strings (`"quire.op.integer.add"`, `".sub"`, `".mul"`, `".negate"`). `select` already receives the typed `IntegerOperator`, and the operator catalog owns that mapping. This is a second, string-keyed copy of the catalog in the renderer that both the routed artifact and the harness depend on. A catalog rename would make native publication refuse with `InvalidPlanState`, and nothing in the type system ties the two together. | src/oracle/scalar/native.rs:94, src/oracle/scalar/native.rs:104 |
 
+## New findings (disposition pass 2)
+
+Found at head `6d405d29c7255654da4e96376bfaebcda9b0e7ee`. The defect was introduced in `dcfcebb9`, was missed in pass 1, and is still present.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-012 | high | `SourceBuilder::finish` (non-test code in `src/oracle/scalar/render.rs`) calls `.expect("the scalar source header declares its native refusal insertion point")`. FR-014-AC-39 requires zero panic tokens in that file's non-test code, and origin/main `dd59aa14` has none. The suite's guard for it fails at this head. Reproduced: `tc_024_ac39_scalar_generator_and_generated_crates_hold_no_panic_site` fails with `src/oracle/scalar/render.rs left: ["expect"] right: []`, so `make test` fails. The fix is to insert the native variant without a panic site, for example by building the enum body from the typed flag instead of splitting the header text. | src/oracle/scalar/render.rs:182, tests/it/exact_scalar_generation.rs:3579 |
+
 ## Dispositions
 
 Disposition pass 1 at head `cb2c12e004002c2d08752d666c5c59486a4d9dc4` (rebased onto `dd59aa14`, the #564 scalar split). `git range-diff 4eccd682..27d2cfd0 dd59aa14..cb2c12e0` shows the two reviewed commits are patch-identical (`a25cea4f = 0bed25e6`, `27d2cfd0 = c13bb455`), so the review-pass verdict carries for them. The fix commits `dcfcebb9` and `cb2c12e0` were reviewed in full. `cb2c12e0` only moves the `native_probe_tests` module below the production items. The #564 split is preserved: `src/oracle/scalar/{mod,derive,lower,render}.rs` name `limit_kind` 1/2/0/0 times, and `tc_024_ac42` passes.
@@ -76,3 +84,12 @@ Disposition pass 1 at head `cb2c12e004002c2d08752d666c5c59486a4d9dc4` (rebased o
 | FND-005 | fixed | `run_mutant` now requires the counterexample to contain `Check for \`assertion\`` and the generated sound-assertion message. The tautological `assert_ne!` is removed, and the bound control shares the same check. |
 | FND-006 | fixed | The text `replace` is gone. `SourceBuilder` takes a typed `needs_native_admission` flag and splices the variant at a declared header insertion point. The byte side-effect on the general route is recorded separately as FND-008. |
 | FND-007 | fixed | New non-ignored `-Dwarnings` typecheck controls compile the native scalar proof body, the native V2 proof body (with stub `kani`) and the native observer example against the locked kernel. All three pass. |
+
+Disposition pass 2 at head `6d405d29c7255654da4e96376bfaebcda9b0e7ee`, which covers repair commit `8dca8c01` and the review-ID rekey commit `6d405d29`. Checked against the code at that head.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-008 | fixed | `SOURCE_HEADER` is byte-identical to origin/main `dd59aa14` again, with no native placeholder. The native variant is spliced in only when `needs_native_admission` is set. The general route therefore emits main's exact `OracleStop` bytes, and general harness identities are unchanged. |
+| FND-009 | fixed | The observer's `#[allow(dead_code)]` is removed, and the observer reads the field (`NativeAdmission(reason) => { let _ = reason; ... }`). The typecheck stubs no longer carry `allow(dead_code, unused_imports, unused_parens)`. Proof functions become `#[test]` under `cargo check --tests` with `-Dwarnings`, and the V2 `expected` binding goes through `native_expected_expression`. Both controls pass. The one remaining `#[allow(dead_code)]`, on the shared fixture, predates pass 1 and carries a stated reason. |
+| FND-010 | fixed | The `/// Trace: FR-015-AC-125` doc line is removed. The binding is carried by the `#[trace]`-tagged tests. |
+| FND-011 | fixed | `native::render` now takes a typed `IntegerOperator`. The operation variant is chosen by matching on the operator. The decision identity is checked through `Operator::from_identity(..).entry().scalar_operator`, and `publish_native_scalar_artifacts` resolves the operator through the catalog. No identity-string selection remains. |

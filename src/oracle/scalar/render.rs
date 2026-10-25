@@ -58,8 +58,6 @@ pub enum OracleStop {
     InvalidConstant,
     /// An IEEE operand does not have the declared width.
     OperandWidth,
-    /* quantity refusal */
-}
 ";
 
 const INTEGER_HELPER: &str = "
@@ -177,14 +175,11 @@ impl SourceBuilder {
         };
         let mut source = SOURCE_HEADER.to_owned();
         if self.needs_native_admission {
-            let (before, after) = source
-                .split_once("    /* quantity refusal */\n")
-                .expect("the scalar source header declares its native refusal insertion point");
-            source = format!(
-                "{before}    /// The production kernel rejected native interval or operand admission.\n    NativeAdmission(rt::NativeIntegerAdmissionError),\n    /* quantity refusal */\n{after}"
-            );
+            source.push_str("    /// The production kernel rejected native interval or operand admission.\n    NativeAdmission(rt::NativeIntegerAdmissionError),\n");
         }
-        source = source.replace("/* quantity refusal */", quantity_refusal);
+        source.push_str("    ");
+        source.push_str(quantity_refusal);
+        source.push_str("\n}\n");
         if self.functions.contains("quantity_owner::") {
             source.push_str("use quire_semantic_value::quantity as quantity_owner;\n");
         }

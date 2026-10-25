@@ -43,3 +43,5 @@ Disposition pass 1 at head `cb2c12e004002c2d08752d666c5c59486a4d9dc4` (rebased o
 | --- | --- | --- |
 | FND-001 | fixed | FR-015-AC-125 and AD-006 now name the explicit `generate_routed_native` trigger, keep `generate_routed` general, and require byte identity between the routed `src/lib.rs` and the harness-embedded oracle (dcfcebb9). |
 | FND-002 | fixed | The qualification map now says the control changes only the independent harness assertion from 9 to 5 and retains the 0..9 semantic domain and the routed native oracle, which matches the implemented control (dcfcebb9). |
+
+Disposition pass 2 at head `6d405d29c7255654da4e96376bfaebcda9b0e7ee`. No findings are open and no spec text changed in the repair round, so no rows are added. This file was rekeyed from SR-17017 to SR-514003. The committed text equals the reviewer's round-1 copy, with only the id, the heading and the cross-references to SR-514001/SR-514002 renamed, as Linear comment b4dcee1f states.

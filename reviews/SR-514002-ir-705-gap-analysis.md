@@ -88,3 +88,10 @@ Disposition pass 1 at head `cb2c12e004002c2d08752d666c5c59486a4d9dc4` (rebased o
 | FND-002 | fixed | The bound control now keeps `Bound::Integer(0, 9)` and edits only the harness literal from 9 to 5. The real-Kani run asserts that the generated sound assertion fails and decodes an original-domain witness with left + 1 > 5. |
 | FND-003 | fixed | The helper-witness test now traces FR-016-AC-1 with TC-026, and the decoder control traces FR-016-AC-2 with TC-026. |
 | FND-004 | fixed | The digest tautology no longer claims FR-015-AC-125. `native_scalar_increment_keeps_original_profile_and_checked_capacity` now asserts that the persisted harness record's `identity.nativeIntegerSelection` equals the typed selection. A change to how the identity binds the selection would fail it. |
+
+Disposition pass 2 at head `6d405d29c7255654da4e96376bfaebcda9b0e7ee` (repair commit `8dca8c01`). Checked against the code at that head.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-005 | fixed | New non-ignored lib test `grouped_native_publication_keeps_each_proof_body_and_source_map_aligned` (`#[trace("FR-015-AC-125")]`) publishes two native claims through `publish_native_scalar_artifacts`. It asserts that `src/lib.rs` starts with `mod oracle_0 {`, that `OracleStop` appears once per module, and that each claim's `oracle_source` is a contiguous `mod oracle_{index} { … } pub use oracle_{index}::{symbol};` body. It also checks that every shifted source-map region lands on its own published declaration line. The test passes. A mixed native-plus-general group remains uncompiled, but this covers the AC's group byte-identity clause. |
+| FND-006 | fixed | `tc_024_ac42` (and `tc_024_ac39`) now include `src/oracle/scalar/native.rs`, with an expected `limit_kind` count of 0. `tc_024_ac42` passes. |
