@@ -95,3 +95,5 @@ Disposition pass 2 at head `6d405d29c7255654da4e96376bfaebcda9b0e7ee` (repair co
 | --- | --- | --- |
 | FND-005 | fixed | New non-ignored lib test `grouped_native_publication_keeps_each_proof_body_and_source_map_aligned` (`#[trace("FR-015-AC-125")]`) publishes two native claims through `publish_native_scalar_artifacts`. It asserts that `src/lib.rs` starts with `mod oracle_0 {`, that `OracleStop` appears once per module, and that each claim's `oracle_source` is a contiguous `mod oracle_{index} { … } pub use oracle_{index}::{symbol};` body. It also checks that every shifted source-map region lands on its own published declaration line. The test passes. A mixed native-plus-general group remains uncompiled, but this covers the AC's group byte-identity clause. |
 | FND-006 | fixed | `tc_024_ac42` (and `tc_024_ac39`) now include `src/oracle/scalar/native.rs`, with an expected `limit_kind` count of 0. `tc_024_ac42` passes. |
+
+Disposition pass 3 at head `ff42c8496613f5f297e5ca8e5bb9bf90898d7713` (rebased onto `1944268f`). No findings are open, so no rows are added. The rebase-only adaptations to #570's typed output reader were reviewed and add no gap or spec defect.
