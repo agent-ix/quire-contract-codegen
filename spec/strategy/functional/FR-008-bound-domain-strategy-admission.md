@@ -7,6 +7,8 @@ relationships:
     type: satisfies
   - target: ix://agent-ix/quire-contract-codegen/FR-002
     type: depends_on
+  - target: ix://agent-ix/quire-contract-codegen/FR-014
+    type: depends_on
   - target: ix://agent-ix/quire-contract-codegen/interface-001
     type: implements
   - target: ix://agent-ix/quire-contract-ir/FR-038
@@ -26,10 +28,12 @@ V2 input contract for the constructive population and campaign behavior of FR-00
 The IR accessor and its public consumer test are implemented under IR-703 in Contract IR; IR's
 fresh QSL producer-origin case runs only under its conformance gate. CG also needs a V2
 comparison oracle for all six admitted operators, taking only the accessor's typed result. The V1
-bound oracle is not an input to it. Open decision (not decided here): whether the V2 comparison
-oracle reuses the integer eq/ne derivation that FR-014-AC-35 requires of
-`generate_exact_scalar_oracles` (planned; today's code has no integer eq/ne descriptor) or has its
-own path; the one-evaluator direction favors reuse. The planner owns the question.
+bound oracle is not an input to it. The planned common CG unit is one internal typed
+integer-comparison lowerer, `lower_typed_integer_comparison`, in `src/oracle`. It will emit the executable predicate for
+integer.eq/ne/lt/le/gt/ge over ordered direct read/read and read/literal operands, with either
+authored literal position and `Current`, `Pre` or `Post` observations on eligible reads. The
+selected strategy and FR-014's clause oracle will use that unit for this shared form set; FR-014's
+broader clause forms do not enlarge FR-008's admitted relation grammar.
 
 ## Terms
 
@@ -90,6 +94,12 @@ own path; the one-evaluator direction favors reuse. The planner owns the questio
   that prevents construction of the selected claim's complete oracle SHALL fail its request
   without artifacts. Successful generation SHALL still be atomic for the selected request's
   entire bundle.
+- The generator SHALL lower each selected-claim comparison and the corresponding FR-014 clause
+  comparison through the one `lower_typed_integer_comparison` function for the shared form set
+  defined above. It SHALL extend that function for FR-014-AC-35's planned integer eq/ne derivation,
+  without adding a second CG comparison lowerer, evaluator module or V1-to-V2 adapter. The
+  generator SHALL retain this selected strategy claim's narrower admission and typed accessor
+  refusal with its locus when sharing the function.
 - Refusal precedence SHALL be: unknown selected clause, absent or inauthentic claim, accessor's
   remaining first-defect order (unsupported clause kind, missing comparison, operator, arity,
   child and operand defects), CG relation/domain refusal, then selected-comparison-oracle
@@ -120,14 +130,16 @@ own path; the one-evaluator direction favors reuse. The planner owns the questio
 | FR-008-AC-4 | Unknown clause, absent claim, unsupported clause kind and malformed comparison report distinct typed causes in the stated first-defect order. Diagnostics carry selected clause and claim, structural path and reached child id when available, without claiming a unique child source region. | Test |
 | FR-008-AC-5 | A request with several applicable defects returns the first only. Every refusal returns zero artifacts; a successful request returns the complete source, census and runner bundle. | Test |
 | FR-008-AC-6 | Either read endpoint or a literal at i64::MIN - 1, i64::MAX + 1, i128::MIN or i128::MAX refuses `UnsupportedRelation` at that operand without narrowing. Two individually i64-representable reads with unequal ranges also refuse; equal ranges admit when other rules hold. | Test |
-| FR-008-AC-7 | PLANNED. Beyond the per-operator agreement stated in FR-008-AC-3, which this criterion does not repeat, for each of integer.eq, ne, lt, le, gt and ge the selected claim's V2 comparison oracle returns, for every valuation of a 1- to 4-member domain (read-versus-read and read-versus-literal, the literal at each member and in either authored position), the result of an independently evaluated ordered relation. | Test |
-| FR-008-AC-8 | PLANNED. The V2 comparison oracle takes only the accessor's typed result for the selected claim, and no V1 bound oracle or `BoundPackage` is an input to it. | Inspection |
+| FR-008-AC-7 | PLANNED. Beyond the per-operator agreement stated in FR-008-AC-3, which this criterion does not repeat, for each of integer.eq, ne, lt, le, gt and ge the selected claim's V2 comparison oracle returns, for every valuation of a 1- to 4-member domain (read-versus-read and read-versus-literal, the literal at each member and in either authored position), the result of an independently evaluated ordered relation. For every such valuation, the FR-014 clause oracle's result for the same direct comparison is identical to the selected oracle's result and to that independent relation. | Test |
+| FR-008-AC-8 | PLANNED. The V2 comparison oracle takes only the accessor's typed result for the selected claim. Source inspection finds exactly one `lower_typed_integer_comparison` function under `src/oracle` used by both the selected strategy oracle and FR-014's clause oracle for all six operators and the ordered direct read/read and read/literal forms; neither path has a second CG comparison lowerer or evaluator module, and no V1 bound oracle, `BoundPackage` or V1-to-V2 adapter is an input to the V2 path. | Inspection |
 | FR-008-AC-9 | PLANNED. A CG integration test calls IR's public clause-context accessor through its public API only, and the generator's census, ordered relation and diagnostics equal the accessor's operator, ordinals, provenance, observation, bounds and refusal fields for each closed operator, provenance and observation variant. | Test |
 | FR-008-AC-10 | PLANNED. Source inspection shows the generator reads no `CheckedSemanticNodeV2.body` field and decodes no body JSON (the verification of FR-008-CON-1). | Inspection |
 
 ## Dependencies
 
 - **Upstream**: [IR FR-038](ix://agent-ix/quire-contract-ir/FR-038) AC-202 through AC-209 (implemented under IR-703), and [QSL FR-034](ix://agent-ix/quire-spec-language/FR-034).
+- **Shared comparison core**: [FR-014](../../oracle/functional/FR-014-exact-scalar-oracles.md)
+  AC-35 and AC-38 supply the V2 clause-oracle path and planned integer eq/ne derivation.
 - **Downstream**: [FR-009](./FR-009-constructive-correlated-populations.md),
   [FR-010](./FR-010-domain-boundary-campaigns.md),
   [TC-017](../matrix/TC-017-bound-domain-admission.md).

@@ -13,6 +13,8 @@ relationships:
     type: references
   - target: ix://agent-ix/quire-contract-ir/FR-038
     type: references
+  - target: ix://agent-ix/quire-contract-codegen/FR-008
+    type: references
 ---
 # FR-014: Generate exact complete-V1 scalar oracles
 
@@ -30,6 +32,10 @@ connectives and the bounded-integer comparisons included
 ([ADR-001](../../decisions/ADR-001-overlapping-generators-and-input-models.md)
 Q2). Its composite/structural equality sibling is
 [FR-018](./FR-018-composite-equality-oracles.md).
+The planned V2 clause comparison path shares CG's planned internal `lower_typed_integer_comparison` unit with
+[FR-008](../../strategy/functional/FR-008-bound-domain-strategy-admission.md) for ordered direct
+read/read and read/literal integer.eq/ne/lt/le/gt/ge forms. FR-008-AC-7 compares both public paths
+against an independent ordered relation, and FR-008-AC-8 inspects the single CG lowering unit.
 
 FR-014 owns the integer and Boolean `eq` and `ne` nodes. Their oracles call the
 QSV's one equality relation, `TypeEnvironment::check_equality` followed by
@@ -592,6 +598,9 @@ otherwise.
 - **Upstream**: Contract IR
   FR-036/FR-038 (CheckedPackage V2 lowering), Contract Runtime FR-007 (exact
   scalar operators), QSpec FR-196.
+- **Shared CG comparison lowering**: [FR-008](../../strategy/functional/FR-008-bound-domain-strategy-admission.md)
+  uses the same planned `lower_typed_integer_comparison` unit for its selected V2 strategy oracle;
+  FR-008-AC-7 and AC-8 verify cross-path results and one CG lowering function.
 - **QSL value authority**: no lane evidences agreement of these TC-187 vectors with the QSL value authority today. quire-integration IR-669 owns a Contract Runtime against QSL composition (Contract Runtime FR-007-AC-5, TC-022); generated-oracle against QSL agreement is owned by quire-integration IR-842, not by CG. FR-014-AC-47 keeps CG's own artifacts from claiming it.
 - **qsl-replay-only constraint**: the QSL arch-lint T12-A allows CG only the `qsl-replay` facade, which exposes no evaluator that reports the outcome, admitted charges and consumed counters (with each single-charge denial) that FR-014-AC-37 compares. It has no quantity evaluator and none for integer comparisons or Boolean connectives as operators: `replay_operator_parity` covers integer add, subtract, multiply and negate and reports consumed counters, while `replay_value_parity` and `replay` run a whole non-Boolean function or Boolean predicate at its bindings (measured at the QSL revision Cargo.lock locks). That is why the Boolean and integer `eq`/`ne` corpus of FR-014-AC-37 has no QSL value-authority leg in CG: the leg is outside CG's boundary, owned by quire-integration IR-842, and not claimed by CG. IR-669 owns the Contract Runtime against QSL composition.
 - **Downstream**: [TC-024](../matrix/TC-024-exact-scalar-oracles.md),
