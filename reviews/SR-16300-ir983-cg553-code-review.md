@@ -65,3 +65,13 @@ QSL's pinned `b8d7138` FR-484 *Retained claim inputs* table explicitly names the
 ## Continuation verdict
 
 **CONDITIONAL, not mergeable yet** at `f19849bce067b4f04824c6b2fcca624648167d6c`: FND-001 is fixed. New FND-002 remains open. The packet's QSL-minted identity, function declaration, target, package, Input arm and generator identity bind correctly. The value request still omits the required complete effective supplied ceilings. The final aggregate gate belongs to the code lead after the fix and review.
+
+## Dispositions (round 2)
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-002 | fixed | `ReplayInputs` now carries configured `SuppliedLimits`; Input packet intake writes `Some(self.inputs.supplied_limits.unwrap_or_default())` to the request. The tagged test checks omitted/default equivalence, three nondefault A/H/B values, QSL typed decode/re-encode, and report claim retention. Witness requests retain their existing configuration behavior. |
+
+## Final review verdict
+
+**PASS** at `e1783fdac9b6e79388e38936459c09209e7139c4`: latest outcomes for FND-001 and FND-002 are fixed. This is a scoped reviewer verdict; the code lead owns the one final aggregate gate. `git diff --check f19849bc..HEAD` passed; no branch changes were made by this review.
