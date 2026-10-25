@@ -107,6 +107,23 @@ four classifications hold (AC-19 to AC-22); each removal prevents success (AC-23
 input gives non-success with no invented classification (AC-24); and neither `BoundPackage` nor
 `ClauseRef` is named (AC-17). These controls are planned.
 
+## Planned V2 execution-point selection controls (FR-004-AC-25)
+
+1. Admit one V2 package whose single invariant checked clause has two authentic `claim`
+   occurrences bound to distinct initialization and handler points. Select each exact checked
+   clause id and occurrence for V2 strategy generation in turn. Compare the generated runner's
+   verdict point with the selected accepted QSL binding point; the two points must remain distinct
+   even though the executable clause population still contains the clause only once.
+2. Select a wrong-role, wrong-ordinal, and other-node occurrence against that checked clause while
+   its authentic sibling retains a point. Separately select an authentic occurrence with no
+   accepted point, then mutate only the rendered runner point for a valid selected occurrence.
+   Require the corresponding typed no-artifact refusal of FR-011-AC-7 for each case, with no
+   sibling-point substitution or inferred point.
+3. In a fresh invocation for each refusal, submit only the artifacts actually emitted (none for
+   that selection) to the V2 analyzer. Confirm structured non-success with no generated-campaign
+   evidence or coverage discharge. The independently derived expected executable-clause population
+   remains unchanged by which occurrence was selected. These controls are planned.
+
 ## Planned native-run-result/2 consumer controls
 
 1. Obtain QSL FR-267's genuine `native-run-result/2` documents for `AllBelow` over `high`
