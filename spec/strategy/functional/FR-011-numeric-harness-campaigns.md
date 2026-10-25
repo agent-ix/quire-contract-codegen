@@ -46,6 +46,9 @@ until specified.
   in-domain census from [FR-010](./FR-010-domain-boundary-campaigns.md).
 - The selected claim's V2 comparison oracle (FR-008), embedded in the same bundle; no V1 bound
   oracle generation output is an input.
+- An explicit typed execution point in the V2 generation request. Its source is the selected
+  clause's accepted QSL binding when that binding supplies one; otherwise it is the caller's
+  invocation context. Clause kind is not an execution-point source.
 - A caller-owned proptest `TestRunner` and `quire_contract_runtime::CampaignReport`.
 - The existing campaign policy: minimum accepted, minimum rejected, and maximum discarded counts.
 
@@ -66,11 +69,16 @@ until specified.
   - for an `Invariant` clause, `true` to `Passed` and `false` to `FailedPostcondition` whose clause
     observation carries the runtime's invariant clause kind, which quire-contract-runtime
     implements but does not yet specify.
+- When generation is requested, the generator shall require the request's typed execution point to
+  equal the selected clause's accepted QSL binding point when present, or the caller's typed invocation point
+  when the binding supplies none. A missing source or missing request point shall yield
+  `MissingExecutionPoint`; a mismatch shall yield `ExecutionPointMismatch`. Either refusal produces
+  no artifact; the generator shall not infer a point from clause kind or silently substitute another
+  point.
 - The runner shall construct each verdict through the runtime `construct_verdict` operation
   (quire-contract-runtime interface-001) with the requirement and revision identity, the runtime
-  execution point, and the clause observations. The sources of the requirement and revision identity
-  and of the execution point are open questions (below); this requirement is not testable beyond
-  verdict construction until they are answered.
+  execution point corresponding to the request's checked typed point, and the clause observations.
+  The source of the requirement and revision identity remains open (below).
 - For a false invariant, the runner shall use the failure detail the runtime
   provides for a contract clause, because quire-contract-runtime's specification does not yet state
   the failure detail of an invariant; a runtime specification of that mapping supersedes this rule.
@@ -117,14 +125,11 @@ until specified.
 | FR-011-AC-3 | The census runner evaluates each of the 10 `VersionUnchanged` in-domain census cases exactly once, in census order, and evaluates none of the out-of-domain cases. | Test (TC-020) |
 | FR-011-AC-4 | A campaign over a report seeded with fixed prior counts returns `discard_rate() == Some((discarded, attempted))` and `rejection_rate() == Some((rejected, attempted))` with those exact values, a fresh zero-attempt summary returns `None` for both, and a runtime snapshot whose counters are `at_limit` returns `None` for both through the generated snapshot-summary operation. | Test (TC-020) |
 | FR-011-AC-5 | A fresh 10,000-case `Broad` campaign for each fixture returns `discard_rate() == Some((0, attempted))` with `attempted > 0`, passes a zero discard ceiling, and does not end `Exhausted`. | Test (TC-020) |
+| FR-011-AC-6 | For a selected clause with an accepted QSL binding point, the V2 request carries that exact typed point; for a selected clause without such a binding point, it carries the caller invocation context's exact typed point. The generated runner passes the corresponding runtime execution point to `construct_verdict` for each case, including an invariant at an initialization or handler anchor. | Test (TC-020) |
+| FR-011-AC-7 | A missing request point or a missing point in both the binding and caller context yields `MissingExecutionPoint`; a request point differing from an available accepted binding point or from the caller context when no binding point exists yields `ExecutionPointMismatch`. Each case produces no artifact. No point is inferred from `Invariant`, `Precondition`, or `Postcondition` kind. | Test (TC-020) |
 
 ## Open Questions
 
-- OQ-1 (execution point): the runtime execution point (`initialization`, `handler`, `pre`, `post`)
-  has no V2 source. IR's accessor returns only the clause kind (`Invariant`, `Precondition`,
-  `Postcondition`), and IR main has no execution-point type, so an invariant could map to
-  `initialization` or `handler`. No source is invented here. The planner is taking this to the
-  owner; no FR-011 criterion depends on the answer.
 - OQ-2 (requirement and revision identity): the V1 `ClauseRef` supplied the requirement and
   revision identity for `construct_verdict`. The V2 request (selected clause id and claim
   occurrence) names no such source. The planner owns the answer; the V2 request shape follows the

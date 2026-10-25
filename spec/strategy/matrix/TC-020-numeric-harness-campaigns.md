@@ -34,6 +34,14 @@ exact rates.
 5. Read the runner's proptest global reject count and each campaign conclusion from steps 1 and 4.
 6. Run a generated campaign with a report whose requirement identity is wrong and whose prior
    discarded count already exceeds the configured ceiling.
+7. Generate for accepted QSL bindings at distinct typed execution points, including an invariant
+   bound to initialization and one bound to a handler. Instrument verdict construction and compare
+   its runtime point with the bound request point on every case. For a selection with no binding
+   point, repeat using the caller's typed invocation context.
+8. Independently omit the V2 request point; omit both the binding and caller context points;
+   supply a request point different from the accepted QSL binding point; and, with no binding
+   point, supply one different from the caller invocation point. Inspect each refusal and artifact
+   output. Repeat an invariant case with a point whose variant cannot be inferred from its kind.
 
 ## Expected Results
 
@@ -51,3 +59,9 @@ exact rates.
   `Exhausted`.
 - The report in step 6 returns `IdentityMismatch`; its prior discard does not mask the identity
   failure as `AboveDiscardCeiling`.
+- Step 7 preserves the exact typed point from the accepted QSL binding or caller context, and every
+  constructed verdict receives the corresponding runtime execution point, including both invariant
+  anchors; changing only clause kind never chooses a point.
+- Each missing-point input in step 8 returns `MissingExecutionPoint`; each mismatched-point input
+  returns `ExecutionPointMismatch`. Each refusal produces no artifact. No default execution point
+  is emitted from the selected clause kind.

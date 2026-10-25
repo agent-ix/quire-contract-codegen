@@ -33,6 +33,13 @@ postcondition false, and neither, and cases whose precondition or postcondition 
 undefined (an integer operation that is undefined), with an instrumented snapshot, precondition
 oracle, subject and postcondition oracle that record call order and whether the subject was invoked. Select an unknown clause identity, a clause of the wrong kind, the same clause for
 both selections, and a body outside the FR-014-AC-38 shape. Generate twice and compare bytes.
+Generate with each selected clause's point from its accepted QSL binding and, for a selection
+without a binding point, from its caller's typed invocation context; include different precondition
+and postcondition points. Instrument verdict construction to observe the precondition point on a
+rejected case and the postcondition point on a failed case.
+Independently for either selection, omit the request point, omit both the binding and caller points,
+mismatch the request point against the available binding, and mismatch it against the caller context
+when no binding point exists. Inspect every refusal and artifact output.
 Inspect the generator source for any `BoundPackage`, `ClauseRef`, `quire_contract_model::TypedExpression`
 or `oracle::boolean_v1` use and for any body opened outside `core/ir/`.
 
@@ -56,3 +63,7 @@ wrong selection to yield a typed, located diagnostic naming the selection and no
 an unsupported body to yield a structured unsupported diagnostic, no artifact and no filtering
 fallback (AC-11), and identical bytes on repeat for the same package, clauses and policy (AC-12).
 These controls are planned.
+The V2 point controls require exact typed source-point preservation for both selections and the
+corresponding runtime point in each constructed verdict (FR-002-AC-19). Every missing point produces
+`MissingExecutionPoint`; every mismatch produces `ExecutionPointMismatch`; both produce no artifact
+and neither infers a point from clause kind (AC-20). These controls are planned.
