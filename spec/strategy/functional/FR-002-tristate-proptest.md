@@ -7,8 +7,6 @@ relationships:
     type: depends_on
   - target: ix://agent-ix/quire-contract-codegen/interface-001
     type: implements
-  - target: ix://agent-ix/quire-contract-ir/IR-1013
-    type: depends_on
 ---
 # FR-002: Generate tri-state harnesses and shaped strategies
 
@@ -145,6 +143,7 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
 ## Dependencies
 
 - **Upstream**: [FR-014](../../oracle/functional/FR-014-exact-scalar-oracles.md);
+  QSL-1082 (accepted binding point on the V2 carrier; planned prerequisite);
   IR-1013 (Contract IR typed accessor for the selected accepted QSL clause binding point; planned,
   blocks the V2 execution-point slice).
 - **Downstream**: bound numeric/state-scalar refinement in

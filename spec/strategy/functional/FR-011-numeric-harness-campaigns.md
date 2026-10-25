@@ -23,8 +23,6 @@ relationships:
     type: depends_on
   - target: ix://agent-ix/quire-contract-runtime/interface-001
     type: depends_on
-  - target: ix://agent-ix/quire-contract-ir/IR-1013
-    type: depends_on
 ---
 # FR-011: Run numeric oracle-conformance campaigns and report rates
 
@@ -150,6 +148,7 @@ until specified.
 
 - **Upstream**: [FR-002](./FR-002-tristate-proptest.md) campaign policy and conclusions;
   quire-contract-runtime FR-001, FR-003, FR-004, and interface-001;
+  QSL-1082 (accepted binding point on the V2 carrier; planned prerequisite);
   IR-1013 (Contract IR typed accessor for the selected accepted QSL clause binding point; planned,
   blocks this V2 execution-point slice);
   [FR-008](./FR-008-bound-domain-strategy-admission.md) (the selected claim's V2 comparison
