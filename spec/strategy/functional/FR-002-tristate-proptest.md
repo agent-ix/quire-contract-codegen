@@ -51,11 +51,12 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
 - Planned (IR-364): the generated V2 campaign has a distinct
   `V2HarnessCampaignResult::NonCompleted` terminal variant carrying that case result and a
   `V2HarnessCampaignSummary`. The summary retains the runtime report's prior accepted,
-  rejected, failed, and discarded counts, plus CG-owned `non_completed` and `attempted` counts.
+  rejected, failed, and discarded counts, plus CG-owned `non_completed` and
+  `attempted: Option<u64>` counts.
   For the first stopped case with a report below its count limit, `non_completed` is one and
-  `attempted` is the runtime report's `counts().total()` plus one; the stopped evaluation is an
+  `attempted` is `Some(runtime report counts().total() + 1)`; the stopped evaluation is an
   attempt even though no runtime verdict is recorded. A report already at its count limit
-  retains that limit signal, and the V2 summary marks its exact attempted count unavailable
+  retains that limit signal, and the V2 summary sets `attempted` to `None`
   while still recording one non-completed case. Completed cases retain `non_completed` zero
   and their existing attempted count. Failed remains a subset of accepted.
 - Planned (IR-815): generation refusals `HarnessErrorCode::MissingClaimOccurrence`,
@@ -110,7 +111,11 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
   precondition or postcondition identity and accepted typed `ExecutionPoint`.
 - Planned (IR-364): if the V2 harness returns a non-completed case result, then the generated
   campaign runner shall return `V2HarnessCampaignResult::NonCompleted` containing that case
-  result and the V2 summary with this case included once in `attempted` and `non_completed`.
+  result and the V2 summary with this case included once in `non_completed` and, when exact
+  counting is available, once in `attempted`.
+- Planned (IR-364): if the supplied runtime report's snapshot is `at_limit` when a V2 oracle
+  stops, then the V2 campaign runner shall set its terminal summary's exact `attempted` to
+  `None` rather than derive a count from saturated runtime counters.
 - Planned (IR-364): for a non-completed case, the V2 harness shall not construct a runtime
   verdict or record one in the runtime report.
 - Planned (IR-364): for a non-completed case, the V2 campaign runner shall not return a successful
@@ -203,6 +208,7 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
 | FR-002-AC-21 | PLANNED (IR-815). The V2 harness header, `RequirementId`, `RevisionId`, source map, and symbols carry the FR-011 canonical `qocc2_`/`qpkg2_` renderings of each driver's selected FR-331 claim's full occurrence key and the same admitted package's full `package_id`; changing one occurrence component or one package-id field changes the corresponding rendered text. | Test (TC-004) |
 | FR-002-AC-22 | PLANNED (IR-815). For either selection, an out-of-driver missing or non-claim occurrence returns `HarnessErrorCode::MissingClaimOccurrence`, a referenced model element absent from the admitted V2 relation returns `HarnessErrorCode::UnboundModelElement` naming it, and a process FR-331 owner differing from the admitted package returns `HarnessErrorCode::OwnerIdentityMismatch`. Each produces no artifact. A linked request uses one driver-exported/E4-emitted/E5-admitted package and a selected claim checked against that package; a foreign claim absent from it returns `HarnessErrorCode::MissingClaimOccurrence`. QSL `export_bindings`, process package-byte/id, and linked E4/E5 handoff refusals retain their own upstream causes. | Test (TC-004) |
 | FR-002-AC-23 | PLANNED (IR-815). At a V2 harness identity text comparison boundary, malformed, truncated, case-folded, or otherwise noncanonical `qocc2_`/`qpkg2_` text returns `HarnessErrorCode::InvalidIdentityRendering` before publication and without normalizing or mutating a report; exact typed and canonical-text comparisons agree on the accepted selection. | Test (TC-004) |
+| FR-002-AC-24 | PLANNED (IR-364). With a supplied runtime report whose snapshot is `at_limit` before a seeded non-completed V2 oracle case, `V2HarnessCampaignResult::NonCompleted` retains that case and a summary with `non_completed == 1` and exact `attempted == None`; it does not infer an exact prior count from the saturated report. The report's existing counters and `at_limit` signal remain unchanged, and no runtime verdict is constructed or recorded for the stopped case. | Test (TC-004) |
 
 ## Open Questions
 

@@ -58,6 +58,13 @@ unchanged prior runtime counters, and a `V2HarnessCampaignResult::NonCompleted` 
 original case and `V2HarnessCampaignSummary` with `attempted` equal to the report's prior
 `counts().total()` plus one and `non_completed` equal to one. Verify the stop is not reported as a
 rejection, failure, discard, or exhaustion.
+At the CG summary's internal runtime-snapshot read seam, seed a controlled snapshot observation
+with `at_limit == true` and nonzero accepted, rejected, failed, and discarded counts, then drive
+one seeded non-completed oracle case. Verify the production path obtains the limit signal from
+`CampaignReport::snapshot().at_limit()`; observe terminal `attempted == None`,
+`non_completed == 1`, the exact typed stop and selection, unchanged prior report counters and
+limit signal, and zero runtime verdict construction or recording calls. This seam does not add a
+public runtime counter constructor.
 Independently for either selection, supply a wrong-role, wrong-ordinal, and other-node occurrence
 while another authentic occurrence of the node has a point; require no sibling substitution. Then
 select an authentic claim lacking its accepted point beside an authentic sibling of that node with a
@@ -106,6 +113,9 @@ wrong selection to yield a typed, located diagnostic naming the selection and no
 an unsupported body to yield a structured unsupported diagnostic, no artifact and no filtering
 fallback (AC-11), and identical bytes on repeat for the same package, clauses and policy (AC-12).
 These controls are planned.
+An at-limit prior runtime snapshot yields a non-completed V2 terminal result with
+`attempted == None` and `non_completed == 1`, retaining the stop and unchanged report without a
+runtime verdict (FR-002-AC-24). This control is planned.
 The V2 point controls require accepted QSL binding-point preservation for both selections, including
 rejected, failed, passed and non-completed cases (FR-002-AC-19). An absent selected binding point
 returns `HarnessErrorCode::MissingExecutionPoint`; a renderer mutant returns
