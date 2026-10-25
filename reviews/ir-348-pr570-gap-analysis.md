@@ -25,3 +25,9 @@ The computed matrix binds the affected FR-016, FR-017 and FR-032 criteria to tes
 ## Coverage
 
 Plan completion: not assessed. `quire matrix --scope . --format json` at the frozen head reported 927 criteria: 557 tagged, 301 untagged, 16 tagged only by ignored tests and 53 methods without a symbol. The untagged and ignored-only counts are repository-wide existing debt and are not attributed to this PR. The affected FR-016-AC-1/6/25, FR-017-AC-5/12 and FR-032-AC-2/3 are all tagged (3/6/4, 6/9 and 7/10 binders respectively). Reverse trace of the changed public parser and decoder APIs found FR-016, FR-017 and FR-032 ownership; AD-004 L-6 owns the architectural boundary. No changed source or test stub was found. Quoin evidence-backed matrix was not used; the static Quire matrix was used. Optional semantic review was not requested.
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | At 209563808da36b89aafe6e29da468b0e89ab65a6, the `src/replay/state_clause.rs` call to `parsed.matches_generated_postcondition(&expected)` consumes a parsed playback; the output reader alone checks the raw assertion suffix. The tagged FR criteria retain their test bindings. |
