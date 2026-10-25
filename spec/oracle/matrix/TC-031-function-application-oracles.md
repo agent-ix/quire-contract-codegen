@@ -142,7 +142,8 @@ required dependency or target path.
     evidence, agreement with the QSL value authority; text that states the
     boundary (outside CG, owned by IR-842) is permitted.
 12b. Planned owner-path corpus (AC-2, AC-4, AC-5, AC-9, AC-17, AC-32,
-     AC-35 through AC-37; QSL #1483/IR-595). For each retained function
+     AC-35 through AC-37; IR-1007/IR-595, with draft QSL #1483 as the
+     current facade candidate). For each retained function
      vector, call `qsl_replay::acquire_checked_closure` with the seven supplied
      inputs, take `CheckedClosureCompilation::handle()`, and use
      `CheckedClosureHandle::lookup_callable(owner_package_id, wire_node_id)`.
@@ -170,22 +171,44 @@ required dependency or target path.
      the independently admitted Contract IR package, that each generated or
      direct run acquired its closure once, and that CG neither rechecked nor
      reconstructed the package.
+     Give `acquire_checked_closure` malformed source bytes and a separately
+     valid source with an insufficient stage or replay limit. Preserve each
+     exact `AdmittedRefusal` and assert no `CheckedClosureHandle`, registry,
+     body invocation or application charge is produced for either failure.
      Compare `handle.package_id()` to the CG admitted unit package id and
      `selection.owner_package_id()` and read-only `selection.key()` bytes to
      the declaring package and function id; the selection, not that key, is
      registration and Begin authority. Pair the admitted CG request for A
-     with a separately authentic QSL
-     acquisition for B, and separately select a different admitted callable
-     in A's checked closure. In either identity mismatch, assert the affected
+     with a separately authentic QSL acquisition for B to exercise the unit
+     package mismatch. To exercise the selection mismatch, obtain a genuine
+     second `CallableSelection` by a successful lookup of a different admitted
+     callable in A's same acquired closure and pass it to CG's private
+     post-lookup identity-validation function with the original request ids.
+     Production shall pass only its own lookup result to that same function.
+     Neither path constructs a selection. For each mismatch assert the affected
      item has
      `OwnerIdentityMismatch` before registration, Begin, body invocation or
      charge, while a matching sibling remains unchanged. A failed QSL lookup
-     retains its exact `CallableLookupRefusal` cause instead of that mismatch
-     refusal. Register and Begin with a selection from a second acquisition
+     retains its exact `CallableLookupRefusal` cause in
+     `ClaimDisposition::Refused { refusal: ExactFunctionRefusal::FacadeLookup
+     { cause } }` instead of that mismatch refusal. Register and Begin with a
+     selection from a second acquisition
      and assert exact `SelectionRefusal::WrongAcquisition` and
-     `ApplicationBeginRefusal::WrongAcquisition` before charge. Check a failed
-     registration or Begin does not run a body or charge a meter and a
-     successful Begin seals that registry. Keep `qsl_replay::replay` in the
+     `ApplicationBeginRefusal::WrongAcquisition` in the typed claim-map
+     `SelectionRefused` and `ApplicationBeginRefused` causes before charge.
+     Exercise each non-`Accepted` registration outcome, including
+     `SignatureMismatch`, `DuplicateBinding`, `CallableNotAdmitted` and
+     `RegistrySealed`, plus `ApplicationBeginRefusal::Call(CallFailure)`,
+     through CG's private typed result-mapping functions. Use genuine facade
+     responses for reachable integration cases and typed variant inputs for
+     outcomes the admitted facade cannot produce; both routes shall assert
+     the exact outcome or cause in `RegistrationNotAccepted` or
+     `ApplicationBeginRefused` for the affected claim. Check a failed
+     registration or Begin does not run a body or charge
+     a meter and a successful Begin seals that registry. Inspect CG and the
+     emitted oracle crate dependencies for direct `quire-eval`, `quire-exact`
+     and `quire-semantic-value` beside `qsl-replay`, and for no RT `exact` or
+     direct QSL evaluator/checker internals. Keep `qsl_replay::replay` in the
      separate Kani witness settlement test, not this generated-body run. Inject
      a denial at `function.call` and
      compare the stop point and unchanged denied charge. For own and imported

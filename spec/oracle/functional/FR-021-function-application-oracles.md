@@ -160,7 +160,16 @@ session; CG's current schedule and location map do not supply it.
   closure, function binding and typed refusal, or a `Scheduled` disposition
   naming the root instruction slot. A concrete oracle symbol is never
   fabricated by a schedule-only result. CG emits no FR-485 owner-path oracle
-  until the facade and CG consumer are implemented and verified.
+  until the facade and CG consumer are implemented and verified. The planned
+  concrete claim map retains QSL facade causes without relabelling them as
+  identity mismatch: `ExactFunctionRefusal::FacadeLookup { cause:
+  CallableLookupRefusal }`, `::RegistrationNotAccepted { admission: Admission }`
+  for each non-`Accepted` leaf result, `::SelectionRefused { cause:
+  SelectionRefusal }`, and `::ApplicationBeginRefused { cause:
+  ApplicationBeginRefusal }`. Each remains a `ClaimDisposition::Refused` for
+  the affected item, with no concrete oracle symbol or application charge.
+  Private CG result-mapping functions accept these typed facade results; the
+  production path and isolated variant tests call the same functions.
 - A location map of constant-size parent-linked occurrence records as defined
   above, encoded as deterministic positional arrays with node ids in a shared
   dictionary so long field names and node ids are not repeated per record.
@@ -274,19 +283,31 @@ session; CG's current schedule and location map do not supply it.
   registration, Begin or any application charge. A sibling with a matching
   identity retains its own disposition. The selected id is compared only
   after QSL lookup has admitted it; CG does not construct a checked key.
-- For a matching `CallableSelection`, the concrete oracle shall create its
-  `ApplicationRegistry` from the same `CheckedClosureHandle`, register the
-  generated `quire_eval::BodyFactory` with `selection.signature()`, and require
-  `Ok(Admission::Accepted)` before Begin. It shall pass the selection,
-  completed `Vec<quire_exact::Value>` arguments, an
-  `ApplicationEnvironment` made from the caller's admitted `ObjectClosure`,
-  and the caller-owned `quire_exact::Meter` to `begin_call`. The concrete
-  oracle shall step or run the resulting `CheckedApplicationSession` to its terminal leaf
-  `Evaluation` or `CallFailure`; CG shall not dispatch checked expressions or
-  invent a second evaluator. A failed lookup, registration or Begin produces
-  no application charge, while a successful Begin permanently seals that
-  registry. The separate Kani witness path continues to use
-  `qsl_replay::replay` and does not use this generated-body registry.
+- When testing the post-lookup identity guard, CG shall expose a private
+  test-callable validation function that accepts the expected admitted V2
+  unit, declaring-package and function ids, the acquired handle and a genuine
+  `CallableSelection`. Production calls it only with its own lookup result;
+  the test passes a selection obtained by a second successful lookup in the
+  same acquisition. This seam shall not construct a selection or alter the
+  public FR-485 facade.
+- When QSL lookup returns a matching `CallableSelection`, CG shall create
+  `ApplicationRegistry` from the same `CheckedClosureHandle`.
+- When CG registers the generated `quire_eval::BodyFactory`, it shall supply
+  that selection and `selection.signature()` and require
+  `Ok(Admission::Accepted)` before Begin. A non-`Accepted` `Admission` or
+  `SelectionRefusal` shall produce the typed claim-map refusal above, without
+  body invocation or application charge.
+- When registration is accepted, the concrete oracle shall pass that selection,
+  completed `Vec<quire_exact::Value>` arguments, an `ApplicationEnvironment`
+  made from the caller's admitted `ObjectClosure`, and the caller-owned
+  `quire_exact::Meter` to `begin_call`. An `ApplicationBeginRefusal` shall
+  produce its typed claim-map refusal above, without body invocation or
+  application charge. Successful Begin permanently seals the registry.
+- When Begin returns a `CheckedApplicationSession`, the concrete oracle shall
+  step or run it to terminal leaf `Evaluation` or `CallFailure`. CG shall not
+  dispatch checked expressions or invent a second evaluator. The separate
+  Kani witness path shall continue to use `qsl_replay::replay` without this
+  generated-body registry.
 
 ## Acceptance Criteria
 
@@ -323,12 +344,12 @@ session; CG's current schedule and location map do not supply it.
 | FR-021-AC-29 | A 100,000-call linear body produces 100,000 constant-size parent-linked location records; requesting its deepest path under sufficient query limits returns exactly 100,000 child ordinals, and a one-unit-below query limit refuses without a partial path. Generation does not materialize all paths. PLANNED (IR-511). | Test (TC-031) |
 | FR-021-AC-30 | A requested generation work limit of `u64::MAX` returns `InvalidGenerationWorkLimit` before lowering or charging; at `u64::MAX - 1` the first denied count is representable in the `u64` refusal and never wraps or panics. PLANNED (IR-511). | Test (TC-031) |
 | FR-021-AC-31 | No test name, trace tag, test output line or doc comment of the 100,000-node case, no TC-031 step and no oracle-matrix row claims, or presents as evidence, that a generated oracle compiled, ran on a 512 KiB stack or agreed with a shallow equivalent through FR-485 without an actual owner-path run; schedule-source compilation (AC-7) is not execution evidence. The planned FR-485 corpus remains distinct from QSL value-authority agreement (FR-014-AC-47). | Inspection (TC-031) |
-| FR-021-AC-32 | Neither the schedule crate nor any concrete oracle requires `quire_contract_runtime::exact`, an alias, wrapper or compatibility layer; a concrete oracle uses `qsl_replay::acquire_checked_closure`, `CheckedClosureHandle::lookup_callable` and `registry()`, `ApplicationRegistry::register` and `begin_call`, and `CheckedApplicationSession::step` or `run` through the permitted FR-485 facade, without direct QSL evaluator or checker internals. `qsl_replay::replay` remains the separate Kani witness settlement entry. PLANNED pending QSL #1483 and IR-595; close only after inspecting CG imports, emitted source, dependencies and the executed corpus. | Inspection (TC-031) |
+| FR-021-AC-32 | Neither the schedule crate nor any concrete oracle requires `quire_contract_runtime::exact`, an alias, wrapper or compatibility layer; a concrete oracle uses `qsl_replay::acquire_checked_closure`, `CheckedClosureHandle::lookup_callable` and `registry()`, `ApplicationRegistry::register` and `begin_call`, and `CheckedApplicationSession::step` or `run` through the permitted FR-485 facade, without direct QSL evaluator or checker internals. CG and any emitted oracle crate hosting a generated body depend directly on `quire-eval`, `quire-exact` and `quire-semantic-value` beside `qsl-replay`, not on QSL re-exports of leaf types. `qsl_replay::replay` remains the separate Kani witness settlement entry. PLANNED pending IR-1007 and IR-595; close only after inspecting CG imports, emitted source, dependencies and the executed corpus. | Inspection (TC-031) |
 | FR-021-AC-33 | With an IR-admitted `temporal`/`formula`, `temporal`/`fairness` or `expression`/`case` node used directly as an item's call-node id, the claim-map entry retains that id and is `Refused { refusal: ExactFunctionRefusal::Unsupported }`. For the separate declared-body-root case, an item names that function through a distinct, IR-admitted `expression`/`call` node that lowers successfully and has no duplicate, capability, or earlier item refusal; its claim retains the call-node id and carries the body's `ExactFunctionRefusal::Unsupported`. For an IR `Unsupported` lowering record the refusal's `unsupported_node_id` and `node_tag` match its first unsupported reachable node and tag, which can differ from either request root; for a lowered `case` root they name that root and `"expression"`. No affected item is scheduled, given an oracle symbol or location entry, omitted, or panicked, and an unrelated healthy function/item's claim, schedule source and location map are byte-identical to a run without it. AC-11's temporal-clause blocker and existing duplicate/capability/lowering precedence remain unchanged. | Test (TC-031) |
 | FR-021-AC-34 | Given one authentic strict-reader-admitted `CheckedPackageV2` of less than 1,048,576 bytes containing 129 distinct functions with two bound Integer parameters each, 128 acyclic `quire.op.function.call` body-root edges forming one chain and a terminating admitted Scalar body, the public function generator schedules all 129 functions and all 128 call edges from that same checked graph. Use the default 1,048,576-byte Contract IR reader/lowering ceilings and default 1,048,576-byte generated-source ceiling; only the caller-selected generation work limit may be raised to the measured required units. The requested chain item has exactly one `Scheduled` claim naming its root instruction slot, the generated flat SSA schedule contains 128 call instructions with ordered two-argument operands and compiles within the default source limit, no item is refused with `LoweringByteLimitExceeded`, and no `SourceTooLarge` error occurs. Source, claims and location map are byte-identical under request permutation. AC-23's real Scalar/Equality and requested call-item `Failed` mappings, AC-12's isolation, call-node-first precedence and AC-27's source-binding refusals still apply. PLANNED (IR-768). | Test (TC-031) |
-| FR-021-AC-35 | For a concrete FR-485 corpus request, the caller supplies all seven acquisition inputs and the separately admitted Contract IR package. CG calls `qsl_replay::acquire_checked_closure` once for the generated run and receives `CheckedClosureCompilation` with emitted package, admitted context and retained `CheckedClosureHandle`; it does not reconstruct a QSL checked closure from the V2 graph or emitted source. Acquisition failure remains `AdmittedRefusal` and yields no handle. PLANNED pending QSL #1483 and IR-595. | Test (TC-031) |
-| FR-021-AC-36 | CG maps the declaring admitted V2 `package_id` domain and digest exactly to FR-485's `DigestRecord` owner id, and the function's `CheckedNodeId` digest exactly to `WireNodeId` only when its domain is `quire.checked-semantic-node/v1`. The own or imported declaring package is selected explicitly; no cross-domain coercion, rehash, fabricated `NodeKey` or name-only owner substitution occurs. CG calls `CheckedClosureHandle::lookup_callable(owner_package_id, wire_node_id)` and receives a checker-issued opaque `CallableSelection` before registration. It supplies the selection and `selection.signature()` with the generated `BodyFactory` to `ApplicationRegistry::register`, then passes that same selection, completed arguments, environment and caller-owned `Meter` to `begin_call`; a raw key alone is never authority. PLANNED pending QSL #1483 and IR-595. | Test (TC-031) |
-| FR-021-AC-37 | A mismatch between `CheckedClosureHandle::package_id()` and the CG request's admitted unit package id, or between `CallableSelection::owner_package_id()` and read-only check-minted key bytes and the selected function's declaring admitted V2 package id and function node digest respectively, refuses the item as `ExactFunctionRefusal::OwnerIdentityMismatch` before registration, Begin, body invocation or application charge. A matching sibling retains its disposition. A QSL `lookup_callable` refusal remains its exact `CallableLookupRefusal::Unknown`, `Foreign(package_id)` or `WrongKind` cause and is not relabelled `OwnerIdentityMismatch`; a wrong-acquisition registration or Begin refusal retains its exact facade type without a charge. PLANNED pending QSL #1483 and IR-595. | Test (TC-031) |
+| FR-021-AC-35 | For a concrete FR-485 corpus request, the caller supplies all seven acquisition inputs and the separately admitted Contract IR package. CG calls `qsl_replay::acquire_checked_closure` once for the generated run and receives `CheckedClosureCompilation` with emitted package, admitted context and retained `CheckedClosureHandle`; it does not reconstruct a QSL checked closure from the V2 graph or emitted source. Acquisition failure remains `AdmittedRefusal` and yields no handle. PLANNED pending IR-1007 and IR-595. | Test (TC-031) |
+| FR-021-AC-36 | CG maps the declaring admitted V2 `package_id` domain and digest exactly to FR-485's `DigestRecord` owner id, and the function's `CheckedNodeId` digest exactly to `WireNodeId` only when its domain is `quire.checked-semantic-node/v1`. The own or imported declaring package is selected explicitly; no cross-domain coercion, rehash, fabricated `NodeKey` or name-only owner substitution occurs. CG calls `CheckedClosureHandle::lookup_callable(owner_package_id, wire_node_id)` and receives a checker-issued opaque `CallableSelection` before registration. It registers the generated `BodyFactory` with that selection and `selection.signature()`; only `Ok(Admission::Accepted)` permits CG to pass that same selection, completed arguments, environment and caller-owned `Meter` to `begin_call`. A raw key alone is never authority. PLANNED pending IR-1007 and IR-595. | Test (TC-031) |
+| FR-021-AC-37 | A mismatch between `CheckedClosureHandle::package_id()` and the CG request's admitted unit package id refuses the item as `ExactFunctionRefusal::OwnerIdentityMismatch` before registration, Begin, body invocation or application charge. The same refusal follows a mismatch between `CallableSelection::owner_package_id()` and the selected function's declaring admitted V2 package id, or between the selection's read-only check-minted key bytes and that function's node digest. The selection comparisons run in a private post-lookup guard; TC-031 exercises them with a genuine selection from a second successful lookup in the same acquired closure, without fabricating a selection or changing production lookup. A matching sibling retains its disposition. A QSL `lookup_callable` refusal remains its exact `CallableLookupRefusal::Unknown`, `Foreign(package_id)` or `WrongKind` cause in `ClaimDisposition::Refused { refusal: ExactFunctionRefusal::FacadeLookup { cause } }`, not `OwnerIdentityMismatch`; non-`Accepted` registration and wrong-acquisition or leaf Begin refusals retain their exact typed causes in the planned claim-map variants and incur no application charge. PLANNED pending IR-1007 and IR-595. | Test (TC-031) |
 
 ### Mutations these criteria detect
 
@@ -416,8 +437,8 @@ AC-14, AC-16, AC-17, AC-19 and AC-20. The historical port is not the target
 architecture and no compatibility surface is specified. TC-031 records the
 schedule-compilation gate; it does not establish owner-path execution.
 AC-2, AC-4, AC-5's corpus half, AC-9's agreement vectors, AC-17's runtime
-check, AC-32 and AC-35 through AC-37 remain PLANNED pending QSL #1483's
-FR-485 facade, FR-262's root-call-site leaf behavior and the IR-595 CG
+check, AC-32 and AC-35 through AC-37 remain PLANNED pending IR-1007's
+FR-485 facade (currently draft QSL #1483), FR-262's root-call-site leaf behavior and the IR-595 CG
 consumer. IR-853 is Done;
 its obsolete blocked-by text gives no acceptance credit. CG must replace the
 RT `exact` imports and execute the FR-485 corpus before closing these rows.

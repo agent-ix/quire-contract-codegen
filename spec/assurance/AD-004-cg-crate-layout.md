@@ -356,7 +356,11 @@ under FR-029. The current concrete function oracle still imports RT's
 module imports QSL evaluator/checker internals as an alternate path. QSL
 FR-060 T12-A continues to constrain the CG replay adapter to the facade.
 
-The shared `quire-eval` leaf provides the evaluation interface. QSL FR-485's
+The CG concrete oracle and any emitted oracle crate hosting a generated
+`quire_eval::BodyFactory` depend directly on the authoritative `quire-eval`
+leaf beside `qsl-replay`; they also depend on `quire-exact` for values and
+the meter and `quire-semantic-value` for the object closure. QSL
+does not re-export these leaf types. QSL FR-485's
 `qsl_replay` consumer API is implemented in draft QSL PR #1483, with
 `acquire_checked_closure` returning a `CheckedClosureCompilation` whose
 `handle()` supports `lookup_callable` and `registry()`. The registry accepts
