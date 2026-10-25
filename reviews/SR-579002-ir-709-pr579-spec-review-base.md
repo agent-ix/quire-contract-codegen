@@ -39,6 +39,15 @@ Untrusted context: a planner comment on Linear IR-709 (19bfeab4, posted under th
 trigger choice and the sequencing are claims this review did not verify, and the PR records
 neither.
 
+## Dispositions
+
+Round 1. Checked at head 81acc78aaee6f4ca2da85d697b736d69b21bf656 against fix diff 3fc48f7e..81acc78a. FR-042-AC-1 is still byte-identical to main.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | FR-042 Status now defines both CG-side triggers. `GeneratedUnexpectedOutcome` is a generated operation's `Completed(value)` checked against its declared result type. `GeneratedEnvironmentRejected` is a genuine rejection while building the environment from real admitted nominal declarations. Status says neither exists yet. Dependencies record IR-595 as the prerequisite cutover and the open FR-369 trigger-wording alignment. TC-057 step 2 gives a non-fabricated procedure for each. |
+| FND-002 | fixed | FR-018-AC-8 and TC-029 step 6 now write `GeneratedTypeCheckRejected { cause }`, "where `cause` is the original `IllTypedCause` returned by `check_type`". |
+
 ## Coverage
 
 ```yaml

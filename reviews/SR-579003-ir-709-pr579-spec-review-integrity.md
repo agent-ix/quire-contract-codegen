@@ -35,6 +35,15 @@ assignments. The FR-369 table also says the two absent rows "remain required tar
 assignments". The FR-018 payload names for `GeneratedTypeCheckRejected` and
 `GeneratedEqualityCheckRejected` agree with FR-369, including the nested `IllTypedCause`.
 
+## Dispositions
+
+Round 1. Checked at head 81acc78aaee6f4ca2da85d697b736d69b21bf656 against fix diff 3fc48f7e..81acc78a and quire-exact FR-369 on origin/main.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The reconstruction bullet now ends at `EnvironmentError::Reconstruction`, and "the oracle is not called with that failed preparation". A new bullet assigns `GeneratedDescriptorReconstructionFailed` to FR-369's trigger, and the prepared-wrapper paragraph (FR-018:328) now names the typed cause. Both match FR-369's row and its separate `EnvironmentError` path. |
+| FND-002 | fixed | FR-042 Dependencies now states that the remaining unit-style or family-only wording in FR-018 and TC-029 still needs alignment and is not claimed complete. FR-018:328 is aligned. FR-018:792 and TC-029:557/579 remain as family references, but they are now recorded as open. |
+
 ## Coverage
 
 ```yaml

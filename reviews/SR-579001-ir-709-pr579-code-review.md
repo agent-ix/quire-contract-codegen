@@ -50,6 +50,14 @@ does not claim the two missing causes landed. The AC-8 and TC-029 step 6 payload
 FR-018 Behavior payload text at line 430 matches both oracle arms. FND-001 is the only claim that
 disagrees with source.
 
+## Dispositions
+
+Round 1. Checked at head 81acc78aaee6f4ca2da85d697b736d69b21bf656 against fix diff 3fc48f7e..81acc78a, with merge-base main c62487bf. `make spec` passes at that head.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | FR-018-AC-17 and TC-029 step 7 now say that a `rebuild_*` Err arm yields `EnvironmentError::Reconstruction` "without calling the oracle". `GeneratedDescriptorReconstructionFailed` moves to a separate clause covering a wrong prepared binding, package identity, context requirement or admitted-context identity, which matches `oracle_{symbol}` at src/oracle/equality/mod.rs:1963. |
+
 ## Coverage
 
 Not run, per brief: Rust gates (`make test`, `make lint`, `make ci`). `make spec` passed at the
