@@ -71,3 +71,46 @@ bindings:
   - {test_id: tc_024_ac39_scalar_generator_and_generated_crates_hold_no_panic_site, ac_id: FR-014-AC-39, trace: correct}
   - {test_id: tc_024_ac42_only_the_shared_classifier_reads_a_failed_records_limit_kind, ac_id: FR-014-AC-42, trace: correct}
 ```
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | low | FR-014-AC-42 and TC-024 step 4 now place the single scalar `Failed` arm "in `src/oracle/scalar/lower.rs`", but no test asserts that location. `tc_024_ac42_*` concatenates the four scalar files and asserts one arm overall, so it passes if the arm moves to `render.rs` or `derive.rs`. Either assert the arm's file or drop the location clause the fix added. | spec/oracle/functional/FR-014-exact-scalar-oracles.md:578; spec/oracle/matrix/TC-024-exact-scalar-oracles.md:312; tests/it/exact_scalar_generation.rs:3621-3640 |
+
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | low | The round-2 FR-014-AC-42 text places `limit_kind` per file: the refusal field "in `mod.rs`", its conversion "in `lower.rs`", and "`derive.rs` and `render.rs` do not name it". `tc_024_ac42_*` still checks `limit_kind` only over the concatenated scalar text (count 3 plus two `contains` checks), so those location clauses have no test. Reviewer mutation: moving `impl From<LoweringFailure> for ExactScalarRefusal` from `lower.rs` to `render.rs` leaves `tc_024_ac42_*` passing while AC-42 becomes false. Either count `limit_kind` per scalar file (1 in `mod.rs`, 2 in `lower.rs`, 0 in `derive.rs` and `render.rs`) or drop the per-file clauses. | spec/oracle/functional/FR-014-exact-scalar-oracles.md:578; tests/it/exact_scalar_generation.rs:3640-3700; src/oracle/scalar/lower.rs:197-216 |
+
+## Dispositions
+
+### Round 1 — exact `da6d12a72e92f080eaae4887dfd52b122c4777a5` (fix diff `1aa7807f..da6d12a7`)
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The FR-014 statement (line 525), FR-014-AC-39 (575), FR-014-AC-42 (578), TC-024 step 4 (309-313) and panic-scan step 1 (318) now name all four scalar files, and AC-42 names the arm's actual file. The sole scalar non-test `CompleteLoweringRecordV2::Failed` arm is at `lower.rs:191`. No criterion is narrowed: the scanned set grows from one file to four, and the equality and function obligations, the token set and the exclusion rules are unchanged. `quire validate` exits 0 on both files. The wording and location-test residuals are recorded separately as SR-17018 FND-001 and FND-004 above. |
+| FND-002 | fixed | `MUST_SCAN` (`no_generation_panics.rs:27-40`) is now 12 entries, adding `scalar/derive.rs`, `lower.rs` and `render.rs`. `no_generation_panics::` passes inside the reviewer's 96/96 `it` run. |
+| FND-003 | fixed | `aggregate_members`, `bound_members`, `literal`, `literal_integer` and `literal_count` moved from `oracle/checked_graph.rs` to `core/ir/checked_term.rs`. The six bound readers and the six `*_MEMBERS` tables moved from `scalar/lower.rs` to `core/ir/scalar_bounds.rs`, with bodies byte-identical to `1aa7807f`. Equality, function, `kani/generate/frame.rs` and `kani/generate/scalar.rs` import them from `core::ir`, and no scalar-stage export remains for shared readers. `core/ir` imports only quire crates, and the L-2 layout tests pass. The AD's wider typed-node-access migration (70 `.get` sites, L-8) is out of this finding's scope. |
+
+The new finding FND-004 has no outcome yet; it is routed to the coder.
+
+Gap evidence at `da6d12a7`:
+- Test fn, trace and Implements multisets are identical to `1aa7807f`.
+- The moved readers in `core/ir` are scanned by the whole-`src` NFR-005-AC-1 walk with the same `panic_tokens_in` scanner. They emit no string literals, so AC-39's literal counting loses nothing.
+- `exact_scalar_generation::` passes 79 tests, inside the 96/96 `it` run with current QSpec.
+
+Evidence limit: `quire coverage` was not re-run this round. The trace, test and Implements multisets were compared directly instead.
+
+### Round 2 — exact `212bff4c65308b04723a114b01c68a5d381e0038` (fix diff `da6d12a7..212bff4c`)
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-004 | fixed | `tc_024_ac42_*` now counts `CompleteLoweringRecordV2::Failed` in each scalar file's non-test code and asserts 1 for `src/oracle/scalar/lower.rs` and 0 for `mod.rs`, `derive.rs` and `render.rs` (`exact_scalar_generation.rs:3630-3640`), so moving the arm out of `lower.rs` now fails the test. The test passes at this head. |
+
+The new finding FND-005 has no outcome yet; it is routed to the coder.
+
+AC narrowing check, round 2: the only spec change is the FR-014-AC-42 rewrite. Against `origin/main`, the per-file `CheckedPackageLimit` and `.limit_kind` bans, the single unbinding `Failed` arm calling `classify_lowering_failure`, and the equality and function `PackageAccounting` obligations are all retained, over six files instead of three. The one loosening in wording ("any conversion" for the equality and function files) is recorded as SR-17018 FND-002. The PR touches no FR-015, FR-037 or FR-039 text.
+
+Gap evidence at `212bff4c`: `exact_scalar_generation::`, `no_generation_panics::`, `checked_term_consumers::` and `layout::` pass 96/96 with current QSpec, and lib `oracle::scalar::` and `core::ir::` pass 22/22. The fix diff adds and removes no `#[trace]`, `#[test]` or `// Implements:` line. `quire validate` on FR-014 and TC-024 exits 0; its one warning (FR-014 line 269) is pre-existing.
