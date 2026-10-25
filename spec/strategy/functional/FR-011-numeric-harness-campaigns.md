@@ -76,8 +76,13 @@ until specified.
     observation carries the runtime's invariant clause kind, which quire-contract-runtime
     implements but does not yet specify.
 - When a V2 claim is selected, the generator shall call the planned Contract IR FR-058 typed
-  accessor with the admitted package, checked clause id, and authentic `claim` occurrence, and use
-  only the returned accepted QSL binding point.
+  accessor with the admitted package, checked clause id, and selected `claim` occurrence.
+- The generator shall use only the accepted QSL binding point returned for that exact tuple.
+- If the accessor returns `UnknownClause`, then the generator shall return the existing
+  `StrategyErrorCode::UnknownClause` and no artifact before checking occurrence authenticity.
+- If the accessor returns `NotStateClause`, then the generator shall return the existing
+  `StrategyErrorCode::UnsupportedClauseKind` and no artifact before checking occurrence
+  authenticity.
 - If the selected occurrence is not an authentic `claim` of that checked clause in that package,
   then the generator shall return `StrategyErrorCode::MissingClaimOccurrence` and no artifact.
 - The generator shall not substitute another occurrence of the same checked clause node for the
@@ -142,8 +147,8 @@ until specified.
 | FR-011-AC-3 | The census runner evaluates each of the 10 `VersionUnchanged` in-domain census cases exactly once, in census order, and evaluates none of the out-of-domain cases. | Test (TC-020) |
 | FR-011-AC-4 | A campaign over a report seeded with fixed prior counts returns `discard_rate() == Some((discarded, attempted))` and `rejection_rate() == Some((rejected, attempted))` with those exact values, a fresh zero-attempt summary returns `None` for both, and a runtime snapshot whose counters are `at_limit` returns `None` for both through the generated snapshot-summary operation. | Test (TC-020) |
 | FR-011-AC-5 | A fresh 10,000-case `Broad` campaign for each fixture returns `discard_rate() == Some((0, attempted))` with `attempted > 0`, passes a zero discard ceiling, and does not end `Exhausted`. | Test (TC-020) |
-| FR-011-AC-6 | For a selected checked clause id and authentic `claim` occurrence in one admitted V2 package, every constructed verdict carries the runtime point rendered from the accepted QSL binding of that exact tuple, with variant and anchor name preserved. Invariant fixtures at both initialization and handler anchors, and two distinct handler anchors, produce distinct runtime point strings; `Precondition` and `Postcondition` fixtures preserve their own binding points. Two authentic claim occurrences on one invariant node with identical clause kind and body anchor but different accepted points yield their distinct rendered points. | Test (TC-020) |
-| FR-011-AC-7 | A wrong-role, wrong-ordinal, or other-node `claim` occurrence returns `StrategyErrorCode::MissingClaimOccurrence` and no artifact, even when another authentic occurrence of the selected node has a point. An authentic selected tuple lacking an accepted binding point returns `StrategyErrorCode::MissingExecutionPoint` and no artifact. A render mutant that changes only the generated runner's execution point returns `StrategyErrorCode::ExecutionPointMismatch` and no artifact before publication. An invariant's clause kind supplies no point: two otherwise equivalent invariant bindings at distinct anchors produce their distinct bound runtime points. | Test (TC-020) |
+| FR-011-AC-6 | For a selected checked clause id and authentic `claim` occurrence in one admitted V2 package, every constructed verdict carries the runtime point rendered from the accepted QSL `ClauseBinding.execution_point` of that exact tuple, with variant and anchor name preserved. Invariant fixtures at both initialization and handler anchors, and two distinct handler anchors, produce distinct runtime point strings; `Precondition` and `Postcondition` fixtures preserve their own binding points. Two authentic claim occurrences on one invariant node with identical clause kind and body anchor but different accepted points yield their distinct rendered points. | Test (TC-020) |
+| FR-011-AC-7 | An absent checked clause maps Contract IR FR-058 `UnknownClause` to `StrategyErrorCode::UnknownClause`; a non-state-clause maps `NotStateClause` to `StrategyErrorCode::UnsupportedClauseKind`, before occurrence checks and with no artifact. A wrong-role, wrong-ordinal, or other-node `claim` occurrence returns `StrategyErrorCode::MissingClaimOccurrence` and no artifact, even when another authentic occurrence of the selected node has a point. An authentic selected tuple lacking an accepted binding point returns `StrategyErrorCode::MissingExecutionPoint` and no artifact, even when another authentic occurrence of that node has a point. A render mutant that changes only the generated runner's execution point returns `StrategyErrorCode::ExecutionPointMismatch` and no artifact before publication. An invariant's clause kind supplies no point: two otherwise equivalent invariant bindings at distinct anchors produce their distinct bound runtime points. | Test (TC-020) |
 
 ## Open Questions
 

@@ -23,9 +23,11 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
   `claim` `CheckedOccurrence`. Planned (IR-1013, FR-058): Contract IR's typed accessor, which does
   not yet exist, returns each selected tuple's accepted QSL `ClauseBinding.execution_point` as its
   owned `quire_contract_model::ExecutionPoint` (variant and `AnchorName`). QSL owns `ClauseBinding`.
-  One checked clause node may have multiple authentic claims with distinct points; the two harness
-  selections may also have different points. A selected clause identity in the V2 harness includes
-  its authentic claim occurrence, so repeated selection in FR-002-AC-12 names the same full tuple.
+  One checked clause node may have multiple authentic claims; precondition claims sharing one body
+  and operation anchor share one `Pre` point, and postcondition claims sharing one body and operation
+  anchor share one `Post` point (QSpec FR-341). The two harness selections may have different points.
+  For FR-002-AC-12, a repeated V2 selection names the same checked clause id and authentic claim
+  occurrence; the clause identity checks of FR-002-AC-10 retain their original scope.
   The caller supplies no separate point. The requirement
   and revision identity source remains open (Open Questions).
 
@@ -86,7 +88,12 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
 - Planned (IR-815): if a selected clause body is outside the FR-014-AC-38 shape, then the V2
   harness generator shall return a structured unsupported diagnostic and no artifact, with no
   fallback to filtering.
-- When a V2 precondition and postcondition are selected, the V2 harness generator shall call the planned Contract IR FR-058 accessor for each admitted package, checked clause id, and authentic `claim` occurrence tuple and take only that tuple's accepted QSL binding point (planned, IR-815).
+- When a V2 precondition and postcondition are selected, the V2 harness generator shall call the planned Contract IR FR-058 accessor for the one admitted package and each selected checked clause id and `claim` occurrence tuple (planned, IR-815).
+- Planned (IR-815): the V2 harness generator shall take each execution point only from the
+  accepted QSL binding point returned for that exact selection.
+- Planned (IR-815): the V2 harness generator shall validate each selected clause id's existence,
+  expected kind, and distinctness under FR-002-AC-10 before checking its claim occurrence under
+  FR-002-AC-20; an unknown clause id or wrong kind retains AC-10's typed, located diagnostic.
 - Planned (IR-815): if either supplied occurrence is not an authentic `claim` of its selected
   checked clause in that package, then the harness generator shall return
   `HarnessErrorCode::MissingClaimOccurrence`, name that selection, and produce no artifact.
@@ -135,8 +142,8 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
 | FR-002-AC-16 | PLANNED (IR-815). A seeded V2 case on which the precondition or postcondition oracle returns an outcome that does not complete (stopped or undefined) is reported as a non-completed case retaining the oracle's cause, is not counted as a pass. | Test (TC-004) |
 | FR-002-AC-17 | PLANNED (IR-815). A seeded V2 case on which the precondition oracle returns an outcome that does not complete does not invoke the subject. | Test (TC-004) |
 | FR-002-AC-18 | PLANNED (IR-815). A seeded V2 case on which the precondition oracle returns an outcome that does not complete does not evaluate the postcondition oracle. | Test (TC-004) |
-| FR-002-AC-19 | PLANNED (IR-815). Each V2 selection preserves the accepted QSL `ClauseBinding.execution_point` for its exact admitted package, checked clause id, and authentic `claim` occurrence through the injective runtime rendering; precondition and postcondition points may differ, and two requests selecting different authentic occurrences of the same checked clause node preserve their distinct points. A rejection carries the precondition point; a failed or passed verdict after completed postcondition evaluation carries the postcondition point; a non-completed case carries the point of the oracle that did not complete and retains its cause without counting as a pass. | Test (TC-004) |
-| FR-002-AC-20 | PLANNED (IR-815). For either selected V2 clause, a wrong-role, wrong-ordinal, or other-node `claim` occurrence yields `HarnessErrorCode::MissingClaimOccurrence` and no artifact even if a sibling occurrence has a point; an authentic selected tuple with no accepted point yields `HarnessErrorCode::MissingExecutionPoint` and no artifact; a render mutant that changes only that selection's generated harness or verdict point yields `HarnessErrorCode::ExecutionPointMismatch` before publication and no artifact. Each diagnostic names the affected precondition or postcondition selection, and no point is inferred from clause kind. | Test (TC-004) |
+| FR-002-AC-19 | PLANNED (IR-815). Each V2 selection preserves the accepted QSL `ClauseBinding.execution_point` for its exact admitted package, checked clause id, and authentic `claim` occurrence through the injective runtime rendering; precondition and postcondition points may differ. Two requests selecting different authentic claims on the same precondition node each retain that node's accepted `Pre` operation point while selecting the correct occurrence. A rejection carries the precondition point; a failed or passed verdict after completed postcondition evaluation carries the postcondition point; a non-completed case carries the point of the oracle that did not complete and retains its cause without counting as a pass. | Test (TC-004) |
+| FR-002-AC-20 | PLANNED (IR-815). After FR-002-AC-10's clause id, kind, and distinctness checks, a wrong-role, wrong-ordinal, or other-node `claim` occurrence for either selected V2 clause yields `HarnessErrorCode::MissingClaimOccurrence` and no artifact even if a sibling occurrence has a point; an authentic selected tuple with no accepted point yields `HarnessErrorCode::MissingExecutionPoint` and no artifact even if another authentic occurrence of that node has a point; a render mutant that changes only that selection's generated harness or verdict point yields `HarnessErrorCode::ExecutionPointMismatch` before publication and no artifact. Each diagnostic names the affected precondition or postcondition selection, and no point is inferred from clause kind. | Test (TC-004) |
 
 ## Open Questions
 
