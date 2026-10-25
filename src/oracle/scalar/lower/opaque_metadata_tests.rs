@@ -5,7 +5,8 @@
 //! operation metadata. The fixture extension is authored here; it carries no
 //! claim of QSL compilation or generated oracle behavior.
 
-use super::{narrowing, references, Graph, Narrowing};
+use super::Graph;
+use super::{narrowing, references, Narrowing};
 use crate::core::canonical;
 use ix_trace_rs::trace;
 use quire_canonical::Limits;

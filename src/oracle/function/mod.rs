@@ -136,9 +136,10 @@ use crate::core::contract_package::{
     routed_contract_lowering_profile, ContractDriverResultSelection, ContractRequestPosition,
     PackageItem, PackageItems, PackageRequestError,
 };
+use crate::core::ir::checked_term::aggregate_members;
 use crate::core::naming::{bounded_readable_component, unique_names};
 use crate::core::profile::oracle_crate_manifest;
-use crate::oracle::checked_graph::{aggregate_members, CheckedGraph, GraphBody};
+use crate::oracle::checked_graph::{CheckedGraph, GraphBody};
 use crate::oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
 use crate::oracle::equality::EqualityOperatorKind;
 use crate::oracle::operator_catalog::IntegerOperator;

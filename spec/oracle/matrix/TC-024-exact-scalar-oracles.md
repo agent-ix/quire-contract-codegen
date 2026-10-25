@@ -306,16 +306,16 @@ by quire-integration IR-842.
    `diagnostics`; each is `LoweringLimitUnrecognised` with `limit_kind` the snake_case name and the
    record's `limit` and `consumed`, with no panic and never `LoweringWorkExhausted`
    (FR-014-AC-41).
-4. Take the non-test code of `src/oracle/scalar/mod.rs`, `src/oracle/equality/mod.rs` and
+4. Take the non-test code of `src/oracle/scalar/mod.rs`, `src/oracle/scalar/derive.rs`, `src/oracle/scalar/lower.rs` and `src/oracle/scalar/render.rs`, `src/oracle/equality/mod.rs` and
    `src/oracle/function/mod.rs` with `non_test_code` and `comments_stripped`, find no
    `CheckedPackageLimit` and no `.limit_kind` access, `limit_kind` named only in the
-   unrecognised-kind refusal and its conversion, and in each exactly one `Failed` arm that binds
+   unrecognised-kind refusal and its conversion, and across the scalar files exactly one `Failed` arm in `src/oracle/scalar/lower.rs` that binds
    nothing and calls `classify_lowering_failure` (FR-014-AC-42).
 
 ## Panic-free source scan
 
 1. Source-level scan (FR-014-AC-39). Read the `src/lib.rs` of every crate any step of this
-   test case generates (all sections above) and the non-test text of `src/oracle/scalar/mod.rs`
+   test case generates (all sections above) and the non-test text of `src/oracle/scalar/mod.rs`, `src/oracle/scalar/derive.rs`, `src/oracle/scalar/lower.rs` and `src/oracle/scalar/render.rs`
    (comments and every `#[cfg(test)]` item removed wherever the item sits, string literals kept),
    and assert zero panic tokens as FR-014-AC-39 defines them: `unwrap`, `expect`,
    `unwrap_unchecked`, `unwrap_err`, `expect_err`, `unwrap_err_unchecked`, `panic_any` and

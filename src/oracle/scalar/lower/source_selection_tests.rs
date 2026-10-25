@@ -3,7 +3,8 @@
 
 //! Admitted scalar source-selection work controls.
 
-use super::{generate_contract_scalar_oracles, source_selection_work};
+use super::super::generate_contract_scalar_oracles;
+use super::source_selection_work;
 use crate::core::contract_package::{
     routed_contract_lowering_profile, ContractDriverResultSelection, ContractRequestPosition,
 };
