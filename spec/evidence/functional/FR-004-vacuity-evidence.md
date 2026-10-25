@@ -25,8 +25,12 @@ per-requirement vacuity report without executing a coverage producer itself.
 - The IR-owned bound executable clause population, including clause identities, typed expressions,
   clause kinds, execution anchors, and dependency/declaration context.
 - Planned (IR-815): for the V2 analyzer, the executable clauses of an admitted `CheckedPackageV2`,
-  read through the `core/ir/` layer of AD-004, in place of the V1 bound population. The source of
-  each clause's execution anchor and of the requirement and revision identity is open (below).
+  read through the `core/ir/` layer of AD-004, in place of the V1 bound population. Each selected
+  clause's execution point is the explicit typed point carried in the V2 generation request and
+  authenticated against its accepted QSL binding, or against the caller's typed invocation context
+  when no binding supplies a point, under FR-011. A missing or mismatched point is refused before
+  runner publication; clause kind supplies no default. The V2 source of the requirement and
+  revision identity remains open (below).
 - Generated Rust/source-map bytes with entry probes and the independently derived implication census.
 - LLVM coverage JSON export bytes captured directly from the LLVM export child started by the
   CG campaign runner for this invocation, its tool and version, and native runtime campaign
@@ -235,12 +239,13 @@ this analyzer supplies execution observations and the coverage-obligation decisi
 
 ## Open Questions
 
-- OQ-1 (anchor and identity): the V2 source of a clause's execution anchor and of the requirement
-  and revision identity is the open question recorded as FR-011 OQ-1 and OQ-2, and the V2 entry
-  shape follows the open interface-001 direction. FR-004-AC-16 to AC-24 do not depend on the
-  answer and none invents a source. The V2 analyzer must also meet FR-004-AC-10, AC-11 and AC-14,
-  which bind the run's requirement and revision, so deleting the V1 `analyze_bound_coverage` waits
-  on the FR-011 OQ-2 identity answer as well as on these criteria.
+- OQ-2 (requirement and revision identity): the V2 source of these identities remains the open
+  FR-011 OQ-2 decision. The explicit per-clause execution point above settles FR-011 OQ-1 for
+  this analyzer; it does not supply or infer requirement or revision identity. FR-004-AC-16 to
+  AC-24 do not depend on that identity answer and none invents a source. The V2 analyzer must also
+  meet FR-004-AC-10, AC-11 and AC-14, which bind the run's requirement and revision, so deleting
+  the V1 `analyze_bound_coverage` waits on the FR-011 OQ-2 identity answer as well as on these
+  criteria.
 
 ## Dependencies
 
