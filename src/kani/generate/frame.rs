@@ -26,22 +26,22 @@
 //! The subject ABI is fixed and documented on [`StateFrameRequest`]. Nothing in this module runs
 //! the prover; `execute_kani_obligation` does.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::{num::NonZeroU64, time::Duration};
 
 use quire_contract_model::{
     ApplicationOperator, CheckedFrameModification, CheckedMemberType, CheckedNodeId,
-    CheckedNodeTag, CheckedPackageV2, CheckedSemanticNodeV2, CheckedTerm,
-    CompleteLoweringProfileV2, CompleteLoweringRecordV2, LiteralKind,
+    CheckedNodeTag, CheckedPackageV2, CheckedTerm, CompleteLoweringProfileV2,
+    CompleteLoweringRecordV2, LiteralKind,
 };
 use serde::Serialize;
-use serde_json::Value;
 
 use crate::oracle::operator_catalog::{FrameSymbol, Operator as CatalogOperator};
 use crate::{
     core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES},
     core::identity::{HarnessPath, HarnessSymbol, ModuleSymbol, SymbolError},
     core::ir::checked_term::{aggregate_members, bound_members, literal},
+    core::ir::frame::{application, application_identity, clause_kind, projected_field, Located},
     kani::abi::{adapter_options, i64_literal, KaniSolver},
     kani::generate::outcome::{
         BoundNotResolvedCause, StateFrameLoweringRefusal, StateFrameRefusal, StateFrameRole,
@@ -52,6 +52,8 @@ use crate::{
         StateFrameProperty, StateFrameScope, StateUnrangedField, StateUnrangedReason,
     },
 };
+
+pub(crate) use crate::core::ir::frame::Graph;
 
 /// Work budget for lowering one clause and its closure.
 const LOWERING_WORK_LIMIT: u64 = 65_536;
@@ -545,74 +547,6 @@ fn lowering_refusal(record: CompleteLoweringRecordV2) -> Option<StateFrameLoweri
     }
 }
 
-/// The admitted graph by node id.
-pub(crate) struct Graph<'g> {
-    pub(crate) package: &'g CheckedPackageV2,
-    pub(crate) nodes: BTreeMap<&'g CheckedNodeId, &'g CheckedSemanticNodeV2>,
-}
-
-impl<'g> Graph<'g> {
-    pub(crate) fn of(package: &'g CheckedPackageV2) -> Self {
-        Self {
-            package,
-            nodes: package
-                .graph()
-                .nodes
-                .iter()
-                .map(|node| (&node.node_id, node))
-                .collect(),
-        }
-    }
-
-    /// `term` itself when inline, else the node a `reference` term names.
-    fn follow(&self, term: &'g CheckedTerm, parent: &'g CheckedNodeId) -> Option<Located<'g>> {
-        let CheckedTerm::Reference { target } = term else {
-            return Some(Located {
-                id: parent,
-                node: None,
-                body: term,
-            });
-        };
-        let node = *self.nodes.get(target)?;
-        Some(Located {
-            id: &node.node_id,
-            node: Some(node),
-            body: self.package.term(&node.node_id)?,
-        })
-    }
-}
-
-/// A term resolved to the node holding it.
-struct Located<'g> {
-    id: &'g CheckedNodeId,
-    node: Option<&'g CheckedSemanticNodeV2>,
-    body: &'g CheckedTerm,
-}
-
-/// The arguments of an application of `operator`/`identity`.
-fn application<'a>(
-    body: &'a CheckedTerm,
-    operator: ApplicationOperator,
-    identity: &str,
-) -> Option<&'a [CheckedTerm]> {
-    match body {
-        CheckedTerm::Application {
-            operator: actual,
-            operation,
-            arguments,
-            ..
-        } if *actual == operator && operation.get("identity")?.as_str()? == identity => {
-            Some(arguments)
-        }
-        _ => None,
-    }
-}
-
-/// A declaration key inside the operation catalog's still-untyped member payload.
-fn node_id(value: &Value) -> Option<CheckedNodeId> {
-    serde_json::from_value(value.clone()).ok()
-}
-
 pub(crate) struct ClauseShape {
     /// The clause's parameters: `self` first, then the result and every operation parameter.
     /// Only `self` is a read of the framed state.
@@ -665,7 +599,7 @@ impl ClauseShape {
             .skip(1)
             .map(|parameter| {
                 let decoded = || {
-                    let members = aggregate_members(graph.package.term(parameter))?;
+                    let members = aggregate_members(graph.term(parameter))?;
                     let [name, level] = bound_members(members, ["name", "level"])?;
                     Some((
                         literal(name, LiteralKind::Text)?.to_owned(),
@@ -683,15 +617,15 @@ impl ClauseShape {
         clause: &'g CheckedNodeId,
     ) -> Result<Self, StateFrameRefusal> {
         let malformed = || StateFrameRefusal::MalformedClause { at: clause.clone() };
-        let node = *graph.nodes.get(clause).ok_or_else(malformed)?;
-        if &*node.node_tag != "state" || &*node.semantic_form != "state_clause" {
+        let shape = graph.shape(clause).ok_or_else(malformed)?;
+        if !shape.is("state", "state_clause") {
             return Err(StateFrameRefusal::NotAStateClause {
                 node: clause.clone(),
-                node_tag: node.node_tag.to_string(),
-                semantic_form: node.semantic_form.to_string(),
+                node_tag: shape.tag.to_owned(),
+                semantic_form: shape.form.to_owned(),
             });
         }
-        let body = graph.package.term(clause).ok_or_else(malformed)?;
+        let body = graph.term(clause).ok_or_else(malformed)?;
         let [parameters, anchor, condition] = application(
             body,
             ApplicationOperator::StateClause,
@@ -699,14 +633,7 @@ impl ClauseShape {
         )
         .and_then(|arguments| <&[CheckedTerm; 3]>::try_from(arguments).ok())
         .ok_or_else(malformed)?;
-        let CheckedTerm::Application { operation, .. } = body else {
-            return Err(malformed());
-        };
-        let kind = operation
-            .get("member")
-            .and_then(|member| member.get("clause"))
-            .and_then(Value::as_str)
-            .ok_or_else(malformed)?;
+        let kind = clause_kind(body).ok_or_else(malformed)?;
         if kind != "postcondition" {
             return Err(StateFrameRefusal::NotAPostcondition {
                 clause: kind.to_owned(),
@@ -725,12 +652,20 @@ impl ClauseShape {
             .ok_or_else(malformed)?;
         let anchor = graph
             .follow(anchor, clause)
-            .and_then(|anchor| anchor.node)
+            .and_then(|anchor| anchor.referenced_node)
             .ok_or_else(malformed)?;
         let condition = graph.follow(condition, clause).ok_or_else(malformed)?;
         Ok(Self {
             parameters,
-            scope: read_scope(graph, anchor).ok_or_else(malformed)?,
+            scope: graph
+                .scope(anchor)
+                .map(|scope| StateFrameScope {
+                    operation: scope.operation,
+                    object: scope.object,
+                    anchor: scope.anchor,
+                    frame: scope.frame,
+                })
+                .ok_or_else(malformed)?,
             condition: condition.body.clone(),
         })
     }
@@ -739,7 +674,7 @@ impl ClauseShape {
     fn frame_grants(&self, graph: &Graph<'_>) -> Result<BTreeSet<String>, StateFrameRefusal> {
         let frame = &self.scope.frame;
         let malformed = || StateFrameRefusal::MalformedClause { at: frame.clone() };
-        let body = graph.package.term(frame).ok_or_else(malformed)?;
+        let body = graph.term(frame).ok_or_else(malformed)?;
         let CheckedTerm::Frame {
             modifies,
             creates,
@@ -789,13 +724,7 @@ impl ClauseShape {
         clause: &'g CheckedNodeId,
     ) -> Result<Condition, StateFrameRefusal> {
         let unsupported = || StateFrameRefusal::ConditionNotSupported { at: clause.clone() };
-        let CheckedTerm::Application { operation, .. } = &self.condition else {
-            return Err(unsupported());
-        };
-        let identity = operation
-            .get("identity")
-            .and_then(Value::as_str)
-            .ok_or_else(unsupported)?;
+        let identity = application_identity(&self.condition).ok_or_else(unsupported)?;
         let comparison = StateComparison::from_operation(identity).ok_or_else(unsupported)?;
         let [left, right] = application(&self.condition, ApplicationOperator::Binary, identity)
             .and_then(|arguments| <&[CheckedTerm; 2]>::try_from(arguments).ok())
@@ -863,17 +792,10 @@ impl ClauseShape {
         )
         .and_then(|arguments| <&[CheckedTerm; 1]>::try_from(arguments).ok())
         .ok_or_else(unsupported)?;
-        let CheckedTerm::Application { operation, .. } = read.body else {
+        let (object, name) = projected_field(read.body).ok_or_else(unsupported)?;
+        if object != self.scope.object {
             return Err(unsupported());
-        };
-        let member = operation.get("member").ok_or_else(unsupported)?;
-        let is_own_field = member.get("kind").and_then(Value::as_str) == Some("field")
-            && member.get("declaration").and_then(node_id).as_ref() == Some(&self.scope.object);
-        let name = member
-            .get("name")
-            .and_then(Value::as_str)
-            .filter(|_| is_own_field)
-            .ok_or_else(unsupported)?;
+        }
         // A name read from the graph, not one the caller supplied.
         if !is_identifier(name) {
             return Err(StateFrameRefusal::MalformedClause {
@@ -897,11 +819,12 @@ impl ClauseShape {
             .ok_or_else(|| StateFrameRefusal::MalformedClause {
                 at: dereference.id.clone(),
             })?
-            .node
+            .referenced_node
             .ok_or_else(unsupported)?;
-        let is_self = &*subject.node_tag == "value"
-            && &*subject.semantic_form == "parameter"
-            && self.parameters.first() == Some(&subject.node_id);
+        let is_self = graph
+            .shape(subject)
+            .is_some_and(|shape| shape.is("value", "parameter"))
+            && self.parameters.first() == Some(subject);
         if !is_self {
             return Err(unsupported());
         }
@@ -914,34 +837,6 @@ struct Observation {
     side: Side,
 }
 
-/// The scope of an `operation_anchor` node (QSpec FR-342): its `context`, `operation` and
-/// `frame` bindings, read by name.
-fn read_scope(graph: &Graph<'_>, anchor: &CheckedSemanticNodeV2) -> Option<StateFrameScope> {
-    if &*anchor.node_tag != "state" || &*anchor.semantic_form != "operation_anchor" {
-        return None;
-    }
-    let members = aggregate_members(graph.package.term(&anchor.node_id))?;
-    let [context, operation, frame] = bound_members(members, ["context", "operation", "frame"])?;
-    let target = |term: &CheckedTerm| match term {
-        CheckedTerm::Reference { target } => Some(target.clone()),
-        _ => None,
-    };
-    let (object, frame) = (target(context)?, target(frame)?);
-    let is_frame = graph
-        .nodes
-        .get(&frame)
-        .is_some_and(|node| &*node.node_tag == "state" && &*node.semantic_form == "frame");
-    if !is_frame {
-        return None;
-    }
-    Some(StateFrameScope {
-        operation: literal(operation, LiteralKind::Text)?.to_owned(),
-        object,
-        anchor: anchor.node_id.clone(),
-        frame,
-    })
-}
-
 /// The `i64` range admitted for one selected model state field. The harness generator and
 /// state-clause replay both use this checked reader, so their bounds agree.
 pub(crate) fn field_range(
@@ -949,12 +844,13 @@ pub(crate) fn field_range(
     object: &CheckedNodeId,
     field: &str,
 ) -> Result<(i64, i64), BoundNotResolvedCause> {
-    let fields = graph.package.model_object_fields(object).map_err(|error| {
-        BoundNotResolvedCause::ModelFieldsUnavailable {
+    let fields = graph
+        .package()
+        .model_object_fields(object)
+        .map_err(|error| BoundNotResolvedCause::ModelFieldsUnavailable {
             object: object.clone(),
             error,
-        }
-    })?;
+        })?;
     let member = fields
         .field(field)
         .ok_or_else(|| BoundNotResolvedCause::MemberAbsent {
