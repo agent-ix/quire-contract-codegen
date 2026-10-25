@@ -75,3 +75,7 @@ QSL's pinned `b8d7138` FR-484 *Retained claim inputs* table explicitly names the
 ## Final review verdict
 
 **PASS** at `e1783fdac9b6e79388e38936459c09209e7139c4`: latest outcomes for FND-001 and FND-002 are fixed. This is a scoped reviewer verdict; the code lead owns the one final aggregate gate. `git diff --check f19849bc..HEAD` passed; no branch changes were made by this review.
+
+## Config-only continuation
+
+**PASS** at `3df522f03a0bfb26f3c1675acbb91dca26d79abf`. The delta from `f718d822e045c44e7d3732dd516191f6cce94402` is two lines in `deny.toml`: a crate-specific `AGPL-3.0-or-later` exception for `quire-checked`. `Cargo.lock` resolves that crate from first-party `agent-ix/quire-eval` revision `5317524d2a040d8f030286ecd8f5d0edecd8e177`; its manifest inherits the workspace's `AGPL-3.0-or-later` license. QSL's locked `qsl-replay`, `qsl-eval` and `qsl-package` manifests declare this dependency. The global permissive license allow-list, git-source allow-list, bans and advisories are unchanged. Prior FND-001 and FND-002 remain fixed; no new finding. `git diff --check` passed. The coder reports focused `make deny` PASS; this reviewer did not rerun the aggregate gate.
