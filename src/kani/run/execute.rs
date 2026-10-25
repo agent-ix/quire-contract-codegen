@@ -29,7 +29,7 @@ use crate::kani::{
     identity::ObligationKind,
     output::{
         diagnostics::{KaniNoVerdictDiagnostics, KnownDirectories, ProcessOutput},
-        playback::{counterexample_playback, playback_blocks},
+        playback::{counterexample_from_blocks, playback_blocks, select_counterexample},
         report::{
             members_in_request_order, KaniCheckResult, KaniFailureCause, KaniHarnessReport,
             KaniHarnessStatus, KaniReportRefusal,
@@ -957,7 +957,7 @@ fn finish_group(
                 let run = classify_member(
                     process_succeeded,
                     member,
-                    || counterexample_playback(&text, Some(&view.selection)),
+                    || counterexample_from_blocks(&blocks, Some(&view.selection)),
                     view.kind,
                 );
                 (run, member.report.exit_status.as_deref())
@@ -1088,7 +1088,12 @@ pub(super) fn launch_evidence(
             exit_code,
             streams,
         } => Ok((
-            classify_kani_run(exited_successfully, report, &streams.merged_text(), kind)?,
+            classify_kani_run(
+                exited_successfully,
+                report,
+                select_counterexample(&streams.merged_text(), None),
+                kind,
+            )?,
             exit_code,
             Some(streams),
         )),
@@ -4281,7 +4286,7 @@ fn kani_concrete_playback_check_1077496887511954657() {
         let alone = classify_kani_run(
             false,
             Some(&batch_report_single_two()),
-            TWO_FAILED_CHECKS_CONSOLE,
+            select_counterexample(TWO_FAILED_CHECKS_CONSOLE, None),
             None,
         )
         .unwrap();

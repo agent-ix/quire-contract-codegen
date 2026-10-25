@@ -23,10 +23,11 @@ use crate::scratch_crate::{runtime_dependency, write_manifest, TemporaryDirector
 use ix_trace_rs::trace;
 use qsl_replay::WitnessValue;
 use quire_contract_codegen::{
-    decode_falsification, execute_kani_obligation, negotiate_kani_obligations, write_bundle_atomic,
-    ArtifactBundle, KaniBindingRole, KaniExecutionRequest, KaniInstallation, KaniObligationHarness,
-    KaniObligationOutcome, KaniObligationRequest, KaniPrimitiveType, KaniRunOutcome,
-    ObligationBinding, ObligationDisposition, ObligationItem, ObligationKind, ObligationRecord,
+    decode_falsification, execute_kani_obligation, negotiate_kani_obligations,
+    parse_assertion_playback, write_bundle_atomic, ArtifactBundle, KaniBindingRole,
+    KaniExecutionRequest, KaniInstallation, KaniObligationHarness, KaniObligationOutcome,
+    KaniObligationRequest, KaniPrimitiveType, KaniRunOutcome, ObligationBinding,
+    ObligationDisposition, ObligationItem, ObligationKind, ObligationRecord,
 };
 use quire_contract_model::{
     BoundPackage, ClauseId, ClauseRef, RequirementRef, EXECUTABLE_PROJECTION_FORMAT,
@@ -381,6 +382,14 @@ fn tc_026_real_falsification_decodes_against_the_persisted_schema_and_mutation_r
     // (`balance` never grows) is falsified under the real backend.
     let transcript = run_falsifying(&installation, postcondition_harness);
     println!("IR-211 real transcript:\n{transcript}");
+    let parsed = parse_assertion_playback(
+        &transcript,
+        &harness_symbol,
+        &module_symbol,
+        usize::MAX,
+        usize::MAX,
+    )
+    .expect("the observed Kani assertion playback parses");
 
     // ---- green: the unmutated persisted schema decodes the real transcript, through the actual
     // production join (`decode_falsification`), not a reimplementation of it -------------------
@@ -388,7 +397,7 @@ fn tc_026_real_falsification_decodes_against_the_persisted_schema_and_mutation_r
         &harness_symbol,
         &module_symbol,
         &persisted_arguments(&record),
-        &transcript,
+        &parsed,
         crate::unbounded_decode_limits(),
     )
     .expect("the generator's own persisted schema must decode its own real transcript");
@@ -429,7 +438,7 @@ fn tc_026_real_falsification_decodes_against_the_persisted_schema_and_mutation_r
         &harness_symbol,
         &module_symbol,
         &persisted_arguments(&dropped),
-        &transcript,
+        &parsed,
         crate::unbounded_decode_limits(),
     )
     .expect_err("a dropped binding must refuse, not silently decode fewer values");
@@ -448,7 +457,7 @@ fn tc_026_real_falsification_decodes_against_the_persisted_schema_and_mutation_r
         &harness_symbol,
         &module_symbol,
         &persisted_arguments(&retyped),
-        &transcript,
+        &parsed,
         crate::unbounded_decode_limits(),
     )
     .expect_err("an 8-byte i64 value against a declared 1-byte boolean must refuse");

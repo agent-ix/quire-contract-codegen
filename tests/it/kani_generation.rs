@@ -4,8 +4,8 @@ use crate::scratch_crate::{runtime_dependency, write_manifest, TemporaryDirector
 use ix_trace_rs::trace;
 use jsonschema::{Draft, JSONSchema};
 use quire_contract_codegen::{
-    classify_kani_run, generate_boolean_oracle, generate_kani_bundle, GenerationErrorCode,
-    GenerationTerminalState, KaniBindingRole, KaniDiagnostic, KaniErrorCode,
+    classify_kani_run, generate_boolean_oracle, generate_kani_bundle, select_counterexample,
+    GenerationErrorCode, GenerationTerminalState, KaniBindingRole, KaniDiagnostic, KaniErrorCode,
     KaniInconclusiveReason, KaniPrimitiveType, KaniRequest, KaniRunOutcome, KaniSolver,
     OracleRequest, ProofDependencyGraph, ProofDependencyKind, ProofDependencyRequest,
     ProofDependencyState, ProofReadiness, MAX_GENERATED_SOURCE_BYTES, MAX_OBLIGATION_UNWIND,
@@ -432,9 +432,14 @@ fn classify_bundle(
         String::from_utf8_lossy(&output.stderr)
     );
     let report = fs::read(&report_path).ok();
-    classify_kani_run(output.status.success(), report.as_deref(), &text, None)
-        .unwrap_or_else(|refusal| panic!("the run was refused as {refusal:?}:\n{text}"))
-        .outcome
+    classify_kani_run(
+        output.status.success(),
+        report.as_deref(),
+        select_counterexample(&text, None),
+        None,
+    )
+    .unwrap_or_else(|refusal| panic!("the run was refused as {refusal:?}:\n{text}"))
+    .outcome
 }
 
 const HEALTHY_BUNDLE_SUBJECT: &str = "/// Customer transition under proof.\npub fn subject(input: bool, pre_state: bool) -> bool { input || pre_state }";

@@ -46,12 +46,12 @@ use crate::{
             outcome::{BoundNotResolvedCause, StateFrameRefusal},
         },
         identity::{ObligationBinding, StateFrameIdentity, StateFrameProperty},
-        output::playback::DecodeFailure,
+        output::playback::parse_assertion_playback,
         terminal::ReplaySettlement,
     },
     replay::{
         function::{render_witness, DependencyLockError, ProvidedDocument, ReplayInputs},
-        witness::{decode_playback, WitnessDecodeLimits},
+        witness::{decode_playback, DecodeFailure, WitnessDecodeLimits},
     },
 };
 
@@ -530,24 +530,25 @@ impl StateClauseReplayInputs<'_> {
                 dependencies: Vec::new(),
             })
             .collect::<Vec<_>>();
+        let parsed = parse_assertion_playback(
+            counterexample,
+            harness.harness_symbol.as_str(),
+            harness.module_symbol.as_str(),
+            limits.bytes,
+            limits.values,
+        )
+        .map_err(|refusal| StateClauseReplayError::Decode(refusal.into()))?;
         let decoded = decode_playback(
             harness.harness_symbol.as_str(),
             harness.module_symbol.as_str(),
             &bindings,
-            counterexample,
+            &parsed,
             limits,
         )
         .map_err(StateClauseReplayError::Decode)?;
         let expected =
             postcondition_check_text(&harness.scope.operation, field, *comparison, *left_is_pre);
-        // Kani prints the source arguments of our `assert!(..., "{}", message)` inside
-        // outer quotes. Its first quoted segment is empty to the generic witness reader.
-        let generated_clause = format!(": \"\"{{}}\",\n{expected:?}\"");
-        let generated_check = decoded
-            .check_clause
-            .strip_prefix(&generated_clause)
-            .is_some_and(|rest| rest.starts_with('\n'));
-        if !generated_check {
+        if !parsed.matches_generated_postcondition(&expected) {
             return Err(StateClauseReplayError::AssertionMismatch);
         }
         self.playback = decoded

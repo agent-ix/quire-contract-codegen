@@ -2,8 +2,8 @@
 //! obligation schema (Linear IR-211, IR-92).
 //!
 //! A `cargo kani --concrete-playback print` block retains only the untyped bytes Kani handed to
-//! each `kani::any()` call, in call order. This module selects the one assertion playback block
-//! of a run, reads those bytes, and types them with
+//! each `kani::any()` call, in call order. The Kani output reader selects and parses that block;
+//! this module types its entries with
 //! [`crate::kani::identity::KaniObligationIdentity::arguments`]: the bindings
 //! `src/kani/generate/clause.rs`'s `abi()` partitions into `role: KaniBindingRole::Argument`, in the
 //! exact order `symbolic_arguments` walks to emit one `kani::any()` call per binding. `render()`
@@ -12,14 +12,12 @@
 //! the emitted `kani::any()` calls, which is position *i* of the concrete bytes Kani's playback
 //! records.
 //!
-//! The block selection, the refusal codes and the comment cross-check reproduce the behaviour of
-//! the witness reader Contract IR no longer carries; the code is rewritten, the behaviour is the
-//! same.
+//! The block selection, the refusal codes and the rendered-value cross-check preserve the
+//! witness reader's behavior while keeping Kani wording in the output reader.
 //!
 //! The values come out as [`qsl_replay::WitnessValue`], the type QSL's replay envelope carries,
-//! so [`crate::replay::function`] hands them to QSL without a conversion. The transcript grammar
-//! read here is Kani's; QSL's `Witness::decode` reads QSL's own transcript grammar and cannot
-//! read this one, so the playback bytes are decoded here.
+//! so [`crate::replay::function`] hands them to QSL without a conversion. The output reader
+//! handles Kani's transcript grammar; QSL's `Witness::decode` reads a different grammar.
 //!
 //! [`decode_falsification`] also checks the transcript's own claimed identity: a transcript from
 //! a sibling obligation over the same operation (same union ABI, hence the same arity and byte
@@ -39,8 +37,39 @@ use qsl_replay::WitnessValue;
 use crate::kani::{
     abi::{KaniBindingRole, KaniPrimitiveType},
     identity::ObligationBinding,
-    output::playback::{read_block, select_assertion_block, DecodeFailure, Playback},
+    output::playback::{Playback, PlaybackRefusal},
 };
+
+/// Why a persisted argument schema could not type a Kani playback.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DecodeFailure {
+    /// Stable machine-readable cause code.
+    pub code: String,
+    /// The source or input identity that first caused the refusal.
+    pub source_id: String,
+    /// Refusal context, including the limit when a bound was exceeded.
+    pub context: String,
+}
+
+impl DecodeFailure {
+    pub(crate) fn new(code: &str, source_id: &str, context: &str) -> Self {
+        Self {
+            code: code.to_owned(),
+            source_id: source_id.to_owned(),
+            context: context.to_owned(),
+        }
+    }
+}
+
+impl From<PlaybackRefusal> for DecodeFailure {
+    fn from(refusal: PlaybackRefusal) -> Self {
+        Self {
+            code: refusal.code.as_str().to_owned(),
+            source_id: refusal.source_id,
+            context: refusal.context,
+        }
+    }
+}
 
 /// Caller supplied bounds for decoding a retained Kani witness.
 ///
@@ -113,9 +142,7 @@ const fn byte_width(primitive: KaniPrimitiveType) -> usize {
     }
 }
 
-/// Decodes one real `cargo kani --concrete-playback print` transcript -- an obligation harness's
-/// [`KaniRunOutcome::Falsified`](crate::kani::classify::KaniRunOutcome::Falsified)
-/// `counterexample` text -- into typed values, using this
+/// Decodes a parsed Kani assertion playback into typed values, using this
 /// obligation's own persisted argument schema.
 ///
 /// `harness_symbol`, `module_symbol` and `arguments` are the three fields of one
@@ -123,19 +150,12 @@ const fn byte_width(primitive: KaniPrimitiveType) -> usize {
 /// directly so a caller holding only the persisted `identity.{harnessSymbol,moduleSymbol,
 /// arguments}` JSON fields can call it.
 ///
-/// `transcript` is expected verbatim from the backend. `limits` is required; byte length is
-/// checked before selecting a playback block, and the reader refuses before parsing a concrete
-/// value beyond `limits.values`. Every failure is a named [`DecodeFailure`]:
+/// `playback` comes from [`crate::parse_assertion_playback`]. `limits` is required; it must
+/// match or tighten the reader's limits. Every failure is a named [`DecodeFailure`]:
 /// `cg_witness_decode_bytes_limit`, `cg_witness_decode_values_limit`,
-/// `cg_witness_schema_non_argument_binding`;
-/// `cg_witness_schema_duplicate_binding` (a name bound twice); a transcript that is not a
-/// single selected assertion playback block (`kani_witness_harness_missing`,
-/// `kani_witness_check_missing`, `kani_witness_check_text_missing`,
-/// `kani_witness_cover_refused`, `kani_witness_check_kind_refused`,
-/// `kani_witness_multiple_assertions_refused`, `kani_witness_concrete_vals_missing`,
-/// `kani_witness_concrete_vals_malformed`, `kani_witness_comment_missing`,
-/// `kani_witness_byte_invalid`); a harness that is not the declared one
-/// (`cg_witness_harness_identity_mismatch`); or bytes that do not fit the schema
+/// `cg_witness_schema_non_argument_binding`,
+/// `cg_witness_schema_duplicate_binding` (a name bound twice),
+/// `cg_witness_harness_identity_mismatch` (a different harness), or bytes that do not fit the schema
 /// (`kani_witness_arity_mismatch`, `kani_witness_width_mismatch`,
 /// `kani_witness_boolean_byte_invalid`, `kani_witness_comment_mismatch`).
 ///
@@ -146,19 +166,17 @@ pub fn decode_falsification(
     harness_symbol: &str,
     module_symbol: &str,
     arguments: &[ObligationBinding],
-    transcript: &str,
+    playback: &Playback<'_>,
     limits: WitnessDecodeLimits,
 ) -> Result<Vec<(String, WitnessValue)>, DecodeFailure> {
-    decode_playback(harness_symbol, module_symbol, arguments, transcript, limits)
+    decode_playback(harness_symbol, module_symbol, arguments, playback, limits)
         .map(|decoded| decoded.values)
 }
 
 /// A decoded playback: the values, and the check text the playback's own assertion block names.
-pub(crate) struct DecodedPlayback<'a> {
+pub(crate) struct DecodedPlayback {
     /// The text of the assertion Kani reports as failed.
     pub(crate) check_text: String,
-    /// The selected check clause as printed, including format arguments when present.
-    pub(crate) check_clause: &'a str,
     /// The decoded values, named by their bindings, in binding order.
     pub(crate) values: Vec<(String, WitnessValue)>,
 }
@@ -169,14 +187,14 @@ pub(crate) struct DecodedPlayback<'a> {
 /// # Errors
 ///
 /// The [`DecodeFailure`] [`decode_falsification`] names.
-pub(crate) fn decode_playback<'a>(
+pub(crate) fn decode_playback(
     harness_symbol: &str,
     module_symbol: &str,
     arguments: &[ObligationBinding],
-    transcript: &'a str,
+    playback: &Playback<'_>,
     limits: WitnessDecodeLimits,
-) -> Result<DecodedPlayback<'a>, DecodeFailure> {
-    if transcript.len() > limits.bytes {
+) -> Result<DecodedPlayback, DecodeFailure> {
+    if playback.source_len > limits.bytes {
         return Err(DecodeFailure::new(
             "cg_witness_decode_bytes_limit",
             harness_symbol,
@@ -202,8 +220,13 @@ pub(crate) fn decode_playback<'a>(
             identifier,
         ));
     }
-    let block = select_assertion_block(transcript, harness_symbol, module_symbol)?;
-    let playback = read_block(block, harness_symbol, module_symbol, limits.values)?;
+    if playback.entries.len() > limits.values {
+        return Err(DecodeFailure::new(
+            "cg_witness_decode_values_limit",
+            harness_symbol,
+            &format!("{module_symbol};values={}", limits.values),
+        ));
+    }
     let declared = if module_symbol.is_empty() {
         harness_symbol.to_owned()
     } else {
@@ -218,8 +241,7 @@ pub(crate) fn decode_playback<'a>(
     }
     Ok(DecodedPlayback {
         check_text: playback.check_text.to_owned(),
-        check_clause: playback.check_clause,
-        values: decode_values(&playback, &schema)?,
+        values: decode_values(playback, &schema)?,
     })
 }
 
@@ -249,10 +271,7 @@ fn decode_values(
             let (value, comment_agrees) = match (primitive, bytes.as_slice()) {
                 (KaniPrimitiveType::Boolean, [byte @ (0 | 1)]) => {
                     let value = *byte == 1;
-                    (
-                        WitnessValue::Boolean(value),
-                        boolean_comment(comment) == Some(value),
-                    )
+                    (WitnessValue::Boolean(value), comment.boolean == Some(value))
                 }
                 (KaniPrimitiveType::Boolean, _) => {
                     return Err(failure("kani_witness_boolean_byte_invalid"))
@@ -263,7 +282,7 @@ fn decode_values(
                     let value = i64::from_le_bytes(buffer);
                     (
                         WitnessValue::Integer(i128::from(value)),
-                        comment.parse::<i64>().is_ok_and(|parsed| parsed == value),
+                        comment.integer == Some(value),
                     )
                 }
             };
@@ -273,15 +292,6 @@ fn decode_values(
             Ok((identifier.to_owned(), value))
         })
         .collect()
-}
-
-/// Kani's decoded-value comment for a Boolean: `true`/`1` and `false`/`0` in any case.
-fn boolean_comment(comment: &str) -> Option<bool> {
-    match comment.to_ascii_lowercase().as_str() {
-        "true" | "1" => Some(true),
-        "false" | "0" => Some(false),
-        _ => None,
-    }
 }
 
 /// The first decoded value outside its argument's declared integer domain, as the argument's
@@ -312,6 +322,24 @@ mod tests {
 
     use super::*;
     use crate::kani::abi::KaniIntegerBounds;
+    use crate::kani::output::playback::{parse_assertion_playback, read_block};
+
+    fn decode_falsification(
+        harness_symbol: &str,
+        module_symbol: &str,
+        arguments: &[ObligationBinding],
+        transcript: &str,
+        limits: WitnessDecodeLimits,
+    ) -> Result<Vec<(String, WitnessValue)>, DecodeFailure> {
+        let parsed = parse_assertion_playback(
+            transcript,
+            harness_symbol,
+            module_symbol,
+            limits.bytes,
+            limits.values,
+        )?;
+        super::decode_falsification(harness_symbol, module_symbol, arguments, &parsed, limits)
+    }
 
     #[trace("TC-026", "FR-016-AC-6")]
     #[test]

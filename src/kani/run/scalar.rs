@@ -2385,7 +2385,7 @@ mod tests {
                             "Failure",
                             &[("Failure", "assertion")],
                         )),
-                        "",
+                        None,
                         None,
                     )
                     .unwrap()

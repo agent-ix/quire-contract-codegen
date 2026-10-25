@@ -3037,7 +3037,7 @@ fn tc_027_a_routed_scalar_harness_run_classifies_like_a_contract_harness() {
         })
     };
     let classify = |checks: Vec<serde_json::Value>| {
-        classify_kani_run(true, Some(&report(checks)), "", None)
+        classify_kani_run(true, Some(&report(checks)), None, None)
             .unwrap()
             .outcome
     };

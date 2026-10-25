@@ -24,12 +24,13 @@ use quire_semantic_value::catalog::Category;
 use crate::{
     kani::generate::corpus::bounded_kani_corpus::BoundedCorpusCase,
     kani::identity::KaniObligationIdentity,
-    kani::output::playback::DecodeFailure,
+    kani::output::playback::parse_assertion_playback,
     kani::terminal::ReplaySettlement,
     replay::{
         obligation::{contract_arguments, function_contract_identity, ObligationIdentityError},
         witness::{
-            decode_falsification, decode_playback, first_out_of_domain, WitnessDecodeLimits,
+            decode_falsification, decode_playback, first_out_of_domain, DecodeFailure,
+            WitnessDecodeLimits,
         },
     },
 };
@@ -1323,11 +1324,25 @@ pub(crate) fn replay_harness_counterexample_through(
         .module_symbol
         .as_ref()
         .map_or("", crate::core::identity::ModuleSymbol::as_str);
+    let parsed = match parse_assertion_playback(
+        transcript,
+        identity.harness_symbol.as_str(),
+        module,
+        package.inputs.decode_limits.bytes,
+        package.inputs.decode_limits.values,
+    ) {
+        Ok(parsed) => parsed,
+        Err(cause) => {
+            return Ok(ReplayVerdict::EvidenceFailure(
+                EvidenceFailureCause::Decode(cause.into()),
+            ))
+        }
+    };
     let decoded = match decode_playback(
         identity.harness_symbol.as_str(),
         module,
         &identity.arguments,
-        transcript,
+        &parsed,
         package.inputs.decode_limits,
     ) {
         Ok(decoded) => decoded,
@@ -1394,11 +1409,21 @@ pub fn replay_counterexample_through(
     if !package.matches_kani_identity(identity) {
         return failure(EvidenceFailureCause::PackageIdentity);
     }
+    let parsed = match parse_assertion_playback(
+        transcript,
+        identity.harness_symbol.as_str(),
+        identity.module_symbol.as_str(),
+        package.inputs.decode_limits.bytes,
+        package.inputs.decode_limits.values,
+    ) {
+        Ok(parsed) => parsed,
+        Err(cause) => return failure(EvidenceFailureCause::Decode(cause.into())),
+    };
     let values = match decode_falsification(
         identity.harness_symbol.as_str(),
         identity.module_symbol.as_str(),
         &identity.arguments,
-        transcript,
+        &parsed,
         package.inputs.decode_limits,
     ) {
         Ok(values) => values,

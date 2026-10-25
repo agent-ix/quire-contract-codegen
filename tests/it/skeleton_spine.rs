@@ -29,7 +29,7 @@ use qsl_replay::{
 };
 use qsl_replay::{Witness, WitnessValue};
 use quire_contract_codegen::{
-    decode_falsification, execute_kani_obligation, replay_counterexample,
+    decode_falsification, execute_kani_obligation, parse_assertion_playback, replay_counterexample,
     replay_counterexample_through, replay_falsification, DependencyLock, DependencyLockError,
     EvidenceFailureCause, KaniExecutionRequest, KaniInstallation, KaniObligationHarness,
     KaniRunOutcome, LockedSource, ObligationKind, ReplayInputs, ReplayPackage, ReplayPackageError,
@@ -1496,11 +1496,19 @@ fn tc_026_one_boolean_clause_goes_from_a_bound_package_through_kani_to_native_re
     };
 
     // The counterexample decodes to typed values, and QSL replays them to the same violation.
+    let parsed = parse_assertion_playback(
+        counterexample,
+        harness.identity.harness_symbol.as_str(),
+        harness.identity.module_symbol.as_str(),
+        usize::MAX,
+        usize::MAX,
+    )
+    .expect("the observed Kani assertion playback parses");
     let decoded = decode_falsification(
         harness.identity.harness_symbol.as_str(),
         harness.identity.module_symbol.as_str(),
         &harness.identity.arguments,
-        counterexample,
+        &parsed,
         crate::unbounded_decode_limits(),
     )
     .expect("the counterexample decodes");

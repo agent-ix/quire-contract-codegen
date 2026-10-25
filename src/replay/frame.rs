@@ -33,14 +33,14 @@ use crate::{
     kani::{
         abi::{KaniBindingRole, KaniPrimitiveType},
         identity::{ObligationBinding, StateFrameIdentity, StateFrameProperty, StateUnrangedField},
-        output::playback::DecodeFailure,
+        output::playback::parse_assertion_playback,
         terminal::ReplaySettlement,
     },
     replay::{
         function::{render_witness, DependencyLockError, ProvidedDocument, ReplayInputs},
         obligation::{frame_identity, frame_kind, ObligationIdentityError},
         state_clause::{IntegerValue, ObjectRef, SnapshotLink, SnapshotPopulation},
-        witness::{decode_playback, WitnessDecodeLimits},
+        witness::{decode_playback, DecodeFailure, WitnessDecodeLimits},
     },
 };
 
@@ -353,11 +353,19 @@ fn decoded_state(
             dependencies: Vec::new(),
         })
         .collect::<Vec<_>>();
+    let parsed = parse_assertion_playback(
+        playback,
+        harness.harness_symbol.as_str(),
+        harness.module_symbol.as_str(),
+        limits.bytes,
+        limits.values,
+    )
+    .map_err(|refusal| FrameReplayError::Decode(refusal.into()))?;
     let decoded = decode_playback(
         harness.harness_symbol.as_str(),
         harness.module_symbol.as_str(),
         &bindings,
-        playback,
+        &parsed,
         limits,
     )
     .map_err(FrameReplayError::Decode)?;
