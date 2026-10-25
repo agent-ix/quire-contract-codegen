@@ -47,3 +47,5 @@ Disposition pass 1 at head `cb2c12e004002c2d08752d666c5c59486a4d9dc4` (rebased o
 Disposition pass 2 at head `6d405d29c7255654da4e96376bfaebcda9b0e7ee`. No findings are open and no spec text changed in the repair round, so no rows are added. This file was rekeyed from SR-17017 to SR-514003. The committed text equals the reviewer's round-1 copy, with only the id, the heading and the cross-references to SR-514001/SR-514002 renamed, as Linear comment b4dcee1f states.
 
 Disposition pass 3 at head `ff42c8496613f5f297e5ca8e5bb9bf90898d7713` (rebased onto `1944268f`). No findings are open, so no rows are added. The rebase-only adaptations to #570's typed output reader were reviewed and add no gap or spec defect.
+
+Disposition pass 4 at head `8c7b3598134328fafdbf5d8d4307a24d1c8252e9` (rebased onto `b60b18ef`). No findings are open, so no rows are added. The repair keeps every AC binding: the helper-mutant test keeps `#[trace("FR-015-AC-126", "FR-016-AC-1", "TC-026")]` at its new location, and spec text is unchanged.

@@ -97,3 +97,5 @@ Disposition pass 2 at head `6d405d29c7255654da4e96376bfaebcda9b0e7ee` (repair co
 | FND-006 | fixed | `tc_024_ac42` (and `tc_024_ac39`) now include `src/oracle/scalar/native.rs`, with an expected `limit_kind` count of 0. `tc_024_ac42` passes. |
 
 Disposition pass 3 at head `ff42c8496613f5f297e5ca8e5bb9bf90898d7713` (rebased onto `1944268f`). No findings are open, so no rows are added. The rebase-only adaptations to #570's typed output reader were reviewed and add no gap or spec defect.
+
+Disposition pass 4 at head `8c7b3598134328fafdbf5d8d4307a24d1c8252e9` (rebased onto `b60b18ef`). No findings are open, so no rows are added. The repair keeps every AC binding: the helper-mutant test keeps `#[trace("FR-015-AC-126", "FR-016-AC-1", "TC-026")]` at its new location, and spec text is unchanged.
