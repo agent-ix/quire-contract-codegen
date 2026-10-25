@@ -142,10 +142,17 @@ required dependency or target path.
     evidence, agreement with the QSL value authority; text that states the
     boundary (outside CG, owned by IR-842) is permitted.
 12b. Planned owner-path corpus (AC-2, AC-4, AC-5, AC-9, AC-17, AC-32,
-     AC-35 through AC-37;
-     IR-1007/IR-595). For each retained function vector, acquire its admitted
-     closure through FR-485, select the exact owner and callable id, and run
-     the emitted body in a fresh facade registry with a fresh meter. Build the
+     AC-35 through AC-37; QSL #1483/IR-595). For each retained function
+     vector, call `qsl_replay::acquire_checked_closure` with the seven supplied
+     inputs, take `CheckedClosureCompilation::handle()`, and use
+     `CheckedClosureHandle::lookup_callable(owner_package_id, wire_node_id)`.
+     From that same handle create `registry()`, register the generated
+     `quire_eval::BodyFactory` with the opaque selection and
+     `selection.signature()`, and assert `Ok(Admission::Accepted)`. Build the
+     `ApplicationEnvironment` from the supplied object closure, then call
+     `begin_call` with that selection, completed arguments, environment and
+     fresh caller-owned meter. Drive the returned `CheckedApplicationSession`
+     through `step` or `run` to its leaf terminal result. Build the
      direct application independently from the request through a separate
      FR-485 acquisition and fresh meter, using QSL's interpreted callable
      with no generated body registered in the direct registry.
@@ -163,13 +170,23 @@ required dependency or target path.
      the independently admitted Contract IR package, that each generated or
      direct run acquired its closure once, and that CG neither rechecked nor
      reconstructed the package.
-     Pair the admitted CG request for A with a separately authentic QSL
+     Compare `handle.package_id()` to the CG admitted unit package id and
+     `selection.owner_package_id()` and read-only `selection.key()` bytes to
+     the declaring package and function id; the selection, not that key, is
+     registration and Begin authority. Pair the admitted CG request for A
+     with a separately authentic QSL
      acquisition for B, and separately select a different admitted callable
      in A's checked closure. In either identity mismatch, assert the affected
      item has
      `OwnerIdentityMismatch` before registration, Begin, body invocation or
      charge, while a matching sibling remains unchanged. A failed QSL lookup
-     retains its exact lookup cause instead of that mismatch refusal. Inject
+     retains its exact `CallableLookupRefusal` cause instead of that mismatch
+     refusal. Register and Begin with a selection from a second acquisition
+     and assert exact `SelectionRefusal::WrongAcquisition` and
+     `ApplicationBeginRefusal::WrongAcquisition` before charge. Check a failed
+     registration or Begin does not run a body or charge a meter and a
+     successful Begin seals that registry. Keep `qsl_replay::replay` in the
+     separate Kani witness settlement test, not this generated-body run. Inject
      a denial at `function.call` and
      compare the stop point and unchanged denied charge. For own and imported
      callables, compare the returned root location to the declaring checked
