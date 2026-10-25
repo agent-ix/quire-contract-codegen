@@ -39,3 +39,12 @@ Out of diff, for the lead, not counted as findings of this PR: FR-022 (line 207)
 ## Verdict
 
 AC coverage is preserved. Every examined AC keeps its tagged evidence and passes, and no criterion is narrowed. Two spec-prose references to the old `exact` path for the moved connective remain: one medium in FR-014's normative Behavior bullet, and one low in the AD-001 seam row. Both are Markdown-only fixes inside this PR.
+
+## Dispositions
+
+Round 1, checked at head 90a04cd042eaf181693e2255f698c3cd55686c63. The delta from b4f398d7 is one commit (90a04cd0) that touches only `spec/assurance/AD-001-codegen-architecture.md`, `spec/oracle/functional/FR-014-exact-scalar-oracles.md` and the two committed `reviews/ir-349-pr568-*.md` files, which are byte-identical to the reviewer's round-0 copies. No Rust, test or manifest file changed, and no AC row changed. `quire validate` passes on both spec files. Its only warning is an EARS warning at FR-014:269, a line this delta does not touch.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | FR-014:38-41 and :476-479 now name `quire_exact::evaluate_boolean` and `quire_contract_runtime::scalar::evaluate_boolean_short_circuit`. Both match the emitted code (`rt` = `quire_exact`; `scalar_owner` = runtime `scalar`). `quire_exact` re-exports `evaluate_boolean` at its root. |
+| FND-002 | fixed | AD-001 splits the seam into three rows: CG → `quire-exact` (kernel ops, `Meter`, `Outcome`), CG → QSV (`check_equality`, `CheckedEquality::evaluate`) and CG → RT (`quire_contract_runtime::scalar` for lazy Boolean evaluation, `exact` for package and function execution). |
