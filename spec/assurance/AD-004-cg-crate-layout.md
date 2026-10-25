@@ -453,7 +453,8 @@ Rules, each checkable:
 - `serde_json::Value` is named only in `core/ir`, `core/canonical` and the report parser. No other
   file reads a field of a body term.
 - `BoundPackage` and `BoundClause` are named only in `strategy/`, `evidence/`, `oracle/boolean_v1.rs`,
-  `oracle/bound_v1.rs` and the V1 arm that step 4f deletes. After step 4f none is named in `kani/`,
+  `oracle/bound_v1.rs`, the V1 Kani arm and `routed/capability.rs`'s public V1 clause form and
+  preflight. Step 4f deletes the V1 Kani and routed paths. After step 4f none is named in `kani/`,
   `routed/` or `replay/`.
 
 ### The one Kani generator
@@ -950,8 +951,11 @@ requirement is authored.
 - L-12. `BoundPackage` and `BoundClause` are named nowhere in `kani/`, `routed/` or `replay/`, and
   after the last V1 reader is replaced nowhere. Until step 4f the interim exceptions, listed by
   file, are the V1 arm: `kani/generate/outcome.rs` (`ObligationItem::BoundClause` holds a
-  `&BoundPackage`), `negotiate.rs` (including its test fixture) and `clause.rs`; each entry is
-  removed with its step.
+  `&BoundPackage`), `negotiate.rs` (including its test fixture) and `clause.rs`; and
+  `routed/capability.rs` (`KaniForm::V1BoundClause` holds a `BoundClause`, with its
+  `KaniFormName::V1BoundClause` identity and V1 clause preflight). Step 4f removes these V1
+  paths and their V1-only tests after the V2 contract-family replacement is live; the L-12
+  end-state remains absolute.
 
 ### Migration order
 
@@ -1067,7 +1071,10 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
      QSL's quire-integration exemplars, which call `generate_kani_bundle` today, onto that entry;
      it is a QSL ticket, not CG work.
    - 4f: deletion of `generate_kani_bundle`, `KaniArtifactBundle`, `ProofDependencyGraph`, the V1
-     obligation arm and bundle validation, with the matching `interface-001` edit. The census types
+     obligation arm and bundle validation, with the matching `interface-001` edit. Also remove
+     `routed/capability.rs`'s public `KaniForm::V1BoundClause`, its `KaniFormName` identity and
+     V1 clause preflight, plus their V1-only tests, when the V2 contract-family form replaces
+     that route. The census types
      in `kani/census.rs` stay: the V2 census input needs them, and the corpus imports them until
      4g. `validate_dependencies` (census validation, and the `KaniDiagnostic` it returns with the
      identity and path helpers it uses) is not bundle validation for this purpose: the corpus calls
