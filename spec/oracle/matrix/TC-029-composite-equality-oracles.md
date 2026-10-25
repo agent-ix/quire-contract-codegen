@@ -104,7 +104,7 @@ the enum-only owner facade does not excuse dropping it.
    a genuine prepared wrapper whose environment is privately replaced by the
    test fixture (no public raw wrapper/index constructor): an
    empty environment, and one omitting a key its operand types reach, and one
-   declaring that closure under a different key; confirm `Outcome::Refused(Refusal::CheckedInvariant)`, no panic, and no charge
+   declaring that closure under a different key; confirm `Outcome::Refused(Refusal::CheckedInvariant { cause: CheckedInvariantCause::GeneratedTypeCheckRejected { cause: error.cause } })`, retaining the original `IllTypedCause`, no panic, and no charge
    admitted on the `Meter`. Assert that this is the emitted `check_type` calls
    deciding it, by confirming the same environments pass `check_equality`: that
    call uses the same genuine enum index and consults the environment through `contains_ieee`, which returns
@@ -177,7 +177,7 @@ the enum-only owner facade does not excuse dropping it.
    identifier character, `)` or `]`. Assert every reconstruction helper returns
    `Result<_, ReconstructionError>`, every call of one is followed by `?` or a
    `match` whose `Err` arm yields `EnvironmentError::Reconstruction` or
-   `Outcome::Refused(Refusal::CheckedInvariant)`, and `EnvironmentError` has the
+   `Outcome::Refused(Refusal::CheckedInvariant { cause: CheckedInvariantCause::GeneratedDescriptorReconstructionFailed })`, and `EnvironmentError` has the
    typed variants required by FR-018 Outputs, including `Declaration` retaining
    QSV `EnvironmentFailure` and `Reconstruction(ReconstructionError)`.
    `ReconstructionError` has the unit variants `Integer`, `Interval`, `Rational`,

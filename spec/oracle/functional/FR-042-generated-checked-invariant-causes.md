@@ -33,9 +33,9 @@ The code generator SHALL use the nine CG-owned causes in the second cause table 
 ## Dependencies
 
 - [quire-exact FR-369](ix://agent-ix/quire-exact/FR-369) owns the shared typed cause vocabulary and nine CG cause assignments.
-- [FR-018](./FR-018-composite-equality-oracles.md) AC-8 and AC-17 still name the former unit `Refusal::CheckedInvariant` constructor; their producer/consumer updates must align with the required payload in FR-042-AC-1.
+- [FR-018](./FR-018-composite-equality-oracles.md) AC-8 and AC-17 name the required typed `Refusal::CheckedInvariant { cause }` payload at their producer paths.
 - [IR-878](https://linear.app/agent-ix/issue/IR-878) tracks the allocation.
 
 ## Status
 
-PLANNED: Seven of the nine CG-owned typed cause producers have landed. IR-709 still owns `GeneratedUnexpectedOutcome` and `GeneratedEnvironmentRejected`, alignment of the former unit-constructor text in FR-018 AC-8 and AC-17, and TC-057 tagged verification of all nine constructors, nested `IllTypedCause`, and charge/failure behavior. QSL owns replay-consumer verification.
+PLANNED: Seven of the nine CG-owned typed cause producer paths are present in current source. IR-709 still owns genuine producer paths for `GeneratedUnexpectedOutcome` and `GeneratedEnvironmentRejected`, plus TC-057 tagged verification of all nine constructors, nested `IllTypedCause`, and charge/failure behavior. An unreachable branch or a fabricated failure does not count as a producer path. QSL owns replay-consumer verification.
