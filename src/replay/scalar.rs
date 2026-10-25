@@ -6,18 +6,40 @@
 use std::collections::BTreeSet;
 
 use crate::kani::{
-    abi::integer_scalar_operand_count, identity::ScalarObligationIdentity,
-    output::playback::parse_assertion_playback,
+    abi::integer_scalar_operand_count,
+    identity::ScalarObligationIdentity,
+    output::playback::{parse_assertion_playback, Playback},
 };
 use crate::replay::witness::DecodeFailure;
 
 const PLAYBACK_BYTES: usize = 8 * 1024 * 1024;
 
-/// Decodes integer scalar assertion playback in the identity's persisted symbolic draw order.
+/// Reads integer scalar assertion playback after validating the persisted schema. The Kani
+/// wording and rendered values are parsed by the output reader.
+///
+/// # Errors
+///
+/// Returns the schema refusal or the output reader's named refusal.
+pub fn parse_scalar_playback<'a>(
+    identity: &ScalarObligationIdentity,
+    transcript: &'a str,
+) -> Result<Playback<'a>, DecodeFailure> {
+    validate_schema(identity)?;
+    parse_assertion_playback(
+        transcript,
+        identity.harness_symbol.as_str(),
+        identity.module_symbol.as_str(),
+        PLAYBACK_BYTES,
+        usize::MAX,
+    )
+    .map_err(Into::into)
+}
+
+/// Decodes typed integer scalar playback in the identity's persisted symbolic draw order.
 ///
 /// Accepts only integer add, subtract, multiply and negate, with their required operand arity
 /// and valid inclusive ranges. Literal singleton operands remain separate positions. The selected
-/// single-harness transcript is limited to 8 MiB before the Kani adapter parses it. Every draw
+/// single-harness transcript is limited to 8 MiB by [`parse_scalar_playback`]. Every draw
 /// must contain exactly eight little-endian bytes and agree with Kani's decoded-value comment.
 /// All draws are decoded before the first operand outside its persisted range is refused.
 ///
@@ -27,52 +49,25 @@ const PLAYBACK_BYTES: usize = 8 * 1024 * 1024;
 ///
 /// # Errors
 ///
-/// Returns the adapter's existing malformed-block, arity, width and comment refusal codes, or
+/// Returns arity, width and rendered-value refusal codes, or
 /// `cg_scalar_witness_operation_unsupported`, `cg_scalar_witness_schema_arity_mismatch`,
 /// `cg_scalar_witness_schema_range_invalid`, `cg_scalar_witness_schema_duplicate_binding`,
 /// `cg_witness_decode_bytes_limit`, `cg_witness_harness_identity_mismatch`, or
 /// `cg_scalar_witness_operand_out_of_domain`. Domain failures name the first operand in draw order.
 pub fn decode_scalar_falsification(
     identity: &ScalarObligationIdentity,
-    transcript: &str,
+    playback: &Playback<'_>,
 ) -> Result<Vec<i64>, DecodeFailure> {
+    let arity = validate_schema(identity)?;
     let harness = identity.harness_symbol.as_str();
     let module = identity.module_symbol.as_str();
     let failure = |code, context: &str| DecodeFailure::new(code, harness, context);
-    let arity = integer_scalar_operand_count(&identity.operation_identity).ok_or_else(|| {
-        failure(
-            "cg_scalar_witness_operation_unsupported",
-            &identity.operation_identity,
-        )
-    })?;
-    if identity.arguments.len() != arity {
-        return Err(failure("cg_scalar_witness_schema_arity_mismatch", module));
-    }
-    let mut seen = BTreeSet::new();
-    for argument in &identity.arguments {
-        if argument.minimum > argument.maximum {
-            return Err(failure(
-                "cg_scalar_witness_schema_range_invalid",
-                &argument.identifier,
-            ));
-        }
-        if !seen.insert(argument.identifier.as_str()) {
-            return Err(failure(
-                "cg_scalar_witness_schema_duplicate_binding",
-                &argument.identifier,
-            ));
-        }
-    }
-    if transcript.len() > PLAYBACK_BYTES {
+    if playback.source_len > PLAYBACK_BYTES {
         return Err(failure(
             "cg_witness_decode_bytes_limit",
             &format!("{module};bytes={PLAYBACK_BYTES}"),
         ));
     }
-    // The fixed byte ceiling bounds adapter allocation. Read all entries so extra draws retain
-    // the arity refusal, rather than being reported as a caller-configured value limit.
-    let playback =
-        parse_assertion_playback(transcript, harness, module, PLAYBACK_BYTES, usize::MAX)?;
     let qualified = format!("{module}::{harness}");
     if playback.harness != qualified {
         return Err(DecodeFailure::new(
@@ -112,4 +107,35 @@ pub fn decode_scalar_falsification(
         }
     }
     Ok(values)
+}
+
+fn validate_schema(identity: &ScalarObligationIdentity) -> Result<usize, DecodeFailure> {
+    let harness = identity.harness_symbol.as_str();
+    let module = identity.module_symbol.as_str();
+    let failure = |code, context: &str| DecodeFailure::new(code, harness, context);
+    let arity = integer_scalar_operand_count(&identity.operation_identity).ok_or_else(|| {
+        failure(
+            "cg_scalar_witness_operation_unsupported",
+            &identity.operation_identity,
+        )
+    })?;
+    if identity.arguments.len() != arity {
+        return Err(failure("cg_scalar_witness_schema_arity_mismatch", module));
+    }
+    let mut seen = BTreeSet::new();
+    for argument in &identity.arguments {
+        if argument.minimum > argument.maximum {
+            return Err(failure(
+                "cg_scalar_witness_schema_range_invalid",
+                &argument.identifier,
+            ));
+        }
+        if !seen.insert(argument.identifier.as_str()) {
+            return Err(failure(
+                "cg_scalar_witness_schema_duplicate_binding",
+                &argument.identifier,
+            ));
+        }
+    }
+    Ok(arity)
 }

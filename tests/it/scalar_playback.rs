@@ -7,11 +7,11 @@ use crate::common::proof_ceilings::proof_ceilings;
 use ix_trace_rs::trace;
 use qsl_replay::{compile_package, DependencyInput, ReplayLimits, SourceIdentity, StageLimits};
 use quire_contract_codegen::{
-    decode_scalar_falsification, generate_routed, routed_contract_lowering_profile,
-    BackendDescriptor, Candidate, ContractDriverResultSelection, ContractRequestPosition,
-    DecodeFailure, GenerationContexts, KaniGenerationContext, KaniScalarObligationHarness,
-    KindOutput, ProviderOrigin, RoutedGenerationItem, ScalarLimits, ScalarObligationIdentity,
-    ScalarOriginalLimitsError,
+    decode_scalar_falsification, generate_routed, parse_scalar_playback,
+    routed_contract_lowering_profile, BackendDescriptor, Candidate, ContractDriverResultSelection,
+    ContractRequestPosition, DecodeFailure, GenerationContexts, KaniGenerationContext,
+    KaniScalarObligationHarness, KindOutput, ProviderOrigin, RoutedGenerationItem, ScalarLimits,
+    ScalarObligationIdentity, ScalarOriginalLimitsError,
 };
 use quire_contract_model::{
     CheckedOccurrenceRole, CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2,
@@ -20,6 +20,14 @@ use quire_contract_model::{
 };
 
 const PLAYBACK_BYTES: usize = 8 * 1024 * 1024;
+
+fn decode_from_transcript(
+    identity: &ScalarObligationIdentity,
+    transcript: &str,
+) -> Result<Vec<i64>, DecodeFailure> {
+    let parsed = parse_scalar_playback(identity, transcript)?;
+    decode_scalar_falsification(identity, &parsed)
+}
 
 fn operation_identity(body: &CheckedTerm) -> Option<&str> {
     let CheckedTerm::Application { operation, .. } = body else {
@@ -191,7 +199,7 @@ fn transcript(identity: &ScalarObligationIdentity, values: &[i64]) -> String {
 }
 
 fn refusal(identity: &ScalarObligationIdentity, text: &str, code: &str) -> DecodeFailure {
-    let error = decode_scalar_falsification(identity, text).expect_err("must refuse playback");
+    let error = decode_from_transcript(identity, text).expect_err("must refuse playback");
     assert_eq!(error.code, code);
     error
 }
@@ -210,7 +218,7 @@ fn routed_draw_order_is_preserved_with_distinct_domains() {
         [(0, 9), (10, 20)],
     );
     assert_eq!(
-        decode_scalar_falsification(&identity, &transcript(&identity, &[3, 17])),
+        decode_from_transcript(&identity, &transcript(&identity, &[3, 17])),
         Ok(vec![3, 17])
     );
     let error = refusal(
@@ -221,7 +229,7 @@ fn routed_draw_order_is_preserved_with_distinct_domains() {
     assert_eq!(error.context, identity.arguments[0].identifier);
     let product = identity_for_product();
     assert_eq!(
-        decode_scalar_falsification(&product, &transcript(&product, &[4, 130])),
+        decode_from_transcript(&product, &transcript(&product, &[4, 130])),
         Ok(vec![4, 130])
     );
 }
@@ -245,7 +253,7 @@ fn negate_and_literal_singleton_keep_every_draw() {
         "-x",
     );
     assert_eq!(
-        decode_scalar_falsification(&negate, &transcript(&negate, &[7])),
+        decode_from_transcript(&negate, &transcript(&negate, &[7])),
         Ok(vec![7])
     );
     let literal = identity(
@@ -259,7 +267,7 @@ fn negate_and_literal_singleton_keep_every_draw() {
         (1, 1)
     );
     assert_eq!(
-        decode_scalar_falsification(&literal, &transcript(&literal, &[4, 1])),
+        decode_from_transcript(&literal, &transcript(&literal, &[4, 1])),
         Ok(vec![4, 1])
     );
     refusal(
@@ -288,7 +296,7 @@ fn subtraction_decodes_signed_extreme_operands_without_evaluating_them() {
     );
     for values in [[i64::MIN, 0], [i64::MAX, 0], [-1, 0]] {
         assert_eq!(
-            decode_scalar_falsification(&identity, &transcript(&identity, &values)),
+            decode_from_transcript(&identity, &transcript(&identity, &values)),
             Ok(values.to_vec())
         );
     }
@@ -300,7 +308,7 @@ fn inclusive_endpoints_and_adjacent_values_use_each_operands_range() {
     let identity = sum();
     for values in [[0, 10], [9, 20], [0, 20], [9, 10]] {
         assert_eq!(
-            decode_scalar_falsification(&identity, &transcript(&identity, &values)),
+            decode_from_transcript(&identity, &transcript(&identity, &values)),
             Ok(values.to_vec())
         );
     }
@@ -371,7 +379,7 @@ fn assertion_selection_and_malformed_blocks_use_adapter_refusals() {
     let good = transcript(&identity, &[3, 17]);
     let cover = good.replace("`assertion`", "`cover`");
     assert_eq!(
-        decode_scalar_falsification(&identity, &format!("{cover}\n{good}")),
+        decode_from_transcript(&identity, &format!("{cover}\n{good}")),
         Ok(vec![3, 17])
     );
     for (text, code) in [
@@ -420,7 +428,7 @@ fn schema_then_byte_ceiling_then_decode_then_domain_precedence() {
     let mut at_limit = transcript(&identity, &[3, 17]);
     at_limit.push_str(&" ".repeat(PLAYBACK_BYTES - at_limit.len()));
     assert_eq!(
-        decode_scalar_falsification(&identity, &at_limit),
+        decode_from_transcript(&identity, &at_limit),
         Ok(vec![3, 17])
     );
     let malformed = transcript(&identity, &[-1, 17]).replace("// 17\n", "// 18\n");

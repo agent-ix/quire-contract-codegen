@@ -244,7 +244,7 @@ pub(crate) fn decode_playback<'a>(
     Ok(DecodedPlayback {
         check_text: playback.check_text.to_owned(),
         check_clause: playback.check_clause,
-        values: decode_values(&playback, &schema)?,
+        values: decode_values(playback, &schema)?,
     })
 }
 

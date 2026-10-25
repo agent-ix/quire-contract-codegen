@@ -459,7 +459,7 @@ mod tests {
     use super::*;
     use ix_trace_rs::trace;
 
-    #[trace("FR-017-AC-5", "FR-024-AC-23", "TC-027")]
+    #[trace("FR-016-AC-1", "TC-026")]
     #[test]
     fn assertion_reader_types_rendered_values_and_refusals() {
         let transcript = "/// Test generated for harness `m::h`\n/// Check for `assertion`: \"x\"\nlet concrete_vals: Vec<Vec<u8>> = vec![\n// true\nvec![1],\n// -1\nvec![255, 255, 255, 255, 255, 255, 255, 255],\n];";
