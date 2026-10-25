@@ -3628,13 +3628,23 @@ fn tc_024_ac42_only_the_shared_classifier_reads_a_failed_records_limit_kind() {
         "src/oracle/scalar/render.rs",
     ];
     for path in scalar_files {
-        let failed_arms = code_of(path)
-            .matches("CompleteLoweringRecordV2::Failed")
-            .count();
+        let code = code_of(path);
+        let failed_arms = code.matches("CompleteLoweringRecordV2::Failed").count();
         assert_eq!(
             failed_arms,
             usize::from(path == "src/oracle/scalar/lower.rs"),
             "{path} has the expected direct-lowering `Failed` arms"
+        );
+        let limit_kind_uses = code.matches("limit_kind").count();
+        let expected_limit_kind_uses = match path {
+            "src/oracle/scalar/mod.rs" => 1,
+            "src/oracle/scalar/lower.rs" => 2,
+            "src/oracle/scalar/derive.rs" | "src/oracle/scalar/render.rs" => 0,
+            _ => unreachable!("the scalar file list is fixed"),
+        };
+        assert_eq!(
+            limit_kind_uses, expected_limit_kind_uses,
+            "{path} names `limit_kind` only in its assigned refusal field or conversion"
         );
     }
     let scalar = scalar_files.into_iter().map(code_of).collect::<String>();
