@@ -20,12 +20,17 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
 - Executable clauses, execution points, state bindings, ranges, memberships, and supported relations.
 - Planned (IR-815): for the V2 harness, an admitted `CheckedPackageV2` with the clause ids of one
   selected precondition and one selected postcondition, read through Contract IR's public typed
-  API. The source of the execution point and of the requirement and revision identity for this
-  input is open (Open Questions); no V2 criterion below depends on it.
+  API. Planned (IR-1013): each selected V2 node must expose its accepted QSL `ClauseBinding` point
+  through a Contract IR typed accessor that does not yet exist. QSL owns `ClauseBinding`; Contract IR
+  owns its `quire_contract_model::ExecutionPoint` type (variant and `AnchorName`). The two selected
+  bindings may carry different points. The caller supplies no separate point. The requirement and
+  revision identity source remains open (Open Questions).
 
 ## Outputs
 
 - Tri-state harness source and broad, boundary, state-pinned, or no-event strategies.
+- Planned (IR-815): generation refusals `HarnessErrorCode::MissingExecutionPoint` and
+  `HarnessErrorCode::ExecutionPointMismatch`, with the affected selection named and no artifact.
 
 ## Behavior
 
@@ -77,6 +82,25 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
 - Planned (IR-815): if a selected clause body is outside the FR-014-AC-38 shape, then the V2
   harness generator shall return a structured unsupported diagnostic and no artifact, with no
   fallback to filtering.
+- When a V2 precondition and postcondition are selected, the V2 harness generator shall take each execution point only from that selected node's accepted QSL `ClauseBinding.execution_point` (planned, IR-815).
+- Planned (IR-815): if either selected node lacks an accepted binding point, then the harness
+  generator shall return `HarnessErrorCode::MissingExecutionPoint`, name that selection, and
+  produce no artifact.
+- Planned (IR-815): if a rendered harness or verdict point differs from its selected accepted
+  binding point, then the harness generator shall return `HarnessErrorCode::ExecutionPointMismatch`,
+  name that selection, and produce no artifact before publication.
+- Planned (IR-815): the harness generator shall not derive a point from clause kind.
+- Planned (IR-815): the harness generator shall render each bound typed point into a runtime string
+  as `<variant>:<utf8-byte-length>:<AnchorName>`, with the same injective variant and UTF-8 byte
+  length rule as FR-011.
+- Planned (IR-815): the generated harness shall assign the selected precondition's rendered point
+  to a `RejectedPrecondition` verdict.
+- Planned (IR-815): the generated harness shall assign the selected postcondition's rendered point
+  to a `FailedPostcondition` or `Passed` verdict after completed postcondition evaluation.
+- Planned (IR-815): the generated harness shall retain the selected precondition's rendered point
+  when its oracle does not complete, alongside that oracle's cause and without counting it as passed.
+- Planned (IR-815): the generated harness shall retain the selected postcondition's rendered point
+  when its oracle does not complete, alongside that oracle's cause and without counting it as passed.
 
 ## Acceptance Criteria
 
@@ -100,15 +124,17 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
 | FR-002-AC-16 | PLANNED (IR-815). A seeded V2 case on which the precondition or postcondition oracle returns an outcome that does not complete (stopped or undefined) is reported as a non-completed case retaining the oracle's cause, is not counted as a pass. | Test (TC-004) |
 | FR-002-AC-17 | PLANNED (IR-815). A seeded V2 case on which the precondition oracle returns an outcome that does not complete does not invoke the subject. | Test (TC-004) |
 | FR-002-AC-18 | PLANNED (IR-815). A seeded V2 case on which the precondition oracle returns an outcome that does not complete does not evaluate the postcondition oracle. | Test (TC-004) |
+| FR-002-AC-19 | PLANNED (IR-815). Each V2 selection preserves its accepted QSL `ClauseBinding.execution_point` through the injective runtime rendering; precondition and postcondition points may differ. A rejection carries the precondition point; a failed or passed verdict after completed postcondition evaluation carries the postcondition point; a non-completed case carries the point of the oracle that did not complete and retains its cause without counting as a pass. | Test (TC-004) |
+| FR-002-AC-20 | PLANNED (IR-815). For either selected V2 clause, an absent accepted binding point yields `HarnessErrorCode::MissingExecutionPoint` and no artifact; a render mutant that changes only that selection's generated harness or verdict point yields `HarnessErrorCode::ExecutionPointMismatch` before publication and no artifact. Each diagnostic names the affected precondition or postcondition selection, and no point is inferred from clause kind. | Test (TC-004) |
 
 ## Open Questions
 
-- OQ-1 (execution point and identity): the V2 source of the harness's execution point and of the
-  requirement and revision identity is the open question recorded as FR-011 OQ-1 and OQ-2, and the
-  V2 entry shape follows the open interface-001 direction. The generated harness writes the
-  requirement and revision into its header comment, its `RequirementId` and its symbol names, so
+- OQ-1 (identity): the V2 source of the harness's requirement and revision identity is the open
+  question recorded as FR-011 OQ-2, and the V2 entry shape follows the open interface-001 direction.
+  The generated harness writes the requirement and revision into its header comment, its
+  `RequirementId` and its symbol names, so
   the final bytes of a V2 harness, FR-002-AC-12 across different identities, and the NFR-002-AC-1
-  header requirement wait on FR-011 OQ-2; FR-002-AC-7 to AC-18 are stated independently of that
+  header requirement wait on FR-011 OQ-2; FR-002-AC-7 to AC-20 are stated independently of that
   identity and none invents a source.
 - OQ-2 (non-completed verdict): which runtime verdict kind carries a non-completed oracle outcome
   (FR-002-AC-16) is not decided here; the criterion fixes only that the case is not a pass and
@@ -116,7 +142,10 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
 
 ## Dependencies
 
-- **Upstream**: [FR-014](../../oracle/functional/FR-014-exact-scalar-oracles.md).
+- **Upstream**: [FR-014](../../oracle/functional/FR-014-exact-scalar-oracles.md);
+  QSL-1082 (accepted binding point on the V2 carrier; planned prerequisite);
+  IR-1013 (Contract IR typed accessor for the selected accepted QSL clause binding point; planned,
+  blocks the V2 execution-point slice).
 - **Downstream**: bound numeric/state-scalar refinement in
   [FR-008](./FR-008-bound-domain-strategy-admission.md) through
   [FR-013](./FR-013-it010-consumable-output.md).
