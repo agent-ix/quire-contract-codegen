@@ -23,6 +23,8 @@ relationships:
     type: depends_on
   - target: ix://agent-ix/quire-contract-runtime/interface-001
     type: depends_on
+  - target: ix://agent-ix/quire-contract-ir/IR-1013
+    type: depends_on
 ---
 # FR-011: Run numeric oracle-conformance campaigns and report rates
 
@@ -46,9 +48,11 @@ until specified.
   in-domain census from [FR-010](./FR-010-domain-boundary-campaigns.md).
 - The selected claim's V2 comparison oracle (FR-008), embedded in the same bundle; no V1 bound
   oracle generation output is an input.
-- The selected V2 node's accepted QSL `ClauseBinding`, whose mandatory `execution_point` has the
-  QSL-owned `quire_contract_model::ExecutionPoint` type (variant and `AnchorName`). CG reads the
-  binding through the admitted node's typed access; the caller supplies no separate point.
+- Planned (IR-1013): the selected V2 node's accepted QSL `ClauseBinding`, whose mandatory
+  `execution_point` has the Contract IR-owned `quire_contract_model::ExecutionPoint` type (variant
+  and `AnchorName`). QSL owns `ClauseBinding`; IR-1013 must expose the accepted point through a
+  Contract IR typed accessor before CG can read it. The current V2 node API has no such accessor,
+  and the caller supplies no separate point.
 - A caller-owned proptest `TestRunner` and `quire_contract_runtime::CampaignReport`.
 - The existing campaign policy: minimum accepted, minimum rejected, and maximum discarded counts.
 
@@ -146,6 +150,8 @@ until specified.
 
 - **Upstream**: [FR-002](./FR-002-tristate-proptest.md) campaign policy and conclusions;
   quire-contract-runtime FR-001, FR-003, FR-004, and interface-001;
+  IR-1013 (Contract IR typed accessor for the selected accepted QSL clause binding point; planned,
+  blocks this V2 execution-point slice);
   [FR-008](./FR-008-bound-domain-strategy-admission.md) (the selected claim's V2 comparison
   oracle), [FR-009](./FR-009-constructive-correlated-populations.md),
   [FR-010](./FR-010-domain-boundary-campaigns.md).

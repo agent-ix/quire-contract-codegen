@@ -7,6 +7,8 @@ relationships:
     type: depends_on
   - target: ix://agent-ix/quire-contract-codegen/interface-001
     type: implements
+  - target: ix://agent-ix/quire-contract-ir/IR-1013
+    type: depends_on
 ---
 # FR-002: Generate tri-state harnesses and shaped strategies
 
@@ -20,11 +22,11 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
 - Executable clauses, execution points, state bindings, ranges, memberships, and supported relations.
 - Planned (IR-815): for the V2 harness, an admitted `CheckedPackageV2` with the clause ids of one
   selected precondition and one selected postcondition, read through Contract IR's public typed
-  API. Each selected V2 node exposes its accepted QSL `ClauseBinding`, whose mandatory
-  `execution_point` is the QSL-owned `quire_contract_model::ExecutionPoint` (variant and
-  `AnchorName`); CG reads each through typed access. The two selected bindings may carry different
-  points. The caller supplies no separate point. The requirement and revision identity source
-  remains open (Open Questions).
+  API. Planned (IR-1013): each selected V2 node must expose its accepted QSL `ClauseBinding` point
+  through a Contract IR typed accessor that does not yet exist. QSL owns `ClauseBinding`; Contract IR
+  owns its `quire_contract_model::ExecutionPoint` type (variant and `AnchorName`). The two selected
+  bindings may carry different points. The caller supplies no separate point. The requirement and
+  revision identity source remains open (Open Questions).
 
 ## Outputs
 
@@ -93,12 +95,14 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
 - Planned (IR-815): the harness generator shall render each bound typed point into a runtime string
   as `<variant>:<utf8-byte-length>:<AnchorName>`, with the same injective variant and UTF-8 byte
   length rule as FR-011.
-- Planned (IR-815): a `RejectedPrecondition` verdict shall use the selected precondition's rendered
-  point; a `FailedPostcondition` or `Passed` verdict after completed postcondition evaluation shall
-  use the selected postcondition's rendered point.
-- Planned (IR-815): a non-completed precondition outcome shall retain the selected precondition's
-  rendered point, and a non-completed postcondition outcome shall retain the selected
-  postcondition's rendered point alongside the oracle's cause, without classifying it as passed.
+- Planned (IR-815): the generated harness shall assign the selected precondition's rendered point
+  to a `RejectedPrecondition` verdict.
+- Planned (IR-815): the generated harness shall assign the selected postcondition's rendered point
+  to a `FailedPostcondition` or `Passed` verdict after completed postcondition evaluation.
+- Planned (IR-815): the generated harness shall retain the selected precondition's rendered point
+  when its oracle does not complete, alongside that oracle's cause and without counting it as passed.
+- Planned (IR-815): the generated harness shall retain the selected postcondition's rendered point
+  when its oracle does not complete, alongside that oracle's cause and without counting it as passed.
 
 ## Acceptance Criteria
 
@@ -140,7 +144,9 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
 
 ## Dependencies
 
-- **Upstream**: [FR-014](../../oracle/functional/FR-014-exact-scalar-oracles.md).
+- **Upstream**: [FR-014](../../oracle/functional/FR-014-exact-scalar-oracles.md);
+  IR-1013 (Contract IR typed accessor for the selected accepted QSL clause binding point; planned,
+  blocks the V2 execution-point slice).
 - **Downstream**: bound numeric/state-scalar refinement in
   [FR-008](./FR-008-bound-domain-strategy-admission.md) through
   [FR-013](./FR-013-it010-consumable-output.md).
