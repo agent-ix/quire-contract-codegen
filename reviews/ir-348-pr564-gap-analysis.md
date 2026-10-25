@@ -114,3 +114,11 @@ The new finding FND-005 has no outcome yet; it is routed to the coder.
 AC narrowing check, round 2: the only spec change is the FR-014-AC-42 rewrite. Against `origin/main`, the per-file `CheckedPackageLimit` and `.limit_kind` bans, the single unbinding `Failed` arm calling `classify_lowering_failure`, and the equality and function `PackageAccounting` obligations are all retained, over six files instead of three. The one loosening in wording ("any conversion" for the equality and function files) is recorded as SR-17018 FND-002. The PR touches no FR-015, FR-037 or FR-039 text.
 
 Gap evidence at `212bff4c`: `exact_scalar_generation::`, `no_generation_panics::`, `checked_term_consumers::` and `layout::` pass 96/96 with current QSpec, and lib `oracle::scalar::` and `core::ir::` pass 22/22. The fix diff adds and removes no `#[trace]`, `#[test]` or `// Implements:` line. `quire validate` on FR-014 and TC-024 exits 0; its one warning (FR-014 line 269) is pre-existing.
+
+### Round 3 — exact `5e83fe1b70d0bb0b34c1c6ad7912c8d4ef37c53d` (fix diff `212bff4c..5e83fe1b`)
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-005 | fixed | `tc_024_ac42_*` now counts `limit_kind` in each scalar file's non-test code and expects 1 in `mod.rs`, 2 in `lower.rs`, and 0 in `derive.rs` and `render.rs` (`exact_scalar_generation.rs:3638-3648`). The reviewer re-ran the round-2 mutation, moving `impl From<LoweringFailure> for ExactScalarRefusal` from `lower.rs` to `render.rs`, and `tc_024_ac42_*` now fails on it. At the unmutated head, `exact_scalar_generation::` passes 79/79. |
+
+Round 3 scope check: apart from committing the reviewer's SR files under `reviews/` (byte-identical to the round-2 scratchpad copies), the diff from `212bff4c` touches only the FR-014-AC-42 row and the per-file count in `tc_024_ac42_*`. AC-42's only change pins the equality file to the field alone, with no conversion, and the function file to its one named conversion. Both are tighter than the round-2 text and than `origin/main`, so no criterion is narrowed. `quire validate` on FR-014 and the four committed `reviews/ir-348-pr564-*.md` files reports no failure. `cargo fmt --check` exits 0.

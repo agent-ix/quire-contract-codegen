@@ -77,3 +77,9 @@ The new finding FND-002 has no outcome yet; it is routed to the coder. The untes
 
 
 Artifact note: the frontmatter `analysis` value was changed from `spec-review` to `integrity` this round, because quire 0.36.2 rejects `spec-review` as an `analysis` value. No finding text was changed.
+
+### Round 2 — exact `5e83fe1b70d0bb0b34c1c6ad7912c8d4ef37c53d` (fix diff `212bff4c..5e83fe1b`)
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-002 | fixed | FR-014-AC-42 now says that `src/oracle/equality/mod.rs` names `limit_kind` only as the field of its own refusal, with no conversion in that file, and that `src/oracle/function/mod.rs` names it only as the field and "in its one conversion from `LoweringFailure::LimitUnrecognised` into `schedule::ScheduleRefusal::LoweringLimitUnrecognised`". This matches the test's pinned counts (1 and 3) and is tighter than `origin/main`'s "the conversion into it". No criterion is narrowed, and `quire validate` exits 0. |
