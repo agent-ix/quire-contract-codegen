@@ -37,7 +37,12 @@ Generate with each selected clause's point from its accepted QSL binding; includ
 precondition and postcondition anchors. Instrument verdict construction to observe the precondition
 point on a rejected case and the postcondition point on failed and passed cases. Drive a
 non-completed precondition case and a non-completed postcondition case and observe the point retained
-beside each oracle's cause. Compare each runtime string with the binding's variant, UTF-8 anchor
+beside each oracle's original typed `Undefined`, `Refused`, or `Incomplete` cause in
+`V2HarnessCaseResult::NonCompleted`. Seed each stop variant at each oracle position. Instrument
+runtime verdict construction and recording, and start with nonzero report counters; require no
+verdict call or pass artifact for a stopped case, unchanged prior verdict counters, and a
+non-success campaign result distinct from rejection, failure, discard, and exhaustion. Compare
+each retained point's runtime string with the binding's variant, UTF-8 anchor
 name and exact byte-length rendering. For two separate requests, select the same precondition
 checked clause node with two authentic `claim` occurrences bound to its same `Pre` operation point,
 keeping the postcondition selection fixed; instrument the accessor to prove each request uses its
@@ -83,8 +88,10 @@ that a floor was missed; completed searches still return the corresponding floor
 
 The V2 controls expect a case with both oracles completing true to run the subject once and pass
 (FR-002-AC-13), a rejected case to leave the subject uninvoked (AC-14), a false postcondition to be
-a failed postcondition (AC-15), a non-completed oracle outcome to be a non-completed case that
-keeps its cause and is no pass (AC-16), and a precondition that does not complete invokes neither
+a failed postcondition (AC-15), a non-completed oracle outcome to return
+`V2HarnessCaseResult::NonCompleted` with its original typed stop, selected accepted point, no
+runtime verdict or pass artifact, and unchanged prior verdict counters (AC-16), and a
+precondition that does not complete invokes neither
 the subject (AC-17) nor the postcondition oracle (AC-18), snapshot, precondition, invocation and postcondition to run in that order (AC-8), each
 wrong selection to yield a typed, located diagnostic naming the selection and no artifact (AC-10),
 an unsupported body to yield a structured unsupported diagnostic, no artifact and no filtering
