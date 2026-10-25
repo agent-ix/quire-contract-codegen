@@ -574,73 +574,6 @@ impl NativeTerm {
     }
 }
 
-#[cfg(test)]
-mod native_probe_tests {
-    use super::{bind_native_arithmetic_probes, ArithmeticProbe};
-    use crate::core::native_integer::{
-        NativeIntegerIntervalDecision as Interval, NativeIntegerOperationDecision as Decision,
-        NativeIntegerSelection,
-    };
-    use ix_trace_rs::trace;
-
-    #[trace("FR-015-AC-125", "TC-025")]
-    #[test]
-    fn bounded_add_feeding_multiply_uses_the_typed_completed_interval() {
-        let node_id: quire_contract_model::CheckedNodeId =
-            serde_json::from_value(serde_json::json!({
-                "domain": "quire.checked-semantic-node/v1",
-                "digest": "2".repeat(64),
-            }))
-            .expect("checked clause key");
-        let interval = |lower: i128, upper: i128| Interval {
-            lower: lower.to_string(),
-            upper: upper.to_string(),
-        };
-        let mut selection = NativeIntegerSelection::new();
-        selection.operations = vec![
-            Decision {
-                node_id: node_id.clone(),
-                step: 0,
-                operation_identity: "quire.op.integer.add".to_owned(),
-                operands: vec![interval(0, 1000), interval(1, 1)],
-                capacity: Some(interval(1, 1001)),
-                semantic_domain: Some(interval(0, 1000)),
-            },
-            Decision {
-                node_id,
-                step: 1,
-                operation_identity: "quire.op.integer.mul".to_owned(),
-                operands: vec![interval(1, 1000), interval(2, 2)],
-                capacity: Some(interval(2, 2000)),
-                semantic_domain: None,
-            },
-        ];
-        let mut probes = vec![
-            ArithmeticProbe {
-                operation_identity: "quire.op.integer.add".to_owned(),
-                operation: "Add",
-                operands: vec!["amount".to_owned(), "1".to_owned()],
-                expected: "amount + 1".to_owned(),
-                operand_bounds: vec![(0, 1000), (1, 1)],
-                semantic_domain: None,
-                guard: "true".to_owned(),
-            },
-            ArithmeticProbe {
-                operation_identity: "quire.op.integer.mul".to_owned(),
-                operation: "Multiply",
-                operands: vec!["amount + 1".to_owned(), "2".to_owned()],
-                expected: "(amount + 1) * 2".to_owned(),
-                operand_bounds: vec![(1, 1001), (2, 2)],
-                semantic_domain: None,
-                guard: "true".to_owned(),
-            },
-        ];
-        bind_native_arithmetic_probes(&mut probes, &selection).expect("admitted typed plan");
-        assert_eq!(probes[0].semantic_domain, Some((0, 1000)));
-        assert_eq!(probes[1].operand_bounds, [(1, 1000), (2, 2)]);
-    }
-}
-
 fn native_term(
     term: &ClauseTerm,
     input_name: &str,
@@ -875,5 +808,72 @@ impl NativeTerm {
             Self::Boolean(expression) => Some(expression.clone()),
             Self::Integer { .. } => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod native_probe_tests {
+    use super::{bind_native_arithmetic_probes, ArithmeticProbe};
+    use crate::core::native_integer::{
+        NativeIntegerIntervalDecision as Interval, NativeIntegerOperationDecision as Decision,
+        NativeIntegerSelection,
+    };
+    use ix_trace_rs::trace;
+
+    #[trace("FR-015-AC-125", "TC-025")]
+    #[test]
+    fn bounded_add_feeding_multiply_uses_the_typed_completed_interval() {
+        let node_id: quire_contract_model::CheckedNodeId =
+            serde_json::from_value(serde_json::json!({
+                "domain": "quire.checked-semantic-node/v1",
+                "digest": "2".repeat(64),
+            }))
+            .expect("checked clause key");
+        let interval = |lower: i128, upper: i128| Interval {
+            lower: lower.to_string(),
+            upper: upper.to_string(),
+        };
+        let mut selection = NativeIntegerSelection::new();
+        selection.operations = vec![
+            Decision {
+                node_id: node_id.clone(),
+                step: 0,
+                operation_identity: "quire.op.integer.add".to_owned(),
+                operands: vec![interval(0, 1000), interval(1, 1)],
+                capacity: Some(interval(1, 1001)),
+                semantic_domain: Some(interval(0, 1000)),
+            },
+            Decision {
+                node_id,
+                step: 1,
+                operation_identity: "quire.op.integer.mul".to_owned(),
+                operands: vec![interval(1, 1000), interval(2, 2)],
+                capacity: Some(interval(2, 2000)),
+                semantic_domain: None,
+            },
+        ];
+        let mut probes = vec![
+            ArithmeticProbe {
+                operation_identity: "quire.op.integer.add".to_owned(),
+                operation: "Add",
+                operands: vec!["amount".to_owned(), "1".to_owned()],
+                expected: "amount + 1".to_owned(),
+                operand_bounds: vec![(0, 1000), (1, 1)],
+                semantic_domain: None,
+                guard: "true".to_owned(),
+            },
+            ArithmeticProbe {
+                operation_identity: "quire.op.integer.mul".to_owned(),
+                operation: "Multiply",
+                operands: vec!["amount + 1".to_owned(), "2".to_owned()],
+                expected: "(amount + 1) * 2".to_owned(),
+                operand_bounds: vec![(1, 1001), (2, 2)],
+                semantic_domain: None,
+                guard: "true".to_owned(),
+            },
+        ];
+        bind_native_arithmetic_probes(&mut probes, &selection).expect("admitted typed plan");
+        assert_eq!(probes[0].semantic_domain, Some((0, 1000)));
+        assert_eq!(probes[1].operand_bounds, [(1, 1000), (2, 2)]);
     }
 }
