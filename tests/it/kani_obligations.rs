@@ -3062,8 +3062,7 @@ fn native_scalar_generated_proof_body_typechecks() {
     let (harness, manifest) = native_scalar_increment();
     assert_eq!(harness.rust.contents.matches("#[kani::proof]").count(), 1);
     assert_eq!(harness.rust.contents.matches("#[cfg(kani)]").count(), 1);
-    let stubs = r#"#![allow(dead_code, unused_imports)]
-extern crate self as kani;
+    let stubs = r#"extern crate self as kani;
 pub fn any<T: Default>() -> T { T::default() }
 pub fn assume(_: bool) {}
 #[macro_export]
@@ -3074,11 +3073,11 @@ macro_rules! cover { ($condition:expr, $message:expr) => { let _ = ($condition, 
         harness
             .rust
             .contents
-            .replace("#[kani::proof]", "")
+            .replace("#[kani::proof]", "#[test]")
             .replace("#[cfg(kani)]", "")
     );
     let scratch = write_scalar_crate("native-scalar-cfg", &manifest, &source);
-    let metadata = std::process::Command::new(env!("CARGO"))
+    let metadata = std::process::Command::new("cargo")
         .args(["metadata", "--offline", "--format-version", "1"])
         .env(
             "CARGO_TARGET_DIR",
@@ -3092,8 +3091,8 @@ macro_rules! cover { ($condition:expr, $message:expr) => { let _ = ($condition, 
         "seeded native scalar lock: {}",
         String::from_utf8_lossy(&metadata.stderr)
     );
-    let output = std::process::Command::new(env!("CARGO"))
-        .args(["check", "--offline", "--locked", "--lib", "--quiet"])
+    let output = std::process::Command::new("cargo")
+        .args(["check", "--offline", "--locked", "--tests", "--quiet"])
         .env("RUSTFLAGS", "-Dwarnings")
         .env(
             "CARGO_TARGET_DIR",

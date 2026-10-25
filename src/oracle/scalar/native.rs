@@ -7,7 +7,7 @@ use quire_exact::{NativeIntegerInterval, NativeIntegerOperation, NativeIntegerPl
 use crate::core::native_integer::{
     NativeIntegerIntervalDecision, NativeIntegerOperationDecision, NativeIntegerSelection,
 };
-use crate::oracle::operator_catalog::IntegerOperator;
+use crate::oracle::operator_catalog::{IntegerOperator, Operator as CatalogOperator};
 
 pub(crate) fn select(
     node_id: &CheckedNodeId,
@@ -54,7 +54,7 @@ pub(crate) fn select(
         capacity: Some(plan.capacity().into()),
         semantic_domain: Some(domain.into()),
     });
-    Some((render(symbol, identity, &selection)?, selection))
+    Some((render(symbol, operator, &selection)?, selection))
 }
 
 fn literal(endpoint: i128) -> String {
@@ -80,19 +80,22 @@ fn decision_interval(interval: &NativeIntegerIntervalDecision) -> Option<NativeI
 /// Render a selected plan for both the routed artifact and its proof harness.
 pub(crate) fn render(
     symbol: &str,
-    identity: &str,
+    operator: IntegerOperator,
     selection: &NativeIntegerSelection,
 ) -> Option<String> {
     let [decision] = selection.operations.as_slice() else {
         return None;
     };
-    if decision.operation_identity != identity {
+    let identity = decision.operation_identity.as_str();
+    if CatalogOperator::from_identity(identity)?
+        .entry()
+        .scalar_operator
+        != Some(operator)
+    {
         return None;
     }
-    let (variant, parameters, descriptor, payloads) = match (identity, decision.operands.as_slice())
-    {
-        ("quire.op.integer.negate", [operand]) => (
-            "Negate",
+    let (parameters, descriptor, payloads) = match (operator, decision.operands.as_slice()) {
+        (IntegerOperator::Negate, [operand]) => (
             "operand: &nx::NativeInteger",
             format!(
                 "nx::NativeIntegerOperation::Negate {{ operand: {} }}",
@@ -100,15 +103,14 @@ pub(crate) fn render(
             ),
             "nx::NativeIntegerOperands::Unary { operand: *operand }",
         ),
-        (identity, [left, right]) => {
-            let variant = match identity {
-                "quire.op.integer.add" => "Add",
-                "quire.op.integer.sub" => "Subtract",
-                "quire.op.integer.mul" => "Multiply",
-                _ => return None,
+        (operator, [left, right]) => {
+            let variant = match operator {
+                IntegerOperator::Add => "Add",
+                IntegerOperator::Subtract => "Subtract",
+                IntegerOperator::Multiply => "Multiply",
+                IntegerOperator::Negate => return None,
             };
             (
-                variant,
                 "left: &nx::NativeInteger, right: &nx::NativeInteger",
                 format!(
                     "nx::NativeIntegerOperation::{variant} {{ left: {}, right: {} }}",
@@ -122,19 +124,19 @@ pub(crate) fn render(
     };
     let domain = decision_interval(decision.semantic_domain.as_ref()?)?;
     let capacity = decision_interval(decision.capacity.as_ref()?)?;
-    let operation = match (variant, decision.operands.as_slice()) {
-        ("Negate", [operand]) => NativeIntegerOperation::Negate {
+    let operation = match (operator, decision.operands.as_slice()) {
+        (IntegerOperator::Negate, [operand]) => NativeIntegerOperation::Negate {
             operand: decision_interval(operand)?,
         },
-        ("Add", [left, right]) => NativeIntegerOperation::Add {
+        (IntegerOperator::Add, [left, right]) => NativeIntegerOperation::Add {
             left: decision_interval(left)?,
             right: decision_interval(right)?,
         },
-        ("Subtract", [left, right]) => NativeIntegerOperation::Subtract {
+        (IntegerOperator::Subtract, [left, right]) => NativeIntegerOperation::Subtract {
             left: decision_interval(left)?,
             right: decision_interval(right)?,
         },
-        ("Multiply", [left, right]) => NativeIntegerOperation::Multiply {
+        (IntegerOperator::Multiply, [left, right]) => NativeIntegerOperation::Multiply {
             left: decision_interval(left)?,
             right: decision_interval(right)?,
         },

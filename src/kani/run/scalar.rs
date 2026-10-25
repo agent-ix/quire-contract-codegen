@@ -866,7 +866,7 @@ fn write_observer(
     };
     let stop_arms = match representation {
         ScalarIntegerRepresentation::General => "   Err(generated::OracleStop::IllTyped(_)) => println!(\"IR791_NATIVE_V1\\toracle_stop\\till_typed\"),\n   Err(generated::OracleStop::InvalidConstant) => println!(\"IR791_NATIVE_V1\\toracle_stop\\tinvalid_constant\"),\n   Err(generated::OracleStop::OperandWidth) => println!(\"IR791_NATIVE_V1\\toracle_stop\\toperand_width\"),",
-        ScalarIntegerRepresentation::Native => "   Err(generated::OracleStop::NativeAdmission(_)) => println!(\"IR791_NATIVE_V1\\toracle_stop\\tnative_admission\"),",
+        ScalarIntegerRepresentation::Native => "   Err(generated::OracleStop::NativeAdmission(reason)) => { let _ = reason; println!(\"IR791_NATIVE_V1\\toracle_stop\\tnative_admission\"); },",
     };
     let limits = [
         "integer_bits",
@@ -885,7 +885,6 @@ fn write_observer(
     .collect::<String>();
     let helper = format!(
         r#"
-#[allow(dead_code)]
 #[path = "../lib.rs"] mod generated;
 use quire_exact as rt;
 fn next_argument(arguments: &mut impl Iterator<Item = String>) -> Result<String, std::io::Error> {{
@@ -1712,7 +1711,8 @@ mod tests {
         assert!(source.contains("rt::NativeInteger::new(i128::from(operand_0))"));
         assert!(source.contains("rt::NativeInteger::new(i128::from(operand_1))"));
         assert!(source.contains("value.value()"));
-        assert!(source.contains("generated::OracleStop::NativeAdmission(_)"));
+        assert!(source.contains("generated::OracleStop::NativeAdmission(reason)"));
+        assert!(source.contains("let _ = reason;"));
         assert!(!source.contains("generated::OracleStop::IllTyped(_)"));
         syn::parse_file(&source).expect("the native observer is valid Rust syntax");
         let node_id = serde_json::from_value(serde_json::json!({
@@ -1738,7 +1738,7 @@ mod tests {
         let owner_lock = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.lock");
         for directory in [snapshot.path().to_owned(), snapshot.path().join("observer")] {
             fs::copy(&owner_lock, directory.join("Cargo.lock")).expect("seeded owner lock");
-            let output = Command::new(env!("CARGO"))
+            let output = Command::new("cargo")
                 .args(["metadata", "--offline", "--format-version", "1"])
                 .env(
                     "CARGO_TARGET_DIR",
@@ -1753,7 +1753,7 @@ mod tests {
                 String::from_utf8_lossy(&output.stderr)
             );
         }
-        let output = Command::new(env!("CARGO"))
+        let output = Command::new("cargo")
             .args([
                 "check",
                 "--offline",

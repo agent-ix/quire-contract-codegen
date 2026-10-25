@@ -311,8 +311,6 @@ pub fn generate_routed(
 
 /// Generate routed Kani scalar claims with the kernel-admitted native integer
 /// policy. Capacity ineligibility retains a typed unsupported disposition.
-///
-/// Trace: FR-015-AC-125
 pub fn generate_routed_native(
     package: &ContractPackageV1,
     positions: &[ContractRequestPosition],

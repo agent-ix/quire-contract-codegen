@@ -58,7 +58,6 @@ pub enum OracleStop {
     InvalidConstant,
     /// An IEEE operand does not have the declared width.
     OperandWidth,
-    /* native refusal */
     /* quantity refusal */
 }
 ";
@@ -176,18 +175,16 @@ impl SourceBuilder {
         } else {
             ""
         };
-        let mut source = SOURCE_HEADER.replace("/* quantity refusal */", quantity_refusal);
-        let (before_native, after_native) = source
-            .split_once("/* native refusal */")
-            .expect("the scalar source header declares its native refusal insertion point");
-        source = format!(
-            "{before_native}{}{after_native}",
-            if self.needs_native_admission {
-                "/// The production kernel rejected native interval or operand admission.\n    NativeAdmission(rt::NativeIntegerAdmissionError),"
-            } else {
-                ""
-            }
-        );
+        let mut source = SOURCE_HEADER.to_owned();
+        if self.needs_native_admission {
+            let (before, after) = source
+                .split_once("    /* quantity refusal */\n")
+                .expect("the scalar source header declares its native refusal insertion point");
+            source = format!(
+                "{before}    /// The production kernel rejected native interval or operand admission.\n    NativeAdmission(rt::NativeIntegerAdmissionError),\n    /* quantity refusal */\n{after}"
+            );
+        }
+        source = source.replace("/* quantity refusal */", quantity_refusal);
         if self.functions.contains("quantity_owner::") {
             source.push_str("use quire_semantic_value::quantity as quantity_owner;\n");
         }
@@ -714,9 +711,12 @@ pub(crate) fn publish_native_scalar_artifacts(
             continue;
         };
         if let Some(selection) = selections.get(&index) {
-            generated.oracle_source =
-                super::native::render(&generated.symbol, &claim.operation.identity, selection)
+            let operator =
+                crate::oracle::operator_catalog::Operator::from_identity(&claim.operation.identity)
+                    .and_then(|catalog| catalog.entry().scalar_operator)
                     .ok_or(OracleGenerationError::InvalidPlanState)?;
+            generated.oracle_source = super::native::render(&generated.symbol, operator, selection)
+                .ok_or(OracleGenerationError::InvalidPlanState)?;
         }
         functions.push((generated.symbol.clone(), generated.oracle_source.clone()));
     }
@@ -1099,4 +1099,129 @@ pub(super) fn build_contract_scalar_oracles(
         },
         claim_indexes,
     ))
+}
+
+#[cfg(test)]
+mod native_publication_tests {
+    use super::*;
+    use crate::oracle::scalar::{GeneratedScalarClaim, OperationClaim, OperationProvenance};
+    use ix_trace_rs::trace;
+    use quire_contract_model::CheckedSemanticId;
+
+    fn node_id(digit: char) -> CheckedNodeId {
+        serde_json::from_value(serde_json::json!({
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": digit.to_string().repeat(64),
+        }))
+        .expect("node id")
+    }
+
+    #[trace("FR-015-AC-125")]
+    #[test]
+    fn grouped_native_publication_keeps_each_proof_body_and_source_map_aligned() {
+        let package_id: CheckedSemanticId = serde_json::from_value(serde_json::json!({
+            "domain": "quire.contract-ir.semantic/v1",
+            "algorithm": "sha256",
+            "digest": "a".repeat(64),
+        }))
+        .expect("package id");
+        let symbols = ["oracle_integer_add_0", "oracle_integer_add_1"];
+        let mut selections = BTreeMap::new();
+        let mut items = Vec::new();
+        for (index, symbol) in symbols.into_iter().enumerate() {
+            let node = node_id(char::from(b'b' + u8::try_from(index).expect("two items")));
+            let (_, selection) = super::super::native::select(
+                &node,
+                "quire.op.integer.add",
+                symbol,
+                IntegerOperator::Add,
+                &[(0, 9), (1, 1)],
+                (0, 9),
+            )
+            .expect("admitted native selection");
+            selections.insert(index, selection);
+            items.push(ExactScalarClaim {
+                node_id: node.clone(),
+                operation: OperationClaim {
+                    identity: "quire.op.integer.add".to_owned(),
+                    provenance: OperationProvenance::IrConfirmed,
+                },
+                result: ClaimDisposition::Generated(Box::new(GeneratedScalarClaim {
+                    symbol: symbol.to_owned(),
+                    contract_package_identity: package_id.clone(),
+                    node_id: node.clone(),
+                    package_id: package_id.clone(),
+                    semantic_form: "binary".to_owned(),
+                    semantic_type: node,
+                    quantity_conversion_target: None,
+                    source_map: Vec::new(),
+                    claims: Vec::new(),
+                    bounds: Vec::new(),
+                    checked_bounds: Vec::new(),
+                    dependencies: Vec::new(),
+                    oracle_source: format!("pub fn {symbol}() {{}}\n"),
+                    boolean_right_may_stop: false,
+                })),
+            });
+        }
+        let mut claims = ClaimMap {
+            package_id,
+            blocked: Vec::new(),
+            items,
+        };
+        let old_source = symbols
+            .iter()
+            .map(|symbol| format!("pub fn {symbol}() {{}}\n"))
+            .collect::<String>();
+        let regions = [0_u32, 1].map(|index| ScalarCoverageRegion {
+            artifact_path: "src/lib.rs".to_owned(),
+            node_id: node_id(char::from(b'b' + u8::try_from(index).expect("two items"))),
+            role: "oracle_evaluation".to_owned(),
+            start_line: index + 1,
+            end_line: index + 1,
+            probe: SourceProbe {
+                line: index + 1,
+                start_column: 1,
+                end_column: 4,
+            },
+            expected_consequents: None,
+        });
+        let mut artifacts = vec![
+            Artifact::new("src/lib.rs", old_source),
+            Artifact::new(
+                "source-maps/lib.json",
+                serde_json::to_string(&regions).expect("old regions"),
+            ),
+        ];
+        publish_native_scalar_artifacts(&mut claims, &mut artifacts, &selections)
+            .expect("grouped native publication");
+        let source = &artifacts[0].contents;
+        assert_eq!(source.matches("pub enum OracleStop").count(), 2);
+        assert!(source.starts_with("mod oracle_0 {\n"));
+        for (index, (symbol, claim)) in symbols.iter().zip(&claims.items).enumerate() {
+            let ClaimDisposition::Generated(generated) = &claim.result else {
+                panic!("selected claim must generate");
+            };
+            let module = format!(
+                "mod oracle_{index} {{\n{}\n}}\npub use oracle_{index}::{symbol};\n",
+                generated.oracle_source
+            );
+            assert!(source.contains(&module), "module keeps proof bytes {index}");
+        }
+        let shifted: Vec<ScalarCoverageRegion> =
+            serde_json::from_str(&artifacts[1].contents).expect("published regions");
+        for (index, region) in shifted.iter().enumerate() {
+            assert_eq!(region.node_id, claims.items[index].node_id);
+            assert_eq!(region.role, "oracle_evaluation");
+            let declaration = format!("pub fn {}(", symbols[index]);
+            let line = source
+                .lines()
+                .position(|text| text.starts_with(&declaration))
+                .expect("published declaration")
+                + 1;
+            assert_eq!(region.start_line, u32::try_from(line).expect("line fits"));
+            assert_eq!(region.end_line, region.start_line);
+            assert_eq!(region.probe.line, region.start_line);
+        }
+    }
 }

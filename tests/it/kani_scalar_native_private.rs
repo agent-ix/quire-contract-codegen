@@ -155,7 +155,7 @@ fn run_mutant(mutant: &KaniScalarObligationHarness, manifest: &Artifact) -> Stri
         "fn main() { println!(\"cargo:rustc-check-cfg=cfg(kani)\"); }\n",
     )
     .unwrap();
-    let metadata = std::process::Command::new(env!("CARGO"))
+    let metadata = std::process::Command::new("cargo")
         .args(["metadata", "--offline", "--format-version", "1"])
         .env(
             "CARGO_TARGET_DIR",

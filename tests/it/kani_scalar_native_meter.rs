@@ -32,7 +32,7 @@ fn routed_native_oracle_preserves_denial_cancellation_counters_and_refusal() {
     )
     .expect("seeded owner dependency lock");
     let cargo = |args: &[&str]| {
-        let output = std::process::Command::new(env!("CARGO"))
+        let output = std::process::Command::new("cargo")
             .args(args)
             .env(
                 "CARGO_TARGET_DIR",

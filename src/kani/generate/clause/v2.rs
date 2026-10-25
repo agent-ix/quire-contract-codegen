@@ -283,7 +283,7 @@ fn render_postcondition(
         },
         binding(
             "expected",
-            Init::Expression(expression(expectation)?),
+            Init::Expression(expression(native_expected_expression(expectation)?)?),
             false,
         ),
         binding(

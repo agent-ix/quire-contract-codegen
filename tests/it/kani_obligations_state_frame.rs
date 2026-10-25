@@ -133,7 +133,7 @@ fn qsl_emitted_state_clause_derives_a_confirmed_field_backed_oracle() {
             quire_contract_codegen::EXACT_DEPENDENCY_SOURCE
         ),
     );
-    let output = std::process::Command::new(env!("CARGO"))
+    let output = std::process::Command::new("cargo")
         .args(["test", "--offline", "--quiet"])
         .env("CARGO_TARGET_DIR", scratch.path.join("target"))
         .env("RUSTFLAGS", "-Dwarnings")
@@ -286,7 +286,7 @@ fn admitted_inline_clause_keeps_the_clause_identity() {
             quire_contract_codegen::EXACT_DEPENDENCY_SOURCE
         ),
     );
-    let output = std::process::Command::new(env!("CARGO"))
+    let output = std::process::Command::new("cargo")
         .args(["test", "--offline", "--quiet"])
         .env("CARGO_TARGET_DIR", scratch.path.join("target"))
         .env("RUSTFLAGS", "-Dwarnings")
@@ -375,7 +375,7 @@ fn qsl_bounded_operation_parameter_becomes_a_clause_input() {
             quire_contract_codegen::EXACT_DEPENDENCY_SOURCE
         ),
     );
-    let output = std::process::Command::new(env!("CARGO"))
+    let output = std::process::Command::new("cargo")
         .args(["test", "--offline", "--quiet"])
         .env("CARGO_TARGET_DIR", scratch.path.join("target"))
         .env("RUSTFLAGS", "-Dwarnings")
@@ -704,7 +704,7 @@ fn native_v2_postcondition_oracle_typechecks_with_direct_dependencies() {
     fs::create_dir_all(directory.path.join("src")).unwrap();
     write_v2_precondition_fixture(&directory.path, harness);
     super::scratch_crate::resolve_seeded_lock(&directory.path);
-    let output = std::process::Command::new(env!("CARGO"))
+    let output = std::process::Command::new("cargo")
         .args(["check", "--locked", "--offline", "--lib", "--quiet"])
         .env(
             "CARGO_TARGET_DIR",
@@ -720,8 +720,7 @@ fn native_v2_postcondition_oracle_typechecks_with_direct_dependencies() {
     );
     assert_eq!(harness.rust.contents.matches("#[kani::proof]").count(), 1);
     assert_eq!(harness.rust.contents.matches("#[cfg(kani)]").count(), 1);
-    let stubs = r#"#![allow(dead_code, unused_imports, unused_parens)]
-extern crate self as kani;
+    let stubs = r#"extern crate self as kani;
 pub fn any<T: Default>() -> T { T::default() }
 pub fn assume(_: bool) {}
 #[macro_export]
@@ -733,12 +732,12 @@ pub mod request { pub fn unrelated(_: i64) -> bool { true } }
         harness
             .rust
             .contents
-            .replace("#[kani::proof]", "")
+            .replace("#[kani::proof]", "#[test]")
             .replace("#[cfg(kani)]", "")
     );
     fs::write(directory.path.join("src/lib.rs"), source).expect("active proof body");
-    let output = std::process::Command::new(env!("CARGO"))
-        .args(["check", "--locked", "--offline", "--lib", "--quiet"])
+    let output = std::process::Command::new("cargo")
+        .args(["check", "--locked", "--offline", "--tests", "--quiet"])
         .env("RUSTFLAGS", "-Dwarnings")
         .env(
             "CARGO_TARGET_DIR",
@@ -902,7 +901,7 @@ fn tc_025_v2_precondition_fixture_compiles_with_its_direct_dependencies() {
     write_v2_precondition_fixture(&directory, &harness);
     super::scratch_crate::resolve_seeded_lock(&directory);
     eprintln!("actual V2 precondition fixture: {}", directory.display());
-    let output = std::process::Command::new(env!("CARGO"))
+    let output = std::process::Command::new("cargo")
         .args(["check", "--locked", "--offline", "--lib", "--quiet"])
         .env(
             "CARGO_TARGET_DIR",
