@@ -29,8 +29,8 @@ per-requirement vacuity report without executing a coverage producer itself.
 - Planned (IR-815): for the V2 analyzer, the executable clauses of an admitted `CheckedPackageV2`,
   read through the `core/ir/` layer of AD-004, in place of the V1 bound population. The expected
   population includes every executable clause of the admitted package; only a clause selected for
-  V2 strategy generation requires that generation request's explicit typed execution point under
-  FR-011. The V2 source of the requirement and revision identity remains open (below).
+  V2 strategy generation requires the accepted QSL `ClauseBinding.execution_point` on its V2 node,
+  under FR-011. The V2 source of the requirement and revision identity remains open (below).
 - Generated Rust/source-map bytes with entry probes and the independently derived implication census.
 - LLVM coverage JSON export bytes captured directly from the LLVM export child started by the
   CG campaign runner for this invocation, its tool and version, and native runtime campaign
@@ -178,14 +178,14 @@ per-requirement vacuity report without executing a coverage producer itself.
 - Planned (IR-815): the analyzer shall apply the classification and non-success rules above to a
   V2 clause population without change.
 - If an executable clause in the V2 analyzer's expected population is selected for V2 strategy
-  generation, then the CG V2 strategy generator shall authenticate the request's typed execution
-  point against that clause's accepted QSL binding point when present, or the caller's typed
-  invocation point when no binding point exists, as FR-011-AC-6 and FR-011-AC-7 require.
-- If that selection lacks a request point or both possible source points, then the CG V2 strategy
-  generator shall return `MissingExecutionPoint` and no artifact. If the request point differs from
-  its authoritative source point, then it shall return `ExecutionPointMismatch` and no artifact.
-  The generator shall not infer a point from clause kind. The analyzer shall not count a refused
-  selection as generated campaign evidence.
+  generation, then the CG V2 strategy generator shall take its typed execution point only from
+  the selected V2 node's accepted QSL `ClauseBinding.execution_point`, as FR-011-AC-6 and
+  FR-011-AC-7 require.
+- If that selected clause lacks an accepted binding point, then the CG V2 strategy generator shall
+  return `MissingExecutionPoint` and no artifact. If the rendered harness or verdict point differs
+  from the accepted binding point, then the generator shall return `ExecutionPointMismatch` and no
+  artifact. The generator shall not infer a point from clause kind or caller invocation context.
+  The analyzer shall not count a refused selection as generated campaign evidence.
 
 ## Acceptance Criteria
 
@@ -215,7 +215,7 @@ per-requirement vacuity report without executing a coverage producer itself.
 | FR-004-AC-22 | PLANNED (IR-815). Over a V2 clause population, an implication-bearing clause with every expected consequent probe observed, and an implication-free clause with its evaluation region observed, is `exercised`. | Test (TC-006) |
 | FR-004-AC-23 | PLANNED (IR-815). Over a V2 clause population, removing one clause, one consequent probe, one evaluation probe, or every clause from the generated artifacts, each alone, prevents successful analysis. | Test (TC-006) |
 | FR-004-AC-24 | PLANNED (IR-815). Over a V2 clause population, each malformed input class of FR-004-AC-5 yields a non-success outcome with no invented classification. | Test (TC-006) |
-| FR-004-AC-25 | PLANNED. For any executable clause in the V2 analyzer's expected population selected for strategy generation, the generator authenticates its explicit typed execution point as FR-011-AC-6 requires. A missing request point or missing point in both the binding and caller context returns `MissingExecutionPoint`; a request point differing from the available authoritative point returns `ExecutionPointMismatch`, as FR-011-AC-7 requires. Every refusal produces no artifact; no point is inferred from clause kind. | Test (TC-020 steps 7-8) |
+| FR-004-AC-25 | PLANNED. For any executable clause in the V2 analyzer's expected population selected for strategy generation, the generator uses only the selected V2 node's accepted QSL `ClauseBinding.execution_point` as FR-011-AC-6 requires. A missing accepted binding point returns `MissingExecutionPoint`; a rendered harness or verdict point differing from that binding returns `ExecutionPointMismatch`, as FR-011-AC-7 requires. Every refusal produces no artifact; no point is inferred from clause kind or caller invocation context. | Test (TC-020 steps 7-8) |
 
 ## Implementation boundary
 
