@@ -46,12 +46,12 @@ use crate::{
             outcome::{BoundNotResolvedCause, StateFrameRefusal},
         },
         identity::{ObligationBinding, StateFrameIdentity, StateFrameProperty},
-        output::playback::DecodeFailure,
+        output::playback::parse_assertion_playback,
         terminal::ReplaySettlement,
     },
     replay::{
         function::{render_witness, DependencyLockError, ProvidedDocument, ReplayInputs},
-        witness::{decode_playback, WitnessDecodeLimits},
+        witness::{decode_playback, DecodeFailure, WitnessDecodeLimits},
     },
 };
 
@@ -530,11 +530,19 @@ impl StateClauseReplayInputs<'_> {
                 dependencies: Vec::new(),
             })
             .collect::<Vec<_>>();
+        let parsed = parse_assertion_playback(
+            counterexample,
+            harness.harness_symbol.as_str(),
+            harness.module_symbol.as_str(),
+            limits.bytes,
+            limits.values,
+        )
+        .map_err(|refusal| StateClauseReplayError::Decode(refusal.into()))?;
         let decoded = decode_playback(
             harness.harness_symbol.as_str(),
             harness.module_symbol.as_str(),
             &bindings,
-            counterexample,
+            &parsed,
             limits,
         )
         .map_err(StateClauseReplayError::Decode)?;

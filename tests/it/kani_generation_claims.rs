@@ -9,12 +9,27 @@ use std::{
 
 use ix_trace_rs::trace;
 use quire_contract_codegen::{
-    classify_kani_run, ClassifiedRun, KaniCheckResult, KaniCheckStatus, KaniRunOutcome,
+    classify_kani_run as classify_typed, select_counterexample, ClassifiedRun, KaniCheckResult,
+    KaniCheckStatus, KaniReportRefusal, KaniRunOutcome, ObligationKind,
 };
 use serde::Deserialize;
 use syn::{spanned::Spanned, Item};
 
 const DECLARATION: &str = "scripts/kani_claims.json";
+
+fn classify_kani_run(
+    exited_successfully: bool,
+    report: Option<&[u8]>,
+    text: &str,
+    kind: Option<ObligationKind>,
+) -> Result<ClassifiedRun, KaniReportRefusal> {
+    classify_typed(
+        exited_successfully,
+        report,
+        select_counterexample(text, None),
+        kind,
+    )
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]

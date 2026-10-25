@@ -6,10 +6,10 @@
 use std::collections::BTreeSet;
 
 use crate::kani::{
-    abi::integer_scalar_operand_count,
-    identity::ScalarObligationIdentity,
-    output::playback::{read_block, select_assertion_block, DecodeFailure},
+    abi::integer_scalar_operand_count, identity::ScalarObligationIdentity,
+    output::playback::parse_assertion_playback,
 };
+use crate::replay::witness::DecodeFailure;
 
 const PLAYBACK_BYTES: usize = 8 * 1024 * 1024;
 
@@ -69,10 +69,10 @@ pub fn decode_scalar_falsification(
             &format!("{module};bytes={PLAYBACK_BYTES}"),
         ));
     }
-    let block = select_assertion_block(transcript, harness, module)?;
     // The fixed byte ceiling bounds adapter allocation. Read all entries so extra draws retain
     // the arity refusal, rather than being reported as a caller-configured value limit.
-    let playback = read_block(block, harness, module, usize::MAX)?;
+    let playback =
+        parse_assertion_playback(transcript, harness, module, PLAYBACK_BYTES, usize::MAX)?;
     let qualified = format!("{module}::{harness}");
     if playback.harness != qualified {
         return Err(DecodeFailure::new(
@@ -94,7 +94,7 @@ pub fn decode_scalar_falsification(
                 .try_into()
                 .map_err(|_| failure("kani_witness_width_mismatch", &argument.identifier))?;
             let value = i64::from_le_bytes(bytes);
-            if comment.parse::<i64>() != Ok(value) {
+            if comment.integer != Some(value) {
                 return Err(failure(
                     "kani_witness_comment_mismatch",
                     &argument.identifier,

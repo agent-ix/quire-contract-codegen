@@ -74,9 +74,9 @@ mod tests {
     use ix_trace_rs::trace;
     use qsl_replay::{ReplayLimits, ScalarLimits, WitnessValue, DEFAULT_REPLAY_INPUT_BYTES};
     use quire_contract_codegen::{
-        decode_falsification, execute_kani_obligation, replay_counterexample, KaniExecutionRequest,
-        KaniObligationIdentity, KaniRunOutcome, LockedSource, ReplayInputs, ReplayPackage,
-        ReplayVerdict,
+        decode_falsification, execute_kani_obligation, parse_assertion_playback,
+        replay_counterexample, KaniExecutionRequest, KaniObligationIdentity, KaniRunOutcome,
+        LockedSource, ReplayInputs, ReplayPackage, ReplayVerdict,
     };
     use std::{collections::BTreeMap, process::Command};
 
@@ -231,11 +231,19 @@ mod tests {
         let replacement = synthetic_playback(&harness_path, 1, 5);
         assert!(!bound_to_stdout(&replacement));
 
+        let parsed = parse_assertion_playback(
+            &counterexample,
+            harness.identity.harness_symbol.as_str(),
+            harness.identity.module_symbol.as_str(),
+            usize::MAX,
+            usize::MAX,
+        )
+        .expect("the retained playback parses");
         let decoded = decode_falsification(
             harness.identity.harness_symbol.as_str(),
             harness.identity.module_symbol.as_str(),
             &harness.identity.arguments,
-            &counterexample,
+            &parsed,
             crate::unbounded_decode_limits(),
         )
         .expect("the retained playback decodes");
@@ -250,11 +258,19 @@ mod tests {
             ReplayVerdict::Reproduced
         );
 
+        let parsed_replacement = parse_assertion_playback(
+            &replacement,
+            harness.identity.harness_symbol.as_str(),
+            harness.identity.module_symbol.as_str(),
+            usize::MAX,
+            usize::MAX,
+        )
+        .expect("the substituted playback parses");
         decode_falsification(
             harness.identity.harness_symbol.as_str(),
             harness.identity.module_symbol.as_str(),
             &harness.identity.arguments,
-            &replacement,
+            &parsed_replacement,
             crate::unbounded_decode_limits(),
         )
         .expect("the substituted playback is valid and decodes");

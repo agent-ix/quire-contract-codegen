@@ -14,9 +14,9 @@ use ix_trace_rs::trace;
 use jsonschema::{Draft, JSONSchema};
 use quire_contract_codegen::{
     classify_kani_run, generate_bounded_kani_corpus_case, prepare_bounded_collection_query,
-    prepare_finite_graph_reaches, BoundedCorpusCase, BoundedCorpusRequest, CollectionLowering,
-    CollectionQuery, CorpusProofDependencyGraph, EmittedCorpusIdentities, GraphLowering,
-    GraphRequest, KaniInconclusiveReason, KaniRunOutcome, ProofDependencyKind,
+    prepare_finite_graph_reaches, select_counterexample, BoundedCorpusCase, BoundedCorpusRequest,
+    CollectionLowering, CollectionQuery, CorpusProofDependencyGraph, EmittedCorpusIdentities,
+    GraphLowering, GraphRequest, KaniInconclusiveReason, KaniRunOutcome, ProofDependencyKind,
     ProofDependencyRequest, ProofDependencyState, ProofReadiness, QueryKind, ReplayVerdict,
     CORPUS_PROOF_GRAPH_SCHEMA,
 };
@@ -669,9 +669,14 @@ fn classify_corpus(
         String::from_utf8_lossy(&output.stderr)
     );
     let report = fs::read(&report_path).ok();
-    classify_kani_run(output.status.success(), report.as_deref(), &text, None)
-        .unwrap_or_else(|refusal| panic!("the run was refused as {refusal:?}:\n{text}"))
-        .outcome
+    classify_kani_run(
+        output.status.success(),
+        report.as_deref(),
+        select_counterexample(&text, None),
+        None,
+    )
+    .unwrap_or_else(|refusal| panic!("the run was refused as {refusal:?}:\n{text}"))
+    .outcome
 }
 
 /// A corpus case draws no input, so a falsification's playback carries no value.

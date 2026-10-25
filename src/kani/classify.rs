@@ -7,7 +7,7 @@ use serde::Serialize;
 use crate::kani::{
     identity::ObligationKind,
     output::{
-        playback::counterexample_playback,
+        playback::CounterexamplePlayback,
         report::{
             KaniCheckResult, KaniHarnessReport, KaniHarnessStatus, KaniMemberReport,
             KaniReportRefusal,
@@ -102,8 +102,7 @@ pub struct ClassifiedRun {
 /// kind, carries exactly the covers that witness its assumptions are satisfiable, so success
 /// without every cover satisfied is vacuous and never `Verified`.
 ///
-/// `report` is the exported report's bytes and `text` the run's console output, used only to find
-/// the playback of a falsifying check. A run that exited unsuccessfully and exported no report
+/// `report` is the exported report's bytes and `playback` is a selected, typed playback. A run that exited unsuccessfully and exported no report
 /// never reached a verdict (a build, launcher or solver failure), which is
 /// [`KaniInconclusiveReason::NoVerdict`]. A run that exited successfully and exported none, or
 /// any report [`KaniReportRefusal`] describes, is a refusal: the run is not read as
@@ -127,7 +126,7 @@ pub struct ClassifiedRun {
 pub fn classify_kani_run(
     exited_successfully: bool,
     report: Option<&[u8]>,
-    text: &str,
+    playback: Option<CounterexamplePlayback>,
     kind: Option<ObligationKind>,
 ) -> Result<ClassifiedRun, KaniReportRefusal> {
     let Some(report) = report else {
@@ -142,12 +141,7 @@ pub fn classify_kani_run(
         };
     };
     let report = KaniHarnessReport::parse(report)?;
-    let outcome = classify_report(
-        exited_successfully,
-        &report,
-        || counterexample_playback(text, None),
-        kind,
-    );
+    let outcome = classify_report(exited_successfully, &report, || playback, kind);
     Ok(classified(outcome, report, kind))
 }
 
@@ -165,7 +159,7 @@ pub fn classify_kani_run(
 pub(crate) fn classify_member(
     process_succeeded: bool,
     member: &KaniMemberReport,
-    playback: impl FnOnce() -> Option<String>,
+    playback: impl FnOnce() -> Option<CounterexamplePlayback>,
     kind: Option<ObligationKind>,
 ) -> ClassifiedRun {
     let report = member.report.clone();
@@ -206,7 +200,7 @@ fn classified(
 fn classify_report(
     exited_successfully: bool,
     report: &KaniHarnessReport,
-    playback: impl FnOnce() -> Option<String>,
+    playback: impl FnOnce() -> Option<CounterexamplePlayback>,
     kind: Option<ObligationKind>,
 ) -> KaniRunOutcome {
     match report.status {
@@ -216,7 +210,9 @@ fn classify_report(
             inconclusive(KaniInconclusiveReason::UnwindBoundExhausted)
         }
         KaniHarnessStatus::Failure => match report.failed_property().then(playback).flatten() {
-            Some(counterexample) => KaniRunOutcome::Falsified { counterexample },
+            Some(counterexample) => KaniRunOutcome::Falsified {
+                counterexample: counterexample.test().to_owned(),
+            },
             None => inconclusive(KaniInconclusiveReason::FailedWithoutCounterexample),
         },
     }
@@ -253,11 +249,26 @@ fn inconclusive(reason: KaniInconclusiveReason) -> KaniRunOutcome {
 #[cfg(test)]
 mod synthetic {
     use super::*;
+    use crate::kani::output::playback::select_counterexample;
     use crate::kani::test_support::{report, COVER_NO, COVER_OK, PASSED};
     use ix_trace_rs::trace;
 
     const COVER_PLAYBACK: &str = "Concrete playback unit test for `m::h`:\n```\n/// Test generated for harness `m::h` that checks contract for `c`\n///\n/// Check for `cover`: \"contract assumptions are jointly satisfiable\"\n\n#[test]\nfn kani_concrete_playback_h_1() {\n    let concrete_vals: Vec<Vec<u8>> = vec![vec![0, 0, 0, 0, 0, 0, 0, 0]];\n    kani::concrete_playback_run(concrete_vals, h);\n}\n```\n";
     const ASSERTION_PLAYBACK: &str = "Concrete playback unit test for `m::h`:\n```\n/// Test generated for harness `m::h` that checks contract for `c`\n///\n/// Check for `assertion`: \"|post_state: &i64| *post_state <= 5\"\n\n#[test]\nfn kani_concrete_playback_h_2() {\n    let concrete_vals: Vec<Vec<u8>> = vec![vec![8, 0, 0, 0, 0, 0, 0, 0]];\n    kani::concrete_playback_run(concrete_vals, h);\n}\n```\n";
+
+    fn classify_kani_run(
+        exited_successfully: bool,
+        report: Option<&[u8]>,
+        text: &str,
+        kind: Option<ObligationKind>,
+    ) -> Result<ClassifiedRun, KaniReportRefusal> {
+        super::classify_kani_run(
+            exited_successfully,
+            report,
+            select_counterexample(text, None),
+            kind,
+        )
+    }
 
     fn classify(
         exited_successfully: bool,
@@ -460,8 +471,23 @@ mod synthetic {
 #[cfg(test)]
 mod real_capture {
     use super::*;
+    use crate::kani::output::playback::select_counterexample;
     use crate::kani::output::report::{KaniCheckClass, KaniCheckLocation, KaniCheckStatus};
     use ix_trace_rs::trace;
+
+    fn classify_kani_run(
+        exited_successfully: bool,
+        report: Option<&[u8]>,
+        text: &str,
+        kind: Option<ObligationKind>,
+    ) -> Result<ClassifiedRun, KaniReportRefusal> {
+        super::classify_kani_run(
+            exited_successfully,
+            report,
+            select_counterexample(text, None),
+            kind,
+        )
+    }
 
     /// A real Kani capture of one `--exact` harness: the exported report, its stdout, and
     /// whether it exited successfully.

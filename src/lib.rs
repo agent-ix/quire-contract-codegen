@@ -238,7 +238,10 @@ pub use kani::identity::{
     StateFrameHarness, StateFrameIdentity, StateFrameProperty, StateFrameRecordError,
     StateFrameScope, StateUnrangedField, StateUnrangedReason, V2ClauseObligationIdentity,
 };
-pub use kani::output::playback::DecodeFailure;
+pub use kani::output::playback::{
+    parse_assertion_playback, select_counterexample, CounterexamplePlayback, Playback,
+    PlaybackRefusal, PlaybackRefusalCode,
+};
 pub use publication::publish::{write_bundle_atomic, PublishedBundleIdentity};
 pub use replay::composite::{
     composite_parity_terminal_value, verified_shadow_terminal_value, CompositeParitySettlement,
@@ -264,6 +267,7 @@ pub use replay::state_clause::{
     StateClauseModelFieldsCause, StateClauseReplay, StateClauseReplayError,
     StateClauseReplayInputs, StateObjectAddress,
 };
+pub use replay::witness::DecodeFailure;
 pub use replay::witness::{decode_falsification, WitnessDecodeLimits};
 pub use strategy::campaign::{
     generate_enum_strategy, generate_i64_strategy, EnumStrategyCampaign, EnumStrategyRequest,
