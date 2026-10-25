@@ -162,14 +162,36 @@ session; CG's current schedule and location map do not supply it.
   fabricated by a schedule-only result. CG emits no FR-485 owner-path oracle
   until the facade and CG consumer are implemented and verified. The planned
   concrete claim map retains QSL facade causes without relabelling them as
-  identity mismatch: `ExactFunctionRefusal::FacadeLookup { cause:
-  CallableLookupRefusal }`, `::RegistrationNotAccepted { admission: Admission }`
-  for each non-`Accepted` leaf result, `::SelectionRefused { cause:
-  SelectionRefusal }`, and `::ApplicationBeginRefused { cause:
-  ApplicationBeginRefusal }`. Each remains a `ClaimDisposition::Refused` for
-  the affected item, with no concrete oracle symbol or application charge.
-  Private CG result-mapping functions accept these typed facade results; the
-  production path and isolated variant tests call the same functions.
+  identity mismatch. Its planned `ExactFunctionRefusal::{FacadeLookup,
+  RegistrationNotAccepted, SelectionRefused, ApplicationBeginRefused}` variants
+  each contain `cause_code: &'static str` and `detail: String`, never a QSL or
+  leaf enum payload. The existing serde-tagged outer `code` field identifies
+  the CG refusal variant; `cause_code` is a CG-owned stable string from the
+  exhaustive mappings below, and `detail` renders the original typed outcome
+  with `Debug`, including payload data such as `Foreign(package_id)`. The
+  in-memory facade result remains typed until one private CG result-mapping
+  function for its enum converts it to these serializable fields. Production
+  and isolated variant tests call the same functions. No CG mirror enum or
+  QSL/leaf `Serialize` derive is required. Each result remains a
+  `ClaimDisposition::Refused` for the affected item, with no concrete oracle
+  symbol or application charge.
+
+  The `CallableLookupRefusal` mapping is `Unknown` to `lookup.unknown`,
+  `Foreign(_)` to `lookup.foreign`, and `WrongKind` to `lookup.wrong_kind`.
+  The `Admission` mapping is `Accepted` to no refusal, `RegistrySealed` to
+  `registration.registry_sealed`, `CallableNotAdmitted` to
+  `registration.callable_not_admitted`, `SignatureMismatch` to
+  `registration.signature_mismatch`, and `DuplicateBinding` to
+  `registration.duplicate_binding`. The `SelectionRefusal` mapping is
+  `WrongAcquisition` to `selection.wrong_acquisition`. The
+  `ApplicationBeginRefusal` mapping is `WrongAcquisition` to
+  `begin.wrong_acquisition` and `Call(cause)` to the exhaustive `CallFailure`
+  mapping prefixed by `begin.call.`: `Input` to `input`, `Fault` to `fault`,
+  `Cancelled` to `cancelled`, `Storage` to `storage`, `Supplied` to `supplied`,
+  and `UnsupportedHelper` to `unsupported_helper`. Each enum has one exhaustive
+  match without a wildcard, so a new QSL or leaf variant breaks the build
+  until CG assigns it a distinct stable code. The detail string does not
+  decide the code and is not a second serialized cause vocabulary.
 - A location map of constant-size parent-linked occurrence records as defined
   above, encoded as deterministic positional arrays with node ids in a shared
   dictionary so long field names and node ids are not repeated per record.
@@ -295,13 +317,15 @@ session; CG's current schedule and location map do not supply it.
 - When CG registers the generated `quire_eval::BodyFactory`, it shall supply
   that selection and `selection.signature()` and require
   `Ok(Admission::Accepted)` before Begin. A non-`Accepted` `Admission` or
-  `SelectionRefusal` shall produce the typed claim-map refusal above, without
-  body invocation or application charge.
+  `SelectionRefusal` shall pass through its exhaustive typed result mapper to
+  the serializable claim-map refusal above, without body invocation or
+  application charge.
 - When registration is accepted, the concrete oracle shall pass that selection,
   completed `Vec<quire_exact::Value>` arguments, an `ApplicationEnvironment`
   made from the caller's admitted `ObjectClosure`, and the caller-owned
-  `quire_exact::Meter` to `begin_call`. An `ApplicationBeginRefusal` shall
-  produce its typed claim-map refusal above, without body invocation or
+  `quire_exact::Meter` to `begin_call`. An `ApplicationBeginRefusal` shall pass
+  through its exhaustive typed result mapper to the serializable claim-map
+  refusal above, without body invocation or
   application charge. Successful Begin permanently seals the registry.
 - When Begin returns a `CheckedApplicationSession`, the concrete oracle shall
   step or run it to terminal leaf `Evaluation` or `CallFailure`. CG shall not
@@ -349,7 +373,7 @@ session; CG's current schedule and location map do not supply it.
 | FR-021-AC-34 | Given one authentic strict-reader-admitted `CheckedPackageV2` of less than 1,048,576 bytes containing 129 distinct functions with two bound Integer parameters each, 128 acyclic `quire.op.function.call` body-root edges forming one chain and a terminating admitted Scalar body, the public function generator schedules all 129 functions and all 128 call edges from that same checked graph. Use the default 1,048,576-byte Contract IR reader/lowering ceilings and default 1,048,576-byte generated-source ceiling; only the caller-selected generation work limit may be raised to the measured required units. The requested chain item has exactly one `Scheduled` claim naming its root instruction slot, the generated flat SSA schedule contains 128 call instructions with ordered two-argument operands and compiles within the default source limit, no item is refused with `LoweringByteLimitExceeded`, and no `SourceTooLarge` error occurs. Source, claims and location map are byte-identical under request permutation. AC-23's real Scalar/Equality and requested call-item `Failed` mappings, AC-12's isolation, call-node-first precedence and AC-27's source-binding refusals still apply. PLANNED (IR-768). | Test (TC-031) |
 | FR-021-AC-35 | For a concrete FR-485 corpus request, the caller supplies all seven acquisition inputs and the separately admitted Contract IR package. CG calls `qsl_replay::acquire_checked_closure` once for the generated run and receives `CheckedClosureCompilation` with emitted package, admitted context and retained `CheckedClosureHandle`; it does not reconstruct a QSL checked closure from the V2 graph or emitted source. Acquisition failure remains `AdmittedRefusal` and yields no handle. PLANNED pending IR-1007 and IR-595. | Test (TC-031) |
 | FR-021-AC-36 | CG maps the declaring admitted V2 `package_id` domain and digest exactly to FR-485's `DigestRecord` owner id, and the function's `CheckedNodeId` digest exactly to `WireNodeId` only when its domain is `quire.checked-semantic-node/v1`. The own or imported declaring package is selected explicitly; no cross-domain coercion, rehash, fabricated `NodeKey` or name-only owner substitution occurs. CG calls `CheckedClosureHandle::lookup_callable(owner_package_id, wire_node_id)` and receives a checker-issued opaque `CallableSelection` before registration. It registers the generated `BodyFactory` with that selection and `selection.signature()`; only `Ok(Admission::Accepted)` permits CG to pass that same selection, completed arguments, environment and caller-owned `Meter` to `begin_call`. A raw key alone is never authority. PLANNED pending IR-1007 and IR-595. | Test (TC-031) |
-| FR-021-AC-37 | A mismatch between `CheckedClosureHandle::package_id()` and the CG request's admitted unit package id refuses the item as `ExactFunctionRefusal::OwnerIdentityMismatch` before registration, Begin, body invocation or application charge. The same refusal follows a mismatch between `CallableSelection::owner_package_id()` and the selected function's declaring admitted V2 package id, or between the selection's read-only check-minted key bytes and that function's node digest. The selection comparisons run in a private post-lookup guard; TC-031 exercises them with a genuine selection from a second successful lookup in the same acquired closure, without fabricating a selection or changing production lookup. A matching sibling retains its disposition. A QSL `lookup_callable` refusal remains its exact `CallableLookupRefusal::Unknown`, `Foreign(package_id)` or `WrongKind` cause in `ClaimDisposition::Refused { refusal: ExactFunctionRefusal::FacadeLookup { cause } }`, not `OwnerIdentityMismatch`; non-`Accepted` registration and wrong-acquisition or leaf Begin refusals retain their exact typed causes in the planned claim-map variants and incur no application charge. PLANNED pending IR-1007 and IR-595. | Test (TC-031) |
+| FR-021-AC-37 | A mismatch between `CheckedClosureHandle::package_id()` and the CG request's admitted unit package id refuses the item as `ExactFunctionRefusal::OwnerIdentityMismatch` before registration, Begin, body invocation or application charge. The same refusal follows a mismatch between `CallableSelection::owner_package_id()` and the selected function's declaring admitted V2 package id, or between the selection's read-only check-minted key bytes and that function's node digest. The selection comparisons run in a private post-lookup guard; TC-031 exercises them with genuine selections from second successful lookups in the same acquired closure, without fabricating a selection or changing production lookup. A matching sibling retains its disposition. A QSL `lookup_callable` refusal remains distinguishable as its exact `CallableLookupRefusal::Unknown`, `Foreign(package_id)` or `WrongKind` cause, not `OwnerIdentityMismatch`; non-`Accepted` registration and wrong-acquisition or leaf Begin refusals likewise retain distinct stable `cause_code` values and rendered details in the planned serializable claim-map variants and incur no application charge. PLANNED pending IR-1007 and IR-595. | Test (TC-031) |
 
 ### Mutations these criteria detect
 

@@ -369,7 +369,7 @@ then starts a metered `CheckedApplicationSession` through `begin_call`; the
 session's `step` or `run` delegates to the one leaf evaluator. QSL's reference
 adapter and the leaf's authoritative root call site sit behind this facade.
 The candidate is not merged delivery. Before a concrete function-application
-oracle replaces the historical RT-port witness, QSL #1483 and the IR-595 CG
+oracle replaces the historical RT-port witness, IR-1007's FR-485 facade and the IR-595 CG
 consumer must land and pass their acceptance checks. CG's `oracle` module
 uses this application facade for checked callables; CG's `replay` module keeps
 using `qsl_replay::replay` for Kani witness settlement. Neither module imports

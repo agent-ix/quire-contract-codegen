@@ -181,29 +181,48 @@ required dependency or target path.
      registration and Begin authority. Pair the admitted CG request for A
      with a separately authentic QSL acquisition for B to exercise the unit
      package mismatch. To exercise the selection mismatch, obtain a genuine
-     second `CallableSelection` by a successful lookup of a different admitted
-     callable in A's same acquired closure and pass it to CG's private
+     second `CallableSelection` by a successful lookup of a callable owned by
+     an imported dependency in A's same acquired closure. Give that dependency
+     a distinct package id but a callable with the same checked node digest as
+     the unit's requested callable, then pass its selection to CG's private
      post-lookup identity-validation function with the original request ids.
-     Production shall pass only its own lookup result to that same function.
-     Neither path constructs a selection. For each mismatch assert the affected
+     This isolates the owner mismatch while the key bytes match. Separately,
+     pass a second successful selection for a different callable in the unit;
+     this isolates the key mismatch while the owner matches. Production shall
+     pass only its own lookup result to that same function. Neither path
+     constructs a selection. For each mismatch assert the affected
      item has
      `OwnerIdentityMismatch` before registration, Begin, body invocation or
      charge, while a matching sibling remains unchanged. A failed QSL lookup
-     retains its exact `CallableLookupRefusal` cause in
-     `ClaimDisposition::Refused { refusal: ExactFunctionRefusal::FacadeLookup
-     { cause } }` instead of that mismatch refusal. Register and Begin with a
+     retains its exact `CallableLookupRefusal` distinction through the
+     `FacadeLookup` refusal's stable `cause_code` and rendered `detail`,
+     rather than becoming an identity mismatch. Register and Begin with a
      selection from a second acquisition
      and assert exact `SelectionRefusal::WrongAcquisition` and
-     `ApplicationBeginRefusal::WrongAcquisition` in the typed claim-map
-     `SelectionRefused` and `ApplicationBeginRefused` causes before charge.
+     `ApplicationBeginRefusal::WrongAcquisition` in the serializable claim-map
+     `SelectionRefused` and `ApplicationBeginRefused` codes before charge.
      Exercise each non-`Accepted` registration outcome, including
      `SignatureMismatch`, `DuplicateBinding`, `CallableNotAdmitted` and
      `RegistrySealed`, plus `ApplicationBeginRefusal::Call(CallFailure)`,
      through CG's private typed result-mapping functions. Use genuine facade
      responses for reachable integration cases and typed variant inputs for
      outcomes the admitted facade cannot produce; both routes shall assert
-     the exact outcome or cause in `RegistrationNotAccepted` or
-     `ApplicationBeginRefused` for the affected claim. Check a failed
+     the distinct stable `cause_code` and rendered `detail` in
+     `RegistrationNotAccepted` or `ApplicationBeginRefused` for the affected
+     claim. Round-trip `claim-map.json` and assert its exact
+     (`code`, `cause_code`) vectors: (`facade_lookup`, `lookup.unknown`),
+     (`facade_lookup`, `lookup.foreign`), (`facade_lookup`,
+     `lookup.wrong_kind`); (`registration_not_accepted`, each of
+     `registration.registry_sealed`, `registration.callable_not_admitted`,
+     `registration.signature_mismatch`, `registration.duplicate_binding`);
+     (`selection_refused`, `selection.wrong_acquisition`);
+     (`application_begin_refused`, `begin.wrong_acquisition`) and each of
+     `begin.call.input`, `begin.call.fault`, `begin.call.cancelled`,
+     `begin.call.storage`, `begin.call.supplied`,
+     `begin.call.unsupported_helper`. `Admission::Accepted` writes no refusal
+     pair. Confirm `detail` renders the original typed result, including the
+     exact package id for `Foreign`, and that each enum is mapped by one
+     exhaustive match with no wildcard arm. Check a failed
      registration or Begin does not run a body or charge
      a meter and a successful Begin seals that registry. Inspect CG and the
      emitted oracle crate dependencies for direct `quire-eval`, `quire-exact`

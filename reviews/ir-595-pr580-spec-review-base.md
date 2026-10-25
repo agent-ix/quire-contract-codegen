@@ -80,3 +80,20 @@ cannot be triggered through #1483, because the selection echoes CG's own lookup 
 | FND-001 | medium | The new path names `quire_eval::BodyFactory`, `Admission::Accepted`, `Signature`, `Evaluation` and `CallFailure`. FR-485 S4 and AC-8 forbid `qsl_replay` from re-exporting leaf types, and #1483's CG-shaped consumer fixture depends directly on `quire-eval`, `quire-exact` and `quire-semantic-value`. CG's `Cargo.toml` has no `quire-eval` dependency today. AD-004's seam paragraph says only that the leaf "provides the evaluation interface". It never says CG (and the emitted oracle crate, if it hosts the `BodyFactory`) adds a direct `quire-eval` dependency beside `qsl-replay`. AC-32 says it closes on inspecting "dependencies" but gives no expected dependency set. | spec/assurance/AD-004-cg-crate-layout.md:359-375; Cargo.toml:38-42 |
 | FND-002 | medium | In #1483, `lookup_callable` builds the `CallableSelection` from the caller's own `owner_package_id` argument, and returns a `key` only when `key.as_bytes() == wire_node_id.as_bytes()` (application.rs:79-131). So after a successful lookup, the AC-37 comparison of `selection.owner_package_id()` and the key bytes with the mapped request ids is equal by construction. Through the public CG API only the `handle.package_id()` branch can fail. TC-031's "separately select a different admitted callable in A's checked closure" needs a test seam that injects a selection, and neither AC-37 nor TC-031 specifies one. As written, the selection branch cannot fail. This is inherited from main's wording, but this PR is what binds it to the concrete API. | spec/oracle/functional/FR-021-function-application-oracles.md:331; spec/oracle/matrix/TC-031-function-application-oracles.md:173-182 |
 | FND-003 | low | The pending gate in AC-32/35/36/37, the Status paragraph and TC-031 12b changed from "IR-1007/IR-595" to "QSL #1483 and IR-595". That keys the gate on one draft PR number rather than the owning ticket or FR-485 delivery. If #1483 is closed or superseded, the gate names a dead PR. Naming IR-1007 (with #1483 as the current candidate in prose) keeps the gate stable. | spec/oracle/functional/FR-021-function-application-oracles.md:326-331 |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | low | TC-031 12b exercises the selection-identity guard with 'a different admitted callable in A's same acquired closure'. That callable may be owned by the unit, which tests only the key-byte comparison. AC-37 also requires the owner comparison (`CallableSelection::owner_package_id()` against the declaring package). No vector requires a genuine second selection from an imported dependency's owner, so dropping the owner comparison from the guard survives the corpus. | spec/oracle/matrix/TC-031-function-application-oracles.md:183-188 |
+| FND-005 | low | AD-004's seam paragraph still keys the precondition on the PR number: 'Before a concrete function-application oracle replaces the historical RT-port witness, QSL #1483 and the IR-595 CG consumer must land'. FR-021 and TC-031 now gate on IR-1007. This is the same class of defect as FND-003, left in AD-004. | spec/assurance/AD-004-cg-crate-layout.md:371-373 |
+
+## Dispositions
+
+Round 1, checked against fix-round head 1249c63ad436f113d26c402bd15ef429f1346dd2.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | AD-004 now states the direct quire-eval, quire-exact and quire-semantic-value dependencies beside qsl-replay and no QSL re-export; AC-32 states the expected set and TC-031 12b inspects it. |
+| FND-002 | fixed | The guard is a private post-lookup function that production feeds only its own lookup result. TC-031 feeds it a genuine second selection from a successful public lookup_callable in the same acquisition. #1483's lookup_callable is public and CallableSelection is Clone, so this is reachable without forging a selection and without changing the facade. |
+| FND-003 | fixed | AC-32/35/36/37, Status and TC-031 12b now gate on IR-1007, with #1483 named in prose as the current candidate. The residual AD-004 line 372 is recorded as new FND-005. |

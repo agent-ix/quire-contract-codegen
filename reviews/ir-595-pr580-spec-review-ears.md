@@ -43,3 +43,13 @@ flag.
 | FND-001 | low | AC-37 reads "or between `CallableSelection::owner_package_id()` and read-only check-minted key bytes and the selected function's declaring admitted V2 package id and function node digest respectively". That is four nouns chained by "and" inside "between ... and", resolved only by "respectively". The pairing (owner to declaring package id, key bytes to function node digest) is recoverable but easy to misread. Stating two explicit pairs removes the ambiguity. | spec/oracle/functional/FR-021-function-application-oracles.md:331 |
 | FND-002 | low | `quire validate` warns `ac:non-canonical-shape` (given-when-then-shaped) at line 330, which is AC-36, not AC-37 as the PR body says. The cause is the procedural "... to `ApplicationRegistry::register`, then passes that same selection ... to `begin_call`". This is a heuristic hit on a sequence, not a semantic defect. Phrasing the order as an outcome (for example "registers ... and passes that same selection ... to `begin_call` only after registration is `Accepted`") clears it. | spec/oracle/functional/FR-021-function-application-oracles.md:330 |
 | FND-003 | low | The new Behavior bullet joins four obligations: create and register, require `Accepted`, pass to `begin_call`, and step or run. It adds a negative ("CG shall not dispatch") and a factual coda, and it opens with "For a matching `CallableSelection`" rather than the EARS "When"/"If" trigger used by the neighbouring bullet ("If the FR-485 acquisition's ... differs ..."). As one compound statement it cannot be cited one obligation at a time. | spec/oracle/functional/FR-021-function-application-oracles.md:277-289 |
+
+## Dispositions
+
+Round 1, checked against fix-round head 1249c63ad436f113d26c402bd15ef429f1346dd2.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | AC-37 now states the handle mismatch, owner pair and key pair as separate explicit comparisons, with no 'respectively'. |
+| FND-002 | fixed | AC-36 now reads 'only Ok(Admission::Accepted) permits CG to pass ... to begin_call'. quire validate over the three spec files at 1249c63a reports no ac:non-canonical-shape warning. |
+| FND-003 | fixed | The bullet is split into four 'When ...' event-driven bullets with one obligation each, plus a separate test-seam bullet. |
