@@ -177,7 +177,7 @@ the enum-only owner facade does not excuse dropping it.
    identifier character, `)` or `]`. Assert every reconstruction helper returns
    `Result<_, ReconstructionError>`, every call of one is followed by `?` or a
    `match` whose `Err` arm yields `EnvironmentError::Reconstruction` or
-   `Outcome::Refused(Refusal::CheckedInvariant { cause })`, and `EnvironmentError` has the
+   `Outcome::Refused(Refusal::CheckedInvariant { cause: CheckedInvariantCause::GeneratedDescriptorReconstructionFailed })`, and `EnvironmentError` has the
    typed variants required by FR-018 Outputs, including `Declaration` retaining
    QSV `EnvironmentFailure` and `Reconstruction(ReconstructionError)`.
    `ReconstructionError` has the unit variants `Integer`, `Interval`, `Rational`,
