@@ -33,9 +33,10 @@ The code generator SHALL use the nine CG-owned causes in the second cause table 
 ## Dependencies
 
 - [quire-exact FR-369](ix://agent-ix/quire-exact/FR-369) owns the shared typed cause vocabulary and nine CG cause assignments.
-- [FR-018](./FR-018-composite-equality-oracles.md) AC-8 and AC-17 name the required typed `Refusal::CheckedInvariant { cause }` payload at their producer paths.
+- [FR-018](./FR-018-composite-equality-oracles.md) AC-8 and AC-17 name the required typed `Refusal::CheckedInvariant { cause }` payload at their producer paths. Remaining unit-style or cause-family-only wording elsewhere in FR-018 and TC-029 still needs alignment; these edits do not claim it is complete.
+- [IR-595](https://linear.app/agent-ix/issue/IR-595) owns the QSL/CG direct owner cutover needed before the two planned generated-function paths can be implemented and exercised. The corresponding trigger wording in quire-exact FR-369's assignment rows must be aligned with those paths before IR-709 closes; its nine cause assignments remain required.
 - [IR-878](https://linear.app/agent-ix/issue/IR-878) tracks the allocation.
 
 ## Status
 
-PLANNED: Seven of the nine CG-owned typed cause producer paths are present in current source. IR-709 still owns genuine producer paths for `GeneratedUnexpectedOutcome` and `GeneratedEnvironmentRejected`, plus TC-057 tagged verification of all nine constructors, nested `IllTypedCause`, and charge/failure behavior. An unreachable branch or a fabricated failure does not count as a producer path. QSL owns replay-consumer verification.
+PLANNED: Seven of the nine CG-owned typed cause producer paths are present in current source. After the IR-595 owner cutover, IR-709's planned `GeneratedUnexpectedOutcome` path checks an actual generated operation's `Outcome::Completed(value)` against its declared result type and refuses a genuine mismatch. Its planned `GeneratedEnvironmentRejected` path constructs the emitted function's type environment from real admitted nominal declarations and preserves a genuine rejection from that construction. Neither path exists yet; the current exhaustive outcome matches and default environment do not supply them. IR-709 also owns TC-057 tagged verification of all nine constructors, nested `IllTypedCause`, and charge/failure behavior. An unreachable branch or a fabricated failure does not count as a producer path. QSL owns replay-consumer verification.

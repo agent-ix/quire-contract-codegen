@@ -104,7 +104,7 @@ the enum-only owner facade does not excuse dropping it.
    a genuine prepared wrapper whose environment is privately replaced by the
    test fixture (no public raw wrapper/index constructor): an
    empty environment, and one omitting a key its operand types reach, and one
-   declaring that closure under a different key; confirm `Outcome::Refused(Refusal::CheckedInvariant { cause: CheckedInvariantCause::GeneratedTypeCheckRejected { cause: error.cause } })`, retaining the original `IllTypedCause`, no panic, and no charge
+   declaring that closure under a different key; confirm `Outcome::Refused(Refusal::CheckedInvariant { cause: CheckedInvariantCause::GeneratedTypeCheckRejected { cause } })`, where `cause` is the original `IllTypedCause` returned by `check_type`, no panic, and no charge
    admitted on the `Meter`. Assert that this is the emitted `check_type` calls
    deciding it, by confirming the same environments pass `check_equality`: that
    call uses the same genuine enum index and consults the environment through `contains_ieee`, which returns
@@ -176,13 +176,16 @@ the enum-only owner facade does not excuse dropping it.
    `.unwrap_or_default(`, and no `[` index or slice expression directly after an
    identifier character, `)` or `]`. Assert every reconstruction helper returns
    `Result<_, ReconstructionError>`, every call of one is followed by `?` or a
-   `match` whose `Err` arm yields `EnvironmentError::Reconstruction` or
-   `Outcome::Refused(Refusal::CheckedInvariant { cause: CheckedInvariantCause::GeneratedDescriptorReconstructionFailed })`, and `EnvironmentError` has the
+   `match` whose `Err` arm yields `EnvironmentError::Reconstruction` without
+   calling the oracle, and `EnvironmentError` has the
    typed variants required by FR-018 Outputs, including `Declaration` retaining
    QSV `EnvironmentFailure` and `Reconstruction(ReconstructionError)`.
    `ReconstructionError` has the unit variants `Integer`, `Interval`, `Rational`,
    `Decimal`, `Text`, `Cardinality`, `Enum` and `Composite`. Inspect the emitted
-   composite lookup: an invalid retained WireNodeId literal or a successful
+   oracle separately: a wrong prepared binding, expected package identity or
+   context requirement, or a wrong admitted-context package identity yields
+   `Outcome::Refused(Refusal::CheckedInvariant { cause: CheckedInvariantCause::GeneratedDescriptorReconstructionFailed })`
+   before any charge. Inspect the emitted composite lookup: an invalid retained WireNodeId literal or a successful
    genuine lookup whose record/tuple form or qualified name disagrees with
    the retained recipe returns `Reconstruction(Composite)`. Facade Unknown,
    Foreign and WrongKind retain `Lookup` and their owning details; missing
