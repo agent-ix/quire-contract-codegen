@@ -39,9 +39,17 @@ exact rates.
    postcondition bindings. Instrument `construct_verdict` and compare each runtime string with the
    source binding's variant, UTF-8 anchor name and exact byte-length rendering. Keep clause kind
    fixed while changing only the invariant binding's anchor, then compare the runtime strings.
-8. Supply a selected V2 node with its accepted binding point absent and inspect the generation
-   refusal. Independently apply a renderer mutant that changes only the generated runner's point
-   after binding selection; inspect the refusal before artifact publication.
+   Use one admitted package with one invariant checked clause node and two authentic `claim`
+   occurrences bound to distinct initialization and handler points. Select each exact `(checked
+   clause id, claim occurrence)` in turn and compare its constructed verdict point with that
+   occurrence's accepted binding; also vary the handler name on a third authentic claim.
+8. Independently select a wrong-role, wrong-ordinal, and other-node occurrence against a checked
+   clause with another authentic claim that has a point; verify that the sibling point cannot satisfy
+   the lookup. Supply an authentic claim lacking its accepted point beside another authentic claim
+   of the same node that has a point; inspect the generation refusal with no sibling substitution.
+   Also select an absent clause id and a present non-state-clause id to inspect the mapped Contract IR
+   FR-058 refusals before occurrence checking. Independently apply a renderer mutant that changes only the generated
+   runner's point after binding selection; inspect the refusal before artifact publication.
 
 ## Expected Results
 
@@ -61,7 +69,12 @@ exact rates.
   failure as `AboveDiscardCeiling`.
 - Step 7 preserves each accepted binding point through injective runtime rendering, including both
   invariant variants and both distinct handler names. Changing only the invariant's bound anchor
-  changes the runtime point while its clause kind remains `Invariant`.
-- The absent binding point in step 8 returns `StrategyErrorCode::MissingExecutionPoint`; the
-  renderer mutant returns `StrategyErrorCode::ExecutionPointMismatch` before publication. Neither
-  produces an artifact, and clause kind supplies no default point.
+  changes the runtime point while its clause kind remains `Invariant`. The same checked node's two
+  authentic claim occurrences produce distinct points with no node-level reuse.
+- Each wrong occurrence in step 8 returns `StrategyErrorCode::MissingClaimOccurrence` with no
+  artifact even when a sibling claim has a point. The authentic claim lacking a point returns
+  `StrategyErrorCode::MissingExecutionPoint` despite its pointed sibling. An absent clause id returns
+  `StrategyErrorCode::UnknownClause` and a non-state-clause returns
+  `StrategyErrorCode::UnsupportedClauseKind`, each before occurrence checking and without an
+  artifact. The renderer mutant returns `StrategyErrorCode::ExecutionPointMismatch` before
+  publication and produces no artifact. Clause kind supplies no default point.

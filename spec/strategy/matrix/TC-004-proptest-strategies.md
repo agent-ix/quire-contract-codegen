@@ -38,10 +38,21 @@ precondition and postcondition anchors. Instrument verdict construction to obser
 point on a rejected case and the postcondition point on failed and passed cases. Drive a
 non-completed precondition case and a non-completed postcondition case and observe the point retained
 beside each oracle's cause. Compare each runtime string with the binding's variant, UTF-8 anchor
-name and exact byte-length rendering.
-Independently for either selection, supply a V2 node lacking its accepted binding point, then apply
-a renderer mutant that changes only the generated harness or verdict point after binding selection.
-Inspect each refusal and artifact output and require the diagnostic to name the affected selection.
+name and exact byte-length rendering. For two separate requests, select the same precondition
+checked clause node with two authentic `claim` occurrences bound to its same `Pre` operation point,
+keeping the postcondition selection fixed; instrument the accessor to prove each request uses its
+own selected occurrence, and compare each generated precondition verdict point with that accepted
+point. Repeat each request with the same
+admitted package, full `(checked clause id, authentic claim occurrence)` selections and campaign
+policy, and compare its bytes with that request's first artifact.
+Independently for either selection, supply a wrong-role, wrong-ordinal, and other-node occurrence
+while another authentic occurrence of the node has a point; require no sibling substitution. Then
+select an authentic claim lacking its accepted point beside an authentic sibling of that node with a
+point; require `MissingExecutionPoint` without sibling substitution. Also combine an unknown clause
+id and wrong occurrence, and a wrong-kind clause id and wrong occurrence, to check FR-002-AC-10's
+diagnostic precedence. Apply a renderer mutant
+that changes only the generated harness or verdict point after binding selection. Inspect every
+refusal and artifact output and require the diagnostic to name the affected selection.
 Inspect the generator source for any `BoundPackage`, `ClauseRef`, `quire_contract_model::TypedExpression`
 or `oracle::boolean_v1` use and for any body opened outside `core/ir/`.
 
@@ -69,4 +80,11 @@ The V2 point controls require accepted QSL binding-point preservation for both s
 rejected, failed, passed and non-completed cases (FR-002-AC-19). An absent selected binding point
 returns `HarnessErrorCode::MissingExecutionPoint`; a renderer mutant returns
 `HarnessErrorCode::ExecutionPointMismatch` before publication. Each names the affected selection,
-produces no artifact and derives no point from clause kind (AC-20). These controls are planned.
+produces no artifact and derives no point from clause kind (AC-20). The two authentic claim
+occurrences on one precondition node each retain their own selection and the same accepted `Pre`
+point. Each wrong occurrence returns `HarnessErrorCode::MissingClaimOccurrence`, names its selection, and produces no
+artifact despite a valid sibling point. An authentic claim lacking a point returns
+`HarnessErrorCode::MissingExecutionPoint` despite its pointed authentic sibling. Unknown or wrong-kind
+clause ids retain FR-002-AC-10's diagnostic ahead of occurrence checks. Repeating either full
+selection with the same package and policy is byte-identical (FR-002-AC-12). These controls are
+planned.

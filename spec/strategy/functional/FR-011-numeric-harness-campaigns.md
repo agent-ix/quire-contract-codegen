@@ -46,11 +46,12 @@ until specified.
   in-domain census from [FR-010](./FR-010-domain-boundary-campaigns.md).
 - The selected claim's V2 comparison oracle (FR-008), embedded in the same bundle; no V1 bound
   oracle generation output is an input.
-- Planned (IR-1013): the selected V2 node's accepted QSL `ClauseBinding`, whose mandatory
-  `execution_point` has the Contract IR-owned `quire_contract_model::ExecutionPoint` type (variant
-  and `AnchorName`). QSL owns `ClauseBinding`; IR-1013 must expose the accepted point through a
-  Contract IR typed accessor before CG can read it. The current V2 node API has no such accessor,
-  and the caller supplies no separate point.
+- Planned (IR-1013, FR-058): one admitted `CheckedPackageV2`, the selected checked clause id, and
+  that clause's authentic `claim` `CheckedOccurrence`. Together they select one accepted QSL
+  `ClauseBinding.execution_point`; Contract IR's planned typed accessor returns its owned
+  `quire_contract_model::ExecutionPoint` (variant and `AnchorName`) for that exact package, clause,
+  and occurrence. QSL owns `ClauseBinding`; the current V2 API has no point accessor, and the caller
+  supplies no separate point.
 - A caller-owned proptest `TestRunner` and `quire_contract_runtime::CampaignReport`.
 - The existing campaign policy: minimum accepted, minimum rejected, and maximum discarded counts.
 
@@ -61,8 +62,9 @@ until specified.
   `discarded` fields, plus `discard_rate()` and `rejection_rate()`.
 - The existing generated campaign error type, plus a `ConformanceMismatch` variant carrying the case
   values, the expected tag, and the observed verdict kind.
-- For generation refusal, `StrategyErrorCode::MissingExecutionPoint` or
-  `StrategyErrorCode::ExecutionPointMismatch`, with no artifact.
+- For generation refusal, `StrategyErrorCode::MissingClaimOccurrence`,
+  `StrategyErrorCode::MissingExecutionPoint`, or `StrategyErrorCode::ExecutionPointMismatch`, with
+  no artifact.
 
 ## Behavior
 
@@ -73,12 +75,23 @@ until specified.
   - for an `Invariant` clause, `true` to `Passed` and `false` to `FailedPostcondition` whose clause
     observation carries the runtime's invariant clause kind, which quire-contract-runtime
     implements but does not yet specify.
-- When a V2 claim is selected, the generator shall use only its accepted QSL
-  `ClauseBinding.execution_point` as the execution-point source.
-- If the selected V2 node has no accepted binding point, then the generator shall return
+- When a V2 claim is selected, the generator shall call the planned Contract IR FR-058 typed
+  accessor with the admitted package, checked clause id, and selected `claim` occurrence.
+- The generator shall use only the accepted QSL binding point returned for that exact tuple.
+- If the accessor returns `UnknownClause`, then the generator shall return the existing
+  `StrategyErrorCode::UnknownClause` and no artifact before checking occurrence authenticity.
+- If the accessor returns `NotStateClause`, then the generator shall return the existing
+  `StrategyErrorCode::UnsupportedClauseKind` and no artifact before checking occurrence
+  authenticity.
+- If the selected occurrence is not an authentic `claim` of that checked clause in that package,
+  then the generator shall return `StrategyErrorCode::MissingClaimOccurrence` and no artifact.
+- The generator shall not substitute another occurrence of the same checked clause node for the
+  selected occurrence.
+- If the selected package, clause, and authentic claim occurrence has no accepted binding point,
+  then the generator shall return
   `StrategyErrorCode::MissingExecutionPoint` and no artifact.
-- If the rendered runner's point differs from the selected accepted binding point, then the
-  generator shall return `StrategyErrorCode::ExecutionPointMismatch` and no artifact before
+- If the rendered runner's point differs from the point returned for the selected claim occurrence,
+  then the generator shall return `StrategyErrorCode::ExecutionPointMismatch` and no artifact before
   publication.
 - The generator shall not derive an execution point from clause kind.
 - The generator shall render the QSL point into the runtime string injectively as
@@ -86,7 +99,7 @@ until specified.
   `handler`, `pre`, or `post` and the length counts the anchor name's UTF-8 bytes.
 - The runner shall construct each verdict through the runtime `construct_verdict` operation
   (quire-contract-runtime interface-001) with the requirement and revision identity, the runtime
-  execution point rendered from the selected accepted binding, and the clause observations.
+  execution point rendered from the selected occurrence's accepted binding, and the clause observations.
   The source of the requirement and revision identity remains open (below).
 - For a false invariant, the runner shall use the failure detail the runtime
   provides for a contract clause, because quire-contract-runtime's specification does not yet state
@@ -134,8 +147,8 @@ until specified.
 | FR-011-AC-3 | The census runner evaluates each of the 10 `VersionUnchanged` in-domain census cases exactly once, in census order, and evaluates none of the out-of-domain cases. | Test (TC-020) |
 | FR-011-AC-4 | A campaign over a report seeded with fixed prior counts returns `discard_rate() == Some((discarded, attempted))` and `rejection_rate() == Some((rejected, attempted))` with those exact values, a fresh zero-attempt summary returns `None` for both, and a runtime snapshot whose counters are `at_limit` returns `None` for both through the generated snapshot-summary operation. | Test (TC-020) |
 | FR-011-AC-5 | A fresh 10,000-case `Broad` campaign for each fixture returns `discard_rate() == Some((0, attempted))` with `attempted > 0`, passes a zero discard ceiling, and does not end `Exhausted`. | Test (TC-020) |
-| FR-011-AC-6 | For a selected V2 claim, every constructed verdict carries the runtime point rendered from that node's accepted QSL `ClauseBinding.execution_point` with variant and anchor name preserved. Invariant fixtures at both initialization and handler anchors, and two distinct handler anchors, produce distinct runtime point strings; `Precondition` and `Postcondition` fixtures preserve their own binding points. | Test (TC-020) |
-| FR-011-AC-7 | A selected V2 node lacking an accepted binding point returns `StrategyErrorCode::MissingExecutionPoint` and no artifact. A render mutant that changes only the generated runner's execution point returns `StrategyErrorCode::ExecutionPointMismatch` and no artifact before publication. An invariant's clause kind supplies no point: two otherwise equivalent invariant bindings at distinct anchors produce their distinct bound runtime points. | Test (TC-020) |
+| FR-011-AC-6 | For a selected checked clause id and authentic `claim` occurrence in one admitted V2 package, every constructed verdict carries the runtime point rendered from the accepted QSL `ClauseBinding.execution_point` of that exact tuple, with variant and anchor name preserved. Invariant fixtures at both initialization and handler anchors, and two distinct handler anchors, produce distinct runtime point strings; `Precondition` and `Postcondition` fixtures preserve their own binding points. Two authentic claim occurrences on one invariant node with identical clause kind and body anchor but different accepted points yield their distinct rendered points. | Test (TC-020) |
+| FR-011-AC-7 | An absent checked clause maps Contract IR FR-058 `UnknownClause` to `StrategyErrorCode::UnknownClause`; a non-state-clause maps `NotStateClause` to `StrategyErrorCode::UnsupportedClauseKind`, before occurrence checks and with no artifact. A wrong-role, wrong-ordinal, or other-node `claim` occurrence returns `StrategyErrorCode::MissingClaimOccurrence` and no artifact, even when another authentic occurrence of the selected node has a point. An authentic selected tuple lacking an accepted binding point returns `StrategyErrorCode::MissingExecutionPoint` and no artifact, even when another authentic occurrence of that node has a point. A render mutant that changes only the generated runner's execution point returns `StrategyErrorCode::ExecutionPointMismatch` and no artifact before publication. An invariant's clause kind supplies no point: two otherwise equivalent invariant bindings at distinct anchors produce their distinct bound runtime points. | Test (TC-020) |
 
 ## Open Questions
 
@@ -149,7 +162,8 @@ until specified.
 - **Upstream**: [FR-002](./FR-002-tristate-proptest.md) campaign policy and conclusions;
   quire-contract-runtime FR-001, FR-003, FR-004, and interface-001;
   QSL-1082 (accepted binding point on the V2 carrier; planned prerequisite);
-  IR-1013 (Contract IR typed accessor for the selected accepted QSL clause binding point; planned,
+  IR-1013 / Contract IR FR-058 (typed accessor for the accepted QSL binding point keyed by admitted
+  package, checked clause id, and authentic claim occurrence; planned,
   blocks this V2 execution-point slice);
   [FR-008](./FR-008-bound-domain-strategy-admission.md) (the selected claim's V2 comparison
   oracle), [FR-009](./FR-009-constructive-correlated-populations.md),
