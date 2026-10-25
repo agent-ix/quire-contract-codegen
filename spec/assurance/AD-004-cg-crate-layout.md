@@ -351,20 +351,22 @@ The internal arrows above do not grant an external evaluator import. `oracle`
 currently emits target-neutral function schedules under FR-021; a schedule is
 not an evaluated result. `replay` obtains witness settlements through the
 public `qsl_replay` facade, and `kani/terminal.rs` maps their typed results
-under FR-029. Neither module calls RT's `exact` port or QSL evaluator/checker
-internals as an alternate path. QSL FR-060 T12-A continues to constrain the
-CG replay adapter to the facade.
+under FR-029. The current concrete function oracle still imports RT's
+`exact` port; replacing it is an open FR-021-AC-32 obligation. Neither
+module imports QSL evaluator/checker internals as an alternate path. QSL
+FR-060 T12-A continues to constrain the CG replay adapter to the facade.
 
-IR-583's proposed shared `quire-eval` interface supplies an eventual boundary
-for evaluation, not a delivered CG consumer entry. Before a concrete
-function-application oracle can replace the historical RT-port witness,
-the interface must be merged, QSL must supply its std reference adapter, and
-QSL must publish the admitted checked-closure acquisition and callable
-application route permitted to CG. Only then may CG emit code against that
-interface with owner-provided values, outcomes and charges; it may not obtain
-those by importing RT or QSL implementation modules. FR-021 and IR-853 retain
-the concrete-oracle scope decision. FR-044's evaluator corpus is a separate
-case-record contract and does not itself deliver this consumer API.
+The shared `quire-eval` leaf provides the evaluation interface, but CG's
+permitted consumer entry is still draft work. QSL FR-485 specifies the
+`qsl_replay` acquisition and application facade, backed by the QSL reference
+adapter and the leaf's authoritative root call site. Before a concrete
+function-application oracle replaces the historical RT-port witness, that
+facade and the IR-595 CG consumer must be implemented and verified. CG then
+uses the facade's owner-provided values, outcomes and charges; it does not
+import RT or QSL implementation modules. FR-021 holds the concrete-oracle
+acceptance criteria Planned until that work lands. IR-853's target decision
+is Done. FR-044's evaluator corpus is a separate case-record contract and
+does not itself deliver the consumer API.
 
 The planned FR-018 admitted-context migration preserves this internal graph:
 `oracle` accepts `Option<&qsl_replay::AdmittedContext>` from the external root,

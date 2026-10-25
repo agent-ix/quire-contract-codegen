@@ -141,16 +141,36 @@ required dependency or target path.
     and the FR-021 rows of the oracle matrix. None may claim, or present as
     evidence, agreement with the QSL value authority; text that states the
     boundary (outside CG, owned by IR-842) is permitted.
-12b. Planned owner-path corpus (AC-2, AC-4, AC-5, AC-9, AC-17, AC-32;
+12b. Planned owner-path corpus (AC-2, AC-4, AC-5, AC-9, AC-17, AC-32,
+     AC-35 through AC-37;
      IR-1007/IR-595). For each retained function vector, acquire its admitted
      closure through FR-485, select the exact owner and callable id, and run
      the emitted body in a fresh facade registry with a fresh meter. Build the
      direct application independently from the request through a separate
-     FR-485 acquisition and fresh meter, using QSL's interpreted callable.
+     FR-485 acquisition and fresh meter, using QSL's interpreted callable
+     with no generated body registered in the direct registry.
      Compare outcomes, ordered admitted charges and consumed counters. Check
-     arity, wrong-value-kind, dangling-reference and unknown-function
-     refusals before charging; keep any unreachable refusal open until a
-     valid triggering fixture exists. Inject a denial at `function.call` and
+     arity, wrong-value-kind and dangling-reference as exact leaf Begin input
+     refusals. An absent requested name retains CG `UnknownFunction`; wrong
+     FR-485 owner/callable ids refuse at `lookup_callable` as `Unknown`,
+     `Foreign(package_id)` or `WrongKind` before selection or Begin. None
+     makes an application charge; keep any unreachable refusal open until a
+     valid triggering fixture exists. For own and admitted dependency
+     functions, derive the QSL lookup owner from the declaring V2 package's
+     `quire.package.semantic/v2` domain and exact digest and the `WireNodeId`
+     from the admitted `quire.checked-semantic-node/v1` function node digest.
+     Verify the caller supplied all seven FR-485 acquisition inputs alongside
+     the independently admitted Contract IR package, that each generated or
+     direct run acquired its closure once, and that CG neither rechecked nor
+     reconstructed the package.
+     Pair the admitted CG request for A with a separately authentic QSL
+     acquisition for B, and separately select a different admitted callable
+     in A's checked closure. In either identity mismatch, assert the affected
+     item has
+     `OwnerIdentityMismatch` before registration, Begin, body invocation or
+     charge, while a matching sibling remains unchanged. A failed QSL lookup
+     retains its exact lookup cause instead of that mismatch refusal. Inject
+     a denial at `function.call` and
      compare the stop point and unchanged denied charge. For own and imported
      callables, compare the returned root location to the declaring checked
      graph's body root, separate from the CG static location path. Do not
