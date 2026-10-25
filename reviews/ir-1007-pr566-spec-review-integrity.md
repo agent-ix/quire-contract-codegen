@@ -43,3 +43,14 @@ in AC-16.
 
 FND-001 needs a fix in this PR (a SHALL with no AC). FND-002 is a low
 judgement call: record a disposition or adjust the wording.
+
+## Dispositions
+
+### Round 1 — exact `221c5514399aba606d0c383e433bbc4e8f61309e` (fix diff `fd2a03a6..221c5514`)
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The ticket-subject SHALL is gone from Inputs. The identity mapping is now named: the V2 `package_id` (`quire.package.semantic/v2`) maps to the FR-485 `DigestRecord` owner, and the function node id (`quire.checked-semantic-node/v1`) maps to `WireNodeId`, exact bytes with no rehash, for own and imported functions. The mismatch obligation is now a Constraints If-then statement naming `OwnerIdentityMismatch`. Each piece has an AC: AC-35 (caller-supplied acquisition inputs, one acquisition), AC-36 (exact mapping) and AC-37 (mismatch refusal before registration, Begin or charge, with lookup refusals not relabelled). TC-031 step 12b has matching steps, `tests.md` has a Planned row for AC-35 through AC-37, and the TC-031 summary row lists AC-35 to AC-37. AC-24's "No new refusal variant" is now scoped to its own duplicate/unknown-name cases, which matches what the AC-24 tests assert. |
+| FND-002 | fixed | FR-021-AC-16 restores the all-oracle prohibition from origin/main: "No oracle makes a claim that those fields are populated." The added sentence ("A future FR-485 session may return dynamic fields, but that alone does not make the CG schedule or an oracle claim their population") does not narrow it. The ✅ Inspection row stays accurate. |
+
+No new findings this round.

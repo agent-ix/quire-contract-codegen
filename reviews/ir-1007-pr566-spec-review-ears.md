@@ -40,3 +40,13 @@ system.
 ## Verdict
 
 One medium wording finding. Fix it together with SR-35012 FND-001.
+
+## Dispositions
+
+### Round 1 — exact `221c5514399aba606d0c383e433bbc4e8f61309e` (fix diff `fd2a03a6..221c5514`)
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The Inputs bullet no longer holds three SHALLs. The caller inputs and the identity mapping are now descriptive Inputs text backed by AC-35 and AC-36, and the ticket ("The IR-595 consumer shall") is no longer the subject. The unwanted-behaviour clause is a singular If-then requirement in Constraints with the system as subject: "If the FR-485 acquisition's checked owner package id or selected callable id differs from the requested admitted V2 package/function identity, the generator shall refuse that item as `OwnerIdentityMismatch` before body registration, Begin or any application charge." The engine EARS check reports FR-021 grammar-clean. |
+
+No new findings this round.

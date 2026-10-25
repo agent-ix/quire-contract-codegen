@@ -58,3 +58,17 @@ Changes requested before merge (fix in this PR): FND-001 and FND-002 are
 small AC wording fixes. FND-003 is a merge-order condition, not a text
 defect: keep this PR draft until QSL #1470 merges. FND-004 and FND-005 are
 low-severity clean-ups.
+
+## Dispositions
+
+### Round 1 — exact `221c5514399aba606d0c383e433bbc4e8f61309e` (fix diff `fd2a03a6..221c5514`)
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | FR-021-AC-2 now requires the direct side to run "session application of the QSL interpreted callable, with no generated body registered in that direct registry"; TC-031 step 12b matches ("using QSL's interpreted callable with no generated body registered in the direct registry"). Registering the same generated body on both sides no longer satisfies the AC. |
+| FND-002 | fixed | FR-021-AC-4 now splits the cases: arity, wrong-value-kind and dangling-reference are forwarded from `ApplicationBeginRefusal::Call(CallFailure::Input)`; an absent name keeps CG `UnknownFunction`; an invalid owner/callable id refuses at FR-485 `lookup_callable` as `Unknown`, `Foreign(package_id)` or `WrongKind` before selection or Begin. Checked against QSL #1470 at e66db517 FR-485 Inputs, behaviour 3 and AC-2/AC-6: the names match. TC-031 step 12b says the same. No case is dropped compared with origin/main. |
+| FND-003 | still-open | This is a merge-order hold, not a text defect. QSL agent-ix/quire-spec-language#1470 is still an OPEN draft at e66db5177758, so FR-485 is not on QSL `main` and FR-021's `depends_on` edge has nothing on main to point at. The cited FR-485 terms (`lookup_callable`, `Unknown`/`Foreign`/`WrongKind`, `DigestRecord`, `WireNodeId`, `ApplicationBeginRefusal::Call(CallFailure::Input)`) match #1470 at that head. This clears when #1470 merges, after a re-check of those terms against the merged text. No CG text change is needed. |
+| FND-004 | fixed | AD-004 lines 354-369 now say the concrete function oracle "still imports RT's `exact` port; replacing it is an open FR-021-AC-32 obligation". They name QSL FR-485 as the `qsl_replay` facade, say "FR-021 holds the concrete-oracle acceptance criteria Planned until that work lands" and that "IR-853's target decision is Done". This agrees with the FR-021 Status. IR-853 and IR-583 are Done in Linear, so saying the `quire-eval` leaf "provides" the interface is accurate. |
+| FND-005 | fixed | The trailing whitespace in `reviews/ir-1007-*.md` is removed. `git diff --check origin/main..221c5514` and `git diff --check fd2a03a6..221c5514` both exit 0. |
+
+No new findings this round. `quire validate --scope .` on FR-021, TC-031, `spec/oracle/matrix/tests.md` and AD-004 reports 4/4 docs grammar-clean and 0 findings (quire 0.36.2, engine 0.50.2).
