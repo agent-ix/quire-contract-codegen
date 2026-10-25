@@ -30,3 +30,9 @@ Reviewed step 4c to 4f order against the live routed enum at PR #567 head 134012
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | medium | Step 4c specifies only a V2 input for Kani precondition and contract families. The live public routed KaniForm has V1BoundClause but no V2 clause or contract-family form. Step 4f now requires that replacement before removing V1BoundClause, yet neither 4c, 4d nor 4e assigns creation of the routed form, identity, preflight and tests. Assign that prerequisite to a step and require its route to be live before 4f deletes V1. | spec/assurance/AD-004-cg-crate-layout.md:1059 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | At e72d3f432af5582de0711729600bba2ba83bc927, step 4e owns the public V2 routed contract-clause form, identity, preflight and tests. It depends on the step 4c lowering, requires a preceding FR-019 spec change retaining AC-25/26/33 obligations, and gates the QSL control move and step 4f's V1 deletion. |

@@ -29,3 +29,9 @@ Reviewed the changed L-12 census, step 4f and the AD's interim-exceptions table 
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | medium | The exhaustive interim-exceptions table still omits routed/capability.rs's V1 form, identity and preflight, despite L-12 newly listing them. Add a row with step 4f expiry so the table and L-12 agree. | spec/assurance/AD-004-cg-crate-layout.md:1409 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | At e72d3f432af5582de0711729600bba2ba83bc927, the interim-exceptions table now lists the public V1 clause form, its identity and preflight in routed/capability.rs, with removal at step 4f after the V2 route is live. |
