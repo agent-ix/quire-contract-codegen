@@ -59,3 +59,9 @@ Round 1, checked against fix-round head 1249c63ad436f113d26c402bd15ef429f1346dd2
 | --- | --- | --- |
 | FND-001 | fixed | TC-031 12b adds malformed-source and insufficient stage/replay-limit acquisition vectors asserting the exact AdmittedRefusal, no handle, no registry and no charge. |
 | FND-002 | fixed | Outputs names FacadeLookup, RegistrationNotAccepted, SelectionRefused and ApplicationBeginRefused as ClaimDisposition::Refused variants. The Behavior bullets and AC-37 route each result to them, and TC-031 exercises every Admission variant (it matches quire-eval main's five-variant enum) plus ApplicationBeginRefusal::Call. The serialization gap this opens is recorded as new FND-003. |
+
+Round 2, checked against fix-round head 78cfee9bf02608c4a97a6d91c1fbd1661ede7970.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-003 | fixed | Each planned variant now carries a CG-owned `cause_code: &'static str` plus a `Debug`-rendered `detail: String`, so the existing `Serialize` derive on `ExactFunctionRefusal` holds with no QSL/leaf `Serialize` and no mirror enum. The exhaustive code tables match #1483 (`CallableLookupRefusal` 3, `SelectionRefusal` 1, `ApplicationBeginRefusal` 2) and quire-eval main (`Admission` 5, `CallFailure` 6: Input, Fault, Cancelled, Storage, Supplied, UnsupportedHelper). None is `#[non_exhaustive]`, so a no-wildcard match is legal. TC-031 asserts the emitted (`code`, `cause_code`) pairs and `detail`. |

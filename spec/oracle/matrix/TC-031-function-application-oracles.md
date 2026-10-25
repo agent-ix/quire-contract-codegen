@@ -180,18 +180,18 @@ required dependency or target path.
      the declaring package and function id; the selection, not that key, is
      registration and Begin authority. Pair the admitted CG request for A
      with a separately authentic QSL acquisition for B to exercise the unit
-     package mismatch. To exercise the selection mismatch, obtain a genuine
-     second `CallableSelection` by a successful lookup of a callable owned by
-     an imported dependency in A's same acquired closure. Give that dependency
-     a distinct package id but a callable with the same checked node digest as
-     the unit's requested callable, then pass its selection to CG's private
-     post-lookup identity-validation function with the original request ids.
-     This isolates the owner mismatch while the key bytes match. Separately,
-     pass a second successful selection for a different callable in the unit;
-     this isolates the key mismatch while the owner matches. Production shall
-     pass only its own lookup result to that same function. Neither path
-     constructs a selection. For each mismatch assert the affected
-     item has
+     package mismatch. To exercise the selection key mismatch, pass a genuine
+     second successful selection for a different callable in A's unit to CG's
+     private post-lookup identity-validation function with the original
+     request ids. The owner matches while the key differs. Production shall
+     pass only its own lookup result to that same function; neither path
+     constructs a selection. Inspect the same guard for an explicit comparison
+     of `selection.owner_package_id()` with the admitted declaring package id
+     before registration or Begin. ADR-013 QC-18 and ADR-011 E3 make this
+     owner comparison defense in depth: a declared function's key includes its
+     owner, and one check cannot admit two package ids for that owner. A
+     same-key, different-owner selection is therefore not an admitted FR-485
+     vector. For each executable mismatch assert the affected item has
      `OwnerIdentityMismatch` before registration, Begin, body invocation or
      charge, while a matching sibling remains unchanged. A failed QSL lookup
      retains its exact `CallableLookupRefusal` distinction through the

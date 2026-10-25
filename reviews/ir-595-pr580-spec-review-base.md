@@ -97,3 +97,16 @@ Round 1, checked against fix-round head 1249c63ad436f113d26c402bd15ef429f1346dd2
 | FND-001 | fixed | AD-004 now states the direct quire-eval, quire-exact and quire-semantic-value dependencies beside qsl-replay and no QSL re-export; AC-32 states the expected set and TC-031 12b inspects it. |
 | FND-002 | fixed | The guard is a private post-lookup function that production feeds only its own lookup result. TC-031 feeds it a genuine second selection from a successful public lookup_callable in the same acquisition. #1483's lookup_callable is public and CallableSelection is Clone, so this is reachable without forging a selection and without changing the facade. |
 | FND-003 | fixed | AC-32/35/36/37, Status and TC-031 12b now gate on IR-1007, with #1483 named in prose as the current candidate. The residual AD-004 line 372 is recorded as new FND-005. |
+
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-006 | medium | TC-031 12b now requires a genuine selection from 'an imported dependency' with 'a distinct package id but a callable with the same checked node digest as the unit's requested callable'. Under ADR-013 QC-18 and ADR-011 E3, a declared function's checked node id carries its owner and never matches across owners. One check admits one package_id per owner, and FR-485-AC-7 refuses a same-owner dependency. So no admitted acquisition contains that fixture, and #1483's `lookup_callable` with the dependency owner and the unit's node id returns `Foreign`, not a selection. The step cannot be built. It should be replaced by an Inspection that the owner comparison is defense-in-depth backed by QC-18, keeping the key-mismatch vector. | spec/oracle/matrix/TC-031-function-application-oracles.md:183-193 |
+
+Round 2, checked against fix-round head 78cfee9bf02608c4a97a6d91c1fbd1661ede7970.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-004 | rejected | Re-measured: no owner-only mismatch exists to isolate. ADR-013 QC-18 and ADR-011 E3 say a declared function's NodeKey carries its owner and 'Equal NodeKeys of declared nodes never cross owners'. One check admits one package_id per owner, and FR-485-AC-7 refuses a same-owner dependency at acquisition. A genuine selection whose key bytes match the requested function but whose owner differs therefore cannot be produced. Dropping the owner comparison is an equivalent mutant under QSL's invariant, not a test gap. The impossible fixture the fix added is recorded as new FND-006. |
+| FND-005 | fixed | AD-004 now gates on IR-1007's FR-485 facade; #1483 remains only in the candidate prose. |
