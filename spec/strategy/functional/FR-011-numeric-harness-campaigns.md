@@ -46,9 +46,9 @@ until specified.
   in-domain census from [FR-010](./FR-010-domain-boundary-campaigns.md).
 - The selected claim's V2 comparison oracle (FR-008), embedded in the same bundle; no V1 bound
   oracle generation output is an input.
-- An explicit typed execution point in the V2 generation request. Its source is the selected
-  clause's accepted QSL binding when that binding supplies one; otherwise it is the caller's
-  invocation context. Clause kind is not an execution-point source.
+- The selected V2 node's accepted QSL `ClauseBinding`, whose mandatory `execution_point` has the
+  QSL-owned `quire_contract_model::ExecutionPoint` type (variant and `AnchorName`). CG reads the
+  binding through the admitted node's typed access; the caller supplies no separate point.
 - A caller-owned proptest `TestRunner` and `quire_contract_runtime::CampaignReport`.
 - The existing campaign policy: minimum accepted, minimum rejected, and maximum discarded counts.
 
@@ -59,6 +59,8 @@ until specified.
   `discarded` fields, plus `discard_rate()` and `rejection_rate()`.
 - The existing generated campaign error type, plus a `ConformanceMismatch` variant carrying the case
   values, the expected tag, and the observed verdict kind.
+- For generation refusal, `StrategyErrorCode::MissingExecutionPoint` or
+  `StrategyErrorCode::ExecutionPointMismatch`, with no artifact.
 
 ## Behavior
 
@@ -69,15 +71,20 @@ until specified.
   - for an `Invariant` clause, `true` to `Passed` and `false` to `FailedPostcondition` whose clause
     observation carries the runtime's invariant clause kind, which quire-contract-runtime
     implements but does not yet specify.
-- When generation is requested, the generator shall require the request's typed execution point to
-  equal the selected clause's accepted QSL binding point when present, or the caller's typed invocation point
-  when the binding supplies none. A missing source or missing request point shall yield
-  `MissingExecutionPoint`; a mismatch shall yield `ExecutionPointMismatch`. Either refusal produces
-  no artifact; the generator shall not infer a point from clause kind or silently substitute another
-  point.
+- When a V2 claim is selected, the generator shall use only its accepted QSL
+  `ClauseBinding.execution_point` as the execution-point source.
+- If the selected V2 node has no accepted binding point, then the generator shall return
+  `StrategyErrorCode::MissingExecutionPoint` and no artifact.
+- If the rendered runner's point differs from the selected accepted binding point, then the
+  generator shall return `StrategyErrorCode::ExecutionPointMismatch` and no artifact before
+  publication.
+- The generator shall not derive an execution point from clause kind.
+- The generator shall render the QSL point into the runtime string injectively as
+  `<variant>:<utf8-byte-length>:<AnchorName>`, where variant is exactly `initialization`,
+  `handler`, `pre`, or `post` and the length counts the anchor name's UTF-8 bytes.
 - The runner shall construct each verdict through the runtime `construct_verdict` operation
   (quire-contract-runtime interface-001) with the requirement and revision identity, the runtime
-  execution point corresponding to the request's checked typed point, and the clause observations.
+  execution point rendered from the selected accepted binding, and the clause observations.
   The source of the requirement and revision identity remains open (below).
 - For a false invariant, the runner shall use the failure detail the runtime
   provides for a contract clause, because quire-contract-runtime's specification does not yet state
@@ -125,8 +132,8 @@ until specified.
 | FR-011-AC-3 | The census runner evaluates each of the 10 `VersionUnchanged` in-domain census cases exactly once, in census order, and evaluates none of the out-of-domain cases. | Test (TC-020) |
 | FR-011-AC-4 | A campaign over a report seeded with fixed prior counts returns `discard_rate() == Some((discarded, attempted))` and `rejection_rate() == Some((rejected, attempted))` with those exact values, a fresh zero-attempt summary returns `None` for both, and a runtime snapshot whose counters are `at_limit` returns `None` for both through the generated snapshot-summary operation. | Test (TC-020) |
 | FR-011-AC-5 | A fresh 10,000-case `Broad` campaign for each fixture returns `discard_rate() == Some((0, attempted))` with `attempted > 0`, passes a zero discard ceiling, and does not end `Exhausted`. | Test (TC-020) |
-| FR-011-AC-6 | For a selected clause with an accepted QSL binding point, the V2 request carries that exact typed point; for a selected clause without such a binding point, it carries the caller invocation context's exact typed point. The generated runner passes the corresponding runtime execution point to `construct_verdict` for each case, including an invariant at an initialization or handler anchor. | Test (TC-020) |
-| FR-011-AC-7 | A missing request point or a missing point in both the binding and caller context yields `MissingExecutionPoint`; a request point differing from an available accepted binding point or from the caller context when no binding point exists yields `ExecutionPointMismatch`. Each case produces no artifact. No point is inferred from `Invariant`, `Precondition`, or `Postcondition` kind. | Test (TC-020) |
+| FR-011-AC-6 | For a selected V2 claim, every constructed verdict carries the runtime point rendered from that node's accepted QSL `ClauseBinding.execution_point` with variant and anchor name preserved. Invariant fixtures at both initialization and handler anchors, and two distinct handler anchors, produce distinct runtime point strings; `Precondition` and `Postcondition` fixtures preserve their own binding points. | Test (TC-020) |
+| FR-011-AC-7 | A selected V2 node lacking an accepted binding point returns `StrategyErrorCode::MissingExecutionPoint` and no artifact. A render mutant that changes only the generated runner's execution point returns `StrategyErrorCode::ExecutionPointMismatch` and no artifact before publication. An invariant's clause kind supplies no point: two otherwise equivalent invariant bindings at distinct anchors produce their distinct bound runtime points. | Test (TC-020) |
 
 ## Open Questions
 

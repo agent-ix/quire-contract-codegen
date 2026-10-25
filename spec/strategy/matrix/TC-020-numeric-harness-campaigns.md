@@ -34,14 +34,14 @@ exact rates.
 5. Read the runner's proptest global reject count and each campaign conclusion from steps 1 and 4.
 6. Run a generated campaign with a report whose requirement identity is wrong and whose prior
    discarded count already exceeds the configured ceiling.
-7. Generate for accepted QSL bindings at distinct typed execution points, including an invariant
-   bound to initialization and one bound to a handler. Instrument verdict construction and compare
-   its runtime point with the bound request point on every case. For a selection with no binding
-   point, repeat using the caller's typed invocation context.
-8. Independently omit the V2 request point; omit both the binding and caller context points;
-   supply a request point different from the accepted QSL binding point; and, with no binding
-   point, supply one different from the caller invocation point. Inspect each refusal and artifact
-   output. Repeat an invariant case with a point whose variant cannot be inferred from its kind.
+7. Generate from accepted QSL bindings at distinct typed points: one invariant at an initialization
+   anchor, two otherwise equivalent invariants at different handler anchors, and precondition and
+   postcondition bindings. Instrument `construct_verdict` and compare each runtime string with the
+   source binding's variant, UTF-8 anchor name and exact byte-length rendering. Keep clause kind
+   fixed while changing only the invariant binding's anchor, then compare the runtime strings.
+8. Supply a selected V2 node with its accepted binding point absent and inspect the generation
+   refusal. Independently apply a renderer mutant that changes only the generated runner's point
+   after binding selection; inspect the refusal before artifact publication.
 
 ## Expected Results
 
@@ -59,9 +59,9 @@ exact rates.
   `Exhausted`.
 - The report in step 6 returns `IdentityMismatch`; its prior discard does not mask the identity
   failure as `AboveDiscardCeiling`.
-- Step 7 preserves the exact typed point from the accepted QSL binding or caller context, and every
-  constructed verdict receives the corresponding runtime execution point, including both invariant
-  anchors; changing only clause kind never chooses a point.
-- Each missing-point input in step 8 returns `MissingExecutionPoint`; each mismatched-point input
-  returns `ExecutionPointMismatch`. Each refusal produces no artifact. No default execution point
-  is emitted from the selected clause kind.
+- Step 7 preserves each accepted binding point through injective runtime rendering, including both
+  invariant variants and both distinct handler names. Changing only the invariant's bound anchor
+  changes the runtime point while its clause kind remains `Invariant`.
+- The absent binding point in step 8 returns `StrategyErrorCode::MissingExecutionPoint`; the
+  renderer mutant returns `StrategyErrorCode::ExecutionPointMismatch` before publication. Neither
+  produces an artifact, and clause kind supplies no default point.

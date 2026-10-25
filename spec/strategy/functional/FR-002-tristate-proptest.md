@@ -20,14 +20,17 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
 - Executable clauses, execution points, state bindings, ranges, memberships, and supported relations.
 - Planned (IR-815): for the V2 harness, an admitted `CheckedPackageV2` with the clause ids of one
   selected precondition and one selected postcondition, read through Contract IR's public typed
-  API. The V2 request carries an explicit typed execution point for each selected clause, taken from
-  that clause's accepted QSL binding when available, or from its caller invocation context otherwise.
-  The two selected clauses may have different points. The requirement and revision identity source
+  API. Each selected V2 node exposes its accepted QSL `ClauseBinding`, whose mandatory
+  `execution_point` is the QSL-owned `quire_contract_model::ExecutionPoint` (variant and
+  `AnchorName`); CG reads each through typed access. The two selected bindings may carry different
+  points. The caller supplies no separate point. The requirement and revision identity source
   remains open (Open Questions).
 
 ## Outputs
 
 - Tri-state harness source and broad, boundary, state-pinned, or no-event strategies.
+- Planned (IR-815): generation refusals `HarnessErrorCode::MissingExecutionPoint` and
+  `HarnessErrorCode::ExecutionPointMismatch`, with the affected selection named and no artifact.
 
 ## Behavior
 
@@ -79,11 +82,23 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
 - Planned (IR-815): if a selected clause body is outside the FR-014-AC-38 shape, then the V2
   harness generator shall return a structured unsupported diagnostic and no artifact, with no
   fallback to filtering.
-- Planned (IR-815): the V2 harness generator shall independently verify each selected clause's
-  request point against that clause's accepted QSL binding point when supplied, or its caller
-  invocation context when the binding supplies none. A missing source or request point shall return
-  `MissingExecutionPoint`; a mismatch shall return `ExecutionPointMismatch`; both produce no
-  artifact. Clause kind shall not supply a default point.
+- When a V2 precondition and postcondition are selected, the V2 harness generator shall take each execution point only from that selected node's accepted QSL `ClauseBinding.execution_point` (planned, IR-815).
+- Planned (IR-815): if either selected node lacks an accepted binding point, then the harness
+  generator shall return `HarnessErrorCode::MissingExecutionPoint`, name that selection, and
+  produce no artifact.
+- Planned (IR-815): if a rendered harness or verdict point differs from its selected accepted
+  binding point, then the harness generator shall return `HarnessErrorCode::ExecutionPointMismatch`,
+  name that selection, and produce no artifact before publication.
+- Planned (IR-815): the harness generator shall not derive a point from clause kind.
+- Planned (IR-815): the harness generator shall render each bound typed point into a runtime string
+  as `<variant>:<utf8-byte-length>:<AnchorName>`, with the same injective variant and UTF-8 byte
+  length rule as FR-011.
+- Planned (IR-815): a `RejectedPrecondition` verdict shall use the selected precondition's rendered
+  point; a `FailedPostcondition` or `Passed` verdict after completed postcondition evaluation shall
+  use the selected postcondition's rendered point.
+- Planned (IR-815): a non-completed precondition outcome shall retain the selected precondition's
+  rendered point, and a non-completed postcondition outcome shall retain the selected
+  postcondition's rendered point alongside the oracle's cause, without classifying it as passed.
 
 ## Acceptance Criteria
 
@@ -100,15 +115,15 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
 | FR-002-AC-9 | PLANNED (IR-815). Source inspection shows the V2 harness generator opens a `CheckedPackageV2` body only through the `core/ir/` layer of AD-004, and names no `BoundPackage`, `ClauseRef`, `quire_contract_model::TypedExpression` or `oracle::boolean_v1` item, each of which today's V1 harness names or uses. | Inspection |
 | FR-002-AC-10 | PLANNED (IR-815). A selected clause identity that is unknown, of the wrong clause kind, or the same for both selections yields a typed, located diagnostic naming the selection and no artifact. | Test (TC-004) |
 | FR-002-AC-11 | PLANNED (IR-815). A selected clause body outside the FR-014-AC-38 shape yields a structured unsupported diagnostic and no artifact, and the generator emits no filtering strategy for it. | Test (TC-004) |
-| FR-002-AC-12 | PLANNED (IR-815). Repeated V2 harness generation for the same admitted package, selected clause identities, both explicit typed execution points and campaign policy is byte-identical. The requirement and revision identity that the generated header, `RequirementId` and symbols carry is not an input here and waits on OQ-1. | Test (TC-004) |
+| FR-002-AC-12 | PLANNED (IR-815). Repeated V2 harness generation for the same admitted package, selected clause identities and campaign policy is byte-identical. The requirement and revision identity that the generated header, `RequirementId` and symbols carry is not an input here and waits on OQ-1. | Test (TC-004) |
 | FR-002-AC-13 | PLANNED (IR-815). A seeded V2 case on which both oracles complete true runs the subject once and is a pass. | Test (TC-004) |
 | FR-002-AC-14 | PLANNED (IR-815). A seeded V2 case on which the precondition oracle completes false is a rejected precondition and the subject is not invoked. | Test (TC-004) |
 | FR-002-AC-15 | PLANNED (IR-815). A seeded V2 case on which the precondition oracle completes true and the postcondition oracle completes false is a failed postcondition. | Test (TC-004) |
 | FR-002-AC-16 | PLANNED (IR-815). A seeded V2 case on which the precondition or postcondition oracle returns an outcome that does not complete (stopped or undefined) is reported as a non-completed case retaining the oracle's cause, is not counted as a pass. | Test (TC-004) |
 | FR-002-AC-17 | PLANNED (IR-815). A seeded V2 case on which the precondition oracle returns an outcome that does not complete does not invoke the subject. | Test (TC-004) |
 | FR-002-AC-18 | PLANNED (IR-815). A seeded V2 case on which the precondition oracle returns an outcome that does not complete does not evaluate the postcondition oracle. | Test (TC-004) |
-| FR-002-AC-19 | PLANNED (IR-815). A V2 harness request preserves each selected clause's exact typed execution point from its accepted QSL binding when supplied, or its caller invocation context otherwise; precondition and postcondition points may differ. A precondition rejection verdict uses the precondition's corresponding runtime point, and a postcondition failure verdict uses the postcondition's corresponding runtime point, without inferring either from clause kind. | Test (TC-004) |
-| FR-002-AC-20 | PLANNED (IR-815). For either selected clause, a missing request point or missing point in both the accepted binding and caller context yields `MissingExecutionPoint`; a request point mismatched with its available source yields `ExecutionPointMismatch`; each produces no harness artifact. | Test (TC-004) |
+| FR-002-AC-19 | PLANNED (IR-815). Each V2 selection preserves its accepted QSL `ClauseBinding.execution_point` through the injective runtime rendering; precondition and postcondition points may differ. A rejection carries the precondition point; a failed or passed verdict after completed postcondition evaluation carries the postcondition point; a non-completed case carries the point of the oracle that did not complete and retains its cause without counting as a pass. | Test (TC-004) |
+| FR-002-AC-20 | PLANNED (IR-815). For either selected V2 clause, an absent accepted binding point yields `HarnessErrorCode::MissingExecutionPoint` and no artifact; a render mutant that changes only that selection's generated harness or verdict point yields `HarnessErrorCode::ExecutionPointMismatch` before publication and no artifact. Each diagnostic names the affected precondition or postcondition selection, and no point is inferred from clause kind. | Test (TC-004) |
 
 ## Open Questions
 
