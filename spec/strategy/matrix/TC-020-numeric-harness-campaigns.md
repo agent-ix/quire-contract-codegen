@@ -5,6 +5,8 @@ type: TC
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-011
     type: verifies
+  - target: ix://agent-ix/quire-contract-codegen/FR-004
+    type: verifies
   - target: ix://agent-ix/quire-contract-codegen/NFR-004
     type: verifies
 ---

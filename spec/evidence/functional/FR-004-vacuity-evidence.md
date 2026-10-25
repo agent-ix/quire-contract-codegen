@@ -7,6 +7,8 @@ relationships:
     type: satisfies
   - target: ix://agent-ix/quire-contract-codegen/FR-014
     type: depends_on
+  - target: ix://agent-ix/quire-contract-codegen/FR-011
+    type: depends_on
   - target: ix://agent-ix/quire-contract-codegen/interface-001
     type: implements
   - target: ix://agent-ix/quire-contract-ir/FR-045
@@ -25,8 +27,13 @@ per-requirement vacuity report without executing a coverage producer itself.
 - The IR-owned bound executable clause population, including clause identities, typed expressions,
   clause kinds, execution anchors, and dependency/declaration context.
 - Planned (IR-815): for the V2 analyzer, the executable clauses of an admitted `CheckedPackageV2`,
-  read through the `core/ir/` layer of AD-004, in place of the V1 bound population. The source of
-  each clause's execution anchor and of the requirement and revision identity is open (below).
+  read through the `core/ir/` layer of AD-004, in place of the V1 bound population. The expected
+  population includes every executable clause of the admitted package; V2 strategy generation
+  selects a checked clause id and one authentic `claim` `CheckedOccurrence`. The accepted QSL
+  `ClauseBinding.execution_point` for that exact package, clause and occurrence is exposed through
+  the planned Contract IR FR-058 typed accessor under FR-011. A node alone does not identify the
+  point: two authentic claims on one node may carry distinct points. The V2 source of the
+  requirement and revision identity remains open (below).
 - Generated Rust/source-map bytes with entry probes and the independently derived implication census.
 - LLVM coverage JSON export bytes captured directly from the LLVM export child started by the
   CG campaign runner for this invocation, its tool and version, and native runtime campaign
@@ -173,6 +180,16 @@ per-requirement vacuity report without executing a coverage producer itself.
   structured binding non-success and no classification for that clause.
 - Planned (IR-815): the analyzer shall apply the classification and non-success rules above to a
   V2 clause population without change.
+- When an executable clause in the V2 analyzer's expected population and one authentic claim
+  occurrence are selected for V2 strategy generation, the CG V2 strategy generator shall apply
+  FR-011's occurrence-keyed point rule through the planned Contract IR FR-058 typed accessor for
+  that admitted package, checked clause id and exact claim occurrence. It shall not substitute a
+  point bound to another claim on the same node.
+- If the supplied claim occurrence is unauthentic, its accepted binding point is absent, or the
+  rendered runner's point differs from the selected binding point, then the CG V2 strategy
+  generator shall apply the corresponding typed no-artifact refusal of FR-011-AC-7 before
+  publication. It shall not infer a point from clause kind or caller invocation context.
+- The V2 analyzer shall not count a refused selection as generated campaign evidence.
 
 ## Acceptance Criteria
 
@@ -202,6 +219,7 @@ per-requirement vacuity report without executing a coverage producer itself.
 | FR-004-AC-22 | PLANNED (IR-815). Over a V2 clause population, an implication-bearing clause with every expected consequent probe observed, and an implication-free clause with its evaluation region observed, is `exercised`. | Test (TC-006) |
 | FR-004-AC-23 | PLANNED (IR-815). Over a V2 clause population, removing one clause, one consequent probe, one evaluation probe, or every clause from the generated artifacts, each alone, prevents successful analysis. | Test (TC-006) |
 | FR-004-AC-24 | PLANNED (IR-815). Over a V2 clause population, each malformed input class of FR-004-AC-5 yields a non-success outcome with no invented classification. | Test (TC-006) |
+| FR-004-AC-25 | PLANNED. For any executable clause in the V2 analyzer's expected population selected for strategy generation, the generator uses the accepted QSL point returned by Contract IR FR-058's typed accessor for the admitted package, checked clause id and authentic `claim` `CheckedOccurrence`. Two authentic occurrences on one node with different accepted points retain their distinct rendered points when selected separately. A wrong-role, wrong-ordinal or other-node occurrence, an authentic tuple with no accepted point, and a renderer mutant changing the selected point each return the corresponding typed no-artifact refusal of FR-011-AC-7; none uses a sibling point, an inferred point or caller context. The analyzer grants no generated-campaign evidence for a refused selection. | Test (TC-006, TC-020 steps 7-8) |
 
 ## Implementation boundary
 
@@ -235,13 +253,17 @@ this analyzer supplies execution observations and the coverage-obligation decisi
 
 ## Open Questions
 
-- OQ-1 (anchor and identity): the V2 source of a clause's execution anchor and of the requirement
-  and revision identity is the open question recorded as FR-011 OQ-1 and OQ-2, and the V2 entry
-  shape follows the open interface-001 direction. FR-004-AC-16 to AC-24 do not depend on the
-  answer and none invents a source. The V2 analyzer must also meet FR-004-AC-10, AC-11 and AC-14,
-  which bind the run's requirement and revision, so deleting the V1 `analyze_bound_coverage` waits
-  on the FR-011 OQ-2 identity answer as well as on these criteria.
+- OQ-1 (requirement and revision identity): the V2 source of these identities remains the open
+  FR-011 OQ-2 decision. FR-011's execution-point rule resolves the point source for selected
+  V2 strategy generation; it does not supply or infer requirement or revision identity.
+  FR-004-AC-16 to AC-24 do not depend on that identity answer and none invents a source. The V2
+  analyzer must also meet FR-004-AC-10, AC-11 and AC-14, which bind the run's requirement and
+  revision, so deleting the V1 `analyze_bound_coverage` waits on the FR-011 OQ-2 identity answer
+  as well as on these criteria.
 
 ## Dependencies
 
-- **Upstream**: [FR-014](../../oracle/functional/FR-014-exact-scalar-oracles.md) and [FR-002](../../strategy/functional/FR-002-tristate-proptest.md).
+- **Upstream**: [FR-014](../../oracle/functional/FR-014-exact-scalar-oracles.md),
+  [FR-002](../../strategy/functional/FR-002-tristate-proptest.md), and
+  [FR-011](../../strategy/functional/FR-011-numeric-harness-campaigns.md) for the V2
+  execution-point gate.
