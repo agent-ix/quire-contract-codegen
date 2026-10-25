@@ -53,6 +53,14 @@ id and wrong occurrence, and a wrong-kind clause id and wrong occurrence, to che
 diagnostic precedence. Apply a renderer mutant
 that changes only the generated harness or verdict point after binding selection. Inspect every
 refusal and artifact output and require the diagnostic to name the affected selection.
+For each authentic QSL driver-bound FR-331 selection, inspect the generated header, runtime
+identities, source map, and symbols against the FR-011 `qocc2_`/`qpkg2_` grammar. Change only the
+occurrence node, role, or ordinal, then one package-id field, using separately admitted matching
+FR-331 request/package pairs; require the corresponding rendered identity to change. Form an
+out-of-driver request with a missing or non-claim occurrence and one whose selected claim
+references a model element absent from the admitted V2 relation. Pair a request owner with a
+different admitted package. Check CG's typed refusals and absence of artifacts; verify that QSL
+keeps `UnknownItem`, `Unbound`, and `Fault` export refusals outside CG.
 Inspect the generator source for any `BoundPackage`, `ClauseRef`, `quire_contract_model::TypedExpression`
 or `oracle::boolean_v1` use and for any body opened outside `core/ir/`.
 
@@ -88,3 +96,8 @@ artifact despite a valid sibling point. An authentic claim lacking a point retur
 clause ids retain FR-002-AC-10's diagnostic ahead of occurrence checks. Repeating either full
 selection with the same package and policy is byte-identical (FR-002-AC-12). These controls are
 planned.
+The identity controls require full canonical rendering and a changed rendered identity when one
+typed field changes (FR-002-AC-21). An out-of-driver missing or non-claim occurrence returns
+`MissingClaimOccurrence`, an absent referenced model element returns `UnboundModelElement`, and a
+cross-package request returns `OwnerIdentityMismatch`; each produces no artifact and QSL export
+refusals stay with the driver (FR-002-AC-22). These controls are planned.

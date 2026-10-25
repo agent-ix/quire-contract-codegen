@@ -166,8 +166,13 @@ input gives non-success with no invented classification (AC-24); and neither `Bo
 
 These controls are planned. QSL-520 must deliver the `/2` producer/reader; QSL-688 allocated the
 result/execution/source/map/export association to CG, whose live runner binding still needs
-implementation. No stored or wire receipt is specified. FR-011 OQ-2 leaves the V2
-requirement/revision source open.
+implementation. No stored or wire receipt is specified. For V2 identity, compare the QSL
+driver-bound FR-331 claim occurrence (node, role, and ordinal) and the same-owner admitted
+`CheckedPackageV2::package_id()` with the campaign, generated map, and analyzed population using
+the FR-011 canonical rendering or exact typed fields. Corrupt one occurrence component and one
+package-id field at a time in controlled generated-map/campaign inputs; refuse noncanonical text
+without normalizing it. Neither identity alone authenticates the same-run producer/artifact
+association.
 The existing `analyze_bound_coverage` primitive does not
 consume a QSL result and is not evidence for these steps.
 
