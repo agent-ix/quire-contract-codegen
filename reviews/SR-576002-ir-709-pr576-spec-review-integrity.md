@@ -47,6 +47,12 @@ Round 1, checked against the repository at head f6ca73d22bc3b7b9d2569fc85819c90b
 | FND-001 | fixed | The tests.md:62 row now reads 'seven typed CG producer paths are present, while two additional assignments remain planned in quire-exact FR-369 pending the direct owner decision ... TC-057 tagged verification of the seven named paths remains open'. |
 | FND-002 | fixed | 'Obsolete' is removed. Status says the other two assignments 'remain PLANNED in quire-exact FR-369 while this correction awaits direct owner authorization' and states the reasons (exhaustive outcome matches, infallible default environment, EnvironmentError::Declaration). One attribution in that reason is imprecise; see FND-003. |
 
+Round 2, checked against head 36244bc707e7f3684979b53191dabb57522f576a.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-003 | fixed | Status gives each reason to its own oracle: Boolean uses planned_equality with no environment, the function uses TypeEnvironment::default with exhaustive matches, and composite equality admission fails with EnvironmentError::Declaration. |
+
 ## Coverage
 
 ```yaml

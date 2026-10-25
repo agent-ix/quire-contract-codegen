@@ -56,6 +56,12 @@ Round 1, checked against the repository at head f6ca73d22bc3b7b9d2569fc85819c90b
 | FND-003 | fixed | TC-057 step 1 exercises 'the seven causes named in FR-042 Behavior ... count no cause from an unreachable branch or a fabricated failure'. Expected Results covers the seven named paths with 'no fabricated failure is counted as evidence'. |
 | FND-004 | fixed | The FR-018 Behavior bullet, FR-018-AC-17 and TC-029 step 8 all name CheckedInvariantCause::GeneratedDescriptorReconstructionFailed, which matches FR-369's trigger ('cannot reconstruct one of its authored source/target types'). This strengthens the text; it narrows nothing. |
 
+Round 2, checked against head 36244bc707e7f3684979b53191dabb57522f576a. The diff from f6ca73d2 touches only FR-042 Dependencies/Status and the three reviews/ copies.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-005 | fixed | Dependencies cites 'the merged owner spec' with nine rows and requires that 'a new quire-exact PR correcting that table must merge together with this PR'. |
+
 ## Coverage
 
 ```yaml
