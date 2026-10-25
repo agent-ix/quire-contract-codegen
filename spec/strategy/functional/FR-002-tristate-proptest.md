@@ -28,15 +28,22 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
   anchor share one `Post` point (QSpec FR-341). The two harness selections may have different points.
   For FR-002-AC-12, a repeated V2 selection names the same checked clause id and authentic claim
   occurrence; the clause identity checks of FR-002-AC-10 retain their original scope.
-  The caller supplies no separate point. The requirement
-  and revision identity source remains open (Open Questions).
+  The caller supplies no separate point. Each requirement identity is the QSL driver's bound
+  FR-331 item's authentic `claim` occurrence in this same admitted package; its full `package_id`
+  supplies the revision. For a process provider, CG compares FR-331 `request.package_id` with the
+  separately admitted package. For a linked provider, the driver exports, emits, and admits one
+  package before CG receives that admitted package and selected claim. QSL export refusals stay
+  with the driver; CG checks the occurrence and referenced V2 model bindings defensively.
 
 ## Outputs
 
 - Tri-state harness source and broad, boundary, state-pinned, or no-event strategies.
 - Planned (IR-815): generation refusals `HarnessErrorCode::MissingClaimOccurrence`,
   `HarnessErrorCode::MissingExecutionPoint`, and `HarnessErrorCode::ExecutionPointMismatch`, with
-  the affected selection named and no artifact.
+  the affected selection named and no artifact. The harness also has
+  `HarnessErrorCode::OwnerIdentityMismatch`, `HarnessErrorCode::UnboundModelElement`, and
+  `HarnessErrorCode::InvalidIdentityRendering`; each produces no harness artifact. FR-011's
+  corresponding numeric-runner variants belong to `StrategyErrorCode`.
 
 ## Behavior
 
@@ -91,6 +98,20 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
 - When a V2 precondition and postcondition are selected, the V2 harness generator shall call the planned Contract IR FR-058 accessor for the one admitted package and each selected checked clause id and `claim` occurrence tuple (planned, IR-815).
 - Planned (IR-815): the V2 harness generator shall take each execution point only from the
   accepted QSL binding point returned for that exact selection.
+- Planned (IR-815): CG shall use each QSL driver-bound FR-331 `claim` occurrence only after the
+  FR-011 process owner comparison when a process frame exists, and the admitted V2 relation check
+  for either route. Linked generation uses its one E5-admitted package. CG shall not call
+  `export_bindings`, accept a bare unbound item, or substitute a sibling package's occurrence.
+- Planned (IR-815): if a process FR-331 `request.package_id` differs from the admitted V2 package's
+  full id, then the harness generator shall return `HarnessErrorCode::OwnerIdentityMismatch`
+  before publishing an artifact, constructing a verdict, or mutating a report.
+- Planned (IR-815): if a selected claim references a model element absent from the admitted V2
+  relation, then the harness generator shall return `HarnessErrorCode::UnboundModelElement` naming
+  that element and publish no artifact.
+- Planned (IR-815): if a V2 harness identity text comparison boundary receives malformed or
+  noncanonical `qocc2_` or `qpkg2_` text, then the harness generator shall return
+  `HarnessErrorCode::InvalidIdentityRendering` before publication or report mutation and shall not
+  normalize the text.
 - Planned (IR-815): the V2 harness generator shall validate each selected clause id's existence,
   expected kind, and distinctness under FR-002-AC-10 before checking its claim occurrence under
   FR-002-AC-20; an unknown clause id or wrong kind retains AC-10's typed, located diagnostic.
@@ -135,7 +156,7 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
 | FR-002-AC-9 | PLANNED (IR-815). Source inspection shows the V2 harness generator opens a `CheckedPackageV2` body only through the `core/ir/` layer of AD-004, and names no `BoundPackage`, `ClauseRef`, `quire_contract_model::TypedExpression` or `oracle::boolean_v1` item, each of which today's V1 harness names or uses. | Inspection |
 | FR-002-AC-10 | PLANNED (IR-815). A selected clause identity that is unknown, of the wrong clause kind, or the same for both selections yields a typed, located diagnostic naming the selection and no artifact. | Test (TC-004) |
 | FR-002-AC-11 | PLANNED (IR-815). A selected clause body outside the FR-014-AC-38 shape yields a structured unsupported diagnostic and no artifact, and the generator emits no filtering strategy for it. | Test (TC-004) |
-| FR-002-AC-12 | PLANNED (IR-815). Repeated V2 harness generation for the same admitted package, selected clause identities and campaign policy is byte-identical. The requirement and revision identity that the generated header, `RequirementId` and symbols carry is not an input here and waits on OQ-1. | Test (TC-004) |
+| FR-002-AC-12 | PLANNED (IR-815). Repeated V2 harness generation for the same admitted package, selected checked clause ids, authentic `claim` occurrences, and campaign policy is byte-identical. The repeated selections include the same FR-011 identity inputs; the generated header, runtime identities, source map, symbols, and remaining bytes all agree across repetitions. | Test (TC-004) |
 | FR-002-AC-13 | PLANNED (IR-815). A seeded V2 case on which both oracles complete true runs the subject once and is a pass. | Test (TC-004) |
 | FR-002-AC-14 | PLANNED (IR-815). A seeded V2 case on which the precondition oracle completes false is a rejected precondition and the subject is not invoked. | Test (TC-004) |
 | FR-002-AC-15 | PLANNED (IR-815). A seeded V2 case on which the precondition oracle completes true and the postcondition oracle completes false is a failed postcondition. | Test (TC-004) |
@@ -144,16 +165,19 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
 | FR-002-AC-18 | PLANNED (IR-815). A seeded V2 case on which the precondition oracle returns an outcome that does not complete does not evaluate the postcondition oracle. | Test (TC-004) |
 | FR-002-AC-19 | PLANNED (IR-815). Each V2 selection preserves the accepted QSL `ClauseBinding.execution_point` for its exact admitted package, checked clause id, and authentic `claim` occurrence through the injective runtime rendering; precondition and postcondition points may differ. Two requests selecting different authentic claims on the same precondition node each retain that node's accepted `Pre` operation point while selecting the correct occurrence. A rejection carries the precondition point; a failed or passed verdict after completed postcondition evaluation carries the postcondition point; a non-completed case carries the point of the oracle that did not complete and retains its cause without counting as a pass. | Test (TC-004) |
 | FR-002-AC-20 | PLANNED (IR-815). After FR-002-AC-10's clause id, kind, and distinctness checks, a wrong-role, wrong-ordinal, or other-node `claim` occurrence for either selected V2 clause yields `HarnessErrorCode::MissingClaimOccurrence` and no artifact even if a sibling occurrence has a point; an authentic selected tuple with no accepted point yields `HarnessErrorCode::MissingExecutionPoint` and no artifact even if another authentic occurrence of that node has a point; a render mutant that changes only that selection's generated harness or verdict point yields `HarnessErrorCode::ExecutionPointMismatch` before publication and no artifact. Each diagnostic names the affected precondition or postcondition selection, and no point is inferred from clause kind. | Test (TC-004) |
+| FR-002-AC-21 | PLANNED (IR-815). The V2 harness header, `RequirementId`, `RevisionId`, source map, and symbols carry the FR-011 canonical `qocc2_`/`qpkg2_` renderings of each driver's selected FR-331 claim's full occurrence key and the same admitted package's full `package_id`; changing one occurrence component or one package-id field changes the corresponding rendered text. | Test (TC-004) |
+| FR-002-AC-22 | PLANNED (IR-815). For either selection, an out-of-driver missing or non-claim occurrence returns `HarnessErrorCode::MissingClaimOccurrence`, a referenced model element absent from the admitted V2 relation returns `HarnessErrorCode::UnboundModelElement` naming it, and a process FR-331 owner differing from the admitted package returns `HarnessErrorCode::OwnerIdentityMismatch`. Each produces no artifact. A linked request uses one driver-exported/E4-emitted/E5-admitted package and a selected claim checked against that package; a foreign claim absent from it returns `HarnessErrorCode::MissingClaimOccurrence`. QSL `export_bindings`, process package-byte/id, and linked E4/E5 handoff refusals retain their own upstream causes. | Test (TC-004) |
+| FR-002-AC-23 | PLANNED (IR-815). At a V2 harness identity text comparison boundary, malformed, truncated, case-folded, or otherwise noncanonical `qocc2_`/`qpkg2_` text returns `HarnessErrorCode::InvalidIdentityRendering` before publication and without normalizing or mutating a report; exact typed and canonical-text comparisons agree on the accepted selection. | Test (TC-004) |
 
 ## Open Questions
 
-- OQ-1 (identity): the V2 source of the harness's requirement and revision identity is the open
-  question recorded as FR-011 OQ-2, and the V2 entry shape follows the open interface-001 direction.
-  The generated harness writes the requirement and revision into its header comment, its
-  `RequirementId` and its symbol names, so
-  the final bytes of a V2 harness, FR-002-AC-12 across different identities, and the NFR-002-AC-1
-  header requirement wait on FR-011 OQ-2; FR-002-AC-7 to AC-20 are stated independently of that
-  identity and none invents a source.
+- OQ-1 (resolved, identity): FR-011 OQ-2 resolves each requirement to its selected QSL
+  driver-bound FR-331 claim occurrence in its one admitted Contract IR package; process FR-331
+  owner comparison and linked E4/E5 admission establish that package. Its
+  `CheckedPackageV2::package_id()` supplies the revision. The generated header,
+  runtime identities, source map, and symbols carry the FR-011 canonical renderings. FR-002-AC-10
+  still governs unknown, wrong-kind, and duplicate checked clause ids before FR-002-AC-20 checks
+  occurrence authenticity; neither criterion is narrowed by the identity source.
 - OQ-2 (non-completed verdict): which runtime verdict kind carries a non-completed oracle outcome
   (FR-002-AC-16) is not decided here; the criterion fixes only that the case is not a pass and
   keeps its cause.

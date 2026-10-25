@@ -52,6 +52,25 @@ exact rates.
    Also select an absent clause id and a present non-state-clause id to inspect the mapped Contract IR
    FR-058 refusals before occurrence checking. Independently apply a renderer mutant that changes only the generated
    runner's point after binding selection; inspect the refusal before artifact publication.
+9. From a QSL driver-bound FR-331 claim and matching admitted Contract IR package, generate a
+   numeric runner twice and compare source and map bytes. Inspect runtime `RequirementId` and
+   `RevisionId`, header, source map, and symbol suffix against FR-011's `qocc2_`/`qpkg2_` grammar.
+   Independently change the authentic occurrence's node, role, and ordinal and each package-id
+   field using separate accepted matching request/package pairs; compare identity text.
+10. For the process form, pair a bound FR-331 request item's `request.package_id` with a different
+    admitted Contract IR package, then vary only its domain, algorithm, or digest. Separately keep
+    a linked driver's E4 emitted package id with its `export_bindings`-accepted item and E5
+    admission from the same emitted bytes. Attempt an E4/E5 id mismatch and verify the driver
+    refuses before CG. Supply a foreign claim occurrence absent from the held linked package and
+    verify CG refuses it as `StrategyErrorCode::MissingClaimOccurrence`; CG has no separate linked
+    owner to compare. Verify also that a process package-byte/id mismatch is refused by the
+    FR-331 reader before CG. Form out-of-driver requests with a missing or non-claim occurrence and with a selected claim whose referenced model element is
+    absent from the admitted V2 relation. Inspect refusal, artifact output, verdict construction,
+    and report counters; keep a matched sibling selection in the batch. Verify separately that QSL
+    keeps `UnknownItem`, `Unbound`, and `Fault` export refusals on the driver side.
+11. At each generated identity text comparison boundary, corrupt one `qocc2_` or `qpkg2_` field,
+    truncate it, uppercase hex, or add a leading-zero count. Compare against the exact typed pair
+    and inspect any artifact, verdict, or report mutation.
 
 ## Expected Results
 
@@ -80,3 +99,15 @@ exact rates.
   `StrategyErrorCode::UnsupportedClauseKind`, each before occurrence checking and without an
   artifact. The renderer mutant returns `StrategyErrorCode::ExecutionPointMismatch` before
   publication and produces no artifact. Clause kind supplies no default point.
+- Step 9 yields byte-identical output for unchanged inputs (FR-011-AC-12) and exact, lossless
+  canonical text in every named location; changing one typed field changes its rendered identity
+  (FR-011-AC-8).
+- Step 10 returns `StrategyErrorCode::OwnerIdentityMismatch` for each unequal process FR-331/IR
+  owner; upstream process and linked handoff mismatches retain their own refusals. The foreign
+  linked claim and other out-of-driver cases return `StrategyErrorCode::MissingClaimOccurrence` for an absent or non-claim occurrence, and
+  `StrategyErrorCode::UnboundModelElement` naming the absent referenced element. Each refused
+  selection produces no bundle, verdict, or report mutation while the matched sibling retains its disposition. QSL
+  export refusals never enter CG (FR-011-AC-9 and AC-10).
+- Step 11 returns `StrategyErrorCode::InvalidIdentityRendering` before bundle publication or
+  verdict/report mutation without normalizing malformed or noncanonical text; canonical text and typed identity agree
+  (FR-011-AC-11).
