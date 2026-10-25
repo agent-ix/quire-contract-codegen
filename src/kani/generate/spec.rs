@@ -164,6 +164,27 @@ pub(super) enum LetType {
 pub(super) enum Init {
     Expression(ExprText),
     ScalarMeter(quire_exact::ScalarLimits),
+    NativeAdmission {
+        checked: ExprText,
+        stage: NativeAdmissionStage,
+    },
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(super) enum NativeAdmissionStage {
+    OperandInterval,
+    PlanCapacity,
+    OperandPopulation,
+}
+
+impl NativeAdmissionStage {
+    pub(super) fn message(self) -> &'static str {
+        match self {
+            Self::OperandInterval => "checked operand interval",
+            Self::PlanCapacity => "checked native capacity",
+            Self::OperandPopulation => "original admitted operand population",
+        }
+    }
 }
 #[derive(Clone, Debug)]
 pub(super) struct LetBinding {
@@ -204,6 +225,11 @@ pub(super) enum Statement {
     Assert {
         condition: ExprText,
         message: String,
+    },
+    /// A post-call probe executes only on the checked short-circuit path.
+    ConditionalProbe {
+        condition: ExprText,
+        body: Vec<Statement>,
     },
 }
 #[derive(Clone, Debug)]
@@ -357,6 +383,21 @@ impl HarnessSpec {
                         return Err(HarnessSpecError::AssertBeforeCall);
                     }
                     message(text)?;
+                }
+                Statement::ConditionalProbe { body, .. } => {
+                    if !called {
+                        return Err(HarnessSpecError::AssertBeforeCall);
+                    }
+                    let mut local = BTreeSet::new();
+                    for item in body {
+                        match item {
+                            Statement::Let(binding) => {
+                                bind(&mut local, &binding.name)?;
+                            }
+                            Statement::Assert { message: text, .. } => message(text)?,
+                            _ => return Err(HarnessSpecError::InvalidExpression),
+                        }
+                    }
                 }
             }
         }

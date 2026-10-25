@@ -7,17 +7,61 @@ use super::{
 };
 use super::{package, proof_ceilings_with_wall_clock};
 use package::Bound;
+use quire_contract_codegen::generate_routed_native;
 use quire_contract_model::{
     CheckedPackageReadLimits, ContractDependencies, ContractPackageReadResult,
     ContractPackageWireV1,
 };
 use std::time::Duration;
 pub(super) fn routed_scalar_with_artifacts(
+    builder: package::PackageBuilder,
+    operation_code: u32,
+    narrow_code: u32,
+    result_bound: Bound,
+    wall_clock: Duration,
+) -> (KaniScalarObligationHarness, Vec<Artifact>) {
+    scalar_with_policy(
+        builder,
+        operation_code,
+        narrow_code,
+        result_bound,
+        wall_clock,
+        ScalarRoute::General,
+    )
+}
+
+// This fixture module is also included by library tests that only call the general route.
+#[allow(dead_code)]
+pub(super) fn routed_native_scalar_with_artifacts(
+    builder: package::PackageBuilder,
+    operation_code: u32,
+    narrow_code: u32,
+    result_bound: Bound,
+    wall_clock: Duration,
+) -> (KaniScalarObligationHarness, Vec<Artifact>) {
+    scalar_with_policy(
+        builder,
+        operation_code,
+        narrow_code,
+        result_bound,
+        wall_clock,
+        ScalarRoute::Native,
+    )
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum ScalarRoute {
+    General,
+    Native,
+}
+
+fn scalar_with_policy(
     mut builder: package::PackageBuilder,
     operation_code: u32,
     narrow_code: u32,
     result_bound: Bound,
     wall_clock: Duration,
+    route: ScalarRoute,
 ) -> (KaniScalarObligationHarness, Vec<Artifact>) {
     let bound = builder.bound(&result_bound);
     builder.narrow(
@@ -67,12 +111,17 @@ pub(super) fn routed_scalar_with_artifacts(
         },
         ContractRequestPosition::ContextRoot { node_id: narrow_id },
     ];
-    let generation = generate_routed(
+    let generate = if route == ScalarRoute::Native {
+        generate_routed_native
+    } else {
+        generate_routed
+    };
+    let generation = generate(
         &admitted,
         &positions,
         &[RoutedGenerationItem::from_descriptor(
             0,
-            node_id,
+            node_id.clone(),
             Candidate {
                 identity: "kani".to_owned(),
             },

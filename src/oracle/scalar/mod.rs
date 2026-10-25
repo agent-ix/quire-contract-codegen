@@ -50,6 +50,7 @@ use super::operator_catalog::IntegerOperator;
 
 pub(crate) mod derive;
 pub(crate) mod lower;
+pub(crate) mod native;
 pub(crate) mod render;
 
 use crate::core::artifact::Artifact;

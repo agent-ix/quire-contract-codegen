@@ -3582,6 +3582,7 @@ fn tc_024_ac39_scalar_generator_and_generated_crates_hold_no_panic_site() {
         "src/oracle/scalar/mod.rs",
         "src/oracle/scalar/derive.rs",
         "src/oracle/scalar/lower.rs",
+        "src/oracle/scalar/native.rs",
         "src/oracle/scalar/render.rs",
     ] {
         let source = fs::read_to_string(root.join(path)).expect("read generator");
@@ -3625,6 +3626,7 @@ fn tc_024_ac42_only_the_shared_classifier_reads_a_failed_records_limit_kind() {
         "src/oracle/scalar/mod.rs",
         "src/oracle/scalar/derive.rs",
         "src/oracle/scalar/lower.rs",
+        "src/oracle/scalar/native.rs",
         "src/oracle/scalar/render.rs",
     ];
     for path in scalar_files {
@@ -3639,7 +3641,9 @@ fn tc_024_ac42_only_the_shared_classifier_reads_a_failed_records_limit_kind() {
         let expected_limit_kind_uses = match path {
             "src/oracle/scalar/mod.rs" => 1,
             "src/oracle/scalar/lower.rs" => 2,
-            "src/oracle/scalar/derive.rs" | "src/oracle/scalar/render.rs" => 0,
+            "src/oracle/scalar/derive.rs"
+            | "src/oracle/scalar/native.rs"
+            | "src/oracle/scalar/render.rs" => 0,
             _ => unreachable!("the scalar file list is fixed"),
         };
         assert_eq!(

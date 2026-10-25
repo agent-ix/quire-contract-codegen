@@ -1,5 +1,7 @@
 //! V2 state-clause condition oracles over admitted checked packages.
 
+mod native;
+
 use std::collections::BTreeMap;
 
 use quire_contract_model::{CheckedNodeId, CheckedPackageV2};
@@ -47,6 +49,9 @@ pub struct V2ClauseDescriptor {
 /// One generated oracle of a V2 clause's Boolean condition.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct V2ClauseOracle {
+    /// Selected native integer capacity decisions, when requested.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub native_integer_selection: Option<crate::core::native_integer::NativeIntegerSelection>,
     /// The operation's checked provenance.
     pub provenance: OperationProvenance,
     /// Self-contained generated Rust source. Retained in memory for harness embedding.
@@ -98,6 +103,31 @@ pub enum V2ClauseRefusal {
     NotClause,
     /// Source rendering exceeded a finite ceiling or failed internally.
     Render,
+    /// A source operation cannot retain its complete population in the native kernel.
+    NativeCapability {
+        /// Authentic checked clause.
+        node_id: CheckedNodeId,
+        /// Refused operator identity, absent for a literal or input.
+        operation_identity: Option<String>,
+        /// Evaluation-plan index.
+        step: usize,
+        /// Typed reason distinct from semantic-domain refusal.
+        reason: NativeClauseCapabilityReason,
+        /// Complete operand intervals given to the kernel constructor.
+        operands: Vec<crate::core::native_integer::NativeIntegerIntervalDecision>,
+    },
+}
+
+/// Why an admitted clause cannot use the native integer route.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NativeClauseCapabilityReason {
+    /// An authored literal or endpoint does not fit signed i128.
+    EndpointNotRepresentable,
+    /// The operation's complete interval image exceeds kernel capacity.
+    CapacityExceeded,
+    /// The operation has no native evaluator.
+    UnsupportedOperation,
 }
 
 /// Derive the typed descriptor of an admitted V2 clause condition without rendering source.
@@ -217,9 +247,35 @@ pub fn generate_v2_clause_oracle(
     generate_v2_clause_oracle_with_view(node_id, &nodes)
 }
 
+/// Select kernel-admitted native integers for every supported intermediate.
+///
+/// The authentic checked clause and its original parameter domains are retained;
+/// an ineligible operation returns a source-associated capability refusal.
+pub fn generate_v2_clause_native_oracle(
+    package: &CheckedPackageV2,
+    node_id: &CheckedNodeId,
+) -> Result<V2ClauseOracle, V2ClauseRefusal> {
+    let nodes = ClauseGraphView::new(package);
+    generate_clause_oracle_with_view(node_id, &nodes, IntegerRenderPolicy::Native)
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum IntegerRenderPolicy {
+    General,
+    Native,
+}
+
 pub(crate) fn generate_v2_clause_oracle_with_view(
     node_id: &CheckedNodeId,
     nodes: &ClauseGraphView<'_>,
+) -> Result<V2ClauseOracle, V2ClauseRefusal> {
+    generate_clause_oracle_with_view(node_id, nodes, IntegerRenderPolicy::General)
+}
+
+fn generate_clause_oracle_with_view(
+    node_id: &CheckedNodeId,
+    nodes: &ClauseGraphView<'_>,
+    policy: IntegerRenderPolicy,
 ) -> Result<V2ClauseOracle, V2ClauseRefusal> {
     let PreparedClause {
         descriptor,
@@ -243,22 +299,42 @@ pub(crate) fn generate_v2_clause_oracle_with_view(
             _ => None,
         })
         .collect::<Vec<_>>();
-    let mut source =
-        render_clause_operation_helpers(&operations).map_err(|_| V2ClauseRefusal::Render)?;
+    let (mut source, native_integer_selection) = if policy == IntegerRenderPolicy::Native {
+        let (source, selected) = native::helpers(&plan, node_id)?;
+        (source, Some(selected))
+    } else {
+        (
+            render_clause_operation_helpers(&operations).map_err(|_| V2ClauseRefusal::Render)?,
+            None,
+        )
+    };
     source.push_str(STOP_TYPE);
     if !operations.is_empty() {
         source.push_str(MEASURED_HELPER);
     }
+    let integer_type = if policy == IntegerRenderPolicy::Native {
+        "nx::NativeInteger"
+    } else {
+        "rt::Integer"
+    };
     let parameters = names
         .values()
-        .map(|name| format!("{name}: &rt::Integer, "))
+        .map(|name| format!("{name}: &{integer_type}, "))
         .collect::<String>();
     let arguments = names
         .values()
         .map(|name| format!("{name}, "))
         .collect::<String>();
     for (index, step) in plan.iter().enumerate() {
-        render_step(&mut source, index, step, &names, &parameters, &arguments)?;
+        render_step(
+            &mut source,
+            index,
+            step,
+            &names,
+            &parameters,
+            &arguments,
+            policy,
+        )?;
     }
     source.push_str(&format!("\n/// The admitted V2 clause condition.\npub fn oracle_clause({parameters}meter: &mut rt::Meter) -> Result<rt::Outcome<bool>, ClauseStop> {{\n    match value_{root}({arguments}meter) {{\n        Ok(value) => Ok(rt::Outcome::Completed(value)),\n        Err(ClauseStop::Runtime(outcome)) => Ok(outcome),\n        Err(other) => Err(other),\n    }}\n}}\n"));
     if source.len() > MAX_GENERATED_SOURCE_BYTES {
@@ -266,6 +342,7 @@ pub(crate) fn generate_v2_clause_oracle_with_view(
     }
     let source_map = coverage_regions(&source, node_id, &plan)?;
     Ok(V2ClauseOracle {
+        native_integer_selection,
         provenance: OperationProvenance::IrConfirmed,
         source,
         descriptor,
@@ -522,9 +599,11 @@ fn render_step(
     names: &BTreeMap<ClauseInput, String>,
     parameters: &str,
     arguments: &str,
+    policy: IntegerRenderPolicy,
 ) -> Result<(), V2ClauseRefusal> {
     let result = match step.kind {
         ValueKind::Boolean => "bool",
+        ValueKind::Integer if policy == IntegerRenderPolicy::Native => "nx::NativeInteger",
         ValueKind::Integer => "rt::Integer",
     };
     source.push_str(&format!("\nfn value_{index}({parameters}meter: &mut rt::Meter) -> Result<{result}, ClauseStop> {{\n"));
@@ -536,6 +615,13 @@ fn render_step(
     source.push_str(");\n");
     match &step.term {
         StepTerm::Boolean(value) => source.push_str(&format!("    Ok({value})\n")),
+        StepTerm::Integer(value) if policy == IntegerRenderPolicy::Native => {
+            let value = value.parse::<i128>().map_err(|_| V2ClauseRefusal::Render)?;
+            source.push_str(&format!(
+                "    Ok(nx::NativeInteger::new({}))\n",
+                native_literal(value)
+            ));
+        }
         StepTerm::Integer(value) => {
             if let Some(integer) = value
                 .parse::<i64>()
@@ -614,6 +700,14 @@ fn render_step(
     Ok(())
 }
 
+fn native_literal(value: i128) -> String {
+    if value == i128::MIN {
+        "i128::MIN".to_owned()
+    } else {
+        format!("{value}_i128")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use ix_trace_rs::trace;
@@ -626,8 +720,16 @@ mod tests {
             term: StepTerm::Integer(spelling.to_owned()),
         };
         let mut source = String::new();
-        render_step(&mut source, 0, &step, &BTreeMap::new(), "", "")
-            .expect("render a standalone integer step");
+        render_step(
+            &mut source,
+            0,
+            &step,
+            &BTreeMap::new(),
+            "",
+            "",
+            IntegerRenderPolicy::General,
+        )
+        .expect("render a standalone integer step");
         syn::parse_file(&source).expect("valid Rust leaf");
         source
     }

@@ -186,6 +186,20 @@ pub enum DerivedDomain {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(tag = "code", rename_all = "snake_case")]
 pub enum UnsupportedObligation {
+    /// The authentic V2 clause contains a native-ineligible source operation.
+    NativeV2ClauseCapability {
+        /// Source-associated typed native capability refusal.
+        refusal: crate::oracle::clause::V2ClauseRefusal,
+    },
+    /// The complete integer operand population exceeds the selected native capacity.
+    NativeIntegerCapacity {
+        /// Authentic source operation.
+        node_id: CheckedNodeId,
+        /// Confirmed operation identity.
+        operation_identity: String,
+        /// Complete original operand intervals.
+        operands: Vec<crate::core::native_integer::NativeIntegerIntervalDecision>,
+    },
     /// This V2 clause cannot be represented by the bounded clause renderer.
     V2ClauseConditionNotRendered {
         /// Selected clause node.

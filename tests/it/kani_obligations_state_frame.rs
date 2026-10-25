@@ -48,18 +48,19 @@ use qsl_replay::{
     WitnessSettlement,
 };
 use quire_contract_codegen::{
-    derive_v2_clause_descriptor, generate_v2_clause_claim_map, generate_v2_clause_oracle,
+    derive_v2_clause_descriptor, generate_v2_clause_claim_map, generate_v2_clause_native_oracle,
+    generate_v2_clause_oracle,
 };
 use quire_contract_codegen::{
-    execute_kani_obligation, generate_state_frame_obligations, negotiate_kani_obligations,
-    BoundNotResolvedCause, FrameReplay, FrameReplayError, InvalidObligationItem,
-    KaniExecutionRequest, KaniInstallation, KaniObligationError, KaniObligationOutcome,
-    KaniObligationRequest, KaniRunOutcome, ModuleSymbol, ObligationDisposition, ObligationItem,
-    ObligationKind, ObligationRecord, PreStateFault, ScopeMember, StateComparison,
-    StateFieldDomain, StateFrameHarness, StateFrameIdentity, StateFrameLoweringRefusal,
-    StateFrameObligations, StateFrameProperty, StateFrameRefusal, StateFrameRequest,
-    StateFrameRole, UnsupportedFrameEffect, UnsupportedObligation, MAX_OBLIGATION_ITEMS,
-    MAX_OBLIGATION_UNWIND,
+    execute_kani_obligation, generate_state_frame_obligations, negotiate_kani_native_obligations,
+    negotiate_kani_obligations, BoundNotResolvedCause, FrameReplay, FrameReplayError,
+    InvalidObligationItem, KaniExecutionRequest, KaniInstallation, KaniObligationError,
+    KaniObligationOutcome, KaniObligationRequest, KaniRunOutcome, ModuleSymbol,
+    ObligationDisposition, ObligationItem, ObligationKind, ObligationRecord, PreStateFault,
+    ScopeMember, StateComparison, StateFieldDomain, StateFrameHarness, StateFrameIdentity,
+    StateFrameLoweringRefusal, StateFrameObligations, StateFrameProperty, StateFrameRefusal,
+    StateFrameRequest, StateFrameRole, UnsupportedFrameEffect, UnsupportedObligation,
+    MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
 };
 use quire_contract_codegen::{HarnessSymbol, StateFrameRecordError};
 use quire_contract_model::{
@@ -132,7 +133,7 @@ fn qsl_emitted_state_clause_derives_a_confirmed_field_backed_oracle() {
             quire_contract_codegen::EXACT_DEPENDENCY_SOURCE
         ),
     );
-    let output = std::process::Command::new(env!("CARGO"))
+    let output = std::process::Command::new("cargo")
         .args(["test", "--offline", "--quiet"])
         .env("CARGO_TARGET_DIR", scratch.path.join("target"))
         .env("RUSTFLAGS", "-Dwarnings")
@@ -285,7 +286,7 @@ fn admitted_inline_clause_keeps_the_clause_identity() {
             quire_contract_codegen::EXACT_DEPENDENCY_SOURCE
         ),
     );
-    let output = std::process::Command::new(env!("CARGO"))
+    let output = std::process::Command::new("cargo")
         .args(["test", "--offline", "--quiet"])
         .env("CARGO_TARGET_DIR", scratch.path.join("target"))
         .env("RUSTFLAGS", "-Dwarnings")
@@ -374,7 +375,7 @@ fn qsl_bounded_operation_parameter_becomes_a_clause_input() {
             quire_contract_codegen::EXACT_DEPENDENCY_SOURCE
         ),
     );
-    let output = std::process::Command::new(env!("CARGO"))
+    let output = std::process::Command::new("cargo")
         .args(["test", "--offline", "--quiet"])
         .env("CARGO_TARGET_DIR", scratch.path.join("target"))
         .env("RUSTFLAGS", "-Dwarnings")
@@ -433,6 +434,369 @@ fn qsl_parameter_precondition_is_a_separate_v2_cover_obligation() {
     assert!(harness.rust.contents.contains("parameter_other >= 0"));
     assert!(harness.rust.contents.contains("parameter_other <= 1000"));
     assert!(harness.rust.contents.contains(&oracle.source));
+}
+
+#[trace("FR-015-AC-125", "TC-025")]
+#[test]
+fn native_v2_precondition_keeps_original_parameter_bounds_and_ordering() {
+    let (package, clause) =
+        Twin::with_bounded_other_precondition().emitted_package("OtherBelowLimit");
+    let native = generate_v2_clause_native_oracle(&package, &clause)
+        .expect("the original checked ordering is native eligible");
+    let general = generate_v2_clause_oracle(&package, &clause).unwrap();
+    assert_eq!(native.descriptor, general.descriptor);
+    assert_eq!(native.descriptor.inputs[0].lower, 0);
+    assert_eq!(native.descriptor.inputs[0].upper, 1000);
+    assert!(native
+        .source
+        .contains("nx::evaluate_native_integer_ordering"));
+    assert!(native.source.contains("nx::NativeInteger::new"));
+    assert!(native.native_integer_selection.is_some());
+    syn::parse_file(&native.source).expect("rendered native oracle is valid Rust syntax");
+
+    let item = ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+    };
+    let outcome = negotiate_kani_native_obligations(&KaniObligationRequest {
+        ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
+        items: &[item],
+        subject_path: REQUEST_SUBJECT,
+        unwind: 3,
+    })
+    .expect("the authentic clause request is well formed");
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("the native clause is emitted");
+    };
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("one original native clause harness");
+    };
+    assert_eq!(harness.identity.unwind, 3);
+    assert_eq!(
+        harness.identity.solver,
+        quire_contract_codegen::KaniSolver::Cadical
+    );
+    assert_eq!(harness.identity.arguments[0].minimum, 0);
+    assert_eq!(harness.identity.arguments[0].maximum, 1000);
+    assert_eq!(
+        harness.identity.integer_representation,
+        quire_contract_codegen::ScalarIntegerRepresentation::Native
+    );
+    assert_eq!(
+        harness.identity.native_integer_selection,
+        native.native_integer_selection
+    );
+    assert!(harness.rust.contents.contains(&native.source));
+    syn::parse_file(&harness.rust.contents)
+        .expect("the native clause harness is valid Rust syntax");
+}
+
+#[trace("FR-015-AC-126", "TC-025")]
+#[test]
+fn native_v2_postcondition_keeps_guarded_arithmetic_and_independent_expectation() {
+    let (package, clause) =
+        Twin::with_bounded_amount_implication().emitted_package("BalanceNeverDrops");
+    let oracle = generate_v2_clause_native_oracle(&package, &clause)
+        .expect("the checked guarded arithmetic is native eligible");
+    let item = ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+    };
+    let outcome = negotiate_kani_native_obligations(&KaniObligationRequest {
+        ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
+        items: &[item],
+        subject_path: REQUEST_SUBJECT,
+        unwind: 3,
+    })
+    .expect("the original clause request is well formed");
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("the native postcondition is emitted");
+    };
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("one original postcondition harness");
+    };
+    assert_eq!(harness.identity.kind, ObligationKind::Postcondition);
+    assert_eq!(harness.identity.arguments[0].minimum, 0);
+    assert_eq!(harness.identity.arguments[0].maximum, 1000);
+    assert_eq!(harness.identity.unwind, 3);
+    assert_eq!(
+        harness.identity.solver,
+        quire_contract_codegen::KaniSolver::Cadical
+    );
+    assert_eq!(
+        harness.identity.native_integer_selection,
+        oracle.native_integer_selection
+    );
+    assert!(harness.rust.contents.contains("nx::NativeIntegerPlan::new"));
+    assert!(!harness.rust.contents.contains("_i128_i128"));
+    assert!(harness.rust.contents.contains("arithmetic subterm agrees"));
+    assert!(harness.rust.contents.contains("subject == expected"));
+    syn::parse_file(&harness.rust.contents).expect("the native harness is valid Rust syntax");
+}
+
+/// Decode only the actual helper-mutant playback against its healthy sealed source and record.
+pub(super) fn decode_native_v2_helper_mutant_playback() {
+    let path = |name| {
+        PathBuf::from(std::env::var_os(name).unwrap_or_else(|| panic!("explicit {name} required")))
+    };
+    let (package, clause) =
+        Twin::with_bounded_amount_implication().emitted_package("BalanceNeverDrops");
+    let item = ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+    };
+    let outcome = negotiate_kani_native_obligations(&KaniObligationRequest {
+        ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
+        items: &[item],
+        subject_path: REQUEST_SUBJECT,
+        unwind: 3,
+    })
+    .expect("the original clause request is well formed");
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("the native postcondition is emitted");
+    };
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("one original postcondition harness");
+    };
+    assert!(fs::read_to_string(path("IR705_HELPER_HEALTHY_SOURCE"))
+        .unwrap()
+        .contains(&harness.rust.contents));
+    assert_eq!(
+        fs::read(path("IR705_HELPER_HEALTHY_RECORD")).unwrap(),
+        harness.record.contents.as_bytes()
+    );
+    let transcript = fs::read_to_string(path("IR705_HELPER_COUNTEREXAMPLE")).unwrap();
+    let decoded = quire_contract_codegen::decode_v2_clause_falsification(
+        harness,
+        &transcript,
+        quire_contract_codegen::WitnessDecodeLimits {
+            bytes: 1024 * 1024,
+            values: 1,
+        },
+    )
+    .expect("actual playback joins the original sealed harness");
+    let [(name, qsl_replay::WitnessValue::Integer(amount))] = decoded.as_slice() else {
+        panic!("one typed original integer draw: {decoded:?}");
+    };
+    assert_eq!(name, &harness.identity.arguments[0].identifier);
+    assert!((0..=1000).contains(amount));
+    let receipt = json!([{ "identifier": name, "type": "integer", "value": amount.to_string() }]);
+    fs::write(
+        path("IR705_HELPER_DECODED_WITNESS"),
+        serde_json::to_vec_pretty(&receipt).unwrap(),
+    )
+    .unwrap();
+}
+
+#[trace("FR-016-AC-2", "TC-026")]
+#[test]
+fn native_v2_decoder_enforces_original_inclusive_bounds() {
+    let (package, clause) =
+        Twin::with_bounded_amount_implication().emitted_package("BalanceNeverDrops");
+    let item = ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+    };
+    let outcome = negotiate_kani_native_obligations(&KaniObligationRequest {
+        ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
+        items: &[item],
+        subject_path: REQUEST_SUBJECT,
+        unwind: 3,
+    })
+    .unwrap();
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("native clause emitted");
+    };
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("one harness");
+    };
+    let [argument] = harness.identity.arguments.as_slice() else {
+        panic!("one parameter");
+    };
+    assert_eq!((argument.minimum, argument.maximum), (0, 1000));
+    // These hand-built bytes test only the parser and cannot count as Kani proof evidence.
+    let decode = |value: i64| {
+        let bytes = value.to_le_bytes().map(|byte| byte.to_string()).join(", ");
+        let transcript = format!(
+            "/// Test generated for harness `{}::{}`\n\
+/// Check for `assertion`: \"synthetic domain decoder control\"\n\
+#[test]\n\
+fn kani_concrete_playback_synthetic() {{\n\
+    let concrete_vals: Vec<Vec<u8>> = vec![\n\
+        // {value}\n\
+        vec![{bytes}],\n\
+    ];\n\
+    kani::concrete_playback_run(concrete_vals, synthetic);\n\
+}}\n",
+            harness.identity.module_symbol, harness.identity.harness_symbol,
+        );
+        quire_contract_codegen::decode_v2_clause_falsification(
+            harness,
+            &transcript,
+            quire_contract_codegen::WitnessDecodeLimits {
+                bytes: 4096,
+                values: 1,
+            },
+        )
+    };
+    for value in [0_i64, 1000] {
+        let decoded = decode(value).expect("inclusive endpoint decoded");
+        assert_eq!(
+            decoded,
+            vec![(
+                argument.identifier.clone(),
+                qsl_replay::WitnessValue::Integer(i128::from(value))
+            )]
+        );
+    }
+    for value in [-1_i64, 1001] {
+        let refusal = decode(value).expect_err("outside the checked domain");
+        assert_eq!(refusal.code, "cg_witness_out_of_domain");
+    }
+}
+
+#[trace("FR-015-AC-126", "TC-025")]
+#[test]
+fn native_v2_postcondition_oracle_typechecks_with_direct_dependencies() {
+    let (package, clause) =
+        Twin::with_bounded_amount_implication().emitted_package("BalanceNeverDrops");
+    let item = ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+    };
+    let outcome = negotiate_kani_native_obligations(&KaniObligationRequest {
+        ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
+        items: &[item],
+        subject_path: REQUEST_SUBJECT,
+        unwind: 3,
+    })
+    .unwrap();
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("native clause emitted");
+    };
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("one harness");
+    };
+    let directory = super::scratch_crate::TemporaryDirectory::new("ir705-native-v2-typecheck");
+    fs::create_dir_all(directory.path.join("src")).unwrap();
+    write_v2_precondition_fixture(&directory.path, harness);
+    super::scratch_crate::resolve_seeded_lock(&directory.path);
+    let output = std::process::Command::new("cargo")
+        .args(["check", "--locked", "--offline", "--lib", "--quiet"])
+        .env(
+            "CARGO_TARGET_DIR",
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target"),
+        )
+        .current_dir(&directory.path)
+        .output()
+        .expect("typecheck generated native oracle");
+    assert!(
+        output.status.success(),
+        "generated native oracle did not typecheck: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(harness.rust.contents.matches("#[kani::proof]").count(), 1);
+    assert_eq!(harness.rust.contents.matches("#[cfg(kani)]").count(), 1);
+    let stubs = r#"extern crate self as kani;
+pub fn any<T: Default>() -> T { T::default() }
+pub fn assume(_: bool) {}
+#[macro_export]
+macro_rules! cover { ($condition:expr, $message:expr) => { let _ = ($condition, $message); }; }
+pub mod request { pub fn unrelated(_: i64) -> bool { true } }
+"#;
+    let source = format!(
+        "{stubs}{}",
+        harness
+            .rust
+            .contents
+            .replace("#[kani::proof]", "#[test]")
+            .replace("#[cfg(kani)]", "")
+    );
+    fs::write(directory.path.join("src/lib.rs"), source).expect("active proof body");
+    let output = std::process::Command::new("cargo")
+        .args(["check", "--locked", "--offline", "--tests", "--quiet"])
+        .env("RUSTFLAGS", "-Dwarnings")
+        .env(
+            "CARGO_TARGET_DIR",
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target"),
+        )
+        .current_dir(&directory.path)
+        .output()
+        .expect("typecheck the generated native V2 proof body");
+    assert!(
+        output.status.success(),
+        "native V2 proof body failed typecheck: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[trace("FR-015-AC-125", "TC-025")]
+#[test]
+fn native_v2_chained_probe_uses_selected_intermediate_interval() {
+    let (package, clause) =
+        Twin::with_bounded_amount_condition("amount < 1000 implies (amount + 1) * 2 <= 2000")
+            .emitted_package("BalanceNeverDrops");
+    let outcome = negotiate_kani_native_obligations(&KaniObligationRequest {
+        ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
+        items: &[ObligationItem::V2Clause {
+            package: &package,
+            clause: &clause,
+        }],
+        subject_path: REQUEST_SUBJECT,
+        unwind: 3,
+    })
+    .expect("the checked clause request");
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("the bounded native clause is admitted");
+    };
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("one native postcondition harness");
+    };
+    let selected = harness
+        .identity
+        .native_integer_selection
+        .as_ref()
+        .expect("native plan decisions");
+    let multiply = selected
+        .operations
+        .iter()
+        .find(|decision| decision.operation_identity == "quire.op.integer.mul")
+        .expect("checked Multiply after bounded Add");
+    assert_eq!(multiply.operands[0].lower, "1");
+    assert_eq!(multiply.operands[0].upper, "1001");
+    assert!(
+        harness
+            .rust
+            .contents
+            .contains("NativeIntegerInterval::new(1_i128, 1001_i128)"),
+        "the generated probe must use the selected completed interval"
+    );
+    assert!(harness.rust.contents.contains("if "));
+    assert!(harness.rust.contents.contains("arithmetic subterm agrees"));
 }
 
 /// The admitted package and selected node fix the generated bytes, while backend and subject
@@ -534,7 +898,7 @@ fn tc_025_v2_precondition_fixture_compiles_with_its_direct_dependencies() {
     write_v2_precondition_fixture(&directory, &harness);
     super::scratch_crate::resolve_seeded_lock(&directory);
     eprintln!("actual V2 precondition fixture: {}", directory.display());
-    let output = std::process::Command::new(env!("CARGO"))
+    let output = std::process::Command::new("cargo")
         .args(["check", "--locked", "--offline", "--lib", "--quiet"])
         .env(
             "CARGO_TARGET_DIR",
