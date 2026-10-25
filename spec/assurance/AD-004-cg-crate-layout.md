@@ -361,17 +361,17 @@ The CG concrete oracle and any emitted oracle crate hosting a generated
 leaf beside `qsl-replay`; they also depend on `quire-exact` for values and
 the meter and `quire-semantic-value` for the object closure. QSL
 does not re-export these leaf types. QSL FR-485's
-`qsl_replay` consumer API is implemented in draft QSL PR #1483, with
+`qsl_replay` consumer API is delivered on QSL main through merged PR #1483, with
 `acquire_checked_closure` returning a `CheckedClosureCompilation` whose
 `handle()` supports `lookup_callable` and `registry()`. The registry accepts
 a checked `CallableSelection` and generated `BodyFactory` through `register`,
 then starts a metered `CheckedApplicationSession` through `begin_call`; the
 session's `step` or `run` delegates to the one leaf evaluator. QSL's reference
 adapter and the leaf's authoritative root call site sit behind this facade.
-The candidate is not merged delivery. Before a concrete function-application
-oracle replaces the historical RT-port witness, IR-1007's FR-485 facade and the IR-595 CG
-consumer must land and pass their acceptance checks. CG's `oracle` module
-uses this application facade for checked callables; CG's `replay` module keeps
+The QSL facade is merged delivery. Before a concrete function-application
+oracle replaces the historical RT-port witness, the IR-595 CG consumer must
+land and pass its acceptance checks. CG's `oracle` module will use this
+application facade for checked callables; CG's `replay` module keeps
 using `qsl_replay::replay` for Kani witness settlement. Neither module imports
 RT or QSL evaluator/checker internals for the new path, and neither copies an
 evaluator. FR-021 holds the concrete-oracle criteria Planned until that work

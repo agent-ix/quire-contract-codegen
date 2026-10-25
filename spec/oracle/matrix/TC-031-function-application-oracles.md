@@ -16,8 +16,9 @@ Verify CG's target-neutral function-body graph analysis, flat SSA schedule,
 caller-selected work and source-byte limits, compact location records, typed
 refusals and deterministic claim ordering. The planned concrete owner-path
 corpus acquires and applies checked callables through QSL FR-485's permitted
-`qsl_replay` facade; it remains Planned until the IR-1007 API and IR-595 CG
-consumer land. The old Contract Runtime `exact` corpus remains historical
+`qsl_replay` facade. QSL delivered that API in merged PR #1483; the corpus
+remains Planned until the IR-595 CG consumer lands and is verified. The old
+Contract Runtime `exact` corpus remains historical
 evidence for the behavioral obligations retained in FR-021; it is not a
 required dependency or target path.
 
@@ -85,13 +86,13 @@ required dependency or target path.
    query unit less refuses without a partial path. For AC-17's planned runtime
    check, independently compare own and imported callable root locations with
    FR-485 session outcomes; this does not replace the static path assertions
-   (AC-15, AC-17 and AC-29; IR-1007/IR-595).
+   (AC-15, AC-17 and AC-29; QSL FR-485 delivered, IR-595 Planned).
 7. On a shallow body with separately observable left and right charge
    points, inspect branch/stop instructions. A denied left charge must branch
    out before any right charge, and an admitted left charge must precede the
    right and parent operation. In the planned FR-485 corpus, run both denial
    injections with fresh meters and compare actual charge prefixes and
-   incomplete outcomes (AC-5, AC-9 and AC-26; IR-1007/IR-595).
+   incomplete outcomes (AC-5, AC-9 and AC-26; QSL FR-485 delivered, IR-595 Planned).
 8. Reuse the six duplicate-declaring-node fixtures and permutations of
    FR-021-AC-22: both admissible; one Stage-1 refusal; shared name plus a
    distinct-node declaration; a nested caller; two duplicate groups holding
@@ -135,15 +136,16 @@ required dependency or target path.
     after replacing the old port. Only then assert that neither the schedule
     nor any concrete oracle requires the port, alias, wrapper or compatibility
     surface, and that the concrete oracle uses only `qsl_replay` for QSL
-    checked-closure acquisition and application (AC-32, IR-1007/IR-595).
+    checked-closure acquisition and application (AC-32; QSL FR-485 delivered,
+    IR-595 Planned).
 12a. Inspect (AC-18, FR-014-AC-47): scan the function-application corpus's test
     names, `Trace:` tags, output lines and doc comments, this procedure's steps
     and the FR-021 rows of the oracle matrix. None may claim, or present as
     evidence, agreement with the QSL value authority; text that states the
     boundary (outside CG, owned by IR-842) is permitted.
 12b. Planned owner-path corpus (AC-2, AC-4, AC-5, AC-9, AC-17, AC-32,
-     AC-35 through AC-37; IR-1007/IR-595, with draft QSL #1483 as the
-     current facade candidate). For each retained function
+     AC-35 through AC-37; QSL FR-485 delivered by merged #1483,
+     IR-595 Planned). For each retained function
      vector, call `qsl_replay::acquire_checked_closure` with the seven supplied
      inputs, take `CheckedClosureCompilation::handle()`, and use
      `CheckedClosureHandle::lookup_callable(owner_package_id, wire_node_id)`.
@@ -289,8 +291,8 @@ source-byte limits on a small stack, compiles as a schedule crate and has no
 depth refusal. The first denied work or byte charge refuses before action or
 partial publication. Existing duplicate, unknown-name, lowering and blocker
 precedence remains testable. Concrete QSL-owner-path compilation and execution
-through FR-485 remain Planned pending IR-1007 and IR-595; no Contract Runtime
-`exact` path is required.
+through FR-485 remain Planned pending IR-595; the QSL API is delivered, and no
+Contract Runtime `exact` path is required.
 
 Direct formula, fairness and case requests have one typed unsupported claim
 per affected call item, retaining the call request's identity separately from
