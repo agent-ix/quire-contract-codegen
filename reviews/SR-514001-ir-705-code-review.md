@@ -1,12 +1,12 @@
 ---
-id: SR-17015
+id: SR-514001
 title: "IR-705 CG #514 code review (Rust lane)"
 type: SpecReview
 analysis: base
 scope: "agent-ix/quire-contract-codegen#514@27d2cfd086fa40a74d50af769f2542a908961bdf vs origin/main 4eccd682; docs/qualification/ir705-native-map.md, src/core/, src/kani/generate/, src/kani/identity.rs, src/kani/run/scalar.rs, src/kani/test_support.rs, src/lib.rs, src/oracle/clause.rs, src/oracle/clause/native.rs, src/replay/witness.rs, src/routed/generate.rs, tests/it/kani_obligations.rs, tests/it/kani_obligations_state_frame.rs, tests/it/kani_scalar_native_fixture.rs, tests/it/kani_scalar_native_private.rs, tests/state_frame_support/native_twin.rs"
 review_set: subset
 ---
-# SR-17015: IR-705 CG #514 code review (Rust lane)
+# SR-514001: IR-705 CG #514 code review (Rust lane)
 
 ## Summary
 
@@ -17,7 +17,7 @@ What was checked, and how:
 - **Kernel consumption.** `Cargo.toml` and `Cargo.lock` are unchanged. CG calls the published quire-exact `NativeIntegerPlan` / `admit` / `evaluate_native_integer_arithmetic` / `evaluate_native_integer_ordering` API through the existing lock. No kernel code is copied. There is no vendored file, no compatibility layer, and no new hash, pin or digest catalog. The only digest use is the existing canonical identity mechanism.
 - **Generated-source typecheck.** In a throwaway detached worktree (`/tmp/pr514-dump`, removed afterwards), the reviewer dumped the actual generated native scalar TC-027 harness, its bound variant, and the V2 precondition and postcondition harnesses. Each `#[cfg(kani)]` body was compiled against the locked kernel with `--cfg kani` and a stub `kani` module. All three typecheck.
 - **Gates.** Fmt-check passes. `make lint` (locked clippy, all targets, `-D warnings`) passes. The focused native lib and `it` tests pass when run one at a time. No real Kani proof and no full aggregate gate was run, as the brief requires.
-- **Old FND-005 misbinding.** It is not repeated. The positive helper-witness test traces FR-016-AC-1 (typed decoding). The inclusive-bounds decoder control traces FR-016-AC-2 (out-of-domain). Neither claims FR-016-AC-6 (byte/value limits). The remaining trace defects are in SR-17016.
+- **Old FND-005 misbinding.** It is not repeated. The positive helper-witness test traces FR-016-AC-1 (typed decoding). The inclusive-bounds decoder control traces FR-016-AC-2 (out-of-domain). Neither claims FR-016-AC-6 (byte/value limits). The remaining trace defects are in SR-514002.
 
 Findings by area:
 
@@ -51,3 +51,28 @@ Three high findings block merge:
 - The suite fails on a fixture-code collision (FND-003).
 
 Fix FND-001 to FND-003 before the coordinated 16 GiB / unwind 3 / Cadical runs. Otherwise those runs cannot serve as AC3 evidence. Observation outside this diff: the untouched `bounded_single_run_preserves_cancelled_with_start_signal_and_timeout_without_signal` failed once under a parallel build load and passed alone, so it is load-sensitive.
+
+## New findings (disposition pass 1)
+
+Found at head `cb2c12e004002c2d08752d666c5c59486a4d9dc4` in the fix-round commits `dcfcebb9` and `cb2c12e0`.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-008 | low | The shared `SOURCE_HEADER` gains a `    /* native refusal */` line, and `SourceBuilder::finish` replaces it with an empty string when native admission is off. Every general-route scalar oracle and clause helper source now carries one more whitespace-only line (four spaces) inside `OracleStop`. So the ordinary `generate_routed` artifact bytes, their line numbers and the identities of general-route harnesses change in a PR whose AC says the general route is retained. The fix is to insert the variant without leaving a line, for example by replacing the whole line including its indentation and newline. | src/oracle/scalar/render.rs:61, src/oracle/scalar/render.rs:180 |
+| FND-009 | low | The fix round adds lint suppressions, although the PR body states "no warning flags are removed or lint suppressed". The generated observer now emits `#[allow(dead_code)]` on `mod generated`. The new `-Dwarnings` typecheck controls prepend `#![allow(dead_code, unused_imports)]`, and the V2 control adds `unused_parens`. That last one exempts the generated V2 proof body from the lint that `-Dwarnings` is there to enforce. The claim and the code should agree: either drop the suppressions and fix the generated text, or record the reason for each one. | src/kani/run/scalar.rs:888, tests/it/kani_obligations_state_frame.rs:723, tests/it/kani_obligations.rs:3064 |
+| FND-010 | low | `generate_routed_native` adds a `/// Trace: FR-015-AC-125` doc line. `Trace:` doc lines are a deprecated binding convention, and ix-trace-rs `#[trace]` on tests is the binding the matrix reads. The new line adds an unmeasured claim. | src/routed/generate.rs:315 |
+| FND-011 | low | `oracle::scalar::native::render` chooses the native variant by matching identity strings (`"quire.op.integer.add"`, `".sub"`, `".mul"`, `".negate"`). `select` already receives the typed `IntegerOperator`, and the operator catalog owns that mapping. This is a second, string-keyed copy of the catalog in the renderer that both the routed artifact and the harness depend on. A catalog rename would make native publication refuse with `InvalidPlanState`, and nothing in the type system ties the two together. | src/oracle/scalar/native.rs:94, src/oracle/scalar/native.rs:104 |
+
+## Dispositions
+
+Disposition pass 1 at head `cb2c12e004002c2d08752d666c5c59486a4d9dc4` (rebased onto `dd59aa14`, the #564 scalar split). `git range-diff 4eccd682..27d2cfd0 dd59aa14..cb2c12e0` shows the two reviewed commits are patch-identical (`a25cea4f = 0bed25e6`, `27d2cfd0 = c13bb455`), so the review-pass verdict carries for them. The fix commits `dcfcebb9` and `cb2c12e0` were reviewed in full. `cb2c12e0` only moves the `native_probe_tests` module below the production items. The #564 split is preserved: `src/oracle/scalar/{mod,derive,lower,render}.rs` name `limit_kind` 1/2/0/0 times, and `tc_024_ac42` passes.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | `generate_routed_native` now runs native negotiation and `publish_native_scalar_artifacts`. That function rewrites the routed `src/lib.rs` from the same `oracle::scalar::native::render` that the harness embeds. The fixture asserts the harness contains the routed production oracle byte for byte, and the oracle rendering now lives in `src/oracle/scalar/native.rs`. |
+| FND-002 | fixed | The bound control keeps `Bound::Integer(0, 9)` (semantic domain and routed oracle unchanged) and edits only the harness literal `exact <= i128::from(9_i64)` to 5. The static twin asserts that the mutant still carries `NativeIntegerInterval::new(0_i128, 9_i128)`. |
+| FND-003 | fixed | Every native routed fixture now registers code 49_100 for the same `Bound::Integer(0, 9)` node. The focused `it` and lib native tests pass together under RUST_TEST_THREADS=4. |
+| FND-004 | fixed | `bind_native_arithmetic_probes` overwrites each probe's operand bounds and semantic domain from the oracle's own typed `NativeIntegerSelection` decisions, matched by operation identity and count. Short-circuit guards and a `completed_prefix` carry intermediate refusal into the final assertions and cover. New tests check the Add-to-Multiply intermediate interval. |
+| FND-005 | fixed | `run_mutant` now requires the counterexample to contain `Check for \`assertion\`` and the generated sound-assertion message. The tautological `assert_ne!` is removed, and the bound control shares the same check. |
+| FND-006 | fixed | The text `replace` is gone. `SourceBuilder` takes a typed `needs_native_admission` flag and splices the variant at a declared header insertion point. The byte side-effect on the general route is recorded separately as FND-008. |
+| FND-007 | fixed | New non-ignored `-Dwarnings` typecheck controls compile the native scalar proof body, the native V2 proof body (with stub `kani`) and the native observer example against the locked kernel. All three pass. |
