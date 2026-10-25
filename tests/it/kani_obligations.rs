@@ -3134,7 +3134,7 @@ fn native_scalar_false_bound_control_keeps_original_draws() {
 
 #[trace("FR-015-AC-126", "TC-027")]
 #[test]
-#[ignore = "real Kani qualification: run after independent review at the original 16 GiB ceiling"]
+#[ignore = "kani lane: real Kani qualification at the original 16 GiB ceiling"]
 fn native_original_tc027_increment_verifies() {
     let (harness, manifest) = native_scalar_increment();
     let evidence = run_scalar_under_real_kani("native-original-tc027", &harness, &manifest);

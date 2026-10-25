@@ -58,8 +58,9 @@ pub(super) fn helpers(
             _ => None,
         })
         .collect::<Vec<_>>();
-    let mut source = crate::oracle::scalar::render_clause_native_operation_helpers(&booleans)
-        .map_err(|_| V2ClauseRefusal::Render)?;
+    let mut source =
+        crate::oracle::scalar::render::render_clause_native_operation_helpers(&booleans)
+            .map_err(|_| V2ClauseRefusal::Render)?;
     source.push_str("\nuse quire_exact as nx;\n");
     let mut selected = NativeIntegerSelection::new();
     let mut ranges = Vec::<Option<NativeIntegerInterval>>::with_capacity(plan.len());

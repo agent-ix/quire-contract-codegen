@@ -663,9 +663,14 @@ fn classify_v2_clause<'a>(
                 node_id: clause.clone(),
             })
         }
-        Some(_) => match lower_v2_clause(view, clause, kind.expect("guarded clause kind")) {
-            Ok(lowered) => Outcome::LoweredV2Clause(Box::new(lowered)),
-            Err(reason) => Outcome::Unsupported(reason),
+        Some(_) => match kind {
+            Some(kind) => match lower_v2_clause(view, clause, kind) {
+                Ok(lowered) => Outcome::LoweredV2Clause(Box::new(lowered)),
+                Err(reason) => Outcome::Unsupported(reason),
+            },
+            None => Outcome::Unsupported(UnsupportedObligation::V2ClauseConditionNotRendered {
+                node_id: clause.clone(),
+            }),
         },
     };
     ItemState {

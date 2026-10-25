@@ -840,9 +840,6 @@ pub fn generate_exact_scalar_oracles(
     render_exact_scalar_plan(plan_exact_scalar_oracles(package, items)?)
 }
 
-pub(crate) use render::publish_native_scalar_artifacts;
-pub(crate) use render::render_clause_native_operation_helpers;
-
 /// A whole-call failure before admitted scalar claims can be published.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ContractScalarError {

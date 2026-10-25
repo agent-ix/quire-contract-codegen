@@ -543,10 +543,7 @@ fn native_v2_postcondition_keeps_guarded_arithmetic_and_independent_expectation(
 }
 
 /// Decode only the actual helper-mutant playback against its healthy sealed source and record.
-#[trace("FR-015-AC-126", "FR-016-AC-1", "TC-026")]
-#[test]
-#[ignore = "run after the coordinated real Kani helper-mutant qualification produces its artifacts"]
-fn native_v2_helper_mutant_playback_decodes_typed_original_witness() {
+pub(super) fn decode_native_v2_helper_mutant_playback() {
     let path = |name| {
         PathBuf::from(std::env::var_os(name).unwrap_or_else(|| panic!("explicit {name} required")))
     };

@@ -34,8 +34,7 @@ use crate::{
     kani::identity::KaniScalarObligationHarness,
     oracle::claim::ClaimMap,
     oracle::scalar::{
-        generate_contract_scalar_oracles, publish_native_scalar_artifacts, ContractScalarError,
-        ExactScalarClaim, ExactScalarOracles,
+        generate_contract_scalar_oracles, ContractScalarError, ExactScalarClaim, ExactScalarOracles,
     },
     routed::capability::{BackendDescriptor, BackendKind, Candidate},
 };
@@ -599,10 +598,14 @@ fn generate_kani(
                         selections.insert(*claim_index, selection);
                     }
                 }
-                publish_native_scalar_artifacts(&mut claim_map, &mut artifacts, &selections)
-                    .map_err(|error| {
-                        RoutedGenerationError::ContractScalar(ContractScalarError::Oracle(error))
-                    })?;
+                crate::oracle::scalar::render::publish_native_scalar_artifacts(
+                    &mut claim_map,
+                    &mut artifacts,
+                    &selections,
+                )
+                .map_err(|error| {
+                    RoutedGenerationError::ContractScalar(ContractScalarError::Oracle(error))
+                })?;
             }
             (records, index_harnesses(scalar_harnesses)?, false)
         }

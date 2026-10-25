@@ -141,7 +141,11 @@ pub(super) fn render(spec: &HarnessSpec) -> Result<Artifact, UnsupportedObligati
                             &mut source,
                             &format!("assert!({}, \"{message}\");", condition.as_str()),
                         ),
-                        _ => unreachable!("validated probe body contains only bindings and assertions"),
+                        _ => {
+                            return Err(UnsupportedObligation::InvalidGeneratedSyntax {
+                                error: "invalid conditional probe statement".to_owned(),
+                            });
+                        }
                     }
                 }
                 line(&mut source, "}");

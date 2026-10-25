@@ -84,6 +84,7 @@ mod kani_obligations_symbolic_domains;
 mod kani_stdout_capture;
 mod kani_witness_join;
 mod layout;
+mod native_v2_helper_playback;
 mod no_generation_panics;
 mod oracle_arithmetic;
 mod oracle_generation;
