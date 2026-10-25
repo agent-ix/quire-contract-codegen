@@ -401,7 +401,7 @@ impl GraphSpec {
 pub mod rt_side {
     use std::collections::BTreeMap;
 
-    pub use quire_contract_runtime::exact::{
+    pub use quire_contract_runtime::scalar::{
         evaluate_boolean_short_circuit, ShortCircuitConnective,
     };
     pub use quire_exact::*;

@@ -189,8 +189,8 @@ impl SourceBuilder {
         if self.functions.contains("enum_owner::") {
             source.push_str("use quire_semantic_value::enumeration as enum_owner;\n");
         }
-        if self.functions.contains("residue::") {
-            source.push_str("use quire_contract_runtime::exact as residue;\n");
+        if self.functions.contains("scalar_owner::") {
+            source.push_str("use quire_contract_runtime::scalar as scalar_owner;\n");
         }
         if self.needs_integer {
             source.push_str(INTEGER_HELPER);
@@ -270,7 +270,7 @@ impl SourceBuilder {
                     };
                     (
                         vec![("left", "bool"), ("right", "impl FnOnce() -> rt::Outcome<bool>")],
-                        format!("Ok(residue::evaluate_boolean_short_circuit(residue::ShortCircuitConnective::{kind}, left, || {{\n        right()\n    }}, meter))"),
+                        format!("Ok(scalar_owner::evaluate_boolean_short_circuit(scalar_owner::ShortCircuitConnective::{kind}, left, || {{\n        right()\n    }}, meter))"),
                     )
                 } else {
                     (parameters, format!("Ok(rt::evaluate_boolean(rt::BooleanConnective::{connective}, meter))"))

@@ -74,8 +74,8 @@ mod tests {
             work_units: u64::MAX,
             result_units: u64::MAX,
         });
-        let produced = quire_contract_runtime::exact::evaluate_boolean_short_circuit(
-            quire_contract_runtime::exact::ShortCircuitConnective::And,
+        let produced = quire_contract_runtime::scalar::evaluate_boolean_short_circuit(
+            quire_contract_runtime::scalar::ShortCircuitConnective::And,
             true,
             || Outcome::Completed(true),
             &mut meter,
