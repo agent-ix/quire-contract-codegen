@@ -127,13 +127,14 @@ required dependency or target path.
     Linked-mode admission
     (AC-8), no kernel-mode application and no literal outcomes/charges (AC-14)
     are inspected on the schedule and generated source.
-12. Inspect the schedule crate and the concrete oracle CG emits today for any
-    `quire_contract_runtime::exact` dependency, alias, wrapper or compatibility
-    surface. Assert none is required. The current oracle still requires it
-    (`src/oracle/function/mod.rs`), so AC-32 stays Planned while it does. CG
-    emits no owner-path oracle yet. In the planned FR-485 corpus, inspect CG
-    imports, emitted source and dependencies again after replacing the old
-    port, and require the concrete oracle to use only `qsl_replay` for QSL
+12. Inspect the present schedule crate and concrete oracle dependencies.
+    Record that the schedule crate requires no `quire_contract_runtime::exact`
+    path, but the current concrete oracle still imports that port in
+    `src/oracle/function/mod.rs`; therefore AC-32 remains Planned. In the
+    planned FR-485 corpus, inspect CG imports, emitted source and dependencies
+    after replacing the old port. Only then assert that neither the schedule
+    nor any concrete oracle requires the port, alias, wrapper or compatibility
+    surface, and that the concrete oracle uses only `qsl_replay` for QSL
     checked-closure acquisition and application (AC-32, IR-1007/IR-595).
 12a. Inspect (AC-18, FR-014-AC-47): scan the function-application corpus's test
     names, `Trace:` tags, output lines and doc comments, this procedure's steps
