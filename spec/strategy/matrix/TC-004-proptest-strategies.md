@@ -37,12 +37,14 @@ Generate with each selected clause's point from its accepted QSL binding; includ
 precondition and postcondition anchors. Instrument verdict construction to observe the precondition
 point on a rejected case and the postcondition point on failed and passed cases. Drive a
 non-completed precondition case and a non-completed postcondition case and observe the point retained
-beside each oracle's original typed `Undefined`, `Refused`, or `Incomplete` cause in
-`V2HarnessCaseResult::NonCompleted`. Seed each stop variant at each oracle position. Instrument
-runtime verdict construction and recording, and start with nonzero report counters; require no
-verdict call or pass artifact for a stopped case, unchanged prior verdict counters, and a
-non-success campaign result distinct from rejection, failure, discard, and exhaustion. Compare
-each retained point's runtime string with the binding's variant, UTF-8 anchor
+beside each oracle's original typed cause in `V2HarnessCaseResult::NonCompleted`. At each oracle
+position, inject exact, distinguishable `Outcome::Undefined`, `Outcome::Refused`, and
+`Outcome::Incomplete` values and exact `ClauseStop::Oracle(OracleStop)` and
+`ClauseStop::InvalidConstant` errors through the generated oracle boundary; compare the returned
+typed variant and cause with the injected value. Compare the result's checked clause id and
+authentic `claim` occurrence with the selected precondition or postcondition tuple. Compare its
+typed `ExecutionPoint` with the accessor's accepted value, then compare the point's derived runtime
+string with the binding's variant, UTF-8 anchor
 name and exact byte-length rendering. For two separate requests, select the same precondition
 checked clause node with two authentic `claim` occurrences bound to its same `Pre` operation point,
 keeping the postcondition selection fixed; instrument the accessor to prove each request uses its
@@ -50,6 +52,12 @@ own selected occurrence, and compare each generated precondition verdict point w
 point. Repeat each request with the same
 admitted package, full `(checked clause id, authentic claim occurrence)` selections and campaign
 policy, and compare its bytes with that request's first artifact.
+For each stopped case, instrument runtime verdict construction and recording, and start with
+nonzero runtime report counters. Require no verdict call, no successful case or campaign result,
+unchanged prior runtime counters, and a `V2HarnessCampaignResult::NonCompleted` carrying the
+original case and `V2HarnessCampaignSummary` with `attempted` equal to the report's prior
+`counts().total()` plus one and `non_completed` equal to one. Verify the stop is not reported as a
+rejection, failure, discard, or exhaustion.
 Independently for either selection, supply a wrong-role, wrong-ordinal, and other-node occurrence
 while another authentic occurrence of the node has a point; require no sibling substitution. Then
 select an authentic claim lacking its accepted point beside an authentic sibling of that node with a
@@ -88,9 +96,10 @@ that a floor was missed; completed searches still return the corresponding floor
 
 The V2 controls expect a case with both oracles completing true to run the subject once and pass
 (FR-002-AC-13), a rejected case to leave the subject uninvoked (AC-14), a false postcondition to be
-a failed postcondition (AC-15), a non-completed oracle outcome to return
-`V2HarnessCaseResult::NonCompleted` with its original typed stop, selected accepted point, no
-runtime verdict or pass artifact, and unchanged prior verdict counters (AC-16), and a
+a failed postcondition (AC-15), either a non-completed `Outcome<bool>` or outer `ClauseStop`
+to return `V2HarnessCaseResult::NonCompleted` with its exact typed cause, selected claim identity
+and accepted typed point, no runtime verdict or successful result, and unchanged prior runtime
+counters, while the V2 terminal summary counts one non-completed attempt (AC-16), and a
 precondition that does not complete invokes neither
 the subject (AC-17) nor the postcondition oracle (AC-18), snapshot, precondition, invocation and postcondition to run in that order (AC-8), each
 wrong selection to yield a typed, located diagnostic naming the selection and no artifact (AC-10),
