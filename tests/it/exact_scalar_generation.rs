@@ -1020,7 +1020,7 @@ fn tc_024_claim_map_carries_identity_source_bounds_and_operation_per_item() {
     // No blocker applies to every entry: a Generated claim's operation is IR-confirmed, and an
     // unconfirmed claim, in any of the cases `OperationProvenance::CallerDeclared` enumerates,
     // carries the blocker on its own `operation.provenance` rather than at the map
-    // level. `blocked` has one writer in the crate (`oracle/scalar/mod.rs`'s `Vec::new()`), so this
+    // level. `blocked` has writers in `oracle/scalar/render.rs`, both using `Vec::new()`, so this
     // pair is a regression guard against that literal changing, not a criterion an implementation
     // can violate; the falsifiable contract is the per-item provenance asserted below.
     assert_eq!(map.blocked, []);
@@ -1057,7 +1057,7 @@ fn tc_024_claim_map_carries_identity_source_bounds_and_operation_per_item() {
     }
 
     // This list is hand-written and independently constructed -- not read from
-    // `scalar_profile()` (`src/oracle/scalar/mod.rs`, private) -- so this cross-check calls IR's
+    // `scalar_profile()` (`src/oracle/scalar/lower.rs`, private) -- so this cross-check calls IR's
     // `lower` directly rather than the generator's own profile, and stays meaningful rather than
     // circular. `LITERAL_OPERAND` reaches the `claim` nodes `corpus_package` wires as its
     // dependencies (issue #100), so this list must admit `Claim` too, or this cross-check would
@@ -3621,15 +3621,23 @@ fn tc_024_ac42_only_the_shared_classifier_reads_a_failed_records_limit_kind() {
         "the shared module owns the classifier"
     );
 
-    let scalar = [
+    let scalar_files = [
         "src/oracle/scalar/mod.rs",
         "src/oracle/scalar/derive.rs",
         "src/oracle/scalar/lower.rs",
         "src/oracle/scalar/render.rs",
-    ]
-    .into_iter()
-    .map(code_of)
-    .collect::<String>();
+    ];
+    for path in scalar_files {
+        let failed_arms = code_of(path)
+            .matches("CompleteLoweringRecordV2::Failed")
+            .count();
+        assert_eq!(
+            failed_arms,
+            usize::from(path == "src/oracle/scalar/lower.rs"),
+            "{path} has the expected direct-lowering `Failed` arms"
+        );
+    }
+    let scalar = scalar_files.into_iter().map(code_of).collect::<String>();
 
     for path in [
         "src/oracle/scalar/mod.rs",

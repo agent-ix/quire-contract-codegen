@@ -46,6 +46,7 @@ use crate::core::ir::scalar_bounds::{
 };
 use quire_contract_model::{CheckedPackageV2, CompleteLoweringProfileV2, ContractRootViewError};
 
+/// The lowered node and the bounds its descriptor was checked against.
 type CheckedItem<'r> = (&'r CompleteContractNodeV2, Vec<CheckedNodeId>);
 
 /// Either [`ExactScalarRefusal`] (a per-item business refusal, folded into
@@ -539,7 +540,7 @@ pub(crate) enum OperandRange {
 /// How a Kani harness ranges each of the node's arguments, by position: over the
 /// `bounded_domain` typing the argument, exactly at the value of a literal argument (inline or a
 /// reference to a literal `value` node), or over the result bound otherwise. Reads the same graph
-/// [`generate_exact_scalar_oracles`] checked, so a Kani harness ranges each operand as the
+/// [`super::generate_exact_scalar_oracles`] checked, so a Kani harness ranges each operand as the
 /// oracle's parameter check did. A claim records the own-bound ids in `checked_bounds` but not
 /// their positions, so the harness takes the positions from here and requires every id to appear
 /// in the claim's `checked_bounds` (`lower_scalar_claim`): the two sources cannot silently
@@ -956,7 +957,7 @@ pub(super) struct Bounds<'g, 'n, Body: GraphBody = Value, NodeBody = CheckedTerm
 
 impl<Body: GraphBody, NodeBody> Bounds<'_, '_, Body, NodeBody> {
     /// Read the result bound of `form`: the one selector both [`Self::equal`] and
-    /// [`derive_exact_scalar_items`] use. Returns the bound's node and the value it reads as.
+    /// [`super::derive_exact_scalar_items`] use. Returns the bound's node and the value it reads as.
     ///
     /// The result's role is named by the node itself. A result typed by a `bounded_domain` has
     /// that domain as its bound. A result typed by a scalar type has the bound of the narrowing
@@ -1755,7 +1756,7 @@ pub(super) fn operation_confirmed<Body: GraphBody>(
 
 /// One oracle's function, self-contained for direct embedding in a generated
 /// Kani harness file (`kani::generate::scalar::render_scalar`): unlike
-/// [`SourceBuilder::finish`]'s crate-wide accumulation (one set of shared
+/// [`super::render::SourceBuilder::finish`]'s crate-wide accumulation (one set of shared
 /// helpers for every oracle in the crate), this always includes whatever
 /// preamble helpers its own body needs, even when that duplicates them
 /// across separate harness files that each embed a different oracle.
