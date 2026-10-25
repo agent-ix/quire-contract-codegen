@@ -43,3 +43,12 @@ changed. The diff adds no pin or SHA. `quire validate --scope . spec/spec.md` an
 | --- | --- | --- | --- |
 | FND-001 | medium | The `{collection,clause/v2}` row says "V2 clause and collection lowerers are live". `clause/v2.rs` only lowers the V2 parameter-precondition cover. FR-015-AC-38 to AC-49 are all PLANNED (IR-489), and the existing `{negotiate,...}` row still says "V2 contract-clause items planned". The cell should say that only the V2 parameter-precondition cover is live and that AC-38 to AC-49 remain planned. | spec/spec.md:132 |
 | FND-002 | low | The `{record,spec,render}` row groups `record` with the unported pieces: "live for scalar and admitted V2 clause paths; collection and remaining families still need their AD-004 ports". `collection.rs` already uses `record`. Only `HarnessSpec` and `render` are still unported for collection (step 4h). | spec/spec.md:131 |
+
+## Dispositions
+
+Round 1, checked against fix-round head 59b9b4e031340a6642cdb160408c12f0f1b11d71.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | `{collection,clause/v2}` is split into two rows. The `clause/v2` row now says only the parameter-precondition cover harness is live and that FR-015-AC-38 to AC-49 remain PLANNED (IR-489). This matches `clause/v2.rs` and FR-015. |
+| FND-002 | fixed | The `{record,spec,render}` row now says the shared record is already used by collection and that only the step 4h rendering port remains. This matches the `record::` import in `collection.rs`. |

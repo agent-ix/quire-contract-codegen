@@ -46,3 +46,14 @@ imprecise.
 | FND-002 | medium | The map gives `kani/generate/clause/v2` its own V2 owner row, but AD-004's layout has no `clause/v2.rs` (nor `role_parity_tests.rs`). The module is declared inside `clause.rs`, which AD-004 and existing row 4 treat as V1-interim "pending AD-004 steps 4c to 4f". It is now unclear whether `clause/v2` retires or moves with its parent. Give it an AD-004 home, or note in the row that AD-004 does not yet place it. | spec/spec.md:132; spec/spec.md:133; src/kani/generate/clause.rs:4; spec/assurance/AD-004-cg-crate-layout.md:227 |
 | FND-003 | low | The final row's owner cell is one compound phrase for three different things. Read literally, "the FR-014/FR-015 criteria traced by the tests" covers `kani/test_support`, which mostly serves FR-017 run, report and classify tests. Give each item its own owner: `role_parity_tests` → its traced FR-014/FR-015 criteria; `test_support` → the criteria of the tests that use it (FR-015, FR-017); module roots → each child module's owner. | spec/spec.md:140; src/kani/test_support.rs |
 | FND-004 | low | The census row says `census_validation` and `corpus/mod.rs` retire under "FR-015-AC-110/111". AC-110, the collection slice, retires neither. `corpus/mod.rs` goes only with AC-111. AD-004 also lets the V2 census input replace `census_validation` instead. | spec/spec.md:134; spec/assurance/AD-004-cg-crate-layout.md:234 |
+
+## Dispositions
+
+Round 1, checked against fix-round head 59b9b4e031340a6642cdb160408c12f0f1b11d71.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The module-roots row now names only `kani/mod.rs` and `kani/{generate,run,output}/mod.rs`. It states that `lower/mod.rs` is owned by the finite-input auxiliary row, which keeps a single owner. |
+| FND-002 | fixed | The `clause/v2` row states that AD-004 does not yet place this child of interim `clause.rs` and that its placement or retirement must be resolved with steps 4c to 4f. The `role_parity_tests` row states the same gap. |
+| FND-003 | fixed | Each item now has its own row. `role_parity_tests` is owned by FR-014-AC-38 and FR-015-AC-60/68, which matches its trace tags. `test_support` is owned by the FR-015 and FR-017 criteria of its users; its users in run, output, classify and generate were verified. Module roots are owned by their children's owners. |
+| FND-004 | fixed | The census row now ties `census_validation` to steps 4f/4g or replacement by the V2 census input. It ties `corpus/mod.rs` to FR-015-AC-111 only. |
