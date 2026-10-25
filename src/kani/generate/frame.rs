@@ -31,8 +31,8 @@ use std::{num::NonZeroU64, time::Duration};
 
 use quire_contract_model::{
     ApplicationOperator, CheckedFrameModification, CheckedMemberType, CheckedNodeId,
-    CheckedNodeTag, CheckedPackageV2, CheckedTerm, CompleteLoweringProfileV2,
-    CompleteLoweringRecordV2, LiteralKind,
+    CheckedNodeKind, CheckedNodeTag, CheckedPackageV2, CheckedTerm, CompleteLoweringProfileV2,
+    CompleteLoweringRecordV2, LiteralKind, StateForm, ValueForm,
 };
 use serde::Serialize;
 
@@ -40,8 +40,11 @@ use crate::oracle::operator_catalog::{FrameSymbol, Operator as CatalogOperator};
 use crate::{
     core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES},
     core::identity::{HarnessPath, HarnessSymbol, ModuleSymbol, SymbolError},
-    core::ir::checked_term::{aggregate_members, bound_members, literal},
-    core::ir::frame::{application, application_identity, clause_kind, projected_field, Located},
+    core::ir::checked_term::{aggregate_members, application, bound_members, literal},
+    core::ir::clause::ClauseGraphView,
+    core::ir::frame::{
+        application_identity, clause_kind, parameter_references, projected_field, Located,
+    },
     kani::abi::{adapter_options, i64_literal, KaniSolver},
     kani::generate::outcome::{
         BoundNotResolvedCause, StateFrameLoweringRefusal, StateFrameRefusal, StateFrameRole,
@@ -52,8 +55,6 @@ use crate::{
         StateFrameProperty, StateFrameScope, StateUnrangedField, StateUnrangedReason,
     },
 };
-
-pub(crate) use crate::core::ir::frame::Graph;
 
 /// Work budget for lowering one clause and its closure.
 const LOWERING_WORK_LIMIT: u64 = 65_536;
@@ -323,7 +324,7 @@ fn plan_state_frame_role(
 /// the frame and the condition each decoded once. A refusal of `prepare` is a ground common to
 /// both roles; a refusal a role finds in `grants` or `condition` is that role's own.
 struct Prepared<'g> {
-    graph: Graph<'g>,
+    graph: ClauseGraphView<'g>,
     shape: ClauseShape,
     /// The frame's granted field names, or why the frame has no encoding.
     grants: Result<BTreeSet<String>, StateFrameRefusal>,
@@ -333,7 +334,7 @@ struct Prepared<'g> {
 
 fn prepare<'g>(request: &StateFrameRequest<'g>) -> Result<Prepared<'g>, StateFrameRefusal> {
     validate_request(request)?;
-    let graph = Graph::of(request.package);
+    let graph = ClauseGraphView::new(request.package);
     lower_clause(request)?;
     let shape = ClauseShape::read(&graph, request.clause)?;
     let grants = shape.frame_grants(&graph);
@@ -575,7 +576,7 @@ impl ClauseShape {
     /// The selected clause's postcondition, decoded by the same reader as generation.
     pub(crate) fn postcondition_property(
         &self,
-        graph: &Graph<'_>,
+        graph: &ClauseGraphView<'_>,
         clause: &CheckedNodeId,
     ) -> Result<StateFrameProperty, StateFrameRefusal> {
         self.condition(graph, clause)
@@ -592,7 +593,7 @@ impl ClauseShape {
     /// The parameter node that is not a `name` and `level` aggregate, or is not in the graph.
     pub(crate) fn declared_parameters(
         &self,
-        graph: &Graph<'_>,
+        graph: &ClauseGraphView<'_>,
     ) -> Result<Vec<(String, String)>, CheckedNodeId> {
         self.parameters
             .iter()
@@ -613,12 +614,12 @@ impl ClauseShape {
 
     /// Decodes the clause, its anchor and its frame by QSpec FR-341 and FR-342.
     pub(crate) fn read<'g>(
-        graph: &Graph<'g>,
+        graph: &ClauseGraphView<'g>,
         clause: &'g CheckedNodeId,
     ) -> Result<Self, StateFrameRefusal> {
         let malformed = || StateFrameRefusal::MalformedClause { at: clause.clone() };
         let shape = graph.shape(clause).ok_or_else(malformed)?;
-        if !shape.is("state", "state_clause") {
+        if shape.kind != CheckedNodeKind::State(StateForm::StateClause) {
             return Err(StateFrameRefusal::NotAStateClause {
                 node: clause.clone(),
                 node_tag: shape.tag.to_owned(),
@@ -639,17 +640,7 @@ impl ClauseShape {
                 clause: kind.to_owned(),
             });
         }
-        let CheckedTerm::Aggregate { members } = parameters else {
-            return Err(malformed());
-        };
-        let parameters = members
-            .iter()
-            .map(|member| match member {
-                CheckedTerm::Reference { target } => Some(target.clone()),
-                _ => None,
-            })
-            .collect::<Option<Vec<_>>>()
-            .ok_or_else(malformed)?;
+        let parameters = parameter_references(parameters).ok_or_else(malformed)?;
         let anchor = graph
             .follow(anchor, clause)
             .and_then(|anchor| anchor.referenced_node)
@@ -671,7 +662,10 @@ impl ClauseShape {
     }
 
     /// The frame's granted field names; refuses every effect with no finite encoding.
-    fn frame_grants(&self, graph: &Graph<'_>) -> Result<BTreeSet<String>, StateFrameRefusal> {
+    fn frame_grants(
+        &self,
+        graph: &ClauseGraphView<'_>,
+    ) -> Result<BTreeSet<String>, StateFrameRefusal> {
         let frame = &self.scope.frame;
         let malformed = || StateFrameRefusal::MalformedClause { at: frame.clone() };
         let body = graph.term(frame).ok_or_else(malformed)?;
@@ -720,7 +714,7 @@ impl ClauseShape {
     /// The condition as one integer comparison of the pre and post reads of one field.
     fn condition<'g>(
         &'g self,
-        graph: &Graph<'g>,
+        graph: &ClauseGraphView<'g>,
         clause: &'g CheckedNodeId,
     ) -> Result<Condition, StateFrameRefusal> {
         let unsupported = || StateFrameRefusal::ConditionNotSupported { at: clause.clone() };
@@ -750,7 +744,7 @@ impl ClauseShape {
     /// `pre(<read>)` or `<read>`, where a read is `project(deref(self), field)`.
     fn observation<'g>(
         &self,
-        graph: &Graph<'g>,
+        graph: &ClauseGraphView<'g>,
         clause: &'g CheckedNodeId,
         term: &'g CheckedTerm,
     ) -> Result<Observation, StateFrameRefusal> {
@@ -779,7 +773,7 @@ impl ClauseShape {
     /// The field a `record.project` of `deref(self)` reads.
     fn field_read<'g>(
         &self,
-        graph: &Graph<'g>,
+        graph: &ClauseGraphView<'g>,
         read: &Located<'g>,
     ) -> Result<String, StateFrameRefusal> {
         let unsupported = || StateFrameRefusal::ConditionNotSupported {
@@ -823,7 +817,7 @@ impl ClauseShape {
             .ok_or_else(unsupported)?;
         let is_self = graph
             .shape(subject)
-            .is_some_and(|shape| shape.is("value", "parameter"))
+            .is_some_and(|shape| shape.kind == CheckedNodeKind::Value(ValueForm::Parameter))
             && self.parameters.first() == Some(subject);
         if !is_self {
             return Err(unsupported());
@@ -840,7 +834,7 @@ struct Observation {
 /// The `i64` range admitted for one selected model state field. The harness generator and
 /// state-clause replay both use this checked reader, so their bounds agree.
 pub(crate) fn field_range(
-    graph: &Graph<'_>,
+    graph: &ClauseGraphView<'_>,
     object: &CheckedNodeId,
     field: &str,
 ) -> Result<(i64, i64), BoundNotResolvedCause> {
@@ -900,7 +894,7 @@ pub(crate) fn field_range(
 
 /// The range of each state field whose member of the framed object declares one.
 fn state_domains(
-    graph: &Graph<'_>,
+    graph: &ClauseGraphView<'_>,
     object: &CheckedNodeId,
     request: &StateFrameRequest<'_>,
 ) -> Result<(Vec<StateFieldDomain>, Vec<StateUnrangedField>), StateFrameRefusal> {

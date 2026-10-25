@@ -3,57 +3,27 @@
 
 //! Typed access to admitted state-frame graph nodes and operation payloads.
 
-use std::collections::BTreeMap;
+use quire_contract_model::{CheckedNodeId, CheckedNodeKind, CheckedTerm, LiteralKind, StateForm};
 
-use quire_contract_model::{
-    ApplicationOperator, CheckedNodeId, CheckedPackageV2, CheckedSemanticNodeV2, CheckedTerm,
-    LiteralKind,
-};
-use serde_json::Value;
-
-use super::checked_term::{aggregate_members, bound_members, literal};
+use super::checked_term::{aggregate_members, bound_members, literal, node_id, reference};
+use super::clause::ClauseGraphView;
 
 /// A graph node's checked shape, independent of its body representation.
 pub(crate) struct NodeShape<'a> {
+    pub(crate) kind: CheckedNodeKind,
     pub(crate) tag: &'a str,
     pub(crate) form: &'a str,
 }
 
-impl NodeShape<'_> {
-    pub(crate) fn is(&self, tag: &str, form: &str) -> bool {
-        self.tag == tag && self.form == form
-    }
-}
-
-/// The admitted graph by node id.
-pub(crate) struct Graph<'g> {
-    pub(crate) package: &'g CheckedPackageV2,
-    nodes: BTreeMap<&'g CheckedNodeId, &'g CheckedSemanticNodeV2>,
-}
-
-impl<'g> Graph<'g> {
-    pub(crate) fn of(package: &'g CheckedPackageV2) -> Self {
-        Self {
-            package,
-            nodes: package
-                .graph()
-                .nodes
-                .iter()
-                .map(|node| (&node.node_id, node))
-                .collect(),
-        }
-    }
-
-    pub(crate) fn package(&self) -> &'g CheckedPackageV2 {
-        self.package
-    }
-
+impl<'g> ClauseGraphView<'g> {
     pub(crate) fn term(&self, id: &CheckedNodeId) -> Option<&'g CheckedTerm> {
-        self.package.term(id)
+        self.package().term(id)
     }
 
     pub(crate) fn shape(&self, id: &CheckedNodeId) -> Option<NodeShape<'g>> {
-        self.nodes.get(id).map(|node| NodeShape {
+        let node = self.node(id)?;
+        Some(NodeShape {
+            kind: self.kind(id)?,
             tag: &node.node_tag,
             form: &node.semantic_form,
         })
@@ -72,17 +42,17 @@ impl<'g> Graph<'g> {
                 body: term,
             });
         };
-        let node = *self.nodes.get(target)?;
+        let node = self.node(target)?;
         Some(Located {
             id: &node.node_id,
             referenced_node: Some(&node.node_id),
-            body: self.package.term(&node.node_id)?,
+            body: self.package().term(&node.node_id)?,
         })
     }
 
     /// The typed operation scope named by an anchor's context, operation and frame.
     pub(crate) fn scope(&self, anchor: &CheckedNodeId) -> Option<FrameScope> {
-        if !self.shape(anchor)?.is("state", "operation_anchor") {
+        if self.kind(anchor)? != CheckedNodeKind::State(StateForm::OperationAnchor) {
             return None;
         }
         let members = aggregate_members(self.term(anchor))?;
@@ -90,7 +60,7 @@ impl<'g> Graph<'g> {
             bound_members(members, ["context", "operation", "frame"])?;
         let object = reference(context)?.clone();
         let frame = reference(frame)?.clone();
-        if !self.shape(&frame)?.is("state", "frame") {
+        if self.kind(&frame)? != CheckedNodeKind::State(StateForm::Frame) {
             return None;
         }
         Some(FrameScope {
@@ -117,29 +87,12 @@ pub(crate) struct FrameScope {
     pub(crate) frame: CheckedNodeId,
 }
 
-/// The arguments of an application of `operator`/`identity`.
-pub(crate) fn application<'a>(
-    body: &'a CheckedTerm,
-    operator: ApplicationOperator,
-    identity: &str,
-) -> Option<&'a [CheckedTerm]> {
-    match body {
-        CheckedTerm::Application {
-            operator: actual,
-            operation,
-            arguments,
-            ..
-        } if *actual == operator && operation_identity(operation)? == identity => Some(arguments),
-        _ => None,
-    }
-}
-
 /// The catalog identity of a checked application.
 pub(crate) fn application_identity(body: &CheckedTerm) -> Option<&str> {
     let CheckedTerm::Application { operation, .. } = body else {
         return None;
     };
-    operation_identity(operation)
+    operation.get("identity")?.as_str()
 }
 
 /// The clause kind carried by a checked state-clause application.
@@ -165,24 +118,17 @@ pub(crate) fn projected_field(body: &CheckedTerm) -> Option<(CheckedNodeId, &str
     ))
 }
 
-fn operation_identity(operation: &Value) -> Option<&str> {
-    operation.get("identity")?.as_str()
-}
-
-fn node_id(value: &Value) -> Option<CheckedNodeId> {
-    serde_json::from_value(value.clone()).ok()
-}
-
-fn reference(term: &CheckedTerm) -> Option<&CheckedNodeId> {
-    match term {
-        CheckedTerm::Reference { target } => Some(target),
-        _ => None,
-    }
+/// The ordered node ids in a state-clause parameter aggregate.
+pub(crate) fn parameter_references(term: &CheckedTerm) -> Option<Vec<CheckedNodeId>> {
+    let members = aggregate_members(Some(term))?;
+    members
+        .iter()
+        .map(|member| reference(member).cloned())
+        .collect()
 }
 
 #[cfg(test)]
 mod tests {
-    /// Trace: AD-004 L-8.
     #[test]
     fn frame_generator_uses_typed_graph_and_operation_access() {
         let source = include_str!("../../kani/generate/frame.rs");

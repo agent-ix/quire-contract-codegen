@@ -3,8 +3,41 @@
 
 //! Shared typed walkers over admitted checked terms.
 
-use quire_contract_model::{CheckedTerm, LiteralKind};
+use quire_contract_model::{ApplicationOperator, CheckedNodeId, CheckedTerm, LiteralKind};
 use quire_exact::Integer;
+use serde_json::Value;
+
+/// Decode a checked node id carried by an operation member.
+pub(crate) fn node_id(value: &Value) -> Option<CheckedNodeId> {
+    serde_json::from_value(value.clone()).ok()
+}
+
+/// The node named by a checked reference term.
+pub(crate) fn reference(term: &CheckedTerm) -> Option<&CheckedNodeId> {
+    match term {
+        CheckedTerm::Reference { target } => Some(target),
+        _ => None,
+    }
+}
+
+/// Arguments of an application with the selected checked operator and identity.
+pub(crate) fn application<'a>(
+    body: &'a CheckedTerm,
+    operator: ApplicationOperator,
+    identity: &str,
+) -> Option<&'a [CheckedTerm]> {
+    match body {
+        CheckedTerm::Application {
+            operator: actual,
+            operation,
+            arguments,
+            ..
+        } if *actual == operator && operation.get("identity")?.as_str()? == identity => {
+            Some(arguments)
+        }
+        _ => None,
+    }
+}
 
 /// The members of an admitted aggregate, without interpreting its wire representation.
 pub(crate) fn aggregate_members<'a>(

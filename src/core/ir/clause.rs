@@ -2,11 +2,11 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use super::checked_term::{application, node_id, reference};
 use quire_contract_model::{
-    ApplicationOperator, CheckedMemberType, CheckedNodeId, CheckedPackageV2, CheckedSemanticNodeV2,
-    CheckedTerm, LiteralKind,
+    ApplicationOperator, CheckedMemberType, CheckedNodeId, CheckedNodeKind, CheckedPackageV2,
+    CheckedSemanticNodeV2, CheckedTerm, LiteralKind,
 };
-use serde_json::Value;
 
 const MAX_CONDITION_TERMS: usize = 256;
 
@@ -43,35 +43,6 @@ pub(crate) struct ClauseCondition {
     pub(crate) condition_node_id: Option<CheckedNodeId>,
 }
 
-fn node_id(value: &Value) -> Option<CheckedNodeId> {
-    serde_json::from_value(value.clone()).ok()
-}
-
-fn reference(value: &CheckedTerm) -> Option<CheckedNodeId> {
-    match value {
-        CheckedTerm::Reference { target } => Some(target.clone()),
-        _ => None,
-    }
-}
-
-fn arguments<'a>(
-    value: &'a CheckedTerm,
-    operator: ApplicationOperator,
-    identity: &str,
-) -> Option<&'a [CheckedTerm]> {
-    match value {
-        CheckedTerm::Application {
-            operator: actual,
-            operation,
-            arguments,
-            ..
-        } if *actual == operator && operation.get("identity")?.as_str()? == identity => {
-            Some(arguments)
-        }
-        _ => None,
-    }
-}
-
 /// First occurrence of each checked graph node, retained for repeated clause lookups.
 pub(crate) struct ClauseNodeIndex<'a> {
     nodes: BTreeMap<&'a CheckedNodeId, &'a CheckedSemanticNodeV2>,
@@ -99,13 +70,19 @@ impl<'a> ClauseNodeIndex<'a> {
 pub(crate) struct ClauseGraphView<'a> {
     package: &'a CheckedPackageV2,
     index: ClauseNodeIndex<'a>,
+    kinds: BTreeMap<&'a CheckedNodeId, CheckedNodeKind>,
 }
 
 impl<'a> ClauseGraphView<'a> {
     pub(crate) fn new(package: &'a CheckedPackageV2) -> Self {
+        let mut kinds = BTreeMap::new();
+        for (node, kind) in package.graph().nodes.iter().zip(package.node_kinds()) {
+            kinds.entry(&node.node_id).or_insert(*kind);
+        }
         Self {
             package,
             index: ClauseNodeIndex::from_nodes(package.graph().nodes.iter()),
+            kinds,
         }
     }
 
@@ -115,6 +92,10 @@ impl<'a> ClauseGraphView<'a> {
 
     pub(crate) fn node(&self, id: &CheckedNodeId) -> Option<&'a CheckedSemanticNodeV2> {
         self.index.node(id)
+    }
+
+    pub(crate) fn kind(&self, id: &CheckedNodeId) -> Option<CheckedNodeKind> {
+        self.kinds.get(id).copied()
     }
 }
 
@@ -282,11 +263,11 @@ impl Reader<'_, '_> {
         if result_type != &declaration {
             return None;
         }
-        let [subject] = arguments(&deref, ApplicationOperator::Deref, "quire.op.model.deref")?
+        let [subject] = application(&deref, ApplicationOperator::Deref, "quire.op.model.deref")?
         else {
             return None;
         };
-        if reference(subject)? != self.self_id {
+        if reference(subject)? != &self.self_id {
             return None;
         }
         let fields = self.package.model_object_fields(&declaration).ok()?;
@@ -306,7 +287,7 @@ impl Reader<'_, '_> {
 
     fn term_body(&self, value: &CheckedTerm) -> Option<CheckedTerm> {
         match reference(value) {
-            Some(id) => Some(self.package.term(&id)?.clone()),
+            Some(id) => Some(self.package.term(id)?.clone()),
             None => Some(value.clone()),
         }
     }
@@ -321,7 +302,7 @@ pub(crate) fn read_clause(
     if &*clause.node_tag != "state" || &*clause.semantic_form != "state_clause" {
         return None;
     }
-    let [parameters, _anchor, condition] = arguments(
+    let [parameters, _anchor, condition] = application(
         package.term(id)?,
         ApplicationOperator::StateClause,
         "quire.op.state.clause",
@@ -332,14 +313,14 @@ pub(crate) fn read_clause(
     let CheckedTerm::Aggregate { members: declared } = parameters else {
         return None;
     };
-    let self_id = declared.first().and_then(reference)?;
+    let self_id = declared.first().and_then(reference)?.clone();
     if package.parameter_declaration(&self_id).ok()?.name.as_ref() != "self" {
         return None;
     }
     let allowed_parameters = declared
         .iter()
         .skip(1)
-        .map(reference)
+        .map(|term| reference(term).cloned())
         .collect::<Option<_>>()?;
     let mut reader = Reader {
         package,
@@ -354,6 +335,6 @@ pub(crate) fn read_clause(
     Some(ClauseCondition {
         term,
         inputs: reader.inputs.into_iter().collect(),
-        condition_node_id: reference(condition),
+        condition_node_id: reference(condition).cloned(),
     })
 }

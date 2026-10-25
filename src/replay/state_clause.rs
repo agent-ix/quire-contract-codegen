@@ -38,11 +38,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     core::canonical::{content_bytes, content_digest, DigestError},
+    core::ir::clause::ClauseGraphView,
     kani::{
         abi::{KaniBindingRole, KaniPrimitiveType},
         classify::KaniRunOutcome,
         generate::{
-            frame::{field_range, postcondition_check_text, ClauseShape, Graph},
+            frame::{field_range, postcondition_check_text, ClauseShape},
             outcome::{BoundNotResolvedCause, StateFrameRefusal},
         },
         identity::{ObligationBinding, StateFrameIdentity, StateFrameProperty},
@@ -475,7 +476,7 @@ impl StateClauseReplayInputs<'_> {
         else {
             return Err(StateClauseReplayError::NotPostconditionHarness);
         };
-        let graph = Graph::of(self.package);
+        let graph = ClauseGraphView::new(self.package);
         let shape = ClauseShape::read(&graph, self.clause_node).map_err(|refusal| {
             StateClauseReplayError::Document(DocumentError::Clause { refusal })
         })?;
@@ -625,7 +626,7 @@ impl StateClauseReplay {
             return Err(StateClauseReplayError::ClauseSelectionMismatch);
         }
 
-        let graph = Graph::of(package);
+        let graph = ClauseGraphView::new(package);
         let shape = ClauseShape::read(&graph, clause_node).map_err(|refusal| {
             StateClauseReplayError::Document(DocumentError::Clause { refusal })
         })?;
@@ -1025,17 +1026,18 @@ enum Side {
 /// The framed object's selected model fields in caller draw order, checked against the admitted
 /// table. A present field without a representable `i64` range remains unranged.
 fn state_fields(
-    graph: &Graph<'_>,
+    graph: &ClauseGraphView<'_>,
     shape: &ClauseShape,
     requested: &[String],
 ) -> Result<Vec<StateField>, StateClauseReplayError> {
     let object = &shape.scope.object;
-    let fields = graph.package.model_object_fields(object).map_err(|cause| {
-        StateClauseReplayError::ModelFields {
+    let fields = graph
+        .package()
+        .model_object_fields(object)
+        .map_err(|cause| StateClauseReplayError::ModelFields {
             object: object.clone(),
             cause: StateClauseModelFieldsCause::Accessor(cause),
-        }
-    })?;
+        })?;
     let mut resolved = Vec::with_capacity(requested.len());
     for name in requested {
         if fields.field(name).is_none() {
@@ -1057,7 +1059,7 @@ fn state_fields(
 /// The shared field reader's range or its typed refusal, with only known non-range types
 /// carried without a domain. An absent field and an accessor failure cannot become unranged.
 fn replay_range(
-    graph: &Graph<'_>,
+    graph: &ClauseGraphView<'_>,
     object: &CheckedNodeId,
     name: &str,
 ) -> Result<Option<(i64, i64)>, StateClauseReplayError> {
@@ -1170,7 +1172,7 @@ fn declared_domains(
 /// clause's parameter nodes come from the generator's `ClauseShape`; each node's `name` and
 /// `level` are read here. A parameter named `result` at level 1 is the result.
 fn operation_declaration(
-    graph: &Graph<'_>,
+    graph: &ClauseGraphView<'_>,
     shape: &ClauseShape,
 ) -> Result<OperationDeclaration, StateClauseReplayError> {
     let mut declaration = OperationDeclaration::default();
