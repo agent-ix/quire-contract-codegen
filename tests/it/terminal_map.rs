@@ -722,6 +722,7 @@ fn repeated_identity_refusal() -> ReplayPackageError {
         dependencies: vec![dependency("lib-one"), dependency("lib-two")],
         accounting_limits: unlimited,
         stage_limits: Default::default(),
+        supplied_limits: None,
         declared_domains: Vec::new(),
         replay_limits: ReplayLimits::default(),
     };

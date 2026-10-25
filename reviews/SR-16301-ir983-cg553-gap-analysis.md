@@ -44,3 +44,13 @@ scope:
     role: examined
     excerpt: "Have the checked parity claim producer complete an input-arm `WitnessPacket<NoPayload>` before invoking CG's parity intake. Build operator-parity and value-parity requests from their admitted packets and independently selected checked claims."
 ```
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The tagged value tests take QSL's `FunctionSite.value_parity.obligation_identity` from a checked non-Boolean function, and the substitution test admits the second checked function's packet before verifying that the fixed selection refuses it. |
+
+## Continuation verdict
+
+**PASS for the previously reviewed identity trace** at `f19849bce067b4f04824c6b2fcca624648167d6c`: FND-001 is fixed. `quire matrix --scope . --format json` reports five binders for FR-024-AC-44 and six for FR-024-AC-46; the two value tests appear on both rows and now exercise a QSL-minted identity and a second admitted claim's packet. The new request-field defect is recorded in SR-16300 FND-002. Plan completion: not assessed.

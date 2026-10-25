@@ -46,3 +46,22 @@ scope:
     role: examined
     excerpt: "Have the checked parity claim producer complete an input-arm `WitnessPacket<NoPayload>` before invoking CG's parity intake. Build operator-parity and value-parity requests from their admitted packets and independently selected checked claims."
 ```
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-002 | medium | The value-parity request leaves `supplied_limits` absent, and its new positive test requires that absence. QSL FR-484 requires the request to carry the complete effective A/H/B supplied ceilings from replay configuration, resolving omitted ceilings to published defaults; `ValueIdentity::sent` applying a default afterward does not make the request complete. | src/replay/function.rs:511; src/replay/function.rs:974; src/replay/function.rs:1700 |
+
+QSL's pinned `b8d7138` FR-484 *Retained claim inputs* table explicitly names the request's complete effective `limits.supplied` object. `ReplayInputs::wire` sets `supplied_limits: None`; `request_from_envelope` changes backend and domains but leaves that member absent. The test asserts `wire.supplied_limits.is_none()` and reads the default only afterward. This is a request contract gap on the new value-parity path. QSL's current `ValueIdentity::sent` resolves the omission to default values, so the tested default replay settles as expected; the finding concerns the wire's required retained inputs.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | `value_parity_packet` and `value_parity_request` both read `self.site.site.value_parity.obligation_identity`; `call_site` mints that site from the compiled package and the request compares the admitted packet against it. The caller can no longer supply an arbitrary obligation digest. |
+| FND-002 | still-open | The wire still carries `supplied_limits: None`; QSL FR-484 requires an explicit complete effective A/H/B object for a value-parity request, and the test asserts the omission. |
+
+## Continuation verdict
+
+**CONDITIONAL, not mergeable yet** at `f19849bce067b4f04824c6b2fcca624648167d6c`: FND-001 is fixed. New FND-002 remains open. The packet's QSL-minted identity, function declaration, target, package, Input arm and generator identity bind correctly. The value request still omits the required complete effective supplied ceilings. The final aggregate gate belongs to the code lead after the fix and review.

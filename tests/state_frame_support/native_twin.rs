@@ -1065,6 +1065,7 @@ impl Twin {
                 "s1.input_bytes".to_owned(),
                 DEFAULT_REPLAY_INPUT_BYTES,
             )]),
+            supplied_limits: None,
             declared_domains: Vec::new(),
             replay_limits: ReplayLimits::default(),
         }

@@ -72,6 +72,7 @@ fn inputs(source: &str) -> ReplayInputs {
         dependencies: Vec::new(),
         accounting_limits: limits(),
         stage_limits: BTreeMap::new(),
+        supplied_limits: None,
         declared_domains: Vec::new(),
         replay_limits: ReplayLimits::default(),
     }

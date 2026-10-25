@@ -20,7 +20,7 @@ use qsl_replay::{
     SourceIdentity, StateEnvironment, SuppliedLibrary, WireNodeId, Witness, WitnessArmResult,
     WitnessEnvelope, WitnessPacket, WitnessRefusal, WitnessSettlement, WitnessValue,
 };
-use quire_semantic_value::catalog::Category;
+use quire_semantic_value::{catalog::Category, supplied_stop::SuppliedLimits};
 
 use crate::{
     kani::generate::corpus::bounded_kani_corpus::BoundedCorpusCase,
@@ -371,6 +371,8 @@ pub struct ReplayInputs {
     pub accounting_limits: ScalarLimits,
     /// The proving run's named stage bounds. Omitted names use QSL's published defaults.
     pub stage_limits: BTreeMap<String, u64>,
+    /// The configured supplied-value ceilings. Absence selects QSL's published defaults.
+    pub supplied_limits: Option<SuppliedLimits>,
     /// The proving run's declared finite domains, keyed by their original proof positions.
     pub declared_domains: Vec<DeclaredDomain>,
     /// The configured reader bound for the replay request and envelopes.
@@ -510,8 +512,7 @@ impl ReplayInputs {
             state_environment: StateEnvironment::new(Vec::new()),
             accounting_limits: self.accounting_limits,
             stage_limits: self.stage_limits.clone(),
-            // This path has no caller-supplied helper ceilings; QSL resolves `None` to its published defaults.
-            supplied_limits: None,
+            supplied_limits: self.supplied_limits,
             declared_domains: self.declared_domains.clone(),
             byte_provision,
             // No Reference parameter is replayed on this path, so no object environment is supplied.
@@ -988,6 +989,9 @@ impl ReplayPackage {
         );
         request.backend = envelope.backend().as_str().to_owned();
         request.declared_domains = envelope.declared_domains().to_vec();
+        if matches!(envelope.source(), ReplaySource::Input(_)) {
+            request.supplied_limits = Some(self.inputs.supplied_limits.unwrap_or_default());
+        }
         Ok(request)
     }
 
@@ -1271,6 +1275,7 @@ fn compile_corpus_qsl_package(
                 result_units: maximum,
             },
             stage_limits: BTreeMap::new(),
+            supplied_limits: None,
             declared_domains: Vec::new(),
             replay_limits: ReplayLimits::default(),
         },
@@ -1683,6 +1688,7 @@ mod tests {
             dependencies: Vec::new(),
             accounting_limits: limits,
             stage_limits: BTreeMap::from([("s1.input_bytes".to_owned(), 1 << 20)]),
+            supplied_limits: None,
             declared_domains: Vec::new(),
             replay_limits: ReplayLimits::default(),
         }
@@ -1739,7 +1745,7 @@ mod tests {
         assert_eq!(wire.backend, generator.as_str());
         assert!(wire.profile_selections.is_empty());
         assert!(wire.declared_domains.is_empty());
-        assert!(wire.supplied_limits.is_none());
+        assert_eq!(wire.supplied_limits, Some(SuppliedLimits::default()));
         let readback = ReplayRequest::decode(wire.clone(), package.inputs.replay_limits)
             .expect("QSL reads the packet-backed value request");
         assert_eq!(
@@ -1757,7 +1763,7 @@ mod tests {
 
         let generated = ScalarOutcome::Value(Value::Integer(Integer::from(5_i64)));
         let content_identity = package.site.package_id;
-        let expected_supplied = wire.supplied_limits.unwrap_or_default();
+        let expected_supplied = SuppliedLimits::default();
         let expected_source = wire.source.clone();
         let report = replay_value_parity(
             wire,
@@ -1774,6 +1780,70 @@ mod tests {
         assert_eq!(report.claim().obligation, obligation);
         assert_eq!(report.claim().generated, generated);
         assert!(matches!(report.result(), ValueParityResult::Agrees { .. }));
+    }
+
+    /// Explicit supplied ceilings survive packet-backed request construction and QSL readback;
+    /// omitting the configuration produces the same complete object as explicit defaults.
+    #[trace("FR-024-AC-44", "TC-035")]
+    #[test]
+    fn tc_035_value_parity_request_carries_effective_supplied_limits() {
+        use qsl_replay::{
+            replay_value_parity, CanonicalAssignment, Integer, ScalarOutcome, Value, ValueClaim,
+        };
+
+        let generator = BackendId::new("generated-provider");
+        let defaults = SuppliedLimits::default();
+        let selected = value_package();
+        let assignments = vec![CanonicalAssignment {
+            parameter: selected.site.site.parameters[0].1,
+            value: WitnessValue::Integer(4),
+        }];
+        let default_packet = selected
+            .value_parity_packet(&generator, assignments.clone())
+            .expect("value claim exists");
+        let default_wire = selected
+            .value_parity_request(default_packet, &generator)
+            .expect("default request binds");
+        assert_eq!(default_wire.supplied_limits, Some(defaults));
+
+        let mut explicit_inputs = test_inputs(VALUE_UNIT);
+        explicit_inputs.supplied_limits = Some(defaults);
+        let explicit_package = ReplayPackage::new(explicit_inputs, "f").expect("same function");
+        let explicit_packet = explicit_package
+            .value_parity_packet(&generator, assignments.clone())
+            .expect("value claim exists");
+        let explicit_wire = explicit_package
+            .value_parity_request(explicit_packet, &generator)
+            .expect("explicit default request binds");
+        assert_eq!(default_wire.supplied_limits, explicit_wire.supplied_limits);
+
+        let selected_limits = defaults
+            .with_admission_work_units(defaults.admission_work_units() + 1)
+            .with_conversion_work_units(defaults.conversion_work_units() + 2)
+            .with_numeric_magnitude_bits(defaults.numeric_magnitude_bits() + 3);
+        let mut configured_inputs = test_inputs(VALUE_UNIT);
+        configured_inputs.supplied_limits = Some(selected_limits);
+        let configured = ReplayPackage::new(configured_inputs, "f").expect("same function");
+        let packet = configured
+            .value_parity_packet(&generator, assignments)
+            .expect("value claim exists");
+        let wire = configured
+            .value_parity_request(packet, &generator)
+            .expect("configured request binds");
+        assert_eq!(wire.supplied_limits, Some(selected_limits));
+        let readback = ReplayRequest::decode(wire.clone(), configured.inputs.replay_limits)
+            .expect("QSL reads the complete supplied limits");
+        assert_eq!(readback.supplied_limits(), selected_limits);
+        assert_eq!(readback.to_wire().supplied_limits, Some(selected_limits));
+        let report = replay_value_parity(
+            wire,
+            ValueClaim {
+                generated: ScalarOutcome::Value(Value::Integer(Integer::from(5_i64))),
+                content_identity: configured.site.package_id,
+            },
+            configured.inputs.replay_limits,
+        );
+        assert_eq!(report.claim().supplied, selected_limits);
     }
 
     /// Another admitted packet, even for this node, cannot select this value-parity claim.
