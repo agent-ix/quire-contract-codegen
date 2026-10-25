@@ -52,8 +52,15 @@ until specified.
   `quire_contract_model::ExecutionPoint` (variant and `AnchorName`) for that exact package, clause,
   and occurrence. QSL owns `ClauseBinding`; the current V2 API has no point accessor, and the caller
   supplies no separate point. The QSL driver supplies the FR-331 bound item for that selected
-  `claim`; CG compares its `request.package_id` with this admitted package's full `package_id`
-  before using its occurrence as requirement identity and the package id as revision identity.
+  `claim`. A process-provider FR-331 frame carries `request.package_id`, which its reader checks
+  against the frame's canonical package bytes; CG compares that id with its separately admitted
+  `CheckedPackageV2`. An in-process linked provider has no FR-331 package frame or independent
+  owner field. The driver calls `export_bindings` on one S4 `CheckedPackage`, emits that same
+  package at E4, then E5 admits those exact emitted bytes as the `CheckedPackageV2` it passes to
+  CG; E5 checks the emitted and admitted ids. The linked CG input is this admitted package and its
+  selected claim, so the package tie is by construction. CG still verifies the claim is authentic
+  in that held package and does not substitute a sibling claim. No QSL facade, owner parameter,
+  or FR-331 wire member is added.
 - A caller-owned proptest `TestRunner` and `quire_contract_runtime::CampaignReport`.
 - The existing campaign policy: minimum accepted, minimum rejected, and maximum discarded counts.
 
@@ -66,7 +73,8 @@ until specified.
   values, the expected tag, and the observed verdict kind.
 - For generation refusal, `StrategyErrorCode::MissingClaimOccurrence`,
   `StrategyErrorCode::MissingExecutionPoint`, `StrategyErrorCode::ExecutionPointMismatch`,
-  `OwnerIdentityMismatch`, `UnboundModelElement`, or `InvalidIdentityRendering`, with no artifact.
+  `StrategyErrorCode::OwnerIdentityMismatch`, `StrategyErrorCode::UnboundModelElement`, or
+  `StrategyErrorCode::InvalidIdentityRendering`, with no artifact.
   QSL `export_bindings` refusals remain with the driver.
 
 ## Behavior
@@ -88,13 +96,17 @@ until specified.
   driver-side refusals. CG shall defend an out-of-driver request without calling
   `export_bindings` or trusting a bare item: an absent or non-claim occurrence returns
   `StrategyErrorCode::MissingClaimOccurrence`; a referenced model element absent from the admitted
-  relation returns `UnboundModelElement` naming that element. Neither publishes an artifact.
-- When checking the selected owner, CG shall compare FR-331 `request.package_id` with the admitted
-  `CheckedPackageV2::package_id()` over exact domain, algorithm, and digest fields. If any field
-  differs, then CG shall return `OwnerIdentityMismatch` with no artifact or verdict. A request id
-  unequal to its package-byte identity remains the FR-331 reader's
-  `stale_dependency`/`content-mismatch` refusal and shall not be relabelled by CG. CG shall not
-  substitute an occurrence or revision from a sibling package.
+  relation returns `StrategyErrorCode::UnboundModelElement` naming that element. Neither publishes
+  an artifact.
+- For a process-provider request, CG shall compare FR-331 `request.package_id` with the separately
+  admitted `CheckedPackageV2::package_id()` over exact domain, algorithm, and digest fields. If any
+  field differs, then CG shall return `StrategyErrorCode::OwnerIdentityMismatch` with no artifact
+  or verdict. A request id unequal to its package bytes remains the FR-331 reader's
+  `stale_dependency`/`content-mismatch` refusal and shall not be relabelled by CG. For linked
+  generation, CG shall use the driver's one E5-admitted package; a foreign or non-claim occurrence
+  absent from that package returns `StrategyErrorCode::MissingClaimOccurrence`, and E4/E5 identity
+  disagreement stays the driver's handoff refusal. CG shall not substitute an occurrence or
+  revision from a sibling package.
 - If the accessor returns `UnknownClause`, then the generator shall return the existing
   `StrategyErrorCode::UnknownClause` and no artifact before checking occurrence authenticity.
 - If the accessor returns `NotStateClause`, then the generator shall return the existing
@@ -116,7 +128,7 @@ until specified.
   `handler`, `pre`, or `post` and the length counts the anchor name's UTF-8 bytes.
 - The runner shall construct each verdict through the runtime `construct_verdict` operation
   (quire-contract-runtime interface-001) with the selected driver-bound FR-331 claim's complete
-  occurrence key as requirement identity, the same-owner admitted
+  occurrence key as requirement identity, the same admitted
   `CheckedPackageV2::package_id()` as revision identity, the runtime execution point rendered from
   the selected occurrence's accepted binding, and the clause observations. The runner shall retain
   the occurrence's node, role, and ordinal and the package id's domain, algorithm, and digest via
@@ -172,15 +184,15 @@ CG shall render the admitted `CheckedPackageV2::package_id()` as
 Each count and hex field follows the role rule, using the exact UTF-8 bytes of the
 `CheckedSemanticId`'s `domain`, `algorithm`, and `digest` fields in that order. These encodings
 are injective and reversible. CG shall not truncate, case-fold, or substitute any field, compute
-a new identity digest, or treat the digest field alone as the revision. The rendered strings are
-the runtime `RequirementId` and `RevisionId` values. Generated headers and source maps shall carry
+a new identity digest, or treat the digest field alone as the revision. `qocc2_` and `qpkg2_`
+separate the two identity domains. The rendered strings are the runtime `RequirementId` and `RevisionId` values. Generated headers and source maps shall carry
 these same strings; generated symbol identity suffixes shall be
-`cg_<qocc2-string>_<qpkg2-string>`.
+`cg_<qocc2-string>_<qpkg2-string>`, where both components follow the grammar above.
 
 Comparisons shall use exact typed fields before rendering or exact canonical strings after
 rendering. If an identity text comparison boundary receives malformed or noncanonical text, then
-CG shall return `InvalidIdentityRendering` before bundle publication, verdict construction, or
-report mutation; CG shall not normalize it. This rendering does not authenticate the same-run
+CG shall return `StrategyErrorCode::InvalidIdentityRendering` before bundle publication,
+verdict construction, or report mutation; CG shall not normalize it. This rendering does not authenticate the same-run
 producer and artifact association required by FR-004.
 
 ## Acceptance Criteria
@@ -195,16 +207,16 @@ producer and artifact association required by FR-004.
 | FR-011-AC-6 | For a selected checked clause id and authentic `claim` occurrence in one admitted V2 package, every constructed verdict carries the runtime point rendered from the accepted QSL `ClauseBinding.execution_point` of that exact tuple, with variant and anchor name preserved. Invariant fixtures at both initialization and handler anchors, and two distinct handler anchors, produce distinct runtime point strings; `Precondition` and `Postcondition` fixtures preserve their own binding points. Two authentic claim occurrences on one invariant node with identical clause kind and body anchor but different accepted points yield their distinct rendered points. | Test (TC-020) |
 | FR-011-AC-7 | An absent checked clause maps Contract IR FR-058 `UnknownClause` to `StrategyErrorCode::UnknownClause`; a non-state-clause maps `NotStateClause` to `StrategyErrorCode::UnsupportedClauseKind`, before occurrence checks and with no artifact. A wrong-role, wrong-ordinal, or other-node `claim` occurrence returns `StrategyErrorCode::MissingClaimOccurrence` and no artifact, even when another authentic occurrence of the selected node has a point. An authentic selected tuple lacking an accepted binding point returns `StrategyErrorCode::MissingExecutionPoint` and no artifact, even when another authentic occurrence of that node has a point. A render mutant that changes only the generated runner's execution point returns `StrategyErrorCode::ExecutionPointMismatch` and no artifact before publication. An invariant's clause kind supplies no point: two otherwise equivalent invariant bindings at distinct anchors produce their distinct bound runtime points. | Test (TC-020) |
 | FR-011-AC-8 | PLANNED. The numeric runner's `RequirementId`, `RevisionId`, generated header, source map, and symbol suffix retain the selected driver-bound FR-331 claim's complete occurrence and the same-owner admitted package's full id through exact `qocc2_`/`qpkg2_` renderings. Changing one occurrence component or package-id field changes the corresponding text. | Test (TC-020) |
-| FR-011-AC-9 | PLANNED. If FR-331 `request.package_id` differs from the separately admitted Contract IR package's full domain, algorithm, or digest, CG returns `OwnerIdentityMismatch` before any bundle, verdict, or report mutation; an unrelated matched selection retains its disposition. A package-byte/id mismatch remains the FR-331 reader's `stale_dependency`/`content-mismatch` and is not relabelled. | Test (TC-020) |
-| FR-011-AC-10 | PLANNED. The QSL driver forwards only FR-331 items accepted by `export_bindings`; its `UnknownItem`, `Unbound`, and `Fault` results stay driver-side. An out-of-driver non-claim or absent occurrence returns CG `StrategyErrorCode::MissingClaimOccurrence`, and a selected claim with an unbound referenced model element returns `UnboundModelElement` naming it. Neither produces an artifact or verdict, and a matched sibling remains unaffected. | Test (TC-020) |
-| FR-011-AC-11 | PLANNED. Malformed, truncated, case-folded, or otherwise noncanonical `qocc2_`/`qpkg2_` text yields `InvalidIdentityRendering` before bundle publication or verdict/report mutation, without normalization; exact typed or canonical-text comparisons agree on the accepted pair. | Test (TC-020) |
+| FR-011-AC-9 | PLANNED. For a process request, if FR-331 `request.package_id` differs from the separately admitted Contract IR package's full domain, algorithm, or digest, CG returns `StrategyErrorCode::OwnerIdentityMismatch` before any bundle, verdict, or report mutation, while an unrelated matched selection retains its disposition. A package-byte/id mismatch stays the FR-331 reader's `stale_dependency`/`content-mismatch` refusal. For a linked request, the driver exports, emits, and admits one package; an E4/E5 id mismatch stays the driver's handoff refusal, and CG verifies the selected claim belongs to its held admitted package without a second owner field. | Test (TC-020) |
+| FR-011-AC-10 | PLANNED. The QSL driver forwards only FR-331 items accepted by `export_bindings`; its `UnknownItem`, `Unbound`, and `Fault` results stay driver-side. An out-of-driver non-claim or absent occurrence returns CG `StrategyErrorCode::MissingClaimOccurrence`, and a selected claim with an unbound referenced model element returns `StrategyErrorCode::UnboundModelElement` naming it. Neither produces an artifact or verdict, and a matched sibling remains unaffected. | Test (TC-020) |
+| FR-011-AC-11 | PLANNED. Malformed, truncated, case-folded, or otherwise noncanonical `qocc2_`/`qpkg2_` text yields `StrategyErrorCode::InvalidIdentityRendering` before bundle publication or verdict/report mutation, without normalization; exact typed or canonical-text comparisons agree on the accepted pair. | Test (TC-020) |
 | FR-011-AC-12 | PLANNED. Repeated numeric runner generation with the same admitted package, selected driver-bound FR-331 claim, checked clause, and campaign policy yields byte-identical source and map. | Test (TC-020) |
 
 ## Open Questions
 
 - OQ-2 (resolved, requirement and revision identity): the QSL driver's selected FR-331 bound
-  `claim` supplies its authentic occurrence key; after exact request/package owner comparison, the
-  same admitted `CheckedPackageV2::package_id()` supplies the revision. A rebinding of the V2
+  `claim` supplies its authentic occurrence key; after process-owner comparison or linked
+  single-package admission, the same admitted `CheckedPackageV2::package_id()` supplies the revision. A rebinding of the V2
   abstraction relation changes the package id (QSL ADR-017 AR-4). QSL supplies no separate
   requirement-revision artifact, and CG creates none. These identities do not authenticate the
   producer/run/artifact association of FR-004-AC-10 and AC-14.
@@ -226,5 +238,7 @@ producer and artifact association required by FR-004.
   [FR-013](./FR-013-it010-consumable-output.md),
   [TC-020](../matrix/TC-020-numeric-harness-campaigns.md).
 - **Driver boundary**: QSL ADR-017 AR-4 and FR-307 put `export_bindings` after S4 and before
-  FR-331 request construction. CG receives the bound FR-331 item and checks the admitted package,
-  occurrence, and V2 abstraction relation; it adds no QSL export facade or copied relation type.
+  FR-331 request construction. The linked driver exports and emits the same S4 package, then
+  retains E5's admission of those bytes; the process frame carries a reader-validated package id.
+  CG receives the bound claim, checks the admitted package's occurrence and V2 relation, and on
+  the process route compares that frame id; it adds no QSL export facade or copied relation type.

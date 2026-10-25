@@ -56,11 +56,17 @@ refusal and artifact output and require the diagnostic to name the affected sele
 For each authentic QSL driver-bound FR-331 selection, inspect the generated header, runtime
 identities, source map, and symbols against the FR-011 `qocc2_`/`qpkg2_` grammar. Change only the
 occurrence node, role, or ordinal, then one package-id field, using separately admitted matching
-FR-331 request/package pairs; require the corresponding rendered identity to change. Form an
-out-of-driver request with a missing or non-claim occurrence and one whose selected claim
-references a model element absent from the admitted V2 relation. Pair a request owner with a
-different admitted package. Check CG's typed refusals and absence of artifacts; verify that QSL
+FR-331 request/package pairs; require the corresponding rendered identity to change. For a linked
+provider, use the one S4 package exported by QSL, emitted at E4 and admitted at E5; attempt an
+E4/E5 mismatch and confirm driver refusal, then supply a foreign claim absent from the held
+admitted package and confirm `HarnessErrorCode::MissingClaimOccurrence`. Form an out-of-driver
+request with a missing or non-claim occurrence and one whose selected claim
+references a model element absent from the admitted V2 relation. Pair a process FR-331
+request owner with a different admitted package. Check CG's typed refusals and absence of artifacts; verify that QSL
 keeps `UnknownItem`, `Unbound`, and `Fault` export refusals outside CG.
+At each V2 harness identity text comparison boundary, corrupt one `qocc2_` or `qpkg2_` field,
+truncate it, uppercase hex, or add a leading-zero count. Inspect the typed refusal, artifact
+output, and report state; compare with the exact typed identity pair.
 Inspect the generator source for any `BoundPackage`, `ClauseRef`, `quire_contract_model::TypedExpression`
 or `oracle::boolean_v1` use and for any body opened outside `core/ir/`.
 
@@ -98,6 +104,9 @@ selection with the same package and policy is byte-identical (FR-002-AC-12). The
 planned.
 The identity controls require full canonical rendering and a changed rendered identity when one
 typed field changes (FR-002-AC-21). An out-of-driver missing or non-claim occurrence returns
-`MissingClaimOccurrence`, an absent referenced model element returns `UnboundModelElement`, and a
-cross-package request returns `OwnerIdentityMismatch`; each produces no artifact and QSL export
-refusals stay with the driver (FR-002-AC-22). These controls are planned.
+`HarnessErrorCode::MissingClaimOccurrence`, an absent referenced model element returns
+`HarnessErrorCode::UnboundModelElement`, and a cross-package process request returns `HarnessErrorCode::OwnerIdentityMismatch`; each produces no
+artifact and QSL export refusals stay with the driver (FR-002-AC-22). These controls are planned.
+The malformed-text controls return `HarnessErrorCode::InvalidIdentityRendering` before
+publication, with no normalization or report mutation, while canonical text and typed identity
+agree (FR-002-AC-23). These controls are planned.
