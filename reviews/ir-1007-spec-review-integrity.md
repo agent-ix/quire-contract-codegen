@@ -61,3 +61,9 @@ Ticket: IR-1007. Frozen head 4682b03c211309913224c24b175ea83765a2199a. The curre
 ## Verdict
 
 Findings require a fix in this PR.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1 c25e1309: present inspection names the RT exact import and reserves absence for the planned FR-485 run. |
