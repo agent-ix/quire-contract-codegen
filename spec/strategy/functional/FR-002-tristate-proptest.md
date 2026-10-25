@@ -38,6 +38,27 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
 ## Outputs
 
 - Tri-state harness source and broad, boundary, state-pinned, or no-event strategies.
+- Planned (IR-364): the generated V2 harness exposes a CG-owned
+  `V2HarnessCaseResult`. Its `Verdict` branch carries a completed case's runtime verdict.
+  Its `NonCompleted` branch carries the precondition or postcondition selection's checked clause
+  id and authentic `claim` occurrence, the original typed stop from
+  `Result<rt::Outcome<bool>, ClauseStop>`, and the typed
+  `ExecutionPoint` accepted for that exact selection. The stop distinguishes
+  `Outcome::Undefined`, `Outcome::Refused`, `Outcome::Incomplete`,
+  `ClauseStop::Oracle(OracleStop)`, and `ClauseStop::InvalidConstant` without
+  flattening their causes to a string. `NonCompleted` is not a runtime verdict;
+  the point's runtime string is derived from its typed value using FR-011's rendering.
+- Planned (IR-364): the generated V2 campaign has a distinct
+  `V2HarnessCampaignResult::NonCompleted` terminal variant carrying that case result and a
+  `V2HarnessCampaignSummary`. The summary retains the runtime report's prior accepted,
+  rejected, failed, and discarded counts, plus CG-owned `non_completed` and
+  `attempted: Option<u64>` counts.
+  For the first stopped case with a report below its count limit, `non_completed` is one and
+  `attempted` is `Some(runtime report counts().total() + 1)`; the stopped evaluation is an
+  attempt even though no runtime verdict is recorded. A report already at its count limit
+  retains that limit signal, and the V2 summary sets `attempted` to `None`
+  while still recording one non-completed case. Completed cases retain `non_completed` zero
+  and their existing attempted count. Failed remains a subset of accepted.
 - Planned (IR-815): generation refusals `HarnessErrorCode::MissingClaimOccurrence`,
   `HarnessErrorCode::MissingExecutionPoint`, and `HarnessErrorCode::ExecutionPointMismatch`, with
   the affected selection named and no artifact. The harness also has
@@ -80,9 +101,28 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
   selected clause body (FR-014-AC-38).
 - Planned (IR-815): the V2 harness shall keep the snapshot, precondition, invocation and
   postcondition ordering of this requirement.
-- Planned (IR-815): if an embedded V2 clause oracle returns an outcome that does not complete, then
-  the V2 harness shall report the case as a non-completed case that retains the oracle's own cause,
-  and shall not count it as a pass.
+- Planned (IR-364): if an embedded V2 clause oracle returns `Ok(Outcome::Undefined)`,
+  `Ok(Outcome::Refused)`, or `Ok(Outcome::Incomplete)`, then the V2 harness shall return
+  `V2HarnessCaseResult::NonCompleted` with that original typed stop and its selected
+  precondition or postcondition identity and accepted typed `ExecutionPoint`.
+- Planned (IR-364): if an embedded V2 clause oracle returns
+  `Err(ClauseStop::Oracle(OracleStop))` or `Err(ClauseStop::InvalidConstant)`, then the V2 harness shall
+  return `V2HarnessCaseResult::NonCompleted` with that original typed stop and its selected
+  precondition or postcondition identity and accepted typed `ExecutionPoint`.
+- Planned (IR-364): if the V2 harness returns a non-completed case result, then the generated
+  campaign runner shall return `V2HarnessCampaignResult::NonCompleted` containing that case
+  result and the V2 summary with this case included once in `non_completed` and, when exact
+  counting is available, once in `attempted`.
+- Planned (IR-364): if the supplied runtime report's snapshot is `at_limit` when a V2 oracle
+  stops, then the V2 campaign runner shall set its terminal summary's exact `attempted` to
+  `None` rather than derive a count from saturated runtime counters.
+- Planned (IR-364): for a non-completed case, the V2 harness shall not construct a runtime
+  verdict or record one in the runtime report.
+- Planned (IR-364): for a non-completed case, the V2 campaign runner shall not return a successful
+  case or campaign conclusion, a precondition rejection, postcondition failure, explicit discard,
+  or framework exhaustion for that stop.
+- Planned (IR-364): for a non-completed case, the V2 campaign runner shall retain the supplied
+  runtime report's prior accepted, rejected, failed, and discarded counters unchanged.
 - Planned (IR-815): if the embedded precondition oracle returns an outcome that does not complete,
   then the V2 harness shall neither invoke the subject nor evaluate the postcondition oracle.
 - Planned (IR-815): the V2 harness generator shall read clause kind, identity and body only through
@@ -160,7 +200,7 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
 | FR-002-AC-13 | PLANNED (IR-815). A seeded V2 case on which both oracles complete true runs the subject once and is a pass. | Test (TC-004) |
 | FR-002-AC-14 | PLANNED (IR-815). A seeded V2 case on which the precondition oracle completes false is a rejected precondition and the subject is not invoked. | Test (TC-004) |
 | FR-002-AC-15 | PLANNED (IR-815). A seeded V2 case on which the precondition oracle completes true and the postcondition oracle completes false is a failed postcondition. | Test (TC-004) |
-| FR-002-AC-16 | PLANNED (IR-815). A seeded V2 case on which the precondition or postcondition oracle returns an outcome that does not complete (stopped or undefined) is reported as a non-completed case retaining the oracle's cause, is not counted as a pass. | Test (TC-004) |
+| FR-002-AC-16 | PLANNED (IR-364). For each selected precondition and postcondition oracle, a seeded `Ok(Outcome::Undefined)`, `Ok(Outcome::Refused)`, `Ok(Outcome::Incomplete)`, `Err(ClauseStop::Oracle(OracleStop))`, and `Err(ClauseStop::InvalidConstant)` returns CG-owned `V2HarnessCaseResult::NonCompleted` retaining the exact typed stop cause, selected claim identity, and selected accepted typed `ExecutionPoint`. The generated campaign returns `V2HarnessCampaignResult::NonCompleted` carrying that case and a summary whose `attempted` includes this stopped case once and whose `non_completed` is one. No runtime verdict is constructed or recorded for the stopped case; prior runtime accepted, rejected, failed, and discarded counters are unchanged. The case is not reported as a pass, rejection, failure, explicit discard, or framework exhaustion. | Test (TC-004) |
 | FR-002-AC-17 | PLANNED (IR-815). A seeded V2 case on which the precondition oracle returns an outcome that does not complete does not invoke the subject. | Test (TC-004) |
 | FR-002-AC-18 | PLANNED (IR-815). A seeded V2 case on which the precondition oracle returns an outcome that does not complete does not evaluate the postcondition oracle. | Test (TC-004) |
 | FR-002-AC-19 | PLANNED (IR-815). Each V2 selection preserves the accepted QSL `ClauseBinding.execution_point` for its exact admitted package, checked clause id, and authentic `claim` occurrence through the injective runtime rendering; precondition and postcondition points may differ. Two requests selecting different authentic claims on the same precondition node each retain that node's accepted `Pre` operation point while selecting the correct occurrence. A rejection carries the precondition point; a failed or passed verdict after completed postcondition evaluation carries the postcondition point; a non-completed case carries the point of the oracle that did not complete and retains its cause without counting as a pass. | Test (TC-004) |
@@ -168,6 +208,7 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
 | FR-002-AC-21 | PLANNED (IR-815). The V2 harness header, `RequirementId`, `RevisionId`, source map, and symbols carry the FR-011 canonical `qocc2_`/`qpkg2_` renderings of each driver's selected FR-331 claim's full occurrence key and the same admitted package's full `package_id`; changing one occurrence component or one package-id field changes the corresponding rendered text. | Test (TC-004) |
 | FR-002-AC-22 | PLANNED (IR-815). For either selection, an out-of-driver missing or non-claim occurrence returns `HarnessErrorCode::MissingClaimOccurrence`, a referenced model element absent from the admitted V2 relation returns `HarnessErrorCode::UnboundModelElement` naming it, and a process FR-331 owner differing from the admitted package returns `HarnessErrorCode::OwnerIdentityMismatch`. Each produces no artifact. A linked request uses one driver-exported/E4-emitted/E5-admitted package and a selected claim checked against that package; a foreign claim absent from it returns `HarnessErrorCode::MissingClaimOccurrence`. QSL `export_bindings`, process package-byte/id, and linked E4/E5 handoff refusals retain their own upstream causes. | Test (TC-004) |
 | FR-002-AC-23 | PLANNED (IR-815). At a V2 harness identity text comparison boundary, malformed, truncated, case-folded, or otherwise noncanonical `qocc2_`/`qpkg2_` text returns `HarnessErrorCode::InvalidIdentityRendering` before publication and without normalizing or mutating a report; exact typed and canonical-text comparisons agree on the accepted selection. | Test (TC-004) |
+| FR-002-AC-24 | PLANNED (IR-364). With a supplied runtime report whose snapshot is `at_limit` before a seeded non-completed V2 oracle case, `V2HarnessCampaignResult::NonCompleted` retains that case and a summary with `non_completed == 1` and exact `attempted == None`; it does not infer an exact prior count from the saturated report. The report's existing counters and `at_limit` signal remain unchanged, and no runtime verdict is constructed or recorded for the stopped case. | Test (TC-004) |
 
 ## Open Questions
 
@@ -178,9 +219,12 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
   runtime identities, source map, and symbols carry the FR-011 canonical renderings. FR-002-AC-10
   still governs unknown, wrong-kind, and duplicate checked clause ids before FR-002-AC-20 checks
   occurrence authenticity; neither criterion is narrowed by the identity source.
-- OQ-2 (non-completed verdict): which runtime verdict kind carries a non-completed oracle outcome
-  (FR-002-AC-16) is not decided here; the criterion fixes only that the case is not a pass and
-  keeps its cause.
+- OQ-2 (resolved, non-completed oracle outcome): `V2HarnessCaseResult::NonCompleted` retains the
+  original typed `Outcome` stop or outer `ClauseStop` error, selected claim identity, and accepted
+  typed `ExecutionPoint`. The CG-owned `V2HarnessCampaignResult::NonCompleted` retains this case
+  and counts its evaluation as one attempted, non-completed case without a runtime verdict.
+  Completed oracle cases continue to use runtime verdicts. No new runtime verdict kind or runtime
+  accounting category is required for this V2 harness boundary.
 
 ## Dependencies
 
