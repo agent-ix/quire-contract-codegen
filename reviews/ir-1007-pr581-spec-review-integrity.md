@@ -48,3 +48,11 @@ is the matrix index CLAUDE.md names, sees FR-485 as undelivered.
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | medium | `spec/oracle/matrix/tests.md` was not updated with the three files. Rows 41, 42, 50, 51 and 103 still gate FR-021-AC-1..5, AC-8, AC-9, AC-14, AC-17, AC-32 and AC-35..37 on "IR-1007" and say they "await the facade". At the same head, FR-021, AD-004 and TC-031 say the QSL FR-485 facade is delivered by merged #1483 and only the CG consumer is pending. Recommended fix: in those five rows, replace "IR-1007/IR-595", "pending IR-1007 and IR-595" and "pending FR-485 through IR-1007 and the IR-595 CG consumer" with the FR-021 wording ("pending the IR-595 CG consumer; the QSL FR-485 facade is delivered"). In row 50, drop "await the facade and". Keep every row Planned. Whatever owner is chosen for SR-581002 FND-001 applies here too. | spec/oracle/matrix/tests.md:41; spec/oracle/matrix/tests.md:42; spec/oracle/matrix/tests.md:50; spec/oracle/matrix/tests.md:51; spec/oracle/matrix/tests.md:103 |
+
+## Dispositions
+
+Round 1, checked against fix-round head 7e5673628f3a547bd6d408d81d1a340ac1ac0fff by Claude Opus 5.5 (`claude-opus-5-5`).
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Commit 7e567362 rewrites `spec/oracle/matrix/tests.md` rows 41, 42, 50, 51 and 103 to "pending the IR-595 CG consumer; the QSL FR-485 facade is delivered", and drops "await the facade". Every row keeps its ⚠️ Partially covered or 🚧 Planned status. `git grep "IR-1007\|await the facade\|draft QSL"` over `spec/` at the fixed head finds no residual gate text, and the fixed tests.md passes `quire validate`. |

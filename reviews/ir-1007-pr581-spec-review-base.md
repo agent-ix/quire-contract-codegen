@@ -56,3 +56,11 @@ text gives no acceptance credit").
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | medium | After this PR, every remaining PLANNED gate in FR-021 (AC-2, AC-4, AC-5, AC-9, AC-17, AC-32, AC-35 to AC-37, Description, Status), AD-004 and TC-031 names only IR-595 as the owner of the CG FR-485 consumer. Linear marks IR-595 Done (completed 2026-10-25T17:33:48Z, after the spec-only #580), but CG main has no `acquire_checked_closure`, `lookup_callable` or `begin_call` call, and `src/core/profile.rs:77` still uses `quire_contract_runtime::exact`. No open ticket owns the consumer. The Planned rows therefore point at a closed owner, and nothing in ix-board's ready queue will pick up the work. Recommended fix: reopen IR-595 (or file a new consumer-code ticket blocked by nothing) and make the gates name that open ticket. If a new ticket is used, replace "IR-595" in the gate text. | spec/oracle/functional/FR-021-function-application-oracles.md:47; spec/oracle/functional/FR-021-function-application-oracles.md:341-376; spec/oracle/functional/FR-021-function-application-oracles.md:464; spec/assurance/AD-004-cg-crate-layout.md:372; spec/oracle/matrix/TC-031-function-application-oracles.md:20 |
+
+## Dispositions
+
+Round 1, checked against fix-round head 7e5673628f3a547bd6d408d81d1a340ac1ac0fff by Claude Opus 5.5 (`claude-opus-5-5`).
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Measured via `linear api` on 2026-10-25: IR-595 state is In Progress and completedAt is null. Comment 867eaebf-444b-4dae-94b9-b546c6f50dec (2026-10-25T22:08:19Z) reopens it as the owner of the remaining CG code/corpus cutover, and says #581 does not satisfy it. The spec gate text naming IR-595 (FR-021 AC-2/4/5/9/17/32/35-37, Status; AD-004:372; TC-031:20) is unchanged, and it now names an open owner. CG code still has no consumer: the fix delta touches no `src/`, so the gate stays truthful. |
