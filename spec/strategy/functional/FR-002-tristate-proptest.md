@@ -102,6 +102,16 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
   FR-011 process owner comparison when a process frame exists, and the admitted V2 relation check
   for either route. Linked generation uses its one E5-admitted package. CG shall not call
   `export_bindings`, accept a bare unbound item, or substitute a sibling package's occurrence.
+- Planned (IR-815): if a process FR-331 `request.package_id` differs from the admitted V2 package's
+  full id, then the harness generator shall return `HarnessErrorCode::OwnerIdentityMismatch`
+  before publishing an artifact, constructing a verdict, or mutating a report.
+- Planned (IR-815): if a selected claim references a model element absent from the admitted V2
+  relation, then the harness generator shall return `HarnessErrorCode::UnboundModelElement` naming
+  that element and publish no artifact.
+- Planned (IR-815): if a V2 harness identity text comparison boundary receives malformed or
+  noncanonical `qocc2_` or `qpkg2_` text, then the harness generator shall return
+  `HarnessErrorCode::InvalidIdentityRendering` before publication or report mutation and shall not
+  normalize the text.
 - Planned (IR-815): the V2 harness generator shall validate each selected clause id's existence,
   expected kind, and distinctness under FR-002-AC-10 before checking its claim occurrence under
   FR-002-AC-20; an unknown clause id or wrong kind retains AC-10's typed, located diagnostic.
