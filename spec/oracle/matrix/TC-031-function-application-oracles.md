@@ -14,9 +14,10 @@ relationships:
 
 Verify CG's target-neutral function-body graph analysis, flat SSA schedule,
 caller-selected work and source-byte limits, compact location records, typed
-refusals and deterministic claim ordering. Concrete oracle execution is a
-separate leg that CG does not claim: QSL exports no application API through
-qsl-replay (IR-845). The old Contract Runtime `exact` corpus remains historical
+refusals and deterministic claim ordering. The planned concrete owner-path
+corpus acquires and applies checked callables through QSL FR-485's permitted
+`qsl_replay` facade; it remains Planned until the IR-1007 API and IR-595 CG
+consumer land. The old Contract Runtime `exact` corpus remains historical
 evidence for the behavioral obligations retained in FR-021; it is not a
 required dependency or target path.
 
@@ -81,14 +82,16 @@ required dependency or target path.
    chain, assert exactly 100,000 constant-size parent-linked records, no eager
    full paths, and linear source/map size. Query its deepest path with
    sufficient work and byte limits and compare all 100,000 ordinals; one
-   query unit less refuses without a partial path. The origin cross-check against a
-   QSL-owned checker's refusal is outside CG's boundary (AC-15, AC-17 and
-   AC-29; IR-845).
+   query unit less refuses without a partial path. For AC-17's planned runtime
+   check, independently compare own and imported callable root locations with
+   FR-485 session outcomes; this does not replace the static path assertions
+   (AC-15, AC-17 and AC-29; IR-1007/IR-595).
 7. On a shallow body with separately observable left and right charge
    points, inspect branch/stop instructions. A denied left charge must branch
    out before any right charge, and an admitted left charge must precede the
-   right and parent operation. Running a concrete oracle with both denial
-   injections is outside CG's boundary (AC-5, AC-9 and AC-26; IR-845).
+   right and parent operation. In the planned FR-485 corpus, run both denial
+   injections with fresh meters and compare actual charge prefixes and
+   incomplete outcomes (AC-5, AC-9 and AC-26; IR-1007/IR-595).
 8. Reuse the six duplicate-declaring-node fixtures and permutations of
    FR-021-AC-22: both admissible; one Stage-1 refusal; shared name plus a
    distinct-node declaration; a nested caller; two duplicate groups holding
@@ -114,25 +117,43 @@ required dependency or target path.
     for the panic tokens AC-19 and AC-21 forbid, and assert `Negate` has no
     schedule root. The schedule and claim/location maps shall not read or
     depend on dynamic invocation location or losses (AC-16, AC-19 to AC-21).
-11. Inspect (AC-31, FR-014-AC-47): QSL exports no callable application API
-    through qsl-replay, so CG emits and runs no concrete owner-path oracle
-    (IR-845). Scan the 100,000-node case's test names, `Trace:` tags, output
+11. Inspect (AC-31, FR-014-AC-47): CG currently emits and runs no concrete
+    FR-485 owner-path oracle. Scan the 100,000-node case's test names,
+    `Trace:` tags, output
     lines and doc comments, this procedure's steps and the FR-021 rows of the
     oracle matrix; none may claim, or present as evidence, that a generated
-    oracle compiled, ran or agreed against a QSL application API. Schedule
-    compilation in step 5 is not execution evidence. Linked-mode admission
+    oracle compiled, ran or agreed through FR-485 before the owner-path
+    corpus runs. Schedule compilation in step 5 is not execution evidence.
+    Linked-mode admission
     (AC-8), no kernel-mode application and no literal outcomes/charges (AC-14)
     are inspected on the schedule and generated source.
 12. Inspect the schedule crate and the concrete oracle CG emits today for any
     `quire_contract_runtime::exact` dependency, alias, wrapper or compatibility
     surface. Assert none is required. The current oracle still requires it
     (`src/oracle/function/mod.rs`), so AC-32 stays Planned while it does. CG
-    emits no owner-path oracle (AC-32, IR-845).
+    emits no owner-path oracle yet. In the planned FR-485 corpus, inspect CG
+    imports, emitted source and dependencies again after replacing the old
+    port, and require the concrete oracle to use only `qsl_replay` for QSL
+    checked-closure acquisition and application (AC-32, IR-1007/IR-595).
 12a. Inspect (AC-18, FR-014-AC-47): scan the function-application corpus's test
     names, `Trace:` tags, output lines and doc comments, this procedure's steps
     and the FR-021 rows of the oracle matrix. None may claim, or present as
     evidence, agreement with the QSL value authority; text that states the
     boundary (outside CG, owned by IR-842) is permitted.
+12b. Planned owner-path corpus (AC-2, AC-4, AC-5, AC-9, AC-17, AC-32;
+     IR-1007/IR-595). For each retained function vector, acquire its admitted
+     closure through FR-485, select the exact owner and callable id, and run
+     the emitted body in a fresh facade registry with a fresh meter. Build the
+     direct application independently from the request through a separate
+     FR-485 acquisition and fresh meter, using QSL's interpreted callable.
+     Compare outcomes, ordered admitted charges and consumed counters. Check
+     arity, wrong-value-kind, dangling-reference and unknown-function
+     refusals before charging; keep any unreachable refusal open until a
+     valid triggering fixture exists. Inject a denial at `function.call` and
+     compare the stop point and unchanged denied charge. For own and imported
+     callables, compare the returned root location to the declaring checked
+     graph's body root, separate from the CG static location path. Do not
+     present this same-leaf comparison as IR-842 QSL value-authority parity.
 13. Direct unsupported roots (FR-021-AC-33). Admit formula, fairness and case
     roots through Contract IR's public V2 reader, using QSpec FR-370/FR-440
     for formula/case shapes and Contract IR FR-038-AC-107 for fairness.
@@ -188,7 +209,8 @@ source-byte limits on a small stack, compiles as a schedule crate and has no
 depth refusal. The first denied work or byte charge refuses before action or
 partial publication. Existing duplicate, unknown-name, lowering and blocker
 precedence remains testable. Concrete QSL-owner-path compilation and execution
-is outside CG's boundary (IR-845); no Contract Runtime `exact` path is required.
+through FR-485 remain Planned pending IR-1007 and IR-595; no Contract Runtime
+`exact` path is required.
 
 Direct formula, fairness and case requests have one typed unsupported claim
 per affected call item, retaining the call request's identity separately from
