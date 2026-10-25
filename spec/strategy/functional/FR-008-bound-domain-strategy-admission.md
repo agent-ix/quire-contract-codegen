@@ -28,11 +28,11 @@ V2 input contract for the constructive population and campaign behavior of FR-00
 The IR accessor and its public consumer test are implemented under IR-703 in Contract IR; IR's
 fresh QSL producer-origin case runs only under its conformance gate. CG also needs a V2
 comparison oracle for all six admitted operators, taking only the accessor's typed result. The V1
-bound oracle is not an input to it. The common CG unit is one internal typed integer-comparison
-lowerer, `lower_typed_integer_comparison`, in `src/oracle`. It emits the executable predicate for
+bound oracle is not an input to it. The planned common CG unit is one internal typed
+integer-comparison lowerer, `lower_typed_integer_comparison`, in `src/oracle`. It will emit the executable predicate for
 integer.eq/ne/lt/le/gt/ge over ordered direct read/read and read/literal operands, with either
 authored literal position and `Current`, `Pre` or `Post` observations on eligible reads. The
-selected strategy and FR-014's clause oracle use that unit for this shared form set; FR-014's
+selected strategy and FR-014's clause oracle will use that unit for this shared form set; FR-014's
 broader clause forms do not enlarge FR-008's admitted relation grammar.
 
 ## Terms

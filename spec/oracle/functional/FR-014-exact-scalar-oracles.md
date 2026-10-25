@@ -32,7 +32,7 @@ connectives and the bounded-integer comparisons included
 ([ADR-001](../../decisions/ADR-001-overlapping-generators-and-input-models.md)
 Q2). Its composite/structural equality sibling is
 [FR-018](./FR-018-composite-equality-oracles.md).
-The V2 clause comparison path shares CG's internal `lower_typed_integer_comparison` unit with
+The planned V2 clause comparison path shares CG's planned internal `lower_typed_integer_comparison` unit with
 [FR-008](../../strategy/functional/FR-008-bound-domain-strategy-admission.md) for ordered direct
 read/read and read/literal integer.eq/ne/lt/le/gt/ge forms. FR-008-AC-7 compares both public paths
 against an independent ordered relation, and FR-008-AC-8 inspects the single CG lowering unit.
