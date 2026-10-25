@@ -23,8 +23,8 @@ use crate::kani_obligations::{admitted_scalar_claims, scalar_package};
 const CORPUS: &str = "src/kani/generate/corpus/bounded_kani_corpus.rs";
 
 /// The seven files that hold a measured site, plus the files FR-014-AC-39, FR-018-AC-19 and
-/// FR-021-AC-21 name, deduplicated (`src/oracle/function/mod.rs` is in both): nine distinct files.
-const MUST_SCAN: [&str; 9] = [
+/// FR-021-AC-21 name, deduplicated (`src/oracle/function/mod.rs` is in both): twelve distinct files.
+const MUST_SCAN: [&str; 12] = [
     "src/oracle/function/mod.rs",
     "src/kani/generate/scalar.rs",
     CORPUS,
@@ -33,6 +33,9 @@ const MUST_SCAN: [&str; 9] = [
     "src/evidence/bound_coverage.rs",
     "src/oracle/boolean_v1.rs",
     "src/oracle/scalar/mod.rs",
+    "src/oracle/scalar/derive.rs",
+    "src/oracle/scalar/lower.rs",
+    "src/oracle/scalar/render.rs",
     "src/oracle/equality/mod.rs",
 ];
 

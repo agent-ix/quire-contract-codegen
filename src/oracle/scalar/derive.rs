@@ -1,19 +1,30 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Agent-IX
 
-use super::lower::{
-    lowered, operand_form, read_decimal_range, read_float_rounding, read_integer_range,
-    read_rational_range, read_text_bounds, scalar_type_form, BoundView, Bounds,
-};
+//! Derive scalar operation descriptors from admitted checked nodes.
+
+use super::lower::{lowered, operand_form, scalar_profile, scalar_type_form, BoundView, Bounds};
 use super::{
-    scalar_profile, BooleanOperator, BoundForm, CatalogOperator, CheckedNodeId, CheckedNodeTag,
-    CheckedPackageV2, CheckedSemanticNodeV2, CheckedTerm, ClaimDerivationRefusal,
-    ComparisonOperator, CompleteLoweringRecordV2, DecimalOperator, DecimalType, DivisionProfile,
-    EqualityOperandKind, EqualityOperator, ExactScalarItem, ExactScalarOperation,
-    ExactScalarRefusal, Graph, GraphBody, IeeeArithmeticOperator, IeeeComparison, IeeeWidth,
-    IntegerDomain, IntegerOperator, OrderingOperandKind, OrderingOperator, QuantityOperator,
-    RationalOperator, RoundingMode, ScalarForm, Value, QUANTITY_CONVERT_IDENTITY,
+    BooleanOperator, BoundForm, ClaimDerivationRefusal, DecimalOperator, EqualityOperandKind,
+    ExactScalarItem, ExactScalarOperation, ExactScalarRefusal, IeeeArithmeticOperator,
+    OrderingOperandKind, QuantityOperator, RationalOperator, ScalarForm, QUANTITY_CONVERT_IDENTITY,
 };
+use crate::core::ir::scalar_bounds::{
+    read_decimal_range, read_float_rounding, read_integer_range, read_rational_range,
+    read_text_bounds,
+};
+use crate::oracle::checked_graph::{CheckedGraph as Graph, GraphBody};
+use crate::oracle::operator_catalog::{IntegerOperator, Operator as CatalogOperator};
+use quire_contract_model::{
+    CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticNodeV2, CheckedTerm,
+    CompleteLoweringRecordV2,
+};
+use quire_exact::{
+    ComparisonOperator, DecimalType, DivisionProfile, IeeeComparison, IeeeWidth, IntegerDomain,
+    OrderingOperator, RoundingMode,
+};
+use quire_semantic_value::declaration::EqualityOperator;
+use serde_json::Value;
 
 pub(super) fn conversion_target<Body: GraphBody, NodeBody>(
     graph: &Graph<'_, Body>,
@@ -37,7 +48,7 @@ pub(super) fn quantity_conversion_target_is_unit<Body: GraphBody, NodeBody>(
 }
 
 /// An operation identity with the parameters that are not read from the node's bounds, laws,
-/// mode or operand forms already resolved. It is the inverse of [`catalogued_operation`]:
+/// mode or operand forms already resolved. It is the inverse of [`super::lower::catalogued_operation`]:
 /// `family_of_identity` is the one match over identity strings, and a round-trip test walks
 /// every descriptor through both.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -66,7 +77,7 @@ pub(super) enum Family {
     QuantityComparison(ComparisonOperator),
 }
 
-/// The inverse of [`catalogued_operation`] over identities. Identities outside the derivable set,
+/// The inverse of [`super::lower::catalogued_operation`] over identities. Identities outside the derivable set,
 /// which is every identity this match does not name, are `None`.
 pub(super) fn family_of_identity(identity: &str) -> Option<Family> {
     use ComparisonOperator as C;
@@ -541,3 +552,6 @@ pub(super) fn derive_operation_from_view<'g, Body: GraphBody, NodeBody, BoundBod
         Family::QuantityComparison(operator) => Op::QuantityComparison { operator },
     })
 }
+
+#[cfg(test)]
+mod tests;

@@ -1,23 +1,50 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Agent-IX
 
-use super::derive::{derive_operation_from_view, quantity_conversion_target_is_unit, Derivation};
-use super::{
-    aggregate_members, bound_members, bounded_readable_component, classify_lowering_failure,
-    direct_unsupported_form, literal, literal_count, literal_integer, term_name,
-    ApplicationOperator, BTreeMap, BTreeSet, BigInt, BooleanOperator, BoundForm, BoundedDomainForm,
-    CatalogOperator, CheckedNodeId, CheckedNodeTag, CheckedOccurrenceRole, CheckedSemanticNodeV2,
-    CheckedTerm, ClaimDisposition, ComparisonOperator, CompleteContractNodeV2,
-    CompleteLoweringRecordV2, ContractDriverResultSelection, ContractOccurrenceKeyV1,
-    ContractPackageV1, ContractResultContextV1, ContractResultViewV1, DecimalOperator, DecimalType,
-    EqualityOperandKind, EqualityOperator, ExactScalarOperation, ExactScalarRefusal,
-    GeneratedScalarClaim, Graph, GraphBody, IeeeArithmeticOperator, IeeeComparison, IeeeWidth,
-    IntegerDomain, IntegerInterval, IntegerOperator, LiteralKind, LoweringFailure,
-    OperandRangeLimitKind, OperationClaim, OperationProvenance, OracleGenerationError,
-    OrderingOperandKind, OrderingOperator, PackageItems, QuantityOperator, RationalDomain,
-    RationalOperator, RoundingMode, ScalarForm, TextProfile, TextType, UpstreamBlocker, Value,
-    QUANTITY_CONVERT_IDENTITY,
+//! Lower and check scalar claims against admitted checked nodes.
+
+use super::derive::{
+    conversion_target, derive_operation_from_view, quantity_conversion_target_is_unit, Derivation,
 };
+use super::{
+    BooleanOperator, BoundForm, DecimalOperator, EqualityOperandKind, ExactScalarOperation,
+    ExactScalarRefusal, GeneratedScalarClaim, IeeeArithmeticOperator, OperandRangeLimitKind,
+    OperationClaim, OperationProvenance, OrderingOperandKind, QuantityOperator, RationalOperator,
+    ScalarForm, QUANTITY_CONVERT_IDENTITY,
+};
+use crate::core::naming::bounded_readable_component;
+use crate::oracle::checked_graph::{term_name, CheckedGraph as Graph, GraphBody};
+use crate::oracle::claim::{ClaimDisposition, OracleGenerationError, UpstreamBlocker};
+use crate::oracle::operator_catalog::{IntegerOperator, Operator as CatalogOperator};
+use crate::oracle::{classify_lowering_failure, direct_unsupported_form, LoweringFailure};
+use num_bigint::BigInt;
+use quire_contract_model::{
+    ApplicationOperator, BoundedDomainForm, CheckedNodeId, CheckedNodeTag, CheckedOccurrenceRole,
+    CheckedSemanticNodeV2, CheckedTerm, CompleteContractNodeV2, CompleteLoweringRecordV2,
+    ContractOccurrenceKeyV1, ContractPackageV1, ContractResultContextV1, ContractResultViewV1,
+};
+use quire_exact::{
+    ComparisonOperator, IeeeComparison, IeeeWidth, IntegerDomain, IntegerInterval,
+    OrderingOperator, RoundingMode,
+};
+use quire_semantic_value::declaration::EqualityOperator;
+use serde_json::Value;
+use std::collections::{BTreeMap, BTreeSet};
+
+use super::{
+    ExactScalarClaim, ExactScalarItem, ExactScalarPlan, PendingOraclePlan,
+    SCALAR_LOWERING_SUPPORTED_TAGS, SCALAR_LOWERING_WORK_LIMIT,
+};
+use crate::core::contract_package::{
+    ContractDriverResultSelection, ContractRequestPosition, PackageItem, PackageItems,
+    PackageRequestError,
+};
+use crate::core::ir::checked_term::{aggregate_members, literal_integer};
+use crate::core::ir::scalar_bounds::{
+    read_decimal_range, read_float_rounding, read_integer_range, read_rational_range,
+    read_text_bounds,
+};
+use quire_contract_model::{CheckedPackageV2, CompleteLoweringProfileV2, ContractRootViewError};
 
 type CheckedItem<'r> = (&'r CompleteContractNodeV2, Vec<CheckedNodeId>);
 
@@ -1227,77 +1254,6 @@ impl<Body: GraphBody, NodeBody> Bounds<'_, '_, Body, NodeBody> {
     }
 }
 
-fn literal_interval(lower: &CheckedTerm, upper: &CheckedTerm) -> Option<IntegerInterval> {
-    IntegerInterval::new(literal_integer(lower)?, literal_integer(upper)?).ok()
-}
-
-/// The `integer_range` member names (QSpec `positive-operation-identities.json`).
-pub(crate) const INTEGER_RANGE_MEMBERS: [&str; 2] = ["min", "max"];
-/// The `rational_range` member names.
-pub(crate) const RATIONAL_RANGE_MEMBERS: [&str; 4] = [
-    "numerator_min",
-    "numerator_max",
-    "denominator_min",
-    "denominator_max",
-];
-/// The `decimal_range` member names.
-pub(crate) const DECIMAL_RANGE_MEMBERS: [&str; 5] = [
-    "coefficient_min",
-    "coefficient_max",
-    "scale_min",
-    "scale_max",
-    "rounding",
-];
-/// The `float_rounding` member names.
-pub(crate) const FLOAT_ROUNDING_MEMBERS: [&str; 1] = ["rounding"];
-/// The `text_bounds` member names.
-pub(crate) const TEXT_BOUNDS_MEMBERS: [&str; 3] = ["min", "max", "text_profile"];
-/// The `collection_bounds` member names.
-pub(crate) const COLLECTION_BOUNDS_MEMBERS: [&str; 2] = ["min", "max"];
-
-pub(crate) fn read_integer_range(members: &[CheckedTerm]) -> Option<IntegerInterval> {
-    let [lower, upper] = bound_members(members, INTEGER_RANGE_MEMBERS)?;
-    literal_interval(lower, upper)
-}
-
-pub(crate) fn read_rational_range(members: &[CheckedTerm]) -> Option<RationalDomain> {
-    let [numerator_lower, numerator_upper, denominator_lower, denominator_upper] =
-        bound_members(members, RATIONAL_RANGE_MEMBERS)?;
-    RationalDomain::new(
-        literal_interval(numerator_lower, numerator_upper)?,
-        literal_interval(denominator_lower, denominator_upper)?,
-    )
-    .ok()
-}
-
-pub(crate) fn read_decimal_range(members: &[CheckedTerm]) -> Option<DecimalType> {
-    let [lower, upper, min_scale, max_scale, rounding] =
-        bound_members(members, DECIMAL_RANGE_MEMBERS)?;
-    DecimalType::new(
-        literal_integer(lower)?,
-        literal_integer(upper)?,
-        literal_count(min_scale)?,
-        literal_count(max_scale)?,
-        RoundingMode::from_code(literal(rounding, LiteralKind::Text)?)?,
-    )
-    .ok()
-}
-
-pub(super) fn read_float_rounding(members: &[CheckedTerm]) -> Option<RoundingMode> {
-    let [rounding] = bound_members(members, FLOAT_ROUNDING_MEMBERS)?;
-    RoundingMode::from_code(literal(rounding, LiteralKind::Text)?)
-}
-
-pub(crate) fn read_text_bounds(members: &[CheckedTerm]) -> Option<TextType> {
-    let [min, max, profile] = bound_members(members, TEXT_BOUNDS_MEMBERS)?;
-    TextType::new(
-        literal_count(min)?,
-        literal_count(max)?,
-        TextProfile::from_code(literal(profile, LiteralKind::Text)?)?,
-    )
-    .ok()
-}
-
 impl ScalarForm {
     pub(super) fn wire(self) -> &'static str {
         match self {
@@ -2154,3 +2110,420 @@ fn contract_scalar_shape(
         Ok(())
     })())
 }
+
+pub(super) fn node_implication_count<Body: GraphBody, NodeBody>(
+    graph: &Graph<'_, Body>,
+    node: &CheckedSemanticNodeV2<NodeBody>,
+) -> u32 {
+    u32::from(
+        graph
+            .operation(&node.node_id)
+            .and_then(|op| op.get("identity"))
+            .and_then(Value::as_str)
+            == Some("quire.op.boolean.implies"),
+    )
+}
+
+/// Checked selected claims before oracle source is rendered.
+pub(super) struct ContractScalarPlan {
+    pub(super) claims: Vec<ExactScalarClaim>,
+    pub(super) pending: Vec<(usize, ExactScalarOperation, u32)>,
+    pub(super) selected_keys: Vec<Option<SelectedScalarKey>>,
+}
+
+pub(super) fn plan_contract_scalar_oracles(
+    package: &ContractPackageV1,
+    requested: &[ContractRequestPosition],
+    positions: &[usize],
+) -> Result<ContractScalarPlan, super::ContractScalarError> {
+    let items =
+        PackageItems::new(package, requested).map_err(super::ContractScalarError::Request)?;
+    let graph = Graph::new(package);
+    let mut claims = Vec::with_capacity(positions.len());
+    let mut pending = Vec::new();
+    let mut counts = BTreeMap::new();
+    let mut selected_keys = Vec::with_capacity(positions.len());
+    for &request_index in positions {
+        let node_id = items
+            .bound_driver_node(request_index)
+            .map_err(super::ContractScalarError::Request)?;
+        let selection =
+            items
+                .result_selection(request_index)
+                .ok_or(super::ContractScalarError::Request(
+                    PackageRequestError::Position { request_index },
+                ))?;
+        let key = selected_scalar_key(package, &items, request_index, node_id, selection);
+        if let Some(key) = &key {
+            *counts.entry(key.clone()).or_insert(0usize) += 1;
+        }
+        selected_keys.push(key);
+    }
+    for (&request_index, selected_key) in positions.iter().zip(&selected_keys) {
+        let node_id = items
+            .bound_driver_node(request_index)
+            .map_err(super::ContractScalarError::Request)?;
+        let item = items
+            .at(request_index, node_id)
+            .map_err(super::ContractScalarError::Request)?;
+        let (identity, result) = match item {
+            PackageItem::Refused {
+                record,
+                occurrences,
+            } => (
+                String::new(),
+                ClaimDisposition::Refused {
+                    refusal: ExactScalarRefusal::PackageAccounting {
+                        record: Box::new(record.clone()),
+                        occurrences: occurrences.to_vec(),
+                    },
+                },
+            ),
+            PackageItem::Lowered { closure, .. } => {
+                let root_sources = closure
+                    .nodes
+                    .iter()
+                    .find(|entry| entry.node.node_id == *node_id)
+                    .map(|entry| entry.sources)
+                    .ok_or_else(|| {
+                        super::ContractScalarError::Request(PackageRequestError::ReachedClosure {
+                            request_index,
+                            node_id: node_id.clone(),
+                            cause: Box::new(ContractRootViewError::Inconsistent),
+                        })
+                    })?;
+                let identity = graph
+                    .operation(&closure.root.node_id)
+                    .and_then(|operation| operation.get("identity"))
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_owned();
+                let tag = CheckedNodeTag::from_wire(&closure.root.node_tag);
+                if selected_key.is_none() {
+                    (
+                        identity,
+                        ClaimDisposition::Refused {
+                            refusal: ExactScalarRefusal::IncompleteContext,
+                        },
+                    )
+                } else if selected_key
+                    .as_ref()
+                    .is_some_and(|key| counts.get(key).copied().unwrap_or(0) > 1)
+                {
+                    (
+                        identity,
+                        ClaimDisposition::Refused {
+                            refusal: ExactScalarRefusal::DuplicateRequest,
+                        },
+                    )
+                } else if !closure.selected_references.is_empty() {
+                    (
+                        identity,
+                        ClaimDisposition::Refused {
+                            refusal: ExactScalarRefusal::SelectedDependencyUnsupported {
+                                references: closure
+                                    .selected_references
+                                    .into_iter()
+                                    .map(|reference| (reference.package, reference.node))
+                                    .collect(),
+                            },
+                        },
+                    )
+                } else {
+                    let selection = items.result_selection(request_index).ok_or(
+                        super::ContractScalarError::Request(PackageRequestError::Position {
+                            request_index,
+                        }),
+                    )?;
+                    match contract_checked_operation(
+                        &graph, &closure, tag, node_id, package, selection,
+                    )
+                    .map_err(super::ContractScalarError::Oracle)?
+                    {
+                        Ok((operation, checked_bounds)) => {
+                            let dependencies = closure
+                                .nodes
+                                .iter()
+                                .filter(|entry| entry.node.node_id != *node_id)
+                                .map(|entry| entry.node.node_id.clone())
+                                .collect();
+                            pending.push((
+                                claims.len(),
+                                operation.clone(),
+                                node_implication_count(&graph, closure.root),
+                            ));
+                            (
+                                identity,
+                                ClaimDisposition::Generated(Box::new(GeneratedScalarClaim {
+                                    symbol: String::new(),
+                                    contract_package_identity: package.identity().clone(),
+                                    node_id: node_id.clone(),
+                                    package_id: package.wire().package.source.package_id.clone(),
+                                    semantic_form: closure.root.semantic_form.to_string(),
+                                    semantic_type: closure.root.semantic_type.clone(),
+                                    quantity_conversion_target: conversion_target(
+                                        &graph,
+                                        closure.root,
+                                    ),
+                                    source_map: root_sources.to_vec(),
+                                    claims: closure.claims,
+                                    bounds: closure.bounds,
+                                    checked_bounds,
+                                    dependencies,
+                                    oracle_source: String::new(),
+                                    boolean_right_may_stop: matches!(
+                                        operation,
+                                        ExactScalarOperation::Boolean {
+                                            right_may_stop: true,
+                                            ..
+                                        }
+                                    ),
+                                })),
+                            )
+                        }
+                        Err(refusal) => (identity, ClaimDisposition::Refused { refusal }),
+                    }
+                }
+            }
+        };
+        let provenance = if matches!(&result, ClaimDisposition::Generated(_)) {
+            OperationProvenance::IrConfirmed
+        } else {
+            OperationProvenance::Underived
+        };
+        claims.push(ExactScalarClaim {
+            node_id: node_id.clone(),
+            operation: OperationClaim {
+                identity,
+                provenance,
+            },
+            result,
+        });
+    }
+    Ok(ContractScalarPlan {
+        claims,
+        pending,
+        selected_keys,
+    })
+}
+
+/// Build the complete checked scalar plan without publishing generated artifacts.
+pub(super) fn plan_exact_scalar_oracles(
+    package: &CheckedPackageV2,
+    items: &[ExactScalarItem],
+) -> Result<ExactScalarPlan, OracleGenerationError> {
+    let mut requests: BTreeMap<&CheckedNodeId, Vec<&ExactScalarOperation>> = BTreeMap::new();
+    for item in items {
+        requests
+            .entry(&item.node_id)
+            .or_default()
+            .push(&item.operation);
+    }
+    let requested = requests.keys().map(|id| (*id).clone()).collect::<Vec<_>>();
+    let lowering = package.lower(&requested, &scalar_profile());
+    let graph = Graph::from_checked(package);
+
+    let mut claims = Vec::with_capacity(requests.len());
+    let mut pending: Vec<PendingOraclePlan> = Vec::new();
+    for ((node_id, operations), record) in requests.into_iter().zip(&lowering.records) {
+        let operation_claim = match operations.as_slice() {
+            [operation] => match check_item(&graph, node_id, record, operation) {
+                Ok((node, checked_bounds)) => {
+                    // This node was lowered from an admitted package, so IR-216's
+                    // `validate_operations` already confirmed `body.operation.identity`
+                    // against the closed catalog before this generator ever saw it. That
+                    // confirms the node's own operation, not that it is the one the
+                    // descriptor named: `check_item`'s shape checks alone cannot
+                    // distinguish, say, `add` from `mul` (both are a binary
+                    // `&rt::Integer` shape) or truncating from floor division, so
+                    // `operation_confirmed` additionally compares the node's own
+                    // `operation.identity`/`operation.mode` against the descriptor's
+                    // implied catalog entry, plus the one law family with more than
+                    // one catalogued definition. Confirmed, this generator reads the
+                    // node's own identity rather than re-deriving codegen's own
+                    // descriptor string; not confirmed, it reports the descriptor's
+                    // own string exactly as before this generator ever read
+                    // `operation.identity` -- never a silent preference between the
+                    // two when they disagree.
+                    // The node's own identity is read before confirmation, not
+                    // behind it. `operation_confirmed` returns false for a node
+                    // missing `operation.identity` just as it does for one whose
+                    // identity simply disagrees, so asking it first collapsed a
+                    // violated upstream invariant into the ordinary
+                    // caller-declared answer -- reporting that codegen had not
+                    // consumed an identity the node does not carry. Reading it
+                    // first keeps the two apart: absent is refused, present and
+                    // disagreeing is caller-declared.
+                    let confirmed_identity = match catalogued_operation_identity(&graph, node) {
+                        Ok(catalogued) => {
+                            Ok(operation_confirmed(&graph, node, operation)?.then_some(catalogued))
+                        }
+                        Err(refusal) => Err(refusal),
+                    };
+                    match confirmed_identity {
+                        Err(refusal) => refused_claim(operation_identity(operation)?, refusal),
+                        Ok(maybe_identity) => {
+                            let confirmed = maybe_identity.is_some();
+                            let (identity, provenance) = match maybe_identity {
+                                Some(identity) => (identity, OperationProvenance::IrConfirmed),
+                                None => (
+                                    operation_identity(operation)?,
+                                    OperationProvenance::CallerDeclared {
+                                        blocked_on: UpstreamBlocker::OperationIdentityNotConsumed,
+                                    },
+                                ),
+                            };
+                            pending.push(PendingOraclePlan {
+                                claim: claims.len(),
+                                identity: identity.clone(),
+                                confirmed,
+                                operation: (*operation).clone(),
+                                expected_consequents: node_implication_count(&graph, &node.node),
+                            });
+                            (
+                                OperationClaim {
+                                    identity,
+                                    provenance,
+                                },
+                                ClaimDisposition::Generated(Box::new(GeneratedScalarClaim {
+                                    symbol: String::new(),
+                                    contract_package_identity: lowering
+                                        .package
+                                        .wire()
+                                        .ok_or(OracleGenerationError::ContractPackageUnavailable)?
+                                        .identity()
+                                        .clone(),
+                                    node_id: node_id.clone(),
+                                    package_id: lowering.package.source_package_id().clone(),
+                                    semantic_form: node.node.semantic_form.to_string(),
+                                    semantic_type: node.semantic_type.clone(),
+                                    quantity_conversion_target: conversion_target(
+                                        &graph, &node.node,
+                                    ),
+                                    source_map: node.source_map.clone(),
+                                    claims: node.claims.clone(),
+                                    bounds: node.bounds.clone(),
+                                    checked_bounds,
+                                    dependencies: node.dependencies.clone(),
+                                    oracle_source: String::new(),
+                                    boolean_right_may_stop: matches!(
+                                        operation,
+                                        ExactScalarOperation::Boolean {
+                                            right_may_stop: true,
+                                            ..
+                                        }
+                                    ),
+                                })),
+                            )
+                        }
+                    }
+                }
+                Err(ItemCheckError::Refusal(refusal)) => {
+                    refused_claim(operation_identity(operation)?, refusal)
+                }
+                // An RT `#[non_exhaustive]` enum yielded a variant
+                // `check_parameters`'s own exhaustive match does not know:
+                // this is not this one item's business refusal, so it aborts
+                // the whole generation instead (see
+                // `OracleGenerationError::UnknownRuntimeVariant`'s own doc).
+                Err(ItemCheckError::Generation(error)) => return Err(error),
+            },
+            // Every copy is refused. The entry is named by the least identity
+            // so that it does not depend on which copy arrived first.
+            copies => {
+                let identities = copies
+                    .iter()
+                    .map(|op| operation_identity(op))
+                    .collect::<Result<Vec<_>, _>>()?;
+                let Some(identity) = identities.into_iter().min() else {
+                    continue;
+                };
+                refused_claim(identity, ExactScalarRefusal::DuplicateRequest)
+            }
+        };
+        let (claim_operation, result) = operation_claim;
+        claims.push(ExactScalarClaim {
+            node_id: node_id.clone(),
+            operation: claim_operation,
+            result,
+        });
+    }
+    Ok(ExactScalarPlan {
+        package_id: lowering.package.source_package_id().clone(),
+        claims,
+        pending,
+    })
+}
+
+pub(super) fn scalar_profile() -> CompleteLoweringProfileV2 {
+    CompleteLoweringProfileV2 {
+        reference: quire_contract_model::LoweringProfileRef {
+            authority: "agent-ix".into(),
+            identity: "quire.codegen.exact-scalar/v1".into(),
+        },
+        supported_tags: BTreeSet::from(SCALAR_LOWERING_SUPPORTED_TAGS),
+        require_bounds: true,
+        work_limit: SCALAR_LOWERING_WORK_LIMIT,
+    }
+}
+
+#[cfg(test)]
+mod source_selection_tests;
+
+#[cfg(test)]
+mod source_selection_work {
+    use std::cell::Cell;
+
+    #[derive(Clone, Copy, Debug, Default)]
+    pub(super) struct Work {
+        pub(super) whole_map_visits: usize,
+        pub(super) indexed_lookups: usize,
+        pub(super) application_occurrences: usize,
+        pub(super) conversion_occurrences: usize,
+    }
+
+    thread_local! {
+        static WORK: Cell<Work> = const { Cell::new(Work {
+            whole_map_visits: 0,
+            indexed_lookups: 0,
+            application_occurrences: 0,
+            conversion_occurrences: 0,
+        }) };
+    }
+
+    // The historical qualification attaches false to each executed whole-map
+    // predicate; the retained path attaches true to each indexed API call.
+    pub(super) fn source(indexed: bool) {
+        WORK.with(|work| {
+            let mut current = work.get();
+            if indexed {
+                current.indexed_lookups += 1;
+            } else {
+                current.whole_map_visits += 1;
+            }
+            work.set(current);
+        });
+    }
+
+    pub(super) fn occurrence(conversion: bool) {
+        WORK.with(|work| {
+            let mut current = work.get();
+            if conversion {
+                current.conversion_occurrences += 1;
+            } else {
+                current.application_occurrences += 1;
+            }
+            work.set(current);
+        });
+    }
+
+    pub(super) fn take() -> Work {
+        WORK.with(|work| work.replace(Work::default()))
+    }
+}
+
+#[cfg(test)]
+pub(in crate::oracle::scalar) mod tests;
+
+#[cfg(test)]
+mod opaque_metadata_tests;

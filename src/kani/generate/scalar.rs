@@ -11,19 +11,17 @@ use crate::{
 };
 
 use crate::{
+    core::ir::checked_term::{aggregate_members, bound_members, literal_count, literal_integer},
+    core::ir::scalar_bounds::{
+        COLLECTION_BOUNDS_MEMBERS, INTEGER_RANGE_MEMBERS, TEXT_BOUNDS_MEMBERS,
+    },
     kani::abi::{i64_literal, readable_component, KaniSolver},
     kani::generate::outcome::{DerivedDomain, KaniObligationRequest, UnsupportedObligation},
     kani::generate::record::{harness_path, record},
     kani::identity::{
         KaniScalarObligationHarness, ScalarObligationArgument, ScalarObligationIdentity,
     },
-    oracle::checked_graph::{aggregate_members, bound_members, literal_count, literal_integer},
-    oracle::scalar::{
-        lower::{
-            OperandRange, COLLECTION_BOUNDS_MEMBERS, INTEGER_RANGE_MEMBERS, TEXT_BOUNDS_MEMBERS,
-        },
-        ExactScalarClaim, GeneratedScalarClaim,
-    },
+    oracle::scalar::{lower::OperandRange, ExactScalarClaim, GeneratedScalarClaim},
 };
 
 /// An IR-confirmed V2 exact-scalar claim this generator can render: bounded integer arithmetic

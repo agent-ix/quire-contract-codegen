@@ -72,17 +72,16 @@ use crate::core::artifact::{
 use crate::core::contract_package::{
     ContractRequestPosition, PackageItem, PackageItems, PackageRequestError,
 };
-use crate::core::naming::unique_names;
-use crate::core::profile::equality_oracle_crate_manifest;
-use crate::oracle::checked_graph::{
-    aggregate_members, bound_members, literal_count, CheckedGraph as Graph, GraphBody,
-};
-use crate::oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
-use crate::oracle::direct_unsupported_form;
-use crate::oracle::scalar::lower::{
+use crate::core::ir::checked_term::{aggregate_members, bound_members, literal_count};
+use crate::core::ir::scalar_bounds::{
     read_decimal_range, read_integer_range, read_rational_range, read_text_bounds,
     COLLECTION_BOUNDS_MEMBERS,
 };
+use crate::core::naming::unique_names;
+use crate::core::profile::equality_oracle_crate_manifest;
+use crate::oracle::checked_graph::{CheckedGraph as Graph, GraphBody};
+use crate::oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
+use crate::oracle::direct_unsupported_form;
 #[cfg(test)]
 use quire_contract_model::CheckedPackageV2;
 use quire_contract_model::{

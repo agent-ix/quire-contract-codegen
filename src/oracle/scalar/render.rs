@@ -1,15 +1,31 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Agent-IX
 
+//! Render checked scalar claims and their oracle artifacts.
+
 use super::derive::{family_of_identity, Family};
+use super::lower::operation_name;
 use super::{
-    BTreeMap, BooleanOperator, CheckedNodeId, ClaimDisposition, ClaimMap, ComparisonOperator,
-    DecimalOperator, DecimalType, DivisionProfile, EqualityOperandKind, EqualityOperator,
-    ExactScalarClaim, ExactScalarOperation, IeeeArithmeticOperator, IeeeComparison, IeeeWidth,
-    IntegerDomain, IntegerInterval, IntegerOperator, OracleGenerationError, OrderingOperandKind,
-    OrderingOperator, QuantityOperator, RationalOperator, RoundingMode, Serialize, SourceProbe,
-    TextProfile,
+    BooleanOperator, DecimalOperator, EqualityOperandKind, ExactScalarClaim, ExactScalarOperation,
+    IeeeArithmeticOperator, OrderingOperandKind, QuantityOperator, RationalOperator,
 };
+use super::{ContractScalarError, ExactScalarOracles, ExactScalarPlan, EXACT_SCALAR_CRATE_NAME};
+use crate::core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES};
+use crate::core::contract_package::ContractRequestPosition;
+use crate::core::naming::unique_names;
+use crate::core::profile::oracle_crate_manifest;
+use crate::core::source_map::SourceProbe;
+use crate::oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError};
+use crate::oracle::operator_catalog::IntegerOperator;
+use quire_contract_model::CheckedNodeId;
+use quire_contract_model::ContractPackageV1;
+use quire_exact::{
+    ComparisonOperator, DecimalType, DivisionProfile, IeeeComparison, IeeeWidth, IntegerDomain,
+    IntegerInterval, OrderingOperator, RoundingMode, TextProfile,
+};
+use quire_semantic_value::declaration::EqualityOperator;
+use serde::Serialize;
+use std::collections::BTreeMap;
 
 pub(super) fn standalone_oracle_source(
     symbol: &str,
@@ -732,4 +748,225 @@ pub(super) fn scalar_coverage_regions<'a>(
         }
     }
     Ok(regions)
+}
+
+/// Render an already checked scalar plan into oracle artifacts.
+pub(super) fn render_exact_scalar_plan(
+    mut plan: ExactScalarPlan,
+) -> Result<ExactScalarOracles, OracleGenerationError> {
+    let mut source = SourceBuilder::default();
+    // Each generated oracle is named by its operation; oracles sharing an operation are numbered
+    // in node-id order, so a refused or differently requested sibling never renames one.
+    let names = unique_names(
+        plan.pending
+            .iter()
+            .map(|oracle| {
+                Ok((
+                    format!("oracle_{}", operation_name(&oracle.operation)?),
+                    plan.claims[oracle.claim].node_id.clone(),
+                ))
+            })
+            .collect::<Result<Vec<_>, OracleGenerationError>>()?,
+    );
+    for (oracle, symbol) in plan.pending.iter().zip(names) {
+        source.oracle(&symbol, &oracle.identity, &oracle.operation)?;
+        if let ClaimDisposition::Generated(generated) = &mut plan.claims[oracle.claim].result {
+            if oracle.confirmed {
+                generated.oracle_source =
+                    standalone_oracle_source(&symbol, &oracle.identity, &oracle.operation)?;
+            }
+            generated.symbol = symbol;
+        }
+    }
+
+    let claim_map = ClaimMap {
+        package_id: plan.package_id,
+        // No blocker applies to every entry any more: a confirmed claim's
+        // provenance is `IrConfirmed`, and an unconfirmed claim's
+        // `CallerDeclared` provenance names
+        // `UpstreamBlocker::OperationIdentityNotConsumed` per-item, whichever
+        // of the cases on `OperationProvenance::CallerDeclared` applies.
+        blocked: Vec::new(),
+        items: plan.claims,
+    };
+    let subjects = claim_map
+        .items
+        .iter()
+        .filter(|claim| matches!(&claim.result, ClaimDisposition::Generated(_)))
+        .map(|claim| crate::core::provenance::node_subject(&claim.node_id))
+        .collect::<Vec<_>>();
+    let lib = crate::core::provenance::with_rust_header(
+        source.finish(),
+        subjects.iter().map(String::as_str),
+    );
+    if lib.len() > MAX_GENERATED_SOURCE_BYTES {
+        return Err(OracleGenerationError::SourceTooLarge {
+            bytes: lib.len(),
+            limit: MAX_GENERATED_SOURCE_BYTES,
+            setting: "cg.scalar.source_bytes",
+        });
+    }
+    let coverage_regions = scalar_coverage_regions(
+        &lib,
+        &claim_map,
+        plan.pending
+            .iter()
+            .map(|oracle| (oracle.claim, &oracle.operation, oracle.expected_consequents)),
+    )?;
+    let mut coverage_bytes = serde_json::to_vec_pretty(&coverage_regions)
+        .map_err(|_| OracleGenerationError::LocationMapSerialization)?;
+    coverage_bytes.push(b'\n');
+    let coverage_text = String::from_utf8(coverage_bytes)
+        .map_err(|_| OracleGenerationError::LocationMapSerialization)?;
+    let mut map_bytes = serde_json::to_vec_pretty(&claim_map)
+        .map_err(|_| OracleGenerationError::ClaimMapSerialization)?;
+    map_bytes.push(b'\n');
+    let map_text =
+        String::from_utf8(map_bytes).map_err(|_| OracleGenerationError::ClaimMapSerialization)?;
+    Ok(ExactScalarOracles {
+        artifacts: vec![
+            Artifact::new("Cargo.toml", oracle_crate_manifest(EXACT_SCALAR_CRATE_NAME)),
+            Artifact::new("src/lib.rs", lib),
+            Artifact::new("source-maps/lib.json", coverage_text),
+            Artifact::new("claim-map.json", map_text),
+        ],
+        claim_map,
+    })
+}
+
+#[derive(Clone, Copy)]
+pub(super) enum ScalarBuildMode {
+    Preflight,
+    Render,
+}
+
+pub(super) fn build_contract_scalar_oracles(
+    package: &ContractPackageV1,
+    requested: &[ContractRequestPosition],
+    positions: &[usize],
+    mode: ScalarBuildMode,
+) -> Result<(ExactScalarOracles, Vec<usize>), ContractScalarError> {
+    let super::lower::ContractScalarPlan {
+        mut claims,
+        mut pending,
+        selected_keys,
+    } = super::lower::plan_contract_scalar_oracles(package, requested, positions)?;
+    let mut source = SourceBuilder::default();
+    // Emit in selected-occurrence order, including two requests over one
+    // expression node. Request permutation cannot rename or reorder source.
+    pending.sort_by(|left, right| selected_keys[left.0].cmp(&selected_keys[right.0]));
+    let names = unique_names(
+        pending
+            .iter()
+            .map(|(claim, operation, _)| {
+                Ok((
+                    format!("oracle_{}", operation_name(operation)?),
+                    selected_keys[*claim].clone(),
+                ))
+            })
+            .collect::<Result<Vec<_>, OracleGenerationError>>()
+            .map_err(ContractScalarError::Oracle)?,
+    );
+    for ((claim, operation, _), symbol) in pending.iter().zip(names) {
+        if matches!(mode, ScalarBuildMode::Preflight) {
+            continue;
+        }
+        let claim_entry = &mut claims[*claim];
+        let identity = &claim_entry.operation.identity;
+        source
+            .oracle(&symbol, identity, operation)
+            .map_err(ContractScalarError::Oracle)?;
+        if let ClaimDisposition::Generated(generated) = &mut claim_entry.result {
+            generated.oracle_source = standalone_oracle_source(&symbol, identity, operation)
+                .map_err(ContractScalarError::Oracle)?;
+            generated.symbol = symbol;
+        }
+    }
+    // FR-014's claim-map order is node order. The selected pair breaks ties
+    // over one expression node without consulting driver request indexes.
+    let mut keyed_claims = claims
+        .into_iter()
+        .zip(selected_keys)
+        .enumerate()
+        .map(|(position, (claim, key))| (position, claim, key))
+        .collect::<Vec<_>>();
+    keyed_claims.sort_by(|(_, left, left_key), (_, right, right_key)| {
+        left.node_id
+            .cmp(&right.node_id)
+            .then(left_key.cmp(right_key))
+    });
+    let mut claim_indexes = vec![0; positions.len()];
+    let claims = keyed_claims
+        .into_iter()
+        .enumerate()
+        .map(|(claim_index, (position, claim, _))| {
+            claim_indexes[position] = claim_index;
+            claim
+        })
+        .collect();
+    let claim_map = ClaimMap {
+        package_id: package.wire().package.source.package_id.clone(),
+        blocked: Vec::new(),
+        items: claims,
+    };
+    if matches!(mode, ScalarBuildMode::Preflight) {
+        return Ok((
+            ExactScalarOracles {
+                artifacts: Vec::new(),
+                claim_map,
+            },
+            claim_indexes,
+        ));
+    }
+    let subjects = claim_map
+        .items
+        .iter()
+        .filter(|claim| matches!(&claim.result, ClaimDisposition::Generated(_)))
+        .map(|claim| crate::core::provenance::node_subject(&claim.node_id))
+        .collect::<Vec<_>>();
+    let lib = crate::core::provenance::with_rust_header(
+        source.finish(),
+        subjects.iter().map(String::as_str),
+    );
+    if lib.len() > MAX_GENERATED_SOURCE_BYTES {
+        return Err(ContractScalarError::Oracle(
+            OracleGenerationError::SourceTooLarge {
+                bytes: lib.len(),
+                limit: MAX_GENERATED_SOURCE_BYTES,
+                setting: "cg.scalar.source_bytes",
+            },
+        ));
+    }
+    let coverage_regions = scalar_coverage_regions(
+        &lib,
+        &claim_map,
+        pending
+            .iter()
+            .map(|(claim, operation, count)| (claim_indexes[*claim], operation, *count)),
+    )
+    .map_err(ContractScalarError::Oracle)?;
+    let mut coverage_bytes = serde_json::to_vec_pretty(&coverage_regions).map_err(|_| {
+        ContractScalarError::Oracle(OracleGenerationError::LocationMapSerialization)
+    })?;
+    coverage_bytes.push(b'\n');
+    let coverage_text = String::from_utf8(coverage_bytes).map_err(|_| {
+        ContractScalarError::Oracle(OracleGenerationError::LocationMapSerialization)
+    })?;
+    let mut map_bytes = serde_json::to_vec_pretty(&claim_map)
+        .map_err(|_| ContractScalarError::Oracle(OracleGenerationError::ClaimMapSerialization))?;
+    map_bytes.push(b'\n');
+    let map_text = String::from_utf8(map_bytes)
+        .map_err(|_| ContractScalarError::Oracle(OracleGenerationError::ClaimMapSerialization))?;
+    Ok((
+        ExactScalarOracles {
+            artifacts: vec![
+                Artifact::new("Cargo.toml", oracle_crate_manifest(EXACT_SCALAR_CRATE_NAME)),
+                Artifact::new("src/lib.rs", lib),
+                Artifact::new("source-maps/lib.json", coverage_text),
+                Artifact::new("claim-map.json", map_text),
+            ],
+            claim_map,
+        },
+        claim_indexes,
+    ))
 }

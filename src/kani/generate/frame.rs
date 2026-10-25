@@ -41,6 +41,7 @@ use crate::oracle::operator_catalog::{FrameSymbol, Operator as CatalogOperator};
 use crate::{
     core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES},
     core::identity::{HarnessPath, HarnessSymbol, ModuleSymbol, SymbolError},
+    core::ir::checked_term::{aggregate_members, bound_members, literal},
     kani::abi::{adapter_options, i64_literal, KaniSolver},
     kani::generate::outcome::{
         BoundNotResolvedCause, StateFrameLoweringRefusal, StateFrameRefusal, StateFrameRole,
@@ -50,7 +51,6 @@ use crate::{
         StateComparison, StateFieldDomain, StateFrameHarness, StateFrameIdentity,
         StateFrameProperty, StateFrameScope, StateUnrangedField, StateUnrangedReason,
     },
-    oracle::checked_graph::{aggregate_members, bound_members, literal},
 };
 
 /// Work budget for lowering one clause and its closure.
