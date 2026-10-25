@@ -41,9 +41,13 @@ producer fixture exist; IR-703's public accessor is implemented in Contract IR.
 
 6. For each of integer.eq, ne, lt, le, gt and ge, build a selected claim over a 1- to 4-member
    domain (read-versus-read, and read-versus-literal with the literal at each member and in either
-   authored position), evaluate the V2 comparison oracle for every valuation, and compare each
-   result with an independently evaluated ordered relation. Inspect that the oracle's only input is
-   the accessor's typed result and that no V1 bound oracle or `BoundPackage` reaches it.
+   authored position). For every valuation, evaluate both the selected V2 comparison oracle and
+   FR-014's public V2 clause oracle for the same direct comparison. Compare both results with each
+   other and with an independently evaluated ordered relation. Inspect that the selected oracle's
+   only input is the accessor's typed result, that both oracle paths call the one
+   `lower_typed_integer_comparison` function under `src/oracle` for these forms, and that no second
+   CG comparison lowerer or evaluator module, V1 bound oracle, `BoundPackage` or V1-to-V2 adapter
+   reaches the selected V2 path.
 7. In a CG integration test, obtain the comparison from IR's public accessor through its public API
    only, for each closed operator, provenance and observation variant and each refusal, and compare
    the operator, ordinals, provenance, observation, bounds and refusal fields with CG's census,
@@ -63,7 +67,10 @@ producer fixture exist; IR-703's public accessor is implemented in Contract IR.
   as a unique source occurrence. No refusal emits part of a bundle.
 - Out-of-i64 endpoints and literals never narrow, wrap or clamp. Unequal read ranges refuse at
   operand one even when both fit i64; equal ranges may admit.
-- Every operator's V2 oracle result equals the independent evaluation for every valuation and
-  literal position (FR-008-AC-7); the oracle's only input is the accessor's typed result (FR-008-AC-8).
+- For every operator, valuation and literal position, the selected V2 oracle result and FR-014
+  clause-oracle result are identical to each other and to the independent ordered relation
+  (FR-008-AC-7). The selected oracle's only input is the accessor's typed result, and source
+  inspection finds one shared CG `lower_typed_integer_comparison` function with no second
+  lowerer/evaluator or V1 input/adapter (FR-008-AC-8).
 - Every CG census, relation and diagnostic field equals the accessor's value (FR-008-AC-9), and
   inspection finds no body read (FR-008-AC-10).
