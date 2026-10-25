@@ -24,6 +24,14 @@ This is the EARS conformance sub-analysis of the SHALL statements and acceptance
 
 EARS alone: mergeable, with one low finding. Checked clean: the FR-018 Behavior "becomes a typed ... before any charge" response stays a single event-driven response. The AC-8 and AC-17 edits change only the payload spelling and introduce no new trigger or response.
 
+## Dispositions
+
+Round 1, checked against the repository at head f6ca73d22bc3b7b9d2569fc85819c90b1689ecfd.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The test-artefact obligation and the 'with genuine producer paths' qualifier are removed from FR-042 Behavior and AC-1. The enumeration and the no-fabrication rule moved to TC-057 step 1 and Expected Results. AC-1's remaining producer/consumer/charge compound is the text already on main and is unchanged. |
+
 ## Coverage
 
 ```yaml

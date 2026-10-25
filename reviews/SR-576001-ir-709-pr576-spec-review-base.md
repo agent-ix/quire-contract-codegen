@@ -39,6 +39,23 @@ Checked clean:
 - Both variants stay in quire-exact's closed thirty-variant set. FR-042 does not touch FR-369.
 - The PR body states the hold clearly: what is reduced (FR-042-AC-1 nine to seven), why (no genuine path), the evidence (the source scan), and the merge condition (Peter's direct authorisation).
 
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | low | FR-042 Dependencies says the two rows "remain PLANNED ... in draft quire-exact PR #84", but #84 merged as quire-exact main 4255499 and keeps all nine CG assignments PLANNED under FR-042-AC-1/TC-057. The PR body still says the paired FR-369 correction "is being drafted", yet no open quire-exact PR touches FR-369, so the second half of the staged pair does not exist yet. Cite FR-369 on quire-exact main, not a draft PR, and say in the hold that a new paired quire-exact PR must land together with #576 if the owner approves seven. | spec/oracle/functional/FR-042-generated-checked-invariant-causes.md:35 |
+
+## Dispositions
+
+Round 1, checked against the repository at head f6ca73d22bc3b7b9d2569fc85819c90b1689ecfd (base main b60b18ef; quire-exact main 4255499 with #84 merged).
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | deferred | Decision hold, not a resolution. The false claim that the owner table correction is "tracked at that owner" is gone. Dependencies now states that FR-369 retains nine rows and that the seven-cause correction takes effect only after Peter's direct authorization and a paired quire-exact table update, with both variants kept in the enum. As a staged pair this is consistent only while #576 stays unmerged. FR-042-AC-1's text is unconditional, so merging #576 alone would contradict quire-exact main 4255499 ('verification of all nine assignments under CG FR-042-AC-1 and TC-057 remain PLANNED'). Resolution: if seven is approved, #576 merges together with a new quire-exact FR-369 PR (none is open); if nine, #576 is withdrawn. |
+| FND-002 | fixed | Behavior names the seven causes: GeneratedBodyPlaceholderInvoked, GeneratedArgumentShapeMismatch, GeneratedOperandKindUnsupported, GeneratedIntervalInvalid, GeneratedTypeCheckRejected { cause }, GeneratedEqualityCheckRejected { cause }, GeneratedDescriptorReconstructionFailed. AC-1 reads 'use exactly the seven causes named in Behavior'. |
+| FND-003 | fixed | TC-057 step 1 exercises 'the seven causes named in FR-042 Behavior ... count no cause from an unreachable branch or a fabricated failure'. Expected Results covers the seven named paths with 'no fabricated failure is counted as evidence'. |
+| FND-004 | fixed | The FR-018 Behavior bullet, FR-018-AC-17 and TC-029 step 8 all name CheckedInvariantCause::GeneratedDescriptorReconstructionFailed, which matches FR-369's trigger ('cannot reconstruct one of its authored source/target types'). This strengthens the text; it narrows nothing. |
+
 ## Coverage
 
 ```yaml

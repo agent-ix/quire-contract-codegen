@@ -32,6 +32,21 @@ Integrity alone: mergeable after FND-001. FND-002 is a nit. Checked clean:
 - TC-029 step 3 matches AC-8's new payload and step 8 matches AC-17's.
 - No other AC row in FR-018 differs from main.
 
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | low | The new Status reason gives Boolean/function oracles an environment construction that "uses infallible TypeEnvironment::default or fails with EnvironmentError::Declaration at preparation". The Boolean helper builds no environment; it calls planned_equality. EnvironmentError::Declaration is the composite equality oracle's preparation error, not a Boolean/function path. The conclusion is correct, but the attribution is wrong. Assign each reason to its own oracle. | spec/oracle/functional/FR-042-generated-checked-invariant-causes.md:41 |
+
+## Dispositions
+
+Round 1, checked against the repository at head f6ca73d22bc3b7b9d2569fc85819c90b1689ecfd.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The tests.md:62 row now reads 'seven typed CG producer paths are present, while two additional assignments remain planned in quire-exact FR-369 pending the direct owner decision ... TC-057 tagged verification of the seven named paths remains open'. |
+| FND-002 | fixed | 'Obsolete' is removed. Status says the other two assignments 'remain PLANNED in quire-exact FR-369 while this correction awaits direct owner authorization' and states the reasons (exhaustive outcome matches, infallible default environment, EnvironmentError::Declaration). One attribution in that reason is imprecise; see FND-003. |
+
 ## Coverage
 
 ```yaml
