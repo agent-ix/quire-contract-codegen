@@ -86,10 +86,9 @@ test: qspec-preflight qspec-preflight-selftest
 # holds a host-wide lock, runs one harness at a time, and builds in its own
 # target directory.
 #
-# Integration tests live in the single `it` binary (`tests/it/main.rs`); the
-# `kani_obligations`, `skeleton_spine`, `kani_witness_join`,
-# `bounded_kani_corpus`, `kani_generation` and `kani_batching` filters select those modules'
-# tests, and `--ignored` runs only their `#[ignore]`d real-prover tests: the
+# Integration tests live in the single `it` binary (`tests/it/main.rs`);
+# KANI_FILTERS selects the lane's modules, and `--ignored` runs only their
+# `#[ignore]`d real-prover tests: the
 # real-Kani obligation runs, the skeleton spine (one Boolean clause through the
 # real prover and native replay through QSL), the witness join (a real
 # counterexample replayed natively), the bounded corpus cases, the
