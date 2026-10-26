@@ -311,11 +311,18 @@ unsatisfiable requires as `cover_unsatisfied`.
     witness. For the plus-one mutant, also execute deterministic concrete
     playback at `amount_current = 999` against the same patched authoritative
     owner and the actual generated harness's independent arithmetic assertion;
-    require that assertion to fail. Compare its oracle bytes, clause identity
-    and native expectation with the plus-one Kani run. The playback mechanism
-    is not prescribed, but it must execute the generated assertion, not a
-    hand-restated check. Inspect the
-    executed oracle call and unchanged native expectation. A mutation confined
+    require that assertion to fail. The selected fixture's subject returns
+    true normally at 999, and the generated harness reaches the arithmetic assertion
+    before checking the clause verdict; this does not impose that order on
+    unrelated result-dependent probes. Attribute failure to that generated
+    assertion by its check message or source location. Failure at an assumption,
+    clause/postcondition check or cover does not satisfy this playback control.
+    Compare the sealed generated harness source and body, its identity record,
+    oracle bytes, clause identity and native expectation with the plus-one Kani
+    run; an appended playback-only test is outside the sealed harness. The
+    playback mechanism is not prescribed, but it must execute the generated
+    assertion, not a hand-restated check. Inspect the executed oracle call and
+    unchanged native expectation. A mutation confined
     to a hand-written compiled subject or a probe in the harness does not
     satisfy this control (FR-015-AC-40, FR-015-AC-41).
     The package comes from QSL's facade on source, never a copied fixture
