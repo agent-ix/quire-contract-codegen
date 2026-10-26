@@ -2,6 +2,7 @@
 //! The scope table is the authority for reachability; the gate reuses it for freshness.
 
 use std::{
+    collections::BTreeSet,
     env, fs,
     io::{self, BufRead, BufReader, Write},
     path::{Path, PathBuf},
@@ -256,6 +257,33 @@ fn passed_count(output: &str) -> Option<usize> {
     })
 }
 
+fn listed_tests(output: &Output) -> Result<BTreeSet<String>, String> {
+    if !output.status.success() {
+        eprint!("{}", String::from_utf8_lossy(&output.stdout));
+        eprint!("{}", String::from_utf8_lossy(&output.stderr));
+        return Err("test list failed".into());
+    }
+    let mut tests = BTreeSet::new();
+    for name in String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(|line| line.strip_suffix(": test"))
+    {
+        if !tests.insert(name.to_owned()) {
+            return Err(format!("duplicate listed test: {name}"));
+        }
+    }
+    Ok(tests)
+}
+
+fn failed_clean_gate(
+    start: Instant,
+    version: &str,
+    reason: impl Into<String>,
+) -> Result<(), String> {
+    gate_result("failed", 0, 0, start, version, "clean");
+    Err(reason.into())
+}
+
 fn gate_held(test_command: &[String]) -> Result<(), String> {
     let start = Instant::now();
     let home = trusted_home()?;
@@ -321,37 +349,109 @@ fn gate_held(test_command: &[String]) -> Result<(), String> {
         gate_result("failed", 0, 0, start, &version, "clean");
         return Err("real Kani lane must be ignored and serial".into());
     }
+    let libtest_args = &test_command[delimiter + 3..];
+    let mut held_names = Vec::new();
+    let mut offset = 0;
+    while libtest_args.get(offset).map(String::as_str) == Some("--skip") {
+        let Some(name) = libtest_args.get(offset + 1) else {
+            return failed_clean_gate(start, &version, "held test skip has no name");
+        };
+        if name.is_empty() || held_names.contains(name) {
+            return failed_clean_gate(start, &version, "held test skip is empty or duplicated");
+        }
+        held_names.push(name.clone());
+        offset += 2;
+    }
+    let filters = &libtest_args[offset..];
+    if filters.is_empty() || filters.iter().any(|arg| arg.starts_with('-')) {
+        return failed_clean_gate(
+            start,
+            &version,
+            "real Kani lane filters missing or contain an unlisted skip",
+        );
+    }
+    let declared_held: Vec<_> = env::var("KANI_HELD_TESTS")
+        .unwrap_or_default()
+        .split_whitespace()
+        .map(str::to_owned)
+        .collect();
+    if held_names != declared_held {
+        return failed_clean_gate(
+            start,
+            &version,
+            "Kani held-test skips differ from the one declared list",
+        );
+    }
+    let hold_reason = env::var("KANI_HOLD_REASON").unwrap_or_default();
+    if !held_names.is_empty() && hold_reason.trim().is_empty() {
+        return failed_clean_gate(start, &version, "Kani held-test reason missing");
+    }
     let mut list = test_command[1..=delimiter].to_vec();
     list.extend(["--list".into(), "--ignored".into()]);
-    list.extend_from_slice(&test_command[delimiter + 3..]);
+    list.extend_from_slice(libtest_args);
+    let mut all_list = test_command[1..=delimiter].to_vec();
+    all_list.extend(["--list".into(), "--ignored".into()]);
+    all_list.extend_from_slice(filters);
     let evidence = Path::new("target-codex-backends/ir19-claim-crate");
     if evidence.exists() {
         fs::remove_dir_all(evidence).map_err(|error| format!("clear claim evidence: {error}"))?;
     }
+    let all_output = command_output(&mut gate_command(
+        &test_command[0],
+        &all_list,
+        real_cargo,
+        &home,
+    ))
+    .map_err(|error| {
+        gate_result("failed", 0, 0, start, &version, "clean");
+        error
+    })?;
+    let selected = listed_tests(&all_output).map_err(|error| {
+        gate_result("failed", 0, 0, start, &version, "clean");
+        error
+    })?;
     let list_output = command_output(&mut gate_command(
         &test_command[0],
         &list,
         real_cargo,
         &home,
-    ));
-    let list_output = match list_output {
-        Ok(output) => output,
-        Err(error) => {
-            gate_result("failed", 0, 0, start, &version, "clean");
-            return Err(error);
-        }
-    };
-    if !list_output.status.success() {
-        eprint!("{}", String::from_utf8_lossy(&list_output.stdout));
-        eprint!("{}", String::from_utf8_lossy(&list_output.stderr));
+    ))
+    .map_err(|error| {
         gate_result("failed", 0, 0, start, &version, "clean");
-        return Err("test list failed".into());
+        error
+    })?;
+    let runnable = listed_tests(&list_output).map_err(|error| {
+        gate_result("failed", 0, 0, start, &version, "clean");
+        error
+    })?;
+    let mut held = BTreeSet::new();
+    for name in &held_names {
+        let matches: Vec<_> = selected
+            .iter()
+            .filter(|selected_name| selected_name.rsplit("::").next() == Some(name.as_str()))
+            .collect();
+        if matches.len() != 1 {
+            return failed_clean_gate(
+                start,
+                &version,
+                format!("held test {name} must name exactly one selected test"),
+            );
+        }
+        held.insert((*matches[0]).clone());
     }
-    let listed = String::from_utf8_lossy(&list_output.stdout);
-    let expected = listed
-        .lines()
-        .filter(|line| line.ends_with(": test"))
-        .count();
+    let expected_runnable: BTreeSet<_> = selected.difference(&held).cloned().collect();
+    if runnable != expected_runnable {
+        return failed_clean_gate(
+            start,
+            &version,
+            "runnable Kani list differs from selected tests minus held tests",
+        );
+    }
+    println!("kani-gate: held={}", held.len());
+    for name in &held {
+        println!("kani-gate: skipped-by-order={name} reason={hold_reason}");
+    }
+    let expected = runnable.len();
     if expected == 0 {
         gate_result("failed", 0, 0, start, &version, "clean");
         return Err("test list empty".into());
@@ -407,7 +507,9 @@ fn gate_held(test_command: &[String]) -> Result<(), String> {
     };
     let after = git_state()?;
     let tree = if after.1.is_empty() { "clean" } else { "dirty" };
-    let claim_list = listed.lines().filter(|line| *line == "kani_generation_claims::real_kani_claims_have_discharge_and_falsifying_mutations: test").count() == 1;
+    let claim_list = runnable.contains(
+        "kani_generation_claims::real_kani_claims_have_discharge_and_falsifying_mutations",
+    );
     let claim_run = claim_run_count == 1;
     if run_status.success()
         && ran == expected

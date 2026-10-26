@@ -13,6 +13,13 @@ version: draft-codegen-v1
 input:
   contract_package: public IR BoundPackage from the public IR derived executable projection decoder; no private wire or codegen input schema
   configuration: backend selection, customer bindings, output profile
+public_types:
+  V2SymbolicEncodingPolicy:
+    values: [original_i64_v1, post_assumption_u16_rebind_v1]
+    semantics: required physical-to-semantic binding policy for a V2 clause harness; select the rebind value exactly when both checked input-domain endpoints lie in [0, u16::MAX], otherwise select the original value; both retain one i64 symbolic draw, the exact inclusive checked-domain assumption and an eight-byte witness
+  V2ClauseObligationIdentity:
+    required_member: symbolic_encoding_policy (V2SymbolicEncodingPolicy)
+    sealed_record_member: identity.symbolicEncodingPolicy with the selected snake_case value, required for proof encoding provenance; a missing, unknown or source-mismatched value gives no proof credit
 operations:
   - name: source_obligation_census
     status: planned; complete producer/consumer implementation gated on IR-759 reviewed neutral correspondence

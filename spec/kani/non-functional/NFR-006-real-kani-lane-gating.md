@@ -32,11 +32,28 @@ relationships:
   matching paths.
 - When no changed path is in the Kani-touching set, `make kani-scope` shall print `not required`.
 - The `make kani-gate` target shall run the recipe of the `make kani` target once, so that the
-  toolchain, flags, target directory and the six filters have one definition that both targets use.
+  toolchain, flags, target directory and the eight filters have one definition that both targets use.
 - The `make kani` recipe shall hold the lock named by `KANI_LOCK`, whose default is
   `/tmp/agent-e-heavy-build.lock`, and shall run the lane's tests with `--test-threads=1`.
-- The `make kani-gate` target shall exit non-zero unless the lane's tests all passed, the number that
-  ran equals the number the lane's filters list for `--ignored`, and that number is greater than zero.
+- While the named IR-917 operator hold is active, the repository shall retain one authoritative
+  held-test list in the `Makefile`. Its sole member is
+  `tc_025_real_kani_falsifies_both_same_clause_addition_mutants`, with the reason "IR planner
+  reports operator hold: fixed 16 GiB ceiling, Inconclusive MemoryExhausted, proves nothing."
+  The `make kani`, `make kani-gate` and
+  `make kani-scope` targets shall print the held test and reason as `skipped-by-order` each time.
+  A held test is excluded from the runnable lane list, is never counted as run or passed, and
+  confers no proof credit. The hold expires only when Peter lifts it after feature work is
+  complete; the maintainer shall then remove the held-list entry and skip and restore the
+  installed proof.
+- While that hold is active, `make kani-gate` shall derive its held count from the same selected ignored
+  test list used for the runnable count, report `held=<n>` separately from `ran` and `expected`,
+  and print each held test with its reason. A listed held name absent from the selected tests,
+  duplicated, or missing a reason shall fail the gate. The gate shall exit non-zero if any
+  non-held selected test fails, does not run, or is absent from the runnable list. A successful
+  gate result shall never report a held test as passed.
+- The `make kani-gate` target shall exit non-zero unless every selected non-held test passed, the
+  number that ran equals the number of selected non-held tests listed for `--ignored`, and that
+  number is greater than zero.
 - The `make kani-gate` target shall include [FR-041](../functional/FR-041-claimed-module-proof-gate.md)'s
   claimed-module census and real mutation controls in its one required lane, and shall exit
   non-zero if any claimed module or shared helper fails that requirement. The controls shall not
@@ -179,9 +196,9 @@ decision (Open decisions); until the owner rules, the answer is no.
 | NFR-006-AC-1 | `make kani-scope` prints `required` and the path for each of `src/kani/generate/negotiate.rs`, `src/oracle/boolean_v1.rs`, `src/routed/generate.rs`, `src/replay/witness.rs`, `src/core/identity.rs`, `src/publication/mod.rs`, `tests/it/kani_batching.rs`, `tests/it/skeleton_spine.rs`, `tests/it/bounded_kani_corpus.rs`, `tests/it/kani_obligations_state_frame.rs`, `tests/it/scratch_crate.rs`, `tests/exact_scalar_support/package.rs`, `tests/checked_package_support/base.rs`, `tests/checked_package_support/rekey.rs`, `tests/state_frame_support/model.rs`, `schemas/kani-proof-graph-v2.schema.json`, `schemas/generated-rust-kani-v2.schema.json`, `Cargo.toml` and `Cargo.lock`, each fed alone. | Test (TC-045) |
 | NFR-006-AC-2 | `make kani-scope` prints `not required` for each of `spec/kani/functional/FR-017-kani-execution-evidence.md`, `reviews/REV-018-bound-coverage-observations.md`, `src/strategy/mod.rs`, `src/evidence/mod.rs`, `Makefile` and `.github/workflows/ci.yml`, each fed alone. | Test (TC-045) |
 | NFR-006-AC-3 | A rename of `src/kani/old.rs` to `src/strategy/new.rs`, and a rename of `src/strategy/old.rs` to `src/kani/new.rs`, each print `required`. | Test (TC-045) |
-| NFR-006-AC-4 | `make -n kani` and `make -n kani-gate` expand to the same `cargo test` command line, and that line holds each of the six filters `kani_obligations`, `skeleton_spine`, `kani_witness_join`, `bounded_kani_corpus`, `kani_generation` and `kani_batching`. | Test (TC-045) |
+| NFR-006-AC-4 | `make -n kani` and `make -n kani-gate` expand to the same `cargo test` command line, and that line holds each of the eight filters `kani_obligations`, `kani_obligations_symbolic_domains`, `skeleton_spine`, `kani_stdout_capture`, `kani_witness_join`, `bounded_kani_corpus`, `kani_generation` and `kani_batching`. | Test (TC-045) |
 | NFR-006-AC-5 | `make kani-gate` starts the lane's `cargo test` once with `--test-threads=1`, holds the lock named by `KANI_LOCK` while it runs, and does not start it while another process holds that lock. | Test (TC-045) |
-| NFR-006-AC-6 | `make kani-gate` exits non-zero and prints `result=failed` when the lane's filters list zero tests, when fewer tests run than are listed, and when any test fails; it exits zero and prints `result=passed` only when every listed test ran and passed and the count is above zero. | Test (TC-045) |
+| NFR-006-AC-6 | `make kani-gate` exits non-zero and prints `result=failed` when the lane's filters list zero non-held runnable tests, when fewer non-held tests run than are listed, and when any non-held test fails; it exits zero and prints `result=passed` only when every listed non-held test ran and passed and the runnable count is above zero. Held tests never count as passes. | Test (TC-045) |
 | NFR-006-AC-7 | The passing run-result line has the fields `result`, `ran`, `expected`, `elapsed`, `kani`, `tree` in that order, with `ran` equal to `expected`, a non-empty `kani` equal to the version the launcher reports, and `tree=clean`; it has no commit token. A run whose launcher reports no version prints `result=failed`. | Test (TC-045) |
 | NFR-006-AC-8 | When the tree state or the head commit read after the run differs from the one read before the build, `make kani-gate` prints `result=failed` and exits non-zero. | Test (TC-045) |
 | NFR-006-AC-9 | With a dirty working tree `make kani-gate` prints `tree=dirty`, never `result=passed`, and exits non-zero. | Test (TC-045) |
@@ -195,11 +212,13 @@ decision (Open decisions); until the owner rules, the answer is no.
 | NFR-006-AC-17 | Before a version tag is pushed, the full gate actually passes on the clean, stable candidate to be tagged; a copied release-ticket line cannot substitute for that run. | Inspection |
 | NFR-006-AC-18 | Every `include!`, `include_str!`, `include_bytes!` and `#[path]` target named in a file of `tests/it` that holds a lane test, and in each file those name in turn, matches a pattern of the Kani-touching set. | Test (TC-045) |
 | NFR-006-AC-19 | On a clean current candidate, `make kani-gate` runs FR-041's module census and real mutation controls in its one required lane, and a failure of any claim or shared-helper control makes the gate exit non-zero. An optional mutation target or saved earlier result cannot substitute. | Test |
+| NFR-006-AC-20 | While the IR-917 hold is active, `make kani`, `make kani-gate` and `make kani-scope` each print the exact held test and its 16 GiB/no-verdict reason. The single Makefile held list excludes it from execution; `make kani-gate` reports `held=1` separately from `ran` and `expected`, and never reports that test as passed. An absent, duplicate, or reasonless held item makes the gate fail. | Test (TC-045) |
+| NFR-006-AC-21 | During the hold, every non-held selected test still runs and passes for a successful gate; one missing, failed, or skipped non-held test makes it fail. The held IR-917 test and FR-015-AC-41/119 remain Planned until Peter lifts the hold after feature work and the original installed evidence is obtained. | Test (TC-045) and Inspection |
 
 ## Open decisions
 
-- Whether the owner may ever waive the lane for one change, and who may record the waiver. The default,
-  until the owner rules, is that the pull request does not merge.
+- Whether any other test may receive an operator hold remains open. The IR-917 hold above names
+  one test and one expiry condition; it does not grant a general waiver of the Kani lane.
 - Whether a required status check or a scheduled run on a hosting system enforces this mechanically.
   That is a workflow change and an owner decision; this requirement leaves `.github/` untouched.
 - Whether a per-path subset of the lane can stand for the whole lane for a runner-only or a replay-only

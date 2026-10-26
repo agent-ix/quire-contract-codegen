@@ -71,6 +71,52 @@ pub struct KaniExecutionRequest<'a> {
     pub home_directory: Option<&'a Path>,
 }
 
+/// One native test appended beside a generated proof solely for concrete
+/// playback. The test name is the exact libtest path, including its module.
+pub struct KaniConcretePlayback<'a> {
+    /// Exact libtest path of the playback function.
+    pub test_name: &'a str,
+    /// Complete source text of the one appended `#[test]` function.
+    pub appended_test: &'a str,
+}
+
+/// The bounded native execution of one concrete Kani playback test. A successful
+/// process is returned only after libtest reports that exact test passed.
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum KaniConcretePlaybackOutcome {
+    /// The playback test process exited on its own.
+    Completed {
+        /// Whether the process exited successfully.
+        succeeded: bool,
+        /// Exit code, when one was available.
+        exit_code: Option<i32>,
+        /// Complete, bounded stdout from the playback process.
+        stdout: Vec<u8>,
+        /// Complete, bounded stderr from the playback process.
+        stderr: Vec<u8>,
+        /// Observed process-tree memory use.
+        memory: MemoryObservation,
+    },
+    /// The process exceeded the harness's wall-clock ceiling and was torn down.
+    TimedOut {
+        /// Observed process-tree memory before owned teardown.
+        memory: MemoryObservation,
+    },
+    /// Cancellation stopped the process and its owned tree.
+    Cancelled {
+        /// First observed cancellation source.
+        source: KaniCancellationSource,
+        /// Observed process-tree memory before owned teardown.
+        memory: MemoryObservation,
+    },
+    /// The process exceeded the harness's memory ceiling and was torn down.
+    MemoryExhausted {
+        /// Observed process-tree memory before owned teardown.
+        memory: MemoryObservation,
+    },
+}
+
 /// Why a harness was not run.
 #[derive(Debug)]
 pub enum KaniExecutionRefusal {
@@ -111,6 +157,23 @@ pub enum KaniExecutionRefusal {
     HarnessProvenanceMismatch {
         /// The generated artifact path.
         harness_path: String,
+    },
+    /// Concrete playback requires a generator-sealed V2 clause harness.
+    ConcretePlaybackUnsupportedHarness {
+        /// The unsupported generated artifact path.
+        harness_path: String,
+    },
+    /// The declared playback test is missing, duplicated, malformed, or does
+    /// not restore the generated proof bytes in `src/lib.rs` when removed.
+    ConcretePlaybackSourceMismatch {
+        /// The generated artifact path whose bytes must be preserved.
+        harness_path: String,
+    },
+    /// Libtest exited successfully without reporting the requested exact test
+    /// as its one passing test. A zero-match run is not playback evidence.
+    ConcretePlaybackTestNotObserved {
+        /// The exact libtest path that was requested.
+        test_name: String,
     },
     /// The run exported a Kani report this crate cannot read exactly. The run proved nothing
     /// and decided nothing; the refusal is never an outcome.
@@ -165,6 +228,9 @@ impl KaniExecutionRefusal {
             | Self::Tool(_)
             | Self::HarnessNotInCrate { .. }
             | Self::HarnessProvenanceMismatch { .. }
+            | Self::ConcretePlaybackUnsupportedHarness { .. }
+            | Self::ConcretePlaybackSourceMismatch { .. }
+            | Self::ConcretePlaybackTestNotObserved { .. }
             | Self::Report(_)
             | Self::BatchTimedOut { .. }
             | Self::MemoryMechanismUnavailable { .. }
@@ -205,6 +271,18 @@ impl fmt::Display for KaniExecutionRefusal {
             Self::HarnessProvenanceMismatch { harness_path } => write!(
                 formatter,
                 "the generated source or identity for {harness_path} changed after generation"
+            ),
+            Self::ConcretePlaybackUnsupportedHarness { harness_path } => write!(
+                formatter,
+                "concrete playback requires a sealed V2 clause harness, got {harness_path}"
+            ),
+            Self::ConcretePlaybackSourceMismatch { harness_path } => write!(
+                formatter,
+                "the declared concrete playback test does not preserve {harness_path}"
+            ),
+            Self::ConcretePlaybackTestNotObserved { test_name } => write!(
+                formatter,
+                "concrete playback did not report {test_name} as its one passing test"
             ),
             Self::Report(refusal) => write!(formatter, "{refusal}"),
             Self::OutputOverLimit {
@@ -372,6 +450,152 @@ pub fn execute_kani_obligation(
 ) -> Result<KaniExecutionEvidence, KaniExecutionRefusal> {
     require_in_crate(request)?;
     run_single(request, None)
+}
+
+/// Runs one exact concrete-playback unit test with the same process-tree bounds,
+/// cancellation, output limits, and owned teardown as a proof run. The caller
+/// prepares the playback test in its scratch crate after the original sealed
+/// proof has run; this entry point does not classify a Kani proof verdict.
+pub fn execute_kani_concrete_playback(
+    request: &KaniExecutionRequest<'_>,
+    playback: &KaniConcretePlayback<'_>,
+) -> Result<KaniConcretePlaybackOutcome, KaniExecutionRefusal> {
+    require_concrete_playback_in_crate(request, playback)?;
+    let arguments = [
+        "kani",
+        "playback",
+        "--lib",
+        "-Z",
+        "function-contracts",
+        "-Z",
+        "concrete-playback",
+        "--",
+        playback.test_name,
+        "--exact",
+        "--nocapture",
+    ]
+    .map(str::to_owned);
+    let mut command = super::namespace::BackendCommand::new(&request.installation.launcher);
+    command
+        .args(&arguments)
+        .env("CARGO_TERM_COLOR", "never")
+        .env("CARGO_TARGET_DIR", request.target_directory)
+        .current_dir(request.crate_directory);
+    let launch = start(
+        request,
+        command,
+        request.harness.view().ceilings.wall_clock,
+        NonZeroUsize::MIN,
+    )?;
+    let memory = launch.memory;
+    match settle(launch.outcome)? {
+        Concluded::Completed {
+            exited_successfully,
+            exit_code,
+            streams,
+        } => {
+            if exited_successfully && !playback_test_passed(&streams.stdout, playback.test_name) {
+                return Err(KaniExecutionRefusal::ConcretePlaybackTestNotObserved {
+                    test_name: playback.test_name.to_owned(),
+                });
+            }
+            Ok(KaniConcretePlaybackOutcome::Completed {
+                succeeded: exited_successfully,
+                exit_code,
+                stdout: streams.stdout,
+                stderr: streams.stderr,
+                memory,
+            })
+        }
+        Concluded::TimedOut => Ok(KaniConcretePlaybackOutcome::TimedOut { memory }),
+        Concluded::Cancelled { source } => {
+            Ok(KaniConcretePlaybackOutcome::Cancelled { source, memory })
+        }
+        Concluded::MemoryExhausted => Ok(KaniConcretePlaybackOutcome::MemoryExhausted { memory }),
+    }
+}
+
+/// Libtest must name the exact selected test and report one pass after it.
+/// Its exit status alone also describes a successful run with zero matches.
+fn playback_test_passed(stdout: &[u8], test_name: &str) -> bool {
+    let Ok(stdout) = std::str::from_utf8(stdout) else {
+        return false;
+    };
+    let plain = format!("test {test_name} ... ok");
+    let should_panic = format!("test {test_name} - should panic ... ok");
+    let mut saw_test = false;
+    let mut saw_summary = false;
+    for line in stdout.lines() {
+        if line.starts_with("test result:") {
+            if !saw_test || saw_summary || !line.starts_with("test result: ok. 1 passed; 0 failed;")
+            {
+                return false;
+            }
+            saw_summary = true;
+        } else if line.starts_with("test ") && line.contains(" ... ") {
+            if saw_test || saw_summary || (line != plain && line != should_panic) {
+                return false;
+            }
+            saw_test = true;
+        }
+    }
+    saw_test && saw_summary
+}
+
+/// Accept only one declared unit test appended at the generated module's
+/// closing brace. Removing those exact bytes must restore the sealed harness.
+fn require_concrete_playback_in_crate(
+    request: &KaniExecutionRequest<'_>,
+    playback: &KaniConcretePlayback<'_>,
+) -> Result<(), KaniExecutionRefusal> {
+    let harness = request.harness.view();
+    if !matches!(request.harness, KaniExecutableHarness::V2Clause(_)) {
+        return Err(KaniExecutionRefusal::ConcretePlaybackUnsupportedHarness {
+            harness_path: harness.rust.path.clone(),
+        });
+    }
+    if !request.harness.has_valid_provenance() {
+        return Err(KaniExecutionRefusal::HarnessProvenanceMismatch {
+            harness_path: harness.rust.path.clone(),
+        });
+    }
+    let mismatch = || KaniExecutionRefusal::ConcretePlaybackSourceMismatch {
+        harness_path: harness.rust.path.clone(),
+    };
+    let (module, _) = harness.selection.rsplit_once("::").ok_or_else(mismatch)?;
+    let (test_module, test_function) = playback.test_name.rsplit_once("::").ok_or_else(mismatch)?;
+    let parsed = syn::parse_str::<syn::ItemFn>(playback.appended_test).map_err(|_| mismatch())?;
+    if test_module != module
+        || parsed.sig.ident != test_function
+        || parsed
+            .attrs
+            .iter()
+            .filter(|attribute| attribute.path().is_ident("test"))
+            .count()
+            != 1
+    {
+        return Err(mismatch());
+    }
+    let prefix = harness
+        .rust
+        .contents
+        .strip_suffix("}\n")
+        .ok_or_else(mismatch)?;
+    let expanded = format!("{prefix}{}}}\n", playback.appended_test);
+    let library_path = request.crate_directory.join("src/lib.rs");
+    let library = read_file(KaniTool::Library, &library_path).map_err(|_| mismatch())?;
+    let library = String::from_utf8(library).map_err(|_| mismatch())?;
+    if library.matches(&expanded).count() != 1
+        || library.matches(playback.appended_test).count() != 1
+        || library
+            .replacen(playback.appended_test, "", 1)
+            .matches(&harness.rust.contents)
+            .count()
+            != 1
+    {
+        return Err(mismatch());
+    }
+    Ok(())
 }
 
 /// Runs a harness from a prepared source tree that must remain read-only for the backend.
@@ -1884,6 +2108,550 @@ wait
         );
     }
 
+    /// Concrete playback uses the proof launcher's wall clock, cancellation,
+    /// and owned process-tree teardown rather than starting a raw Cargo child.
+    #[trace(
+        "FR-015-AC-131",
+        "FR-017-AC-57",
+        "FR-017-AC-58",
+        "FR-017-AC-59",
+        "TC-027"
+    )]
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn concrete_playback_uses_the_proof_process_bounds() {
+        let timeout = Duration::from_secs(2);
+        let mut harness = memory_member("playback", 128 * 1024 * 1024);
+        harness.identity.ceilings.wall_clock = timeout;
+        harness.rust.contents = "// generated header\nmod playback {\nfn oracle_clause() -> bool { true }\nfn check() {}\n}\n".to_owned();
+        let identity = crate::kani::identity::V2ClauseObligationIdentity {
+            symbolic_encoding_policy:
+                crate::kani::identity::V2SymbolicEncodingPolicy::OriginalI64V1,
+            integer_representation: crate::kani::identity::ScalarIntegerRepresentation::General,
+            native_integer_selection: None,
+            ceilings: harness.identity.ceilings,
+            package: quire_contract_model::CheckedSemanticId {
+                domain: "quire.test-package/v1".into(),
+                algorithm: "sha256".into(),
+                digest: "0".repeat(64).into(),
+            },
+            clause: harness.identity.clause.clone(),
+            kind: ObligationKind::Postcondition,
+            oracle_symbol: "oracle_clause".to_owned(),
+            subject_path: "crate::subject::check".to_owned(),
+            arguments: Vec::new(),
+            module_symbol: harness.identity.module_symbol.clone(),
+            harness_symbol: harness.identity.harness_symbol.clone(),
+            solver: KaniSolver::Cadical,
+            unwind: harness.identity.unwind,
+            options: harness.identity.options.clone(),
+        };
+        let v2_harness = crate::kani::identity::KaniV2ClauseObligationHarness::generated(
+            identity,
+            harness.rust.clone(),
+            harness.record.clone(),
+        );
+        let playback = KaniConcretePlayback {
+            test_name: "playback::playback_999",
+            appended_test: "#[test]\nfn playback_999() {}\n",
+        };
+        let source = format!(
+            "// generated header\nmod playback {{\nfn oracle_clause() -> bool {{ true }}\nfn check() {{}}\n{}}}\n",
+            playback.appended_test
+        );
+        let running = |name, body| {
+            let stand_in = StandIn::running(name, body);
+            fs::write(stand_in.crate_directory.join("src/lib.rs"), &source).unwrap();
+            stand_in
+        };
+
+        let unsupported = running("playback-unsupported-harness", "exit 0");
+        assert!(matches!(
+            execute_kani_concrete_playback(&unsupported.request(&harness, timeout), &playback),
+            Err(KaniExecutionRefusal::ConcretePlaybackUnsupportedHarness { .. })
+        ));
+        assert!(unsupported.calls().is_empty());
+
+        let missing = StandIn::running("playback-missing-test", "exit 0");
+        fs::write(
+            missing.crate_directory.join("src/lib.rs"),
+            &harness.rust.contents,
+        )
+        .unwrap();
+        assert!(matches!(
+            execute_kani_concrete_playback(
+                &missing.v2_playback_request(&v2_harness, timeout),
+                &playback
+            ),
+            Err(KaniExecutionRefusal::ConcretePlaybackSourceMismatch { .. })
+        ));
+        assert!(missing.calls().is_empty());
+
+        for (name, unreadable) in [
+            ("playback-absent-library", false),
+            ("playback-unreadable-library", true),
+        ] {
+            let stand_in = running(name, "exit 0");
+            let library = stand_in.crate_directory.join("src/lib.rs");
+            fs::remove_file(&library).unwrap();
+            if unreadable {
+                fs::create_dir(&library).unwrap();
+            }
+            assert!(matches!(
+                execute_kani_concrete_playback(
+                    &stand_in.v2_playback_request(&v2_harness, timeout),
+                    &playback
+                ),
+                Err(KaniExecutionRefusal::ConcretePlaybackSourceMismatch { .. })
+            ));
+            assert!(stand_in.calls().is_empty(), "{name}: no launcher start");
+        }
+
+        let duplicated = running("playback-duplicate-test", "exit 0");
+        fs::write(
+            duplicated.crate_directory.join("src/lib.rs"),
+            source.replacen(playback.appended_test, &playback.appended_test.repeat(2), 1),
+        )
+        .unwrap();
+        assert!(matches!(
+            execute_kani_concrete_playback(
+                &duplicated.v2_playback_request(&v2_harness, timeout),
+                &playback
+            ),
+            Err(KaniExecutionRefusal::ConcretePlaybackSourceMismatch { .. })
+        ));
+        assert!(duplicated.calls().is_empty());
+
+        let mismatch = KaniConcretePlayback {
+            test_name: "playback::other",
+            appended_test: playback.appended_test,
+        };
+        let wrong_name = running("playback-wrong-name", "exit 0");
+        assert!(matches!(
+            execute_kani_concrete_playback(
+                &wrong_name.v2_playback_request(&v2_harness, timeout),
+                &mismatch
+            ),
+            Err(KaniExecutionRefusal::ConcretePlaybackSourceMismatch { .. })
+        ));
+        assert!(wrong_name.calls().is_empty());
+
+        let wrong_module = KaniConcretePlayback {
+            test_name: "other::playback_999",
+            appended_test: playback.appended_test,
+        };
+        let wrong_module_run = running("playback-wrong-module", "exit 0");
+        assert!(matches!(
+            execute_kani_concrete_playback(
+                &wrong_module_run.v2_playback_request(&v2_harness, timeout),
+                &wrong_module
+            ),
+            Err(KaniExecutionRefusal::ConcretePlaybackSourceMismatch { .. })
+        ));
+        assert!(wrong_module_run.calls().is_empty());
+
+        for (name, appended_test) in [
+            ("playback-malformed", "#[test]\nfn playback_999("),
+            ("playback-no-attribute", "fn playback_999() {}\n"),
+            (
+                "playback-two-attributes",
+                "#[test]\n#[test]\nfn playback_999() {}\n",
+            ),
+        ] {
+            let stand_in = running(name, "exit 0");
+            fs::write(
+                stand_in.crate_directory.join("src/lib.rs"),
+                source.replacen(playback.appended_test, appended_test, 1),
+            )
+            .unwrap();
+            let invalid = KaniConcretePlayback {
+                test_name: playback.test_name,
+                appended_test,
+            };
+            assert!(matches!(
+                execute_kani_concrete_playback(
+                    &stand_in.v2_playback_request(&v2_harness, timeout),
+                    &invalid
+                ),
+                Err(KaniExecutionRefusal::ConcretePlaybackSourceMismatch { .. })
+            ));
+            assert!(stand_in.calls().is_empty(), "{name}: no launcher start");
+        }
+
+        let altered = running("playback-altered-proof", "exit 0");
+        fs::write(
+            altered.crate_directory.join("src/lib.rs"),
+            source.replacen("fn check() {}", "fn check() { panic!() }", 1),
+        )
+        .unwrap();
+        assert!(matches!(
+            execute_kani_concrete_playback(
+                &altered.v2_playback_request(&v2_harness, timeout),
+                &playback
+            ),
+            Err(KaniExecutionRefusal::ConcretePlaybackSourceMismatch { .. })
+        ));
+        assert!(altered.calls().is_empty());
+
+        for (name, before, after) in [
+            (
+                "playback-altered-header",
+                "// generated header",
+                "// changed header",
+            ),
+            (
+                "playback-altered-oracle",
+                "fn oracle_clause() -> bool { true }",
+                "fn oracle_clause() -> bool { false }",
+            ),
+        ] {
+            let stand_in = running(name, "exit 0");
+            fs::write(
+                stand_in.crate_directory.join("src/lib.rs"),
+                source.replacen(before, after, 1),
+            )
+            .unwrap();
+            assert!(matches!(
+                execute_kani_concrete_playback(
+                    &stand_in.v2_playback_request(&v2_harness, timeout),
+                    &playback
+                ),
+                Err(KaniExecutionRefusal::ConcretePlaybackSourceMismatch { .. })
+            ));
+            assert!(stand_in.calls().is_empty(), "{name}: no launcher start");
+        }
+
+        let mut invalid_provenance =
+            crate::kani::identity::KaniV2ClauseObligationHarness::generated(
+                v2_harness.identity.clone(),
+                harness.rust.clone(),
+                harness.record.clone(),
+            );
+        invalid_provenance.record.contents.push('x');
+        let invalid_run = running("playback-invalid-provenance", "exit 0");
+        assert!(matches!(
+            execute_kani_concrete_playback(
+                &KaniExecutionRequest {
+                    cancel: &invalid_run.cancel,
+                    installation: &invalid_run.installation,
+                    harness: (&invalid_provenance).into(),
+                    crate_directory: &invalid_run.crate_directory,
+                    target_directory: &invalid_run.target_directory,
+                    home_directory: None,
+                },
+                &playback,
+            ),
+            Err(KaniExecutionRefusal::HarnessProvenanceMismatch { .. })
+        ));
+        assert!(invalid_run.calls().is_empty());
+
+        let mut invalid_policy = v2_harness.clone();
+        invalid_policy.identity.symbolic_encoding_policy =
+            crate::kani::identity::V2SymbolicEncodingPolicy::PostAssumptionU16RebindV1;
+        assert!(matches!(
+            execute_kani_obligation(&invalid_run.v2_playback_request(&invalid_policy, timeout)),
+            Err(KaniExecutionRefusal::HarnessProvenanceMismatch { .. })
+        ));
+        assert!(
+            invalid_run.calls().is_empty(),
+            "policy mismatch must not launch a proof"
+        );
+        assert!(matches!(
+            execute_kani_concrete_playback(
+                &KaniExecutionRequest {
+                    cancel: &invalid_run.cancel,
+                    installation: &invalid_run.installation,
+                    harness: (&invalid_policy).into(),
+                    crate_directory: &invalid_run.crate_directory,
+                    target_directory: &invalid_run.target_directory,
+                    home_directory: None,
+                },
+                &playback,
+            ),
+            Err(KaniExecutionRefusal::HarnessProvenanceMismatch { .. })
+        ));
+        assert!(invalid_run.calls().is_empty());
+
+        let zero = running(
+            "playback-zero-tests",
+            "printf 'running 0 tests\\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out\\n'",
+        );
+        assert!(matches!(
+            execute_kani_concrete_playback(
+                &zero.v2_playback_request(&v2_harness, timeout),
+                &playback
+            ),
+            Err(KaniExecutionRefusal::ConcretePlaybackTestNotObserved { .. })
+        ));
+        assert_eq!(zero.calls().len(), 1);
+
+        let passed = running(
+            "playback-one-test",
+            "printf 'test playback::playback_999 ... ok\\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out\\n'",
+        );
+        assert!(matches!(
+            execute_kani_concrete_playback(
+                &passed.v2_playback_request(&v2_harness, timeout),
+                &playback
+            ),
+            Ok(KaniConcretePlaybackOutcome::Completed {
+                succeeded: true,
+                ..
+            })
+        ));
+        assert_eq!(passed.calls().len(), 1);
+
+        let failed = running(
+            "playback-failed-build",
+            "printf 'error: playback crate did not compile\\n'; exit 101",
+        );
+        assert!(matches!(
+            execute_kani_concrete_playback(
+                &failed.v2_playback_request(&v2_harness, timeout),
+                &playback
+            ),
+            Ok(KaniConcretePlaybackOutcome::Completed {
+                succeeded: false,
+                exit_code: Some(101),
+                stdout,
+                ..
+            }) if stdout == b"error: playback crate did not compile\n"
+        ));
+        assert_eq!(failed.calls().len(), 1);
+
+        for (stream, redirect) in [(CaptureStream::Stdout, ""), (CaptureStream::Stderr, "1>&2")] {
+            let body = format!("head -c {} /dev/zero {redirect}", CAPTURE_LIMIT + 1);
+            let stand_in = StandIn::running("playback-over-limit", &body);
+            fs::write(stand_in.crate_directory.join("src/lib.rs"), &source).unwrap();
+            let result = execute_kani_concrete_playback(
+                &stand_in.v2_playback_request(&v2_harness, timeout),
+                &playback,
+            );
+            assert!(
+                matches!(
+                    result,
+                    Err(KaniExecutionRefusal::OutputOverLimit {
+                        stream: actual,
+                        limit: CAPTURE_LIMIT,
+                        harnesses: 1,
+                    }) if actual == stream
+                ),
+                "{stream}: {result:?}"
+            );
+            assert_eq!(stand_in.calls().len(), 1);
+        }
+
+        use super::super::owners::{LaunchOwners, ProcessMemory, SystemPoll};
+        let mut unread_identity = v2_harness.identity.clone();
+        unread_identity.ceilings.wall_clock = T;
+        let unread_harness = crate::kani::identity::KaniV2ClauseObligationHarness::generated(
+            unread_identity,
+            v2_harness.rust.clone(),
+            v2_harness.record.clone(),
+        );
+        for stream in [CaptureStream::Stdout, CaptureStream::Stderr] {
+            let body = match stream {
+                CaptureStream::Stdout => "printf ready > \"$CALLS.ready\"; printf x; sleep 45",
+                CaptureStream::Stderr => "printf ready > \"$CALLS.ready\"; printf x 1>&2; sleep 45",
+            };
+            let mut stand_in = running("playback-unread-output", body);
+            let (capture, controller) = OwnerGate::new();
+            let injected = std::sync::Arc::new(ControlledPoll {
+                ready: Some(stand_in.directory.join("calls.ready")),
+                gate: capture.clone(),
+                fail: true,
+            });
+            let stdout: std::sync::Arc<dyn super::super::owners::PollOperation> =
+                if stream == CaptureStream::Stdout {
+                    injected.clone()
+                } else {
+                    std::sync::Arc::new(SystemPoll)
+                };
+            let stderr: std::sync::Arc<dyn super::super::owners::PollOperation> =
+                if stream == CaptureStream::Stderr {
+                    injected
+                } else {
+                    std::sync::Arc::new(SystemPoll)
+                };
+            stand_in.installation = KaniInstallation::with_owners(
+                stand_in.installation.launcher.clone(),
+                std::sync::Arc::new(LaunchOwners {
+                    memory: std::sync::Arc::new(ProcessMemory),
+                    stdout,
+                    stderr,
+                    confirmation: std::sync::Arc::new(SystemPoll),
+                }),
+            );
+            let result = std::thread::scope(|scope| {
+                let worker = scope.spawn(|| {
+                    execute_kani_concrete_playback(
+                        &stand_in.v2_playback_request(&unread_harness, T),
+                        &playback,
+                    )
+                });
+                controller.entered();
+                controller.release();
+                worker.join().unwrap()
+            });
+            assert!(
+                matches!(
+                    result,
+                    Err(KaniExecutionRefusal::OutputUnread { stream: actual, .. }) if actual == stream
+                ),
+                "{stream}: {result:?}"
+            );
+            assert!(capture.failed.load(std::sync::atomic::Ordering::Acquire));
+            assert_eq!(stand_in.calls().len(), 1);
+        }
+
+        let body = "printf '%s' \"$(readlink /proc/self/ns/pid)\" > \"$CALLS.namespace\"\nsleep 45 &\nprintf '%s' \"$!\" > \"$CALLS.child\"\nwait";
+        let timed = running("playback-timeout", body);
+        let result = execute_kani_concrete_playback(
+            &timed.v2_playback_request(&v2_harness, timeout),
+            &playback,
+        )
+        .unwrap();
+        assert!(matches!(
+            result,
+            KaniConcretePlaybackOutcome::TimedOut { .. }
+        ));
+        assert_eq!(
+            timed.calls(),
+            [vec![
+                "kani",
+                "playback",
+                "--lib",
+                "-Z",
+                "function-contracts",
+                "-Z",
+                "concrete-playback",
+                "--",
+                "playback::playback_999",
+                "--exact",
+                "--nocapture"
+            ]]
+        );
+        recorded_process_gone(&timed.directory.join("calls.child"));
+
+        let cancellation_ceiling = T;
+        let mut bounded_identity = v2_harness.identity.clone();
+        bounded_identity.ceilings.wall_clock = cancellation_ceiling;
+        let cancelled_harness = crate::kani::identity::KaniV2ClauseObligationHarness::generated(
+            bounded_identity.clone(),
+            v2_harness.rust.clone(),
+            v2_harness.record.clone(),
+        );
+        let cancelled = running("playback-cancel", body);
+        let result = std::thread::scope(|scope| {
+            let worker = scope.spawn(|| {
+                execute_kani_concrete_playback(
+                    &cancelled.v2_playback_request(&cancelled_harness, cancellation_ceiling),
+                    &playback,
+                )
+            });
+            let ready = cancelled.directory.join("calls.child");
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while !ready.is_file() {
+                assert!(Instant::now() < deadline, "playback process started");
+                std::thread::yield_now();
+            }
+            cancelled.cancel.cancel(quire_exact::CancelCause::Requested);
+            worker.join().unwrap().unwrap()
+        });
+        assert!(matches!(
+            result,
+            KaniConcretePlaybackOutcome::Cancelled {
+                source: KaniCancellationSource::Requested,
+                ..
+            }
+        ));
+        recorded_process_gone(&cancelled.directory.join("calls.child"));
+
+        bounded_identity.ceilings.memory_bytes =
+            std::num::NonZeroU64::new(32 * 1024 * 1024).expect("positive memory ceiling");
+        let memory_harness = crate::kani::identity::KaniV2ClauseObligationHarness::generated(
+            bounded_identity,
+            v2_harness.rust.clone(),
+            v2_harness.record.clone(),
+        );
+        let memory = running("playback-memory", CHILD_MEMORY_OVERAGE);
+        let result = execute_kani_concrete_playback(
+            &memory.v2_playback_request(&memory_harness, cancellation_ceiling),
+            &playback,
+        )
+        .unwrap();
+        assert!(matches!(
+            result,
+            KaniConcretePlaybackOutcome::MemoryExhausted { .. }
+        ));
+        recorded_process_gone(&memory.directory.join("calls.child"));
+        recorded_process_gone(&memory.directory.join("calls.sibling"));
+    }
+
+    /// One exact passing test must precede its one-pass summary. Libtest
+    /// labels `#[should_panic]` on the test line, including for Kani playback.
+    #[trace("FR-017-AC-59", "TC-027")]
+    #[test]
+    fn concrete_playback_parser_pairs_the_exact_test_and_summary() {
+        let test_name = "playback::playback_999";
+        let plain = "test playback::playback_999 ... ok";
+        let should_panic = "test playback::playback_999 - should panic ... ok";
+        let one = "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out";
+        for line in [plain, should_panic] {
+            let output = format!("Finished test profile\nrunning 1 test\n{line}\n{one}\n");
+            assert!(playback_test_passed(output.as_bytes(), test_name), "{line}");
+        }
+        let captured_panic = format!(
+            "running 1 test\nthread 'playback::playback_999' panicked at lib.rs:7:7:\nunique assertion\n{should_panic}\n{one}\n"
+        );
+        assert!(playback_test_passed(captured_panic.as_bytes(), test_name));
+        for (case, output) in [
+            (
+                "wrong test",
+                format!("test other::playback_999 ... ok\n{one}\n"),
+            ),
+            (
+                "zero pass",
+                format!("{plain}\ntest result: ok. 0 passed; 0 failed; 1 filtered out\n"),
+            ),
+            (
+                "two passes",
+                format!("{plain}\ntest result: ok. 2 passed; 0 failed;\n"),
+            ),
+            (
+                "failed summary",
+                format!("{plain}\ntest result: FAILED. 0 passed; 1 failed;\n"),
+            ),
+            ("summary first", format!("{one}\n{plain}\n")),
+            (
+                "interleaved test result",
+                format!(
+                    "test playback::playback_999 - should panic ...\nunique assertion\nok\n{one}\n"
+                ),
+            ),
+            ("duplicate test", format!("{plain}\n{plain}\n{one}\n")),
+            ("duplicate summary", format!("{plain}\n{one}\n{one}\n")),
+            (
+                "unrelated passing test",
+                format!("test other::playback_999 ... ok\n{plain}\n{one}\n"),
+            ),
+            (
+                "incidental earlier result",
+                format!("test result: ok. 0 passed; 0 failed;\n{plain}\n{one}\n"),
+            ),
+            (
+                "incidental later result",
+                format!("{plain}\n{one}\ntest result: ok. 0 passed; 0 failed;\n"),
+            ),
+        ] {
+            assert!(
+                !playback_test_passed(output.as_bytes(), test_name),
+                "{case}: {output}"
+            );
+        }
+        assert!(!playback_test_passed(b"\xff", test_name));
+    }
+
     // Exercises the real Linux namespace/procfs bounded execution API.
     #[trace("FR-028-AC-21")]
     #[cfg(target_os = "linux")]
@@ -2121,6 +2889,22 @@ exit 0
         fn request<'a>(
             &'a self,
             harness: &'a StateFrameHarness,
+            timeout: Duration,
+        ) -> KaniExecutionRequest<'a> {
+            assert_eq!(harness.identity.ceilings.wall_clock, timeout);
+            KaniExecutionRequest {
+                cancel: &self.cancel,
+                installation: &self.installation,
+                harness: harness.into(),
+                crate_directory: &self.crate_directory,
+                target_directory: &self.target_directory,
+                home_directory: None,
+            }
+        }
+
+        fn v2_playback_request<'a>(
+            &'a self,
+            harness: &'a crate::kani::identity::KaniV2ClauseObligationHarness,
             timeout: Duration,
         ) -> KaniExecutionRequest<'a> {
             assert_eq!(harness.identity.ceilings.wall_clock, timeout);

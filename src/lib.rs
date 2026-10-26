@@ -164,7 +164,8 @@ pub use kani::output::report::{
     KaniReportRefusal, OtherCheckClass,
 };
 pub use kani::run::execute::{
-    execute_kani_obligation, execute_kani_obligations, KaniBatchInvocation, KaniExecutionEvidence,
+    execute_kani_concrete_playback, execute_kani_obligation, execute_kani_obligations,
+    KaniBatchInvocation, KaniConcretePlayback, KaniConcretePlaybackOutcome, KaniExecutionEvidence,
     KaniExecutionRefusal, KaniExecutionRequest, KaniGroupRun, OUTPUT_OVER_LIMIT_CODE,
     OUTPUT_UNREAD_CODE,
 };
@@ -244,7 +245,7 @@ pub use kani::identity::{
     ScalarObligationArgument, ScalarObligationIdentity, ScalarOriginalLimitsError, StateComparison,
     StateFieldDomain, StateFrameHarness, StateFrameIdentity, StateFrameProperty,
     StateFrameRecordError, StateFrameScope, StateUnrangedField, StateUnrangedReason,
-    V2ClauseObligationIdentity,
+    V2ClauseObligationIdentity, V2SymbolicEncodingPolicy,
 };
 pub use kani::output::playback::{
     parse_assertion_playback, select_counterexample, CounterexamplePlayback, Playback,

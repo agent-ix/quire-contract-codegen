@@ -442,6 +442,19 @@ impl Twin {
         twin
     }
 
+    /// A source-authored precondition whose checked parameter range crosses a carrier edge.
+    pub fn with_bounded_other_precondition_and_range(minimum: i64, maximum: i64) -> Self {
+        let mut twin =
+            Self::with_bounded_other_precondition().with_parameter_range(minimum, maximum);
+        twin.unit = unit_source(&hex(&jcs_digest(&twin.domain)), &[CLAUSES[0]], 0)
+            .replace(
+                "post BalanceNeverDrops using v on Bank::Account::deposit { self.balance >= pre(self.balance) }",
+                "pre OtherBelowLimit using v on Bank::Account::deposit { other < 1000 }",
+            )
+            .into_bytes();
+        twin
+    }
+
     /// Source-authored condition over the existing `Int[0, 1000]` parameter.
     pub fn with_bounded_amount_condition(condition: &str) -> Self {
         let mut twin = Self::with_bounded_other_condition();
@@ -465,6 +478,41 @@ impl Twin {
             .replace("self.balance >= pre(self.balance)", condition)
             .into_bytes();
         twin
+    }
+
+    /// A source-authored amount condition whose selected parameter range crosses a carrier edge.
+    pub fn with_bounded_amount_condition_and_range(
+        condition: &str,
+        minimum: i64,
+        maximum: i64,
+    ) -> Self {
+        let mut twin =
+            Self::with_bounded_amount_condition(condition).with_parameter_range(minimum, maximum);
+        twin.unit = unit_source(&hex(&jcs_digest(&twin.domain)), &[CLAUSES[0]], 0)
+            .replace("self.balance >= pre(self.balance)", condition)
+            .into_bytes();
+        twin
+    }
+
+    fn with_parameter_range(mut self, minimum: i64, maximum: i64) -> Self {
+        let mut document: Value = serde_json::from_slice(&self.domain).expect("domain document");
+        let amount_type = document["types"]
+            .as_array_mut()
+            .expect("types")
+            .iter_mut()
+            .find(|ty| ty["identity"] == range_type("balance"))
+            .expect("amount parameter value type");
+        for (keyword, value) in [("min", minimum), ("max", maximum)] {
+            let bound = amount_type["constraints"]
+                .as_array_mut()
+                .expect("constraints")
+                .iter_mut()
+                .find(|constraint| constraint["keyword"] == keyword)
+                .expect("range constraint");
+            bound["operands"]["value"] = json!(value.to_string());
+        }
+        self.domain = document.to_string().into_bytes();
+        self
     }
 
     /// The original guarded arithmetic condition with the same declared bounds.
@@ -591,6 +639,27 @@ impl Twin {
         let changed = source.replace("self.balance >= pre(self.balance)", condition);
         assert_ne!(changed, source, "the balance condition changed");
         twin.unit = changed.into_bytes();
+        twin
+    }
+
+    /// A bounded literal comparison and an independent clause in one QSL unit.
+    pub fn with_literal_narrow_and_sibling() -> Self {
+        let mut twin = Self::build(
+            &model::GRANTED,
+            &[CLAUSES[0], ("SpareA", "deposit", "balance")],
+            0,
+        );
+        let source = String::from_utf8(twin.unit).expect("native unit");
+        let original =
+            "post BalanceNeverDrops using v on Bank::Account::deposit { self.balance >= pre(self.balance) }";
+        let narrowed =
+            "post BalanceNeverDrops using v on Bank::Account::deposit { self.balance = 0 }";
+        let source = source.replace(original, narrowed);
+        assert!(
+            source.contains(narrowed),
+            "the bounded literal clause changed"
+        );
+        twin.unit = source.into_bytes();
         twin
     }
 

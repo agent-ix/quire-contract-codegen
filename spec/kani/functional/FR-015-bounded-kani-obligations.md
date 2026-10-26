@@ -742,6 +742,21 @@ CG SHALL use FR-384's operator-specific capacity policy through the actual check
 
 Generated artifacts and canonical identity inputs SHALL bind the actual selected operator-capacity policy and its revision together with the selected ABI and interval decisions, under the owning identity schema's compatibility rules. A policy revision changes that identity even when the original fixture domains remain admitted and the rendered arithmetic for them would otherwise be identical. New qualification uses fresh evidence for that policy and actual production kernel implementation, not an old unrestricted-i128 multiplication proof attempt.
 
+For a V2 clause harness, CG SHALL select the required versioned
+`V2ClauseObligationIdentity.symbolic_encoding_policy` from both endpoints of
+the admitted checked input domain. Endpoints wholly within `[0, u16::MAX]`
+select `post_assumption_u16_rebind_v1`; every other interval selects
+`original_i64_v1`. Both policies retain one physical `i64` draw, the exact
+inclusive checked-domain assumption, and an eight-byte witness. The rebind
+policy converts through `u16` only after that assumption and feeds the rebound
+`i64` to the oracle, subject, independent expectation and probes; the original
+policy emits no rebind. The sealed record SHALL contain required
+`identity.symbolicEncodingPolicy` with the selected value. Equal admitted
+inputs and policy SHALL regenerate byte-identical source and record. A retained
+identity with a policy changed independently of the sealed source SHALL fail
+provenance validation and grant no proof credit. A record with no policy or an
+unknown policy cannot identify an accepted proof encoding.
+
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
@@ -873,6 +888,10 @@ Generated artifacts and canonical identity inputs SHALL bind the actual selected
 | FR-015-AC-125 | Authentic QSL-emitted, IR-admitted bounded integer scalar and clause inputs generate kernel-owned native carriers and checked operation plans for all intermediates, with original graph identities/domains retained. Add/Subtract/Negate/ordering retain their admitted signed-i128 capacities; Multiply is eligible exactly when both whole operand intervals fit signed32 and uses the exact four-corner signed64 image retained in i128. A Multiply operand interval outside signed32 makes the whole requested arithmetic component native-ineligible, even with a zero opposite operand, fitting actual payload or narrower semantic result domain; the existing policy returns an honest general route or typed source-associated native refusal, with original domains and i64 symbolic draws unchanged. Generated artifact and canonical identity inputs bind the actual operator-capacity policy/revision; changing that policy changes identity. Neither fallback nor a prior proof attempt supplies a Verified result. Reversed/oversized capacities and operands outside a selected plan yield typed source-associated refusal, never narrowed assumptions or a completed value. Calling the explicit generate_routed_native API selects native scalar rendering during routed Kani generation; the ordinary generate_routed API retains its general scalar route. For one generated scalar claim, routed src/lib.rs and the oracle source embedded in its Kani harness are byte-identical; for a group, each embedded oracle source is a byte-identical contiguous module body in routed src/lib.rs. Native production and proof artifacts use the same kernel implementation and real Meter; inspection finds no copied arithmetic or verification-only evaluator. | Test |
 | FR-015-AC-126 | Genuine TC-027 healthy and bound mutant, TC-025 arithmetic mutant, IR-917 clause implication and IR-948 V2 pre/post/invariant profiles regenerate through public CG with the reviewed admitted kernel API. Original semantic domains, selected propositions/clauses, independent expected values, subject controls, assertions, final completion covers and existing solver/unwind/time settings remain. Static plan-admission checks establish that the original TC-027, IR-917 and IR-948 fixture operand/intermediate intervals remain admitted under this policy, including their original 0..1000 domains; those checks are not backend proof verdicts. Each healthy profile verifies at 16 GiB; each required substantive mutant falsifies with original-domain native playback. The IR-948 impossible-precondition control must complete as CoverUnsatisfied at the same ceiling, not resource exhaustion or a vacuous Verified. Recorded source/ABI/identity changes explain the new route without reusing stale proof evidence. MemoryExhausted, timeout, unknown, missing cover/mutant or missing teardown is inconclusive. | Test |
 | FR-015-AC-127 | End-to-end denied/cancelled admitted-native controls retain all real Meter counters, charge order, complete incomplete/refusal fields and admitted prefixes at every reached charge point, compared with independent normative expectations and the general exact route. A semantic result-domain failure remains after arithmetic charge and before result-retain, separately from generation-time native-capacity failure. | Test |
+| FR-015-AC-128 | A V2 clause whose checked input-domain endpoints are both within `[0, u16::MAX]` records `PostAssumptionU16RebindV1` in its public identity; a clause with either endpoint outside that interval records `OriginalI64V1`. | Test (TC-025) |
+| FR-015-AC-129 | Every generated V2 clause sealed JSON record has required `identity.symbolicEncodingPolicy` equal to its selected public identity's `snake_case` value. | Test (TC-025) |
+| FR-015-AC-130 | A V2 clause harness under either policy has one `i64` symbolic draw, an inclusive assumption equal to its checked domain, and an eight-byte witness; the rebind policy emits its lossless `u16` conversion after the assumption and feeds that `i64` to every semantic consumer, while the original policy emits no conversion. | Test (TC-025) |
+| FR-015-AC-131 | Equal admitted V2 clause inputs and policy regenerate byte-identical source and record; a retained identity whose policy is changed without regenerating its sealed source fails provenance validation and grants no proof credit. | Test (TC-025) |
 
 ### Mutations FR-015-AC-69 to FR-015-AC-76 detect
 

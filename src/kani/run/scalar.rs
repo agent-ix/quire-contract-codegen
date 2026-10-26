@@ -386,6 +386,9 @@ impl KaniScalarNativeError {
             Self::Kani(refusal) => match refusal {
                 KaniExecutionRefusal::HarnessNotInCrate { .. }
                 | KaniExecutionRefusal::HarnessProvenanceMismatch { .. }
+                | KaniExecutionRefusal::ConcretePlaybackUnsupportedHarness { .. }
+                | KaniExecutionRefusal::ConcretePlaybackSourceMismatch { .. }
+                | KaniExecutionRefusal::ConcretePlaybackTestNotObserved { .. }
                 | KaniExecutionRefusal::OutputOverLimit { .. }
                 | KaniExecutionRefusal::PlaybackForNonMember { .. } => CompletionRefusal,
                 KaniExecutionRefusal::Tool(_)
@@ -2370,6 +2373,9 @@ mod tests {
             KaniExecutionRefusal::BatchMemoryExhausted { .. } => (F, None),
             KaniExecutionRefusal::HarnessNotInCrate { .. } => (R, None),
             KaniExecutionRefusal::HarnessProvenanceMismatch { .. } => (R, None),
+            KaniExecutionRefusal::ConcretePlaybackUnsupportedHarness { .. } => (R, None),
+            KaniExecutionRefusal::ConcretePlaybackSourceMismatch { .. } => (R, None),
+            KaniExecutionRefusal::ConcretePlaybackTestNotObserved { .. } => (R, None),
             KaniExecutionRefusal::Report(_) => (F, None),
             KaniExecutionRefusal::OutputOverLimit { .. } => (R, Some("kani_output_over_limit")),
             KaniExecutionRefusal::OutputUnread { .. } => (F, Some("kani_output_unread")),
@@ -2523,6 +2529,15 @@ mod tests {
             },
             KaniExecutionRefusal::HarnessProvenanceMismatch {
                 harness_path: "table".into(),
+            },
+            KaniExecutionRefusal::ConcretePlaybackUnsupportedHarness {
+                harness_path: "table".into(),
+            },
+            KaniExecutionRefusal::ConcretePlaybackSourceMismatch {
+                harness_path: "table".into(),
+            },
+            KaniExecutionRefusal::ConcretePlaybackTestNotObserved {
+                test_name: "table".into(),
             },
             KaniExecutionRefusal::OutputOverLimit {
                 stream: CaptureStream::Stdout,
