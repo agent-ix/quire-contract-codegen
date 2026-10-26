@@ -3,22 +3,10 @@
 
 //! Typed scalar access to admitted application operations and node shape.
 
-use quire_contract_model::{CheckedNodeId, CheckedSemanticNodeV2, CheckedTerm};
+use quire_contract_model::{CheckedNodeId, CheckedTerm};
 
 use super::checked_term::node_id;
-
-/// The admitted node's scalar classification fields.
-pub(crate) struct NodeShape<'a> {
-    pub(crate) tag: &'a str,
-    pub(crate) form: &'a str,
-}
-
-pub(crate) fn shape<Body>(node: &CheckedSemanticNodeV2<Body>) -> NodeShape<'_> {
-    NodeShape {
-        tag: &node.node_tag,
-        form: &node.semantic_form,
-    }
-}
+use super::frame::application_identity;
 
 fn operation(term: Option<&CheckedTerm>) -> Option<&serde_json::Value> {
     match term? {
@@ -29,7 +17,7 @@ fn operation(term: Option<&CheckedTerm>) -> Option<&serde_json::Value> {
 
 /// The admitted application's catalog identity, if present.
 pub(crate) fn identity(term: Option<&CheckedTerm>) -> Option<&str> {
-    operation(term)?.get("identity")?.as_str()
+    application_identity(term?)
 }
 
 /// The value of an operation mode with the requested kind.
@@ -71,11 +59,20 @@ mod tests {
         let derive = include_str!("../../oracle/scalar/derive.rs");
         let lower = include_str!("../../oracle/scalar/lower.rs");
         for source in [derive, lower] {
-            assert!(!source.contains(".get(\""));
-            assert!(!source.contains(".operation("));
-            assert!(!source.contains("[\"identity\"]"));
-            assert!(!source.contains("[\"mode\"]"));
-            assert!(!source.contains("[\"laws\"]"));
+            let compact: String = source
+                .chars()
+                .filter(|character| !character.is_whitespace())
+                .collect();
+            assert!(!compact.contains(".get(\""));
+            assert!(!compact.contains(".operation("));
+            assert!(!compact.contains("[\""));
+            assert!(!compact.contains("serde_json::from_value"));
+            assert!(!compact.contains("Value::"));
+            assert!(!compact.contains("Application{operation"));
+            // The V1 graph's generic node-body type is still Value; no scalar
+            // operation payload is read through it in these consumer modules.
+            assert_eq!(compact.matches("useserde_json::Value;").count(), 1);
+            assert_eq!(compact.matches("serde_json::Value").count(), 1);
         }
         assert!(derive.contains("scalar_ir::identity("));
         assert!(lower.contains("scalar_ir::identity("));

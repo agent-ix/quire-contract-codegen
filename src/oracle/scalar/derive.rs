@@ -418,7 +418,7 @@ pub(super) fn derive_operation_from_view<'g, Body: GraphBody, NodeBody, BoundBod
     bounds: BoundView<'_, BoundBody>,
 ) -> Result<ExactScalarOperation, ExactScalarRefusal> {
     use ExactScalarOperation as Op;
-    if scalar_ir::shape(node).tag != CheckedNodeTag::Expression.as_wire()
+    if &*node.node_tag != CheckedNodeTag::Expression.as_wire()
         || !matches!(
             graph.term(&node.node_id),
             Some(CheckedTerm::Application { .. })

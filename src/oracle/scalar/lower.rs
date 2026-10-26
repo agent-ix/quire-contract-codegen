@@ -132,7 +132,7 @@ pub(super) fn check_item<'r, Body: GraphBody>(
         }
     }
     let shape = Shape::of(operation).map_err(ItemCheckError::Generation)?;
-    if scalar_ir::shape(&node.node).form != shape.form {
+    if &*node.node.semantic_form != shape.form {
         return Err(ExactScalarRefusal::FormMismatch {
             expected: shape.form,
             found: node.node.semantic_form.to_string(),
