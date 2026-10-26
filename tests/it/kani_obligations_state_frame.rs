@@ -67,6 +67,7 @@ use quire_contract_model::{
     CheckedMemberType, CheckedNodeId, CheckedPackageReadLimits, CheckedPackageV2, CheckedTerm,
 };
 use quire_semantic_value::catalog::Category;
+use quote::ToTokens;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
@@ -549,7 +550,13 @@ fn native_v2_postcondition_keeps_guarded_arithmetic_and_independent_expectation(
 
 /// The selected QSL clause, its generated oracle, and the proof's independent condition all
 /// retain one parameter value. The oracle is embedded as an exact contiguous source fragment.
-#[trace("FR-014-AC-38", "FR-015-AC-40", "FR-015-AC-41", "TC-025")]
+#[trace(
+    "FR-014-AC-38",
+    "FR-015-AC-40",
+    "FR-015-AC-41",
+    "FR-015-AC-119",
+    "TC-025"
+)]
 #[test]
 fn qsl_v2_implication_harness_embeds_its_clause_oracle_and_checks_native_arithmetic() {
     let (package, clause) =
@@ -605,15 +612,22 @@ fn qsl_v2_implication_harness_embeds_its_clause_oracle_and_checks_native_arithme
         .lines()
         .find(|line| line.starts_with("let expected = "))
         .expect("one independent native condition");
-    assert!(
-        expected.contains("!"),
-        "native implication must negate its antecedent"
+    let actual = syn::parse_str::<syn::Expr>(
+        expected
+            .strip_prefix("let expected = ")
+            .and_then(|expression| expression.strip_suffix(';'))
+            .expect("the independent condition binding"),
+    )
+    .expect("one independent Boolean expression");
+    let required = syn::parse_str::<syn::Expr>(
+        "!(i128::from(amount_current) < 1000_i128) || ((i128::from(amount_current) + 1_i128) <= 1000_i128)",
+    )
+    .unwrap();
+    assert_eq!(
+        actual.to_token_stream().to_string(),
+        required.to_token_stream().to_string(),
+        "native implication must be the independent !left || right expression"
     );
-    assert!(
-        expected.contains("||"),
-        "native implication must include its consequent"
-    );
-    assert!(expected.contains("amount_current"), "{expected}");
     assert!(!harness
         .rust
         .contents
@@ -621,10 +635,68 @@ fn qsl_v2_implication_harness_embeds_its_clause_oracle_and_checks_native_arithme
     syn::parse_file(&harness.rust.contents).expect("the complete harness is Rust syntax");
 }
 
+#[trace("FR-015-AC-42", "TC-025")]
+#[test]
+fn general_v2_arithmetic_postcondition_refuses_without_a_harness() {
+    let (equality_package, equality_clause) =
+        Twin::with_bounded_amount_condition("amount = 0").emitted_package("BalanceNeverDrops");
+    let supported = negotiate_kani_obligations(&KaniObligationRequest {
+        ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
+        items: &[ObligationItem::V2Clause {
+            package: &equality_package,
+            clause: &equality_clause,
+        }],
+        subject_path: "crate::subject::check",
+        unwind: 3,
+    })
+    .expect("general postconditions reach the renderer");
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses: supported_harnesses,
+        ..
+    } = supported
+    else {
+        panic!("the general equality request is supported");
+    };
+    assert_eq!(supported_harnesses.len(), 1);
+
+    let (package, clause) =
+        Twin::with_bounded_amount_implication().emitted_package("BalanceNeverDrops");
+    let outcome = negotiate_kani_obligations(&KaniObligationRequest {
+        ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
+        items: &[ObligationItem::V2Clause {
+            package: &package,
+            clause: &clause,
+        }],
+        subject_path: "crate::subject::check",
+        unwind: 3,
+    })
+    .expect("one admitted arithmetic clause request");
+    let KaniObligationOutcome::Emitted {
+        records,
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("the admitted request has one typed disposition");
+    };
+    assert!(v2_clause_harnesses.is_empty());
+    let [record] = records.as_slice() else {
+        panic!("one clause record");
+    };
+    assert_eq!(record.kind, Some(ObligationKind::Postcondition));
+    assert_eq!(
+        record.disposition,
+        ObligationDisposition::Unsupported {
+            reason: UnsupportedObligation::V2ClauseConditionNotRendered { node_id: clause }
+        }
+    );
+}
+
 #[trace("FR-015-AC-40", "TC-025")]
 #[test]
 fn qsl_v2_boolean_connective_and_comparison_oracles_embed_byte_identically() {
-    for condition in [
+    let mut sources = Vec::new();
+    for (index, condition) in [
         "amount = 0",
         "amount != 0",
         "amount < 1000",
@@ -637,7 +709,10 @@ fn qsl_v2_boolean_connective_and_comparison_oracles_embed_byte_identically() {
         "amount < 1000 implies amount >= 0",
         "(amount < 1000) = (amount >= 0)",
         "(amount < 1000) != (amount >= 0)",
-    ] {
+    ]
+    .into_iter()
+    .enumerate()
+    {
         let (package, clause) =
             Twin::with_bounded_amount_condition(condition).emitted_package("BalanceNeverDrops");
         let oracle = generate_v2_clause_oracle(&package, &clause)
@@ -668,50 +743,32 @@ fn qsl_v2_boolean_connective_and_comparison_oracles_embed_byte_identically() {
             1,
             "{condition}"
         );
+        if condition == "amount = 0" {
+            assert_eq!(
+                harness.identity.integer_representation,
+                quire_contract_codegen::ScalarIntegerRepresentation::General
+            );
+            assert!(harness
+                .rust
+                .contents
+                .contains("rt::Integer::from(amount_current)"));
+            assert!(harness.rust.contents.contains("environment.check_equality"));
+            assert!(harness.rust.contents.contains("checked.evaluate"));
+        }
+        sources.push(format!(
+            "#[allow(dead_code)]\nmod case_{index} {{\n{}\n}}",
+            harness
+                .rust
+                .contents
+                .replace("#[kani::proof]", "#[test]")
+                .replace("#[cfg(kani)]", "")
+        ));
     }
-}
-
-#[trace("FR-015-AC-40", "TC-025")]
-#[test]
-fn qsl_v2_integer_equality_harness_typechecks_with_owner_equality() {
-    let (package, clause) =
-        Twin::with_bounded_amount_condition("amount = 0").emitted_package("BalanceNeverDrops");
-    let outcome = negotiate_kani_obligations(&KaniObligationRequest {
-        ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
-        items: &[ObligationItem::V2Clause {
-            package: &package,
-            clause: &clause,
-        }],
-        subject_path: "crate::subject::check",
-        unwind: 3,
-    })
-    .expect("QSL equality clause request");
-    let KaniObligationOutcome::Emitted {
-        v2_clause_harnesses,
-        ..
-    } = outcome
-    else {
-        panic!("equality clause must emit");
-    };
-    let [harness] = v2_clause_harnesses.as_slice() else {
-        panic!("one equality clause harness");
-    };
-    assert_eq!(harness.identity.clause, clause);
-    assert_eq!(
-        harness.identity.integer_representation,
-        quire_contract_codegen::ScalarIntegerRepresentation::General
-    );
-    assert!(harness
-        .rust
-        .contents
-        .contains("rt::Integer::from(amount_current)"));
-    assert!(harness.rust.contents.contains("environment.check_equality"));
-    assert!(harness.rust.contents.contains("checked.evaluate"));
-    let directory = super::scratch_crate::TemporaryDirectory::new("ir917-v2-equality-typecheck");
+    let directory = super::scratch_crate::TemporaryDirectory::new("ir917-v2-general-typecheck");
     super::scratch_crate::write_manifest(
         &directory.path,
         &format!(
-            "[package]\nname = \"ir917-v2-equality-typecheck\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\nquire-exact = {{ {} }}\nquire-semantic-value = {{ {} }}\n\n[workspace]\n",
+            "[package]\nname = \"ir917-v2-general-typecheck\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\nquire-exact = {{ {} }}\nquire-semantic-value = {{ {} }}\n\n[workspace]\n",
             super::scratch_crate::runtime_dependency(&["exact"]),
             quire_contract_codegen::EXACT_DEPENDENCY_SOURCE,
             quire_contract_codegen::SEMANTIC_VALUE_DEPENDENCY_SOURCE,
@@ -722,9 +779,6 @@ fn qsl_v2_integer_equality_harness_typechecks_with_owner_equality() {
         "fn main() { println!(\"cargo:rustc-check-cfg=cfg(kani)\"); }\n",
     )
     .expect("check-cfg build script");
-    fs::write(directory.path.join("src/lib.rs"), &harness.rust.contents)
-        .expect("write the generated equality proof");
-    super::scratch_crate::resolve_seeded_lock(&directory.path);
     let stubs = r#"extern crate self as kani;
 pub fn any<T: Default>() -> T { T::default() }
 pub fn assume(_: bool) {}
@@ -734,16 +788,10 @@ pub mod subject { pub fn check(amount_current: i64) -> bool { amount_current == 
 "#;
     fs::write(
         directory.path.join("src/lib.rs"),
-        format!(
-            "{stubs}{}",
-            harness
-                .rust
-                .contents
-                .replace("#[kani::proof]", "#[test]")
-                .replace("#[cfg(kani)]", "")
-        ),
+        format!("{stubs}\n{}", sources.join("\n")),
     )
-    .expect("compile the active proof body");
+    .expect("write all active generated proof bodies");
+    super::scratch_crate::resolve_seeded_lock(&directory.path);
     let output = std::process::Command::new("cargo")
         .args(["check", "--locked", "--offline", "--tests", "--quiet"])
         .env("RUSTFLAGS", "-Dwarnings")
@@ -753,17 +801,17 @@ pub mod subject { pub fn check(amount_current: i64) -> bool { amount_current == 
         )
         .current_dir(&directory.path)
         .output()
-        .expect("typecheck the generated equality proof");
+        .expect("typecheck all admitted generated proof bodies");
     assert!(
         output.status.success(),
-        "generated equality proof did not typecheck: {}",
+        "generated general proof bodies did not typecheck: {}",
         String::from_utf8_lossy(&output.stderr)
     );
 }
 
-/// The installed prover runs the same admitted clause with a healthy subject and two seeded
-/// arithmetic defects. The second seed changes only the proof's arithmetic result, leaving its
-/// native i128 assertion and embedded clause oracle intact.
+/// The installed prover runs the same generated clause against the owner kernel and two isolated
+/// checkouts whose addition bodies are mutated. The original oracle bytes and native expectation
+/// remain unchanged, so both defects must be caught by the independent arithmetic assertion.
 #[trace("FR-015-AC-41", "TC-025")]
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
@@ -814,43 +862,6 @@ fn tc_025_real_kani_falsifies_both_same_clause_addition_mutants() {
     )
     .expect("write the generated proof crate");
     super::scratch_crate::resolve_seeded_lock(&directory.path);
-    let subject_mutant = healthy_subject.replace(
-        "amount_current + 1 <= 1000",
-        "amount_current + 1 + 1 <= 1000",
-    );
-    assert_ne!(subject_mutant, healthy_subject);
-    let probe_site = "let arithmetic_outcome_0 = nx::evaluate_native_integer_arithmetic(arithmetic_admitted_0, &mut arithmetic_meter_0);";
-    assert_eq!(harness.rust.contents.matches(probe_site).count(), 1);
-    let left_mutant = harness.rust.contents.replacen(
-        probe_site,
-        "let arithmetic_outcome_0 = rt::Outcome::Completed(nx::NativeInteger::new(i128::from(amount_current)));",
-        1,
-    );
-    assert_ne!(left_mutant, harness.rust.contents);
-    assert!(left_mutant.contains(&oracle.source));
-
-    let run = |source: &str, subject: &str| {
-        fs::write(
-            directory.path.join("src/lib.rs"),
-            format!("{source}\n{subject}\n"),
-        )
-        .expect("write the selected proof crate");
-        std::process::Command::new("cargo")
-            .arg("kani")
-            .args(&harness.identity.options)
-            .env(
-                "CARGO_TARGET_DIR",
-                PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target"),
-            )
-            .current_dir(&directory.path)
-            .output()
-            .expect("installed Kani starts")
-    };
-    fs::write(
-        directory.path.join("src/lib.rs"),
-        format!("{}\n{healthy_subject}\n", harness.rust.contents),
-    )
-    .expect("write the unmodified generated proof crate");
     let cancel = quire_exact::Cancel::new();
     let installation = KaniInstallation::discover().expect("installed Kani");
     let healthy = execute_kani_obligation(&KaniExecutionRequest {
@@ -868,41 +879,173 @@ fn tc_025_real_kani_falsifies_both_same_clause_addition_mutants() {
             && check.status == quire_contract_codegen::KaniCheckStatus::Satisfied
     }));
 
-    for (name, source, subject, expected_amount) in [
+    let metadata = std::process::Command::new("cargo")
+        .args(["metadata", "--locked", "--offline", "--format-version", "1"])
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output()
+        .expect("read the locked owner checkout");
+    assert!(metadata.status.success(), "locked owner metadata");
+    let metadata: Value = serde_json::from_slice(&metadata.stdout).expect("Cargo metadata JSON");
+    let exact_manifest = metadata["packages"]
+        .as_array()
+        .expect("dependency packages")
+        .iter()
+        .find(|package| {
+            package["name"] == "quire-exact"
+                && package["source"]
+                    .as_str()
+                    .is_some_and(|source| source.starts_with("git+"))
+        })
+        .and_then(|package| package["manifest_path"].as_str())
+        .expect("the locked authoritative quire-exact package");
+    let exact_source = std::path::Path::new(exact_manifest)
+        .parent()
+        .expect("owner crate directory");
+    let original_proof_source =
+        fs::read_to_string(directory.path.join("src/lib.rs")).expect("the healthy proof source");
+    let arithmetic_line = harness
+        .rust
+        .contents
+        .lines()
+        .position(|line| {
+            line.contains("arithmetic subterm agrees with independent i128 expectation")
+        })
+        .map(|line| u32::try_from(line + 1).expect("finite harness line"))
+        .expect("the independent arithmetic assertion line");
+
+    for (mutant, replacement, expected_amount) in [
         (
             "plus_one",
-            harness.rust.contents.as_str(),
-            subject_mutant.as_str(),
+            "left.0.checked_add(right.0)?.checked_add(1)",
             Some(999),
         ),
-        ("left", left_mutant.as_str(), healthy_subject, None),
+        ("left", "Some(left.0)", None),
     ] {
-        let run = run(source, subject);
-        let stdout = String::from_utf8_lossy(&run.stdout);
+        let mutant_crate = super::scratch_crate::TemporaryDirectory::new(&format!(
+            "ir917-v2-clause-kani-{mutant}"
+        ));
+        let mutant_exact = mutant_crate.path.join("exact-mutant");
+        let clone = std::process::Command::new("git")
+            .args(["clone", "--quiet", "--local"])
+            .arg(exact_source)
+            .arg(&mutant_exact)
+            .output()
+            .expect("isolate the locked owner source");
         assert!(
-            !run.status.success() && stdout.contains("VERIFICATION:- FAILED"),
-            "{name} must falsify the same clause:\n{stdout}\n{}",
+            clone.status.success(),
+            "owner checkout clone: {}",
+            String::from_utf8_lossy(&clone.stderr)
+        );
+        let kernel_file = mutant_exact.join("src/native_integer.rs");
+        let kernel = fs::read_to_string(&kernel_file).expect("owner addition body");
+        let original_addition = "left.0.checked_add(right.0)";
+        assert_eq!(kernel.matches(original_addition).count(), 1);
+        fs::write(
+            &kernel_file,
+            kernel.replacen(original_addition, replacement, 1),
+        )
+        .expect("mutate only the owner addition body");
+        let changed = std::process::Command::new("git")
+            .args(["diff", "--name-only"])
+            .current_dir(&mutant_exact)
+            .output()
+            .expect("inspect the isolated owner checkout");
+        assert!(changed.status.success());
+        assert_eq!(changed.stdout, b"src/native_integer.rs\n");
+        super::scratch_crate::write_manifest(
+            &mutant_crate.path,
+            &format!(
+                "[package]\nname = \"ir917-v2-clause-kani-{mutant}\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\nquire-exact = {{ {} }}\n\n[patch.\"https://github.com/agent-ix/quire-exact\"]\nquire-exact = {{ path = \"exact-mutant\" }}\n\n[workspace]\n",
+                super::scratch_crate::runtime_dependency(&["exact"]),
+                quire_contract_codegen::EXACT_DEPENDENCY_SOURCE,
+            ),
+        );
+        fs::write(
+            mutant_crate.path.join("build.rs"),
+            "fn main() { println!(\"cargo:rustc-check-cfg=cfg(kani)\"); }\n",
+        )
+        .expect("check-cfg build script");
+        fs::write(mutant_crate.path.join("src/lib.rs"), &original_proof_source)
+            .expect("same generated clause and subject source");
+        super::scratch_crate::resolve_seeded_lock(&mutant_crate.path);
+        let selected = std::process::Command::new("cargo")
+            .args(["metadata", "--locked", "--offline", "--format-version", "1"])
+            .current_dir(&mutant_crate.path)
+            .output()
+            .expect("read the mutant dependency graph");
+        assert!(selected.status.success(), "mutant dependency metadata");
+        let selected: Value =
+            serde_json::from_slice(&selected.stdout).expect("mutant Cargo metadata JSON");
+        let exact_packages = selected["packages"]
+            .as_array()
+            .expect("mutant dependency packages")
+            .iter()
+            .filter(|package| package["name"] == "quire-exact")
+            .collect::<Vec<_>>();
+        assert_eq!(exact_packages.len(), 1, "{mutant}: one exact kernel");
+        assert_eq!(
+            exact_packages[0]["manifest_path"].as_str(),
+            mutant_exact.join("Cargo.toml").to_str(),
+            "{mutant}: the original dependency must resolve to the isolated owner checkout"
+        );
+        assert_eq!(
+            fs::read_to_string(mutant_crate.path.join("src/lib.rs")).unwrap(),
+            original_proof_source,
+            "the mutation must leave the generated clause and subject unchanged"
+        );
+        let report_path = mutant_crate.path.join("kani-report.json");
+        let run = std::process::Command::new("cargo")
+            .arg("kani")
+            .args(&harness.identity.options)
+            .args(["-Z", "unstable-options", "--export-json"])
+            .arg(&report_path)
+            .env(
+                "CARGO_TARGET_DIR",
+                PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target"),
+            )
+            .current_dir(&mutant_crate.path)
+            .output()
+            .expect("installed Kani starts on the owner kernel mutant");
+        let transcript = format!(
+            "{}\n{}",
+            String::from_utf8_lossy(&run.stdout),
             String::from_utf8_lossy(&run.stderr)
         );
-        let failed_assertion = if name == "left" {
-            "arithmetic subterm agrees with independent i128 expectation"
-        } else {
-            "compiled subject agrees with the checked condition"
+        let report = fs::read(&report_path).expect("the installed backend exported its report");
+        let classified = quire_contract_codegen::classify_kani_run(
+            run.status.success(),
+            Some(&report),
+            quire_contract_codegen::select_counterexample(&transcript, None),
+            Some(ObligationKind::Postcondition),
+        )
+        .unwrap_or_else(|refusal| panic!("{mutant}: typed Kani report refused: {refusal:?}"));
+        let KaniRunOutcome::Falsified { counterexample } = &classified.outcome else {
+            panic!(
+                "{mutant}: expected Falsified, got {:?}\n{transcript}",
+                classified.outcome
+            );
         };
-        assert!(stdout.contains(failed_assertion), "{name}: {stdout}");
+        assert!(
+            classified.checks.iter().any(|check| {
+                check.status == quire_contract_codegen::KaniCheckStatus::Failure
+                    && check.location.line == Some(arithmetic_line)
+            }),
+            "{mutant}: the independent native arithmetic assertion must fail: {:?}",
+            classified.checks
+        );
         let decoded = quire_contract_codegen::decode_v2_clause_falsification(
             harness,
-            &stdout,
+            &counterexample,
             quire_contract_codegen::WitnessDecodeLimits {
                 bytes: 1024 * 1024,
                 values: 1,
             },
         )
-        .expect("the failed assertion has a concrete same-clause playback");
-        let [(name, qsl_replay::WitnessValue::Integer(amount))] = decoded.as_slice() else {
+        .expect("the classified failure has a concrete same-clause playback");
+        let [(parameter, qsl_replay::WitnessValue::Integer(amount))] = decoded.as_slice() else {
             panic!("one typed parameter playback: {decoded:?}");
         };
-        assert_eq!(name, "amount_current");
+        assert_eq!(parameter, "amount_current");
         assert!((0..=1000).contains(amount));
         if let Some(expected_amount) = expected_amount {
             assert_eq!(*amount, expected_amount);

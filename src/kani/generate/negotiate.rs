@@ -652,20 +652,14 @@ fn classify_v2_clause<'a>(
                 semantic_form: node.semantic_form.to_string(),
             })
         }
-        Some(_)
-            if kind != Some(ObligationKind::Precondition)
-                && kind != Some(ObligationKind::Postcondition) =>
-        {
-            Outcome::Unsupported(UnsupportedObligation::V2ClauseConditionNotRendered {
-                node_id: clause.clone(),
-            })
-        }
         Some(_) => match kind {
-            Some(kind) => match lower_v2_clause(view, clause, kind) {
-                Ok(lowered) => Outcome::LoweredV2Clause(Box::new(lowered)),
-                Err(reason) => Outcome::Unsupported(reason),
-            },
-            None => Outcome::Unsupported(UnsupportedObligation::V2ClauseConditionNotRendered {
+            Some(kind @ (ObligationKind::Precondition | ObligationKind::Postcondition)) => {
+                match lower_v2_clause(view, clause, kind) {
+                    Ok(lowered) => Outcome::LoweredV2Clause(Box::new(lowered)),
+                    Err(reason) => Outcome::Unsupported(reason),
+                }
+            }
+            _ => Outcome::Unsupported(UnsupportedObligation::V2ClauseConditionNotRendered {
                 node_id: clause.clone(),
             }),
         },

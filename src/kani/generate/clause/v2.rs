@@ -621,19 +621,11 @@ fn native_term(
         ClauseTerm::Operation {
             identity,
             arguments,
-            result_bound,
+            ..
         } => {
             if identity == "quire.op.numeric.narrow" {
-                let ([ClauseTerm::Integer(value)], Some((minimum, maximum))) =
-                    (arguments.as_slice(), result_bound)
-                else {
-                    return None;
-                };
-                let integer = value.parse::<i128>().ok()?;
-                if integer < *minimum || integer > *maximum {
-                    return None;
-                }
-                return native_term(&arguments[0], input_name, symbolic_name, arithmetic);
+                let literal = crate::oracle::clause::admitted_literal_narrow(term)?;
+                return native_term(literal, input_name, symbolic_name, arithmetic);
             }
             if let [left, right] = arguments.as_slice() {
                 let gate = match identity.as_str() {
@@ -854,7 +846,7 @@ mod native_probe_tests {
     };
     use ix_trace_rs::trace;
 
-    #[trace("FR-015-AC-40", "TC-025")]
+    #[trace("FR-014-AC-54", "FR-015-AC-41", "TC-025")]
     #[test]
     fn native_clause_expectation_accepts_only_in_range_literal_narrows() {
         let narrow = |value: &str| ClauseTerm::Operation {
@@ -862,7 +854,22 @@ mod native_probe_tests {
             arguments: vec![ClauseTerm::Integer(value.to_owned())],
             result_bound: Some((0, 1000)),
         };
-        assert!(native_term(&narrow("0"), "amount", "amount_current", &mut Vec::new()).is_some());
+        assert_eq!(
+            native_term(&narrow("0"), "amount", "amount_current", &mut Vec::new())
+                .and_then(|term| term.clone_integer()),
+            Some(("0_i128".to_owned(), 0, 0, Some("0i64".to_owned())))
+        );
+        assert_eq!(
+            native_term(&narrow("1000"), "amount", "amount_current", &mut Vec::new())
+                .and_then(|term| term.clone_integer()),
+            Some((
+                "1000_i128".to_owned(),
+                1000,
+                1000,
+                Some("1000i64".to_owned())
+            ))
+        );
+        assert!(native_term(&narrow("-1"), "amount", "amount_current", &mut Vec::new()).is_none());
         assert!(
             native_term(&narrow("1001"), "amount", "amount_current", &mut Vec::new()).is_none()
         );

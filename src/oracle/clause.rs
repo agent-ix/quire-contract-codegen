@@ -475,6 +475,27 @@ enum StepTerm {
     },
 }
 
+/// A checked literal narrowing keeps its integer value when the target admits it.
+/// This is shared by the oracle plan and the independent harness expectation.
+pub(crate) fn admitted_literal_narrow(term: &ClauseTerm) -> Option<&ClauseTerm> {
+    let ClauseTerm::Operation {
+        identity,
+        arguments,
+        result_bound: Some((minimum, maximum)),
+    } = term
+    else {
+        return None;
+    };
+    if identity != "quire.op.numeric.narrow" {
+        return None;
+    }
+    let [literal @ ClauseTerm::Integer(value)] = arguments.as_slice() else {
+        return None;
+    };
+    let integer = value.parse::<i128>().ok()?;
+    (*minimum..=*maximum).contains(&integer).then_some(literal)
+}
+
 struct Step {
     kind: ValueKind,
     term: StepTerm,
@@ -507,21 +528,10 @@ fn lower(
             arguments,
             result_bound,
         } => {
-            // A checked literal inside the target interval has the same integer value after
-            // QSL's narrowing admission. Other conversions remain unsupported here.
             if identity == "quire.op.numeric.narrow" {
-                let ([ClauseTerm::Integer(value)], Some((minimum, maximum))) =
-                    (arguments.as_slice(), result_bound)
-                else {
-                    return Err(V2ClauseRefusal::UnsupportedCondition);
-                };
-                let integer = value
-                    .parse::<i128>()
-                    .map_err(|_| V2ClauseRefusal::UnsupportedCondition)?;
-                if integer < *minimum || integer > *maximum {
-                    return Err(V2ClauseRefusal::UnsupportedCondition);
-                }
-                return lower(&arguments[0], names, plan);
+                let literal =
+                    admitted_literal_narrow(term).ok_or(V2ClauseRefusal::UnsupportedCondition)?;
+                return lower(literal, names, plan);
             }
             let operation = clause_scalar_operation(identity, *result_bound)
                 .ok_or(V2ClauseRefusal::UnsupportedCondition)?;
@@ -730,7 +740,7 @@ mod tests {
 
     use super::*;
 
-    #[trace("FR-014-AC-38", "TC-024")]
+    #[trace("FR-014-AC-54", "TC-024")]
     #[test]
     fn a_literal_narrow_is_elided_only_when_its_value_is_inside_the_target() {
         let narrow = |value: &str, bound| ClauseTerm::Operation {
@@ -746,9 +756,20 @@ mod tests {
         assert!(matches!(&plan[0].term, StepTerm::Integer(value) if value == "0"));
 
         for refused in [
+            narrow("-1", Some((0, 1000))),
             narrow("1001", Some((0, 1000))),
             narrow("0", None),
             narrow("outside-i128", Some((0, 1000))),
+            ClauseTerm::Operation {
+                identity: "quire.op.numeric.narrow".to_owned(),
+                arguments: vec![ClauseTerm::Input(ClauseInput {
+                    name: "amount".to_owned(),
+                    side: ClauseInputSide::Parameter,
+                    lower: 0,
+                    upper: 1000,
+                })],
+                result_bound: Some((0, 1000)),
+            },
             ClauseTerm::Operation {
                 identity: "quire.op.numeric.narrow".to_owned(),
                 arguments: vec![ClauseTerm::Boolean(true)],
