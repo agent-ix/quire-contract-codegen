@@ -123,6 +123,11 @@ operations:
     inputs: [KaniExecutionRequest, whose harness is a KaniExecutableHarness: Contract, Scalar or StateFrame; KaniExecutionRequest::home_directory, the optional home directory of the launcher's environment, used only to redact NoVerdict diagnostics and as a grouping key (FR-017-AC-35, FR-017-AC-36)]
     output: KaniExecutionEvidence | KaniExecutionRefusal
     semantics: refuses a crate that does not contain the harness, runs the harness and reports the backend's own outcome; a `no_verdict` evidence carries the serialize-only `diagnostics` member (FR-017-AC-32 to FR-017-AC-36), and a `failed_without_counterexample` evidence whose report states an exit status carries the serialize-only `failureCause` member and, for a CBMC failure, `diagnostics` (FR-017-AC-37 to FR-017-AC-40); see kani_obligation_execution_slice (FR-017)
+  - name: execute_kani_concrete_playback
+    status: planned under IR-917; separate native playback after a sealed proof
+    inputs: [KaniExecutionRequest borrowing a seal-validated V2 clause harness, KaniConcretePlayback with test_name as exact libtest module::function path and appended_test as one complete Rust test function]
+    output: KaniConcretePlaybackOutcome | KaniExecutionRefusal
+    semantics: non-V2 harnesses refuse as ConcretePlaybackUnsupportedHarness; validate V2 sealed provenance or refuse as HarnessProvenanceMismatch, then validate one appended test inside the module and outside the proof function whose exact removal restores the unique full sealed rust artifact including header and oracle bytes, with missing or unreadable source and invalid insertions refusing as ConcretePlaybackSourceMismatch before launch; run native Kani playback over one --lib target with the proof-time -Z function-contracts option and exact test selection and the harness's bounded launcher, cancellation and owned teardown; return Completed { succeeded, exit_code, stdout, stderr, memory }, TimedOut { memory }, Cancelled { source, memory } or MemoryExhausted { memory }, never a proof verdict; successful exit without one intact selected pass line and exactly one compatible one-pass summary refuses as ConcretePlaybackTestNotObserved, including zero/multiple summaries or interleaved lines; Completed with unsuccessful exit alone never attributes an assertion (FR-017-AC-57 to AC-60)
   - name: execute_kani_obligations
     inputs: [list of KaniExecutionRequest, one per harness]
     output: one KaniGroupRun per launcher process (the request positions of its members and either one KaniExecutionEvidence per member or the KaniExecutionRefusal of the whole process), or one KaniExecutionRefusal for the whole call
@@ -451,6 +456,7 @@ remain public until their separately gated retirement slices.
 | derive_exact_scalar_items | operation |
 | negotiate_kani_obligations | operation |
 | execute_kani_obligation | operation |
+| execute_kani_concrete_playback | operation |
 | execute_kani_obligations | operation |
 | kani_launch_command | operation |
 | run_launcher_with_timeout | operation |
