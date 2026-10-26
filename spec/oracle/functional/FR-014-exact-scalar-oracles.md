@@ -41,10 +41,10 @@ FR-014 owns the integer and Boolean `eq` and `ne` nodes. Their oracles call the
 QSV's one equality relation, `TypeEnvironment::check_equality` followed by
 `CheckedEquality::evaluate`, as FR-018's oracles do, and return its
 `Outcome<bool>` unchanged; no oracle compares two values itself. A Boolean
-connective's oracle calls `exact::evaluate_boolean` with the matching
+connective's oracle calls `quire_exact::evaluate_boolean` with the matching
 `BooleanConnective` when both operands are decided values, and
-`exact::evaluate_boolean_short_circuit` when its right operand is itself an
-oracle that may stop, and returns the runtime's `Outcome<bool>` unchanged.
+`quire_contract_runtime::scalar::evaluate_boolean_short_circuit` when its right
+operand is itself an oracle that may stop, and returns `Outcome<bool>` unchanged.
 
 The checked-package expression route includes catalogued text comparisons. Text
 admission is a separate caller-ingress operation: a caller constructs a
@@ -480,8 +480,9 @@ otherwise.
   (FR-015-AC-50).
 - When a node is a Boolean connective (`and`, `or`, `not`, `implies`), the
   generator shall derive its descriptor and generate an oracle that calls
-  `exact::evaluate_boolean` or, where the right operand may stop,
-  `exact::evaluate_boolean_short_circuit`, and returns its `Outcome<bool>`.
+  `quire_exact::evaluate_boolean` or, where the right operand may stop,
+  `quire_contract_runtime::scalar::evaluate_boolean_short_circuit`, and returns
+  its `Outcome<bool>`.
 - When a node is an integer or Boolean `eq` or `ne`, the generator shall derive
   its descriptor and generate an oracle that calls
   `TypeEnvironment::check_equality` and `CheckedEquality::evaluate` and returns
