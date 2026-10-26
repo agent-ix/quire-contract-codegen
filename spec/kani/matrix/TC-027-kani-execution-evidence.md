@@ -267,17 +267,18 @@ unconstrained clause proof, mutant Falsified verdict and in-domain witness.
    expected-panic playback. Require the selected test's observed pass line and
    sole compatible summary in both; the mutant's test must execute the same
    sealed generated arithmetic assertion and identify its unique check message
-   or source location. Retain bounded output and memory observations and prove
+   or source location. Confirm the selected fixture's subject returns true
+   normally at 999 and the generated harness reaches that arithmetic assertion
+   before the clause verdict; an assumption, clause/postcondition or cover
+   failure cannot satisfy this control. Bind the mutant's restored sealed
+   generated source and body, identity record, oracle bytes, clause identity
+   and native expectation to TC-025 step 11's unconstrained mutant run.
+   Retain bounded output and memory observations and prove
    owned teardown after each run. Inspect the installed command and require
    `-Z function-contracts`, the option present in this harness's proof-time
-   `adapter_options`. In a separate diagnostic control over the same source
-   and selected test, omit only that flag and record the installed compiler or
-   playback result; this control cannot supply qualified playback evidence,
-   even if it succeeds on one Kani version. The public entry always carries
-   the proof option, as Kani's concrete-playback contract requires. Keep the
-   mutant's separate unconstrained Kani Falsified run and in-domain playback
-   under FR-015-AC-41; neither this
-   native test nor a stand-in supplies that proof verdict (FR-017-AC-60).
+   `adapter_options`. Keep the mutant's separate unconstrained Kani Falsified
+   run and in-domain playback under TC-025 step 11; neither this native test
+   nor a stand-in supplies that proof verdict (FR-015-AC-41, FR-017-AC-60).
 
 ## Expected Results
 

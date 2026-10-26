@@ -29,6 +29,12 @@ Not mergeable until the findings above are resolved in this PR.
 | FND-002 | low | TC-027 intro still assigns the installed 999 playback and attribution to TC-025 step 11, while new TC-027 step 5 and FR-017-AC-60 also claim that same control through the public API. Assign TC-025 the unconstrained Falsified proof and TC-027 the deterministic 999 playback; cross-reference the two. | spec/kani/matrix/TC-027-kani-execution-evidence.md:219-221 |
 | FND-003 | low | FR-017-AC-58 prescribes a fixed playback argv that omits proof-time -Z function-contracts without saying why. Kani documentation says compilation options used during verification must be used for playback. Derive compile-relevant -Z flags from the retained harness option vector or state the evidence-backed reason they can be dropped; have TC-027 assert the chosen argv. The V2 harness has no contract attributes, so this is a low-risk specification gap. | spec/kani/functional/FR-017-kani-execution-evidence.md:941 |
 
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | low | FR-017-AC-60 adds a diagnostic installed run that omits only -Z function-contracts but accepts and merely records every possible result, so that clause cannot fail; TC-027 step 5 gives it no launch path because the public entry always carries the flag. Remove the diagnostic obligation from the AC and TC, or define a separate testable public path and expected outcome. | spec/kani/functional/FR-017-kani-execution-evidence.md:947 |
+
 ## Dispositions
 
 | FND | outcome | reason |
@@ -36,3 +42,6 @@ Not mergeable until the findings above are resolved in this PR.
 | FND-001 | fixed | New AC-60 and TC-027 step 5 require installed healthy and expected-panic mutant runs through the exact public API, with assertion attribution, bounded output and owned teardown. |
 | FND-002 | still-open | New in this fix: TC-027 introduction and new step 5 both assign the 999 playback control to different test cases. |
 | FND-003 | still-open | New in this fix: AC-58 drops proof-time compilation option -Z function-contracts without a stated derivation or justification. |
+| FND-002 | still-open | Round 2: TC-025 step 11 still independently owns the deterministic 999 playback and says its mechanism is unspecified, while TC-027 step 5 claims the same playback through the public API; TC-025 gives no cross-reference. |
+| FND-003 | fixed | Round 2: FR-017-AC-58 now carries proof-time -Z function-contracts into playback, with TC-027 argv and installed controls. |
+| FND-004 | still-open | Round 2: New in this fix: omitting the flag is an untestable diagnostic obligation with no launch path through the public entry. |
