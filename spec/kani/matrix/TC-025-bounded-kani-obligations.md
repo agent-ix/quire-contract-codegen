@@ -305,11 +305,19 @@ unsatisfiable requires as `cover_unsatisfied`.
     Run the installed backend over the healthy clause and, in separate runs of
     the same clause, mutate the `+` arithmetic executed by the embedded clause
     oracle (or the authoritative kernel operation it calls) to return
-    `left + right + 1` (expected playback `amount_current = 999`) and `left`.
-    Require both mutants to be falsified on the independent native assertion;
-    inspect the executed oracle call and unchanged native expectation. A
-    mutation confined to a hand-written compiled subject or a probe in the
-    harness does not satisfy this control (FR-015-AC-40, FR-015-AC-41).
+    `left + right + 1` and `left`. Require both unconstrained installed-Kani
+    mutants to be `Falsified` on the independent native assertion with typed
+    in-domain playback, without requiring the backend to select a particular
+    witness. For the plus-one mutant, also execute deterministic concrete
+    playback at `amount_current = 999` against the same patched authoritative
+    owner and the actual generated harness's independent arithmetic assertion;
+    require that assertion to fail. Compare its oracle bytes, clause identity
+    and native expectation with the plus-one Kani run. The playback mechanism
+    is not prescribed, but it must execute the generated assertion, not a
+    hand-restated check. Inspect the
+    executed oracle call and unchanged native expectation. A mutation confined
+    to a hand-written compiled subject or a probe in the harness does not
+    satisfy this control (FR-015-AC-40, FR-015-AC-41).
     The package comes from QSL's facade on source, never a copied fixture
     (AD-004 step 4a); if the facade cannot build it, the real-Kani control is the
     quire-integration exemplar of AD-004 L-5, a test in a repository above both.
