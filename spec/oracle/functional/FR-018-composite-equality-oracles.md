@@ -444,6 +444,13 @@ acceptance.
   Those defenses do not establish public generation-time reachability. This
   stage distinction does not reclassify the other declaration or recursion
   controls above.
+- FR-021's planned emitted function environment is a separate construction
+  path: it shall consume the selected checked closure owner's actual nominal
+  declarations through the owner facade and map a genuine construction
+  rejection to FR-042's `GeneratedEnvironmentRejected`. This does not change
+  this equality item's generation-time `EnvironmentError::Declaration`
+  contract, and is blocked by QSL-1105 until the facade exposes record/tuple
+  members.
 - The generator shall reconstruct each item's operand types with a separate,
   caller-selected type-resolution work limit (default 65,536 units). Entering the root type node or
   following one member, option-payload, or collection-element reference or a

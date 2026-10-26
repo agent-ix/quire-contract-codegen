@@ -332,6 +332,30 @@ session; CG's current schedule and location map do not supply it.
   dispatch checked expressions or invent a second evaluator. The separate
   Kani witness path shall continue to use `qsl_replay::replay` without this
   generated-body registry.
+- When an emitted function body returns `Outcome::Completed(value)`, the
+  generated body shall compare that value with the same checker-issued
+  `CallableSelection::signature().result()` supplied at registration, using
+  the admitted QSV type environment's `admits` operation. If the value is not
+  admitted by the declared result type, it shall return
+  `Outcome::Refused(Refusal::CheckedInvariant { cause:
+  CheckedInvariantCause::GeneratedUnexpectedOutcome })` at that body boundary.
+  It shall forward `Undefined`, `Refused` and `Incomplete` without relabelling
+  them or changing admitted charges. This contract is PLANNED under IR-709
+  after the IR-595 cutover; the current exhaustive outcome adapters do not
+  supply a wrong-result producer.
+- Before executing a generated body that needs nominal types, its emitted
+  preparation shall construct the QSV type environment from the actual
+  checker-owned nominal declarations of the selected checked closure. If
+  that construction returns a declaration rejection, the generated body shall
+  return `Outcome::Refused(Refusal::CheckedInvariant { cause:
+  CheckedInvariantCause::GeneratedEnvironmentRejected })` before any body
+  operation or body charge, retaining the original construction rejection in
+  diagnostic evidence. Resource exhaustion and cancellation retain their own
+  typed failure paths. The declaration input must come from the selected
+  owner's checked closure, with its keys, member order, presence and types;
+  neither an empty default environment nor a synthetic declaration is a
+  substitute. This producer is PLANNED under IR-709 and blocked by QSL-1105,
+  because the current FR-485 facade does not expose record/tuple members.
 
 ## Acceptance Criteria
 
@@ -374,6 +398,8 @@ session; CG's current schedule and location map do not supply it.
 | FR-021-AC-35 | For a concrete FR-485 corpus request, the caller supplies all seven acquisition inputs and the separately admitted Contract IR package. CG calls `qsl_replay::acquire_checked_closure` once for the generated run and receives `CheckedClosureCompilation` with emitted package, admitted context and retained `CheckedClosureHandle`; it does not reconstruct a QSL checked closure from the V2 graph or emitted source. Acquisition failure remains `AdmittedRefusal` and yields no handle. PLANNED pending IR-595; the QSL FR-485 facade is delivered. | Test (TC-031) |
 | FR-021-AC-36 | CG maps the declaring admitted V2 `package_id` domain and digest exactly to FR-485's `DigestRecord` owner id, and the function's `CheckedNodeId` digest exactly to `WireNodeId` only when its domain is `quire.checked-semantic-node/v1`. The own or imported declaring package is selected explicitly; no cross-domain coercion, rehash, fabricated `NodeKey` or name-only owner substitution occurs. CG calls `CheckedClosureHandle::lookup_callable(owner_package_id, wire_node_id)` and receives a checker-issued opaque `CallableSelection` before registration. It registers the generated `BodyFactory` with that selection and `selection.signature()`; only `Ok(Admission::Accepted)` permits CG to pass that same selection, completed arguments, environment and caller-owned `Meter` to `begin_call`. A raw key alone is never authority. PLANNED pending IR-595; the QSL FR-485 facade is delivered. | Test (TC-031) |
 | FR-021-AC-37 | A mismatch between `CheckedClosureHandle::package_id()` and the CG request's admitted unit package id refuses the item as `ExactFunctionRefusal::OwnerIdentityMismatch` before registration, Begin, body invocation or application charge. The same refusal follows a mismatch between `CallableSelection::owner_package_id()` and the selected function's declaring admitted V2 package id, or between the selection's read-only check-minted key bytes and that function's node digest. The selection comparisons run in a private post-lookup guard; TC-031 tests the key comparison with a genuine second selection and inspects the owner comparison as defense in depth under ADR-013 QC-18 and ADR-011 E3, without fabricating a selection or changing production lookup. A matching sibling retains its disposition. A QSL `lookup_callable` refusal remains distinguishable as its exact `CallableLookupRefusal::Unknown`, `Foreign(package_id)` or `WrongKind` cause, not `OwnerIdentityMismatch`; non-`Accepted` registration and wrong-acquisition or leaf Begin refusals likewise retain distinct stable `cause_code` values and rendered details in the planned serializable claim-map variants and incur no application charge. PLANNED pending IR-595; the QSL FR-485 facade is delivered. | Test and Inspection (TC-031) |
+| FR-021-AC-38 | With a genuine selected callable whose checker-issued signature declares Boolean result, a reachable test mutation of its generated body returns `Completed(Value::Integer(...))`; the body reports `Refused(CheckedInvariant { cause: GeneratedUnexpectedOutcome })` rather than a completed value, preserving all charges already admitted up to that point. The unmutated body returns its admitted Boolean result; `Undefined`, `Refused` and `Incomplete` controls retain their original variants, payloads and charges. The comparison uses that selection's `signature().result()` and the admitted environment's `admits`, not a CG re-derived or test-supplied result type. PLANNED (IR-709 after IR-595). | Test (TC-031, TC-057) |
+| FR-021-AC-39 | For an emitted function with real checker-owned nominal declarations, the emitted preparation consumes the selected closure's exact declaration keys, forms, ordered members, presence and types; a genuine QSV environment-construction rejection from that path yields `Refused(CheckedInvariant { cause: GeneratedEnvironmentRejected })` before body operation or body charge, with the original rejection observable in diagnostic evidence. A successful construction and a non-nominal control do not yield that cause; resource exhaustion and cancellation keep their distinct typed failures. The test uses a checker-admitted source and no synthetic declaration, forced error, or empty-default environment. PLANNED (IR-709 after IR-595; blocked by QSL-1105 owner declaration facade). | Test (TC-031, TC-057) |
 
 ### Mutations these criteria detect
 
