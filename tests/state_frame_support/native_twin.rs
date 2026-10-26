@@ -594,6 +594,27 @@ impl Twin {
         twin
     }
 
+    /// A bounded literal comparison and an independent clause in one QSL unit.
+    pub fn with_literal_narrow_and_sibling() -> Self {
+        let mut twin = Self::build(
+            &model::GRANTED,
+            &[CLAUSES[0], ("SpareA", "deposit", "balance")],
+            0,
+        );
+        let source = String::from_utf8(twin.unit).expect("native unit");
+        let original =
+            "post BalanceNeverDrops using v on Bank::Account::deposit { self.balance >= pre(self.balance) }";
+        let narrowed =
+            "post BalanceNeverDrops using v on Bank::Account::deposit { self.balance = 0 }";
+        let source = source.replace(original, narrowed);
+        assert!(
+            source.contains(narrowed),
+            "the bounded literal clause changed"
+        );
+        twin.unit = source.into_bytes();
+        twin
+    }
+
     /// Four clauses of one operation with distinct checked node identities for item validation.
     pub fn with_distinct_balance_clauses() -> Self {
         let mut twin = Self::build(

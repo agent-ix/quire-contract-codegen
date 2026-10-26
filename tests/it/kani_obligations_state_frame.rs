@@ -635,7 +635,7 @@ fn qsl_v2_implication_harness_embeds_its_clause_oracle_and_checks_native_arithme
     syn::parse_file(&harness.rust.contents).expect("the complete harness is Rust syntax");
 }
 
-#[trace("FR-015-AC-42", "TC-025")]
+#[trace("TC-025")]
 #[test]
 fn general_v2_arithmetic_postcondition_refuses_without_a_harness() {
     let (equality_package, equality_clause) =
@@ -913,13 +913,9 @@ fn tc_025_real_kani_falsifies_both_same_clause_addition_mutants() {
         .map(|line| u32::try_from(line + 1).expect("finite harness line"))
         .expect("the independent arithmetic assertion line");
 
-    for (mutant, replacement, expected_amount) in [
-        (
-            "plus_one",
-            "left.0.checked_add(right.0)?.checked_add(1)",
-            Some(999),
-        ),
-        ("left", "Some(left.0)", None),
+    for (mutant, replacement) in [
+        ("plus_one", "left.0.checked_add(right.0)?.checked_add(1)"),
+        ("left", "Some(left.0)"),
     ] {
         let mutant_crate = super::scratch_crate::TemporaryDirectory::new(&format!(
             "ir917-v2-clause-kani-{mutant}"
@@ -993,37 +989,85 @@ fn tc_025_real_kani_falsifies_both_same_clause_addition_mutants() {
             original_proof_source,
             "the mutation must leave the generated clause and subject unchanged"
         );
-        let report_path = mutant_crate.path.join("kani-report.json");
-        let run = std::process::Command::new("cargo")
-            .arg("kani")
-            .args(&harness.identity.options)
-            .args(["-Z", "unstable-options", "--export-json"])
-            .arg(&report_path)
-            .env(
-                "CARGO_TARGET_DIR",
-                PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target"),
+        if mutant == "plus_one" {
+            // Kani may choose any counterexample. This separate fixed playback
+            // exercises the same patched owner and byte-identical oracle at
+            // the required boundary without constraining the proof harness.
+            fs::create_dir_all(mutant_crate.path.join("tests"))
+                .expect("deterministic playback test directory");
+            fs::write(
+                mutant_crate.path.join("tests/playback999.rs"),
+                r#"
+use ir917_v2_clause_kani_plus_one::oracle_clause;
+use quire_exact as rt;
+
+#[test]
+fn the_same_mutated_arithmetic_fails_the_independent_assertion_at_999() {
+    let amount = rt::NativeInteger::new(999);
+    let one = rt::NativeInteger::new(1);
+    let left = rt::NativeIntegerInterval::new(0, 1000).unwrap();
+    let right = rt::NativeIntegerInterval::new(1, 1).unwrap();
+    let plan = rt::NativeIntegerPlan::new(rt::NativeIntegerOperation::Add { left, right }, None)
+        .unwrap();
+    let admitted = plan.admit(rt::NativeIntegerOperands::Binary { left: amount, right: one })
+        .unwrap();
+    let limits = rt::ScalarLimits {
+        integer_bits: 1000, decimal_digits: 1000, scale_expansion: 1000,
+        text_input_bytes: 1000, text_scalars: 1000, normalized_scalars: 1000,
+        unit_edges: 1000, value_occurrences: 1000, work_units: 1000, result_units: 1000,
+    };
+    let mut arithmetic_meter = rt::Meter::new(limits);
+    let actual = rt::evaluate_native_integer_arithmetic(admitted, &mut arithmetic_meter);
+    let independent_sum = 999_i128 + 1_i128;
+    let rt::Outcome::Completed(actual_value) = actual else {
+        panic!("the patched owner must complete its arithmetic at 999: {actual:?}");
+    };
+    assert_eq!(actual_value.value(), 1001);
+    assert_ne!(actual_value.value(), independent_sum,
+        "the unchanged native arithmetic assertion must fail at amount_current = 999");
+
+    let mut oracle_meter = rt::Meter::new(limits);
+    assert!(matches!(oracle_clause(&amount, &mut oracle_meter),
+        Ok(rt::Outcome::Completed(false))),
+        "the same mutated owner must make the original clause oracle false at 999");
+}
+"#,
             )
-            .current_dir(&mutant_crate.path)
-            .output()
-            .expect("installed Kani starts on the owner kernel mutant");
-        let transcript = format!(
-            "{}\n{}",
-            String::from_utf8_lossy(&run.stdout),
-            String::from_utf8_lossy(&run.stderr)
-        );
-        let report = fs::read(&report_path).expect("the installed backend exported its report");
-        let classified = quire_contract_codegen::classify_kani_run(
-            run.status.success(),
-            Some(&report),
-            quire_contract_codegen::select_counterexample(&transcript, None),
-            Some(ObligationKind::Postcondition),
-        )
-        .unwrap_or_else(|refusal| panic!("{mutant}: typed Kani report refused: {refusal:?}"));
-        let KaniRunOutcome::Falsified { counterexample } = &classified.outcome else {
-            panic!(
-                "{mutant}: expected Falsified, got {:?}\n{transcript}",
-                classified.outcome
+            .expect("write explicit 999 playback against the patched owner");
+            let playback = std::process::Command::new("cargo")
+                .args([
+                    "test",
+                    "--locked",
+                    "--offline",
+                    "-j2",
+                    "--test",
+                    "playback999",
+                ])
+                .env(
+                    "CARGO_TARGET_DIR",
+                    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target"),
+                )
+                .current_dir(&mutant_crate.path)
+                .output()
+                .expect("run explicit playback at 999");
+            assert!(
+                playback.status.success(),
+                "explicit 999 playback against the patched owner failed: {}\n{}",
+                String::from_utf8_lossy(&playback.stdout),
+                String::from_utf8_lossy(&playback.stderr)
             );
+        }
+        let classified = execute_kani_obligation(&KaniExecutionRequest {
+            cancel: &cancel,
+            installation: &installation,
+            harness: harness.into(),
+            crate_directory: &mutant_crate.path,
+            target_directory: &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target"),
+            home_directory: None,
+        })
+        .unwrap_or_else(|refusal| panic!("{mutant}: bounded Kani run refused: {refusal:?}"));
+        let KaniRunOutcome::Falsified { counterexample } = &classified.outcome else {
+            panic!("{mutant}: expected Falsified, got {:?}", classified.outcome);
         };
         assert!(
             classified.checks.iter().any(|check| {
@@ -1047,9 +1091,6 @@ fn tc_025_real_kani_falsifies_both_same_clause_addition_mutants() {
         };
         assert_eq!(parameter, "amount_current");
         assert!((0..=1000).contains(amount));
-        if let Some(expected_amount) = expected_amount {
-            assert_eq!(*amount, expected_amount);
-        }
     }
 }
 

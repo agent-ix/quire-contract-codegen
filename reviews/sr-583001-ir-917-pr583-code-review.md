@@ -93,3 +93,29 @@ re-measured. `quire matrix` was computed at the head (see SR-583002).
 | FND-007 | low | In `classify_v2_clause`, once the guard refuses every kind other than Precondition and Postcondition, the inner `None =>` arm is unreachable. One match over `Some(kind @ (Precondition \| Postcondition))` would state the rule once. | src/kani/generate/negotiate.rs:655-672 |
 | FND-008 | low | The tests carry redundant and shadowing scaffolding. `src/lib.rs` is written and then overwritten (`:725` then `:735`), and the healthy crate is written twice (`:811`, `:849`). The `run` closure is shadowed by its own result, and the mutant `name` is shadowed by the playback name. | tests/it/kani_obligations_state_frame.rs:725-905 |
 | FND-009 | low | The AC-41 controls use proxies. `plus_one` mutates the hand-written compiled subject, and `left` replaces the harness's own probe result. Neither mutates the clause's `+` as evaluated by the embedded oracle or the kernel, which is what AC-41 and TC-025 step 11 describe. The spec owner should confirm the subject-mutant reading. | tests/it/kani_obligations_state_frame.rs:810-830 |
+
+## New findings (disposition pass 1)
+
+Disposition pass 1 reviewed fix head 738ca6faa267e2966456a2bb26066a70ae19cca4. The PR was rebased onto
+main 1175b995bc4314798cafe839a85a1ca2a745408c, which merges CG #584's FR-014-AC-54 and FR-015-AC-41
+spec text. `git range-diff` shows the original commit carried over unchanged (cc026574 = 52cde938).
+The fix delta is ab92a63b plus 738ca6fa.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-010 | medium | The `plus_one` owner-kernel mutant asserts playback `amount_current = 999`. The mutated `Add` makes the independent arithmetic assertion fail for every admitted `amount` in 0..=999 (the result is wrong, or refused where the true one completes), so the backend's chosen counterexample is not forced to be 999. When first run, the assertion can fail although the mutant was correctly falsified. | tests/it/kani_obligations_state_frame.rs:917-921 |
+| FND-011 | medium | Both owner-kernel mutant runs call raw `cargo kani` outside `execute_kani_obligation`. They therefore run without the bounded memory, teardown and ceiling path the healthy run uses, on a shared host for a clause with known memory pressure. Their verdicts are also not produced under the same ceiling as the healthy run. | tests/it/kani_obligations_state_frame.rs:997-1010 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Mutant verdicts come from `classify_kani_run` over the exported JSON report and require `KaniRunOutcome::Falsified` and a `Failure` check at the rendered line of the independent arithmetic assertion (one `assert!` per line, harness first in `src/lib.rs`). |
+| FND-002 | fixed | `general_v2_arithmetic_postcondition_refuses_without_a_harness` asserts zero harnesses and a `V2ClauseConditionNotRendered { node_id: clause }` record beside a supported general equality control. Its trace tag is recorded in SR-583002 FND-005. |
+| FND-003 | fixed | The test asserts the exact `(expression, lower, upper, small_expression)` tuple for `0` and `1000`, and refusal for `-1` and `1001`. |
+| FND-004 | fixed | The test parses the expectation and compares its token stream with the exact required `!left \|\| right` expression. |
+| FND-005 | fixed | Both call sites use the single `crate::oracle::clause::admitted_literal_narrow`. |
+| FND-006 | fixed | All 12 general harnesses are compiled together, one module per case, in one offline `cargo check` with `-Dwarnings`. |
+| FND-007 | fixed | One `Some(kind @ (Precondition \| Postcondition))` arm, with every other kind refused by the `_` arm. |
+| FND-008 | fixed | Each scratch `src/lib.rs` is written once, the `run` closure is removed, and the playback binding is renamed `parameter`. |
+| FND-009 | fixed | Each mutant now patches `left.0.checked_add(right.0)` in an isolated clone of the locked quire-exact checkout. Both the embedded native oracle and the probe execute this through `evaluate_native_integer_arithmetic`, while the proof source, oracle bytes and subject stay unchanged. This matches the updated FR-015-AC-41 on main (CG #584). |

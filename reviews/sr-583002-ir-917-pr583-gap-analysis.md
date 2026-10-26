@@ -74,3 +74,23 @@ Per criterion, at the head:
 
 Evidence limits: this reviewer ran no cargo build, test or Kani, by dispatcher instruction. Focused
 test results are author-reported. Plan completion: not assessed.
+
+## New findings (disposition pass 1)
+
+Disposition pass 1 reviewed fix head 738ca6faa267e2966456a2bb26066a70ae19cca4 (rebased onto main
+1175b995bc4314798cafe839a85a1ca2a745408c). The matrix was recomputed at that head: 565 tagged, 313
+untagged, 16 tagged only by ignored tests, 53 method-without-symbol.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | medium | `general_v2_arithmetic_postcondition_refuses_without_a_harness` is tagged FR-015-AC-42 and is that criterion's only binder. AC-42 states that an unsupported operator (division, modulo, absolute value) is refused with a typed reason naming the node and the operator. The test asserts a general-route render refusal of the supported `+`, and its reason `V2ClauseConditionNotRendered { node_id }` names no operator. AC-42 changes from untagged to tagged without its claim being tested. | tests/it/kani_obligations_state_frame.rs:638-640 |
+| FND-006 | low | FR-014-AC-54's two tagged tests cover the unchanged value and the refusal shapes (missing target, out of range, nonliteral, unparseable). They do not cover parity of ordered charges, consumed counters and outcome with direct-owner evaluation, independence from a generated sibling, or refusal of another `convert` identity. AC-54 correctly remains PLANNED. | src/oracle/clause.rs:743-784 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | deferred | The installed-backend clause of FR-015-AC-41 still has no run evidence. `tc_025_real_kani_falsifies_both_same_clause_addition_mutants` is ignored and was explicitly not run this round, because CG #569 holds the host. This PR claims no AC-41 acceptance, AC-41 and TC-025 remain PLANNED, and IR-917 stays open until a recorded `make kani` run exists. |
+| FND-002 | fixed | `qsl_v2_implication_harness_embeds_its_clause_oracle_and_checks_native_arithmetic` now carries FR-015-AC-119 for its generation clauses. The installed healthy and helper-body runs remain owed by quire-integration #24 SC-02, so AC-119 remains PLANNED. |
+| FND-003 | fixed | The narrow unit test is retagged `FR-014-AC-54`, `FR-015-AC-41`, `TC-025`. |
+| FND-004 | fixed | FR-014-AC-54 (CG #584, merged to main and present at this head) now specifies checked literal narrowing for V2 clause oracles, including its refusals. |

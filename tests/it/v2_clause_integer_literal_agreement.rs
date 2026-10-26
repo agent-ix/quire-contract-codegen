@@ -53,6 +53,15 @@ fn cases() -> Vec<Case> {
             skipped_arithmetic: false,
         });
     }
+    // Equality against a bounded field makes QSL wrap the literal in its
+    // checked numeric.narrow node. The direct owner sees the same integer,
+    // without a conversion charge.
+    cases.push(Case {
+        source: "self.balance = 0".into(),
+        reference: "c(\"eq\", input(), lit(\"0\"))".into(),
+        expected: "x == 0",
+        skipped_arithmetic: false,
+    });
     for (source, reference, expected) in [
         ("(self.balance + 5) > 5", "c(\"gt\", a(\"add\", input(), lit(\"5\")), lit(\"5\"))", "x > 0"),
         ("(self.balance - 5) < 0", "c(\"lt\", a(\"sub\", input(), lit(\"5\")), lit(\"0\"))", "x < 5"),
@@ -138,15 +147,50 @@ fn cases() -> Vec<Case> {
     cases
 }
 
-#[trace("TC-024", "FR-014-AC-53")]
+#[trace("TC-024", "FR-014-AC-54")]
+#[test]
+fn qsl_literal_narrow_oracle_is_independent_of_a_generated_sibling() {
+    let twin = Twin::with_literal_narrow_and_sibling();
+    let (package, narrow) = twin.emitted_package("BalanceNeverDrops");
+    let (_, sibling) = twin.emitted_package("SpareA");
+    let before = generate_v2_clause_oracle(&package, &narrow)
+        .expect("QSL's checked literal narrow generates an oracle");
+    let sibling_oracle = generate_v2_clause_oracle(&package, &sibling)
+        .expect("the other admitted clause generates independently");
+    assert_ne!(before.descriptor.node_id, sibling_oracle.descriptor.node_id);
+    let after = generate_v2_clause_oracle(&package, &narrow)
+        .expect("sibling generation leaves the narrow oracle admitted");
+    assert_eq!(before.source, after.source);
+    assert_eq!(before.descriptor, after.descriptor);
+}
+
+#[trace("TC-024", "FR-014-AC-53", "FR-014-AC-54")]
 #[test]
 fn public_v2_integer_literals_preserve_owner_semantics_and_every_denial_prefix() {
     let scratch = scratch_crate::TemporaryDirectory::new("v2-clause-integer-literal-agreement");
     let mut source = String::from(NATIVE_SUPPORT);
     let cases = cases();
     for (index, case) in cases.iter().enumerate() {
+        let criterion = if case.source == "self.balance = 0" {
+            "FR-014-AC-54"
+        } else {
+            "FR-014-AC-53"
+        };
         let (package, node) =
             Twin::with_balance_condition(&case.source).emitted_package("BalanceNeverDrops");
+        if criterion == "FR-014-AC-54" {
+            assert!(
+                package.graph().nodes.iter().any(|candidate| {
+                    matches!(
+                        &candidate.body,
+                        quire_contract_model::CheckedTerm::Application { operation, .. }
+                            if operation.get("identity").and_then(|value| value.as_str())
+                                == Some("quire.op.numeric.narrow")
+                    )
+                }),
+                "the QSL-authored bounded equality must contain the checked narrow wrapper"
+            );
+        }
         let oracle = generate_v2_clause_oracle(&package, &node)
             .unwrap_or_else(|error| panic!("{}: {error:?}", case.source));
         let mut arguments = String::new();
@@ -159,7 +203,7 @@ fn public_v2_integer_literals_preserve_owner_semantics_and_every_denial_prefix()
         // Map every public typed stop without Debug/string erasure. A newly
         // introduced variant must force this agreement consumer to be updated.
         writeln!(source, r#"
-#[ix_trace_rs::trace("TC-024", "FR-014-AC-53")]
+#[ix_trace_rs::trace("TC-024", "{criterion}")]
 #[test]
 fn case_{index}() {{
     let expression = {reference};

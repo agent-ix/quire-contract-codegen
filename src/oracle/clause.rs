@@ -754,6 +754,10 @@ mod tests {
         assert_eq!(index, 0);
         assert_eq!(plan.len(), 1);
         assert!(matches!(&plan[0].term, StepTerm::Integer(value) if value == "0"));
+        let sibling = lower(&ClauseTerm::Boolean(true), &BTreeMap::new(), &mut plan)
+            .expect("an independent sibling remains lowerable");
+        assert_eq!(sibling, 1);
+        assert_eq!(plan.len(), 2);
 
         for refused in [
             narrow("-1", Some((0, 1000))),
@@ -775,11 +779,19 @@ mod tests {
                 arguments: vec![ClauseTerm::Boolean(true)],
                 result_bound: Some((0, 1000)),
             },
+            ClauseTerm::Operation {
+                identity: "quire.op.quantity.convert".to_owned(),
+                arguments: vec![ClauseTerm::Integer("0".to_owned())],
+                result_bound: Some((0, 1000)),
+            },
         ] {
             assert!(matches!(
-                lower(&refused, &BTreeMap::new(), &mut Vec::new()),
+                lower(&refused, &BTreeMap::new(), &mut plan),
                 Err(V2ClauseRefusal::UnsupportedCondition)
             ));
+            assert_eq!(plan.len(), 2, "a refused term must not disturb a sibling");
+            assert!(matches!(&plan[0].term, StepTerm::Integer(value) if value == "0"));
+            assert!(matches!(&plan[1].term, StepTerm::Boolean(true)));
         }
     }
 
