@@ -48,6 +48,14 @@ precedence clause loses its only interim tests, and nothing records this. Mergea
 is fixed or explicitly recorded. SR-593001 FND-001 (the decoder's untested own ceiling) is the
 related code-level gap.
 
+## Dispositions
+
+Round 1. Checked at head b7fed787eb2e3125163f791d4b80a74cfb4fb9ea against fix diff 3ee11b66..b7fed787. The coder's `cg593-fix-quire.log` shows module-registry warnings only, with no error.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The finding's retag option was taken. `typed_schema_byte_ceiling_decode_and_domain_refusals` and `unsupported_operator_and_invalid_persisted_schema_refuse_typed_playback` now carry `#[trace("FR-032-AC-3")]` only. Their altered-schema refusals and domain cases fit AC-3's "altered operand schema ... refuses", and neither test now claims AC-2's precedence clause. The new decoder-limit test carries `FR-032-AC-2` for the ceiling refusal, which it does assert. AC-2's precedence clause is still unverified, but FR-032 marks AC-2 PLANNED (IR-631), so no test now overclaims it. |
+
 ## Coverage
 
 ```yaml

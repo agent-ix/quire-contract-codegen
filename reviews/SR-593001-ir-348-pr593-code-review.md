@@ -68,6 +68,16 @@ Rust gates were not run by this reviewer, per the brief. The coder's focused log
 native Kani mutant tests the PR edits have no recorded run at this head, and the shared final
 gate must cover them.
 
+## Dispositions
+
+Round 1. Checked at head b7fed787eb2e3125163f791d4b80a74cfb4fb9ea against fix diff 3ee11b66..b7fed787 (one commit, `IR-348: exercise scalar decoder limit and correct trace claims`). Cargo was not run by this reviewer. The coder's logs `cg593-fix-clippy.log` (clippy finished clean) and `cg593-fix-scalar.log` (`scalar_playback::` 11/11, including the new test) pass. Neither log records the head it ran at.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | New test `scalar_decoder_rejects_playback_above_its_limit_after_a_loose_parse` (`tests/it/scalar_playback.rs:451-472`) parses an 8 MiB + 1 transcript with the reader limit at `SCALAR_PLAYBACK_BYTES + 1`, then asserts that `decode_scalar_falsification` refuses with `cg_witness_decode_bytes_limit` and context `{module};bytes=8388608`. Deleting the decoder's check at `scalar.rs:45-50` would now fail it. |
+| FND-002 | fixed | `scalar.rs:21-22` now reads "limited to 8 MiB by this decoder, even if the output reader accepted a larger input." |
+| FND-003 | fixed | The ceiling is now the single documented `pub const SCALAR_PLAYBACK_BYTES` (`scalar.rs:15`, re-exported at `lib.rs:272`). The two native literals and the separate integration-test constant now use it. Making it `pub` rather than `pub(crate)` is required, because `tests/it/scalar_playback.rs` is an external integration test, and the constant documents the decoder's contract. |
+
 ## Coverage
 
 ```yaml
