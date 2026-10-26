@@ -904,6 +904,62 @@ fn tc_025_real_kani_falsifies_both_same_clause_addition_mutants() {
         .expect("owner crate directory");
     let original_proof_source =
         fs::read_to_string(directory.path.join("src/lib.rs")).expect("the healthy proof source");
+    let healthy_playback_name = "playback_healthy_999";
+    let healthy_playback_test = format!(
+        "    #[test]\n    fn {healthy_playback_name}() {{\n        assert!(crate::subject::check(999));\n        kani::concrete_playback_run(vec![999_i64.to_le_bytes().to_vec()], {});\n    }}\n",
+        harness.identity.harness_symbol
+    );
+    let proof_body = harness
+        .rust
+        .contents
+        .strip_suffix("}\n")
+        .expect("generated proof ends with its module closing brace");
+    let healthy_replay_harness = format!("{proof_body}{healthy_playback_test}}}\n");
+    let healthy_replay_source =
+        original_proof_source.replacen(&harness.rust.contents, &healthy_replay_harness, 1);
+    assert_eq!(
+        healthy_replay_source
+            .matches(&healthy_playback_test)
+            .count(),
+        1
+    );
+    assert_eq!(
+        healthy_replay_source.replacen(&healthy_playback_test, "", 1),
+        original_proof_source,
+        "healthy concrete playback preserves sealed proof bytes"
+    );
+    fs::write(directory.path.join("src/lib.rs"), healthy_replay_source)
+        .expect("append the healthy concrete playback test");
+    let healthy_playback = execute_kani_concrete_playback(
+        &KaniExecutionRequest {
+            cancel: &cancel,
+            installation: &installation,
+            harness: harness.into(),
+            crate_directory: &directory.path,
+            target_directory: &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target"),
+            home_directory: None,
+        },
+        &KaniConcretePlayback {
+            test_name: &format!(
+                "{}::{healthy_playback_name}",
+                harness.identity.module_symbol
+            ),
+            appended_test: &healthy_playback_test,
+        },
+    )
+    .expect("bounded healthy concrete playback starts and tears down");
+    assert!(
+        matches!(
+            healthy_playback,
+            KaniConcretePlaybackOutcome::Completed {
+                succeeded: true,
+                ..
+            }
+        ),
+        "healthy concrete playback must pass: {healthy_playback:?}"
+    );
+    fs::write(directory.path.join("src/lib.rs"), &original_proof_source)
+        .expect("restore the healthy sealed proof after playback");
     let arithmetic_line = harness
         .rust
         .contents
