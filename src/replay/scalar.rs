@@ -11,13 +11,15 @@ use crate::kani::{
 };
 use crate::replay::witness::DecodeFailure;
 
-const PLAYBACK_BYTES: usize = 8 * 1024 * 1024;
+/// Maximum selected scalar playback bytes accepted by the decoder.
+pub const SCALAR_PLAYBACK_BYTES: usize = 8 * 1024 * 1024;
 
 /// Decodes typed integer scalar playback in the identity's persisted symbolic draw order.
 ///
 /// Accepts only integer add, subtract, multiply and negate, with their required operand arity
 /// and valid inclusive ranges. Literal singleton operands remain separate positions. The selected
-/// single-harness transcript is limited to 8 MiB by the output reader. Every draw
+/// single-harness transcript is limited to 8 MiB by this decoder, even if the output reader
+/// accepted a larger input. Every draw
 /// must contain exactly eight little-endian bytes and agree with Kani's decoded-value comment.
 /// All draws are decoded before the first operand outside its persisted range is refused.
 ///
@@ -40,10 +42,10 @@ pub fn decode_scalar_falsification(
     let harness = identity.harness_symbol.as_str();
     let module = identity.module_symbol.as_str();
     let failure = |code, context: &str| DecodeFailure::new(code, harness, context);
-    if playback.source_len > PLAYBACK_BYTES {
+    if playback.source_len > SCALAR_PLAYBACK_BYTES {
         return Err(failure(
             "cg_witness_decode_bytes_limit",
-            &format!("{module};bytes={PLAYBACK_BYTES}"),
+            &format!("{module};bytes={SCALAR_PLAYBACK_BYTES}"),
         ));
     }
     let qualified = format!("{module}::{harness}");

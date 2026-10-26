@@ -269,7 +269,7 @@ pub use replay::function::{
     ReplayParameter, ReplayVerdict, SpineReplayError,
 };
 pub use replay::obligation::ObligationIdentityError;
-pub use replay::scalar::decode_scalar_falsification;
+pub use replay::scalar::{decode_scalar_falsification, SCALAR_PLAYBACK_BYTES};
 pub use replay::state_clause::{
     DocumentError, DocumentLabel, ModelError, OperationDeclaration, StateClauseHarnessMember,
     StateClauseModelFieldsCause, StateClauseReplay, StateClauseReplayError,

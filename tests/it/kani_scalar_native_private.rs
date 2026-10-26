@@ -97,7 +97,7 @@ fn native_tc025_arithmetic_mutant_falsifies() {
         &counterexample,
         mutant.identity.harness_symbol.as_str(),
         mutant.identity.module_symbol.as_str(),
-        8 * 1024 * 1024,
+        crate::replay::scalar::SCALAR_PLAYBACK_BYTES,
         usize::MAX,
     )
     .expect("actual backend playback is valid");
@@ -141,7 +141,7 @@ fn native_original_tc027_false_bound_falsifies() {
         &counterexample,
         mutant.identity.harness_symbol.as_str(),
         mutant.identity.module_symbol.as_str(),
-        8 * 1024 * 1024,
+        crate::replay::scalar::SCALAR_PLAYBACK_BYTES,
         usize::MAX,
     )
     .expect("actual backend playback is valid");
