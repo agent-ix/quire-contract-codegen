@@ -54,3 +54,4 @@ Not mergeable until the findings above are resolved in this PR.
 | FND-002 | fixed | Round 3: TC-025 step 11 now assigns deterministic 999 playback to TC-027 step 5, retaining its own unconstrained proof and binding the same owner/assertion/artifact. |
 | FND-004 | fixed | Round 3: vacuous omitted-flag diagnostic run was removed from FR-017-AC-60 and TC-027 step 5. |
 | FND-005 | still-open | New in this fix: FR-015-AC-41 Verification still names TC-025 alone after deterministic playback moved to TC-027. |
+| FND-005 | fixed | Round 4: FR-015-AC-41 Verification now cites both TC-025 and TC-027; only the reference changed and its obligation text was retained. |
