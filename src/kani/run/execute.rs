@@ -2429,6 +2429,10 @@ wait
             let output = format!("Finished test profile\nrunning 1 test\n{line}\n{one}\n");
             assert!(playback_test_passed(output.as_bytes(), test_name), "{line}");
         }
+        let captured_panic = format!(
+            "running 1 test\nthread 'playback::playback_999' panicked at lib.rs:7:7:\nunique assertion\n{should_panic}\n{one}\n"
+        );
+        assert!(playback_test_passed(captured_panic.as_bytes(), test_name));
         for (case, output) in [
             (
                 "wrong test",
@@ -2447,6 +2451,12 @@ wait
                 format!("{plain}\ntest result: FAILED. 0 passed; 1 failed;\n"),
             ),
             ("summary first", format!("{one}\n{plain}\n")),
+            (
+                "interleaved test result",
+                format!(
+                    "test playback::playback_999 - should panic ...\nunique assertion\nok\n{one}\n"
+                ),
+            ),
             ("duplicate test", format!("{plain}\n{plain}\n{one}\n")),
             ("duplicate summary", format!("{plain}\n{one}\n{one}\n")),
             (
