@@ -33,3 +33,30 @@ Ticket: IR-348. Independent Opus review of the spec-only diff at e18e3385b8ae9ec
 ## Verdict
 
 FINDINGS: 2 defect(s) in this method; the changed AD needs correction before this review is clean.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | low | The function row omits public transcript-taking wrappers replay_counterexample and BoundedCorpusCase::replay_counterexample (src/replay/function.rs:1283-1291,983-997). Converting only the listed helpers could leave text parsing inside these public boundaries. | spec/assurance/AD-004-cg-crate-layout.md:1427 |
+| FND-004 | low | The frame row names private decoded_state, while the public boundary is FrameReplayInputs::playback: String, consumed by FrameReplay::new (src/replay/frame.rs:66,559-579). Converting only the helper could leave a public raw-text boundary. | spec/assurance/AD-004-cg-crate-layout.md:1430 |
+
+## Dispositions
+
+Round 1 at 306b8d4a523dde0f1c10e1da03d3a0ba6e84479a. The original Findings rows above remain unchanged.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | AD-004:931-934 now names all five replay files; the exception table at 1426-1430 covers every production replay call to parse_assertion_playback. L-6 end state remains intact. |
+| FND-002 | fixed | AD-004:1141-1144 assigns all transcript-taking replay entries to IR-348 step 5 completion; each exception row repeats that owner. |
+
+FND-003 and FND-004 are new low-severity findings requiring a later disposition. The L-6 end state and test remain unchanged.
+
+### Round 2
+
+Reviewed at f956d7fea961d81b6963e4afa18c866089f94f42. FND-003 and FND-004 are fixed. The single-parse target at AD-004:783-785 retains distinct report-per-Kani-process and playback-per-replay units; L-6 remains partial as stated.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-003 | fixed | AD-004:1430 now names replay_counterexample and BoundedCorpusCase::replay_counterexample as public text-taking entries and requires typed Playback at those entries and their helpers; source replay/function.rs:983-997,1283-1291 confirms both wrappers. |
+| FND-004 | fixed | AD-004:1433 now names FrameReplayInputs::playback, FrameReplay::new and decoded_state, and requires typed Playback at the public field; source replay/frame.rs:66,559-579 confirms the boundary. |
