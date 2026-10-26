@@ -780,8 +780,9 @@ made the output reader return typed entries and a typed refusal. `replay/witness
 entries against persisted argument bindings and builds `qsl_replay::WitnessValue`. Replay imports
 `kani`; `kani` never imports `replay`. There is one report-parser implementation and one
 playback-parser implementation, even while several callers invoke them.
-The step 5 end state remains one report parse and one playback parse per replay; the
-typed results are passed through subsequent consumers without reparsing the text.
+The step 5 end state remains one report parse per Kani process and one
+`parse_assertion_playback` call per replay. The classifier's counterexample selection
+is separate, and typed results reach replay consumers without reparsing the text.
 The removal of IR's witness-accessor re-parse (IR-277) is
 on IR's side: CG imports no IR witness type already (AD-001), so nothing in CG depends on those
 accessors. Batching (IR-277) touches `run/` only, plus the keyed parse above.
