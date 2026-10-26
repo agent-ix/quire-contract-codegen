@@ -175,6 +175,7 @@ pub(crate) fn term_name(term: &CheckedTerm) -> &'static str {
         CheckedTerm::DependencyReference { .. } => "dependency_reference",
         CheckedTerm::Frame { .. } => "frame",
         CheckedTerm::AbstractionRelation { .. } => "abstraction_relation",
+        CheckedTerm::Refinement { .. } => "refinement",
         CheckedTerm::ExtensionForm { .. } => "extension_form",
     }
 }

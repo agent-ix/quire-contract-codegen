@@ -14,7 +14,8 @@ use quire_contract_model::{
     derive_application_node_id, encode_checked_package_v2, ApplicationIdentityContext,
     ApplicationNodeDraft, ApplicationOperator, CheckedCapability, CheckedNodeId,
     CheckedPackageEvidence, CheckedPackageIdentityPreimageRefV2, CheckedPackageIdentityPreimageV2,
-    CheckedPackageReadLimits, CheckedPackageV2, CheckedPackageV2ReadResult, CheckedSemanticGraphV2,
+    CheckedPackageReadLimits, CheckedPackageSourceCorrespondenceRef, CheckedPackageV2,
+    CheckedPackageV2ReadResult, CheckedRefinementStepRowRegion, CheckedSemanticGraphV2,
     CheckedSemanticId, CheckedSourceMapEntry, CheckedTerm,
 };
 use serde_json::{json, Value};
@@ -84,12 +85,20 @@ fn encode_draft(wire: &Value) -> Vec<u8> {
         .map(|byte| format!("{byte:02x}"))
         .collect::<String>()
         .into();
+    let source_map: Vec<CheckedSourceMapEntry> =
+        serde_json::from_value(wire["source_map"].clone()).unwrap();
+    let refinement_step_rows: Option<Vec<CheckedRefinementStepRowRegion>> = wire
+        .get("refinement_step_rows")
+        .map(|rows| serde_json::from_value(rows.clone()).unwrap());
     encode_checked_package_v2(
         &borrowed,
         &id,
         &serde_json::from_value(wire["lock"].clone()).unwrap(),
         &graph,
-        &serde_json::from_value::<Vec<CheckedSourceMapEntry>>(wire["source_map"].clone()).unwrap(),
+        CheckedPackageSourceCorrespondenceRef {
+            source_map: &source_map,
+            refinement_step_rows: refinement_step_rows.as_deref(),
+        },
         &serde_json::from_value::<Vec<CheckedCapability>>(wire["capability_report"].clone())
             .unwrap(),
         &serde_json::from_value(wire["diagnostics"].clone()).unwrap(),

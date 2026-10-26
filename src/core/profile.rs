@@ -34,6 +34,14 @@ pub(crate) fn oracle_crate_manifest(crate_name: &str) -> String {
     )
 }
 
+/// The concrete function oracle's checked-closure facade and direct leaf dependencies.
+#[cfg(test)]
+pub(crate) fn function_oracle_crate_manifest(crate_name: &str) -> String {
+    format!(
+        "[package]\nname = \"{crate_name}\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[lib]\npath = \"src/lib.rs\"\n\n[dependencies]\nquire-contract-codegen = {{ git = \"https://github.com/agent-ix/quire-contract-codegen\", branch = \"main\" }}\nquire-contract-model = {{ git = \"https://github.com/agent-ix/quire-contract-ir\", branch = \"main\" }}\nqsl-replay = {{ git = \"https://github.com/agent-ix/quire-spec-language\", branch = \"main\" }}\nquire-eval = {{ git = \"https://github.com/agent-ix/quire-eval\", branch = \"main\" }}\nquire-exact = {{ {EXACT_DEPENDENCY_SOURCE} }}\nquire-semantic-value = {{ {SEMANTIC_VALUE_DEPENDENCY_SOURCE} }}\n\n[lints.rust]\nunsafe_code = \"forbid\"\n\n{ORACLE_KANI_METADATA}[workspace]\n"
+    )
+}
+
 /// The equality ABI alone needs the public admitted-context facade.
 pub(crate) fn equality_oracle_crate_manifest(crate_name: &str) -> String {
     let manifest = oracle_crate_manifest(crate_name);
@@ -50,8 +58,8 @@ pub(crate) fn scalar_observer_manifest() -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        equality_oracle_crate_manifest, oracle_crate_manifest, scalar_observer_manifest,
-        EXACT_DEPENDENCY_SOURCE, RUNTIME_DEPENDENCY_SOURCE,
+        equality_oracle_crate_manifest, function_oracle_crate_manifest, oracle_crate_manifest,
+        scalar_observer_manifest, EXACT_DEPENDENCY_SOURCE, RUNTIME_DEPENDENCY_SOURCE,
     };
     use ix_trace_rs::trace;
 
@@ -110,6 +118,24 @@ mod tests {
         assert!(!equality.contains("test-support"));
         assert!(!oracle_crate_manifest("scalar-probe").contains("qsl-replay"));
         assert!(!scalar_observer_manifest().contains("qsl-replay"));
+    }
+
+    #[trace("FR-021-AC-32", "TC-031")]
+    #[test]
+    fn function_manifest_uses_the_checked_closure_facade_and_direct_leaves() {
+        let function = function_oracle_crate_manifest("function-probe");
+        for dependency in [
+            "quire-contract-codegen",
+            "quire-contract-model",
+            "qsl-replay",
+            "quire-eval",
+            "quire-exact",
+            "quire-semantic-value",
+        ] {
+            assert!(function.contains(&format!("{dependency} = {{ git = ")));
+        }
+        assert!(!function.contains("quire-contract-runtime"));
+        assert!(!function.contains("rev ="));
     }
 
     #[trace("FR-017-AC-52", "TC-027")]

@@ -655,7 +655,7 @@ impl FrameReplay {
             declared_domains: Some(Vec::new()),
             backend: Some(wire.backend.clone()),
             trace_position: Some(None),
-            source: Some(ReplaySource::Witness(witness)),
+            source: Some(qsl_replay::EnvelopeSource::Witness(witness)),
             family_payload: Some(payload),
         };
         Ok(Self {

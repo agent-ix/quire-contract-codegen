@@ -132,6 +132,9 @@
 //! call) are implemented and tested in full.
 
 use crate::core::artifact::{Artifact, MAX_ARTIFACT_BYTES, MAX_GENERATED_SOURCE_BYTES};
+mod owner_path;
+#[cfg(test)]
+mod owner_render;
 use crate::core::contract_package::{
     routed_contract_lowering_profile, ContractDriverResultSelection, ContractRequestPosition,
     PackageItem, PackageItems, PackageRequestError,
@@ -145,6 +148,11 @@ use crate::oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, Up
 use crate::oracle::equality::EqualityOperatorKind;
 use crate::oracle::operator_catalog::IntegerOperator;
 use crate::oracle::{classify_lowering_failure, direct_unsupported_form, LoweringFailure};
+pub use owner_path::{
+    apply_checked_function, checked_function_wire_id, checked_package_digest,
+    select_checked_callable, selected_nested_call_site, CheckedFunctionError,
+    CheckedFunctionSource,
+};
 use quire_contract_model::{
     ApplicationOperator, CheckedNodeId, CheckedNodeTag, CheckedPackageIncomplete,
     CheckedPackageReadLimits, CheckedPackageRefusal, CheckedPackageV2, CheckedSemanticId,
@@ -153,9 +161,6 @@ use quire_contract_model::{
     ContractPackageReadResult, ContractPackageV1, ContractPackageWireV1, ContractReachedClosureV1,
     LiteralKind,
 };
-use quire_contract_runtime::exact as rt;
-use quire_exact::{self as exact, Outcome, Refusal};
-use quire_semantic_value::declaration as sv;
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -1422,14 +1427,42 @@ pub enum ExactFunctionRefusal {
         /// Its family or form.
         node_tag: &'static str,
     },
-    /// `PackageDeclarations::check` refused the assembled package every
-    /// surviving function belongs to.
-    PackageRefused {
-        /// The applied function's assigned index in the assembled package,
-        /// when known.
-        function_index: Option<usize>,
-        /// A rendering of the runtime's own `CheckCause`.
-        cause: String,
+    /// The retained checked closure or selected callable disagrees with the IR-admitted identity.
+    OwnerIdentityMismatch,
+    /// QSL did not issue a callable selection.
+    FacadeLookup {
+        /// Stable CG cause code, mapped exhaustively from QSL's typed refusal.
+        cause_code: &'static str,
+        /// The original typed refusal rendered for diagnostics.
+        detail: String,
+    },
+    /// QSL did not issue a checked nested-call location for the selected body.
+    NestedCallSite {
+        /// Stable CG cause code, preserving the typed source or facade refusal.
+        cause_code: &'static str,
+        /// The original typed refusal rendered for diagnostics.
+        detail: String,
+    },
+    /// The leaf refused generated-body registration.
+    RegistrationNotAccepted {
+        /// Stable CG cause code, mapped exhaustively from the leaf admission result.
+        cause_code: &'static str,
+        /// The original typed result rendered for diagnostics.
+        detail: String,
+    },
+    /// The selection did not belong to the registry's acquisition.
+    SelectionRefused {
+        /// Stable CG cause code, mapped exhaustively from QSL's typed refusal.
+        cause_code: &'static str,
+        /// The original typed refusal rendered for diagnostics.
+        detail: String,
+    },
+    /// Begin refused before any generated body or application charge.
+    ApplicationBeginRefused {
+        /// Stable CG cause code, mapped exhaustively from QSL's typed refusal.
+        cause_code: &'static str,
+        /// The original typed refusal rendered for diagnostics.
+        detail: String,
     },
 }
 
@@ -2292,13 +2325,6 @@ enum OperandKind {
 }
 
 impl OperandKind {
-    fn to_value_type(self) -> exact::ValueType {
-        match self {
-            Self::Boolean => exact::ValueType::Boolean,
-            Self::Integer => exact::ValueType::Integer,
-        }
-    }
-
     fn render(self) -> &'static str {
         match self {
             Self::Boolean => "exact::ValueType::Boolean",
@@ -2309,9 +2335,7 @@ impl OperandKind {
 
 /// A declared function that survived Stage 1 classification, ready to enter
 /// the assembled package: its declaration and its fully-resolved parameter
-/// and result operand kinds (Stage 1 already validated these once; this
-/// struct is what both admission-time assembly and source rendering read,
-/// so the two can never disagree about a function's own type).
+/// with the body shape that Stage 1 validated.
 struct ClassifiedFunction<'r> {
     declaration: &'r ExactFunctionDeclaration,
     body: ClassifiedBody<'r>,
@@ -2873,55 +2897,13 @@ pub fn generate_exact_function_oracles(
         .map(|function| function.declaration)
         .collect();
 
-    let declared_functions: Vec<rt::FunctionDeclaration> = classified
-        .iter()
-        .map(|function| rt::FunctionDeclaration {
-            name: function.declaration.name.clone(),
-            parameters: function
-                .declaration
-                .parameters
-                .iter()
-                .zip(&function.parameter_kinds)
-                .map(|(parameter, kind)| (parameter.name.clone(), kind.to_value_type()))
-                .collect(),
-            result: function.result_kind.to_value_type(),
-            ieee_requirements: Vec::new(),
-            integer_division_consumers: Vec::new(),
-            measure_discharged: true,
-            body: Box::new(|_frame, _args| {
-                Outcome::Refused(Refusal::CheckedInvariant {
-                    cause: quire_exact::CheckedInvariantCause::GeneratedBodyPlaceholderInvoked,
-                })
-            }),
-        })
-        .collect();
-
     let survivor_index: BTreeMap<&CheckedNodeId, (usize, &ExactFunctionDeclaration)> = classified
         .iter()
         .enumerate()
         .map(|(index, function)| (&function.declaration.node_id, (index, function.declaration)))
         .collect();
 
-    let package_check = rt::PackageDeclarations {
-        types: sv::TypeEnvironment::default(),
-        functions: declared_functions,
-    }
-    .check(rt::CheckMode::Linked, rt::CheckingLimits::default());
-
-    let package_refusal: Option<String> = match &package_check {
-        Ok(_) => None,
-        Err(refusals) => Some(
-            refusals
-                .iter()
-                .map(|refusal| format!("{:?}", refusal.cause))
-                .collect::<Vec<_>>()
-                .join("; "),
-        ),
-    };
-
-    // Location map: one entry per surviving function, whether or not the
-    // package itself later admits -- this is a static, generation-time fact
-    // about the request, independent of admission (AC-15).
+    // Static location records describe the admitted IR graph, independently of a later QSL run.
     let mut location_map = Vec::with_capacity(survivors.len());
     for declaration in &survivors {
         let index = survivor_index[&declaration.node_id].0;
@@ -2996,7 +2978,6 @@ pub fn generate_exact_function_oracles(
                 &names,
                 &resolved,
                 &survivor_index,
-                &package_refusal,
                 (package, &source_index),
                 item,
                 admitted,
@@ -3181,7 +3162,6 @@ fn item_disposition<'a>(
     names: &FunctionNames<'_>,
     resolved: &BTreeMap<&CheckedNodeId, Result<(), ExactFunctionRefusal>>,
     survivor_index: &BTreeMap<&CheckedNodeId, (usize, &'a ExactFunctionDeclaration)>,
-    package_refusal: &Option<String>,
     source: (&ContractPackageV1, &FunctionSourceIndex<'_>),
     item: &ExactFunctionItem,
     admitted: PackageItem<'_>,
@@ -3255,12 +3235,6 @@ fn item_disposition<'a>(
             &argument.semantic_type
         };
         resolve_operand_type(graph, type_node_id)?;
-    }
-    if let Some(cause) = package_refusal {
-        return Err(ExactFunctionRefusal::PackageRefused {
-            function_index: Some(index),
-            cause: cause.clone(),
-        });
     }
     // The readable stem: the applied function's name. The caller settles the final name.
     let stem = format!("call_{}", bounded_readable_component(&declaration.name));
@@ -3749,6 +3723,25 @@ mod tests {
             index.source_function_node_id("same", &body.node_id),
             Some(&first.node_id)
         );
+        let declaration = ExactFunctionDeclaration {
+            node_id: body.node_id.clone(),
+            name: "same".to_owned(),
+            parameters: Vec::new(),
+            result_type: body.node_id.clone(),
+            body: ExactFunctionBody::Scalar {
+                operator: IntegerOperator::Add,
+            },
+            capability_requirements: Vec::new(),
+        };
+        for shape in [
+            owner_render::DirectBody::Scalar(BinaryIntegerOperator::Add),
+            owner_render::DirectBody::Equality(EqualityOperatorKind::Equal),
+        ] {
+            let emitted = owner_render::checked_item(&index, "same", &declaration, shape)
+                .expect("unique callable declaration");
+            assert!(emitted.contains(first.node_id.digest.as_ref()));
+            assert!(!emitted.contains(body.node_id.digest.as_ref()));
+        }
         assert_eq!(index.source_function_node_id("Same", &body.node_id), None);
         let duplicate = function(22, &body.node_id);
         let nodes = [&body, &other, &first, &same_name_other_body, &duplicate];
