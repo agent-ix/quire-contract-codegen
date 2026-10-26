@@ -1,6 +1,6 @@
 ---
 id: AD-007
-title: "Proposed width-minimal V2 symbolic draw for bounded Kani tractability"
+title: "Proposed full-domain V2 symbolic proof tractability"
 type: ArchitectureDescription
 status: proposed
 owner: quire-contract-codegen-maintainer
@@ -17,110 +17,128 @@ relationships:
   - target: ix://agent-ix/quire-contract-codegen/AD-006
     type: references
 ---
-# AD-007: Proposed width-minimal V2 symbolic draw for bounded Kani tractability
+# AD-007: Proposed full-domain V2 symbolic proof tractability
 
 ## System Boundary
 
-This is an **unapproved proposal**, not a change to FR-015 acceptance or proof credit. IR-1022
-owns tractability of the same V2 postcondition clause required by FR-015-AC-41 and AC-119:
-`amount < 1000 implies amount + 1 <= 1000`, with the checked parameter domain
-`amount: Int[0, 1000]`. CG owns the generated symbolic draw, its proof identity and its V2
-counterexample reader. The admitted package, clause, byte-identical FR-014 oracle, genuine
-quire-exact operations and Meter, compiled subject, independent native arithmetic assertion,
-final cover, bounded Kani runner and source-owner mutations retain their existing owners.
+This is an **unapproved proposal**, not a change to FR-015 acceptance or proof credit.
+IR-1022 owns tractability of the same QSL-authored V2 postcondition clause required by
+FR-015-AC-41 and AC-119: `amount < 1000 implies amount + 1 <= 1000`, with the checked
+parameter domain `amount: Int[0, 1000]`. CG owns the generated symbolic draw, sealed
+harness record and V2 counterexample reader. The admitted package, byte-identical FR-014
+oracle, genuine quire-exact operations and Meter, compiled subject, independent native
+arithmetic assertion, final cover and source-owner mutations retain their owners.
 
-The installed healthy clause currently ends `Inconclusive(MemoryExhausted)` under the existing
-16 GiB ceiling. A diagnostic under 24 GiB also exhausted memory before any healthy verdict or
-mutant run. These observations motivate a narrower symbolic representation; they do not show
-that it fits 16 GiB. The accepted solver, unwind, wall-clock and memory limits remain fixed for
-acceptance. No smaller semantic domain, changed assertion, stubbed owner evaluator or fixture-only
-path is proposed.
+The original installed healthy proof exhausted the existing 16 GiB ceiling; a separate
+24 GiB diagnostic also exhausted memory. Neither produced a healthy verdict. An isolated,
+**no-credit** experiment on commit `e1074c9c603c8d80fd34224b0bc3b601e91fc822` kept the
+`i64` draw, assumed `[0,1000]` and rebound the semantic value through `u16` after that
+assumption. The focused generator test passed. One installed healthy run reached CBMC with
+CaDiCaL and unwind 3, then the test failed after 619.43 seconds with
+`MemoryObservationFailed(namespace cleanup failed: namespace teardown was not confirmed)`.
+The configured wall-clock limit was 600 seconds. No Kani verdict, cover result, peak RSS or
+mutant result was exposed; timeout before teardown is plausible but unproven. This run
+provides **no proof credit and no measured tractability benefit**. The accepted 16 GiB,
+wall-clock, solver and unwind settings remain fixed. No smaller semantic domain, altered
+assertion, substitute evaluator or fixture-only route is proposed.
 
 ## Views
 
-The current input contract, the proposed representation and the acceptance observations are
-separate views of the same clause. The representation view changes proof encoding only if the
-contract owners approve it; the acceptance view remains an unmeasured plan.
+The existing obligation, two representation candidates and acceptance evidence are
+separate views of the same checked clause. Both candidates preserve every declared
+valuation; neither has demonstrated an installed healthy verdict at the accepted limit.
 
-### Existing contract and conflict
+### Existing contract and primary candidate
 
-FR-015-AC-39 requires one nondeterministic draw per drawn input with an inclusive assumption
-equal to its declared domain. FR-015-AC-40 requires the embedded clause oracle to match FR-014
-byte for byte. FR-015-AC-41 requires the independent arithmetic assertion, genuine installed
-healthy and two arithmetic-mutant verdicts, typed in-domain playback and the selected 999
-control. FR-015-AC-119 requires the unchanged value to reach the runtime implication subject.
-FR-016-AC-8 binds persisted symbolic argument positions to witness positions. AD-003 distinguishes
-the semantic obligation identity from the generated harness record.
+FR-015-AC-39 requires one nondeterministic draw per drawn input and an inclusive assumption
+**equal** to its declared domain. FR-015-AC-40 requires the embedded clause oracle to match
+FR-014 byte for byte. FR-015-AC-41 requires the independent arithmetic assertion, healthy
+and both addition-body mutant verdicts, in-domain playback and selected 999 control.
+FR-015-AC-119 additionally requires the runtime implication helper-body mutant.
+FR-015-AC-126 owns the 16 GiB clause profile, including its existing time, solver and
+unwind settings. FR-016-AC-8 binds persisted symbolic argument positions to witnesses;
+FR-017-AC-60 owns healthy installed playback. AD-003 distinguishes semantic obligation
+identity from the generated harness record.
 
-**Blocking conflict:** FR-015-AC-125 and AD-006's execution view expressly preserve the
-original `i64` symbolic draws. The proposed physical `u16` `kani::any()` changes that draw,
-although the semantic value passed to the subject and oracle remains `i64`. The V2 witness
-reader also currently interprets every such draw as eight `i64` bytes. Implementing the
-proposal before the FR-015-AC-125 and AD-006 owners decide this conflict would silently change
-their contracts. Their other obligations, including the original domain and selected kernel
-policy, must remain intact.
+The **primary candidate** preserves the original `i64` `kani::any()` draw and exact
+inclusive `raw >= 0 && raw <= 1000` assumption. Only *after* that assumption, shadow the
+semantic binding with `let amount: i64 = i64::from(raw as u16);`. Every allowed `raw` fits
+in `u16`; conversion back to `i64` is the identity on all 1001 checked values. It adds
+no draw or domain restriction. The oracle, genuine subject, independent expected arithmetic
+and cover all consume that same rebound `i64` value. Downstream bit-vector arithmetic can
+see zero high bits, which is the hypothesized SAT reduction; the failed diagnostic has not
+established a resource improvement. For any other V2 interval, apply this transformation
+only when **both** checked endpoints fall within `[0, u16::MAX]`; otherwise retain the
+existing generation. Selection depends on the checked domain, never fixture identity or
+proof outcome.
 
-### Candidate generation and identity
+The physical draw remains `i64`. `ObligationBinding.primitive_type`, the persisted
+eight-byte witness, signedness, decoder and subject ABI remain `i64`; exact-999 playback
+still uses eight bytes. The generated proof source and its sealed harness record change
+under FR-015-AC-47/48, while AD-003's semantic obligation identity does not change merely
+because equivalent proof encoding changes. The same checked package and generation policy
+must regenerate byte-identical source. Append a concrete 999 playback to the sealed proof,
+then remove only that appended test to recover the original source byte for byte.
 
-For a V2 bounded integer input, select the narrowest supported signed or unsigned primitive
-whose full range contains **both** checked endpoints; if none is narrower, retain `i64`.
-Selection depends on the checked endpoints and a declared generator policy, never on a sample,
-the proof outcome or a fixture name. For `[0,1000]`, draw one symbolic `u16`, assume its value
-is at most 1000, then convert it without loss to the original `i64` parameter binding. The
-conversion maps every one of the 1001 checked values from exactly one drawn value and admits
-none outside the checked domain. The oracle, independent native expectation, subject and cover
-consume that same converted binding. A negative interval needs a signed carrier that contains
-both endpoints; an interval crossing zero cannot use an unsigned carrier.
+### Secondary physical-width candidate, pending a separate decision
 
-Record the selected physical draw primitive in the **generated harness identity and persisted
-witness schema**, with the original semantic parameter identity and declared bounds retained.
-Changing the physical primitive changes the generated artifact and harness record. It does not
-change AD-003's semantic clause obligation identity merely because proof representation changes.
-Regeneration from the same checked input and policy remains byte-identical. The original
-eight-byte V2 playback and a new two-byte playback must never be decoded by guessing from
-length alone or silently reinterpreted under another harness identity.
+If a clean installed result leaves the primary candidate insufficient, a physical `u16`
+draw is a separate candidate, **not** the approved implementation. It would still make
+exactly one draw and an explicit inclusive assumption `draw >= 0 && draw <= 1000`, even
+when the carrier's lower bound makes one comparison tautological. Conversion to the
+semantic `i64` binding must be injective and surjective over the full checked interval.
+For generic carrier choice, choose the narrowest supported type containing both endpoints;
+at equal width choose unsigned for a nonnegative interval, signed for an interval with a
+negative endpoint. Intervals crossing zero must use a signed carrier. Retain `i64` if no
+narrower supported type contains both endpoints.
 
-The V2 counterexample reader uses the sealed harness's physical primitive to check arity,
-width, signedness, byte order and Kani's rendered value comment, then converts losslessly to
-the same typed `i128` witness value used by QSL replay and checks the **original** `[0,1000]`
-domain. A malformed, mismatched or out-of-domain encoding receives a named typed refusal with
-no replay or proof credit. The deterministic `999` playback uses the physical two-byte `u16`
-encoding while the generated proof calls the original `i64` subject with 999. Its appended
-playback test is removed to restore the complete sealed proof source byte for byte, as
-FR-015-AC-41 and FR-017-AC-60 require.
+AD-006's execution view says original `i64` symbolic draws remain unchanged. The wording
+in FR-015-AC-125 about unchanged draws applies specifically to its native-ineligible
+general route; it does not independently govern this native-eligible clause. A physical
+`u16` draw conflicts with AD-006 and requires an owner decision before normative change
+or implementation. `ObligationBinding.primitive_type` currently serves both physical draw
+width and semantic subject type. This candidate must define separate physical carrier and
+semantic `i64` fields before code, with explicit sealed identity, decoder width, signedness,
+byte order and rendered-comment checks. Its 999 playback would use two witness bytes but
+call the unchanged `i64` subject. Malformed, mismatched or out-of-domain encoding must
+receive a named typed refusal, without replay or proof credit. No reader may guess width
+from byte length or silently reinterpret an old harness record. The physical choice
+would rekey the generated harness record, not AD-003's semantic obligation identity.
 
-### Proposed acceptance and test plan, pending contract decision
+### Proposed acceptance and evidence plan
 
-| Proposed criterion | Falsifiable control | Owner after decision |
+| Proposed check | Falsifiable control and required evidence | Existing owner |
 | --- | --- | --- |
-| Full-domain representation | For the admitted `[0,1000]` input, the generator draws one `u16`, retains exactly `[0,1000]`, proves conversion is injective and surjective over all 1001 values, and tests 0, 999 and 1000. An implementation drawing a smaller semantic interval or adding another draw fails. Test signed, zero-crossing and full-`i64` boundaries before making the selection generic. | FR-015 / TC-025 |
-| Identity and witness typing | The sealed harness records physical width and original semantic bounds separately; changed width changes the harness identity while the AD-003 semantic obligation identity stays fixed. Two-byte V2 playback decodes to the same named typed amount, while eight-byte, wrong-sign, mismatched-comment, extra-value and out-of-domain forms refuse by name. | FR-015 and FR-016 / TC-025 and TC-026 |
-| Exact-999 playback | The appended concrete test feeds two-byte 999 through the actual generated proof and its independent arithmetic assertion against the same plus-one owner mutation; removing only that test restores the sealed source, and the failure is attributed to that assertion. | FR-015 and FR-017 / TC-025 and TC-027 |
-| Installed proof and resource result | At the **existing 16 GiB ceiling**, unchanged solver and unwind, the genuine healthy clause must classify `Verified` with the final cover satisfied; both authoritative addition-body mutants must independently classify `Falsified` at the arithmetic assertion with decoded in-domain playback. Record elapsed time and process-tree peak RSS per run. `MemoryExhausted`, timeout, unknown, missing cover, missing mutant or missing teardown is inconclusive. | FR-015 / TC-025; IR-1022 and IR-917 remain open until measured |
+| Full checked domain | One draw and an exact inclusive `[0,1000]` assumption; prove the post-assumption transformation is identity for all 1001 values, including 0, 999 and 1000. A missing lower-bound comparison, narrowed interval, second draw or fixture-only selection fails. Test signed, crossing-zero and full-`i64` boundaries for any generic policy. | FR-015-AC-39 / TC-025 |
+| Sealed identity and witness | For the primary candidate, retain `i64` width and eight-byte typed playback while rekeying the changed generated source record. Refuse malformed width, wrong signedness, mismatched rendered comment, extra value and out-of-domain value by name. If the physical candidate is later authorized, separately prove two-byte typing and explicit physical/semantic fields. | FR-015-AC-47/48; FR-016-AC-8 / TC-025/026 |
+| Exact-999 and healthy playback | Run 999 through the actual generated proof and independent arithmetic assertion; remove only the appended concrete test to restore sealed source byte for byte. Run healthy installed playback and require the expected in-domain result. | FR-015-AC-41; FR-017-AC-60 / TC-025/027 |
+| Installed proof and mutations | Under the **original 16 GiB, 600-second, CaDiCaL, unwind-3 profile**, require genuine healthy `Verified` with final cover, both addition-body mutants `Falsified` at the independent arithmetic assertion with in-domain playback, and the same-clause runtime implication helper-body mutant `Falsified` with in-domain playback. Record elapsed time, process-tree peak RSS, Kani verdict and cover for each run. Timeout, OOM, cleanup refusal, missing result or missing mutation remains inconclusive. | FR-015-AC-41/119/126 / TC-025; IR-917 and IR-1022 remain open until measured |
 
-The first implementation experiment should exercise a generated proof with the width change
-and original owner call graph before widening the change to other V2 domains. A focused source
-and decoder test can establish representation correctness; only the installed backend can
-establish the 16 GiB tractability claim. Tests for the new requirement must trace its formal
-criterion id after the owner approves one; this proposal creates no criterion id or coverage.
+Focused source, decoder and boundary tests establish representation and refusal behavior;
+only installed backend evidence establishes 16 GiB tractability. A no-credit experiment
+must remain distinct from acceptance. Tests for any new normative criterion must trace
+its formal criterion id after owner approval; this proposal creates no new criterion id.
 
 ## Decisions
 
 | Pending decision | Recommendation | Consequence |
 | --- | --- | --- |
-| May the physical `kani::any()` type differ from the semantic `i64` subject argument? | Amend FR-015-AC-125 and AD-006 explicitly to permit a lossless physical draw selected from the complete checked domain, while retaining every other AC-125 native-kernel and proof condition. Add the planned FR-015/FR-016 criteria described above before code. | This is a reviewed contract change, not an interpretation that `i64` symbolic draws were unchanged. It requires a new sealed artifact and fresh evidence; historical proof results cannot be reused. |
-| Does this proposal meet the 16 GiB acceptance ceiling? | Decide only from the installed healthy and mutant results. | The proposal may still fail because the unchanged oracle and independent evaluator both execute the real native kernel and Meter. If it fails, retain `Inconclusive` and escalate the measured result; no range, ceiling, assertion or owner substitution follows. |
+| Does the primary `i64` draw and lossless rebind improve the installed proof? | Keep it as the first candidate, but make no acceptance claim from the teardown-failed diagnostic. Inspect retained runner evidence before any repeat; require a clean healthy result under the original profile. | No AD-006 draw amendment, new witness schema or changed semantic identity is needed. The generated source and harness record still rekey. |
+| Should a physical `u16` draw be attempted? | Decide only after the primary result and a separate AD-006/FR-015 owner review. Do not amend normative requirements solely on a hypothesized benefit. | Requires explicit physical/semantic binding split, typed decoder and identity contract, then fresh installed evidence. The native-ineligible clause of AC-125 must retain its stated conditions unless separately reviewed. |
+| Does any candidate meet acceptance? | Decide only from healthy, cover and all required installed mutant/playback controls at the original limits. | If not, retain `Inconclusive`; no higher ceiling, smaller range, weaker assertion or substitute owner follows. |
 
 ## Risks
 
-- **Tractability is unproven.** Width reduction may leave solver memory above 16 GiB. Owner:
-  IR-1022 implementation lead. Next review: after the first installed healthy diagnostic with
-  the original bounded runner.
-- **Witness misbinding.** A two-byte draw decoded through the existing eight-byte schema could
-  fabricate or reject a value. Owner: CG witness reviewer. Next review: before the first mutant
-  proof; require sealed physical type, exact width and Kani-comment cross-checks.
-- **Contract conflict.** FR-015-AC-125 and AD-006 currently require `i64` symbolic draws.
-  Owner: FR-015/AD-006 maintainer. Next review: before any normative FR edit or implementation.
-- **Identity confusion.** A physical representation change must rekey the harness record while
-  leaving the AD-003 semantic obligation identity determined by its own inputs. Owner: CG
-  identity reviewer. Next review: with the proposed FR-015 criterion and source diff.
+- **Tractability unproven.** The diagnostic ended in a namespace teardown refusal after
+  619.43 seconds; it did not expose the wait conclusion or peak RSS. Owner: IR-1022
+  implementation lead. Next review: after runner evidence and a clean installed result.
+- **Independent evaluator cost.** Both the oracle and native assertion use genuine owner
+  operations and Meter; reducing downstream bit width might not control their expansion.
+  Owner: CG architecture reviewer. Next review: measured result under the fixed profile.
+- **Physical-width contract conflict.** Only the secondary candidate changes AD-006's
+  original `i64` draw and the current joint meaning of `primitive_type`. Owner: AD-006 and
+  FR-015 maintainer. Next review: before any normative edit or physical-width code.
+- **Witness and identity confusion.** Even the primary candidate changes generated source
+  and must rekey its sealed harness record while keeping the eight-byte witness and
+  AD-003 semantic identity rules. Owner: CG identity reviewer. Next review: source and
+  decoder evidence before installed mutant playback.
