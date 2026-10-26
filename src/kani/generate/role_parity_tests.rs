@@ -84,9 +84,10 @@ fn clause_node_index_preserves_first_node_and_reuses_one_walk() {
         clause_test_node(1, "later"),
     ];
     let visits = Cell::new(0);
-    let index = ClauseNodeIndex::from_nodes(graph.iter().inspect(|_| {
-        visits.set(visits.get() + 1);
-    }));
+    let mut index = ClauseNodeIndex::new();
+    for node in graph.iter().inspect(|_| visits.set(visits.get() + 1)) {
+        index.insert(node);
+    }
     for _ in 0..3 {
         let Some(CheckedTerm::Literal { value: first, .. }) =
             index.node(&clause_test_id(1)).map(|node| &node.body)
