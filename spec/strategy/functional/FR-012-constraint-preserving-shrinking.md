@@ -50,10 +50,10 @@ populations of a selected V2 claim; FR-002-AC-4 itself stays verified by TC-004.
 
 | ID | Criteria | Verification |
 |----|----------|--------------|
-| FR-012-AC-1 | For every V2 comparison operator and every domain of 1 to 4 members from FR-009-AC-2, an exhaustive walk of every valid `simplify` and `complicate` path of `Satisfying`, `Violating`, and `Broad` value trees visits only in-domain candidates that keep their original tag; a valid path calls `complicate` only after at least one successful `simplify`. | Test (TC-021) |
-| FR-012-AC-2 | For 1,000 seeded `VersionUnchanged` value trees of each population over 0..=1000, every candidate on the greedy shrink path stays in domain and keeps its tag. | Test (TC-021) |
-| FR-012-AC-3 | A `Violating` V2 `VersionUnchanged` campaign whose comparison oracle is replaced by `post == pre || post == pre + 1` (so only `Violated` cases with post = pre + 1 mismatch) reports a minimal counterexample with post = pre + 1, both in 0..=1000, tagged `Violated`. | Test (TC-021) |
-| FR-012-AC-4 | After a shrinking campaign, `attempted` equals the number of oracle evaluations the runner performed, including shrink replays. | Test (TC-021) |
+| FR-012-AC-1 | PLANNED (IR-364). For every V2 comparison operator and every domain of 1 to 4 members from FR-009-AC-2, an exhaustive walk of every valid `simplify` and `complicate` path of `Satisfying`, `Violating`, and `Broad` value trees visits only in-domain candidates that keep their original tag; a valid path calls `complicate` only after at least one successful `simplify`. | Test (TC-021) |
+| FR-012-AC-2 | PLANNED (IR-364). For 1,000 seeded `VersionUnchanged` value trees of each population over 0..=1000, every candidate on the greedy shrink path stays in domain and keeps its tag. | Test (TC-021) |
+| FR-012-AC-3 | PLANNED (IR-364). A `Violating` V2 `VersionUnchanged` campaign whose comparison oracle is replaced by `post == pre || post == pre + 1` (so only `Violated` cases with post = pre + 1 mismatch) reports a minimal counterexample with post = pre + 1, both in 0..=1000, tagged `Violated`. | Test (TC-021) |
+| FR-012-AC-4 | PLANNED (IR-364). After a shrinking campaign, `attempted` equals the number of oracle evaluations the runner performed, including shrink replays. | Test (TC-021) |
 
 ## Dependencies
 

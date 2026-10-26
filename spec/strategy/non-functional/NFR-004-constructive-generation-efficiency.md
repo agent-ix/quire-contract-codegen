@@ -49,8 +49,8 @@ returning them as global rejects, remove that failure mode and make the discard 
 
 | ID | Criteria | Verification |
 |----|----------|--------------|
-| NFR-004-AC-1 | Fresh 10,000-case and 256-case campaigns of every population over the V2 selected claims `VersionUnchanged`, `amount < 7`, and a `Precondition` fixture record zero discards, zero proptest global rejects, and no `Exhausted` conclusion. | Test (TC-020) |
-| NFR-004-AC-2 | For every admitted fixture in TC-019, the in-domain census plus out-of-domain array holds at most 20 cases. | Test (TC-019) |
+| NFR-004-AC-1 | PLANNED (IR-364). Fresh 10,000-case and 256-case campaigns of every population over the V2 selected claims `VersionUnchanged`, `amount < 7`, and a `Precondition` fixture record zero discards, zero proptest global rejects, and no `Exhausted` conclusion. | Test (TC-020) |
+| NFR-004-AC-2 | PLANNED (IR-364). For every admitted fixture in TC-019, the in-domain census plus out-of-domain array holds at most 20 cases. | Test (TC-019) |
 
 ## Verification
 
