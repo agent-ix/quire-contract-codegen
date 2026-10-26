@@ -216,18 +216,19 @@ failure and IR-705/IR-844 qualification are not resolved by this amendment.
 
 ## Concrete playback execution (IR-917, planned)
 
-These controls qualify the public execution entry; TC-025 step 11 owns the
-installed-Kani `amount_current = 999` clause mutant and its arithmetic-assertion
-attribution.
+These controls qualify the public playback entry and its installed
+`amount_current = 999` execution; TC-025 step 11 owns the separate
+unconstrained clause proof, mutant Falsified verdict and in-domain witness.
 
 1. From a seal-validated generated V2 clause harness, append one parseable
    `#[test]` function immediately before its module's closing brace, outside
    the proof function, and name its exact libtest `module::function` path. Treat
    its attributes, signature, body and separators as one appended byte span;
-   removing only that span must restore the unique generated module bytes.
+   removing only that span must restore the unique full sealed rust artifact,
+   including its header, oracle source and generated module, byte for byte.
    Through the public
    `execute_kani_concrete_playback` entry, inspect the exact-selection
-   `kani playback --lib -Z concrete-playback -- <test_name> --exact --nocapture`
+   `kani playback --lib -Z function-contracts -Z concrete-playback -- <test_name> --exact --nocapture`
    launch. With a launcher stand-in that reports the named test as the sole
    pass, require `Completed { succeeded: true }`, the actual exit code,
    complete bounded stdout/stderr and observed memory; do not classify it as
@@ -239,7 +240,9 @@ attribution.
    the appended test, supply malformed Rust or a function whose name or module
    disagrees with `test_name`, alter the generated source beside the appended
    test, remove or make `src/lib.rs` unreadable, or place the test so removing
-   the exact inserted byte span does not restore one unique generated module.
+   the exact inserted byte span does not restore one unique full sealed rust
+   artifact. Also change the embedded oracle bytes outside the module while
+   retaining the appended test; require the same source refusal before launch.
    Each source case requires `ConcretePlaybackSourceMismatch` and zero backend
    calls (FR-017-AC-57).
 3. Let a stand-in exit successfully after running zero matching tests, name a
@@ -265,8 +268,15 @@ attribution.
    sole compatible summary in both; the mutant's test must execute the same
    sealed generated arithmetic assertion and identify its unique check message
    or source location. Retain bounded output and memory observations and prove
-   owned teardown after each run. Keep the mutant's separate unconstrained
-   Kani Falsified run and in-domain playback under FR-015-AC-41; neither this
+   owned teardown after each run. Inspect the installed command and require
+   `-Z function-contracts`, the option present in this harness's proof-time
+   `adapter_options`. In a separate diagnostic control over the same source
+   and selected test, omit only that flag and record the installed compiler or
+   playback result; this control cannot supply qualified playback evidence,
+   even if it succeeds on one Kani version. The public entry always carries
+   the proof option, as Kani's concrete-playback contract requires. Keep the
+   mutant's separate unconstrained Kani Falsified run and in-domain playback
+   under FR-015-AC-41; neither this
    native test nor a stand-in supplies that proof verdict (FR-017-AC-60).
 
 ## Expected Results

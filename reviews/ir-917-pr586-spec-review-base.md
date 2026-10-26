@@ -21,3 +21,9 @@ Independent Claude Opus 5.5 review of CG PR #586 at 322f78313264326b4e83918e7d81
 ## Verdict
 
 Not mergeable until the findings above are resolved in this PR.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | AC-58, interface-001 and Outputs now include memory on TimedOut and MemoryExhausted. |

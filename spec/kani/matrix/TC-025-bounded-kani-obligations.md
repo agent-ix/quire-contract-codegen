@@ -319,10 +319,12 @@ unsatisfiable requires as `cover_unsatisfied`.
     clause/postcondition check or cover does not satisfy this playback control.
     Compare the sealed generated harness source and body, its identity record,
     oracle bytes, clause identity and native expectation with the plus-one Kani
-    run; an appended playback-only test is outside the sealed harness. The
-    playback mechanism is not prescribed, but it must execute the generated
-    assertion, not a hand-restated check. Inspect the executed oracle call and
-    unchanged native expectation. A mutation confined
+    run. Append the playback-only test inside the generated module just before
+    its closing brace, outside the proof function; removing exactly its bytes
+    restores the unique full sealed rust artifact, including header and oracle
+    source, byte for byte. The playback mechanism is not prescribed, but it
+    must execute the generated assertion, not a hand-restated check. Inspect
+    the executed oracle call and unchanged native expectation. A mutation confined
     to a hand-written compiled subject or a probe in the harness does not
     satisfy this control (FR-015-AC-40, FR-015-AC-41).
     The package comes from QSL's facade on source, never a copied fixture
