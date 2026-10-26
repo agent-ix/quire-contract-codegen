@@ -81,8 +81,7 @@ pub struct KaniConcretePlayback<'a> {
 }
 
 /// The bounded native execution of one concrete Kani playback test. A successful
-/// process is evidence only when the caller also observes its exact test name in
-/// `stdout`; libtest may exit successfully after running zero matching tests.
+/// process is returned only after libtest reports that exact test passed.
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum KaniConcretePlaybackOutcome {
@@ -165,6 +164,12 @@ pub enum KaniExecutionRefusal {
         /// The generated artifact path whose bytes must be preserved.
         harness_path: String,
     },
+    /// Libtest exited successfully without reporting the requested exact test
+    /// as its one passing test. A zero-match run is not playback evidence.
+    ConcretePlaybackTestNotObserved {
+        /// The exact libtest path that was requested.
+        test_name: String,
+    },
     /// The run exported a Kani report this crate cannot read exactly. The run proved nothing
     /// and decided nothing; the refusal is never an outcome.
     Report(KaniReportRefusal),
@@ -219,6 +224,7 @@ impl KaniExecutionRefusal {
             | Self::HarnessNotInCrate { .. }
             | Self::HarnessProvenanceMismatch { .. }
             | Self::ConcretePlaybackSourceMismatch { .. }
+            | Self::ConcretePlaybackTestNotObserved { .. }
             | Self::Report(_)
             | Self::BatchTimedOut { .. }
             | Self::MemoryMechanismUnavailable { .. }
@@ -263,6 +269,10 @@ impl fmt::Display for KaniExecutionRefusal {
             Self::ConcretePlaybackSourceMismatch { harness_path } => write!(
                 formatter,
                 "the declared concrete playback test does not preserve {harness_path}"
+            ),
+            Self::ConcretePlaybackTestNotObserved { test_name } => write!(
+                formatter,
+                "concrete playback did not report {test_name} as its one passing test"
             ),
             Self::Report(refusal) => write!(formatter, "{refusal}"),
             Self::OutputOverLimit {
@@ -455,6 +465,7 @@ pub fn execute_kani_concrete_playback(
     let mut command = super::namespace::BackendCommand::new(&request.installation.launcher);
     command
         .args(&arguments)
+        .env("CARGO_TERM_COLOR", "never")
         .env("CARGO_TARGET_DIR", request.target_directory)
         .current_dir(request.crate_directory);
     let launch = start(
@@ -469,19 +480,40 @@ pub fn execute_kani_concrete_playback(
             exited_successfully,
             exit_code,
             streams,
-        } => Ok(KaniConcretePlaybackOutcome::Completed {
-            succeeded: exited_successfully,
-            exit_code,
-            stdout: streams.stdout,
-            stderr: streams.stderr,
-            memory,
-        }),
+        } => {
+            if exited_successfully && !playback_test_passed(&streams.stdout, playback.test_name) {
+                return Err(KaniExecutionRefusal::ConcretePlaybackTestNotObserved {
+                    test_name: playback.test_name.to_owned(),
+                });
+            }
+            Ok(KaniConcretePlaybackOutcome::Completed {
+                succeeded: exited_successfully,
+                exit_code,
+                stdout: streams.stdout,
+                stderr: streams.stderr,
+                memory,
+            })
+        }
         Concluded::TimedOut => Ok(KaniConcretePlaybackOutcome::TimedOut { memory }),
         Concluded::Cancelled { source } => {
             Ok(KaniConcretePlaybackOutcome::Cancelled { source, memory })
         }
         Concluded::MemoryExhausted => Ok(KaniConcretePlaybackOutcome::MemoryExhausted { memory }),
     }
+}
+
+/// Libtest must name the exact selected test and report one pass. Its exit
+/// status alone also describes a successful run with zero matching tests.
+fn playback_test_passed(stdout: &[u8], test_name: &str) -> bool {
+    let Ok(stdout) = std::str::from_utf8(stdout) else {
+        return false;
+    };
+    stdout
+        .lines()
+        .any(|line| line == format!("test {test_name} ... ok"))
+        && stdout
+            .lines()
+            .any(|line| line.starts_with("test result: ok. 1 passed; 0 failed;"))
 }
 
 /// Accept only one declared unit test appended at the generated module's
@@ -2103,6 +2135,124 @@ wait
             Err(KaniExecutionRefusal::ConcretePlaybackSourceMismatch { .. })
         ));
         assert!(wrong_name.calls().is_empty());
+
+        let wrong_module = KaniConcretePlayback {
+            test_name: "other::playback_999",
+            appended_test: playback.appended_test,
+        };
+        let wrong_module_run = running("playback-wrong-module", "exit 0");
+        assert!(matches!(
+            execute_kani_concrete_playback(
+                &wrong_module_run.request(&harness, timeout),
+                &wrong_module
+            ),
+            Err(KaniExecutionRefusal::ConcretePlaybackSourceMismatch { .. })
+        ));
+        assert!(wrong_module_run.calls().is_empty());
+
+        for (name, appended_test) in [
+            ("playback-malformed", "#[test]\nfn playback_999("),
+            ("playback-no-attribute", "fn playback_999() {}\n"),
+            (
+                "playback-two-attributes",
+                "#[test]\n#[test]\nfn playback_999() {}\n",
+            ),
+        ] {
+            let stand_in = running(name, "exit 0");
+            fs::write(
+                stand_in.crate_directory.join("src/lib.rs"),
+                source.replacen(playback.appended_test, appended_test, 1),
+            )
+            .unwrap();
+            let invalid = KaniConcretePlayback {
+                test_name: playback.test_name,
+                appended_test,
+            };
+            assert!(matches!(
+                execute_kani_concrete_playback(&stand_in.request(&harness, timeout), &invalid),
+                Err(KaniExecutionRefusal::ConcretePlaybackSourceMismatch { .. })
+            ));
+            assert!(stand_in.calls().is_empty(), "{name}: no launcher start");
+        }
+
+        let altered = running("playback-altered-proof", "exit 0");
+        fs::write(
+            altered.crate_directory.join("src/lib.rs"),
+            source.replacen("fn check() {}", "fn check() { panic!() }", 1),
+        )
+        .unwrap();
+        assert!(matches!(
+            execute_kani_concrete_playback(&altered.request(&harness, timeout), &playback),
+            Err(KaniExecutionRefusal::ConcretePlaybackSourceMismatch { .. })
+        ));
+        assert!(altered.calls().is_empty());
+
+        let identity = crate::kani::identity::V2ClauseObligationIdentity {
+            integer_representation: crate::kani::identity::ScalarIntegerRepresentation::General,
+            native_integer_selection: None,
+            ceilings: harness.identity.ceilings,
+            package: quire_contract_model::CheckedSemanticId {
+                domain: "quire.test-package/v1".into(),
+                algorithm: "sha256".into(),
+                digest: "0".repeat(64).into(),
+            },
+            clause: harness.identity.clause.clone(),
+            kind: ObligationKind::Postcondition,
+            oracle_symbol: "oracle_clause".to_owned(),
+            subject_path: "crate::subject::check".to_owned(),
+            arguments: Vec::new(),
+            module_symbol: harness.identity.module_symbol.clone(),
+            harness_symbol: harness.identity.harness_symbol.clone(),
+            solver: KaniSolver::Cadical,
+            unwind: harness.identity.unwind,
+            options: harness.identity.options.clone(),
+        };
+        let mut invalid_provenance =
+            crate::kani::identity::KaniV2ClauseObligationHarness::generated(
+                identity,
+                harness.rust.clone(),
+                harness.record.clone(),
+            );
+        invalid_provenance.record.contents.push('x');
+        let invalid_run = running("playback-invalid-provenance", "exit 0");
+        assert!(matches!(
+            execute_kani_concrete_playback(
+                &KaniExecutionRequest {
+                    cancel: &invalid_run.cancel,
+                    installation: &invalid_run.installation,
+                    harness: (&invalid_provenance).into(),
+                    crate_directory: &invalid_run.crate_directory,
+                    target_directory: &invalid_run.target_directory,
+                    home_directory: None,
+                },
+                &playback,
+            ),
+            Err(KaniExecutionRefusal::HarnessProvenanceMismatch { .. })
+        ));
+        assert!(invalid_run.calls().is_empty());
+
+        let zero = running(
+            "playback-zero-tests",
+            "printf 'running 0 tests\\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out\\n'",
+        );
+        assert!(matches!(
+            execute_kani_concrete_playback(&zero.request(&harness, timeout), &playback),
+            Err(KaniExecutionRefusal::ConcretePlaybackTestNotObserved { .. })
+        ));
+        assert_eq!(zero.calls().len(), 1);
+
+        let passed = running(
+            "playback-one-test",
+            "printf 'test playback::playback_999 ... ok\\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out\\n'",
+        );
+        assert!(matches!(
+            execute_kani_concrete_playback(&passed.request(&harness, timeout), &playback),
+            Ok(KaniConcretePlaybackOutcome::Completed {
+                succeeded: true,
+                ..
+            })
+        ));
+        assert_eq!(passed.calls().len(), 1);
 
         let body = "printf '%s' \"$(readlink /proc/self/ns/pid)\" > \"$CALLS.namespace\"\nsleep 45 &\nprintf '%s' \"$!\" > \"$CALLS.child\"\nwait";
         let timed = running("playback-timeout", body);
