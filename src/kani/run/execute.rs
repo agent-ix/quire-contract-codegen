@@ -466,6 +466,8 @@ pub fn execute_kani_concrete_playback(
         "playback",
         "--lib",
         "-Z",
+        "function-contracts",
+        "-Z",
         "concrete-playback",
         "--",
         playback.test_name,
@@ -2115,7 +2117,7 @@ wait
         let timeout = Duration::from_secs(2);
         let mut harness = memory_member("playback", 128 * 1024 * 1024);
         harness.identity.ceilings.wall_clock = timeout;
-        harness.rust.contents = "mod playback {\nfn check() {}\n}\n".to_owned();
+        harness.rust.contents = "// generated header\nmod playback {\nfn oracle_clause() -> bool { true }\nfn check() {}\n}\n".to_owned();
         let identity = crate::kani::identity::V2ClauseObligationIdentity {
             integer_representation: crate::kani::identity::ScalarIntegerRepresentation::General,
             native_integer_selection: None,
@@ -2146,7 +2148,7 @@ wait
             appended_test: "#[test]\nfn playback_999() {}\n",
         };
         let source = format!(
-            "mod playback {{\nfn check() {{}}\n{}}}\n",
+            "// generated header\nmod playback {{\nfn oracle_clause() -> bool {{ true }}\nfn check() {{}}\n{}}}\n",
             playback.appended_test
         );
         let running = |name, body| {
@@ -2263,6 +2265,34 @@ wait
         ));
         assert!(altered.calls().is_empty());
 
+        for (name, before, after) in [
+            (
+                "playback-altered-header",
+                "// generated header",
+                "// changed header",
+            ),
+            (
+                "playback-altered-oracle",
+                "fn oracle_clause() -> bool { true }",
+                "fn oracle_clause() -> bool { false }",
+            ),
+        ] {
+            let stand_in = running(name, "exit 0");
+            fs::write(
+                stand_in.crate_directory.join("src/lib.rs"),
+                source.replacen(before, after, 1),
+            )
+            .unwrap();
+            assert!(matches!(
+                execute_kani_concrete_playback(
+                    &stand_in.v2_playback_request(&v2_harness, timeout),
+                    &playback
+                ),
+                Err(KaniExecutionRefusal::ConcretePlaybackSourceMismatch { .. })
+            ));
+            assert!(stand_in.calls().is_empty(), "{name}: no launcher start");
+        }
+
         let mut invalid_provenance =
             crate::kani::identity::KaniV2ClauseObligationHarness::generated(
                 v2_harness.identity.clone(),
@@ -2351,6 +2381,8 @@ wait
                 "kani",
                 "playback",
                 "--lib",
+                "-Z",
+                "function-contracts",
                 "-Z",
                 "concrete-playback",
                 "--",
