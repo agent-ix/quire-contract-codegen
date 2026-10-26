@@ -88,3 +88,41 @@ Gate evidence at `69983f71`, reviewer-run in the worktree's own `target/`, `RUST
 - `cargo test --locked --lib -- core::ir:: kani::generate::frame:: replay::state_clause::`: 7/7 passed.
 
 The aggregate gate and Kani were not run.
+
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-008 | high | Round 1 missed a guard-test regression. The FND-002/FND-004 repair (`69983f71`, rebased as `2bc861c3`) added a second `package.graph().nodes` walk in `ClauseGraphView::new` to build `kinds`, next to `ClauseNodeIndex::from_nodes(package.graph().nodes.iter())`. The existing lib test `kani::generate::role_parity_tests::clause_planning_and_reading_share_one_graph_walk` requires exactly one `.graph()` in `oracle/clause.rs` plus `core/ir/clause.rs`, and it found 2 at `8801b7d3` and at `728d2ca0`. Round 1's focused filters did not include `kani::generate::role_parity_tests`. This is the guard for the reused clause view that FR-014-AC-38 oracle planning and reading share. | src/core/ir/clause.rs:77-88; src/kani/generate/role_parity_tests.rs:120-128 |
+| FND-009 | low | `reviews/ir-348-pr569-code-review.md` and `reviews/ir-348-pr569-gap-analysis.md` (added in `2bc861c3`) are stale review-pass copies. They reuse ids SR-35025 and SR-35026 and have no `## Dispositions`, while `reviews/SR-35025-…`/`SR-35026-…` (added in `728d2ca0`) hold the current records. That leaves two artifacts per id in the repo, and the copies disagree. Per-file `quire validate` passes, so nothing catches it. Delete the two unprefixed copies. | reviews/ir-348-pr569-code-review.md:1-61; reviews/ir-348-pr569-gap-analysis.md:1-36 |
+
+### Round 2 — exact `613ec9f4a6bbadf6ee1cefbc6fac993803af44d2` (fix diff `728d2ca0..613ec9f4`)
+
+The reviewer checked that `8801b7d3..728d2ca0` is patch-identical (`git range-diff`: all three commits `=`) and that `origin/main` `9196cbe4` is an ancestor of the head. The fix touches only `src/core/ir/clause.rs` and `src/kani/generate/role_parity_tests.rs`.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-007 | rejected: unreachable for any admitted package | The `quire-contract-model` checkout CG resolves (`a98e63a`) builds `CheckedPackageV2` in `checked_package/v2/mod.rs`. It refuses a repeated `node_id` (`if index.insert(&node.node_id, position).is_some() { return Err(refuse(InvalidSemanticGraph, …)) }`) and pushes exactly one `CheckedNodeKind` per node in graph order. Ids are unique, so first-wins and last-wins agree, and `node()`, `kind()` and `term()` all describe the same node. |
+| FND-008 | fixed | - |
+
+FND-008 after_excerpt (`src/core/ir/clause.rs:77-88`):
+
+```rust
+pub(crate) fn new(package: &'a CheckedPackageV2) -> Self {
+    let mut index = ClauseNodeIndex::new();
+    let mut kinds = BTreeMap::new();
+    for (node, kind) in package.graph().nodes.iter().zip(package.node_kinds()) {
+        index.insert(node);
+        kinds.entry(&node.node_id).or_insert(*kind);
+    }
+    Self { package, index, kinds }
+}
+```
+
+FND-008 behavior check. Before the fix, `index` covered every node and `kinds` covered the zip prefix. Now both cover the zip prefix. That is equivalent because admission makes `node_kinds().len() == graph().nodes.len()`. First-wins is kept by `ClauseNodeIndex::insert` (`entry().or_insert`). `from_nodes` had no other callers (`grep`). The `CollectionNodeIndex::from_nodes` and `FunctionPreflightGraph::from_nodes` functions are separate types and were not touched. The unit test `clause_node_index_preserves_first_node_and_reuses_one_walk` still counts one visit per node through the new `new()`/`insert` API and still asserts that the first node wins. `clause_planning_and_reading_share_one_graph_walk` now counts 1 and passes. It also checks that the descriptor derived from the shared view equals the one from `derive_v2_clause_descriptor` and that a non-clause node refuses with `NotClause`, so FR-014-AC-38's clause-identified descriptor path is unchanged. Rust idiom: no new `pub` items, no panic paths, and clippy is clean. The source-text count guard is weak, but it predates this PR and is out of scope here.
+
+FND-009 is new in this round and has no outcome yet. It is routed to the code lead. The trailing artifact commit, which must also copy this updated file into `reviews/`, can delete both stale copies.
+
+Gate evidence at `613ec9f4`, reviewer-run in the worktree's own `target/`: `cargo test --locked --lib -- kani::generate::role_parity_tests core::ir::` gave 6 passed, 0 failed. The code lead's brief reports fmt and clippy (`--lib --tests -D warnings`) clean at this head; the reviewer did not re-run them. The aggregate gate and Kani were not run.
+
+Unrelated full-gate failure: the code lead reports that `make ci` also failed a namespace-cleanup timing test under host load. The PR diff (`git diff --name-only origin/main...HEAD`) touches nothing under `src/kani/run/` (namespace, process, launch, memory) or `tests/`. The only `namespace` text in a changed file is the unrelated `revision_namespace` label field in `replay/state_clause.rs`. Judged from the diff alone, without a re-run, that failure is not caused by this PR.
