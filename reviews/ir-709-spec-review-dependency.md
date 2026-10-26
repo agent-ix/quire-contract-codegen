@@ -111,3 +111,12 @@ The PR redefines `GeneratedUnexpectedOutcome` as 'a completed value the declared
 | --- | --- | --- | --- |
 | FND-001 | medium | The 'admitted QSV environment' for the unexpected-outcome check also needs owner nominal declarations for nominal result types, yet only the environment leg is marked QSL-1105-blocked | spec/oracle/functional/FR-042-generated-checked-invariant-causes.md:44 |
 | FND-002 | low | FR-369 trigger-row and quire-exact rustdoc alignment for GeneratedUnexpectedOutcome has no owning ticket | spec/oracle/functional/FR-042-generated-checked-invariant-causes.md:51 |
+
+## Dispositions
+
+Round 1, checked against fix commit `9cc1a3e3` (exact head `9cc1a3e3b46cc4f2c99058e6cb9372a5accc9421`), full diff from base `28e46843`. Every outcome was verified against the pushed text, not taken from the ticket or brief.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |
+| FND-002 | fixed | IR-1021 verified in Linear (Backlog) with a blocks edge to IR-709. |

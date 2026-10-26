@@ -32,9 +32,15 @@ AC-40 in IR-709's generated producer migration.
    `Err(InternalFault)`. Run the unmutated Boolean body
    and separate `Undefined`, `Refused` and `Incomplete` controls; assert that
    only the wrong completed value changes cause and that admitted charges are
-   unchanged. Probe QSV `admits` reservation failure and assert it is never
-   `GeneratedUnexpectedOutcome` or `Completed`; its exact typed leaf mapping
-   remains blocked on the owner body-resource channel. Nominal result values
+   unchanged. Inspect the generated `admits` result match and the public QSV
+   API to verify that an `Err(EnvironmentFailure)` cannot enter the
+   `Ok(false)` cause arm. After QSL-1107 supplies a public reservation-control
+   seam for this exact body-side call, run an allocation/capacity stop through
+   the unchanged `admits` call and assert it is neither
+   `GeneratedUnexpectedOutcome` nor `Completed`, with the owner-defined typed
+   leaf result. This executable storage control remains PLANNED; the current
+   public QSV API cannot inject its private `GlobalReservations` policy.
+   Nominal result values
    also wait for QSL-1105; this Boolean control does not claim nominal coverage.
 3. Once QSL-1105 exposes the selected owner's record/tuple members, use a
    checker-admitted source with real nominal declarations to exercise the
@@ -49,10 +55,15 @@ AC-40 in IR-709's generated producer migration.
    `EnvironmentFailure::Refused(InvalidDeclaration)` and maps to
    `GeneratedEnvironmentRejected`, with the original typed diagnostic,
    declaration occurrence location and zero body operation/charge. A
-   successful construction shall not produce this cause. Exercise
-   `Limit(WorkUnits)` with the cancel handle both tripped and untripped,
-   plus `Allocation` and `Capacity`; none may map to a checked-invariant
-   refusal. Their exact typed leaf mapping remains blocked on QSL-1107.
+   successful construction shall not produce this cause. Exercise the public
+   `Limit(WorkUnits)` control with the cancel handle both tripped and
+   untripped. Inspect the emitted match and public QSV API to confirm that
+   `Allocation` and `Capacity` are separate arms and cannot map to a
+   checked-invariant refusal. After QSL-1107 supplies a public
+   reservation-control seam for this exact constructor, execute both storage
+   failures through the unchanged constructor and assert the owner-defined
+   typed leaf result. Those executable storage controls remain PLANNED;
+   current public QSV constructors use private `GlobalReservations`.
    No invented declaration, empty default environment, injected constructor
    error or production test hook counts. The healthy source shall retain the
    same checked owner declaration set and succeed.

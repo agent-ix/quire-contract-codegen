@@ -103,3 +103,11 @@ quire-eval `Body::resume` returns `Result<Transition, InternalFault>`, and its d
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | medium | Wrong-result producer is specified as Outcome::Refused without reconciling quire-eval's Body contract, which reports a body's own broken invariant as Err(InternalFault) | spec/oracle/functional/FR-021-function-application-oracles.md:335-345 |
+
+## Dispositions
+
+Round 1, checked against fix commit `9cc1a3e3` (exact head `9cc1a3e3b46cc4f2c99058e6cb9372a5accc9421`), full diff from base `28e46843`. Every outcome was verified against the pushed text, not taken from the ticket or brief.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |

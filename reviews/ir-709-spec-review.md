@@ -150,3 +150,12 @@ A generated body from checked source cannot complete with a value its own signat
 | --- | --- | --- | --- |
 | FND-001 | high | A genuine declaration rejection from a checker-admitted source's exact owner declarations appears unreachable, so AC-39/FR-042-AC-3 and hence FR-042-AC-1 may never pass | spec/oracle/functional/FR-021-function-application-oracles.md:402 |
 | FND-002 | medium | 'Reachable test mutation of its generated body' is undefined and sits against the 'fabricated failure gives no credit' exclusion | spec/oracle/functional/FR-021-function-application-oracles.md:401 |
+
+## Dispositions
+
+Round 1, checked against fix commit `9cc1a3e3` (exact head `9cc1a3e3b46cc4f2c99058e6cb9372a5accc9421`), full diff from base `28e46843`. Every outcome was verified against the pushed text, not taken from the ticket or brief.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Owner-accepted trigger verified on QSV origin/main 0a365db: TypeEnvironment prepare refuses a resubmitted composite key with EnvironmentFailure::Refused(InvalidDeclaration{cause: DuplicateKey}) (src/declaration.rs:2310-2311, test at :415-419). |
+| FND-002 | fixed | - |

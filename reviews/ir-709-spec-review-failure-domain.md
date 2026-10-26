@@ -98,3 +98,24 @@ The AC and the Behavior bullet say only that limit, cancellation and resource fa
 | --- | --- | --- | --- |
 | FND-001 | medium | No disposition for admits() returning Err(EnvironmentFailure) on the completed-result check | spec/oracle/functional/FR-021-function-application-oracles.md:335-345 |
 | FND-002 | medium | 'Resource exhaustion and cancellation keep their distinct typed failures' names no target, and QSV reports cancellation as a WorkUnits limit | spec/oracle/functional/FR-021-function-application-oracles.md:402 |
+
+## New findings (disposition pass 1)
+
+Checked at head `9cc1a3e3b46cc4f2c99058e6cb9372a5accc9421`.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | medium | TC-057 requires Allocation, Capacity and admits-reservation-failure controls that no public QSV API can produce without injection | spec/oracle/matrix/TC-057-generated-checked-invariant-causes.md:35-37, 52-55 |
+
+### FND-003 (medium, confidence high, untestable-ac): TC-057-step-3
+
+TC-057 step 2 says 'Probe QSV `admits` reservation failure', and step 3 says 'Exercise `Limit(WorkUnits)` ... plus `Allocation` and `Capacity`'. On QSV origin/main 0a365db, `TypeEnvironment::admits` and `new`/`bounded`/`bounded_with_cancel` always use the private `GlobalReservations` policy. `bounded_with_reservations` and `admits_checked` are not public. The only public reservation-injection entry point is `admit_supplied_with_reservation`, which is supplied-argument admission, not either call this TC names. So `Allocation` and `Capacity` arise only from genuine allocator denial or size overflow. The steps therefore cannot be run without an injection hook, which is the kind of 'injected constructor error' the same TC forbids, or without CG entering QSV internals. `Limit(WorkUnits)`, tripped or untripped, is reachable through `TypeEnvironmentLimits` and `Cancel`. Fix: scope the storage controls to an owner-provided public injection seam (add it to QSL-1107 or a QSV ticket), or mark them inspection-only until one exists.
+
+## Dispositions
+
+Round 1, checked against fix commit `9cc1a3e3` (exact head `9cc1a3e3b46cc4f2c99058e6cb9372a5accc9421`), full diff from base `28e46843`. Every outcome was verified against the pushed text, not taken from the ticket or brief.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Non-conflation is now normative; exact leaf mapping is explicitly PLANNED on filed blocker QSL-1107 (Linear: blocks IR-709). |
+| FND-002 | fixed | - |

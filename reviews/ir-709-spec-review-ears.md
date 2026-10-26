@@ -86,3 +86,11 @@ FR-021's two new Behavior bullets follow the event-driven pattern: 'When an emit
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | low | Two FR-042 SHALL clauses make the input, not the system, the subject | spec/oracle/functional/FR-042-generated-checked-invariant-causes.md:27-37 |
+
+## Dispositions
+
+Round 1, checked against fix commit `9cc1a3e3` (exact head `9cc1a3e3b46cc4f2c99058e6cb9372a5accc9421`), full diff from base `28e46843`. Every outcome was verified against the pushed text, not taken from the ticket or brief.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |

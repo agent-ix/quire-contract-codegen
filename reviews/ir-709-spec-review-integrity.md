@@ -123,3 +123,12 @@ One AC row asserts the wrong-result refusal, charge preservation, the unmutated 
 | --- | --- | --- | --- |
 | FND-001 | medium | New FR-021-AC-38/39 and FR-042-AC-2/3 are absent from TC-057's frontmatter/description, TC-031 and the matrix index | spec/oracle/matrix/TC-057-generated-checked-invariant-causes.md:1-13 |
 | FND-002 | low | FR-021-AC-38 bundles mutated, unmutated, three outcome-arm controls and result-type provenance in one AC | spec/oracle/functional/FR-021-function-application-oracles.md:401 |
+
+## Dispositions
+
+Round 1, checked against fix commit `9cc1a3e3` (exact head `9cc1a3e3b46cc4f2c99058e6cb9372a5accc9421`), full diff from base `28e46843`. Every outcome was verified against the pushed text, not taken from the ticket or brief.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |
+| FND-002 | fixed | - |
