@@ -18,7 +18,7 @@ use crate::{
         },
         identity::{
             KaniV2ClauseObligationHarness, ObligationKind, ScalarObligationArgument,
-            V2ClauseObligationIdentity,
+            V2ClauseObligationIdentity, V2SymbolicEncodingPolicy,
         },
     },
     oracle::clause::{
@@ -140,21 +140,38 @@ pub(in crate::kani::generate) fn render_clause(
     };
     let minimum = i64::try_from(input.lower).map_err(|_| UnsupportedObligation::RenderFailed)?;
     let maximum = i64::try_from(input.upper).map_err(|_| UnsupportedObligation::RenderFailed)?;
+    let symbolic_encoding_policy = symbolic_encoding_policy(minimum, maximum);
+    let semantic_input =
+        if symbolic_encoding_policy == V2SymbolicEncodingPolicy::PostAssumptionU16RebindV1 {
+            format!("{}_rebound", input.name)
+        } else {
+            input.name.clone()
+        };
+    let mut input_bindings = Vec::new();
+    if symbolic_encoding_policy == V2SymbolicEncodingPolicy::PostAssumptionU16RebindV1 {
+        input_bindings.push(LetBinding {
+            name: semantic_input.clone(),
+            ty: None,
+            mutable: false,
+            init: Init::Expression(expression(format!("i64::from({} as u16)", input.name))?),
+        });
+    }
+    input_bindings.push(LetBinding {
+        name: input.name.clone(),
+        ty: None,
+        mutable: false,
+        init: Init::Expression(expression(if lowered.native_integer {
+            format!("nx::NativeInteger::new(i128::from({semantic_input}))")
+        } else {
+            format!("rt::Integer::from({semantic_input})")
+        })?),
+    });
     let body = vec![
         Statement::Input {
             name: input.name.clone(),
             ty: KaniPrimitiveType::I64,
             domain: (input.lower, input.upper),
-            then: vec![LetBinding {
-                name: input.name.clone(),
-                ty: None,
-                mutable: false,
-                init: Init::Expression(ExprText::new(if lowered.native_integer {
-                    format!("nx::NativeInteger::new(i128::from({}))", input.name)
-                } else {
-                    format!("rt::Integer::from({})", input.name)
-                })?),
-            }],
+            then: input_bindings,
         },
         Statement::Let(LetBinding {
             name: "meter".to_owned(),
@@ -191,6 +208,7 @@ pub(in crate::kani::generate) fn render_clause(
     )?;
     let rust = render::render(&spec)?;
     let identity = V2ClauseObligationIdentity {
+        symbolic_encoding_policy,
         integer_representation: if lowered.native_integer {
             crate::kani::identity::ScalarIntegerRepresentation::Native
         } else {
@@ -222,6 +240,38 @@ pub(in crate::kani::generate) fn render_clause(
 
 fn expression(text: impl Into<String>) -> Result<ExprText, UnsupportedObligation> {
     ExprText::new(text).map_err(Into::into)
+}
+
+fn symbolic_encoding_policy(minimum: i64, maximum: i64) -> V2SymbolicEncodingPolicy {
+    if minimum >= 0 && maximum <= i64::from(u16::MAX) {
+        V2SymbolicEncodingPolicy::PostAssumptionU16RebindV1
+    } else {
+        V2SymbolicEncodingPolicy::OriginalI64V1
+    }
+}
+
+#[cfg(test)]
+mod symbolic_encoding_tests {
+    use super::{symbolic_encoding_policy, V2SymbolicEncodingPolicy};
+    use ix_trace_rs::trace;
+
+    /// The carrier rebind is selected by both checked endpoints, including its exact edges.
+    #[trace("FR-015-AC-39", "FR-015-AC-47", "TC-025")]
+    #[test]
+    fn checked_domain_selects_the_versioned_encoding() {
+        use V2SymbolicEncodingPolicy::{OriginalI64V1, PostAssumptionU16RebindV1};
+        assert_eq!(symbolic_encoding_policy(0, 0), PostAssumptionU16RebindV1);
+        assert_eq!(
+            symbolic_encoding_policy(0, i64::from(u16::MAX)),
+            PostAssumptionU16RebindV1
+        );
+        assert_eq!(symbolic_encoding_policy(-1, 1000), OriginalI64V1);
+        assert_eq!(
+            symbolic_encoding_policy(0, i64::from(u16::MAX) + 1),
+            OriginalI64V1
+        );
+        assert_eq!(symbolic_encoding_policy(i64::MIN, i64::MAX), OriginalI64V1);
+    }
 }
 
 fn binding(name: &str, init: Init, mutable: bool) -> Statement {
@@ -272,21 +322,32 @@ fn render_postcondition(
         .ok_or(UnsupportedObligation::RenderFailed)?;
     let minimum = i64::try_from(input.lower).map_err(|_| UnsupportedObligation::RenderFailed)?;
     let maximum = i64::try_from(input.upper).map_err(|_| UnsupportedObligation::RenderFailed)?;
+    let symbolic_encoding_policy = symbolic_encoding_policy(minimum, maximum);
+    let mut input_bindings = Vec::new();
+    if symbolic_encoding_policy == V2SymbolicEncodingPolicy::PostAssumptionU16RebindV1 {
+        input_bindings.push(LetBinding {
+            name: symbolic.to_owned(),
+            ty: None,
+            mutable: false,
+            init: Init::Expression(expression(format!("i64::from({symbolic} as u16)"))?),
+        });
+    }
+    input_bindings.push(LetBinding {
+        name: input.name.clone(),
+        ty: None,
+        mutable: false,
+        init: Init::Expression(expression(if lowered.native_integer {
+            format!("nx::NativeInteger::new(i128::from({symbolic}))")
+        } else {
+            format!("rt::Integer::from({symbolic})")
+        })?),
+    });
     let mut body = vec![
         Statement::Input {
             name: symbolic.to_owned(),
             ty: KaniPrimitiveType::I64,
             domain: (input.lower, input.upper),
-            then: vec![LetBinding {
-                name: input.name.clone(),
-                ty: None,
-                mutable: false,
-                init: Init::Expression(expression(if lowered.native_integer {
-                    format!("nx::NativeInteger::new(i128::from({symbolic}))")
-                } else {
-                    format!("rt::Integer::from({symbolic})")
-                })?),
-            }],
+            then: input_bindings,
         },
         binding(
             "expected",
@@ -476,6 +537,7 @@ fn render_postcondition(
     )?;
     let rust = render::render(&spec)?;
     let identity = V2ClauseObligationIdentity {
+        symbolic_encoding_policy,
         integer_representation: if lowered.native_integer {
             crate::kani::identity::ScalarIntegerRepresentation::Native
         } else {

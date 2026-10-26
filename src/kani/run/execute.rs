@@ -2119,6 +2119,8 @@ wait
         harness.identity.ceilings.wall_clock = timeout;
         harness.rust.contents = "// generated header\nmod playback {\nfn oracle_clause() -> bool { true }\nfn check() {}\n}\n".to_owned();
         let identity = crate::kani::identity::V2ClauseObligationIdentity {
+            symbolic_encoding_policy:
+                crate::kani::identity::V2SymbolicEncodingPolicy::OriginalI64V1,
             integer_representation: crate::kani::identity::ScalarIntegerRepresentation::General,
             native_integer_selection: None,
             ceilings: harness.identity.ceilings,
@@ -2327,6 +2329,25 @@ wait
                     cancel: &invalid_run.cancel,
                     installation: &invalid_run.installation,
                     harness: (&invalid_provenance).into(),
+                    crate_directory: &invalid_run.crate_directory,
+                    target_directory: &invalid_run.target_directory,
+                    home_directory: None,
+                },
+                &playback,
+            ),
+            Err(KaniExecutionRefusal::HarnessProvenanceMismatch { .. })
+        ));
+        assert!(invalid_run.calls().is_empty());
+
+        let mut invalid_policy = v2_harness.clone();
+        invalid_policy.identity.symbolic_encoding_policy =
+            crate::kani::identity::V2SymbolicEncodingPolicy::PostAssumptionU16RebindV1;
+        assert!(matches!(
+            execute_kani_concrete_playback(
+                &KaniExecutionRequest {
+                    cancel: &invalid_run.cancel,
+                    installation: &invalid_run.installation,
+                    harness: (&invalid_policy).into(),
                     crate_directory: &invalid_run.crate_directory,
                     target_directory: &invalid_run.target_directory,
                     home_directory: None,

@@ -61,7 +61,7 @@ use quire_contract_codegen::{
     ScopeMember, StateComparison, StateFieldDomain, StateFrameHarness, StateFrameIdentity,
     StateFrameLoweringRefusal, StateFrameObligations, StateFrameProperty, StateFrameRefusal,
     StateFrameRequest, StateFrameRole, UnsupportedFrameEffect, UnsupportedObligation,
-    MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
+    V2SymbolicEncodingPolicy, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
 };
 use quire_contract_codegen::{HarnessSymbol, StateFrameRecordError};
 use quire_contract_model::{
@@ -485,6 +485,17 @@ fn native_v2_precondition_keeps_original_parameter_bounds_and_ordering() {
     assert_eq!(harness.identity.arguments[0].minimum, 0);
     assert_eq!(harness.identity.arguments[0].maximum, 1000);
     assert_eq!(
+        harness.identity.symbolic_encoding_policy,
+        V2SymbolicEncodingPolicy::PostAssumptionU16RebindV1
+    );
+    assert!(harness.rust.contents.contains(
+        "kani::assume(parameter_other >= 0_i64 && parameter_other <= 1000_i64);\nlet parameter_other_rebound = i64::from(parameter_other as u16);"
+    ));
+    assert!(harness
+        .rust
+        .contents
+        .contains("nx::NativeInteger::new(i128::from(parameter_other_rebound))"));
+    assert_eq!(
         harness.identity.integer_representation,
         quire_contract_codegen::ScalarIntegerRepresentation::Native
     );
@@ -590,6 +601,10 @@ fn qsl_v2_implication_harness_embeds_its_clause_oracle_and_checks_native_arithme
     assert_eq!(harness.identity.arguments.len(), 1);
     assert_eq!(harness.identity.arguments[0].identifier, "amount_current");
     assert_eq!(
+        harness.identity.symbolic_encoding_policy,
+        V2SymbolicEncodingPolicy::PostAssumptionU16RebindV1
+    );
+    assert_eq!(
         (
             harness.identity.arguments[0].minimum,
             harness.identity.arguments[0].maximum
@@ -598,6 +613,25 @@ fn qsl_v2_implication_harness_embeds_its_clause_oracle_and_checks_native_arithme
     );
     assert_eq!(harness.rust.contents.matches(&oracle.source).count(), 1);
     assert_eq!(harness.rust.contents.matches("kani::any()").count(), 1);
+    assert!(harness.rust.contents.contains(
+        "kani::assume(amount_current >= 0_i64 && amount_current <= 1000_i64);\nlet amount_current = i64::from(amount_current as u16);"
+    ));
+    let record: Value = serde_json::from_str(&harness.record.contents).expect("sealed record");
+    assert_eq!(
+        record["identity"]["symbolicEncodingPolicy"],
+        "post_assumption_u16_rebind_v1"
+    );
+    assert_eq!(
+        record["identity"]["arguments"][0]["identifier"],
+        "amount_current"
+    );
+    for amount in 0_i64..=1000 {
+        assert_eq!(
+            i64::from(amount as u16),
+            amount,
+            "checked domain value {amount}"
+        );
+    }
     assert!(harness
         .rust
         .contents

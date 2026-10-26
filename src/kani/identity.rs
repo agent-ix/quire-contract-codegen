@@ -155,10 +155,22 @@ pub struct KaniObligationHarness {
     pub record: Artifact,
 }
 
+/// Versioned physical-to-semantic binding policy for a V2 clause's `i64` draw.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum V2SymbolicEncodingPolicy {
+    /// The original `i64` draw feeds the semantic value directly.
+    OriginalI64V1,
+    /// A bounded `i64` draw is losslessly rebound through `u16` after its assumption.
+    PostAssumptionU16RebindV1,
+}
+
 /// One admitted V2 clause and the execution facts of its generated harness.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct V2ClauseObligationIdentity {
+    /// Required, versioned encoding of the generated symbolic value.
+    pub symbolic_encoding_policy: V2SymbolicEncodingPolicy,
     /// Selected integer ABI; absent on the general route.
     #[serde(skip_serializing_if = "ScalarIntegerRepresentation::is_general")]
     pub integer_representation: ScalarIntegerRepresentation,

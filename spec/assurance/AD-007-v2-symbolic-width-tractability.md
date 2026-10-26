@@ -1,8 +1,8 @@
 ---
 id: AD-007
-title: "Proposed full-domain V2 symbolic proof tractability"
+title: "Full-domain V2 symbolic proof tractability"
 type: ArchitectureDescription
-status: proposed
+status: accepted
 owner: quire-contract-codegen-maintainer
 system: V2 clause Kani symbolic input, sealed harness identity and counterexample decoding
 relationships:
@@ -17,11 +17,13 @@ relationships:
   - target: ix://agent-ix/quire-contract-codegen/AD-006
     type: references
 ---
-# AD-007: Proposed full-domain V2 symbolic proof tractability
+# AD-007: Full-domain V2 symbolic proof tractability
 
 ## System Boundary
 
-This is an **unapproved proposal**, not a change to FR-015 acceptance or proof credit.
+The primary candidate was accepted for implementation following the reviewed design in
+CG PR #590 and the IR planner's lane decision. Acceptance of the design does not change
+FR-015 proof credit: installed healthy and mutant evidence remains required.
 IR-1022 owns tractability of the same QSL-authored V2 postcondition clause required by
 FR-015-AC-41 and AC-119: `amount < 1000 implies amount + 1 <= 1000`, with the checked
 parameter domain `amount: Int[0, 1000]`. CG owns the generated symbolic draw, sealed
