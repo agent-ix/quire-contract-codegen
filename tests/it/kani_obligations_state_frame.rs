@@ -1006,7 +1006,7 @@ pub mod subject { pub fn check(amount_current: i64) -> bool { amount_current == 
 /// Disabled installed proof. The original oracle bytes and native expectation are retained for
 /// future work, but this test is not evidence for FR-015-AC-41/119 or TC-025 while it is skipped.
 #[test]
-#[ignore = "DO NOT RUN: installed V2 clause proof exhausts the fixed 16 GiB Kani ceiling"]
+#[ignore = "kani lane: DO NOT RUN; installed V2 clause proof exhausts the fixed 16 GiB Kani ceiling"]
 fn tc_025_real_kani_falsifies_both_same_clause_addition_mutants() {
     eprintln!(
         "DO NOT RUN: this installed V2 clause proof exhausts the fixed 16 GiB ceiling.\n\

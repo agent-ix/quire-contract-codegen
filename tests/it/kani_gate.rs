@@ -25,6 +25,7 @@ const EXPECTED_KANI_FILTERS: [&str; 8] = [
     "kani_generation",
     "kani_batching",
 ];
+const BLOCKED_KANI_TEST: &str = "tc_025_real_kani_falsifies_both_same_clause_addition_mutants";
 
 struct Sandbox {
     root: PathBuf,
@@ -574,6 +575,11 @@ fn make_targets_share_one_real_lane_and_ci_excludes_it() {
     };
     let kani = stdout(&dry("kani"));
     let gate = stdout(&dry("kani-gate"));
+    let scope = stdout(&dry("kani-scope"));
+    for output in [&kani, &gate, &scope] {
+        assert!(output.contains("DO NOT RUN: installed IR-917 V2 clause proof"));
+        assert!(output.contains(&format!("skipped-by-order: {BLOCKED_KANI_TEST}")));
+    }
     let shared = kani
         .lines()
         .find_map(|line| line.strip_prefix("flock /tmp/agent-e-heavy-build.lock "))
@@ -588,12 +594,16 @@ fn make_targets_share_one_real_lane_and_ci_excludes_it() {
         .expect("verified Kani command under the same lock");
     assert_eq!(gated, shared, "gate must run the identical full command");
     assert!(shared.contains("--ignored --test-threads=1"));
-    let filters = shared
+    let mut lane_args = shared
         .split_whitespace()
         .skip_while(|arg| *arg != "--test-threads=1")
         .skip(1)
         .collect::<Vec<_>>();
-    assert_eq!(filters, EXPECTED_KANI_FILTERS);
+    assert_eq!(
+        lane_args.drain(..2).collect::<Vec<_>>(),
+        ["--skip", BLOCKED_KANI_TEST]
+    );
+    assert_eq!(lane_args, EXPECTED_KANI_FILTERS);
     let ci = stdout(&dry("ci"));
     assert!(!ci.contains("cg_gates -- kani-gate"));
     assert!(!ci.contains("flock /tmp/agent-e-heavy-build.lock"));
