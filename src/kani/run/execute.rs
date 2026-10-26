@@ -2110,7 +2110,7 @@ wait
 
     /// Concrete playback uses the proof launcher's wall clock, cancellation,
     /// and owned process-tree teardown rather than starting a raw Cargo child.
-    #[trace("FR-015-AC-41", "TC-025")]
+    #[trace("FR-017-AC-57", "FR-017-AC-58", "FR-017-AC-59", "TC-027")]
     #[cfg(target_os = "linux")]
     #[test]
     fn concrete_playback_uses_the_proof_process_bounds() {
@@ -2450,7 +2450,7 @@ wait
 
     /// One exact passing test must precede its one-pass summary. Libtest
     /// labels `#[should_panic]` on the test line, including for Kani playback.
-    #[trace("FR-015-AC-41", "TC-025")]
+    #[trace("FR-017-AC-59", "TC-027")]
     #[test]
     fn concrete_playback_parser_pairs_the_exact_test_and_summary() {
         let test_name = "playback::playback_999";

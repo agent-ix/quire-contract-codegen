@@ -813,7 +813,7 @@ pub mod subject { pub fn check(amount_current: i64) -> bool { amount_current == 
 /// The installed prover runs the same generated clause against the owner kernel and two isolated
 /// checkouts whose addition bodies are mutated. The original oracle bytes and native expectation
 /// remain unchanged, so both defects must be caught by the independent arithmetic assertion.
-#[trace("FR-015-AC-41", "TC-025")]
+#[trace("FR-015-AC-41", "FR-017-AC-60", "TC-025", "TC-027")]
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_025_real_kani_falsifies_both_same_clause_addition_mutants() {
