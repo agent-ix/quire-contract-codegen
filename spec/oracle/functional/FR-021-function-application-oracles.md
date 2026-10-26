@@ -332,6 +332,56 @@ session; CG's current schedule and location map do not supply it.
   dispatch checked expressions or invent a second evaluator. The separate
   Kani witness path shall continue to use `qsl_replay::replay` without this
   generated-body registry.
+- When an emitted function body returns `Outcome::Completed(value)`, the
+  generated body shall compare that value with the same checker-issued
+  `CallableSelection::signature().result()` supplied at registration, using
+  the admitted QSV type environment's `admits` operation. If `admits` returns
+  `Ok(false)`, the generated body shall return
+  `Outcome::Refused(Refusal::CheckedInvariant { cause:
+  CheckedInvariantCause::GeneratedUnexpectedOutcome })` at that body boundary,
+  with `Evaluation::location` naming the generated body's result occurrence.
+  This is a generated oracle checked-result refusal, as with the existing
+  in-body checked-invariant causes, rather than a scheduler protocol fault:
+  `Body::resume` returns `Ok(Transition::Done(Evaluation))`, not
+  `Err(InternalFault)`. `Ok(true)` completes with the original value.
+  An `Err(EnvironmentFailure)` from `admits` decided no membership and shall
+  never become `GeneratedUnexpectedOutcome` or a completed result; its exact
+  non-conflating leaf mapping and executable storage control remain PLANNED
+  under QSL-1107 (the current `Body::resume` error type carries only
+  `InternalFault`, and public QSV `admits` uses private reservations).
+  It shall forward `Undefined`, `Refused` and `Incomplete` without relabelling
+  them or changing admitted charges. Non-nominal result controls can use a
+  complete scalar environment after IR-595; nominal result membership also
+  depends on QSL-1105's owner-complete declaration environment. This contract
+  is PLANNED under IR-709 after the IR-595 cutover; the current exhaustive
+  outcome adapters do not supply a wrong-result producer.
+- Before executing a generated body that needs nominal types, its emitted
+  preparation shall construct the QSV type environment from the actual
+  checker-owned nominal declarations of the selected checked closure. If
+  that construction returns `EnvironmentFailure::Refused(InvalidDeclaration)`,
+  the generated body shall
+  return `Outcome::Refused(Refusal::CheckedInvariant { cause:
+  CheckedInvariantCause::GeneratedEnvironmentRejected })` before any body
+  operation or body charge, with `Evaluation::location` at the generated
+  declaration-construction occurrence and the original `InvalidDeclaration`
+  in diagnostic evidence. `EnvironmentFailure::Limit(WorkUnits)` with a
+  tripped cancel handle is cancellation; without that signal it is the
+  exact work-limit failure. `Allocation` and `Capacity` are distinct storage
+  failures. None is a declaration rejection or checked-invariant refusal;
+  their exact non-conflating leaf mapping and executable storage controls
+  are PLANNED under QSL-1107; current public QSV constructors use private
+  reservations. The declaration input must come from the selected
+  owner's checked closure, with its keys, member order, presence and types;
+  neither an empty default environment nor a synthetic declaration is a
+  substitute. In the unmutated production body, each owner declaration
+  occurs exactly once and construction succeeds. To prove this internal
+  invariant guard can fire, the test shall mutate only the emitted
+  pre-body assembly source so it submits one unchanged real owner declaration
+  twice to the same shipped QSV constructor. Its duplicate-key
+  `Refused(InvalidDeclaration)` is a real constructor result, not an injected
+  error; no production hook or extra declaration is emitted. This producer
+  is PLANNED under IR-709 and blocked by QSL-1105, because the current FR-485
+  facade does not expose record/tuple members.
 
 ## Acceptance Criteria
 
@@ -374,6 +424,9 @@ session; CG's current schedule and location map do not supply it.
 | FR-021-AC-35 | For a concrete FR-485 corpus request, the caller supplies all seven acquisition inputs and the separately admitted Contract IR package. CG calls `qsl_replay::acquire_checked_closure` once for the generated run and receives `CheckedClosureCompilation` with emitted package, admitted context and retained `CheckedClosureHandle`; it does not reconstruct a QSL checked closure from the V2 graph or emitted source. Acquisition failure remains `AdmittedRefusal` and yields no handle. PLANNED pending IR-595; the QSL FR-485 facade is delivered. | Test (TC-031) |
 | FR-021-AC-36 | CG maps the declaring admitted V2 `package_id` domain and digest exactly to FR-485's `DigestRecord` owner id, and the function's `CheckedNodeId` digest exactly to `WireNodeId` only when its domain is `quire.checked-semantic-node/v1`. The own or imported declaring package is selected explicitly; no cross-domain coercion, rehash, fabricated `NodeKey` or name-only owner substitution occurs. CG calls `CheckedClosureHandle::lookup_callable(owner_package_id, wire_node_id)` and receives a checker-issued opaque `CallableSelection` before registration. It registers the generated `BodyFactory` with that selection and `selection.signature()`; only `Ok(Admission::Accepted)` permits CG to pass that same selection, completed arguments, environment and caller-owned `Meter` to `begin_call`. A raw key alone is never authority. PLANNED pending IR-595; the QSL FR-485 facade is delivered. | Test (TC-031) |
 | FR-021-AC-37 | A mismatch between `CheckedClosureHandle::package_id()` and the CG request's admitted unit package id refuses the item as `ExactFunctionRefusal::OwnerIdentityMismatch` before registration, Begin, body invocation or application charge. The same refusal follows a mismatch between `CallableSelection::owner_package_id()` and the selected function's declaring admitted V2 package id, or between the selection's read-only check-minted key bytes and that function's node digest. The selection comparisons run in a private post-lookup guard; TC-031 tests the key comparison with a genuine second selection and inspects the owner comparison as defense in depth under ADR-013 QC-18 and ADR-011 E3, without fabricating a selection or changing production lookup. A matching sibling retains its disposition. A QSL `lookup_callable` refusal remains distinguishable as its exact `CallableLookupRefusal::Unknown`, `Foreign(package_id)` or `WrongKind` cause, not `OwnerIdentityMismatch`; non-`Accepted` registration and wrong-acquisition or leaf Begin refusals likewise retain distinct stable `cause_code` values and rendered details in the planned serializable claim-map variants and incur no application charge. PLANNED pending IR-595; the QSL FR-485 facade is delivered. | Test and Inspection (TC-031) |
+| FR-021-AC-38 | With a genuine selected callable declaring Boolean result, mutate only the test's copy of the emitted body source to return `Completed(Value::Integer(...))`, then compile and run that source through the normal registered `Body`; the unchanged shipped result check returns `Done(Evaluation { outcome: FamilyOutcome::Evaluated(Outcome::Refused(CheckedInvariant { cause: GeneratedUnexpectedOutcome })), location: Some(result occurrence), .. })`, preserving charges already admitted. The unmutated production body emits and executes the same check and completes with its admitted Boolean value. The mutation supplies a reachable wrong value to the real check; it does not inject a refusal, add a production hook or fabricate an outcome at the adapter. PLANNED (IR-709 after IR-595). | Test (TC-031, TC-057) |
+| FR-021-AC-39 | For an emitted function with real checker-owned nominal declarations, the unmutated emitted preparation consumes the selected closure's exact declaration keys, forms, ordered members, presence and types once each and constructs successfully. A test-only mutation of emitted pre-body assembly submits one unchanged real owner declaration twice to the shipped QSV constructor; its genuine duplicate-key `EnvironmentFailure::Refused(InvalidDeclaration)` yields `Done(Evaluation { outcome: FamilyOutcome::Evaluated(Outcome::Refused(CheckedInvariant { cause: GeneratedEnvironmentRejected })), location: Some(declaration occurrence), .. })` before body operation or body charge, retaining the exact `InvalidDeclaration` in diagnostic evidence. No synthetic declaration, forced error, empty-default environment or production hook is used. `Limit(WorkUnits)` is distinguished by the cancel handle's tripped state; `Allocation` and `Capacity` remain distinct storage failures, and none maps to this cause. The current match is inspected; executable allocation/capacity controls remain PLANNED until QSL-1107 provides a public reservation seam for this constructor. PLANNED (IR-709 after IR-595; blocked by QSL-1105 and QSL-1107). | Test and Inspection (TC-031, TC-057) |
+| FR-021-AC-40 | For the same selected callable, the generated result check reads the exact checker-issued `selection.signature().result()` and the admitted QSV environment, never a CG re-derived or test-supplied result type; `Undefined`, `Refused` and `Incomplete` body results pass through with their original variant, payload, location and admitted charge prefix. `admits` returning `Err(EnvironmentFailure)` yields no membership verdict and is never `GeneratedUnexpectedOutcome` or `Completed`; the exact non-conflating leaf mapping and executable storage control await QSL-1107, while nominal result environment awaits QSL-1105. The current match is inspected without claiming an executable storage stop. PLANNED (IR-709 after IR-595). | Test and Inspection (TC-031, TC-057) |
 
 ### Mutations these criteria detect
 
@@ -416,6 +469,9 @@ written.
 | FR-021-AC-32 | Keep the deleted Contract Runtime `exact` port reachable through a re-export, wrapper or compatibility layer. |
 | FR-021-AC-33 | Classify a directly requested formula or fairness root as the clause's QSL-121 blocker, classify a lowered `case` body or call item as `FormMismatch`, substitute the unsupported body root for the distinct valid call item and thereby mask the body's refusal, or omit the affected call item's claim while its healthy sibling is scheduled. |
 | FR-021-AC-34 | Submit all 129 Call body roots to one Contract IR lowering request, duplicating their transitive suffixes until the unchanged 1,048,576-byte ceiling refuses an admitted public-generation chain. |
+| FR-021-AC-38 | Remove the shipped result check, inject a refusal only in test code, report `Err(InternalFault)` for the wrong completed value, or erase the result occurrence location. |
+| FR-021-AC-39 | Duplicate an owner declaration in production, invent a malformed declaration in the test instead of resubmitting an authentic one, map a resource error to `GeneratedEnvironmentRejected`, or run a body operation before environment admission. |
+| FR-021-AC-40 | Derive the result type from CG input rather than the checker-issued selection, turn `admits` storage failure into `Ok(false)`, or relabel `Undefined`, `Refused` or `Incomplete`. |
 
 ## Dependencies
 
@@ -431,6 +487,14 @@ written.
   against its leaf root-site behavior. FR-485 is the sole permitted CG
   application route under T12-A. This target does not establish independent agreement
   with the QSL value authority, which remains IR-842's obligation.
+- **Owner declaration and resource contracts**:
+  [QSL-1105](https://linear.app/agent-ix/issue/QSL-1105) must expose the
+  selected closure's complete checked nominal declarations for nominal
+  result membership and environment construction.
+  [QSL-1107](https://linear.app/agent-ix/issue/QSL-1107) must define a typed
+  body-side leaf result for QSV `EnvironmentFailure` from `admits` and
+  construction; the current `Body::resume` error branch is only
+  `InternalFault`, which is not a resource-failure result. QSL-1107 also owns a public reservation-control seam for executable `admits` and constructor `Allocation`/`Capacity` controls; current public QSV methods use private reservations.
 - **Downstream**: [TC-031](../matrix/TC-031-function-application-oracles.md).
 
 ## Status
