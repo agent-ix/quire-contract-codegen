@@ -35,6 +35,12 @@ Not mergeable until the findings above are resolved in this PR.
 | --- | --- | --- | --- |
 | FND-004 | low | FR-017-AC-60 adds a diagnostic installed run that omits only -Z function-contracts but accepts and merely records every possible result, so that clause cannot fail; TC-027 step 5 gives it no launch path because the public entry always carries the flag. Remove the diagnostic obligation from the AC and TC, or define a separate testable public path and expected outcome. | spec/kani/functional/FR-017-kani-execution-evidence.md:947 |
 
+## New findings (disposition pass 3)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | low | FR-015-AC-41 now delegates its deterministic 999 playback to TC-027 step 5, while its Verification cell still points only to TC-025. Add TC-027 to the explicit verification reference so a reader can locate both the unconstrained proof and deterministic playback checks. | spec/kani/functional/FR-015-bounded-kani-obligations.md:789 |
+
 ## Dispositions
 
 | FND | outcome | reason |
@@ -45,3 +51,6 @@ Not mergeable until the findings above are resolved in this PR.
 | FND-002 | still-open | Round 2: TC-025 step 11 still independently owns the deterministic 999 playback and says its mechanism is unspecified, while TC-027 step 5 claims the same playback through the public API; TC-025 gives no cross-reference. |
 | FND-003 | fixed | Round 2: FR-017-AC-58 now carries proof-time -Z function-contracts into playback, with TC-027 argv and installed controls. |
 | FND-004 | still-open | Round 2: New in this fix: omitting the flag is an untestable diagnostic obligation with no launch path through the public entry. |
+| FND-002 | fixed | Round 3: TC-025 step 11 now assigns deterministic 999 playback to TC-027 step 5, retaining its own unconstrained proof and binding the same owner/assertion/artifact. |
+| FND-004 | fixed | Round 3: vacuous omitted-flag diagnostic run was removed from FR-017-AC-60 and TC-027 step 5. |
+| FND-005 | still-open | New in this fix: FR-015-AC-41 Verification still names TC-025 alone after deterministic playback moved to TC-027. |
