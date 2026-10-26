@@ -24,3 +24,20 @@ The proposal is internally sound. The verification plan can fail: tractability f
 ## Verdict
 
 Changes requested before the owner decision. FND-001 and FND-002 change what the owner is asked to decide. FND-003 is a grounding clarification. No owner approval exists, and no 16 GiB fit is claimed or implied.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | low | The V2 clause path persists no `ObligationBinding.primitive_type`. `V2ClauseObligationIdentity.arguments` is `Vec<ScalarObligationArgument>` (identifier, minimum, maximum), and `decode_v2_clause_falsification` builds temporary bindings with a hardcoded `KaniPrimitiveType::I64`. AD-007, repeating this review's FND-003 grounding, named the wrong V2 field. | spec/assurance/AD-007-v2-symbolic-width-tractability.md:75 |
+| FND-005 | medium | The primary i64-rebind candidate claimed its sealed V2 harness record rekeys "under FR-015-AC-47/48". No `V2ClauseObligationIdentity` member changes with the rebind, and `record.rs` serializes only the identity and `rust_path`, so the record bytes would be identical before and after. FR-015-AC-48 is the semantic obligation identity, which must not change. As written, stale proof evidence could be reused across encodings, which FR-015-AC-126 forbids. | spec/assurance/AD-007-v2-symbolic-width-tractability.md:75 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1 at df1848b3854ec37b4986751518e40109a8093070. The i64 draw with the exact [0,1000] assumption, followed by the lossless `i64::from(raw as u16)` rebind, is now the primary candidate. It keeps the eight-byte witness, decoder and i64 subject ABI and needs no AD-006 amendment. |
+| FND-002 | fixed | Round 1 at df1848b3. The Decisions table forbids amending normative requirements on a hypothesised benefit and defers the physical u16 candidate until the primary result and a separate owner review. The 619.43 s diagnostic is recorded as no-credit MemoryObservationFailed (namespace teardown not confirmed), with no Kani verdict, cover, peak RSS or mutant result, and its cause stated as unproven. |
+| FND-003 | fixed | Round 1 at df1848b3. The physical candidate must define separate physical-carrier and semantic i64 fields before code. Its V2 grounding is corrected under FND-004. |
+| FND-004 | fixed | Round 2 at e81c561c8df206e5f0b6cafada5df10adcfacdec. AD-007 now says V2 `ScalarObligationArgument` has no type and `decode_v2_clause_falsification` hardcodes I64, which matches `src/kani/identity.rs` and `src/replay/witness.rs:182-205`. The secondary candidate must add a required physical carrier per V2 argument and make the decoder use it. |
+| FND-005 | fixed | Round 2 at e81c561c. AD-007 now states that today's V2 record (identity plus `rust_path`, `src/kani/generate/record.rs:29-50`) is unchanged by the rebind, so the diagnostic does not rekey and earns no credit. Before accepted implementation, it requires a versioned `symbolic_encoding_policy` member in `V2ClauseObligationIdentity` and the sealed record (`original_i64_v1` / `post_assumption_u16_rebind_v1`). A missing or stale policy refuses reuse. The FR-015-AC-48 citation is removed, and the plan row cites FR-015-AC-47 only. |

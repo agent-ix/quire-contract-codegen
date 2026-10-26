@@ -23,3 +23,10 @@ AD-007 correctly labels itself an unapproved proposal. It names the AD-006 i64-d
 ## Verdict
 
 The proposal is not ready for the owner decision until FND-001 is resolved. FND-002 should be corrected in the same revision. It is spec-only and must not be read as approval or a normative override of FR-015-AC-125 or AD-006.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1 at df1848b3854ec37b4986751518e40109a8093070, still present at e81c561c8df206e5f0b6cafada5df10adcfacdec. The installed-proof row now requires the FR-015-AC-119 runtime implication helper-body mutant Falsified with in-domain playback. A separate row requires FR-017-AC-60 healthy installed playback. The row cites FR-015-AC-41/119/126 under the original 16 GiB, 600-second, CaDiCaL, unwind-3 profile. |
+| FND-002 | fixed | Round 1 at df1848b3, unchanged at e81c561c. AD-007 now says the AC-125 unchanged-draw wording applies to its native-ineligible general route, and that the governing statement is AD-006's execution view. |

@@ -21,3 +21,10 @@ Independent Claude Opus 5.5 review of CG PR #590 (Ticket: IR-1022) at 1e3c2936b9
 ## Verdict
 
 Changes requested. FND-001 adds an unsurfaced AC-39 conflict to the owner decision. FND-002 is a determinism gap to close before the rule is made generic.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1 at df1848b3854ec37b4986751518e40109a8093070, still present at e81c561c8df206e5f0b6cafada5df10adcfacdec. The primary candidate keeps the exact inclusive raw >= 0 && raw <= 1000 assumption. The physical u16 candidate must assume both endpoints even when one comparison is tautological. The plan row fails if the lower-bound comparison is missing. |
+| FND-002 | fixed | Round 1 at df1848b3, unchanged at e81c561c. At equal width the rule picks unsigned for a nonnegative interval and signed for an interval with a negative endpoint. An interval crossing zero gets a signed carrier, and anything else keeps i64. The primary candidate applies only when both endpoints are within [0, u16::MAX]. |
