@@ -151,6 +151,22 @@ exactly the names of its form, once each:
 A bare literal member, a missing or duplicate name and an unlisted name are each
 an unreadable bound.
 
+When a checked integer literal used by a V2 clause comparison or arithmetic
+operand is wrapped in QSL's `quire.op.numeric.narrow` conversion, the generator
+shall recognize only the FR-093 `Coerce` shape: one reference to an integer
+literal, a `type_argument` naming the conversion's checked `Int[..]` target,
+and the corresponding admitted integer-range bound. It shall parse the complete
+literal spelling, admit that integer to the target interval and use the same
+mathematical value as the operand. This admission is a domain check, not a
+second arithmetic operation or a resource charge. The source checker already
+admitted the coercion; CG still validates the represented shape and domain
+before generating an oracle. A missing target or operand, a literal outside
+the target, a nonliteral operand or an unparseable literal receives a typed
+refusal naming the failing shape or value, with no generated oracle. An owner
+reader refusal remains upstream; a defensive CG seam checks malformed shapes
+that the strict reader cannot admit. This rule adds no general conversion
+evaluator and changes neither arithmetic evaluation nor the checked node id.
+
 For an integer operand that references an `expression` application with a plain
 `Integer` result, the generator may establish a finite operand interval
 independently of a result-domain node. It walks only `quire.op.integer.add`,
@@ -593,6 +609,7 @@ otherwise.
 | FR-014-AC-51 | A selected `quire.op.quantity.convert` claim settles through capability settlement like any other quantity operation, as `OperationNotRendered` (Planned, IR-269), because the Kani scalar renderer builds no quantity harness; the conversion is credited by its oracle only and is uncredited for Kani. The settlement is not a refusal by name, and a quantity harness is IR-269's work, not this requirement's. The owning settlement row is TC-030's Quantity scalar row, which names `quire.op.quantity.convert` and cites this criterion. | Test (TC-024) |
 | FR-014-AC-52 | Every generated quantity operand is a QSV `UnitQuantity<'_>` resolved through the kernel quantity's own id by `UnitTable::resolve` or `UnitScope::resolve`, with no CG-created unit ids or unrelated metadata pairing. Comparison calls QSV `compare_quantity` and preserves its typed `IllTyped`. Arithmetic calls QSV `evaluate_quantity_unit` and returns `Result<(Outcome<Quantity>, IdentifiedUnit), OracleStop>` with the exact owner-provided identified result unit on every `Ok`, including stopped outcomes, and preserves both `QuantityRefusal::IllTyped` and `QuantityRefusal::Identity` as distinct typed causes in `OracleStop` on `Err`. Both errors leave charges and counters unchanged, before evaluation. Recording the paired unit through `UnitScope::form` permits a completed product, quotient or power to resolve for a subsequent operation with its exact unit id and metadata. All existing quantity vector outcomes, admitted charges, consumed counters and denied-charge prefixes remain equal to direct QSV execution; no stopped outcome becomes a completed value. | Test |
 | FR-014-AC-53 | Through public V2 clause oracle generation, complete canonical signed-i64 spellings use the public `Integer::from(i64)` constructor, including both endpoints, zero, both signs and ordinary constants; endpoint neighbors, i128 boundaries and beyond-i128 values retain the original general parse and typed failure behavior. An actual i64-MIN leaf is distinct from a negate application over positive 2^63, whose child retains parse and whose tree is not folded. Packages refused by the owner reader, including malformed-bound and stale-identity controls, remain refused. Any general integer leaf the reader admits with an ineligible spelling retains the original runtime canonical parse and typed `InvalidConstant` failure mapping, never the primitive constructor; defensive private-seam controls retain the same fallback. Against independently prepared parse-based direct-owner operands, generated comparisons and add/subtract/multiply/negate preserve mathematical results, result-domain refusals, full typed stopped outcomes, admitted charges, counters and every charge-denial prefix, including child-stop propagation, skipped-branch laziness and genuine BigInt continuation. Existing checked identities, domains and owner calls remain unchanged; the existing determinism, provenance and oracle-embedding requirements still apply. | Test |
+| FR-014-AC-54 | PLANNED (IR-917). A QSL-authored V2 clause comparison containing an integer literal wrapped by the checked FR-093 `quire.op.numeric.narrow` shape derives and generates its clause-identified oracle when the complete literal parses and lies in the target `Int[..]` interval. The oracle uses the unchanged integer value and yields the same ordered admitted charges, consumed counters and outcome as independent direct-owner evaluation of that clause arithmetic with that integer; the wrapper itself admits no charge. Missing target or operand, out-of-range literal, nonliteral operand and unparseable literal each refuse with a typed cause and no oracle, independently of a generated sibling; reader-rejected shapes are tested at the owner boundary, and unreachable malformed shapes only at CG's defensive seam. A node with another `convert` identity remains refused with a typed cause and no oracle. | Test (TC-024) |
 
 ## Dependencies
 

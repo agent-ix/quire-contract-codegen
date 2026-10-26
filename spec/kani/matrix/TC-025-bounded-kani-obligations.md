@@ -299,11 +299,18 @@ unsatisfiable requires as `cover_unsatisfied`.
 11. Generate a clause of connectives and comparisons and compare the embedded oracle with
     the FR-014 crate's function byte for byte (needs FR-014-AC-38); generate the
     arithmetic postcondition `amount < 1000` implies `amount + 1 <= 1000`, check the
-    native `i128` assertion of each arithmetic subterm, and run the installed backend over
-    the unmutated clause and over one whose `+` returns `left + right + 1` (expected
-    playback `amount_current = 999`), and one whose `+` returns `left`, which is
-    falsified on the native assertion (FR-015-AC-40,
-    FR-015-AC-41). The package comes from QSL's facade on source, never a copied fixture
+    native `i128` assertion of each arithmetic subterm. Admit QSL's checked
+    `numeric.narrow` wrapper around literal `1` through FR-014-AC-54, without
+    treating it as an arbitrary conversion or adding an admission charge.
+    Run the installed backend over the healthy clause and, in separate runs of
+    the same clause, mutate the `+` arithmetic executed by the embedded clause
+    oracle (or the authoritative kernel operation it calls) to return
+    `left + right + 1` (expected playback `amount_current = 999`) and `left`.
+    Require both mutants to be falsified on the independent native assertion;
+    inspect the executed oracle call and unchanged native expectation. A
+    mutation confined to a hand-written compiled subject or a probe in the
+    harness does not satisfy this control (FR-015-AC-40, FR-015-AC-41).
+    The package comes from QSL's facade on source, never a copied fixture
     (AD-004 step 4a); if the facade cannot build it, the real-Kani control is the
     quire-integration exemplar of AD-004 L-5, a test in a repository above both.
 12. Request a clause with an unsupported operator (division, modulo, absolute value), a
