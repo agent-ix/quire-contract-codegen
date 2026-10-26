@@ -5,44 +5,63 @@ type: TC
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-042
     type: verifies
+  - target: ix://agent-ix/quire-contract-codegen/FR-021
+    type: verifies
 ---
 # TC-057: Check typed checked-invariant causes from generated oracles
 
 ## Description
 
-Planned owner control for FR-042-AC-1's IR-709 generated producer migration.
+Planned owner control for FR-042-AC-1 through AC-3 and FR-021-AC-38 through
+AC-40 in IR-709's generated producer migration.
 
 ## Test Procedure
 
 1. Exercise every generated Boolean, equality, function and pre-check placeholder checked-invariant constructor listed in the second cause table of quire-exact FR-369. Inspect the emitted source for each of the nine named paths; do not count an unreachable branch or a fabricated failure as evidence.
 2. After IR-595, select an authentic admitted callable with a Boolean result
    from the FR-485 facade. Register a reachable generated body with that
-   selection and use a test mutation of the emitted body to return
-   `Completed(Value::Integer(...))`. Assert that the body compares against
+   selection. Mutate only the test's copy of the emitted body source to return
+   `Completed(Value::Integer(...))`, recompile it, and run the normal registered
+   `Body`. Keep the shipped result-check code byte-identical in the test
+   copy, and verify that it is present in the unmutated production source.
+   This is a reachable wrong value supplied to the shipped check, not an
+   injected refusal or a production test hook. Assert that the body compares against
    that selection's `signature().result()` via the admitted QSV environment
-   and reports `GeneratedUnexpectedOutcome`. Run the unmutated Boolean body
+   and reports `GeneratedUnexpectedOutcome` through `Ok(Transition::Done)`
+   with the result occurrence as `Evaluation::location`, not through
+   `Err(InternalFault)`. Run the unmutated Boolean body
    and separate `Undefined`, `Refused` and `Incomplete` controls; assert that
    only the wrong completed value changes cause and that admitted charges are
-   unchanged. Do not synthesize an outcome at the adapter boundary.
+   unchanged. Probe QSV `admits` reservation failure and assert it is never
+   `GeneratedUnexpectedOutcome` or `Completed`; its exact typed leaf mapping
+   remains blocked on the owner body-resource channel. Nominal result values
+   also wait for QSL-1105; this Boolean control does not claim nominal coverage.
 3. Once QSL-1105 exposes the selected owner's record/tuple members, use a
    checker-admitted source with real nominal declarations to exercise the
    emitted function's QSV environment construction. Record the declaration
    keys, forms, ordered members, presence and types read from that checked
-   owner, and verify that the emitted constructor consumes those exact
-   declarations. Exercise a genuine construction rejection through the
-   emitted path and assert `GeneratedEnvironmentRejected`, the original typed
-   diagnostic and zero body operation/charge. A successful construction and
-   separate limit and cancellation controls shall not produce this cause.
-   No invented declaration, empty default environment or forced constructor
-   error counts. If no checker-admitted source reaches a construction
-   rejection, this step remains unverified; report the owner-contract gap
-   instead of granting acceptance credit.
+   owner, and verify that the unmutated emitted constructor consumes each
+   exact declaration once and succeeds. Mutate only the test's copy of the
+   emitted pre-body assembly source to submit one unchanged real owner
+   declaration a second time to the same shipped QSV constructor. Recompile
+   and run the registered body. Assert that the constructor's genuine
+   duplicate-key result is exactly
+   `EnvironmentFailure::Refused(InvalidDeclaration)` and maps to
+   `GeneratedEnvironmentRejected`, with the original typed diagnostic,
+   declaration occurrence location and zero body operation/charge. A
+   successful construction shall not produce this cause. Exercise
+   `Limit(WorkUnits)` with the cancel handle both tripped and untripped,
+   plus `Allocation` and `Capacity`; none may map to a checked-invariant
+   refusal. Their exact typed leaf mapping remains blocked on QSL-1107.
+   No invented declaration, empty default environment, injected constructor
+   error or production test hook counts. The healthy source shall retain the
+   same checked owner declaration set and succeed.
 4. Compare each typed cause and nested `IllTypedCause` against the input result; check the generated charge and failure boundary.
 5. Confirm no former unit constructor or invented default remains. The QSL replay consumer is verified at its owner.
 
 ## Expected Results
 
-All nine genuine CG producer paths retain their table causes and original nested payloads without changing charge or failure behavior; a reachable wrong-result body and a real owner-declaration construction rejection are shown, and no fabricated failure is counted as evidence. The environment-rejection leg remains PLANNED and blocked by QSL-1105 until its owner contract and a reachable source are verified.
+All nine CG producer guards retain their table causes and original nested payloads without changing charge or failure behavior; test-only emitted-source mutations reach the shipped wrong-result and owner-declaration construction guards without injecting a failure. The environment-rejection leg remains PLANNED and blocked by QSL-1105 and QSL-1107 until its owner contracts and the healthy/mutant controls are verified.
 
 ## Status
 
