@@ -289,6 +289,26 @@ by quire-integration IR-842.
    claim remains refused, and a condition containing an operand outside FR-014-AC-10's
    supported forms is refused without an oracle (FR-014-AC-38, FR-014-AC-7 and AC-10).
 
+## Checked literal narrowing in a V2 clause (IR-917, planned)
+
+1. Author QSL source with a bounded `amount` parameter and a clause comparison
+   against literal `0` that the checker lowers as a literal reference wrapped by
+   `quire.op.numeric.narrow`. Use QSL's public emitter and Contract IR's strict
+   reader; inspect the admitted conversion's `type_argument`, sole literal
+   reference and target integer range. Select the clause identity through public
+   CG and require an `ir_confirmed` generated oracle. Against independent
+   direct-owner evaluation of the same clause arithmetic with that integer,
+   compare the mathematical value, full outcome, ordered charges and consumed
+   counters. The wrapper adds no
+   charge or duplicate evaluation (FR-014-AC-54).
+2. Exercise missing target, missing operand, out-of-range literal, nonliteral
+   operand and unparseable literal independently, beside a supported sibling.
+   Use public owner admission for shapes it rejects; only shapes unreachable
+   after that admission use CG's private defensive seam. Require a typed cause
+   and no oracle for each bad item, while the sibling's oracle is unchanged.
+   Include another `convert` identity to show that literal narrowing does not
+   grant it support (FR-014-AC-54).
+
 ## Lowering byte-ceiling failure (IR-547)
 
 1. Build a package whose lowered contract package for the call's requested nodes is longer than its
