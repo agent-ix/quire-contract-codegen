@@ -302,12 +302,15 @@ by quire-integration IR-842.
    counters. The wrapper adds no
    charge or duplicate evaluation (FR-014-AC-54).
 2. Exercise missing target, missing operand, out-of-range literal, nonliteral
-   operand and unparseable literal independently, beside a supported sibling.
-   Use public owner admission for shapes it rejects; only shapes unreachable
-   after that admission use CG's private defensive seam. Require a typed cause
-   and no oracle for each bad item, while the sibling's oracle is unchanged.
-   Include another `convert` identity to show that literal narrowing does not
-   grant it support (FR-014-AC-54).
+   operand and unparseable literal independently. Present each malformed
+   package to Contract IR's strict reader first. Where the reader rejects it,
+   require its typed refusal; no admitted package or CG generation exists, so
+   make no sibling-oracle assertion. For a malformed shape that the reader
+   admits, or that only CG's private defensive seam can receive, require a
+   typed per-item refusal and no oracle for that item beside a generated
+   sibling whose bytes remain unchanged. Include another `convert` identity
+   in the applicable admitted or defensive-seam control to show that literal
+   narrowing does not grant it support (FR-014-AC-54).
 
 ## Lowering byte-ceiling failure (IR-547)
 
