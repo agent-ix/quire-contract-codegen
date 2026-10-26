@@ -23,8 +23,10 @@ use quire_contract_model::{
     CheckedCompositeOperandDomain, CheckedCompositeOperandError, CheckedCompositeOperands,
     CheckedNodeId, CheckedOccurrence, CheckedOccurrenceRole, CheckedPackageEvidence,
     CheckedPackageIncomplete, CheckedPackageReadLimits, CheckedPackageRefusal, CheckedPackageV2,
-    CheckedPackageV2ReadResult, CheckedScalarOperandChild, CheckedSourceRef, CheckedTerm,
+    CheckedPackageV2ReadResult, CheckedScalarOperandChild, CheckedSourceRef,
 };
+
+use crate::core::ir::frame::application_identity;
 
 use super::{
     composite::{verified_shadow_terminal_value, CompositeReportError, VerifiedShadowSettlement},
@@ -305,16 +307,7 @@ impl OriginalCompositeEqContext {
             .original
             .composite_application_operands(node, occurrence, work_limit)
             .map_err(|cause| CompositeBuildError::Operands(Box::new(cause)))?;
-        // IR's operand projection validates Eq/Ne but does not return a typed operator yet.
-        // Read the selected node identity until the IR API carries that operation (IR-803).
-        let actual = self
-            .original
-            .term(node)
-            .and_then(|term| match term {
-                CheckedTerm::Application { operation, .. } => operation.get("identity"),
-                _ => None,
-            })
-            .and_then(serde_json::Value::as_str);
+        let actual = self.original.term(node).and_then(application_identity);
         let actual = node_equality_operator(actual)?;
         if actual != operator {
             return Err(CompositeBuildError::OperatorMismatch {

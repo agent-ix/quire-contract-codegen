@@ -163,4 +163,12 @@ mod tests {
         assert!(!source.contains(".semantic_form"));
         assert!(!source.contains(".nodes"));
     }
+
+    #[test]
+    fn composite_builder_uses_typed_operation_access() {
+        let source = include_str!("../../replay/composite_builder.rs");
+        assert!(!source.contains("serde_json::Value"));
+        assert!(!source.contains(".get(\""));
+        assert!(source.contains(".and_then(application_identity)"));
+    }
 }
