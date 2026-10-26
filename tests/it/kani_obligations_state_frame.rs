@@ -54,14 +54,14 @@ use quire_contract_codegen::{
 use quire_contract_codegen::{
     execute_kani_concrete_playback, execute_kani_obligation, generate_state_frame_obligations,
     negotiate_kani_native_obligations, negotiate_kani_obligations, BoundNotResolvedCause,
-    FrameReplay, FrameReplayError, InvalidObligationItem, KaniConcretePlaybackOutcome,
-    KaniExecutionRequest, KaniInstallation, KaniObligationError, KaniObligationOutcome,
-    KaniObligationRequest, KaniRunOutcome, ModuleSymbol, ObligationDisposition, ObligationItem,
-    ObligationKind, ObligationRecord, PreStateFault, ScopeMember, StateComparison,
-    StateFieldDomain, StateFrameHarness, StateFrameIdentity, StateFrameLoweringRefusal,
-    StateFrameObligations, StateFrameProperty, StateFrameRefusal, StateFrameRequest,
-    StateFrameRole, UnsupportedFrameEffect, UnsupportedObligation, MAX_OBLIGATION_ITEMS,
-    MAX_OBLIGATION_UNWIND,
+    FrameReplay, FrameReplayError, InvalidObligationItem, KaniConcretePlayback,
+    KaniConcretePlaybackOutcome, KaniExecutionRequest, KaniInstallation, KaniObligationError,
+    KaniObligationOutcome, KaniObligationRequest, KaniRunOutcome, ModuleSymbol,
+    ObligationDisposition, ObligationItem, ObligationKind, ObligationRecord, PreStateFault,
+    ScopeMember, StateComparison, StateFieldDomain, StateFrameHarness, StateFrameIdentity,
+    StateFrameLoweringRefusal, StateFrameObligations, StateFrameProperty, StateFrameRefusal,
+    StateFrameRequest, StateFrameRole, UnsupportedFrameEffect, UnsupportedObligation,
+    MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
 };
 use quire_contract_codegen::{HarnessSymbol, StateFrameRecordError};
 use quire_contract_model::{
@@ -1080,7 +1080,10 @@ fn tc_025_real_kani_falsifies_both_same_clause_addition_mutants() {
                     target_directory: &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target"),
                     home_directory: None,
                 },
-                &exact_test,
+                &KaniConcretePlayback {
+                    test_name: &exact_test,
+                    appended_test: &playback_test,
+                },
             )
             .expect("bounded concrete playback starts and tears down");
             let KaniConcretePlaybackOutcome::Completed {
