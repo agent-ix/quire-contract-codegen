@@ -220,35 +220,54 @@ These controls qualify the public execution entry; TC-025 step 11 owns the
 installed-Kani `amount_current = 999` clause mutant and its arithmetic-assertion
 attribution.
 
-1. From a sealed generated contract harness, append one parseable `#[test]`
-   function in its owning module and name its exact libtest
-   `module::function` path. Through the public
+1. From a seal-validated generated V2 clause harness, append one parseable
+   `#[test]` function immediately before its module's closing brace, outside
+   the proof function, and name its exact libtest `module::function` path. Treat
+   its attributes, signature, body and separators as one appended byte span;
+   removing only that span must restore the unique generated module bytes.
+   Through the public
    `execute_kani_concrete_playback` entry, inspect the exact-selection
-   `kani playback -Z concrete-playback -- <test_name> --exact --nocapture`
+   `kani playback --lib -Z concrete-playback -- <test_name> --exact --nocapture`
    launch. With a launcher stand-in that reports the named test as the sole
    pass, require `Completed { succeeded: true }`, the actual exit code,
    complete bounded stdout/stderr and observed memory; do not classify it as
    `Verified` (FR-017-AC-58, FR-017-AC-59).
-2. Before any launch, alter the retained generated harness source or identity
-   record and require `HarnessProvenanceMismatch`. Separately omit or duplicate the appended test,
-   supply malformed Rust or a function whose name or module disagrees with
-   `test_name`, alter the generated source beside the appended test, or place
-   the test so removing only its bytes does not restore the generated harness.
+2. Submit each non-V2 harness kind (Contract, Scalar, StateFrame and Collection)
+   and require `ConcretePlaybackUnsupportedHarness { harness_path }` before
+   backend launch. Alter the retained V2 generated harness source or identity
+   record and require `HarnessProvenanceMismatch`. Separately omit or duplicate
+   the appended test, supply malformed Rust or a function whose name or module
+   disagrees with `test_name`, alter the generated source beside the appended
+   test, remove or make `src/lib.rs` unreadable, or place the test so removing
+   the exact inserted byte span does not restore one unique generated module.
    Each source case requires `ConcretePlaybackSourceMismatch` and zero backend
    calls (FR-017-AC-57).
-3. Let a stand-in exit successfully after running zero matching tests, or
-   print a different passing test or a summary other than exactly one pass and
-   zero failures. Require `ConcretePlaybackTestNotObserved { test_name }`, not
-   successful playback. Let the selected test fail at an assertion: retain
-   `Completed { succeeded: false }`, actual exit code and bounded streams so
-   the caller can attribute the check, without claiming a proof verdict
-   (FR-017-AC-59).
+3. Let a stand-in exit successfully after running zero matching tests, name a
+   different passing test, print two libtest summaries (including an unrelated
+   zero-test summary), or interleave `--nocapture` text through the selected
+   test-result line. Require `ConcretePlaybackTestNotObserved { test_name }`,
+   never successful playback. Accept one intact exact selected-test pass line
+   (`test <name> ... ok` or `test <name> - should panic ... ok`) and exactly one one-pass/zero-failure
+   summary from the `--lib` target. Let the selected test exit unsuccessfully
+   at an assertion, and separately fail compilation or a dependency before
+   test execution: each retains `Completed { succeeded: false }`, actual exit
+   code and bounded streams, but neither raw outcome alone attributes failure
+   to a generated assertion or claims a proof verdict (FR-017-AC-59).
 4. Reuse the existing bounded-launch controls for wall-clock timeout,
    cancellation, memory exhaustion, output over-limit/unread and owned
    teardown with the concrete-playback entry. Require distinct `TimedOut`,
    `Cancelled { source, memory }`, `MemoryExhausted` and existing typed output
    refusals; verify the backend tree is gone and no case is classified as a
    proof outcome (FR-017-AC-58).
+5. With installed Kani, call this exact public entry for a healthy V2 clause
+   playback and for the plus-one owner mutant's `amount_current = 999`
+   expected-panic playback. Require the selected test's observed pass line and
+   sole compatible summary in both; the mutant's test must execute the same
+   sealed generated arithmetic assertion and identify its unique check message
+   or source location. Retain bounded output and memory observations and prove
+   owned teardown after each run. Keep the mutant's separate unconstrained
+   Kani Falsified run and in-domain playback under FR-015-AC-41; neither this
+   native test nor a stand-in supplies that proof verdict (FR-017-AC-60).
 
 ## Expected Results
 
