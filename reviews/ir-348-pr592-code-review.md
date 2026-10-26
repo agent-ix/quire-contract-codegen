@@ -33,3 +33,10 @@ CONDITIONAL: the behavior-preserving move is sound, with two low maintainability
 ## Coverage
 
 AD-004 L-8 remains open across the repository. The existing FR-033-AC-1 tagged tests cover operator mismatch and repeated request identity; FR-014-AC-2 tags the unsupported operation control. No new runtime test is required for this pure lookup relocation. No focused build was run by this reviewer while the host was under concurrent gate load. The prior IR-635 review's FND-001 explicitly deferred a typed operator on `CheckedCompositeOperands` to IR-803; this PR does not deliver it.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | At b31ad554, the IR-803 typed-operator follow-up note is restored immediately above the checked-node identity lookup. |
+| FND-002 | fixed | At b31ad554, the expression-spelling positive assertion is removed; the two negative L-8 source checks remain. |
