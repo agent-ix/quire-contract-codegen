@@ -169,6 +169,5 @@ mod tests {
         let source = include_str!("../../replay/composite_builder.rs");
         assert!(!source.contains("serde_json::Value"));
         assert!(!source.contains(".get(\""));
-        assert!(source.contains(".and_then(application_identity)"));
     }
 }

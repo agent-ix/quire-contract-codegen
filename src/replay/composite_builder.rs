@@ -307,6 +307,7 @@ impl OriginalCompositeEqContext {
             .original
             .composite_application_operands(node, occurrence, work_limit)
             .map_err(|cause| CompositeBuildError::Operands(Box::new(cause)))?;
+        // IR-803 will carry the typed operator; read the checked node's identity meanwhile.
         let actual = self.original.term(node).and_then(application_identity);
         let actual = node_equality_operator(actual)?;
         if actual != operator {
