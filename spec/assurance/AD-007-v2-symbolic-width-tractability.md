@@ -72,13 +72,22 @@ only when **both** checked endpoints fall within `[0, u16::MAX]`; otherwise reta
 existing generation. Selection depends on the checked domain, never fixture identity or
 proof outcome.
 
-The physical draw remains `i64`. `ObligationBinding.primitive_type`, the persisted
-eight-byte witness, signedness, decoder and subject ABI remain `i64`; exact-999 playback
-still uses eight bytes. The generated proof source and its sealed harness record change
-under FR-015-AC-47/48, while AD-003's semantic obligation identity does not change merely
-because equivalent proof encoding changes. The same checked package and generation policy
-must regenerate byte-identical source. Append a concrete 999 playback to the sealed proof,
-then remove only that appended test to recover the original source byte for byte.
+The physical draw remains `i64`. V2's `V2ClauseObligationIdentity.arguments` currently
+holds `ScalarObligationArgument` identifiers and bounds without a type;
+`decode_v2_clause_falsification` constructs temporary `ObligationBinding` values with
+`KaniPrimitiveType::I64`. That reader, its eight-byte witness and the `i64` subject ABI
+remain unchanged for this candidate; exact-999 playback still uses eight bytes. The
+generated source changes, but today's V2 record serializes the identity and Rust path,
+not the Rust bytes or their digest. The isolated diagnostic therefore does **not** rekey
+the record and cannot support proof credit. Before an accepted implementation, add a
+required, versioned `symbolic_encoding_policy` member to `V2ClauseObligationIdentity`
+and its serialized sealed record, distinguishing `original_i64_v1` from
+`post_assumption_u16_rebind_v1`. A record without the member or with a different policy
+or revision cannot identify or reuse this proof encoding. Regeneration
+from the same checked package and policy must yield byte-identical source and record
+under FR-015-AC-47. AD-003's semantic obligation identity remains independent of this
+generated record. Append a concrete 999 playback to the sealed proof, then remove only
+that appended test to recover the original source byte for byte.
 
 ### Secondary physical-width candidate, pending a separate decision
 
@@ -96,10 +105,12 @@ AD-006's execution view says original `i64` symbolic draws remain unchanged. The
 in FR-015-AC-125 about unchanged draws applies specifically to its native-ineligible
 general route; it does not independently govern this native-eligible clause. A physical
 `u16` draw conflicts with AD-006 and requires an owner decision before normative change
-or implementation. `ObligationBinding.primitive_type` currently serves both physical draw
-width and semantic subject type. This candidate must define separate physical carrier and
-semantic `i64` fields before code, with explicit sealed identity, decoder width, signedness,
-byte order and rendered-comment checks. Its 999 playback would use two witness bytes but
+or implementation. V2's `ScalarObligationArgument` has no physical-type member and its
+decoder currently constructs `ObligationBinding` with hardcoded `I64`; neither can safely
+describe a two-byte draw. This candidate must add a required physical carrier type per
+V2 argument to its identity record while retaining the semantic `i64` subject type, and
+make the V2 decoder use that sealed physical type for width, signedness, byte order and
+rendered-comment checks. Its 999 playback would use two witness bytes but
 call the unchanged `i64` subject. Malformed, mismatched or out-of-domain encoding must
 receive a named typed refusal, without replay or proof credit. No reader may guess width
 from byte length or silently reinterpret an old harness record. The physical choice
@@ -110,7 +121,7 @@ would rekey the generated harness record, not AD-003's semantic obligation ident
 | Proposed check | Falsifiable control and required evidence | Existing owner |
 | --- | --- | --- |
 | Full checked domain | One draw and an exact inclusive `[0,1000]` assumption; prove the post-assumption transformation is identity for all 1001 values, including 0, 999 and 1000. A missing lower-bound comparison, narrowed interval, second draw or fixture-only selection fails. Test signed, crossing-zero and full-`i64` boundaries for any generic policy. | FR-015-AC-39 / TC-025 |
-| Sealed identity and witness | For the primary candidate, retain `i64` width and eight-byte typed playback while rekeying the changed generated source record. Refuse malformed width, wrong signedness, mismatched rendered comment, extra value and out-of-domain value by name. If the physical candidate is later authorized, separately prove two-byte typing and explicit physical/semantic fields. | FR-015-AC-47/48; FR-016-AC-8 / TC-025/026 |
+| Sealed identity and witness | For the primary candidate, add a required symbolic-encoding policy and revision to the V2 harness record, retain `i64` width and eight-byte typed playback, and refuse missing or stale policy records. Refuse malformed width, wrong signedness, mismatched rendered comment, extra value and out-of-domain value by name. If the physical candidate is later authorized, separately prove two-byte typing and explicit V2 carrier/semantic fields. | FR-015-AC-47; FR-016-AC-8 / TC-025/026 |
 | Exact-999 and healthy playback | Run 999 through the actual generated proof and independent arithmetic assertion; remove only the appended concrete test to restore sealed source byte for byte. Run healthy installed playback and require the expected in-domain result. | FR-015-AC-41; FR-017-AC-60 / TC-025/027 |
 | Installed proof and mutations | Under the **original 16 GiB, 600-second, CaDiCaL, unwind-3 profile**, require genuine healthy `Verified` with final cover, both addition-body mutants `Falsified` at the independent arithmetic assertion with in-domain playback, and the same-clause runtime implication helper-body mutant `Falsified` with in-domain playback. Record elapsed time, process-tree peak RSS, Kani verdict and cover for each run. Timeout, OOM, cleanup refusal, missing result or missing mutation remains inconclusive. | FR-015-AC-41/119/126 / TC-025; IR-917 and IR-1022 remain open until measured |
 
@@ -123,8 +134,8 @@ its formal criterion id after owner approval; this proposal creates no new crite
 
 | Pending decision | Recommendation | Consequence |
 | --- | --- | --- |
-| Does the primary `i64` draw and lossless rebind improve the installed proof? | Keep it as the first candidate, but make no acceptance claim from the teardown-failed diagnostic. Inspect retained runner evidence before any repeat; require a clean healthy result under the original profile. | No AD-006 draw amendment, new witness schema or changed semantic identity is needed. The generated source and harness record still rekey. |
-| Should a physical `u16` draw be attempted? | Decide only after the primary result and a separate AD-006/FR-015 owner review. Do not amend normative requirements solely on a hypothesized benefit. | Requires explicit physical/semantic binding split, typed decoder and identity contract, then fresh installed evidence. The native-ineligible clause of AC-125 must retain its stated conditions unless separately reviewed. |
+| Does the primary `i64` draw and lossless rebind improve the installed proof? | Keep it as the first candidate, but make no acceptance claim from the teardown-failed diagnostic. Inspect retained runner evidence before any repeat; require a clean healthy result under the original profile. | No AD-006 draw amendment, new witness schema or changed semantic identity is needed. A required V2 symbolic-encoding policy revision must rekey the generated record before accepted proof evidence. |
+| Should a physical `u16` draw be attempted? | Decide only after the primary result and a separate AD-006/FR-015 owner review. Do not amend normative requirements solely on a hypothesized benefit. | Requires an explicit V2 physical-carrier member per argument, typed decoder and identity contract, then fresh installed evidence. The native-ineligible clause of AC-125 must retain its stated conditions unless separately reviewed. |
 | Does any candidate meet acceptance? | Decide only from healthy, cover and all required installed mutant/playback controls at the original limits. | If not, retain `Inconclusive`; no higher ceiling, smaller range, weaker assertion or substitute owner follows. |
 
 ## Risks
@@ -136,9 +147,10 @@ its formal criterion id after owner approval; this proposal creates no new crite
   operations and Meter; reducing downstream bit width might not control their expansion.
   Owner: CG architecture reviewer. Next review: measured result under the fixed profile.
 - **Physical-width contract conflict.** Only the secondary candidate changes AD-006's
-  original `i64` draw and the current joint meaning of `primitive_type`. Owner: AD-006 and
+  original `i64` draw and V2's current hardcoded `I64` witness decoding. Owner: AD-006 and
   FR-015 maintainer. Next review: before any normative edit or physical-width code.
-- **Witness and identity confusion.** Even the primary candidate changes generated source
-  and must rekey its sealed harness record while keeping the eight-byte witness and
-  AD-003 semantic identity rules. Owner: CG identity reviewer. Next review: source and
-  decoder evidence before installed mutant playback.
+- **Witness and identity confusion.** The primary candidate changes generated source but
+  today's V2 record bytes remain equal; a required symbolic-encoding revision must change
+  that record before proof credit while keeping the eight-byte witness and AD-003 semantic
+  identity rules. Owner: CG identity reviewer. Next review: record and decoder evidence
+  before installed mutant playback.
