@@ -119,3 +119,4 @@ Round 1, checked against fix commit `9cc1a3e3` (exact head `9cc1a3e3b46cc4f2c990
 | --- | --- | --- |
 | FND-001 | fixed | Non-conflation is now normative; exact leaf mapping is explicitly PLANNED on filed blocker QSL-1107 (Linear: blocks IR-709). |
 | FND-002 | fixed | - |
+| FND-003 | fixed | Round 2 at exact head 1d488eeb490fd06e54e8f229e951c2e4bf810f67: TC-057 steps 2-3 and FR-021-AC-39/40, FR-042-AC-2/3 now inspect the storage arms now and keep executable Allocation/Capacity/admits-reservation controls PLANNED on QSL-1107 public reservation seam (QSL-1107 AC-3 requires public-boundary allocation/capacity controls); no-relabel obligations unchanged, no execution credit claimed. |
