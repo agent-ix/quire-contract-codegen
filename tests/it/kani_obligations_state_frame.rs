@@ -578,15 +578,21 @@ pub(super) fn decode_native_v2_helper_mutant_playback() {
         harness.record.contents.as_bytes()
     );
     let transcript = fs::read_to_string(path("IR705_HELPER_COUNTEREXAMPLE")).unwrap();
-    let decoded = quire_contract_codegen::decode_v2_clause_falsification(
-        harness,
+    let limits = quire_contract_codegen::WitnessDecodeLimits {
+        bytes: 1024 * 1024,
+        values: 1,
+    };
+    let playback = quire_contract_codegen::parse_assertion_playback(
         &transcript,
-        quire_contract_codegen::WitnessDecodeLimits {
-            bytes: 1024 * 1024,
-            values: 1,
-        },
+        harness.identity.harness_symbol.as_str(),
+        harness.identity.module_symbol.as_str(),
+        limits.bytes,
+        limits.values,
     )
-    .expect("actual playback joins the original sealed harness");
+    .expect("actual backend playback parses once");
+    let decoded =
+        quire_contract_codegen::decode_v2_clause_falsification(harness, &playback, limits)
+            .expect("actual playback joins the original sealed harness");
     let [(name, qsl_replay::WitnessValue::Integer(amount))] = decoded.as_slice() else {
         panic!("one typed original integer draw: {decoded:?}");
     };
@@ -646,14 +652,19 @@ fn kani_concrete_playback_synthetic() {{\n\
 }}\n",
             harness.identity.module_symbol, harness.identity.harness_symbol,
         );
-        quire_contract_codegen::decode_v2_clause_falsification(
-            harness,
+        let limits = quire_contract_codegen::WitnessDecodeLimits {
+            bytes: 4096,
+            values: 1,
+        };
+        let playback = quire_contract_codegen::parse_assertion_playback(
             &transcript,
-            quire_contract_codegen::WitnessDecodeLimits {
-                bytes: 4096,
-                values: 1,
-            },
+            harness.identity.harness_symbol.as_str(),
+            harness.identity.module_symbol.as_str(),
+            limits.bytes,
+            limits.values,
         )
+        .expect("synthetic assertion parses once");
+        quire_contract_codegen::decode_v2_clause_falsification(harness, &playback, limits)
     };
     for value in [0_i64, 1000] {
         let decoded = decode(value).expect("inclusive endpoint decoded");

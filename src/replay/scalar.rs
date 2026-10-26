@@ -6,40 +6,18 @@
 use std::collections::BTreeSet;
 
 use crate::kani::{
-    abi::integer_scalar_operand_count,
-    identity::ScalarObligationIdentity,
-    output::playback::{parse_assertion_playback, Playback},
+    abi::integer_scalar_operand_count, identity::ScalarObligationIdentity,
+    output::playback::Playback,
 };
 use crate::replay::witness::DecodeFailure;
 
 const PLAYBACK_BYTES: usize = 8 * 1024 * 1024;
 
-/// Reads integer scalar assertion playback after validating the persisted schema. The Kani
-/// wording and rendered values are parsed by the output reader.
-///
-/// # Errors
-///
-/// Returns the schema refusal or the output reader's named refusal.
-pub fn parse_scalar_playback<'a>(
-    identity: &ScalarObligationIdentity,
-    transcript: &'a str,
-) -> Result<Playback<'a>, DecodeFailure> {
-    validate_schema(identity)?;
-    parse_assertion_playback(
-        transcript,
-        identity.harness_symbol.as_str(),
-        identity.module_symbol.as_str(),
-        PLAYBACK_BYTES,
-        usize::MAX,
-    )
-    .map_err(Into::into)
-}
-
 /// Decodes typed integer scalar playback in the identity's persisted symbolic draw order.
 ///
 /// Accepts only integer add, subtract, multiply and negate, with their required operand arity
 /// and valid inclusive ranges. Literal singleton operands remain separate positions. The selected
-/// single-harness transcript is limited to 8 MiB by [`parse_scalar_playback`]. Every draw
+/// single-harness transcript is limited to 8 MiB by the output reader. Every draw
 /// must contain exactly eight little-endian bytes and agree with Kani's decoded-value comment.
 /// All draws are decoded before the first operand outside its persisted range is refused.
 ///

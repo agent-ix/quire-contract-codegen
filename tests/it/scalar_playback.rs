@@ -7,7 +7,7 @@ use crate::common::proof_ceilings::proof_ceilings;
 use ix_trace_rs::trace;
 use qsl_replay::{compile_package, DependencyInput, ReplayLimits, SourceIdentity, StageLimits};
 use quire_contract_codegen::{
-    decode_scalar_falsification, generate_routed, parse_scalar_playback,
+    decode_scalar_falsification, generate_routed, parse_assertion_playback,
     routed_contract_lowering_profile, BackendDescriptor, Candidate, ContractDriverResultSelection,
     ContractRequestPosition, DecodeFailure, GenerationContexts, KaniGenerationContext,
     KaniScalarObligationHarness, KindOutput, ProviderOrigin, RoutedGenerationItem, ScalarLimits,
@@ -25,7 +25,14 @@ fn decode_from_transcript(
     identity: &ScalarObligationIdentity,
     transcript: &str,
 ) -> Result<Vec<i64>, DecodeFailure> {
-    let parsed = parse_scalar_playback(identity, transcript)?;
+    let parsed = parse_assertion_playback(
+        transcript,
+        identity.harness_symbol.as_str(),
+        identity.module_symbol.as_str(),
+        PLAYBACK_BYTES,
+        usize::MAX,
+    )
+    .map_err(DecodeFailure::from)?;
     decode_scalar_falsification(identity, &parsed)
 }
 
@@ -421,7 +428,7 @@ fn assertion_selection_and_malformed_blocks_use_adapter_refusals() {
 
 #[trace("FR-032-AC-2", "FR-032-AC-3")]
 #[test]
-fn schema_then_byte_ceiling_then_decode_then_domain_precedence() {
+fn typed_schema_byte_ceiling_decode_and_domain_refusals() {
     let identity = sum();
     let oversized = "x".repeat(PLAYBACK_BYTES + 1);
     refusal(&identity, &oversized, "cg_witness_decode_bytes_limit");
@@ -437,7 +444,7 @@ fn schema_then_byte_ceiling_then_decode_then_domain_precedence() {
     invalid.arguments[0].minimum = 10;
     let error = refusal(
         &invalid,
-        &oversized,
+        &at_limit,
         "cg_scalar_witness_schema_range_invalid",
     );
     assert_eq!(error.context, invalid.arguments[0].identifier);
@@ -445,8 +452,9 @@ fn schema_then_byte_ceiling_then_decode_then_domain_precedence() {
 
 #[trace("FR-032-AC-2", "FR-032-AC-3")]
 #[test]
-fn unsupported_operator_and_invalid_persisted_schema_refuse_before_parsing() {
+fn unsupported_operator_and_invalid_persisted_schema_refuse_typed_playback() {
     let identity = sum();
+    let valid = transcript(&identity, &[3, 17]);
     for operation in [
         "quire.op.boolean.implies",
         "quire.op.integer.div",
@@ -458,7 +466,7 @@ fn unsupported_operator_and_invalid_persisted_schema_refuse_before_parsing() {
         unsupported.operation_identity = operation.to_owned();
         refusal(
             &unsupported,
-            "no block",
+            &valid,
             "cg_scalar_witness_operation_unsupported",
         );
     }
@@ -466,14 +474,14 @@ fn unsupported_operator_and_invalid_persisted_schema_refuse_before_parsing() {
     wrong_arity.arguments.pop();
     refusal(
         &wrong_arity,
-        "no block",
+        &valid,
         "cg_scalar_witness_schema_arity_mismatch",
     );
     let mut duplicate = identity.clone();
     duplicate.arguments[1].identifier = duplicate.arguments[0].identifier.clone();
     refusal(
         &duplicate,
-        "no block",
+        &valid,
         "cg_scalar_witness_schema_duplicate_binding",
     );
 }
