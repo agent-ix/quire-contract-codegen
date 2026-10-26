@@ -299,7 +299,6 @@ fn negotiate_integer_policy(
                 request.ceilings,
                 &mut scalar_lookups,
                 &mut checked_lookups,
-                native,
             )
         })
         .collect::<Vec<_>>();
@@ -567,11 +566,10 @@ fn classify<'a>(
     ceilings: crate::kani::identity::ProofCeilings,
     scalar_lookups: &mut BTreeMap<*const ContractPackageV1, ContractLookup<'a>>,
     checked_lookups: &mut CheckedLookups<'a>,
-    native: bool,
 ) -> ItemState<'a> {
     match *item {
         ObligationItem::V2Clause { package, clause } => {
-            classify_v2_clause(checked_lookup(checked_lookups, package), clause, native)
+            classify_v2_clause(checked_lookup(checked_lookups, package), clause)
         }
         ObligationItem::BoundClause { package, clause } => classify_clause(package, clause),
         ObligationItem::ScalarClaim {
@@ -628,7 +626,6 @@ fn classify<'a>(
 fn classify_v2_clause<'a>(
     lookup: &mut CheckedLookup<'a>,
     clause: &'a CheckedNodeId,
-    native: bool,
 ) -> ItemState<'a> {
     let package = lookup.package;
     let view = lookup.clause();
@@ -657,7 +654,7 @@ fn classify_v2_clause<'a>(
         }
         Some(_)
             if kind != Some(ObligationKind::Precondition)
-                && !(native && kind == Some(ObligationKind::Postcondition)) =>
+                && kind != Some(ObligationKind::Postcondition) =>
         {
             Outcome::Unsupported(UnsupportedObligation::V2ClauseConditionNotRendered {
                 node_id: clause.clone(),
@@ -1898,7 +1895,6 @@ mod tests {
             render_probe_request(&[]).ceilings,
             &mut BTreeMap::new(),
             &mut BTreeMap::new(),
-            false,
         )
         .outcome
         else {

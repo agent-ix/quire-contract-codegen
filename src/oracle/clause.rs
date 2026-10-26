@@ -507,6 +507,22 @@ fn lower(
             arguments,
             result_bound,
         } => {
+            // A checked literal inside the target interval has the same integer value after
+            // QSL's narrowing admission. Other conversions remain unsupported here.
+            if identity == "quire.op.numeric.narrow" {
+                let ([ClauseTerm::Integer(value)], Some((minimum, maximum))) =
+                    (arguments.as_slice(), result_bound)
+                else {
+                    return Err(V2ClauseRefusal::UnsupportedCondition);
+                };
+                let integer = value
+                    .parse::<i128>()
+                    .map_err(|_| V2ClauseRefusal::UnsupportedCondition)?;
+                if integer < *minimum || integer > *maximum {
+                    return Err(V2ClauseRefusal::UnsupportedCondition);
+                }
+                return lower(&arguments[0], names, plan);
+            }
             let operation = clause_scalar_operation(identity, *result_bound)
                 .ok_or(V2ClauseRefusal::UnsupportedCondition)?;
             let children = arguments
@@ -713,6 +729,38 @@ mod tests {
     use ix_trace_rs::trace;
 
     use super::*;
+
+    #[trace("FR-014-AC-38", "TC-024")]
+    #[test]
+    fn a_literal_narrow_is_elided_only_when_its_value_is_inside_the_target() {
+        let narrow = |value: &str, bound| ClauseTerm::Operation {
+            identity: "quire.op.numeric.narrow".to_owned(),
+            arguments: vec![ClauseTerm::Integer(value.to_owned())],
+            result_bound: bound,
+        };
+        let mut plan = Vec::new();
+        let index = lower(&narrow("0", Some((0, 1000))), &BTreeMap::new(), &mut plan)
+            .expect("admitted literal keeps its exact value");
+        assert_eq!(index, 0);
+        assert_eq!(plan.len(), 1);
+        assert!(matches!(&plan[0].term, StepTerm::Integer(value) if value == "0"));
+
+        for refused in [
+            narrow("1001", Some((0, 1000))),
+            narrow("0", None),
+            narrow("outside-i128", Some((0, 1000))),
+            ClauseTerm::Operation {
+                identity: "quire.op.numeric.narrow".to_owned(),
+                arguments: vec![ClauseTerm::Boolean(true)],
+                result_bound: Some((0, 1000)),
+            },
+        ] {
+            assert!(matches!(
+                lower(&refused, &BTreeMap::new(), &mut Vec::new()),
+                Err(V2ClauseRefusal::UnsupportedCondition)
+            ));
+        }
+    }
 
     fn integer_leaf(spelling: &str) -> String {
         let step = Step {

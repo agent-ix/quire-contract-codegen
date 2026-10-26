@@ -254,6 +254,11 @@ fn render_postcondition(
     request: &KaniObligationRequest<'_>,
     lowered: &LoweredV2Clause,
 ) -> Result<KaniV2ClauseObligationHarness, UnsupportedObligation> {
+    if !lowered.native_integer && !lowered.arithmetic.is_empty() {
+        return Err(UnsupportedObligation::V2ClauseConditionNotRendered {
+            node_id: lowered.node_id.clone(),
+        });
+    }
     let [input] = lowered.oracle.descriptor.inputs.as_slice() else {
         return Err(UnsupportedObligation::RenderFailed);
     };
@@ -276,9 +281,11 @@ fn render_postcondition(
                 name: input.name.clone(),
                 ty: None,
                 mutable: false,
-                init: Init::Expression(expression(format!(
-                    "nx::NativeInteger::new(i128::from({symbolic}))"
-                ))?),
+                init: Init::Expression(expression(if lowered.native_integer {
+                    format!("nx::NativeInteger::new(i128::from({symbolic}))")
+                } else {
+                    format!("rt::Integer::from({symbolic})")
+                })?),
             }],
         },
         binding(
@@ -469,7 +476,11 @@ fn render_postcondition(
     )?;
     let rust = render::render(&spec)?;
     let identity = V2ClauseObligationIdentity {
-        integer_representation: crate::kani::identity::ScalarIntegerRepresentation::Native,
+        integer_representation: if lowered.native_integer {
+            crate::kani::identity::ScalarIntegerRepresentation::Native
+        } else {
+            crate::kani::identity::ScalarIntegerRepresentation::General
+        },
         native_integer_selection: lowered.oracle.native_integer_selection.clone(),
         ceilings: request.ceilings,
         package: lowered.package.clone(),
@@ -610,8 +621,20 @@ fn native_term(
         ClauseTerm::Operation {
             identity,
             arguments,
-            ..
+            result_bound,
         } => {
+            if identity == "quire.op.numeric.narrow" {
+                let ([ClauseTerm::Integer(value)], Some((minimum, maximum))) =
+                    (arguments.as_slice(), result_bound)
+                else {
+                    return None;
+                };
+                let integer = value.parse::<i128>().ok()?;
+                if integer < *minimum || integer > *maximum {
+                    return None;
+                }
+                return native_term(&arguments[0], input_name, symbolic_name, arithmetic);
+            }
             if let [left, right] = arguments.as_slice() {
                 let gate = match identity.as_str() {
                     "quire.op.boolean.and" | "quire.op.boolean.implies" => Some(false),
@@ -784,6 +807,16 @@ fn native_term(
                     };
                     Some(NativeTerm::Boolean(format!("({a} {operator} {b})")))
                 }
+                ("quire.op.boolean.eq" | "quire.op.boolean.ne", [left, right]) => {
+                    let a = left.clone_boolean()?;
+                    let b = right.clone_boolean()?;
+                    let operator = if identity == "quire.op.boolean.eq" {
+                        "=="
+                    } else {
+                        "!="
+                    };
+                    Some(NativeTerm::Boolean(format!("({a} {operator} {b})")))
+                }
                 _ => None,
             }
         }
@@ -813,12 +846,27 @@ impl NativeTerm {
 
 #[cfg(test)]
 mod native_probe_tests {
-    use super::{bind_native_arithmetic_probes, ArithmeticProbe};
+    use super::{bind_native_arithmetic_probes, native_term, ArithmeticProbe};
+    use crate::core::ir::clause::ClauseTerm;
     use crate::core::native_integer::{
         NativeIntegerIntervalDecision as Interval, NativeIntegerOperationDecision as Decision,
         NativeIntegerSelection,
     };
     use ix_trace_rs::trace;
+
+    #[trace("FR-015-AC-40", "TC-025")]
+    #[test]
+    fn native_clause_expectation_accepts_only_in_range_literal_narrows() {
+        let narrow = |value: &str| ClauseTerm::Operation {
+            identity: "quire.op.numeric.narrow".to_owned(),
+            arguments: vec![ClauseTerm::Integer(value.to_owned())],
+            result_bound: Some((0, 1000)),
+        };
+        assert!(native_term(&narrow("0"), "amount", "amount_current", &mut Vec::new()).is_some());
+        assert!(
+            native_term(&narrow("1001"), "amount", "amount_current", &mut Vec::new()).is_none()
+        );
+    }
 
     #[trace("FR-015-AC-125", "TC-025")]
     #[test]
