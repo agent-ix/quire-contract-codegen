@@ -12,12 +12,14 @@ use serde_json::Value;
 use std::{borrow::Borrow, collections::BTreeMap};
 
 use crate::{
-    core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES},
+    core::artifact::MAX_GENERATED_SOURCE_BYTES,
     kani::{
         abi::{adapter_options, readable_component, KaniSolver},
         generate::{
             outcome::{KaniObligationRequest, UnsupportedObligation},
             record::{harness_path, record},
+            render,
+            spec::{CollectionElement, CollectionQuantifier, CollectionSpec, HarnessSpec},
         },
         identity::{
             CollectionElementIdentity, CollectionKindIdentity, CollectionObligationIdentity,
@@ -244,17 +246,17 @@ pub(super) fn render_collection(
             },
         });
     }
-    let (element_type, element_domain, element_assumption) = match field.element {
-        CollectionElementDomain::Boolean => {
-            ("bool", CollectionElementIdentity::Boolean, String::new())
-        }
+    let (element, element_domain) = match field.element {
+        CollectionElementDomain::Boolean => (
+            CollectionElement::Boolean,
+            CollectionElementIdentity::Boolean,
+        ),
         CollectionElementDomain::Integer { minimum, maximum } => {
             let minimum = collection_i64(minimum, &field.quantifier)?;
             let maximum = collection_i64(maximum, &field.quantifier)?;
             (
-                "i64",
+                CollectionElement::Integer { minimum, maximum },
                 CollectionElementIdentity::Integer { minimum, maximum },
-                format!("                kani::assume(item >= {minimum} && item <= {maximum});\n"),
             )
         }
     };
@@ -279,22 +281,15 @@ pub(super) fn render_collection(
             },
         });
     }
-    let (quantifier, collection_call) = match field.quantifier_operation.as_str() {
-        "quire.op.collection.forall" => ("forall", "all"),
-        "quire.op.collection.exists" => ("exists", "any"),
+    let quantifier = match field.quantifier_operation.as_str() {
+        "quire.op.collection.forall" => CollectionQuantifier::ForAll,
+        "quire.op.collection.exists" => CollectionQuantifier::Exists,
         _ => {
             return Err(UnsupportedObligation::CollectionClaimNotRendered {
                 node_id: field.quantifier.clone(),
                 reason: crate::kani::generate::outcome::CollectionUnsupportedReason::UnsupportedClaimShape,
             });
         }
-    };
-    let predicate = match field.predicate {
-        CollectionPredicateIdentity::IntegerGreaterOrEqual { threshold } => {
-            format!("item >= {threshold}")
-        }
-        CollectionPredicateIdentity::IntegerEqual { value } => format!("item == {value}"),
-        CollectionPredicateIdentity::BooleanNotEqual { value } => format!("item != {value}"),
     };
     let symbol_material = serde_json::to_vec(&(
         (
@@ -357,30 +352,23 @@ pub(super) fn render_collection(
         module_symbol: path.module.clone(),
         harness_symbol: path.harness.clone(),
     };
-    let source = format!(
-        "// SPDX-License-Identifier: MIT OR Apache-2.0\n\
-         // Claim: {quantifier} over admitted model field `{}`\n\
-         #[cfg(kani)]\n\
-         mod {module} {{\n\
-             #[kani::proof]\n\
-             fn {harness}() {{\n\
-                 let {length_name}: i64 = kani::any();\n\
-                 kani::assume({length_name} >= {minimum_length} && {length_name} <= {maximum_length});\n\
-                 let {item_name}: [{element_type}; {array_len}] = kani::any();\n\
-                 for index in 0..{length_name} {{\n\
-                     let item = {item_name}[index as usize];\n\
-{element_assumption}\
-                 }}\n\
-                 let claim = (0..{length_name}).{collection_call}(|index| {{\n\
-                     let item = {item_name}[index as usize];\n\
-                     {predicate}\n\
-                 }});\n\
-                 assert!(claim, \"the symbolic sequence satisfies the selected QSL {quantifier} body\");\n\
-                 kani::cover!({length_name} == {minimum_length} || {length_name} == {maximum_length}, \"a selected field cardinality endpoint is reachable\");\n\
-             }}\n\
-         }}\n",
-        field.field_name,
-    );
+    let spec = HarnessSpec::new_collection(
+        path.clone(),
+        CollectionSpec {
+            field_name: field.field_name.clone(),
+            item_name,
+            length_name,
+            minimum_length,
+            maximum_length,
+            array_len,
+            element,
+            quantifier,
+            predicate: field.predicate.clone(),
+        },
+        request.unwind,
+        KaniSolver::Cadical,
+    )?;
+    let rendered = render::render(&spec)?;
     let subjects = [
         crate::core::provenance::node_subject(&identity.function_id),
         crate::core::provenance::node_subject(&identity.quantifier_id),
@@ -389,8 +377,10 @@ pub(super) fn render_collection(
         crate::core::provenance::node_subject(&identity.element_type_id),
         crate::core::provenance::node_subject(&identity.predicate_id),
     ];
-    let source =
-        crate::core::provenance::with_rust_header(source, subjects.iter().map(String::as_str));
+    let source = crate::core::provenance::with_rust_header(
+        rendered.contents,
+        subjects.iter().map(String::as_str),
+    );
     if source.len() > MAX_GENERATED_SOURCE_BYTES {
         return Err(UnsupportedObligation::ResourceLimitExceeded {
             bytes: source.len(),
@@ -401,7 +391,7 @@ pub(super) fn render_collection(
             error: error.to_string(),
         });
     }
-    let rust = Artifact::new(format!("src/generated/{}.rs", path.module), source);
+    let rust = crate::core::artifact::Artifact::new(rendered.path, source);
     let record = record(&path.module.to_string(), &identity, &rust)?;
     let harness = KaniCollectionObligationHarness::generated(identity, rust, record);
     if !harness.has_valid_provenance() {

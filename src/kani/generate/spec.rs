@@ -4,6 +4,7 @@ use super::outcome::{UnsupportedObligation, MAX_OBLIGATION_UNWIND};
 use crate::{
     core::identity::HarnessPath,
     kani::abi::{adapter_options, KaniPrimitiveType, KaniSolver},
+    kani::identity::CollectionPredicateIdentity,
 };
 use std::collections::BTreeSet;
 use syn::{
@@ -238,6 +239,46 @@ pub(super) struct Cover {
     pub(super) message: String,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub(super) enum CollectionQuantifier {
+    ForAll,
+    Exists,
+}
+
+impl CollectionQuantifier {
+    pub(super) fn name(self) -> &'static str {
+        match self {
+            Self::ForAll => "forall",
+            Self::Exists => "exists",
+        }
+    }
+    pub(super) fn iterator_method(self) -> &'static str {
+        match self {
+            Self::ForAll => "all",
+            Self::Exists => "any",
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(super) struct CollectionSpec {
+    pub(super) field_name: String,
+    pub(super) item_name: String,
+    pub(super) length_name: String,
+    pub(super) minimum_length: i64,
+    pub(super) maximum_length: i64,
+    pub(super) array_len: usize,
+    pub(super) element: CollectionElement,
+    pub(super) quantifier: CollectionQuantifier,
+    pub(super) predicate: CollectionPredicateIdentity,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(super) enum CollectionElement {
+    Boolean,
+    Integer { minimum: i64, maximum: i64 },
+}
+
 #[derive(Clone, Debug)]
 pub(super) struct HarnessSpec {
     label: String,
@@ -249,6 +290,7 @@ pub(super) struct HarnessSpec {
     unwind: u32,
     solver: KaniSolver,
     options: Vec<String>,
+    collection: Option<CollectionSpec>,
 }
 fn identifier_identity(identifier: &syn::Ident) -> String {
     identifier.unraw().to_string()
@@ -412,7 +454,53 @@ impl HarnessSpec {
             unwind,
             solver,
             options,
+            collection: None,
         })
+    }
+    pub(super) fn new_collection(
+        path: HarnessPath,
+        collection: CollectionSpec,
+        unwind: u32,
+        solver: KaniSolver,
+    ) -> Result<Self, HarnessSpecError> {
+        identifier(&collection.item_name)?;
+        identifier(&collection.length_name)?;
+        if collection.item_name == collection.length_name
+            || collection.minimum_length > collection.maximum_length
+            || collection.array_len
+                != usize::try_from(collection.maximum_length)
+                    .map_err(|_| HarnessSpecError::InvalidDomain)?
+            || matches!(collection.element, CollectionElement::Integer { minimum, maximum } if minimum > maximum)
+            || !(1..=MAX_OBLIGATION_UNWIND).contains(&unwind)
+        {
+            return Err(HarnessSpecError::InvalidDomain);
+        }
+        let options = adapter_options(&path.to_string(), unwind, solver, false);
+        let cover = Cover {
+            condition: ExprText::new(format!(
+                "{} == {} || {} == {}",
+                collection.length_name,
+                collection.minimum_length,
+                collection.length_name,
+                collection.maximum_length
+            ))?,
+            message: "a selected field cardinality endpoint is reachable".to_owned(),
+        };
+        Ok(Self {
+            label: format!("{} over admitted model field", collection.quantifier.name()),
+            path,
+            oracle_source: String::new(),
+            proof: ProofKind::Proof,
+            body: Vec::new(),
+            cover,
+            unwind,
+            solver,
+            options,
+            collection: Some(collection),
+        })
+    }
+    pub(super) fn collection(&self) -> Option<&CollectionSpec> {
+        self.collection.as_ref()
     }
     pub(super) fn label(&self) -> &str {
         &self.label
