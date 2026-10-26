@@ -130,6 +130,31 @@ pub(crate) fn parameter_references(term: &CheckedTerm) -> Option<Vec<CheckedNode
 #[cfg(test)]
 mod tests {
     #[test]
+    fn function_oracle_reads_operation_identity_through_core_ir() {
+        let source = include_str!("../../oracle/function/mod.rs");
+        let production = source
+            .split_once("\n#[cfg(test)]\nmod tests")
+            .expect("function module has an in-file test module")
+            .0;
+        let has_raw_access = |source: &str| {
+            let compact: String = source
+                .chars()
+                .filter(|character| !character.is_whitespace())
+                .collect();
+            compact.contains(".get(\"")
+                || compact.contains("[\"")
+                || compact.contains("Application{operation")
+                || compact.contains("serde_json::Value::as_str")
+        };
+        assert!(!has_raw_access(production));
+
+        let bypass = format!(
+            "{production}\nfn raw_identity(op: &serde_json::Value) {{ let _ = op.get(\"identity\"); }}"
+        );
+        assert!(has_raw_access(&bypass));
+    }
+
+    #[test]
     fn frame_generator_uses_typed_graph_and_operation_access() {
         let source = include_str!("../../kani/generate/frame.rs");
         assert!(!source.contains("serde_json::Value"));

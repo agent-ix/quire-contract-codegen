@@ -137,6 +137,7 @@ use crate::core::contract_package::{
     PackageItem, PackageItems, PackageRequestError,
 };
 use crate::core::ir::checked_term::aggregate_members;
+use crate::core::ir::frame::application_identity;
 use crate::core::naming::{bounded_readable_component, unique_names};
 use crate::core::profile::oracle_crate_manifest;
 use crate::oracle::checked_graph::{CheckedGraph, GraphBody};
@@ -930,9 +931,9 @@ fn project_function_node<Body>(
 
     let Some(CheckedTerm::Application {
         result_type,
-        operation,
         arguments,
         operator,
+        ..
     }) = body
     else {
         return Err(schedule::ScheduleRefusal::MalformedTerm(
@@ -943,9 +944,8 @@ fn project_function_node<Body>(
         .get(result_type)
         .copied()
         .ok_or_else(|| schedule::ScheduleRefusal::UnsupportedOperation(source.node_id.clone()))?;
-    let operation_identity = operation
-        .get("identity")
-        .and_then(serde_json::Value::as_str)
+    let operation_identity = body
+        .and_then(application_identity)
         .ok_or_else(|| schedule::ScheduleRefusal::MalformedTerm(source.node_id.clone()))?;
 
     if *operator == ApplicationOperator::Call {
@@ -1065,22 +1065,19 @@ fn validate_schedule_item(
             item.call_node_id.clone(),
         ));
     }
+    let body = source_nodes.term(&item.call_node_id);
     let Some(CheckedTerm::Application {
         operator: ApplicationOperator::Call,
-        operation,
         arguments,
         result_type,
-    }) = source_nodes.term(&item.call_node_id)
+        ..
+    }) = body
     else {
         return Err(schedule::ScheduleRefusal::MalformedTerm(
             item.call_node_id.clone(),
         ));
     };
-    if operation
-        .get("identity")
-        .and_then(serde_json::Value::as_str)
-        != Some("quire.op.function.call")
-    {
+    if body.and_then(application_identity) != Some("quire.op.function.call") {
         return Err(schedule::ScheduleRefusal::MalformedTerm(
             item.call_node_id.clone(),
         ));
@@ -1673,18 +1670,13 @@ fn source_call_matches<'a>(
     }
     let CheckedTerm::Application {
         operator: ApplicationOperator::Call,
-        operation,
         arguments,
         ..
     } = body
     else {
         return false;
     };
-    if operation
-        .get("identity")
-        .and_then(serde_json::Value::as_str)
-        != Some("quire.op.function.call")
-    {
+    if application_identity(body) != Some("quire.op.function.call") {
         return false;
     }
     if arguments.len() != argument_node_ids.len() + 1 {
@@ -2195,12 +2187,7 @@ pub(crate) fn checked_integer_function_application_is_supported_with_graph(
     let Some(_body_node) = graph.get(body_id) else {
         return Ok(false);
     };
-    let Some(operation_identity) = graph.get_term(body_id).and_then(|term| match term {
-        CheckedTerm::Application { operation, .. } => operation
-            .get("identity")
-            .and_then(serde_json::Value::as_str),
-        _ => None,
-    }) else {
+    let Some(operation_identity) = graph.get_term(body_id).and_then(application_identity) else {
         return Ok(false);
     };
     let operator = match operation_identity {
@@ -2614,12 +2601,7 @@ fn classify_body_shape<'r, Body>(
                 .and_then(application_arguments)
                 .filter(|arguments| arguments.len() == 2)
                 .ok_or(ExactFunctionRefusal::BodyMismatch)?;
-            let operation_identity = body.and_then(|term| match term {
-                CheckedTerm::Application { operation, .. } => operation
-                    .get("identity")
-                    .and_then(serde_json::Value::as_str),
-                _ => None,
-            });
+            let operation_identity = body.and_then(application_identity);
             let expected_identity = match operator {
                 BinaryIntegerOperator::Add => "quire.op.integer.add",
                 BinaryIntegerOperator::Subtract => "quire.op.integer.sub",
