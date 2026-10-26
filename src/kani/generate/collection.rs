@@ -16,7 +16,7 @@ use crate::{
     kani::{
         abi::{adapter_options, readable_component, KaniSolver},
         generate::{
-            outcome::{KaniObligationRequest, UnsupportedObligation},
+            outcome::{CollectionUnsupportedReason, KaniObligationRequest, UnsupportedObligation},
             record::{harness_path, record},
             render,
             spec::{
@@ -371,19 +371,24 @@ pub(super) fn render_collection(
         request.unwind,
         KaniSolver::Cadical,
     )
-    .map_err(|error| UnsupportedObligation::CollectionClaimNotRendered {
-        node_id: field.quantifier.clone(),
-        reason: match error {
-            HarnessSpecError::InvalidUnwind(_) => {
-                crate::kani::generate::outcome::CollectionUnsupportedReason::UnwindBelowCollectionBound {
-                    required: field.maximum_length.saturating_add(1),
-                    supplied: request.unwind,
-                }
-            }
-            HarnessSpecError::InvalidDomain => {
-                crate::kani::generate::outcome::CollectionUnsupportedReason::DomainNotRepresentableInHarness
-            }
-            _ => crate::kani::generate::outcome::CollectionUnsupportedReason::UnsupportedClaimShape,
+    .map_err(|error| match error {
+        HarnessSpecError::InvalidDomain => UnsupportedObligation::CollectionClaimNotRendered {
+            node_id: field.quantifier.clone(),
+            reason: CollectionUnsupportedReason::DomainNotRepresentableInHarness,
+        },
+        HarnessSpecError::InvalidUnwind(_)
+        | HarnessSpecError::CoverCount(_)
+        | HarnessSpecError::LiteralTrueCover
+        | HarnessSpecError::CallCount(_)
+        | HarnessSpecError::InputAfterCall
+        | HarnessSpecError::AssumeAfterCall
+        | HarnessSpecError::AssertBeforeCall
+        | HarnessSpecError::DuplicateBinding(_) => UnsupportedObligation::RenderFailed,
+        HarnessSpecError::InvalidIdentifier(_)
+        | HarnessSpecError::InvalidMessage
+        | HarnessSpecError::InvalidExpression
+        | HarnessSpecError::ForbiddenExpression => UnsupportedObligation::InvalidGeneratedSyntax {
+            error: error.to_string(),
         },
     })?;
     let rendered = render::render(&spec)?;

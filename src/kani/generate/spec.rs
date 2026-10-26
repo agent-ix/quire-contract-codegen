@@ -597,7 +597,7 @@ mod tests {
         construct(body, covers, unwind).unwrap_err()
     }
 
-    #[trace("FR-015-AC-99", "FR-015-AC-101", "TC-025")]
+    #[trace("FR-015-AC-99", "TC-025")]
     #[test]
     fn collection_constructor_refuses_invalid_domains_and_bindings() {
         let path = HarnessPath {
