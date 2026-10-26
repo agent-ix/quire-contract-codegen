@@ -736,6 +736,99 @@ fn qsl_v2_outside_u16_domain_keeps_original_i64_harness_and_record() {
     }
 }
 
+/// The separate precondition constructor retains the checked domain and original i64 wire slot.
+#[trace("FR-015-AC-128", "FR-015-AC-129", "FR-015-AC-130", "TC-025")]
+#[test]
+fn qsl_v2_precondition_outside_u16_domain_keeps_original_i64_harness_and_record() {
+    for (minimum, maximum) in [(-1, 1000), (0, i64::from(u16::MAX) + 1)] {
+        let (package, clause) = Twin::with_bounded_other_precondition_and_range(minimum, maximum)
+            .emitted_package("OtherBelowLimit");
+        let oracle = generate_v2_clause_oracle(&package, &clause)
+            .expect("the QSL-authored precondition has an admitted oracle");
+        assert_eq!(
+            (
+                oracle.descriptor.inputs[0].lower,
+                oracle.descriptor.inputs[0].upper
+            ),
+            (i128::from(minimum), i128::from(maximum))
+        );
+        let harness = v2_precondition_fixture_harness(
+            Twin::with_bounded_other_precondition_and_range(minimum, maximum),
+            "OtherBelowLimit",
+        );
+        assert_eq!(harness.identity.kind, ObligationKind::Precondition);
+        assert_eq!(harness.identity.clause, clause);
+        assert_eq!(
+            harness.identity.symbolic_encoding_policy,
+            V2SymbolicEncodingPolicy::OriginalI64V1
+        );
+        let [argument] = harness.identity.arguments.as_slice() else {
+            panic!("one checked precondition parameter");
+        };
+        assert_eq!(argument.identifier, "parameter_other");
+        assert_eq!((argument.minimum, argument.maximum), (minimum, maximum));
+        let source = &harness.rust.contents;
+        assert_eq!(
+            source
+                .matches("let parameter_other: i64 = kani::any();")
+                .count(),
+            1
+        );
+        assert_eq!(source.matches("kani::any()").count(), 1);
+        assert!(source.contains(&format!(
+            "kani::assume(parameter_other >= {minimum}_i64 && parameter_other <= {maximum}_i64);"
+        )));
+        assert!(!source.contains(" as u16"));
+        assert!(!source.contains("parameter_other_rebound"));
+        assert!(source.contains("rt::Integer::from(parameter_other)"));
+        assert!(source.contains(&oracle.source));
+        let record: Value =
+            serde_json::from_str(&harness.record.contents).expect("sealed V2 precondition record");
+        assert_eq!(
+            record["identity"]["symbolicEncodingPolicy"],
+            "original_i64_v1"
+        );
+        assert_eq!(
+            record["identity"]["arguments"][0]["identifier"],
+            "parameter_other"
+        );
+        assert_eq!(record["identity"]["arguments"][0]["minimum"], minimum);
+        assert_eq!(record["identity"]["arguments"][0]["maximum"], maximum);
+        for value in [minimum, maximum] {
+            let bytes = value.to_le_bytes().map(|byte| byte.to_string()).join(", ");
+            let transcript = format!(
+                "/// Test generated for harness `{}::{}`\n\
+/// Check for `assertion`: \"synthetic precondition decoder control\"\n\
+#[test]\n\
+fn kani_concrete_playback_synthetic() {{\n\
+    let concrete_vals: Vec<Vec<u8>> = vec![\n\
+        // {value}\n\
+        vec![{bytes}],\n\
+    ];\n\
+    kani::concrete_playback_run(concrete_vals, synthetic);\n\
+}}\n",
+                harness.identity.module_symbol, harness.identity.harness_symbol,
+            );
+            assert_eq!(
+                quire_contract_codegen::decode_v2_clause_falsification(
+                    &harness,
+                    &transcript,
+                    quire_contract_codegen::WitnessDecodeLimits {
+                        bytes: 4096,
+                        values: 1,
+                    },
+                )
+                .expect("the precondition keeps an eight-byte i64 witness slot"),
+                vec![(
+                    argument.identifier.clone(),
+                    qsl_replay::WitnessValue::Integer(i128::from(value))
+                )]
+            );
+        }
+        syn::parse_file(source).expect("the complete precondition harness is Rust syntax");
+    }
+}
+
 #[trace("TC-025")]
 #[test]
 fn general_v2_arithmetic_postcondition_refuses_without_a_harness() {

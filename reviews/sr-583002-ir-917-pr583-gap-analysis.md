@@ -96,6 +96,57 @@ method-without-symbol. FR-015-AC-42 is untagged again.
 | --- | --- | --- | --- |
 | FND-007 | medium | FR-015-AC-41 requires each owner-`+` mutant run to be falsified by the independent native assertion with concrete playback `amount_current = 999` for the first. Under that mutant the native assertion fails for every admitted amount 0..=999, so no backend witness can be required to be 999. The test substitutes a separate concrete replay. AC-41 as written is not attainable from backend evidence and needs reconciliation by the spec owner; AC-41 stays PLANNED. | spec/kani/functional/FR-015-bounded-kani-obligations.md:789 |
 
+## New findings (disposition pass 3)
+
+Disposition pass 3 reviewed fix head be9328efa7d0ad383377b55e381a70a19f480813 on main
+aa55d2256bebea3d06a583d5febf7c77f77801a2. The matrix was recomputed at that head: 564 tagged, 314
+untagged, 16 tagged only by ignored tests, 53 method-without-symbol. FR-015-AC-41 now has four binders,
+one of them the ignored installed test. FR-015-AC-40, AC-41 and AC-119 and FR-014-AC-54 remain PLANNED
+in spec.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-008 | medium | The new public API (`execute_kani_concrete_playback`, `KaniConcretePlayback`, `KaniConcretePlaybackOutcome`, `KaniExecutionRefusal::ConcretePlaybackSourceMismatch`) has no owning requirement and no interface-001 entry. Its bounds and teardown unit test is tagged FR-015-AC-41, which says "the playback mechanism is not prescribed" and states no bounds, refusals or outcomes. Behaviour such as the source check, the bounded launcher and the outcome variants is therefore unspecified (reverse gap). | src/lib.rs:166-170 |
+
+## New findings (disposition pass 5)
+
+Disposition pass 5 reviewed fix head d571e110df94360c23d8ddad854c5cb1c663d652 on main
+4788b46723d7454af86fdbe9c7b4f4ad1154cbb6 (spec PR #586 merged). The matrix was recomputed at that
+head: 567 tagged, 314 untagged, 17 tagged only by ignored tests, 53 method-without-symbol.
+FR-017-AC-57 and AC-58 are bound to `concrete_playback_uses_the_proof_process_bounds`; AC-59 adds
+`concrete_playback_parser_pairs_the_exact_test_and_summary`. FR-017-AC-60 is tagged only by the
+ignored installed test, which is red on its healthy proof (MemoryExhausted, IR-1022). FR-015-AC-41,
+AC-119, FR-017-AC-57 to AC-60 and FR-014-AC-54 remain PLANNED in spec.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-009 | low | Two FR-017 clauses that TC-027 lists have no playback-entry test. AC-57's absent or unreadable `src/lib.rs` refusal is correct by inspection (`read_file` error maps to `ConcretePlaybackSourceMismatch`) but untested. AC-58's stdout/stderr over-limit and unread typed refusals (TC-027 step 4) are exercised for proof runs only, not through `execute_kani_concrete_playback`. | src/kani/run/execute.rs:2110-2449 |
+
+## New findings (disposition pass 7)
+
+Disposition pass 7 reviewed head 98f7c46c9d14a9150b690fbbd28353f225a184b3 on main
+8db3554e0426ece64840e36cb73d1016de99960b. AD-007 is now status `accepted` and still states that
+installed healthy and mutant evidence remains required for FR-015 credit. FR-015-AC-41 and AC-119,
+FR-017-AC-57 to AC-60, FR-014-AC-54 and TC-025/TC-027 remain PLANNED. FND-001 remains deferred (its
+latest outcome): no installed run exists at this head.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-010 | low | The new public `V2SymbolicEncodingPolicy` and the required `V2ClauseObligationIdentity.symbolic_encoding_policy` member are owned only by AD-007, an architecture description. No FR-015 criterion or interface-001 entry states the record member, its two values or the [0, u16::MAX] selection rule. The selection unit test borrows FR-015-AC-39 and AC-47, which state neither. The parent identity struct already lacked an interface-001 entry before this change. | src/kani/identity.rs:158-174 |
+
+## New findings (disposition pass 8)
+
+Disposition pass 8 reviewed head 92efc9c705735a7c765154cb54d93cdc678a8775 (one commit over 98f7c46c,
+main 8db3554e). The spec delta only adds text: FR-015 prose, FR-015-AC-128 to AC-131, a TC-025 step 11
+paragraph and interface-001 `public_types`. No existing criterion is narrowed. The new criteria are
+unmarked and carry no PLANNED/IMPLEMENTED status; they are generation-time controls, and none grants
+installed proof credit. FR-015-AC-41 and AC-119, FR-017-AC-57 to AC-60, FR-014-AC-54 and TC-025/TC-027
+remain PLANNED.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-011 | low | FR-015-AC-131's "grants no proof credit" is tested only through `execute_kani_concrete_playback` (`concrete_playback_uses_the_proof_process_bounds`, a policy-changed V2 identity refused as `HarnessProvenanceMismatch`). The proof-run entry `execute_kani_obligation` reaches the same `has_valid_provenance` check through `require_in_crate` (execute.rs:451, :612-618), but no test changes a V2 identity's policy and asserts that entry's refusal. | src/kani/run/execute.rs:451-453 |
+
 ## Dispositions
 
 | FND | outcome | reason |
@@ -106,3 +157,8 @@ method-without-symbol. FR-015-AC-42 is untagged again.
 | FND-004 | fixed | FR-014-AC-54 (CG #584, merged to main and present at this head) now specifies checked literal narrowing for V2 clause oracles, including its refusals. |
 | FND-005 | fixed | Round 2: `general_v2_arithmetic_postcondition_refuses_without_a_harness` is now tagged `TC-025` only, and FR-015-AC-42 is back to untagged in the computed matrix. |
 | FND-006 | fixed | Round 2. Owner parity: the public agreement corpus adds the QSL-authored `self.balance = 0` case, asserts that the package holds a `quire.op.numeric.narrow` node, and compares outcome, ordered admitted charges and every consumed counter with direct-owner evaluation, including denial prefixes. Sibling: the defensive seam asserts every refused narrow, and a refused `quire.op.quantity.convert`, leave a lowered sibling plan unchanged; a QSL twin asserts that the narrow oracle is unchanged across sibling generation. Convert: `quantity.convert` is refused. AC-54 remains PLANNED. |
+| FND-007 | fixed | Round 3: merged CG #585 rewrites FR-015-AC-41 and TC-025 step 11. The unconstrained installed-Kani mutants may select any in-domain witness, and the exact 999 control is a separate deterministic playback that must execute the actual generated arithmetic assertion and attribute failure by message or location. The test at this head matches that wording. Acceptance remains PLANNED: no installed run exists. |
+| FND-008 | deferred | Round 4: still unspecified at this head. Draft, unmerged CG #586 (head 322f78313264326b4e83918e7d81e876522334e5) adds FR-017-AC-57/58/59, TC-027 "Concrete playback execution" steps 1-4 and an interface-001 operation entry. Read at that head, they own the public entry, its source and provenance refusals, the bounded launch, the outcome variants and `ConcretePlaybackTestNotObserved`. Closes when #586 merges and the playback unit test is retagged from FR-015-AC-41 to FR-017-AC-57-59. |
+| FND-008 | fixed | Round 5: CG #586 is merged into this PR's base (4788b467). FR-017-AC-57 to AC-60, TC-027 "Concrete playback execution" and the interface-001 `execute_kani_concrete_playback` entry own the public API. Implementation matches: V2-only `ConcretePlaybackUnsupportedHarness`, full sealed-artifact restoration including header and oracle, `kani playback --lib -Z function-contracts -Z concrete-playback -- <name> --exact --nocapture` (V2 harness options carry no `-Z stubbing`), and the AC-59 parser. The unit tests are retagged FR-017-AC-57/58/59 with TC-027, and the installed test adds FR-017-AC-60 and TC-027. |
+| FND-009 | fixed | Round 6 (head 3fa8bce4fa8d61ca7c0b59f03952b47b5de2e62d, a test-only delta in `src/kani/run/execute.rs`): `concrete_playback_uses_the_proof_process_bounds` now drives the public `execute_kani_concrete_playback` entry through stand-ins for each case. An absent `src/lib.rs` and a directory in its place each refuse `ConcretePlaybackSourceMismatch` with zero launcher calls. More than `CAPTURE_LIMIT` bytes on stdout, then on stderr, each refuse `OutputOverLimit { stream, limit: CAPTURE_LIMIT, harnesses: 1 }` after one launch. An injected poll failure on each stream refuses `OutputUnread { stream }` after one launch, with the gate's failure flag observed. Every case is an `Err`, never a `Completed` outcome, so none confers playback or proof credit. Production source, sealed-artifact checks and gate scope are unchanged. Verified by inspection only; I did not run the test. |
+| FND-010 | fixed | Round 8: FR-015 now owns the policy in SHALL prose and FR-015-AC-128 (endpoint selection), AC-129 (sealed record member), AC-130 (one i64 draw, exact assumption, 8-byte witness, rebind only under the u16 policy) and AC-131 (byte-identical regeneration, policy-change provenance refusal). TC-025 step 11 adds the matching inspection. interface-001 adds `public_types` entries for `V2SymbolicEncodingPolicy` and the required `V2ClauseObligationIdentity.symbolic_encoding_policy` / `identity.symbolicEncodingPolicy` contract. The selection unit test is retagged FR-015-AC-128; the generated-source tests carry AC-128/129/130; the decoder test carries AC-130; the determinism and playback-provenance tests carry AC-131. |

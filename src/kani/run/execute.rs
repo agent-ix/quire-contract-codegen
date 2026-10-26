@@ -2349,6 +2349,14 @@ wait
         invalid_policy.identity.symbolic_encoding_policy =
             crate::kani::identity::V2SymbolicEncodingPolicy::PostAssumptionU16RebindV1;
         assert!(matches!(
+            execute_kani_obligation(&invalid_run.v2_playback_request(&invalid_policy, timeout)),
+            Err(KaniExecutionRefusal::HarnessProvenanceMismatch { .. })
+        ));
+        assert!(
+            invalid_run.calls().is_empty(),
+            "policy mismatch must not launch a proof"
+        );
+        assert!(matches!(
             execute_kani_concrete_playback(
                 &KaniExecutionRequest {
                     cancel: &invalid_run.cancel,

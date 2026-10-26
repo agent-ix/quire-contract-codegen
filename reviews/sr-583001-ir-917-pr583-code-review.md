@@ -115,6 +115,83 @@ Disposition pass 2 reviewed fix head 0afa590bca21eb2ebcb0afb185911ac82892d9a9 (o
 | --- | --- | --- | --- |
 | FND-012 | low | The 999 replay test hand-builds its own `Add` plan (no semantic domain, its own operand intervals) and restates the independent check as `assert_ne!(actual, 999 + 1)`. It does not execute the generated harness's arithmetic assertion at `amount_current = 999`. Only its `oracle_clause(&999)` half runs generated code. | tests/it/kani_obligations_state_frame.rs:1004-1033 |
 
+## New findings (disposition pass 3)
+
+Disposition pass 3 reviewed fix head be9328efa7d0ad383377b55e381a70a19f480813: commits 3814199f and
+be9328ef over the rebased round-2 head 21c7f85d, on main aa55d2256bebea3d06a583d5febf7c77f77801a2.
+`git range-diff` shows every earlier commit carried over unchanged. Main's delta is CG #585
+(FR-015-AC-41 and TC-025 step 11 text) plus its review files. I ran no cargo build or test: the host
+was at load average 27-41 with CG #569 running, and I found no log for the round-3 commits.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-013 | low | The playback source-check unit test covers only a missing test, a duplicated test and a wrong function name. It does not exercise several refusals `require_concrete_playback_in_crate` implements: an unparseable appended test, a wrong module, zero or two `#[test]` attributes, altered sealed harness bytes beside a correct appended test, and a V2 harness with invalid provenance. | src/kani/run/execute.rs:2053-2172 |
+| FND-014 | low | `KaniConcretePlaybackOutcome::Completed` reports only raw process success. A libtest run that matches zero tests also exits 0, so the public API leaves "the declared test ran and passed" to each caller parsing libtest stdout (documented at :83-85). The IR-917 caller does this; any other caller that skips the check gets false evidence. | src/kani/run/execute.rs:82-102 |
+
+## New findings (disposition pass 4)
+
+Disposition pass 4 reviewed fix head 75b6c4426ebeae30b9e301178a9b8d70f37e6061 (one commit over
+be9328ef, still on main aa55d2256bebea3d06a583d5febf7c77f77801a2). I ran no cargo build or test,
+because CG #569's cargo test was still running on the shared host, and I found no log for this commit.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-015 | high | `playback_test_passed` accepts only the exact line `test {test_name} ... ok`. The only real caller, the IR-917 999 playback, is a `#[should_panic(expected = ...)]` test, and libtest prints such a test as `test {name} - should panic ... ok`: `write_test_name` in library/test/src/formatters/pretty.rs (toolchain 1.98.1) adds `- {test_mode}` whenever `TestDesc::test_mode()` returns "should panic". A genuinely passing playback therefore returns `ConcretePlaybackTestNotObserved`, and the installed test's `.expect("bounded concrete playback starts and tears down")` fails on its first run. The unit stand-in prints the plain form, so this is not caught. | src/kani/run/execute.rs:507-517 |
+| FND-016 | low | The passing-test guard is unit-tested only for a zero-match summary and one exact plain pass. Untested cases are those TC-027 step 3 of draft CG #586 lists: a different passing test, a summary other than exactly one pass and zero failures, an assertion failure kept as `Completed { succeeded: false }`. Incidental or duplicated result lines are also untested; the matcher checks the test line and the summary line independently, so their order and pairing are unchecked. | src/kani/run/execute.rs:2233-2256 |
+
+## New findings (disposition pass 5)
+
+Disposition pass 5 reviewed fix head d571e110df94360c23d8ddad854c5cb1c663d652 on CG main
+4788b46723d7454af86fdbe9c7b4f4ad1154cbb6, which merges spec PR #586 and IR-348 (CG #569).
+`git range-diff aa55d225..75b6c442 4788b467..47f60919` shows every earlier commit carried over
+unchanged, and main's delta shares no file with the PR. The fix delta is 43bd0aed, 63e998b5,
+3a17dbea, d2a3e0df, 38107575 and d571e110. I ran no cargo build or test. Local installed-Kani logs
+(`target/ir917-installed-kani.log`, `target/ir917-installed-kani-24g.log`, 2026-10-25 23:28/23:39)
+show the healthy V2 proof `Inconclusive { reason: MemoryExhausted }` at 16 GiB after 257.85 s and at
+24 GiB after 328.69 s (peak 25,796,603,904 bytes), before any playback or mutant. IR-1022 owns this
+tractability.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-017 | medium | The PR adds an ignored installed test, matched by the `kani_obligations` filter of `KANI_FILTERS`, whose healthy proof is known to end `MemoryExhausted`. NFR-006 makes `make kani-gate` run that lane and fail unless every listed test passes. This PR touches `src/kani/` and `tests/it/kani_*.rs`, so it is itself in kani-gate scope, and after merge every later Kani-touching PR fails `make kani-gate` until IR-1022 lands. `make ci` excludes the lane, so a green `make ci` hides this. Merging needs an explicit owner/lead decision on the red lane; quarantining the test would weaken the gate and needs the same decision. No source defect is involved. | tests/it/kani_obligations_state_frame.rs:816-819 |
+
+## New findings (disposition pass 7)
+
+Disposition pass 7 reviewed head 98f7c46c9d14a9150b690fbbd28353f225a184b3 on CG main
+8db3554e0426ece64840e36cb73d1016de99960b, which adds #590 (AD-007) and IR-348 commits. `git
+range-diff 4788b467..3fa8bce4 8db3554e..3f92b906` shows every earlier commit carried over unchanged.
+The PR-owned delta is commit 98f7c46c (IR-1022): AD-007 status set to accepted; a required
+`V2SymbolicEncodingPolicy` (`original_i64_v1`, `post_assumption_u16_rebind_v1`) in
+`V2ClauseObligationIdentity` and the serialized sealed record; and a post-assumption `i64::from(x as
+u16)` rebind in both `render_clause` (precondition, as `<input>_rebound`) and `render_postcondition`
+(shadowing the symbolic name). The rebind is selected only when both checked endpoints lie in [0,
+u16::MAX]. The one `i64` `kani::any()` draw, its exact inclusive assumption, the 8-byte witness and
+the decoder are unchanged, and the oracle, subject call, expected value and probes consume the
+rebound value. The cast is lossless after the assumption, so the full checked domain is preserved.
+A provenance control refuses a harness whose identity policy was changed after generation. I ran no
+cargo build or test while CG #591 holds the host, and found no logged test or compile output for
+98f7c46c. The lead state records that the coder's focused tests passed and that the emitted
+precondition scratch compile was interrupted (exit 130, no verdict).
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-018 | low | The loop `for amount in 0_i64..=1000 { assert_eq!(i64::from(amount as u16), amount) }` asserts a Rust cast identity over test-supplied values; no production change can make it fail. The generated-source and record assertions beside it carry the actual evidence. | tests/it/kani_obligations_state_frame.rs:628-634 |
+| FND-019 | low | The `original_i64_v1` path is tested only at the private selection helper. No generated-harness or record test asserts that a clause whose checked domain has a negative endpoint or exceeds `u16::MAX` emits no rebind and records `symbolicEncodingPolicy = original_i64_v1`, as AD-007 requires ("otherwise retain the existing generation"). | src/kani/generate/clause/v2.rs:245-275 |
+
+## New findings (disposition pass 8)
+
+Disposition pass 8 reviewed head 92efc9c705735a7c765154cb54d93cdc678a8775: one commit (92efc9c7) over
+98f7c46c, still on main 8db3554e0426ece64840e36cb73d1016de99960b, with no rebase. The source change is
+a trace retag only. The tests replace the cast-identity loop, add an original-policy control for
+QSL-emitted edge domains, and add a twin helper that edits the checked range. The spec adds
+FR-015-AC-128 to AC-131, FR-015 prose, a TC-025 step 11 paragraph and interface-001 `public_types`. I
+ran no cargo build, test or Kani while CG #591 holds the host, and found no log for the coder's
+reported focused runs.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-020 | low | The new `original_i64_v1` generated-harness and record control covers only the postcondition constructor (`render_postcondition`, condition `amount = 0`). The precondition constructor `render_clause` has its own policy branch and binding names, but no test generates an out-of-u16 precondition and asserts no rebind and an `original_i64_v1` record. FR-015-AC-130 covers a V2 clause harness under either policy. | src/kani/generate/clause/v2.rs:143-176 |
+
 ## Dispositions
 
 | FND | outcome | reason |
@@ -130,3 +207,13 @@ Disposition pass 2 reviewed fix head 0afa590bca21eb2ebcb0afb185911ac82892d9a9 (o
 | FND-009 | fixed | Each mutant now patches `left.0.checked_add(right.0)` in an isolated clone of the locked quire-exact checkout. Both the embedded native oracle and the probe execute this through `evaluate_native_integer_arithmetic`, while the proof source, oracle bytes and subject stay unchanged. This matches the updated FR-015-AC-41 on main (CG #584). |
 | FND-010 | fixed | Round 2: the Kani run no longer asserts the backend's arbitrary witness equals 999, and it asserts only an in-domain playback. A separate `playback999` cargo test against the same patched owner crate asserts `Completed(1001)` and `oracle_clause(&999) == Ok(Completed(false))` from the unchanged generated proof source. The test strength is recorded as FND-012; the AC-41 spec tension is recorded as SR-583002 FND-007. |
 | FND-011 | fixed | Round 2: both mutants run through `execute_kani_obligation` on the isolated patched crate. The healthy run uses the same path, and the verdict must be `KaniRunOutcome::Falsified`. |
+| FND-012 | fixed | Round 3: the hand-restated replay is removed. The playback test sits inside the sealed generated module and calls `kani::concrete_playback_run(vec![999_i64.to_le_bytes().to_vec()], prove_clause)`, so the generated `prove_clause` and its own arithmetic `assert!` run at `amount_current = 999` against the same patched owner crate. Failure is attributed by `#[should_panic(expected = "arithmetic subterm agrees with independent i128 expectation")]`, after asserting that message occurs once in the harness, plus `test <module>::playback_amount_current_999 ... ok` in libtest stdout. The test checks byte-identity of the proof source minus the playback test, and `execute_kani_concrete_playback` re-checks it with the same bounded launcher (wall clock, cancellation, memory, owned teardown). Not run here: the installed lane is unrun. |
+| FND-013 | fixed | Round 4: `concrete_playback_uses_the_proof_process_bounds` now also asserts `ConcretePlaybackSourceMismatch` with zero launcher calls for a wrong module, an unparseable test, no `#[test]`, two `#[test]` attributes and altered sealed harness bytes. It asserts `HarnessProvenanceMismatch` with zero calls for a V2 clause harness whose record was changed after generation. The prior missing, duplicated and wrong-name cases and the timeout, cancellation and memory teardown controls are unchanged. |
+| FND-014 | fixed | Round 4: a successful launcher exit now returns `Completed { succeeded: true }` only when stdout has the exact test line and a `test result: ok. 1 passed; 0 failed;` summary. Otherwise it returns the new typed `ConcretePlaybackTestNotObserved { test_name }`, which is unit-tested for a zero-match run. `CARGO_TERM_COLOR=never` keeps output parseable. The matcher wrongly refuses should-panic tests (new FND-015), and its coverage is limited (FND-016). |
+| FND-015 | fixed | Round 5: `playback_test_passed` accepts exactly `test {name} ... ok` or `test {name} - should panic ... ok`, matching libtest's `write_test_name`. It requires that one pass line to precede exactly one `test result: ok. 1 passed; 0 failed;` summary, and fails closed on any other `test ... ` line or `test result:` line. `concrete_playback_parser_pairs_the_exact_test_and_summary` accepts the plain, should-panic and stderr-separated panic forms. `--lib` restricts playback to the library target, so a doc-test summary cannot appear. |
+| FND-016 | fixed | Round 5: the parser test refuses a wrong test, zero passes, two passes, a failed summary, a summary first, an interleaved pass line, a duplicate test, a duplicate summary, an unrelated passing test, incidental earlier and later results, and non-UTF-8 output. The unit test also keeps a failed build as `Completed { succeeded: false, exit_code: Some(101) }` with its bounded stdout. |
+| FND-017 | still-open | Round 6 (head 3fa8bce4fa8d61ca7c0b59f03952b47b5de2e62d, a test-only delta from d571e110 that touches no Makefile, `KANI_FILTERS`, `scripts/cg_gates.rs` or ignore attribute): unchanged. The ignored installed TC-025 test's healthy proof is still `MemoryExhausted` at 16 GiB and IR-1022 owns tractability, so `make kani` and `make kani-gate` stay red for this Kani-scope PR. The lead holds #583 as a draft, will not quarantine the test and will not merge with a red Kani gate. This is not a source defect. |
+| FND-017 | still-open | Round 7 (head 98f7c46c): unchanged. The IR-1022 rebind exists in source only; no installed healthy proof has run at this head. The latest recorded installed runs remain `MemoryExhausted` (16 GiB and 24 GiB), and the lead state records the isolated diagnostic as `MemoryObservationFailed` with no verdict. `make kani` and `make kani-gate` still select this ignored test, and it stays red until a healthy `Verified` run with its cover satisfied, plus both same-clause mutants and the 999 playback, run at the original 16 GiB profile. |
+| FND-017 | still-open | Round 8 (head 92efc9c7): unchanged. No installed healthy `Verified` run with its cover satisfied, no same-clause owner-kernel mutant `Falsified` runs, and no healthy or exact-999 playback exist at any IR-1022 head. The ignored test is still selected by `make kani` and `make kani-gate`. |
+| FND-018 | fixed | Round 8: the cast-identity loop is removed. The test now locates the generated exact assumption `kani::assume(amount_current >= 0_i64 && amount_current <= 1000_i64);`, the rebind `let amount_current = i64::from(amount_current as u16);` and `let expected = `. It asserts that order (assumption < rebind < expectation) and exactly one `let amount_current = i64::from(` occurrence, so a missing, duplicated or misplaced generated rebind fails. Because the rebind shadows the symbolic name, the oracle input, subject call and probes after it consume the rebound value. |
+| FND-019 | fixed | Round 8: `qsl_v2_outside_u16_domain_keeps_original_i64_harness_and_record` generates QSL-emitted packages whose checked parameter range is (-1, 1000) and (0, 65536), the edges on each side of [0, u16::MAX]. For each it asserts the identity policy `OriginalI64V1`, arguments equal to the edited range (proving the edit reached the parameter), one `kani::any()`, the exact inclusive assumption, no ` as u16`, `subject::check(amount_current)`, `identity.symbolicEncodingPolicy = original_i64_v1` in the sealed record, and parseable Rust. Only the postcondition constructor is covered (new FND-020). |

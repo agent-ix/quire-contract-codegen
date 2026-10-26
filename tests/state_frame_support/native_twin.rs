@@ -442,6 +442,19 @@ impl Twin {
         twin
     }
 
+    /// A source-authored precondition whose checked parameter range crosses a carrier edge.
+    pub fn with_bounded_other_precondition_and_range(minimum: i64, maximum: i64) -> Self {
+        let mut twin =
+            Self::with_bounded_other_precondition().with_parameter_range(minimum, maximum);
+        twin.unit = unit_source(&hex(&jcs_digest(&twin.domain)), &[CLAUSES[0]], 0)
+            .replace(
+                "post BalanceNeverDrops using v on Bank::Account::deposit { self.balance >= pre(self.balance) }",
+                "pre OtherBelowLimit using v on Bank::Account::deposit { other < 1000 }",
+            )
+            .into_bytes();
+        twin
+    }
+
     /// Source-authored condition over the existing `Int[0, 1000]` parameter.
     pub fn with_bounded_amount_condition(condition: &str) -> Self {
         let mut twin = Self::with_bounded_other_condition();
@@ -473,8 +486,16 @@ impl Twin {
         minimum: i64,
         maximum: i64,
     ) -> Self {
-        let mut twin = Self::with_bounded_amount_condition(condition);
-        let mut document: Value = serde_json::from_slice(&twin.domain).expect("domain document");
+        let mut twin =
+            Self::with_bounded_amount_condition(condition).with_parameter_range(minimum, maximum);
+        twin.unit = unit_source(&hex(&jcs_digest(&twin.domain)), &[CLAUSES[0]], 0)
+            .replace("self.balance >= pre(self.balance)", condition)
+            .into_bytes();
+        twin
+    }
+
+    fn with_parameter_range(mut self, minimum: i64, maximum: i64) -> Self {
+        let mut document: Value = serde_json::from_slice(&self.domain).expect("domain document");
         let amount_type = document["types"]
             .as_array_mut()
             .expect("types")
@@ -490,11 +511,8 @@ impl Twin {
                 .expect("range constraint");
             bound["operands"]["value"] = json!(value.to_string());
         }
-        twin.domain = document.to_string().into_bytes();
-        twin.unit = unit_source(&hex(&jcs_digest(&twin.domain)), &[CLAUSES[0]], 0)
-            .replace("self.balance >= pre(self.balance)", condition)
-            .into_bytes();
-        twin
+        self.domain = document.to_string().into_bytes();
+        self
     }
 
     /// The original guarded arithmetic condition with the same declared bounds.
