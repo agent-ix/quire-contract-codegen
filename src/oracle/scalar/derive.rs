@@ -9,6 +9,7 @@ use super::{
     ExactScalarItem, ExactScalarOperation, ExactScalarRefusal, IeeeArithmeticOperator,
     OrderingOperandKind, QuantityOperator, RationalOperator, ScalarForm, QUANTITY_CONVERT_IDENTITY,
 };
+use crate::core::ir::scalar as scalar_ir;
 use crate::core::ir::scalar_bounds::{
     read_decimal_range, read_float_rounding, read_integer_range, read_rational_range,
     read_text_bounds,
@@ -30,10 +31,7 @@ pub(super) fn conversion_target<Body: GraphBody, NodeBody>(
     graph: &Graph<'_, Body>,
     node: &CheckedSemanticNodeV2<NodeBody>,
 ) -> Option<CheckedNodeId> {
-    let payload = graph.operation(&node.node_id)?;
-    (payload["identity"].as_str() == Some(QUANTITY_CONVERT_IDENTITY))
-        .then(|| serde_json::from_value(payload["member"]["declaration"].clone()).ok())
-        .flatten()
+    scalar_ir::quantity_conversion_target(graph.term(&node.node_id), QUANTITY_CONVERT_IDENTITY)
 }
 
 pub(super) fn quantity_conversion_target_is_unit<Body: GraphBody, NodeBody>(
@@ -327,10 +325,7 @@ impl<Body: GraphBody, NodeBody, BoundBody> Derivation<'_, '_, '_, Body, NodeBody
 
     /// The `operation.mode` value when its kind is `rounding`.
     fn mode_value(&self) -> Option<&str> {
-        let mode = &self.graph.operation(&self.node.node_id)?["mode"];
-        (mode["kind"].as_str() == Some("rounding"))
-            .then(|| mode["value"].as_str())
-            .flatten()
+        scalar_ir::mode(self.graph.term(&self.node.node_id), "rounding")
     }
 
     /// Requires `operation.mode` to carry `rounding`.
@@ -347,16 +342,10 @@ impl<Body: GraphBody, NodeBody, BoundBody> Derivation<'_, '_, '_, Body, NodeBody
         let named = DivisionProfile::ALL
             .into_iter()
             .filter(|profile| {
-                self.graph
-                    .operation(&self.node.node_id)
-                    .and_then(|operation| operation.get("laws"))
-                    .and_then(Value::as_array)
-                    .into_iter()
-                    .flatten()
-                    .any(|law| {
-                        law["definition"]["identity"].as_str()
-                            == Some(profile.definition_identity())
-                    })
+                scalar_ir::has_law(
+                    self.graph.term(&self.node.node_id),
+                    profile.definition_identity(),
+                )
             })
             .collect::<Vec<_>>();
         match named.as_slice() {
@@ -440,10 +429,7 @@ pub(super) fn derive_operation_from_view<'g, Body: GraphBody, NodeBody, BoundBod
         }
         .refusal());
     }
-    let identity = graph
-        .operation(&node.node_id)
-        .and_then(|operation| operation.get("identity"))
-        .and_then(Value::as_str)
+    let identity = scalar_ir::identity(graph.term(&node.node_id))
         .ok_or_else(|| ClaimDerivationRefusal::MissingOperationIdentity.refusal())?;
     let derivation = Derivation {
         graph,
