@@ -450,16 +450,10 @@ Rules, each checkable:
   report parse, so those tests move to `kani/classify.rs`, which may import `output`. The tests
   that need only the report parse stay with `output/report.rs`. The step 2f item map decides each
   test by name.
-- One interim exception to the typed-values target, recorded as the code has it. `classify_kani_run`
-  takes the console text beside the typed report, and `classify_report` calls
-  `counterexample_playback` on it for a falsifying check, so `kani/classify.rs` imports
-  `kani/output/playback.rs`. The Kani run table below records the target and today's reading side
-  by side. The edge points in the allowed direction (`classify` is after `output`), so no order rule
-  is broken; the exception is to L-6 (the classifier takes typed values) and is listed there. It
-  holds before this AD, and step 2f keeps it as it is. Step 5 removes it by changing the classifier's
-  input from the text to the playback `output/playback.rs` extracts; that signature change is public
-  (`classify_kani_run` is `pub` so tests can reach the production classifier) and is step 5's to
-  design.
+- The former L-6 exception is closed by step 5: `classify_kani_run` takes
+  `Option<CounterexamplePlayback>` beside the typed report. `kani/output/playback.rs` extracts
+  that value from console text; `kani/classify.rs` does not read the text. The edge from
+  `classify` to `output` remains in the allowed direction.
 - `serde_json::Value` is named only in `core/ir`, `core/canonical` and the report parser. No other
   file reads a field of a body term.
 - `BoundPackage` and `BoundClause` are named only in `strategy/`, `evidence/`, `oracle/boolean_v1.rs`,
@@ -767,8 +761,8 @@ Where the runner, report parser and witness decode sit. One module reads Kani's 
 | Launch, capture cap, timeout, process-group kill, harness-in-crate check | `kani/run/` | process only |
 | Report parse | `kani/output/report.rs` | the JSON file, typed |
 | Playback extraction | `kani/output/playback.rs` | the printed block, as a payload; Kani's report carries no concrete playback |
-| Run classification and vacuity | `kani/classify.rs` | the typed report; TARGET: nothing else. Today also the run's console text (`classify_kani_run`'s `text` parameter), which it hands to `output/playback.rs`'s `counterexample_playback` for a falsifying check; an interim exception removed by step 5 (see Dependency direction and L-6) |
-| Witness decode | `replay/witness.rs` | TARGET: typed playback entries only. Until step 5 it reads the block through `output/playback.rs`'s scan and compares Kani's decoded-value comment itself (`boolean_comment`) |
+| Run classification and vacuity | `kani/classify.rs` | the typed report and `Option<CounterexamplePlayback>` extracted by `kani/output/playback.rs`; step 5 removed the console-text input |
+| Witness decode | `replay/witness.rs` | typed playback entries from `kani/output/playback.rs`; step 5 moved comment reading into the output reader |
 | FR-029 map: `KaniRunOutcome` to a terminal value | `kani/terminal.rs` | typed run outcome only |
 | C-09 map: IR's `KaniOutcome` with the replay outcome to `TerminalValue` | `kani/terminal.rs`, a public entry | typed outcome and the replay-outcome type it defines; total over the pair (step 5) |
 | Pairing the two inputs | the driver, outside this crate | runs the replay and calls the C-09 entry with both |
@@ -780,17 +774,12 @@ request and also call `replay` themselves (AD-001's Replay view). That is a devi
 recorded here: the layout keeps `replay/` calling `replay` until the driver takes the call, at which
 point `replay/` only builds the request and converts results. This AD does not schedule that move.
 
-Today `kani_witness_join` also scans Kani's text (`check_clause`, `select_assertion_block`,
-`read_block`, `concrete_entries`, with `unescaped_quote` and `bracketed`), which breaks AD-001's
-"Kani's printed wording is read in exactly one module". Two steps fix it, and the first is a
-verbatim move. Step 2f moves the scan items, the two marker constants, the `Playback` and
-`CheckKind` types and `DecodeFailure` (the error the scan raises, so `kani` need not import
-`replay`) to `kani/output/playback.rs`, unchanged but for visibility; the decode half stays in the
-flat `kani_witness_join.rs`. Step 2g moves that half to `replay/witness.rs`. Step 5 then changes
-the interface: `playback.rs` returns typed `(name, rendered value)` entries and its own typed
-refusal, and `replay/witness.rs` receives them, checks them against the persisted argument
-bindings and builds `qsl_replay::WitnessValue`. Replay imports `kani`; `kani` never imports
-`replay`. That gives one report parse and one playback parse. The removal of IR's witness-accessor re-parse (IR-277) is
+The former `kani_witness_join` text scan now lives in `kani/output/playback.rs`.
+Step 2f moved the scan there, step 2g moved witness decoding to `replay/witness.rs`, and step 5
+made the output reader return typed entries and a typed refusal. `replay/witness.rs` checks those
+entries against persisted argument bindings and builds `qsl_replay::WitnessValue`. Replay imports
+`kani`; `kani` never imports `replay`. There is one report parse and one playback parse.
+The removal of IR's witness-accessor re-parse (IR-277) is
 on IR's side: CG imports no IR witness type already (AD-001), so nothing in CG depends on those
 accessors. Batching (IR-277) touches `run/` only, plus the keyed parse above.
 
@@ -934,11 +923,9 @@ requirement is authored.
 - L-6. Kani output is read in `kani/output/` only, and the classifier, the terminal maps and the
   witness decode take typed values. Test: a grep for Kani's banner, check and playback wording
   outside that directory, over non-test source: the test modules that embed real Kani captures as
-  fixtures (`kani/classify.rs`, the decode tests) are not scanned. Interim exceptions, listed by
-  file and each removed with its step: `kani/classify.rs` takes the console text and calls
-  `counterexample_playback` (removed by step 5), and the flat `kani_witness_join.rs`, then
-  `replay/witness.rs`, still compares Kani's decoded-value comment in `decode_values` and
-  `boolean_comment` (removed by step 5, when the typed entries carry the rendered value).
+  fixtures (`kani/classify.rs`, the decode tests) are not scanned. Step 5 removed the former
+  console-text classifier input and witness comment comparison. `kani/output/playback.rs` now
+  supplies `CounterexamplePlayback` for classification and typed entries for witness decoding.
 - L-7. The report path is `<target-dir>/quire-kani-report-<pid>-<seq>.json`, unique to the launch,
   removed only by its own run before launch and after reading, and absent from every
   `ArtifactBundle`. Test: a stand-in launcher that leaves another run's report, and concurrent
@@ -1428,9 +1415,6 @@ Each is a place where the target of this AD is not yet true, stated so that no s
 
 | Exception | Where | Removed by |
 | --- | --- | --- |
-| The classifier takes console text and calls `counterexample_playback`, so `classify` imports `output/playback` | `kani/classify.rs` | step 5 (the classifier takes the extracted playback); L-6's listed exception |
-| The decode half compares Kani's decoded-value comment (`decode_values`, `boolean_comment`) | flat `kani_witness_join.rs`, then `replay/witness.rs` | step 5 (typed entries carry the rendered value); L-6's listed exception |
-| `DecodeFailure` is defined in `kani/output/playback.rs`, where the scan raises it | `kani/output/playback.rs` | step 5 (the reader gets its own typed refusal; `DecodeFailure` moves to `replay/witness.rs`) |
 | The V1 bundle generator, still live | `kani/generate/v1_bundle.rs` | step 4f deletes the file |
 | `validate_dependencies`, the V1 error type it returns and `deterministic_json` | `kani/generate/census_validation.rs` | 4g or the V2 census input for the first two; step 1a for `deterministic_json` |
 | The shared V1 clause lowering and the V1 arm (`ObligationItem::BoundClause` in `outcome.rs`, `classify_clause` in `negotiate.rs`) | `kani/generate/clause.rs`, `outcome.rs`, `negotiate.rs` | step 4c reshapes the lowering for the V2 input; 4f deletes the V1 arm |
