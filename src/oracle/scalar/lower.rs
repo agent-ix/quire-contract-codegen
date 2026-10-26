@@ -40,6 +40,7 @@ use crate::core::contract_package::{
     PackageRequestError,
 };
 use crate::core::ir::checked_term::{aggregate_members, literal_integer};
+use crate::core::ir::scalar as scalar_ir;
 use crate::core::ir::scalar_bounds::{
     read_decimal_range, read_float_rounding, read_integer_range, read_rational_range,
     read_text_bounds,
@@ -131,7 +132,7 @@ pub(super) fn check_item<'r, Body: GraphBody>(
         }
     }
     let shape = Shape::of(operation).map_err(ItemCheckError::Generation)?;
-    if &*node.node.semantic_form != shape.form {
+    if scalar_ir::shape(&node.node).form != shape.form {
         return Err(ExactScalarRefusal::FormMismatch {
             expected: shape.form,
             found: node.node.semantic_form.to_string(),
@@ -420,11 +421,7 @@ pub(super) fn narrows<Body: GraphBody>(
 ) -> bool {
     &*consumer.node_tag == CheckedNodeTag::Expression.as_wire()
         && &*consumer.semantic_form == "conversion"
-        && graph
-            .operation(&consumer.node_id)
-            .and_then(|op| op.get("identity"))
-            .and_then(Value::as_str)
-            == Some(NARROW_IDENTITY)
+        && scalar_ir::identity(graph.term(&consumer.node_id)) == Some(NARROW_IDENTITY)
         && application_arguments(graph.term(&consumer.node_id), "convert").is_some_and(
             |arguments| matches!(arguments, [only] if reference_target(only).as_ref() == Some(id)),
         )
@@ -685,12 +682,11 @@ pub(super) fn infer_integer_range<Body: GraphBody>(
             } else if &*node.node_tag == CheckedNodeTag::Expression.as_wire()
                 && scalar_type_form(graph, &node.semantic_type).as_deref() == Some("integer")
             {
-                let operation = graph
-                    .operation(&node.node_id)
-                    .and_then(|v| v.get("identity"))
-                    .and_then(Value::as_str)
-                    .ok_or_else(|| ExactScalarRefusal::InvalidBody {
-                        body_node_id: node_id.clone(),
+                let operation =
+                    scalar_ir::identity(graph.term(&node.node_id)).ok_or_else(|| {
+                        ExactScalarRefusal::InvalidBody {
+                            body_node_id: node_id.clone(),
+                        }
                     })?;
                 let integer_operator = CatalogOperator::from_identity(operation)
                     .and_then(|catalogued| catalogued.entry().scalar_operator)
@@ -1478,10 +1474,7 @@ pub(super) fn catalogued_operation_identity<Body: GraphBody>(
     graph: &Graph<'_, Body>,
     node: &CompleteContractNodeV2,
 ) -> Result<String, ExactScalarRefusal> {
-    graph
-        .operation(&node.node.node_id)
-        .and_then(|operation| operation.get("identity"))
-        .and_then(Value::as_str)
+    scalar_ir::identity(graph.term(&node.node.node_id))
         .map(str::to_owned)
         .ok_or_else(|| ExactScalarRefusal::MissingOperationIdentity {
             node_id: node.node.node_id.clone(),
@@ -1731,23 +1724,20 @@ pub(super) fn operation_confirmed<Body: GraphBody>(
     let Some(catalogued) = catalogued_operation(operation)? else {
         return Ok(false);
     };
-    let Some(payload) = graph.operation(&node.node.node_id) else {
+    let term = graph.term(&node.node.node_id);
+    let Some(identity) = scalar_ir::identity(term) else {
         return Ok(false);
     };
-    if payload["identity"].as_str() != Some(catalogued.identity) {
+    if identity != catalogued.identity {
         return Ok(false);
     }
     if let Some((kind, value)) = catalogued.mode {
-        let mode = &payload["mode"];
-        if mode["kind"].as_str() != Some(kind) || mode["value"].as_str() != Some(value) {
+        if scalar_ir::mode(term, kind) != Some(value) {
             return Ok(false);
         }
     }
     if let ExactScalarOperation::IntegerDivision { profile, .. } = operation {
-        let law_confirmed = payload["laws"].as_array().into_iter().flatten().any(|law| {
-            law["definition"]["identity"].as_str() == Some(profile.definition_identity())
-        });
-        if !law_confirmed {
+        if !scalar_ir::has_law(term, profile.definition_identity()) {
             return Ok(false);
         }
     }
@@ -2116,13 +2106,7 @@ pub(super) fn node_implication_count<Body: GraphBody, NodeBody>(
     graph: &Graph<'_, Body>,
     node: &CheckedSemanticNodeV2<NodeBody>,
 ) -> u32 {
-    u32::from(
-        graph
-            .operation(&node.node_id)
-            .and_then(|op| op.get("identity"))
-            .and_then(Value::as_str)
-            == Some("quire.op.boolean.implies"),
-    )
+    u32::from(scalar_ir::identity(graph.term(&node.node_id)) == Some("quire.op.boolean.implies"))
 }
 
 /// Checked selected claims before oracle source is rendered.
@@ -2193,10 +2177,7 @@ pub(super) fn plan_contract_scalar_oracles(
                             cause: Box::new(ContractRootViewError::Inconsistent),
                         })
                     })?;
-                let identity = graph
-                    .operation(&closure.root.node_id)
-                    .and_then(|operation| operation.get("identity"))
-                    .and_then(Value::as_str)
+                let identity = scalar_ir::identity(graph.term(&closure.root.node_id))
                     .unwrap_or_default()
                     .to_owned();
                 let tag = CheckedNodeTag::from_wire(&closure.root.node_tag);

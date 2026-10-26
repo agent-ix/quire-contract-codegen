@@ -147,14 +147,6 @@ impl<'a, Body: GraphBody> CheckedGraph<'a, Body> {
         self.ordered.len()
     }
 
-    /// The unchanged catalog payload of an admitted application.
-    pub(crate) fn operation(&self, key: &CheckedNodeId) -> Option<&'a serde_json::Value> {
-        match self.term(key)? {
-            CheckedTerm::Application { operation, .. } => Some(operation),
-            _ => None,
-        }
-    }
-
     /// Arguments in the admitted application's original source order.
     pub(crate) fn arguments(&self, key: &CheckedNodeId) -> Option<&'a [CheckedTerm]> {
         match self.term(key)? {
