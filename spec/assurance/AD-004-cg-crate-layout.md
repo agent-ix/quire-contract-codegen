@@ -450,7 +450,7 @@ Rules, each checkable:
   report parse, so those tests move to `kani/classify.rs`, which may import `output`. The tests
   that need only the report parse stay with `output/report.rs`. The step 2f item map decides each
   test by name.
-- The former L-6 exception is closed by step 5: `classify_kani_run` takes
+- The classifier's former L-6 exception is closed by step 5: `classify_kani_run` takes
   `Option<CounterexamplePlayback>` beside the typed report. `kani/output/playback.rs` extracts
   that value from console text; `kani/classify.rs` does not read the text. The edge from
   `classify` to `output` remains in the allowed direction.
@@ -762,7 +762,7 @@ Where the runner, report parser and witness decode sit. One module reads Kani's 
 | Report parse | `kani/output/report.rs` | the JSON file, typed |
 | Playback extraction | `kani/output/playback.rs` | the printed block, as a payload; Kani's report carries no concrete playback |
 | Run classification and vacuity | `kani/classify.rs` | the typed report and `Option<CounterexamplePlayback>` extracted by `kani/output/playback.rs`; step 5 removed the console-text input |
-| Witness decode | `replay/witness.rs` | typed playback entries from `kani/output/playback.rs`; step 5 moved comment reading into the output reader |
+| Witness decode | `replay/witness.rs` | `decode_falsification` takes typed playback entries from `kani/output/playback.rs`; the public V2 clause convenience entry still takes transcript text and calls the output parser before decoding |
 | FR-029 map: `KaniRunOutcome` to a terminal value | `kani/terminal.rs` | typed run outcome only |
 | C-09 map: IR's `KaniOutcome` with the replay outcome to `TerminalValue` | `kani/terminal.rs`, a public entry | typed outcome and the replay-outcome type it defines; total over the pair (step 5) |
 | Pairing the two inputs | the driver, outside this crate | runs the replay and calls the C-09 entry with both |
@@ -926,6 +926,9 @@ requirement is authored.
   fixtures (`kani/classify.rs`, the decode tests) are not scanned. Step 5 removed the former
   console-text classifier input and witness comment comparison. `kani/output/playback.rs` now
   supplies `CounterexamplePlayback` for classification and typed entries for witness decoding.
+  The public `decode_v2_clause_falsification` entry in `replay/witness.rs` still takes a raw
+  transcript and invokes the output parser itself; L-6 remains partial until this entry takes
+  parsed playback from its caller.
 - L-7. The report path is `<target-dir>/quire-kani-report-<pid>-<seq>.json`, unique to the launch,
   removed only by its own run before launch and after reading, and absent from every
   `ArtifactBundle`. Test: a stand-in launcher that leaves another run's report, and concurrent
@@ -1415,6 +1418,7 @@ Each is a place where the target of this AD is not yet true, stated so that no s
 
 | Exception | Where | Removed by |
 | --- | --- | --- |
+| The public V2 clause witness entry takes transcript text, then calls the output parser before typed decoding | `replay/witness.rs`, `decode_v2_clause_falsification` | move parsing to the caller and pass `Playback` directly; L-6 remains partial |
 | The V1 bundle generator, still live | `kani/generate/v1_bundle.rs` | step 4f deletes the file |
 | `validate_dependencies`, the V1 error type it returns and `deterministic_json` | `kani/generate/census_validation.rs` | 4g or the V2 census input for the first two; step 1a for `deterministic_json` |
 | The shared V1 clause lowering and the V1 arm (`ObligationItem::BoundClause` in `outcome.rs`, `classify_clause` in `negotiate.rs`) | `kani/generate/clause.rs`, `outcome.rs`, `negotiate.rs` | step 4c reshapes the lowering for the V2 input; 4f deletes the V1 arm |
