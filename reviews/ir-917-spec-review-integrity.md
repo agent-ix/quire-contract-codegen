@@ -20,3 +20,9 @@ Reviewed CG PR #585 exact head 52a4dfde26116ea81cd2c313f6c8df14c75f057f against 
 ## Verdict
 
 PASS WITH LOW FINDING. FR-015-AC-41 and TC-025 step 11 agree with each other. One low gap: the playback is not bound to the same generated harness source.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1 at e6902279401586508a42d0194ce8352cd2a3ad5f. Fix commit e6902279 adds the sealed generated harness source and body, and its identity record, to the artifacts that must be unchanged from the unconstrained plus-one Kani run. They join the oracle bytes, clause identity and native expectation, matching FR-015-AC-119. The one exclusion, an appended playback-only test, sits outside the sealed harness, and the generated assertion must still execute. TC-025 step 11 matches, and no regression was found. |
