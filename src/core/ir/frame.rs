@@ -130,6 +130,19 @@ pub(crate) fn parameter_references(term: &CheckedTerm) -> Option<Vec<CheckedNode
 #[cfg(test)]
 mod tests {
     #[test]
+    fn function_oracle_reads_operation_identity_through_core_ir() {
+        let source = include_str!("../../oracle/function/mod.rs");
+        let compact: String = source
+            .chars()
+            .filter(|character| !character.is_whitespace())
+            .collect();
+        assert!(!compact.contains("operation.get("));
+        assert!(!compact.contains("operation["));
+        assert!(!compact.contains("Application{operation"));
+        assert!(!compact.contains("serde_json::Value::as_str"));
+    }
+
+    #[test]
     fn frame_generator_uses_typed_graph_and_operation_access() {
         let source = include_str!("../../kani/generate/frame.rs");
         assert!(!source.contains("serde_json::Value"));
