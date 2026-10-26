@@ -164,9 +164,9 @@ pub use kani::output::report::{
     KaniReportRefusal, OtherCheckClass,
 };
 pub use kani::run::execute::{
-    execute_kani_obligation, execute_kani_obligations, KaniBatchInvocation, KaniExecutionEvidence,
-    KaniExecutionRefusal, KaniExecutionRequest, KaniGroupRun, OUTPUT_OVER_LIMIT_CODE,
-    OUTPUT_UNREAD_CODE,
+    execute_kani_concrete_playback, execute_kani_obligation, execute_kani_obligations,
+    KaniBatchInvocation, KaniConcretePlaybackOutcome, KaniExecutionEvidence, KaniExecutionRefusal,
+    KaniExecutionRequest, KaniGroupRun, OUTPUT_OVER_LIMIT_CODE, OUTPUT_UNREAD_CODE,
 };
 pub use kani::run::harness::KaniExecutableHarness;
 pub use kani::run::launch::CaptureStream;

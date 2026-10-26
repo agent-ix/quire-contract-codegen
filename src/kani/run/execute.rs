@@ -71,6 +71,44 @@ pub struct KaniExecutionRequest<'a> {
     pub home_directory: Option<&'a Path>,
 }
 
+/// The bounded native execution of one concrete Kani playback test. A successful
+/// process is evidence only when the caller also observes its exact test name in
+/// `stdout`; libtest may exit successfully after running zero matching tests.
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum KaniConcretePlaybackOutcome {
+    /// The playback test process exited on its own.
+    Completed {
+        /// Whether the process exited successfully.
+        succeeded: bool,
+        /// Exit code, when one was available.
+        exit_code: Option<i32>,
+        /// Complete, bounded stdout from the playback process.
+        stdout: Vec<u8>,
+        /// Complete, bounded stderr from the playback process.
+        stderr: Vec<u8>,
+        /// Observed process-tree memory use.
+        memory: MemoryObservation,
+    },
+    /// The process exceeded the harness's wall-clock ceiling and was torn down.
+    TimedOut {
+        /// Observed process-tree memory before owned teardown.
+        memory: MemoryObservation,
+    },
+    /// Cancellation stopped the process and its owned tree.
+    Cancelled {
+        /// First observed cancellation source.
+        source: KaniCancellationSource,
+        /// Observed process-tree memory before owned teardown.
+        memory: MemoryObservation,
+    },
+    /// The process exceeded the harness's memory ceiling and was torn down.
+    MemoryExhausted {
+        /// Observed process-tree memory before owned teardown.
+        memory: MemoryObservation,
+    },
+}
+
 /// Why a harness was not run.
 #[derive(Debug)]
 pub enum KaniExecutionRefusal {
@@ -372,6 +410,62 @@ pub fn execute_kani_obligation(
 ) -> Result<KaniExecutionEvidence, KaniExecutionRefusal> {
     require_in_crate(request)?;
     run_single(request, None)
+}
+
+/// Runs one exact concrete-playback unit test with the same process-tree bounds,
+/// cancellation, output limits, and owned teardown as a proof run. The caller
+/// prepares the playback test in its scratch crate after the original sealed
+/// proof has run; this entry point does not classify a Kani proof verdict.
+pub fn execute_kani_concrete_playback(
+    request: &KaniExecutionRequest<'_>,
+    exact_test: &str,
+) -> Result<KaniConcretePlaybackOutcome, KaniExecutionRefusal> {
+    if !request.harness.has_valid_provenance() {
+        return Err(KaniExecutionRefusal::HarnessProvenanceMismatch {
+            harness_path: request.harness.view().rust.path.clone(),
+        });
+    }
+    let arguments = [
+        "kani",
+        "playback",
+        "-Z",
+        "concrete-playback",
+        "--",
+        exact_test,
+        "--exact",
+        "--nocapture",
+    ]
+    .map(str::to_owned);
+    let mut command = super::namespace::BackendCommand::new(&request.installation.launcher);
+    command
+        .args(&arguments)
+        .env("CARGO_TARGET_DIR", request.target_directory)
+        .current_dir(request.crate_directory);
+    let launch = start(
+        request,
+        command,
+        request.harness.view().ceilings.wall_clock,
+        NonZeroUsize::MIN,
+    )?;
+    let memory = launch.memory;
+    match settle(launch.outcome)? {
+        Concluded::Completed {
+            exited_successfully,
+            exit_code,
+            streams,
+        } => Ok(KaniConcretePlaybackOutcome::Completed {
+            succeeded: exited_successfully,
+            exit_code,
+            stdout: streams.stdout,
+            stderr: streams.stderr,
+            memory,
+        }),
+        Concluded::TimedOut => Ok(KaniConcretePlaybackOutcome::TimedOut { memory }),
+        Concluded::Cancelled { source } => {
+            Ok(KaniConcretePlaybackOutcome::Cancelled { source, memory })
+        }
+        Concluded::MemoryExhausted => Ok(KaniConcretePlaybackOutcome::MemoryExhausted { memory }),
+    }
 }
 
 /// Runs a harness from a prepared source tree that must remain read-only for the backend.
@@ -1882,6 +1976,82 @@ wait
                 reason: KaniInconclusiveReason::MemoryExhausted
             }
         );
+    }
+
+    /// Concrete playback uses the proof launcher's wall clock, cancellation,
+    /// and owned process-tree teardown rather than starting a raw Cargo child.
+    #[trace("FR-015-AC-41", "TC-025")]
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn concrete_playback_uses_the_proof_process_bounds() {
+        let timeout = Duration::from_secs(2);
+        let mut harness = memory_member("playback", 128 * 1024 * 1024);
+        harness.identity.ceilings.wall_clock = timeout;
+        let body = "printf '%s' \"$(readlink /proc/self/ns/pid)\" > \"$CALLS.namespace\"\nsleep 45 &\nprintf '%s' \"$!\" > \"$CALLS.child\"\nwait";
+        let timed = StandIn::running("playback-timeout", body);
+        let result = execute_kani_concrete_playback(
+            &timed.request(&harness, timeout),
+            "proof::playback_999",
+        )
+        .unwrap();
+        assert!(matches!(
+            result,
+            KaniConcretePlaybackOutcome::TimedOut { .. }
+        ));
+        assert_eq!(
+            timed.calls(),
+            [vec![
+                "kani",
+                "playback",
+                "-Z",
+                "concrete-playback",
+                "--",
+                "proof::playback_999",
+                "--exact",
+                "--nocapture"
+            ]]
+        );
+        recorded_process_gone(&timed.directory.join("calls.child"));
+
+        let cancellation_ceiling = T;
+        harness.identity.ceilings.wall_clock = cancellation_ceiling;
+        let cancelled = StandIn::running("playback-cancel", body);
+        let result = std::thread::scope(|scope| {
+            let worker = scope.spawn(|| {
+                execute_kani_concrete_playback(
+                    &cancelled.request(&harness, cancellation_ceiling),
+                    "proof::playback_999",
+                )
+            });
+            let ready = cancelled.directory.join("calls.child");
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while !ready.is_file() {
+                assert!(Instant::now() < deadline, "playback process started");
+                std::thread::yield_now();
+            }
+            cancelled.cancel.cancel(quire_exact::CancelCause::Requested);
+            worker.join().unwrap().unwrap()
+        });
+        assert!(matches!(
+            result,
+            KaniConcretePlaybackOutcome::Cancelled {
+                source: KaniCancellationSource::Requested,
+                ..
+            }
+        ));
+        recorded_process_gone(&cancelled.directory.join("calls.child"));
+
+        let limited = memory_member("playback_memory", 32 * 1024 * 1024);
+        let memory = StandIn::running("playback-memory", CHILD_MEMORY_OVERAGE);
+        let result =
+            execute_kani_concrete_playback(&memory.request(&limited, T), "proof::playback_999")
+                .unwrap();
+        assert!(matches!(
+            result,
+            KaniConcretePlaybackOutcome::MemoryExhausted { .. }
+        ));
+        recorded_process_gone(&memory.directory.join("calls.child"));
+        recorded_process_gone(&memory.directory.join("calls.sibling"));
     }
 
     // Exercises the real Linux namespace/procfs bounded execution API.

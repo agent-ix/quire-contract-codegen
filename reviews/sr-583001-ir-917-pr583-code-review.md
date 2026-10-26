@@ -106,6 +106,15 @@ The fix delta is ab92a63b plus 738ca6fa.
 | FND-010 | medium | The `plus_one` owner-kernel mutant asserts playback `amount_current = 999`. The mutated `Add` makes the independent arithmetic assertion fail for every admitted `amount` in 0..=999 (the result is wrong, or refused where the true one completes), so the backend's chosen counterexample is not forced to be 999. When first run, the assertion can fail although the mutant was correctly falsified. | tests/it/kani_obligations_state_frame.rs:917-921 |
 | FND-011 | medium | Both owner-kernel mutant runs call raw `cargo kani` outside `execute_kani_obligation`. They therefore run without the bounded memory, teardown and ceiling path the healthy run uses, on a shared host for a clause with known memory pressure. Their verdicts are also not produced under the same ceiling as the healthy run. | tests/it/kani_obligations_state_frame.rs:997-1010 |
 
+## New findings (disposition pass 2)
+
+Disposition pass 2 reviewed fix head 0afa590bca21eb2ebcb0afb185911ac82892d9a9 (one commit over
+738ca6fa, base main 1175b995bc4314798cafe839a85a1ca2a745408c).
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-012 | low | The 999 replay test hand-builds its own `Add` plan (no semantic domain, its own operand intervals) and restates the independent check as `assert_ne!(actual, 999 + 1)`. It does not execute the generated harness's arithmetic assertion at `amount_current = 999`. Only its `oracle_clause(&999)` half runs generated code. | tests/it/kani_obligations_state_frame.rs:1004-1033 |
+
 ## Dispositions
 
 | FND | outcome | reason |
@@ -119,3 +128,5 @@ The fix delta is ab92a63b plus 738ca6fa.
 | FND-007 | fixed | One `Some(kind @ (Precondition \| Postcondition))` arm, with every other kind refused by the `_` arm. |
 | FND-008 | fixed | Each scratch `src/lib.rs` is written once, the `run` closure is removed, and the playback binding is renamed `parameter`. |
 | FND-009 | fixed | Each mutant now patches `left.0.checked_add(right.0)` in an isolated clone of the locked quire-exact checkout. Both the embedded native oracle and the probe execute this through `evaluate_native_integer_arithmetic`, while the proof source, oracle bytes and subject stay unchanged. This matches the updated FR-015-AC-41 on main (CG #584). |
+| FND-010 | fixed | Round 2: the Kani run no longer asserts the backend's arbitrary witness equals 999, and it asserts only an in-domain playback. A separate `playback999` cargo test against the same patched owner crate asserts `Completed(1001)` and `oracle_clause(&999) == Ok(Completed(false))` from the unchanged generated proof source. The test strength is recorded as FND-012; the AC-41 spec tension is recorded as SR-583002 FND-007. |
+| FND-011 | fixed | Round 2: both mutants run through `execute_kani_obligation` on the isolated patched crate. The healthy run uses the same path, and the verdict must be `KaniRunOutcome::Falsified`. |

@@ -52,15 +52,16 @@ use quire_contract_codegen::{
     generate_v2_clause_oracle,
 };
 use quire_contract_codegen::{
-    execute_kani_obligation, generate_state_frame_obligations, negotiate_kani_native_obligations,
-    negotiate_kani_obligations, BoundNotResolvedCause, FrameReplay, FrameReplayError,
-    InvalidObligationItem, KaniExecutionRequest, KaniInstallation, KaniObligationError,
-    KaniObligationOutcome, KaniObligationRequest, KaniRunOutcome, ModuleSymbol,
-    ObligationDisposition, ObligationItem, ObligationKind, ObligationRecord, PreStateFault,
-    ScopeMember, StateComparison, StateFieldDomain, StateFrameHarness, StateFrameIdentity,
-    StateFrameLoweringRefusal, StateFrameObligations, StateFrameProperty, StateFrameRefusal,
-    StateFrameRequest, StateFrameRole, UnsupportedFrameEffect, UnsupportedObligation,
-    MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
+    execute_kani_concrete_playback, execute_kani_obligation, generate_state_frame_obligations,
+    negotiate_kani_native_obligations, negotiate_kani_obligations, BoundNotResolvedCause,
+    FrameReplay, FrameReplayError, InvalidObligationItem, KaniConcretePlaybackOutcome,
+    KaniExecutionRequest, KaniInstallation, KaniObligationError, KaniObligationOutcome,
+    KaniObligationRequest, KaniRunOutcome, ModuleSymbol, ObligationDisposition, ObligationItem,
+    ObligationKind, ObligationRecord, PreStateFault, ScopeMember, StateComparison,
+    StateFieldDomain, StateFrameHarness, StateFrameIdentity, StateFrameLoweringRefusal,
+    StateFrameObligations, StateFrameProperty, StateFrameRefusal, StateFrameRequest,
+    StateFrameRole, UnsupportedFrameEffect, UnsupportedObligation, MAX_OBLIGATION_ITEMS,
+    MAX_OBLIGATION_UNWIND,
 };
 use quire_contract_codegen::{HarnessSymbol, StateFrameRecordError};
 use quire_contract_model::{
@@ -989,74 +990,6 @@ fn tc_025_real_kani_falsifies_both_same_clause_addition_mutants() {
             original_proof_source,
             "the mutation must leave the generated clause and subject unchanged"
         );
-        if mutant == "plus_one" {
-            // Kani may choose any counterexample. This separate fixed playback
-            // exercises the same patched owner and byte-identical oracle at
-            // the required boundary without constraining the proof harness.
-            fs::create_dir_all(mutant_crate.path.join("tests"))
-                .expect("deterministic playback test directory");
-            fs::write(
-                mutant_crate.path.join("tests/playback999.rs"),
-                r#"
-use ir917_v2_clause_kani_plus_one::oracle_clause;
-use quire_exact as rt;
-
-#[test]
-fn the_same_mutated_arithmetic_fails_the_independent_assertion_at_999() {
-    let amount = rt::NativeInteger::new(999);
-    let one = rt::NativeInteger::new(1);
-    let left = rt::NativeIntegerInterval::new(0, 1000).unwrap();
-    let right = rt::NativeIntegerInterval::new(1, 1).unwrap();
-    let plan = rt::NativeIntegerPlan::new(rt::NativeIntegerOperation::Add { left, right }, None)
-        .unwrap();
-    let admitted = plan.admit(rt::NativeIntegerOperands::Binary { left: amount, right: one })
-        .unwrap();
-    let limits = rt::ScalarLimits {
-        integer_bits: 1000, decimal_digits: 1000, scale_expansion: 1000,
-        text_input_bytes: 1000, text_scalars: 1000, normalized_scalars: 1000,
-        unit_edges: 1000, value_occurrences: 1000, work_units: 1000, result_units: 1000,
-    };
-    let mut arithmetic_meter = rt::Meter::new(limits);
-    let actual = rt::evaluate_native_integer_arithmetic(admitted, &mut arithmetic_meter);
-    let independent_sum = 999_i128 + 1_i128;
-    let rt::Outcome::Completed(actual_value) = actual else {
-        panic!("the patched owner must complete its arithmetic at 999: {actual:?}");
-    };
-    assert_eq!(actual_value.value(), 1001);
-    assert_ne!(actual_value.value(), independent_sum,
-        "the unchanged native arithmetic assertion must fail at amount_current = 999");
-
-    let mut oracle_meter = rt::Meter::new(limits);
-    assert!(matches!(oracle_clause(&amount, &mut oracle_meter),
-        Ok(rt::Outcome::Completed(false))),
-        "the same mutated owner must make the original clause oracle false at 999");
-}
-"#,
-            )
-            .expect("write explicit 999 playback against the patched owner");
-            let playback = std::process::Command::new("cargo")
-                .args([
-                    "test",
-                    "--locked",
-                    "--offline",
-                    "-j2",
-                    "--test",
-                    "playback999",
-                ])
-                .env(
-                    "CARGO_TARGET_DIR",
-                    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target"),
-                )
-                .current_dir(&mutant_crate.path)
-                .output()
-                .expect("run explicit playback at 999");
-            assert!(
-                playback.status.success(),
-                "explicit 999 playback against the patched owner failed: {}\n{}",
-                String::from_utf8_lossy(&playback.stdout),
-                String::from_utf8_lossy(&playback.stderr)
-            );
-        }
         let classified = execute_kani_obligation(&KaniExecutionRequest {
             cancel: &cancel,
             installation: &installation,
@@ -1091,6 +1024,79 @@ fn the_same_mutated_arithmetic_fails_the_independent_assertion_at_999() {
         };
         assert_eq!(parameter, "amount_current");
         assert!((0..=1000).contains(amount));
+
+        if mutant == "plus_one" {
+            // Kani's chosen counterexample above need not be 999. Replay the
+            // original generated proof function at that required concrete
+            // value, using the same patched owner and unchanged assertion.
+            assert_eq!(
+                harness
+                    .rust
+                    .contents
+                    .matches("arithmetic subterm agrees with independent i128 expectation")
+                    .count(),
+                1,
+                "only the generated arithmetic assertion carries the expected panic text"
+            );
+            let proof_body = harness
+                .rust
+                .contents
+                .strip_suffix("}\n")
+                .expect("generated proof ends with its module closing brace");
+            let playback_name = "playback_amount_current_999";
+            let playback_test = format!(
+                "    #[test]\n    #[should_panic(expected = \"arithmetic subterm agrees with independent i128 expectation\")]\n    fn {playback_name}() {{\n        assert!(crate::subject::check(999), \"the unchanged subject returns normally at 999\");\n        let concrete_values = vec![999_i64.to_le_bytes().to_vec()];\n        kani::concrete_playback_run(concrete_values, {});\n    }}\n",
+                harness.identity.harness_symbol
+            );
+            let replay_harness = format!("{proof_body}{playback_test}}}\n");
+            assert_eq!(
+                replay_harness.replacen(&playback_test, "", 1),
+                harness.rust.contents,
+                "the generated proof body, oracle, and arithmetic assertion are byte-identical"
+            );
+            assert_eq!(
+                original_proof_source
+                    .matches(&harness.rust.contents)
+                    .count(),
+                1
+            );
+            let replay_source =
+                original_proof_source.replacen(&harness.rust.contents, &replay_harness, 1);
+            assert_eq!(
+                replay_source.replacen(&playback_test, "", 1),
+                original_proof_source,
+                "the concrete playback adds only its test outside the sealed proof"
+            );
+            syn::parse_file(&replay_source).expect("one valid playback test beside the proof");
+            fs::write(mutant_crate.path.join("src/lib.rs"), replay_source)
+                .expect("add only the playback test to the scratch crate");
+            let exact_test = format!("{}::{playback_name}", harness.identity.module_symbol);
+            let playback = execute_kani_concrete_playback(
+                &KaniExecutionRequest {
+                    cancel: &cancel,
+                    installation: &installation,
+                    harness: harness.into(),
+                    crate_directory: &mutant_crate.path,
+                    target_directory: &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target"),
+                    home_directory: None,
+                },
+                &exact_test,
+            )
+            .expect("bounded concrete playback starts and tears down");
+            let KaniConcretePlaybackOutcome::Completed {
+                succeeded: true,
+                stdout,
+                ..
+            } = playback
+            else {
+                panic!("the actual generated arithmetic assertion must fail at 999: {playback:?}");
+            };
+            let output = String::from_utf8(stdout).expect("libtest playback output is UTF-8");
+            assert!(
+                output.contains(&format!("test {exact_test} ... ok")),
+                "the exact generated-harness playback test must execute: {output}"
+            );
+        }
     }
 }
 

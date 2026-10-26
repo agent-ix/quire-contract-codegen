@@ -86,6 +86,16 @@ untagged, 16 tagged only by ignored tests, 53 method-without-symbol.
 | FND-005 | medium | `general_v2_arithmetic_postcondition_refuses_without_a_harness` is tagged FR-015-AC-42 and is that criterion's only binder. AC-42 states that an unsupported operator (division, modulo, absolute value) is refused with a typed reason naming the node and the operator. The test asserts a general-route render refusal of the supported `+`, and its reason `V2ClauseConditionNotRendered { node_id }` names no operator. AC-42 changes from untagged to tagged without its claim being tested. | tests/it/kani_obligations_state_frame.rs:638-640 |
 | FND-006 | low | FR-014-AC-54's two tagged tests cover the unchanged value and the refusal shapes (missing target, out of range, nonliteral, unparseable). They do not cover parity of ordered charges, consumed counters and outcome with direct-owner evaluation, independence from a generated sibling, or refusal of another `convert` identity. AC-54 correctly remains PLANNED. | src/oracle/clause.rs:743-784 |
 
+## New findings (disposition pass 2)
+
+Disposition pass 2 reviewed fix head 0afa590bca21eb2ebcb0afb185911ac82892d9a9. The matrix was
+recomputed at that head: 564 tagged, 314 untagged, 16 tagged only by ignored tests, 53
+method-without-symbol. FR-015-AC-42 is untagged again.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-007 | medium | FR-015-AC-41 requires each owner-`+` mutant run to be falsified by the independent native assertion with concrete playback `amount_current = 999` for the first. Under that mutant the native assertion fails for every admitted amount 0..=999, so no backend witness can be required to be 999. The test substitutes a separate concrete replay. AC-41 as written is not attainable from backend evidence and needs reconciliation by the spec owner; AC-41 stays PLANNED. | spec/kani/functional/FR-015-bounded-kani-obligations.md:789 |
+
 ## Dispositions
 
 | FND | outcome | reason |
@@ -94,3 +104,5 @@ untagged, 16 tagged only by ignored tests, 53 method-without-symbol.
 | FND-002 | fixed | `qsl_v2_implication_harness_embeds_its_clause_oracle_and_checks_native_arithmetic` now carries FR-015-AC-119 for its generation clauses. The installed healthy and helper-body runs remain owed by quire-integration #24 SC-02, so AC-119 remains PLANNED. |
 | FND-003 | fixed | The narrow unit test is retagged `FR-014-AC-54`, `FR-015-AC-41`, `TC-025`. |
 | FND-004 | fixed | FR-014-AC-54 (CG #584, merged to main and present at this head) now specifies checked literal narrowing for V2 clause oracles, including its refusals. |
+| FND-005 | fixed | Round 2: `general_v2_arithmetic_postcondition_refuses_without_a_harness` is now tagged `TC-025` only, and FR-015-AC-42 is back to untagged in the computed matrix. |
+| FND-006 | fixed | Round 2. Owner parity: the public agreement corpus adds the QSL-authored `self.balance = 0` case, asserts that the package holds a `quire.op.numeric.narrow` node, and compares outcome, ordered admitted charges and every consumed counter with direct-owner evaluation, including denial prefixes. Sibling: the defensive seam asserts every refused narrow, and a refused `quire.op.quantity.convert`, leave a lowered sibling plan unchanged; a QSL twin asserts that the narrow oracle is unchanged across sibling generation. Convert: `quantity.convert` is refused. AC-54 remains PLANNED. |
