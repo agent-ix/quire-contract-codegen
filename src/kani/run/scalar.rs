@@ -386,6 +386,7 @@ impl KaniScalarNativeError {
             Self::Kani(refusal) => match refusal {
                 KaniExecutionRefusal::HarnessNotInCrate { .. }
                 | KaniExecutionRefusal::HarnessProvenanceMismatch { .. }
+                | KaniExecutionRefusal::ConcretePlaybackUnsupportedHarness { .. }
                 | KaniExecutionRefusal::ConcretePlaybackSourceMismatch { .. }
                 | KaniExecutionRefusal::ConcretePlaybackTestNotObserved { .. }
                 | KaniExecutionRefusal::OutputOverLimit { .. }
@@ -2372,6 +2373,7 @@ mod tests {
             KaniExecutionRefusal::BatchMemoryExhausted { .. } => (F, None),
             KaniExecutionRefusal::HarnessNotInCrate { .. } => (R, None),
             KaniExecutionRefusal::HarnessProvenanceMismatch { .. } => (R, None),
+            KaniExecutionRefusal::ConcretePlaybackUnsupportedHarness { .. } => (R, None),
             KaniExecutionRefusal::ConcretePlaybackSourceMismatch { .. } => (R, None),
             KaniExecutionRefusal::ConcretePlaybackTestNotObserved { .. } => (R, None),
             KaniExecutionRefusal::Report(_) => (F, None),
@@ -2526,6 +2528,9 @@ mod tests {
                 harness_path: "table".into(),
             },
             KaniExecutionRefusal::HarnessProvenanceMismatch {
+                harness_path: "table".into(),
+            },
+            KaniExecutionRefusal::ConcretePlaybackUnsupportedHarness {
                 harness_path: "table".into(),
             },
             KaniExecutionRefusal::ConcretePlaybackSourceMismatch {
