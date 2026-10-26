@@ -467,6 +467,36 @@ impl Twin {
         twin
     }
 
+    /// A source-authored amount condition whose selected parameter range crosses a carrier edge.
+    pub fn with_bounded_amount_condition_and_range(
+        condition: &str,
+        minimum: i64,
+        maximum: i64,
+    ) -> Self {
+        let mut twin = Self::with_bounded_amount_condition(condition);
+        let mut document: Value = serde_json::from_slice(&twin.domain).expect("domain document");
+        let amount_type = document["types"]
+            .as_array_mut()
+            .expect("types")
+            .iter_mut()
+            .find(|ty| ty["identity"] == range_type("balance"))
+            .expect("amount parameter value type");
+        for (keyword, value) in [("min", minimum), ("max", maximum)] {
+            let bound = amount_type["constraints"]
+                .as_array_mut()
+                .expect("constraints")
+                .iter_mut()
+                .find(|constraint| constraint["keyword"] == keyword)
+                .expect("range constraint");
+            bound["operands"]["value"] = json!(value.to_string());
+        }
+        twin.domain = document.to_string().into_bytes();
+        twin.unit = unit_source(&hex(&jcs_digest(&twin.domain)), &[CLAUSES[0]], 0)
+            .replace("self.balance >= pre(self.balance)", condition)
+            .into_bytes();
+        twin
+    }
+
     /// The original guarded arithmetic condition with the same declared bounds.
     pub fn with_bounded_amount_implication() -> Self {
         Self::with_bounded_amount_condition("amount < 1000 implies amount + 1 <= 1000")

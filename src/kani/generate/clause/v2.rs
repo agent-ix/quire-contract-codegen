@@ -256,7 +256,7 @@ mod symbolic_encoding_tests {
     use ix_trace_rs::trace;
 
     /// The carrier rebind is selected by both checked endpoints, including its exact edges.
-    #[trace("FR-015-AC-39", "FR-015-AC-47", "TC-025")]
+    #[trace("FR-015-AC-128", "TC-025")]
     #[test]
     fn checked_domain_selects_the_versioned_encoding() {
         use V2SymbolicEncodingPolicy::{OriginalI64V1, PostAssumptionU16RebindV1};

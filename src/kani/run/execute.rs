@@ -2110,7 +2110,13 @@ wait
 
     /// Concrete playback uses the proof launcher's wall clock, cancellation,
     /// and owned process-tree teardown rather than starting a raw Cargo child.
-    #[trace("FR-017-AC-57", "FR-017-AC-58", "FR-017-AC-59", "TC-027")]
+    #[trace(
+        "FR-015-AC-131",
+        "FR-017-AC-57",
+        "FR-017-AC-58",
+        "FR-017-AC-59",
+        "TC-027"
+    )]
     #[cfg(target_os = "linux")]
     #[test]
     fn concrete_playback_uses_the_proof_process_bounds() {

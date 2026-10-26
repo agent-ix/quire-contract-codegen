@@ -321,6 +321,14 @@ unsatisfiable requires as `cover_unsatisfied`.
     The package comes from QSL's facade on source, never a copied fixture
     (AD-004 step 4a); if the facade cannot build it, the real-Kani control is the
     quire-integration exemplar of AD-004 L-5, a test in a repository above both.
+    For V2 clause inputs with checked bounds wholly within `[0, u16::MAX]`,
+    inspect the generated source and sealed identity record for the required
+    `post_assumption_u16_rebind_v1` policy, the one `i64` draw, exact inclusive
+    assumption and post-assumption rebind. For QSL-authored checked domains with
+    a negative lower endpoint and with an upper endpoint above `u16::MAX`,
+    inspect the generated harness and record for `original_i64_v1` and no
+    rebind. Alter the retained policy without regenerating the source and
+    require provenance refusal, not proof credit (FR-015-AC-128 to FR-015-AC-131).
 12. Request a clause with an unsupported operator (division, modulo, absolute value), a
     node that is not a modelled clause role and an absent node id beside a supported item.
     The operator is `unsupported`, the other two refused as FR-015-AC-14 states, each
