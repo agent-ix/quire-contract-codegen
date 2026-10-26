@@ -22,3 +22,9 @@ Reviewed CG PR #584 exact head 98fe6da149fc6992c2116a9207e14ecb06071e43, limited
 ## Verdict
 
 PASS with one medium finding requiring an in-PR test-procedure correction.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | At head 8563b8e1, TC-024 step 2 now separates strict-reader rejection (no admitted package or CG generation) from admitted or defensive-seam per-item refusal, for which sibling oracle bytes must remain unchanged. |
