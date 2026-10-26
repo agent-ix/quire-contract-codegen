@@ -566,7 +566,7 @@ fn require_concrete_playback_in_crate(
     let (test_module, test_function) = playback.test_name.rsplit_once("::").ok_or_else(mismatch)?;
     let parsed = syn::parse_str::<syn::ItemFn>(playback.appended_test).map_err(|_| mismatch())?;
     if test_module != module
-        || parsed.sig.ident.to_string() != test_function
+        || parsed.sig.ident != test_function
         || parsed
             .attrs
             .iter()
