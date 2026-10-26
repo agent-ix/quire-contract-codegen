@@ -37,9 +37,9 @@ relationships:
   `/tmp/agent-e-heavy-build.lock`, and shall run the lane's tests with `--test-threads=1`.
 - While the named IR-917 operator hold is active, the repository shall retain one authoritative
   held-test list in the `Makefile`. Its sole member is
-  `tc_025_real_kani_falsifies_both_same_clause_addition_mutants`, with the reason "held by Peter
-  order: the installed V2 clause proof exhausts the fixed 16 GiB ceiling, returns
-  `Inconclusive MemoryExhausted`, and proves nothing." The `make kani`, `make kani-gate` and
+  `tc_025_real_kani_falsifies_both_same_clause_addition_mutants`, with the reason "IR planner
+  reports operator hold: fixed 16 GiB ceiling, Inconclusive MemoryExhausted, proves nothing."
+  The `make kani`, `make kani-gate` and
   `make kani-scope` targets shall print the held test and reason as `skipped-by-order` each time.
   A held test is excluded from the runnable lane list, is never counted as run or passed, and
   confers no proof credit. The hold expires only when Peter lifts it after feature work is
@@ -51,8 +51,9 @@ relationships:
   duplicated, or missing a reason shall fail the gate. The gate shall exit non-zero if any
   non-held selected test fails, does not run, or is absent from the runnable list. A successful
   gate result shall never report a held test as passed.
-- The `make kani-gate` target shall exit non-zero unless the lane's tests all passed, the number that
-  ran equals the number the lane's filters list for `--ignored`, and that number is greater than zero.
+- The `make kani-gate` target shall exit non-zero unless every selected non-held test passed, the
+  number that ran equals the number of selected non-held tests listed for `--ignored`, and that
+  number is greater than zero.
 - The `make kani-gate` target shall include [FR-041](../functional/FR-041-claimed-module-proof-gate.md)'s
   claimed-module census and real mutation controls in its one required lane, and shall exit
   non-zero if any claimed module or shared helper fails that requirement. The controls shall not
@@ -197,7 +198,7 @@ decision (Open decisions); until the owner rules, the answer is no.
 | NFR-006-AC-3 | A rename of `src/kani/old.rs` to `src/strategy/new.rs`, and a rename of `src/strategy/old.rs` to `src/kani/new.rs`, each print `required`. | Test (TC-045) |
 | NFR-006-AC-4 | `make -n kani` and `make -n kani-gate` expand to the same `cargo test` command line, and that line holds each of the eight filters `kani_obligations`, `kani_obligations_symbolic_domains`, `skeleton_spine`, `kani_stdout_capture`, `kani_witness_join`, `bounded_kani_corpus`, `kani_generation` and `kani_batching`. | Test (TC-045) |
 | NFR-006-AC-5 | `make kani-gate` starts the lane's `cargo test` once with `--test-threads=1`, holds the lock named by `KANI_LOCK` while it runs, and does not start it while another process holds that lock. | Test (TC-045) |
-| NFR-006-AC-6 | `make kani-gate` exits non-zero and prints `result=failed` when the lane's filters list zero tests, when fewer tests run than are listed, and when any test fails; it exits zero and prints `result=passed` only when every listed test ran and passed and the count is above zero. | Test (TC-045) |
+| NFR-006-AC-6 | `make kani-gate` exits non-zero and prints `result=failed` when the lane's filters list zero non-held runnable tests, when fewer non-held tests run than are listed, and when any non-held test fails; it exits zero and prints `result=passed` only when every listed non-held test ran and passed and the runnable count is above zero. Held tests never count as passes. | Test (TC-045) |
 | NFR-006-AC-7 | The passing run-result line has the fields `result`, `ran`, `expected`, `elapsed`, `kani`, `tree` in that order, with `ran` equal to `expected`, a non-empty `kani` equal to the version the launcher reports, and `tree=clean`; it has no commit token. A run whose launcher reports no version prints `result=failed`. | Test (TC-045) |
 | NFR-006-AC-8 | When the tree state or the head commit read after the run differs from the one read before the build, `make kani-gate` prints `result=failed` and exits non-zero. | Test (TC-045) |
 | NFR-006-AC-9 | With a dirty working tree `make kani-gate` prints `tree=dirty`, never `result=passed`, and exits non-zero. | Test (TC-045) |

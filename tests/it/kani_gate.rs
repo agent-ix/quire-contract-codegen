@@ -92,6 +92,9 @@ if [[ " $* " == *" --list "* ]]; then
     printf 'kani_generation_claims::real_kani_claims_have_discharge_and_falsifying_mutations: test\n'
   fi
   for ((i=0; i<${FAKE_LIST_COUNT:-2}; i++)); do
+    if [[ "${FAKE_OMIT_RUNNABLE:-no}" == yes ]] && [[ " $* " == *" --skip "* ]] && ((i == 0)); then
+      continue
+    fi
     printf 'kani_obligations::proof_%s: test\n' "$i"
   done
 else
@@ -628,7 +631,7 @@ fn make_targets_share_one_real_lane_and_ci_excludes_it() {
 fn held_kani_test_is_reported_separately_and_invalid_holds_refuse_before_run() {
     let script = Path::new(env!("CARGO_BIN_EXE_cg_gates"));
     let reason =
-        "held by Peter order: 16 GiB ceiling, Inconclusive MemoryExhausted, proves nothing";
+        "IR planner reports operator hold: fixed 16 GiB ceiling, Inconclusive MemoryExhausted, proves nothing.";
 
     let sandbox = Sandbox::new();
     let output = sandbox
@@ -675,7 +678,24 @@ fn held_kani_test_is_reported_separately_and_invalid_holds_refuse_before_run() {
             !sandbox.marker(),
             "invalid hold must refuse before execution"
         );
+        assert!(stdout(&output).contains("kani-gate: result=failed"));
     }
+
+    let sandbox = Sandbox::new();
+    let output = sandbox
+        .gate_script_with_held(script, "cargo", &[BLOCKED_KANI_TEST])
+        .env("KANI_HELD_TESTS", BLOCKED_KANI_TEST)
+        .env("KANI_HOLD_REASON", reason)
+        .env("FAKE_HELD_NAME", BLOCKED_KANI_TEST)
+        .env("FAKE_OMIT_RUNNABLE", "yes")
+        .output()
+        .expect("missing runnable test control");
+    assert!(!output.status.success());
+    assert!(stdout(&output).contains("kani-gate: result=failed"));
+    assert!(
+        !sandbox.marker(),
+        "a missing runnable test must refuse before execution"
+    );
 }
 
 struct IncludeTargets(Vec<String>);

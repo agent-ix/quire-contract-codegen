@@ -275,6 +275,15 @@ fn listed_tests(output: &Output) -> Result<BTreeSet<String>, String> {
     Ok(tests)
 }
 
+fn failed_clean_gate(
+    start: Instant,
+    version: &str,
+    reason: impl Into<String>,
+) -> Result<(), String> {
+    gate_result("failed", 0, 0, start, version, "clean");
+    Err(reason.into())
+}
+
 fn gate_held(test_command: &[String]) -> Result<(), String> {
     let start = Instant::now();
     let home = trusted_home()?;
@@ -344,18 +353,22 @@ fn gate_held(test_command: &[String]) -> Result<(), String> {
     let mut held_names = Vec::new();
     let mut offset = 0;
     while libtest_args.get(offset).map(String::as_str) == Some("--skip") {
-        let name = libtest_args
-            .get(offset + 1)
-            .ok_or("held test skip has no name")?;
+        let Some(name) = libtest_args.get(offset + 1) else {
+            return failed_clean_gate(start, &version, "held test skip has no name");
+        };
         if name.is_empty() || held_names.contains(name) {
-            return Err("held test skip is empty or duplicated".into());
+            return failed_clean_gate(start, &version, "held test skip is empty or duplicated");
         }
         held_names.push(name.clone());
         offset += 2;
     }
     let filters = &libtest_args[offset..];
     if filters.is_empty() || filters.iter().any(|arg| arg.starts_with('-')) {
-        return Err("real Kani lane filters missing or contain an unlisted skip".into());
+        return failed_clean_gate(
+            start,
+            &version,
+            "real Kani lane filters missing or contain an unlisted skip",
+        );
     }
     let declared_held: Vec<_> = env::var("KANI_HELD_TESTS")
         .unwrap_or_default()
@@ -363,11 +376,15 @@ fn gate_held(test_command: &[String]) -> Result<(), String> {
         .map(str::to_owned)
         .collect();
     if held_names != declared_held {
-        return Err("Kani held-test skips differ from the one declared list".into());
+        return failed_clean_gate(
+            start,
+            &version,
+            "Kani held-test skips differ from the one declared list",
+        );
     }
     let hold_reason = env::var("KANI_HOLD_REASON").unwrap_or_default();
     if !held_names.is_empty() && hold_reason.trim().is_empty() {
-        return Err("Kani held-test reason missing".into());
+        return failed_clean_gate(start, &version, "Kani held-test reason missing");
     }
     let mut list = test_command[1..=delimiter].to_vec();
     list.extend(["--list".into(), "--ignored".into()]);
@@ -384,15 +401,29 @@ fn gate_held(test_command: &[String]) -> Result<(), String> {
         &all_list,
         real_cargo,
         &home,
-    ))?;
-    let selected = listed_tests(&all_output)?;
+    ))
+    .map_err(|error| {
+        gate_result("failed", 0, 0, start, &version, "clean");
+        error
+    })?;
+    let selected = listed_tests(&all_output).map_err(|error| {
+        gate_result("failed", 0, 0, start, &version, "clean");
+        error
+    })?;
     let list_output = command_output(&mut gate_command(
         &test_command[0],
         &list,
         real_cargo,
         &home,
-    ))?;
-    let runnable = listed_tests(&list_output)?;
+    ))
+    .map_err(|error| {
+        gate_result("failed", 0, 0, start, &version, "clean");
+        error
+    })?;
+    let runnable = listed_tests(&list_output).map_err(|error| {
+        gate_result("failed", 0, 0, start, &version, "clean");
+        error
+    })?;
     let mut held = BTreeSet::new();
     for name in &held_names {
         let matches: Vec<_> = selected
@@ -400,15 +431,21 @@ fn gate_held(test_command: &[String]) -> Result<(), String> {
             .filter(|selected_name| selected_name.rsplit("::").next() == Some(name.as_str()))
             .collect();
         if matches.len() != 1 {
-            return Err(format!(
-                "held test {name} must name exactly one selected test"
-            ));
+            return failed_clean_gate(
+                start,
+                &version,
+                format!("held test {name} must name exactly one selected test"),
+            );
         }
         held.insert((*matches[0]).clone());
     }
     let expected_runnable: BTreeSet<_> = selected.difference(&held).cloned().collect();
     if runnable != expected_runnable {
-        return Err("runnable Kani list differs from selected tests minus held tests".into());
+        return failed_clean_gate(
+            start,
+            &version,
+            "runnable Kani list differs from selected tests minus held tests",
+        );
     }
     println!("kani-gate: held={}", held.len());
     for name in &held {

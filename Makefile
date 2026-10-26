@@ -111,7 +111,7 @@ KANI_LOCK ?= /tmp/agent-e-heavy-build.lock
 # Keep each ignored installed-Kani test module in this lane; kani-scope selects the gate by path.
 KANI_FILTERS := kani_obligations kani_obligations_symbolic_domains skeleton_spine kani_stdout_capture kani_witness_join bounded_kani_corpus kani_generation kani_batching
 export KANI_HELD_TESTS := tc_025_real_kani_falsifies_both_same_clause_addition_mutants
-export KANI_HOLD_REASON := held by Peter order: fixed 16 GiB ceiling, Inconclusive MemoryExhausted, proves nothing
+export KANI_HOLD_REASON := IR planner reports operator hold: fixed 16 GiB ceiling, Inconclusive MemoryExhausted, proves nothing.
 KANI_HELD_SKIPS := $(foreach test,$(KANI_HELD_TESTS),--skip $(test))
 KANI_TEST := $(CARGO) +$(MSRV) test $(LOCKED) -j 4 --test it --target-dir target-codex-backends -- --ignored --test-threads=1 $(KANI_HELD_SKIPS) $(KANI_FILTERS)
 KANI_BLOCKED_WARNING = @$(foreach test,$(KANI_HELD_TESTS),printf '%s\n' 'DO NOT RUN: installed IR-917 V2 clause proof exhausts the fixed 16 GiB ceiling.' 'It returns Inconclusive MemoryExhausted, proves nothing, and blocked feature work for a week.' 'IR planner reports an operator hold until all feature work is done; FR-015-AC-41/119 and TC-025 remain Planned.' 'skipped-by-order: $(test); reason: $(KANI_HOLD_REASON)';)
