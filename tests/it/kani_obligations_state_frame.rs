@@ -1035,7 +1035,7 @@ fn tc_025_real_kani_falsifies_both_same_clause_addition_mutants() {
         );
         let decoded = quire_contract_codegen::decode_v2_clause_falsification(
             harness,
-            &counterexample,
+            counterexample,
             quire_contract_codegen::WitnessDecodeLimits {
                 bytes: 1024 * 1024,
                 values: 1,
