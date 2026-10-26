@@ -126,3 +126,15 @@ FND-009 is new in this round and has no outcome yet. It is routed to the code le
 Gate evidence at `613ec9f4`, reviewer-run in the worktree's own `target/`: `cargo test --locked --lib -- kani::generate::role_parity_tests core::ir::` gave 6 passed, 0 failed. The code lead's brief reports fmt and clippy (`--lib --tests -D warnings`) clean at this head; the reviewer did not re-run them. The aggregate gate and Kani were not run.
 
 Unrelated full-gate failure: the code lead reports that `make ci` also failed a namespace-cleanup timing test under host load. The PR diff (`git diff --name-only origin/main...HEAD`) touches nothing under `src/kani/run/` (namespace, process, launch, memory) or `tests/`. The only `namespace` text in a changed file is the unrelated `revision_namespace` label field in `replay/state_clause.rs`. Judged from the diff alone, without a re-run, that failure is not caused by this PR.
+
+### Round 3 — exact `8bbbd1445fa1cfa2f5f7ce57332d355485270e92` (fix diff `613ec9f4..8bbbd144`)
+
+The diff touches only `reviews/`. It adds the round-2 SR-35025 file (byte-identical to the reviewer's round-2 copy) and deletes `reviews/ir-348-pr569-code-review.md` and `reviews/ir-348-pr569-gap-analysis.md`. No source, test, spec or build file changed. `origin/main` `9196cbe4` is an ancestor of the head.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-009 | fixed | - |
+
+FND-009 after_excerpt: `reviews/` now holds exactly one artifact per id for this PR, `reviews/SR-35025-ir-348-pr569-code-review.md` and `reviews/SR-35026-ir-348-pr569-gap-analysis.md`. A repo-wide `grep -rlE '^id:[[:space:]]*"?SR-3502[56]"?' --include=*.md .` finds only those two files. `quire validate --scope .` reports no errors on either file.
+
+After this round, every SR-35025 finding has a resolved latest outcome: FND-001 to FND-006 and FND-008 are fixed, FND-007 is rejected, and FND-009 is fixed. SR-35026 FND-001 stays deferred (round 1). No finding is still open. There are 16 other duplicate SR ids under `reviews/`, but they already exist on `origin/main` and this PR did not introduce them.
