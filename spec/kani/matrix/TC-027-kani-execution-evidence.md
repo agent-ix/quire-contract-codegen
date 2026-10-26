@@ -214,6 +214,42 @@ the nested isolated package/external example path, fresh resolution, or sealed e
 checks remain UNRUN until the implementation executes them. The separate Unicode resolution
 failure and IR-705/IR-844 qualification are not resolved by this amendment.
 
+## Concrete playback execution (IR-917, planned)
+
+These controls qualify the public execution entry; TC-025 step 11 owns the
+installed-Kani `amount_current = 999` clause mutant and its arithmetic-assertion
+attribution.
+
+1. From a sealed generated contract harness, append one parseable `#[test]`
+   function in its owning module and name its exact libtest
+   `module::function` path. Through the public
+   `execute_kani_concrete_playback` entry, inspect the exact-selection
+   `kani playback -Z concrete-playback -- <test_name> --exact --nocapture`
+   launch. With a launcher stand-in that reports the named test as the sole
+   pass, require `Completed { succeeded: true }`, the actual exit code,
+   complete bounded stdout/stderr and observed memory; do not classify it as
+   `Verified` (FR-017-AC-58, FR-017-AC-59).
+2. Before any launch, alter the retained generated harness source or identity
+   record and require `HarnessProvenanceMismatch`. Separately omit or duplicate the appended test,
+   supply malformed Rust or a function whose name or module disagrees with
+   `test_name`, alter the generated source beside the appended test, or place
+   the test so removing only its bytes does not restore the generated harness.
+   Each source case requires `ConcretePlaybackSourceMismatch` and zero backend
+   calls (FR-017-AC-57).
+3. Let a stand-in exit successfully after running zero matching tests, or
+   print a different passing test or a summary other than exactly one pass and
+   zero failures. Require `ConcretePlaybackTestNotObserved { test_name }`, not
+   successful playback. Let the selected test fail at an assertion: retain
+   `Completed { succeeded: false }`, actual exit code and bounded streams so
+   the caller can attribute the check, without claiming a proof verdict
+   (FR-017-AC-59).
+4. Reuse the existing bounded-launch controls for wall-clock timeout,
+   cancellation, memory exhaustion, output over-limit/unread and owned
+   teardown with the concrete-playback entry. Require distinct `TimedOut`,
+   `Cancelled { source, memory }`, `MemoryExhausted` and existing typed output
+   refusals; verify the backend tree is gone and no case is classified as a
+   proof outcome (FR-017-AC-58).
+
 ## Expected Results
 
 Only the all-covers-satisfied success is verified. The unsatisfied and partial

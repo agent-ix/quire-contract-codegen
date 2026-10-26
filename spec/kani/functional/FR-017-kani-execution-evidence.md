@@ -79,6 +79,10 @@ Text-admission identity rather than claiming a checked node or contract role.
   the NoVerdict diagnostic excerpts, and as a grouping key, so requests that name different home
   directories are never grouped. The generator never reads it from the process environment, and
   when it is absent nothing is redacted as `<HOME>`.
+- For concrete playback after a sealed proof, the same `KaniExecutionRequest` and a
+  `KaniConcretePlayback` naming the exact libtest `module::function` path and
+  providing the complete source of one appended `#[test]` function. The caller
+  prepares its scratch crate; CG does not alter the generated proof source.
 
 ## Outputs
 
@@ -96,6 +100,12 @@ Text-admission identity rather than claiming a checked node or contract role.
   property, the same diagnostic record (see CBMC failure cause below).
 - A typed refusal, and no run, when the launcher is absent or when the crate
   does not contain the harness.
+- For concrete playback only, a `KaniConcretePlaybackOutcome` describing a
+  bounded native test process (`Completed` with success flag, optional exit code,
+  bounded complete stdout/stderr and memory observation; `TimedOut`, `Cancelled`
+  with source, or `MemoryExhausted`, each with its memory observation), or a
+  typed `KaniExecutionRefusal`. This outcome is not Kani proof evidence and
+  confers no `Verified` or `Falsified` classification.
 - For a paired routed-scalar run, an opaque receipt containing the measured proof-content
   identity, the retained scalar identity, the ordered concrete operands and exact `ScalarLimits`
   supplied to and used by the native invocation,
@@ -163,6 +173,21 @@ Text-admission identity rather than claiming a checked node or contract role.
 - If the crate's library source does not contain the harness's generated source
   byte for byte, then the generator shall refuse, because evidence about a
   harness the crate does not contain is evidence about nothing.
+- When a caller requests concrete playback, CG shall first validate the
+  generated harness's provenance and the appended test's exact module/function
+  name, one parseable `#[test]` function, unique placement in `src/lib.rs` and
+  byte-for-byte restoration of the sealed generated harness source after
+  removing only that appended function. Invalid provenance or source shall
+  refuse before backend launch as its distinct typed cause.
+- When the playback source is admitted, CG shall invoke the installed Kani
+  launcher's concrete-playback path with an exact test selection under the
+  harness identity's wall-clock and memory ceilings, cancellation handle,
+  bounded output capture and owned process-tree teardown. The returned native
+  process outcome shall not be classified through Kani's proof report.
+- If a concrete-playback process exits successfully without stdout reporting
+  the requested exact test as its one passing test, then CG shall refuse with
+  `ConcretePlaybackTestNotObserved`; a successful exit after zero matching
+  tests shall never be evidence that the playback assertion passed.
 - The generator shall classify a run as verified only when the process exited
   successfully, the backend's exported report states success, and the report lists at
   least one cover property and every one is satisfied. A run is never defaulted to verified:
@@ -903,6 +928,9 @@ compile, sealed invocation, proof success, independent-resolution fix or IR-17 c
 | FR-017-AC-54 | A successful claimed-init confirmation poll with no `IN` yields public `MemoryObservationFailed` with the existing outer and nested prefixes and labelled observations of that attempt: returned poll count, raw revents bits, monotonic poll elapsed duration with its unit, captured init PID/start ticks, captured wrapper PID or explicit absence, init-handle presence, gate presence and cleaned state. Test controls through the existing `PollOperation` seam delegate first to real poll on the real owned pidfd, record its positive count and `IN`, then clear revents and return either zero or that genuine positive count. For both controlled omissions the diagnostic matches the returned count and cleared bits, the captured identities and failure state; elapsed is measured without a timing lower-bound assertion. The original failed-attempt diagnostic survives a subsequent successful real `Drop` confirmation. These controls are labelled injected observation omissions, not naturally reproduced timeouts. | Test |
 | FR-017-AC-55 | Through the real public execution entry and real owned namespace, an unchanged real-poll control retains its original public result and confirmed cleanup; each AC-54 omission refuses even when cancellation is submitted before or after the cleanup barrier. The confirmation seam sees the same claimed pidfd and exactly one poll with timeout `(5, 0)` per cleanup invocation. Failure retains gate/cleaned state and the existing `Drop` retry, and actual backend processes/namespace are gone after return. The existing real-poll-delegating errno control retains its public refusal rather than cancellation evidence. | Test |
 | FR-017-AC-56 | Inspection of the cleanup change shows that init-pidfd KILL still precedes wrapper-group KILL, the single confirmation poll retains its `(5, 0)` timeout, signal-error/poll-error/missing-readiness precedence is unchanged, syscall errors retain their original kind and errno, and only successful cleanup closes the gate and marks cleaned. Existing `Drop` behavior is unchanged. Diagnostic observations come only from that poll and existing owned fields; no added wait, retry, skip, PID reopen, procfs/cgroup rescan or invented host-state field is introduced. | Inspection |
+| FR-017-AC-57 | PLANNED (IR-917). The public `execute_kani_concrete_playback(&KaniExecutionRequest, &KaniConcretePlayback) -> Result<KaniConcretePlaybackOutcome, KaniExecutionRefusal>` accepts `test_name` as the exact libtest `module::function` path and `appended_test` as one complete parseable `#[test]` function. It refuses invalid sealed-harness provenance as `HarnessProvenanceMismatch`; a missing, duplicated, malformed, wrong-module or wrong-function appended test, or source from which removing that exact test does not restore the generated harness bytes, refuses as `ConcretePlaybackSourceMismatch`. Each refusal occurs before backend launch and confers no proof credit. | Test (TC-027) |
+| FR-017-AC-58 | PLANNED (IR-917). For admitted concrete playback CG runs `kani playback -Z concrete-playback -- <test_name> --exact --nocapture` through the existing owned bounded launcher with the request's installation, target directory, cancellation handle and harness-identity wall-clock/memory ceilings; stdout and stderr retain the existing one-harness limits and over-limit/unread typed refusals. A concluded process that passes AC-59's successful-exit guard, or that exits unsuccessfully, returns `Completed { succeeded, exit_code, stdout, stderr, memory }` with the observed values; timeout, cancellation and memory exhaustion return distinct `TimedOut`, `Cancelled { source, memory }` and `MemoryExhausted` outcomes with owned teardown. No result is a Kani proof verdict or changes the prior sealed proof identity. | Test (TC-027) |
+| FR-017-AC-59 | PLANNED (IR-917). A successfully exited concrete-playback process yields `Completed { succeeded: true, .. }` only if its bounded stdout names the selected exact test as passing and reports exactly one passed test with zero failed; otherwise it refuses as `ConcretePlaybackTestNotObserved { test_name }`, including a zero-match success. An unsuccessfully exited process remains `Completed { succeeded: false, .. }` with its actual exit code and bounded streams, so an assertion panic can be attributed to the generated check; it is never a proof `Falsified` verdict by itself. | Test (TC-027) |
 
 ## Dependencies
 
