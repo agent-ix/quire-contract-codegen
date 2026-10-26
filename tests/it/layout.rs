@@ -1007,6 +1007,8 @@ fn file_import_allowlist(file: &str) -> Option<&'static [&'static [&'static str]
             &["kani", "identity"],
             &["kani", "generate", "outcome"],
             &["kani", "generate", "record"],
+            &["kani", "generate", "render"],
+            &["kani", "generate", "spec"],
         ]),
         _ => None,
     }
@@ -1025,7 +1027,7 @@ fn kani_exact_imports(importer: &str) -> Option<&'static [&'static str]> {
 fn generate_exact_imports(importer: &str) -> Option<&'static [&'static str]> {
     match importer {
         "outcome" => Some(&[]),
-        "collection" => Some(&["outcome", "record"]),
+        "collection" => Some(&["outcome", "record", "spec", "render"]),
         "frame" => Some(&["outcome"]),
         "negotiate" => Some(&[
             "outcome",

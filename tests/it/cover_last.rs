@@ -5,8 +5,8 @@
 //! emitted source with `syn` and checks every function attributed `#[kani::proof]` or
 //! `#[kani::proof_for_contract]`. The scan reads the non-test string literals of `src/` and fails
 //! when a file outside the driven set spells either proof attribute, so a new emitter cannot be
-//! added without being driven here. The scalar family uses the private HarnessSpec renderer; the other families
-//! retain their own emitters, so this inspection still drives every emitted source.
+//! added without being driven here. The scalar and symbolic collection families use the private
+//! HarnessSpec renderer; the remaining families retain their own emitters.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -40,7 +40,7 @@ const FAMILIES: [(&str, &str); 11] = [
         "corpus collection",
         "kani/generate/corpus/bounded_kani_corpus.rs",
     ),
-    ("symbolic collection", "kani/generate/collection.rs"),
+    ("symbolic collection", "kani/generate/render.rs"),
 ];
 
 /// Test code the scan skips whole: `kani/test_support.rs` has no `#[cfg(test)]` of its own, its
@@ -191,11 +191,10 @@ fn tc_025_the_cover_inspection_rejects_a_misplaced_duplicated_or_missing_cover()
 /// The proof-attribute templates each driven file holds, as `proof_spellings` counts them. A
 /// driven file with more spellings than this has a template no entry point above drives; raise
 /// the count only together with a driver and a family in `FAMILIES`.
-const PROOF_TEMPLATES: [(&str, usize); 7] = [
-    ("kani/generate/collection.rs", 1),
+const PROOF_TEMPLATES: [(&str, usize); 6] = [
     ("kani/generate/precondition.rs", 1),
     ("kani/generate/contract.rs", 1),
-    ("kani/generate/render.rs", 1),
+    ("kani/generate/render.rs", 2),
     ("kani/generate/frame.rs", 2),
     ("kani/generate/v1_bundle.rs", 1),
     ("kani/generate/corpus/bounded_kani_corpus.rs", 1),

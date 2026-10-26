@@ -1129,7 +1129,8 @@ fn negotiation_renders_the_selected_sequence_claims_deterministically() {
             .rust
             .contents
             .contains("let selected_items: [i64; 3] = kani::any();"));
-        assert!(!harness.rust.contents.contains("Vec<i128>"));
+        assert!(!harness.rust.contents.contains("Vec<"));
+        assert!(!harness.rust.contents.contains("vec!["));
         assert!(harness
             .rust
             .contents
@@ -1143,10 +1144,9 @@ fn negotiation_renders_the_selected_sequence_claims_deterministically() {
                 < harness.rust.contents.find("kani::cover!").unwrap()
         );
         assert_eq!(harness.rust.contents.matches("kani::cover!(").count(), 1);
-        assert!(
-            harness.rust.contents.rfind("kani::cover!(").unwrap()
-                < harness.rust.contents.rfind("\n}\n}").unwrap()
-        );
+        let lines: Vec<_> = harness.rust.contents.lines().map(str::trim).collect();
+        assert!(lines[lines.len() - 3].starts_with("kani::cover!("));
+        assert_eq!(&lines[lines.len() - 2..], &["}", "}"]);
         assert!(harness
             .rust
             .contents
