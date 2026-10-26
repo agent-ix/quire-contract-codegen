@@ -49,15 +49,15 @@ pub(crate) struct ClauseNodeIndex<'a> {
 }
 
 impl<'a> ClauseNodeIndex<'a> {
-    /// Read graph nodes once, keeping the first node for duplicate identities.
-    pub(crate) fn from_nodes(
-        graph_nodes: impl IntoIterator<Item = &'a CheckedSemanticNodeV2>,
-    ) -> Self {
-        let mut nodes = BTreeMap::new();
-        for node in graph_nodes {
-            nodes.entry(&node.node_id).or_insert(node);
+    pub(crate) fn new() -> Self {
+        Self {
+            nodes: BTreeMap::new(),
         }
-        Self { nodes }
+    }
+
+    /// Keep the first node for a duplicate identity.
+    pub(crate) fn insert(&mut self, node: &'a CheckedSemanticNodeV2) {
+        self.nodes.entry(&node.node_id).or_insert(node);
     }
 
     /// Look up an admitted node without scanning the graph again.
@@ -75,13 +75,15 @@ pub(crate) struct ClauseGraphView<'a> {
 
 impl<'a> ClauseGraphView<'a> {
     pub(crate) fn new(package: &'a CheckedPackageV2) -> Self {
+        let mut index = ClauseNodeIndex::new();
         let mut kinds = BTreeMap::new();
         for (node, kind) in package.graph().nodes.iter().zip(package.node_kinds()) {
+            index.insert(node);
             kinds.entry(&node.node_id).or_insert(*kind);
         }
         Self {
             package,
-            index: ClauseNodeIndex::from_nodes(package.graph().nodes.iter()),
+            index,
             kinds,
         }
     }
