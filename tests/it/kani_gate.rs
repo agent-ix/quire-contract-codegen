@@ -85,6 +85,9 @@ esac
             r##"#!/usr/bin/env bash
 set -euo pipefail
 if [[ " $* " == *" --list "* ]]; then
+  if [[ -n "${FAKE_HELD_NAME:-}" ]] && [[ " $* " != *" --skip ${FAKE_HELD_NAME} "* ]]; then
+    printf 'kani_obligations::%s: test\n' "$FAKE_HELD_NAME"
+  fi
   if [[ "${FAKE_CLAIM_REPORTS:-no}" == yes ]]; then
     printf 'kani_generation_claims::real_kani_claims_have_discharge_and_falsifying_mutations: test\n'
   fi
@@ -137,6 +140,8 @@ fi
             "kani-gate"
         });
         command.current_dir(env!("CARGO_MANIFEST_DIR"));
+        command.env_remove("KANI_HELD_TESTS");
+        command.env_remove("KANI_HOLD_REASON");
         command.env("PATH", format!("{}:/usr/bin:/bin", self.bin.display()));
         command.env("FAKE_MARKER", self.root.join("run-marker"));
         command.env("FAKE_LOCK_MARKER", self.root.join("lock-marker"));
@@ -156,11 +161,17 @@ fi
     }
 
     fn gate_script(&self, script: &Path, cargo: &str) -> Command {
+        self.gate_script_with_held(script, cargo, &[])
+    }
+
+    fn gate_script_with_held(&self, script: &Path, cargo: &str, held: &[&str]) -> Command {
         // The gate clears and the stand-in cargo writes its claim evidence
         // relative to the working directory, so it runs inside the sandbox
         // rather than the shared checkout.
         let mut command = Command::new(script);
         command.arg("kani-gate");
+        command.env_remove("KANI_HELD_TESTS");
+        command.env_remove("KANI_HOLD_REASON");
         command.env("PATH", format!("{}:/usr/bin:/bin", self.bin.display()));
         command.env("FAKE_MARKER", self.root.join("run-marker"));
         command.env("FAKE_LOCK_MARKER", self.root.join("lock-marker"));
@@ -183,8 +194,11 @@ fi
             "--",
             "--ignored",
             "--test-threads=1",
-            "kani_obligations",
         ]);
+        for name in held {
+            command.args(["--skip", name]);
+        }
+        command.arg("kani_obligations");
         command
     }
 
@@ -607,6 +621,61 @@ fn make_targets_share_one_real_lane_and_ci_excludes_it() {
     let ci = stdout(&dry("ci"));
     assert!(!ci.contains("cg_gates -- kani-gate"));
     assert!(!ci.contains("flock /tmp/agent-e-heavy-build.lock"));
+}
+
+#[trace("NFR-006-AC-20", "NFR-006-AC-21", "TC-045")]
+#[test]
+fn held_kani_test_is_reported_separately_and_invalid_holds_refuse_before_run() {
+    let script = Path::new(env!("CARGO_BIN_EXE_cg_gates"));
+    let reason =
+        "held by Peter order: 16 GiB ceiling, Inconclusive MemoryExhausted, proves nothing";
+
+    let sandbox = Sandbox::new();
+    let output = sandbox
+        .gate_script_with_held(script, "cargo", &[BLOCKED_KANI_TEST])
+        .env("KANI_HELD_TESTS", BLOCKED_KANI_TEST)
+        .env("KANI_HOLD_REASON", reason)
+        .env("FAKE_HELD_NAME", BLOCKED_KANI_TEST)
+        .output()
+        .expect("held gate control");
+    assert!(
+        !output.status.success(),
+        "stand-in cargo cannot pass the gate"
+    );
+    let report = stdout(&output);
+    assert!(report.contains("kani-gate: held=1"), "{report}");
+    assert!(report.contains(&format!(
+        "skipped-by-order=kani_obligations::{BLOCKED_KANI_TEST} reason={reason}"
+    )));
+    assert!(
+        report.contains("result=failed ran=2 expected=2"),
+        "{report}"
+    );
+    assert!(sandbox.marker(), "non-held tests must still run");
+
+    for (held, reason, selected) in [
+        (vec![BLOCKED_KANI_TEST], "", BLOCKED_KANI_TEST),
+        (vec![BLOCKED_KANI_TEST], reason, "different_test"),
+        (
+            vec![BLOCKED_KANI_TEST, BLOCKED_KANI_TEST],
+            reason,
+            BLOCKED_KANI_TEST,
+        ),
+    ] {
+        let sandbox = Sandbox::new();
+        let output = sandbox
+            .gate_script_with_held(script, "cargo", &held)
+            .env("KANI_HELD_TESTS", held.join(" "))
+            .env("KANI_HOLD_REASON", reason)
+            .env("FAKE_HELD_NAME", selected)
+            .output()
+            .expect("invalid held gate control");
+        assert!(!output.status.success());
+        assert!(
+            !sandbox.marker(),
+            "invalid hold must refuse before execution"
+        );
+    }
 }
 
 struct IncludeTargets(Vec<String>);

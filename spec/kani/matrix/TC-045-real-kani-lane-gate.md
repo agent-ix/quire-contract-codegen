@@ -33,7 +33,8 @@ test` and holds no host-wide lock.
    assert `required` for each. Assert the binary's `git` argument vector turns rename detection off.
 4. One recipe (NFR-006-AC-4): run `make -n kani` and `make -n kani-gate`; assert the same `cargo test`
    command line in both and that it holds each of the eight current filters, `--ignored` and
-   `--test-threads=1`.
+   `--test-threads=1`. While the IR-917 hold is active, both commands carry the exact held-test
+   skip from the one Makefile list; `make -n kani-scope` names the same hold.
 5. Lock and serial (NFR-006-AC-5): set `KANI_LOCK` to a temporary file. The stand-in `cargo` writes a
    marker file when it starts and records whether `flock -n` on `KANI_LOCK` fails (the gate holds it).
    Assert one start, the `--ignored` and `--test-threads=1` arguments, and a failed `flock -n`.
@@ -41,7 +42,7 @@ test` and holds no host-wide lock.
    the test, start the gate, wait until a process whose command line names `flock` and the temporary
    lock path appears in the process table, assert the marker file is absent, release the lock and
    wait for the marker file. No wall-clock interval orders the steps.
-6. Counts (NFR-006-AC-6): with a stand-in, listing zero tests gives `result=failed expected=0`
+6. Counts (NFR-006-AC-6): with a stand-in, listing zero runnable tests gives `result=failed expected=0`
    and no test start; listing two but reporting one passed, or reporting a test failure, gives
    `result=failed` and non-zero. A stand-in that reports all listed tests passed also gives
    `result=failed`: only the trusted Cargo command can discharge the proof. Step 13 observes the
@@ -68,7 +69,9 @@ test` and holds no host-wide lock.
     path and function name of every `#[ignore]`d test and notes which carry `#[ignore = "kani lane`.
     Confirm the eight named filters in `make -n kani`. Apply libtest's rule (a filter selects a test whose full
     path contains it) and assert that the tagged tests and the `#[ignore]`d tests the filters select are
-    the same set; a tagged test no filter selects, or a selected test without the tag, fails the step.
+    the same set before the named operator hold is applied; a tagged test no filter selects, or a
+    selected test without the tag, fails the step. The held test is selected but excluded from the
+    runnable subset and cannot count as a pass.
     Include closure (NFR-006-AC-18): in the same walk, read every `include!`, `include_str!`,
     `include_bytes!` and `#[path]` target from each `tests/it` file that holds a lane test, and from
     each file those name in turn, resolve it against the naming file's directory, and assert the
@@ -83,17 +86,27 @@ test` and holds no host-wide lock.
     Kani-reaching main changes absent from the candidate, update the candidate from current main.
     Observe a fresh full gate on
     that clean, stable candidate immediately before merge; require successful process exit and every
-    listed test run. A copied PR-body status line does not pass this step. A failed, absent or skipped
+    non-held listed test run, with held tests separately counted. A copied PR-body status line does
+    not pass this step. A failed, absent or skipped
     gate leaves the pull request unmerged and without a verification claim. For a `not required`
     scope, no real-Kani run is mandatory. Before a version tag is pushed, observe the actual full
     gate pass on the clean, stable candidate to be tagged; a release-ticket line is insufficient.
+14. Named hold (NFR-006-AC-20/21): inspect the one Makefile held list and its reason. Assert each
+    Kani target prints `skipped-by-order` with the exact test and the 16 GiB/no-verdict reason.
+    List ignored filter-selected tests before and after the skip: require exactly one held selected
+    test and every other selected test in the runnable list. `make kani-gate` reports `held=1`
+    separately from `ran` and `expected`. A missing, duplicate or reasonless held name, a skipped
+    non-held test or a failed non-held test makes the gate fail. Inspect that the held test and
+    FR-015-AC-41/119 remain Planned until Peter lifts the hold after feature work and the
+    original installed evidence exists.
 
 ## Expected Results
 
 The scope target is a pure function of the changed paths, renames included. The gate prints `passed`
-only for a run in which every listed test ran and passed on a clean tree that did not move, serially,
-under the lock, with the `make kani` command line, and prints a `not run` or `failed` line otherwise,
-with a non-zero exit. The lane selects exactly the tests that carry its tag. `make ci` does not run
+only for a run in which every non-held listed test ran and passed on a clean tree that did not move,
+serially, under the lock, with the `make kani` command line, and prints a `not run` or `failed` line
+otherwise, with a non-zero exit. Held tests are named and counted separately, never as passes. The
+lane filters select exactly the tests that carry its tag before the named hold. `make ci` does not run
 the lane. Before a Kani-touching pull request opens or merges, and before a tag is pushed, the actual
 gate passes on its current clean candidate; a copied status line is insufficient.
 
@@ -101,4 +114,5 @@ gate passes on its current clean candidate; a copied status line is insufficient
 
 Implemented: `scripts/cg_gates.rs`, the `kani-scope` and `kani-gate`
 targets and the shared `kani` recipe variable in `Makefile`, and `tests/it/kani_gate.rs`.
-Steps 1 to 12 are tests; step 13 is inspection. No CI workflow is part of this test case.
+Steps 1 to 12 and 14 include tests; steps 13 and 14 include inspection. No CI workflow is part of
+this test case.
