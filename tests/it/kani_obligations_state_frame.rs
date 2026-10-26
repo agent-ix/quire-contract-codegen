@@ -1003,13 +1003,22 @@ pub mod subject { pub fn check(amount_current: i64) -> bool { amount_current == 
     );
 }
 
-/// The installed prover runs the same generated clause against the owner kernel and two isolated
-/// checkouts whose addition bodies are mutated. The original oracle bytes and native expectation
-/// remain unchanged, so both defects must be caught by the independent arithmetic assertion.
-#[trace("FR-015-AC-41", "FR-017-AC-60", "TC-025", "TC-027")]
+/// Disabled installed proof. The original oracle bytes and native expectation are retained for
+/// future work, but this test is not evidence for FR-015-AC-41/119 or TC-025 while it is skipped.
 #[test]
-#[ignore = "kani lane: run serially through `make kani`"]
+#[ignore = "DO NOT RUN: installed V2 clause proof exhausts the fixed 16 GiB Kani ceiling"]
 fn tc_025_real_kani_falsifies_both_same_clause_addition_mutants() {
+    eprintln!(
+        "DO NOT RUN: this installed V2 clause proof exhausts the fixed 16 GiB ceiling.\n\
+         It returns Inconclusive MemoryExhausted, proves nothing, and blocked feature work for a week.\n\
+         The IR planner reports an operator hold until all feature work is done.\n\
+         FR-015-AC-41/119 and TC-025 remain Planned."
+    );
+    assert_eq!(
+        std::env::var("CG_ENABLE_IR917_16G_KANI_PROOF").as_deref(),
+        Ok("I_ACCEPT_THE_16G_RESOURCE_RISK"),
+        "installed V2 clause proof disabled before CBMC; explicit maintainer opt-in required"
+    );
     let (package, clause) =
         Twin::with_bounded_amount_implication().emitted_package("BalanceNeverDrops");
     let outcome = negotiate_kani_native_obligations(&KaniObligationRequest {
