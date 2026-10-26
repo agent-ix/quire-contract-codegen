@@ -27,3 +27,9 @@ Ticket: IR-348. Planless inspection of the AD-004 L-8 function slice, its comput
 ## Coverage
 
 Plan completion: not assessed. Examined AD-004 L-8, AD-004 step 3, FR-021 function schedule/refusal context, both changed files and the existing function tests. `quire coverage --scope . --format tsv` reported existing repository-wide status and trace gaps; no new trace tag or criterion was introduced by this PR. `quire matrix --scope . --format json` computed 40 FR-021 criteria, with 30 having at least one binder; the unbound criteria are pre-existing planned scope, not introduced by this slice. Reverse inspection found existing FR-021 ownership for the five moved reads. The new source guard checks only `operation.get(`, `operation[`, a leading `Application{operation` pattern, and `serde_json::Value::as_str`; `op.get("identity")` passes all four. Optional semantic review was not requested. Full gates were not run during this review.
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | At `5a6ecec4`, the scoped L-8 guard bans `.get("` independently of variable name; its positive control appends `op.get("identity")` and asserts detection. The original test gap is closed. |
