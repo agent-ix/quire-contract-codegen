@@ -2179,6 +2179,26 @@ wait
         ));
         assert!(missing.calls().is_empty());
 
+        for (name, unreadable) in [
+            ("playback-absent-library", false),
+            ("playback-unreadable-library", true),
+        ] {
+            let stand_in = running(name, "exit 0");
+            let library = stand_in.crate_directory.join("src/lib.rs");
+            fs::remove_file(&library).unwrap();
+            if unreadable {
+                fs::create_dir(&library).unwrap();
+            }
+            assert!(matches!(
+                execute_kani_concrete_playback(
+                    &stand_in.v2_playback_request(&v2_harness, timeout),
+                    &playback
+                ),
+                Err(KaniExecutionRefusal::ConcretePlaybackSourceMismatch { .. })
+            ));
+            assert!(stand_in.calls().is_empty(), "{name}: no launcher start");
+        }
+
         let duplicated = running("playback-duplicate-test", "exit 0");
         fs::write(
             duplicated.crate_directory.join("src/lib.rs"),
@@ -2363,6 +2383,91 @@ wait
             }) if stdout == b"error: playback crate did not compile\n"
         ));
         assert_eq!(failed.calls().len(), 1);
+
+        for (stream, redirect) in [(CaptureStream::Stdout, ""), (CaptureStream::Stderr, "1>&2")] {
+            let body = format!("head -c {} /dev/zero {redirect}", CAPTURE_LIMIT + 1);
+            let stand_in = StandIn::running("playback-over-limit", &body);
+            fs::write(stand_in.crate_directory.join("src/lib.rs"), &source).unwrap();
+            let result = execute_kani_concrete_playback(
+                &stand_in.v2_playback_request(&v2_harness, timeout),
+                &playback,
+            );
+            assert!(
+                matches!(
+                    result,
+                    Err(KaniExecutionRefusal::OutputOverLimit {
+                        stream: actual,
+                        limit: CAPTURE_LIMIT,
+                        harnesses: 1,
+                    }) if actual == stream
+                ),
+                "{stream}: {result:?}"
+            );
+            assert_eq!(stand_in.calls().len(), 1);
+        }
+
+        use super::super::owners::{LaunchOwners, ProcessMemory, SystemPoll};
+        let mut unread_identity = v2_harness.identity.clone();
+        unread_identity.ceilings.wall_clock = T;
+        let unread_harness = crate::kani::identity::KaniV2ClauseObligationHarness::generated(
+            unread_identity,
+            v2_harness.rust.clone(),
+            v2_harness.record.clone(),
+        );
+        for stream in [CaptureStream::Stdout, CaptureStream::Stderr] {
+            let body = match stream {
+                CaptureStream::Stdout => "printf ready > \"$CALLS.ready\"; printf x; sleep 45",
+                CaptureStream::Stderr => "printf ready > \"$CALLS.ready\"; printf x 1>&2; sleep 45",
+            };
+            let mut stand_in = running("playback-unread-output", body);
+            let (capture, controller) = OwnerGate::new();
+            let injected = std::sync::Arc::new(ControlledPoll {
+                ready: Some(stand_in.directory.join("calls.ready")),
+                gate: capture.clone(),
+                fail: true,
+            });
+            let stdout: std::sync::Arc<dyn super::super::owners::PollOperation> =
+                if stream == CaptureStream::Stdout {
+                    injected.clone()
+                } else {
+                    std::sync::Arc::new(SystemPoll)
+                };
+            let stderr: std::sync::Arc<dyn super::super::owners::PollOperation> =
+                if stream == CaptureStream::Stderr {
+                    injected
+                } else {
+                    std::sync::Arc::new(SystemPoll)
+                };
+            stand_in.installation = KaniInstallation::with_owners(
+                stand_in.installation.launcher.clone(),
+                std::sync::Arc::new(LaunchOwners {
+                    memory: std::sync::Arc::new(ProcessMemory),
+                    stdout,
+                    stderr,
+                    confirmation: std::sync::Arc::new(SystemPoll),
+                }),
+            );
+            let result = std::thread::scope(|scope| {
+                let worker = scope.spawn(|| {
+                    execute_kani_concrete_playback(
+                        &stand_in.v2_playback_request(&unread_harness, T),
+                        &playback,
+                    )
+                });
+                controller.entered();
+                controller.release();
+                worker.join().unwrap()
+            });
+            assert!(
+                matches!(
+                    result,
+                    Err(KaniExecutionRefusal::OutputUnread { stream: actual, .. }) if actual == stream
+                ),
+                "{stream}: {result:?}"
+            );
+            assert!(capture.failed.load(std::sync::atomic::Ordering::Acquire));
+            assert_eq!(stand_in.calls().len(), 1);
+        }
 
         let body = "printf '%s' \"$(readlink /proc/self/ns/pid)\" > \"$CALLS.namespace\"\nsleep 45 &\nprintf '%s' \"$!\" > \"$CALLS.child\"\nwait";
         let timed = running("playback-timeout", body);
