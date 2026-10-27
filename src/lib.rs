@@ -153,9 +153,6 @@ pub use kani::classify::{
     classify_kani_run, ClassifiedRun, KaniInconclusiveReason, KaniRunOutcome,
 };
 pub use kani::generate::census_validation::{KaniDiagnostic, KaniErrorCode};
-pub use kani::generate::v1_bundle::{
-    generate_kani_bundle, KaniArtifactBundle, KaniRequest, KaniSubjectBinding, ProofDependencyGraph,
-};
 pub use kani::output::diagnostics::{
     KaniFailurePhase, KaniNoVerdictDiagnostics, KaniStreamExcerpt,
 };
