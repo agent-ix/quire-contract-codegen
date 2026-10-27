@@ -1319,6 +1319,28 @@ fn tc_044_native_division_matches_independent_member_model() {
         .unwrap();
         modules.push((module, source));
     }
+    let source = member_only_reproduction(NumericOperator::Divide).source();
+    let module = module_of(2, "member_only");
+    let invocation = call(
+        &format!("crate::{module}"),
+        &source,
+        &[("x_current", "0"), ("y_current", "y")],
+        "&mut meter()",
+    );
+    writeln!(checks, "#[test]\nfn divide_member_zero_and_edges() {{
+        for y in [-2_i64, -1, 0, 1, 2, 5, 10, 12] {{
+            let expected = if y == 0 {{ rt::Outcome::Undefined(rt::Undefined::DivisionByZero) }} else {{
+                let quotient = 10_i128 / i128::from(y);
+                if (1..=10).contains(&quotient) {{ rt::Outcome::Completed(quotient <= 10) }}
+                else {{ rt::Outcome::Refused(rt::Refusal::DivisionOutOfDomain {{
+                    domain: Box::new(rt::IntegerInterval::new(rt::Integer::from(1), rt::Integer::from(10)).unwrap()),
+                    member: rt::DivisionMember::Quotient,
+                }}) }}
+            }};
+            assert_eq!({invocation}, expected, \"y={{y}}\");
+        }}
+    }}").unwrap();
+    modules.push((module, source));
     run_crate("division-model", &modules, &checks);
 }
 
