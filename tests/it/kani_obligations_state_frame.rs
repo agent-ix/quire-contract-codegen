@@ -57,10 +57,11 @@ use quire_contract_codegen::{
     InvalidObligationItem, KaniExecutionRequest, KaniInstallation, KaniObligationError,
     KaniObligationOutcome, KaniObligationRequest, KaniRunOutcome, ModuleSymbol,
     ObligationDisposition, ObligationItem, ObligationKind, ObligationRecord, PreStateFault,
-    ScopeMember, StateComparison, StateFieldDomain, StateFrameHarness, StateFrameIdentity,
-    StateFrameLoweringRefusal, StateFrameObligations, StateFrameProperty, StateFrameRefusal,
-    StateFrameRequest, StateFrameRole, UnsupportedFrameEffect, UnsupportedObligation,
-    MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
+    ProofDependencyKind, ProofDependencyRequest, ProofDependencyState, ProofExecutionState,
+    ProofReadiness, ScopeMember, StateComparison, StateFieldDomain, StateFrameHarness,
+    StateFrameIdentity, StateFrameLoweringRefusal, StateFrameObligations, StateFrameProperty,
+    StateFrameRefusal, StateFrameRequest, StateFrameRole, UnsupportedFrameEffect,
+    UnsupportedObligation, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
 };
 use quire_contract_codegen::{HarnessSymbol, StateFrameRecordError};
 use quire_contract_model::{
@@ -410,6 +411,7 @@ fn qsl_parameter_precondition_is_a_separate_v2_cover_obligation() {
     let outcome = negotiate(&[ObligationItem::V2Clause {
         package: &package,
         clause: &clause,
+        dependencies: None,
     }]);
     let [record] = outcome.records() else {
         panic!("one selected precondition");
@@ -436,6 +438,151 @@ fn qsl_parameter_precondition_is_a_separate_v2_cover_obligation() {
     assert!(harness.rust.contents.contains(&oracle.source));
 }
 
+/// A malformed declaration rejects the V2 request before any harness is exposed.
+#[trace("FR-015-AC-22", "FR-015-AC-44", "TC-025")]
+#[test]
+fn v2_clause_census_refuses_invalid_declared_dependencies() {
+    let (package, clause) =
+        Twin::with_bounded_other_precondition().emitted_package("OtherBelowLimit");
+    let required = ProofDependencyRequest {
+        proof_id: "proof_a",
+        kind: ProofDependencyKind::Required,
+        state: ProofDependencyState::Passed,
+        original_path: None,
+        replacement_path: None,
+    };
+    let evaluate = |dependencies: &[ProofDependencyRequest<'_>]| {
+        let item = [ObligationItem::V2Clause {
+            package: &package,
+            clause: &clause,
+            dependencies: Some(dependencies),
+        }];
+        negotiate_kani_obligations(&KaniObligationRequest {
+            ceilings: crate::common::proof_ceilings::proof_ceilings(),
+            items: &item,
+            subject_path: REQUEST_SUBJECT,
+            unwind: 3,
+        })
+        .expect("request shape")
+    };
+    let invalid = [
+        (
+            vec![ProofDependencyRequest {
+                proof_id: "",
+                ..required
+            }],
+            InvalidObligationItem::EmptyProofDependencyIdentity { index: 0 },
+        ),
+        (
+            vec![required, required],
+            InvalidObligationItem::DuplicateProofDependencyIdentity {
+                index: 1,
+                first_index: 0,
+            },
+        ),
+        (
+            vec![ProofDependencyRequest {
+                state: ProofDependencyState::Assumed,
+                ..required
+            }],
+            InvalidObligationItem::InconsistentProofDependency { index: 0 },
+        ),
+        (
+            vec![ProofDependencyRequest {
+                original_path: Some("crate::predicate"),
+                ..required
+            }],
+            InvalidObligationItem::InconsistentProofDependency { index: 0 },
+        ),
+        (
+            vec![ProofDependencyRequest {
+                kind: ProofDependencyKind::Assumed,
+                state: ProofDependencyState::Assumed,
+                original_path: Some("crate::predicate"),
+                ..required
+            }],
+            InvalidObligationItem::NonRequiredProofDependency { index: 0 },
+        ),
+    ];
+    for (dependencies, expected) in invalid {
+        let KaniObligationOutcome::Rejected { records } = evaluate(&dependencies) else {
+            panic!("invalid V2 census must expose no harness");
+        };
+        assert!(matches!(
+            &records[0].disposition,
+            ObligationDisposition::InvalidRequest { reason } if reason == &expected
+        ));
+    }
+}
+
+/// The normalized census is part of the sealed identity while generation has no run verdict.
+#[trace("FR-015-AC-25", "FR-015-AC-45", "TC-025")]
+#[test]
+fn v2_clause_census_is_order_independent_and_records_readiness() {
+    let (package, clause) =
+        Twin::with_bounded_other_precondition().emitted_package("OtherBelowLimit");
+    let dependency = |proof_id, state| ProofDependencyRequest {
+        proof_id,
+        kind: ProofDependencyKind::Required,
+        state,
+        original_path: None,
+        replacement_path: None,
+    };
+    let evaluate = |dependencies: &[ProofDependencyRequest<'_>]| {
+        let item = [ObligationItem::V2Clause {
+            package: &package,
+            clause: &clause,
+            dependencies: Some(dependencies),
+        }];
+        let outcome = negotiate_kani_obligations(&KaniObligationRequest {
+            ceilings: crate::common::proof_ceilings::proof_ceilings(),
+            items: &item,
+            subject_path: REQUEST_SUBJECT,
+            unwind: 3,
+        })
+        .expect("request shape");
+        let KaniObligationOutcome::Emitted {
+            v2_clause_harnesses,
+            ..
+        } = outcome
+        else {
+            panic!("valid V2 census admits the clause");
+        };
+        let [harness] = v2_clause_harnesses.as_slice() else {
+            panic!("one V2 clause harness");
+        };
+        harness.clone()
+    };
+    let passed = [
+        dependency("proof_b", ProofDependencyState::Passed),
+        dependency("proof_a", ProofDependencyState::Passed),
+    ];
+    let reversed = [passed[1], passed[0]];
+    let ready = evaluate(&passed);
+    assert_eq!(ready, evaluate(&reversed));
+    assert_eq!(ready.identity.readiness, ProofReadiness::Ready);
+    assert_eq!(
+        ready.identity.proof_execution_state,
+        ProofExecutionState::NotRun
+    );
+    assert_eq!(ready.identity.dependencies[0].proof_id, "proof_a");
+    assert_eq!(ready.identity.dependencies[1].proof_id, "proof_b");
+    assert!(ready
+        .record
+        .contents
+        .contains("\"proofExecutionState\":\"not_run\""));
+    for state in [ProofDependencyState::Missing, ProofDependencyState::Failed] {
+        let incomplete = evaluate(&[dependency("proof_a", state), passed[0]]);
+        assert_eq!(incomplete.identity.readiness, ProofReadiness::Incomplete);
+        assert_ne!(ready.identity, incomplete.identity);
+        assert_ne!(ready.record.contents, incomplete.record.contents);
+        assert_eq!(
+            incomplete.identity.proof_execution_state,
+            ProofExecutionState::NotRun
+        );
+    }
+}
+
 #[trace("FR-015-AC-125", "TC-025")]
 #[test]
 fn native_v2_precondition_keeps_original_parameter_bounds_and_ordering() {
@@ -457,6 +604,7 @@ fn native_v2_precondition_keeps_original_parameter_bounds_and_ordering() {
     let item = ObligationItem::V2Clause {
         package: &package,
         clause: &clause,
+        dependencies: None,
     };
     let outcome = negotiate_kani_native_obligations(&KaniObligationRequest {
         ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
@@ -505,6 +653,7 @@ fn native_v2_postcondition_keeps_guarded_arithmetic_and_independent_expectation(
     let item = ObligationItem::V2Clause {
         package: &package,
         clause: &clause,
+        dependencies: None,
     };
     let outcome = negotiate_kani_native_obligations(&KaniObligationRequest {
         ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
@@ -552,6 +701,7 @@ pub(super) fn decode_native_v2_helper_mutant_playback() {
     let item = ObligationItem::V2Clause {
         package: &package,
         clause: &clause,
+        dependencies: None,
     };
     let outcome = negotiate_kani_native_obligations(&KaniObligationRequest {
         ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
@@ -608,6 +758,7 @@ fn native_v2_decoder_enforces_original_inclusive_bounds() {
     let item = ObligationItem::V2Clause {
         package: &package,
         clause: &clause,
+        dependencies: None,
     };
     let outcome = negotiate_kani_native_obligations(&KaniObligationRequest {
         ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
@@ -679,6 +830,7 @@ fn native_v2_postcondition_oracle_typechecks_with_direct_dependencies() {
     let item = ObligationItem::V2Clause {
         package: &package,
         clause: &clause,
+        dependencies: None,
     };
     let outcome = negotiate_kani_native_obligations(&KaniObligationRequest {
         ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
@@ -761,6 +913,7 @@ fn native_v2_chained_probe_uses_selected_intermediate_interval() {
         items: &[ObligationItem::V2Clause {
             package: &package,
             clause: &clause,
+            dependencies: None,
         }],
         subject_path: REQUEST_SUBJECT,
         unwind: 3,
@@ -809,6 +962,7 @@ fn qsl_v2_precondition_harness_identity_tracks_request_facts() {
     let item = ObligationItem::V2Clause {
         package: &package,
         clause: &clause,
+        dependencies: None,
     };
     let generated = |unwind, subject_path| {
         let request = KaniObligationRequest {
@@ -848,6 +1002,7 @@ fn v2_precondition_fixture_harness(
     let item = ObligationItem::V2Clause {
         package: &package,
         clause: &clause,
+        dependencies: None,
     };
     let outcome = negotiate_kani_obligations(&KaniObligationRequest {
         ceilings: crate::common::proof_ceilings::proof_ceilings(),

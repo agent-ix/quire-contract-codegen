@@ -7,6 +7,7 @@ use crate::{
     core::ir::clause::{read_clause, ClauseGraphView, ClauseTerm},
     kani::{
         abi::{KaniPrimitiveType, KaniSolver},
+        census::{dependency_readiness, ProofDependencyEdge, ProofExecutionState},
         generate::{
             outcome::{KaniObligationRequest, UnsupportedObligation},
             record::{harness_path, record},
@@ -27,6 +28,7 @@ use crate::{
 };
 
 pub(in crate::kani::generate) struct LoweredV2Clause {
+    dependencies: Vec<ProofDependencyEdge>,
     pub(super) package: CheckedSemanticId,
     pub(super) node_id: CheckedNodeId,
     kind: ObligationKind,
@@ -90,6 +92,7 @@ pub(in crate::kani::generate) fn lower(
             .collect::<String>()
     );
     Ok(LoweredV2Clause {
+        dependencies: Vec::new(),
         package: package.package_id().clone(),
         node_id: clause.clone(),
         kind,
@@ -109,6 +112,13 @@ pub(in crate::kani::generate) fn lower(
 }
 
 impl LoweredV2Clause {
+    pub(in crate::kani::generate) fn set_dependencies(
+        &mut self,
+        dependencies: Vec<ProofDependencyEdge>,
+    ) {
+        self.dependencies = dependencies;
+    }
+
     pub(in crate::kani::generate) fn select_native_integer(
         &mut self,
         package: &CheckedPackageV2,
@@ -191,6 +201,9 @@ pub(in crate::kani::generate) fn render_clause(
     )?;
     let rust = render::render(&spec)?;
     let identity = V2ClauseObligationIdentity {
+        dependencies: lowered.dependencies.clone(),
+        readiness: dependency_readiness(&lowered.dependencies),
+        proof_execution_state: ProofExecutionState::NotRun,
         integer_representation: if lowered.native_integer {
             crate::kani::identity::ScalarIntegerRepresentation::Native
         } else {
@@ -469,6 +482,9 @@ fn render_postcondition(
     )?;
     let rust = render::render(&spec)?;
     let identity = V2ClauseObligationIdentity {
+        dependencies: lowered.dependencies.clone(),
+        readiness: dependency_readiness(&lowered.dependencies),
+        proof_execution_state: ProofExecutionState::NotRun,
         integer_representation: crate::kani::identity::ScalarIntegerRepresentation::Native,
         native_integer_selection: lowered.oracle.native_integer_selection.clone(),
         ceilings: request.ceilings,

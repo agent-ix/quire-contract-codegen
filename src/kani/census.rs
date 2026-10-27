@@ -45,6 +45,14 @@ pub enum ProofReadiness {
     Incomplete,
 }
 
+/// Execution state of a generated proof before any backend run.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProofExecutionState {
+    /// Generation has not run the proof.
+    NotRun,
+}
+
 /// One caller-declared proof dependency.
 #[derive(Clone, Copy, Debug)]
 pub struct ProofDependencyRequest<'a> {
