@@ -769,10 +769,8 @@ enum NameKey {
     Node(CheckedNodeId, usize),
 }
 
-/// Settles every lowered item's generated names across the request with [`unique_names`]: clause
-/// oracle functions (any may be embedded beside another as an assumed precondition), then the
-/// module and harness names of every clause and scalar obligation. A name depends on its item and
-/// on the siblings sharing its readable stem, never on the item's request position.
+/// Settles generated scalar module and harness names across the request with [`unique_names`].
+/// A name depends on its item and on siblings sharing its readable stem, never on request order.
 fn assign_names(items: &[ObligationItem<'_>], states: &mut [ItemState]) {
     let module_slots = states
         .iter()

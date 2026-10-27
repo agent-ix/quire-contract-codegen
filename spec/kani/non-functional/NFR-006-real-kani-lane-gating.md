@@ -90,7 +90,7 @@ relationships:
 ## Scope
 
 Applies to the real-Kani lane: the `#[ignore]`d tests of `tests/it` that run `cargo kani`, selected by
-the filters `kani_obligations`, `skeleton_spine`, `kani_witness_join`, `bounded_kani_corpus`,
+the filters `kani_obligations`, `skeleton_spine`, `bounded_kani_corpus`,
 `kani_generation` and `kani_batching` (FR-015, FR-017, FR-031, TC-025, TC-026, TC-027, TC-043,
 TC-044). The statement fixes the gate's behaviour and the local targets that implement it. It does
 not name a hosting system: the CI workflow at `.github/workflows/ci.yml` is out of this requirement,
@@ -98,8 +98,7 @@ and a required status check or a scheduled run on that or any other system is a 
 decision (Open decisions).
 
 The Kani-touching set is the code the lane reaches: the lane's tests call generation entry points of
-`src/kani`, `src/oracle` and `src/routed`, decode and replay through `src/replay`, write bundles
-through `src/publication` (`kani_witness_join`), and reach their harness fixtures through
+`src/kani`, `src/oracle` and `src/routed`, decode and replay through `src/replay`, and reach their harness fixtures through
 `tests/it/scratch_crate.rs` (which copies `Cargo.lock` into every scratch crate) and the `#[path]`
 modules `tests/exact_scalar_support/package.rs` and `tests/state_frame_support/**`, the first of
 which `include!`s `tests/checked_package_support/base.rs` and `#[path]`-includes
@@ -211,19 +210,16 @@ decision (Open decisions); until the owner rules, the answer is no.
 NFR-006-AC-19 remains Open during IR-348 V1 retirement. Only the V1-sourced claim row is HELD
 under the reason "V1 deleted by owner ruling 2026-10-27; no genuine V2 named independent
 expectation/control exists yet" and the expiry "until the V2 named independent expectation +
-real positive/falsifying control exists". The lane must continue to run
-FR-041's claim census and real mutation controls. The current V1 claim source selected by
-`kani_generation::guard_sources()[0]` and named in `scripts/kani_claims.json` remains
-an unproved FR-003@4 Boolean state-transition claim. IR-1047 specifies an additional,
-separately named V2 implication scalar module with independent expectation and subject
-roots; its proof cannot discharge the historical row or expire its hold. The
-same-claim V2 FR-003@4 source and retained-row update are PLANNED under IR-1049
-and FR-041-AC-10. Deleting the
-source, dropping the historical claim or removing this gate cannot satisfy AC-19. While this is the only claimed module and is held, zero module proofs and
-mutations are discharged. The IR-348 immediate V1 deletion code slice must implement the
-hold in or before its deletion PR; at this spec head it remains PLANNED. No
-historical-claim replacement or current-run proof is identified here; IR-1047
-Acceptance 4 remains unmet.
+real positive/falsifying control exists". The lane continues to run FR-041's claim
+census and real mutation controls for non-held rows. The retired V1 claim source is absent;
+`kani_generation::guard_sources()[0]` selects a V2 scalar harness but supplies no FR-041
+module proof. IR-1047 specifies an additional, separately named V2 implication scalar
+module with independent subject and expectation roots; that proof cannot discharge the
+historical FR-003@4 row or expire its hold. The same-claim V2 source and retained-row update
+are PLANNED under IR-1049 and FR-041-AC-10. Dropping the historical claim or removing the
+gate cannot satisfy AC-19. While the only current claim is held, zero module proofs and
+mutations are discharged. IR-348 implements the bounded hold and its reporting; no V2
+replacement or current-run proof is identified here. IR-1047 Acceptance 4 remains unmet.
 
 ## Open decisions
 

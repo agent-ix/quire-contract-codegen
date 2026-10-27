@@ -39,7 +39,7 @@ use crate::{
 /// Stable schema identity for [`CorpusProofDependencyGraph`].
 ///
 /// This corpus schema carries only the fields that
-/// [`generate_bounded_kani_corpus_case`] actually derives.
+/// [`generate_bounded_kani_corpus_case`] actually derives, separate from retired bundle output.
 pub const CORPUS_PROOF_GRAPH_SCHEMA: &str = "quire.kani-corpus-proof-graph/v1";
 
 /// One semantic family represented in the bounded corpus.
@@ -116,7 +116,7 @@ pub struct BoundedCorpusArtifacts {
 /// Carries only what [`generate_bounded_kani_corpus_case`] actually derives: the case's own
 /// `#[kani::proof]` symbol, its semantic family/construct, its case name (the same name its
 /// sibling artifact paths carry), the derived readiness, and the sorted declared
-/// dependency census. See [`CORPUS_PROOF_GRAPH_SCHEMA`] for why this is a distinct envelope from
+/// dependency census. Its schema identity is [`CORPUS_PROOF_GRAPH_SCHEMA`].
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct CorpusProofDependencyGraph {

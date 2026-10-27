@@ -165,21 +165,17 @@ about a semantic stage the test input did not traverse.
 
 ## Status
 
-Open; the V1-sourced module claim hold is PLANNED under IR-348's immediate V1 deletion code
-slice and is not implemented at this spec head. The current test
-`tests/it/kani_generation_claims.rs` takes
-`kani_generation::guard_sources()[0]`, which is a V1 bundle source in
-`tests/it/kani_generation.rs`; `scripts/kani_claims.json` names that generated V1 module.
-IR-348 retirement removes that claim source; the hold implementation must land in or before the
-V1 deletion PR so the claim test still validates the declaration and output without false proof
-credit. The V2 Boolean implication scalar renderer is the selected production owner for an
-additional, distinct claim. Its current generated expectation is inline and has no named
-call-graph root; the claim test still selects V1 source. No qualifying V2 claim or current-run
-FR-041 evidence is asserted by this draft. A proved V2 implication claim cannot discharge the
-held FR-003@4 Boolean state-transition claim. That historical row stays held and unproved;
-IR-1047 Acceptance 4, including same-claim V2 source and hold expiry, remains unmet and
-open under IR-1049 and FR-041-AC-10. While the only current claim is held, no module
-proof or mutation is discharged. FR-041-AC-1 through AC-5 remain unchanged and unfulfilled for the held claim;
+Open; IR-348 implements the bounded hold for the retired V1 module claim row in
+`scripts/kani_claims.json`. The claim test and gate validate the held declaration, report its
+reason and expiry, and compare claim names with the merge-base declaration. The V1 source was
+removed; `kani_generation::guard_sources()[0]` selects a surviving V2 scalar harness but
+provides no FR-041 module proof. The V2 Boolean implication scalar renderer is the selected
+production owner for an additional, distinct claim. Its expectation remains inline with no
+named call-graph root. A proved implication claim cannot discharge the held FR-003@4 Boolean
+state-transition claim. That historical row stays visible, held and unproved; its same-claim
+V2 source and hold expiry are PLANNED under IR-1049 and FR-041-AC-10. IR-1047 Acceptance 4
+remains unmet. No current-run FR-041 proof or mutation evidence is asserted. FR-041-AC-1
+through AC-5 remain unchanged and unfulfilled for the held claim;
 non-held claims retain the full gate.
 
 ## Dependencies

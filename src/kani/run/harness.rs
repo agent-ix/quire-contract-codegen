@@ -17,7 +17,7 @@ use crate::{
 /// `view()` projects those facts once and the byte-for-byte source check, the launch and the classification stay one code path (FR-017).
 #[derive(Clone, Copy, Debug)]
 pub enum KaniExecutableHarness<'a> {
-    /// A V1 frozen-clause contract harness (FR-015).
+    /// A caller-built FR-017 contract execution input.
     Contract(&'a KaniObligationHarness),
     /// A V2 exact-scalar harness, as `generate_routed` returns it (FR-022).
     Scalar(&'a KaniScalarObligationHarness),

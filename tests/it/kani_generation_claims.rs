@@ -524,10 +524,9 @@ fn real_kani_claims_have_discharge_and_falsifying_mutations() {
     );
     if held == declaration.modules.len() {
         let generated = &crate::kani_generation::guard_sources()[0].1;
-        assert!(
-            !module_extents(generated).contains_key(RETIRED_V1_CLAIM),
-            "retired V1 module must be absent from production V2 source"
-        );
+        let modules = module_extents(generated);
+        claim_census(&declaration, &base_names(), &BTreeSet::new(), &modules, &[])
+            .unwrap_or_else(|error| panic!("{error}"));
         println!("kani-claims: active=0 held={held}");
         return;
     }

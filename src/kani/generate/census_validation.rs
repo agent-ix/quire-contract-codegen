@@ -2,11 +2,10 @@
 
 use std::collections::BTreeSet;
 
-use quire_contract_model::SourceSpan;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    core::diagnostic::{GenerationErrorCode, GenerationTerminalState},
+    core::diagnostic::GenerationTerminalState,
     kani::census::{ProofDependencyKind, ProofDependencyRequest, ProofDependencyState},
 };
 
@@ -18,18 +17,6 @@ pub enum KaniErrorCode {
     InvalidIdentity,
     /// A dependency kind/state/path combination is invalid.
     InvalidDependency,
-    /// The first slice cannot bind the supplied clause dependencies to `fn(bool, bool) -> bool`.
-    UnsupportedBinding,
-    /// A Boolean clause could not be lowered without approximation.
-    ClauseGenerationFailed,
-    /// The explicit unwind value is zero or exceeds the first-slice bound.
-    InvalidUnwind,
-    /// Generated Rust did not parse.
-    InvalidGeneratedSyntax,
-    /// A deterministic graph could not be serialized.
-    SerializationFailed,
-    /// The generated source exceeds the bounded artifact size.
-    ResourceLimitExceeded,
 }
 
 impl KaniErrorCode {
@@ -37,15 +24,9 @@ impl KaniErrorCode {
     #[must_use]
     pub const fn terminal_state(self) -> GenerationTerminalState {
         match self {
-            Self::InvalidIdentity | Self::InvalidDependency | Self::InvalidUnwind => {
+            Self::InvalidIdentity | Self::InvalidDependency => {
                 GenerationTerminalState::InvalidInput
             }
-            Self::UnsupportedBinding | Self::ResourceLimitExceeded => {
-                GenerationTerminalState::Unsupported
-            }
-            Self::ClauseGenerationFailed
-            | Self::InvalidGeneratedSyntax
-            | Self::SerializationFailed => GenerationTerminalState::Inconclusive,
         }
     }
 }
@@ -58,13 +39,8 @@ pub struct KaniDiagnostic {
     pub code: KaniErrorCode,
     /// Interface-001 terminal state.
     pub terminal_state: GenerationTerminalState,
-    /// Preserved Boolean-lowering code, when the failure originated in an oracle clause.
-    pub generation_code: Option<GenerationErrorCode>,
     /// Stable path to the rejected request element.
     pub path: String,
-    /// Exact IR-owned locus when clause lowering identified one.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source_span: Option<SourceSpan>,
     /// Human-readable detail not used as machine identity.
     pub message: String,
 }
@@ -173,9 +149,7 @@ pub(super) fn single_diagnostic(
     vec![KaniDiagnostic {
         code,
         terminal_state: code.terminal_state(),
-        generation_code: None,
         path: path.to_owned(),
-        source_span: None,
         message: message.to_owned(),
     }]
 }

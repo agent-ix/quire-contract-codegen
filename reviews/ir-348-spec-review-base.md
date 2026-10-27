@@ -1,35 +1,54 @@
 ---
-id: SR-585007
-title: 'IR-348 CG #587 spec-review/base review'
+id: SR-601003
+title: "IR-348 PR #601 spec-review/base (FR-016, TC-026, replay matrix, interface-001)"
 type: SpecReview
 analysis: base
+scope: "agent-ix/quire-contract-codegen; PR #601 head 64992f5be8aebb7d036fba5491fa9ef61af70d29 against merge-base 46dbaccacbd96f55654fc4b331a9d42883e70a2c; spec/core/functional/interface-001-codegen-api.md, spec/replay/functional/FR-016-witness-native-replay.md, spec/replay/matrix/TC-026-witness-native-replay.md, spec/replay/matrix/tests.md; IR-348"
 review_set: subset
-scope: agent-ix/quire-contract-codegen; spec/assurance/AD-004-cg-crate-layout.md
+relationships:
+  - target: ix://agent-ix/quire-contract-codegen/FR-016
+    type: reviews
 ---
-
-# IR-348 CG #587 spec-review/base review
 
 ## Summary
 
-Ticket: IR-348. Independent Opus review of the spec-only diff at e18e3385b8ae9ec99ffe1836f2bc7c719bf1804b against origin/main source. Targeted Quire validation passed; no applicable AssuranceProfile exists under spec/. L-6 end state and its test are retained. No Cargo, Kani, or full gate was run.
+Ticket: IR-348. This review covers the four spec files the PR changes:
 
-## Scope
+- **interface-001:** the `generate_kani_bundle` operation and its row in the operation table are
+  removed. No compatibility entry is left behind.
+- **FR-016 and TC-026:** new Status text and the replay matrix split AC-9 and AC-10 out as
+  "Partially backed, Open under IR-1047".
 
-- examined: AD-004:dependency-direction — - The classifier's former L-6 exception is closed by step 5: `classify_kani_run` takes `Option<CounterexamplePlayback>` beside the typed report. `kani/output/playback.rs` extracts that value from console text; `kani/classify.rs` does not read the text. The edge from `classify` to `output` remains in the allowed direction.
-- examined: AD-004:run-output — | Run classification and vacuity | `kani/classify.rs` | the typed report and `Option<CounterexamplePlayback>` extracted by `kani/output/playback.rs`; step 5 removed the console-text input | | Witness decode | `replay/witness.rs` | `decode_falsification` takes typed playback entries from `kani/output/playback.rs`; the public V2 clause convenience entry still takes transcript text and calls the output parser before decoding |
-- examined: AD-004:witness-boundary — The former `kani_witness_join` text scan now lives in `kani/output/playback.rs`. Step 2f moved the scan there, step 2g moved witness decoding to `replay/witness.rs`, and step 5 made the output reader return typed entries and a typed refusal. `replay/witness.rs` checks those entries against persisted argument bindings and builds `qsl_replay::WitnessValue`. Replay imports `kani`; `kani` never imports `replay`. There is one report parse and one playback parse.
-- examined: AD-004:L-6 — - L-6. Kani output is read in `kani/output/` only, and the classifier, the terminal maps and the witness decode take typed values. Test: a grep for Kani's banner, check and playback wording outside that directory, over non-test source: the test modules that embed real Kani captures as fixtures (`kani/classify.rs`, the decode tests) are not scanned. Step 5 removed the former console-text classifier input and witness comment comparison. `kani/output/playback.rs` now supplies `CounterexamplePlayback` for classification and typed entries for witness decoding. The public `decode_v2_clause_falsifica
-- examined: AD-004:interim-exception — #### Interim exceptions  Each is a place where the target of this AD is not yet true, stated so that no step stops for it.  | Exception | Where | Removed by | | --- | --- | --- | | The public V2 clause witness entry takes transcript text, then calls the output parser before typed decoding | `replay/witness.rs`, `decode_v2_clause_falsification` | move parsing to the caller and pass `Playback` directly; L-6 remains partial |
-- examined: AD-004:layout-tree — output/                   the one reader of Kani output diagnostics.rs          the bounded NoVerdict record: failure phase from the console markers and the redacted stream tails (FR-017-AC-32 to AC-36) report.rs               typed report parse (--export-json) playback.rs             the concrete-playback block: the console-text extraction (`counterexample_playback`) and, from step 2f, the block scan `kani_witness_join` held, with `DecodeFailure`; typed entries from step 5
-- context_only: AD-004:step-5 — 5. **One output reader and the terminal map.** The playback scanning already sits in `kani/output/playback.rs` (step 2f moved it verbatim); this step changes the interface: `playback.rs` returns typed entries and its own typed refusal, `replay/witness.rs` takes them and `DecodeFailure` is built from that refusal, and `classify_kani_run` takes the extracted playback in place of the console text, which removes the interim edge from `kani/classify.rs` to `counterexample_playback`. Batching follows, in
+The AC text and verification methods are unchanged, and no PASS is claimed for the
+installed-Kani E7-E9 control. The FR-016 Status text, however, still describes the PR's own
+deleted tests as present.
 
 ## Findings
 
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
-| FND-001 | low | The text says step 5 removed witness comment comparison, but replay/witness.rs:312-355 still compares decoded bytes with the typed rendered-value comment and refuses mismatches; step 5 moved comment parsing to kani/output/playback.rs. | spec/assurance/AD-004-cg-crate-layout.md:926-927 |
-| FND-002 | low | The current layout tree names counterexample_playback, which no longer exists; kani/output/playback.rs:69,75 exposes select_counterexample and counterexample_from_blocks. | spec/assurance/AD-004-cg-crate-layout.md:248-250 |
+| FND-001 | medium | FR-016 Status describes files and tests deleted by this same PR in the present tense. It says `skeleton_spine.rs`'s installed E7-E9 control "uses the retired V1 `BoundClause` generator". It says `kani_argument_order.rs` and `kani_witness_join.rs` "use the retiring V1 `BoundClause` producer". It says `tc_026_installed_kani_falsification_is_bound_to_process_stdout` "uses a V1 `BoundClause` harness". All of them are gone at this head. TC-026 (lines 165-173) and the replay matrix AC-8 row repeat the same claims. | spec/replay/functional/FR-016-witness-native-replay.md:163-185; spec/replay/matrix/TC-026-witness-native-replay.md:165-173; spec/replay/matrix/tests.md:15 |
 
 ## Verdict
 
-FINDINGS: 2 defect(s) in this method; the changed AD needs correction before this review is clean.
+Changes requested (medium). Rewrite the three FR-016 Status paragraphs, the matching TC-026
+paragraphs and the AC-8 matrix row to say the files were removed by IR-348. Keep the Open status
+and the follow-up owners (IR-1047, IR-604) unchanged. The substance of the change is correct:
+
+- AC-9 and AC-10 stay Open and partially backed, and their native replay evidence is kept.
+- The fixture is labelled test-only and is not a generator claim.
+- The V2 control remains owned by IR-1047 and is not counted as a substitute.
+- The interface-001 removal is complete.
+
+## Coverage
+
+```yaml
+scope:
+- {id: FR-016-AC-9, path: spec/replay/functional/FR-016-witness-native-replay.md, role: examined, excerpt: "FR-016-AC-9 and AC-10 retain their default native replay tests, but the skeleton_spine.rs installed-prover E7-E9 control uses the retired V1 BoundClause generator. That installed path is Open and partially backed until IR-1047 supplies a genuine V2 generated harness and real-Kani counterexample control."}
+- {id: FR-016-AC-10, path: spec/replay/matrix/tests.md, role: examined, excerpt: "FR-016 | FR-016-AC-9, FR-016-AC-10 | TC-026 | Partially backed, Open under IR-1047: default native replay tests survive; the V1 skeleton_spine.rs installed-prover E7-E9 control retires"}
+- {id: FR-016-AC-21, path: spec/replay/matrix/TC-026-witness-native-replay.md, role: examined, excerpt: "FR-016-AC-21 to AC-23 are implemented and tested in the default suite (tests/it/skeleton_spine.rs with a direct test-only identity fixture"}
+- {id: FR-016-AC-8, path: spec/replay/functional/FR-016-witness-native-replay.md, role: examined, excerpt: "The only emission-order and real-Kani persisted-schema controls in tests/it/kani_argument_order.rs and tests/it/kani_witness_join.rs use the retiring V1 BoundClause producer."}
+- {id: FR-016-AC-25, path: spec/replay/functional/FR-016-witness-native-replay.md, role: examined, excerpt: "In tests/it/kani_stdout_capture.rs, the ignored tc_026_installed_kani_falsification_is_bound_to_process_stdout uses a V1 BoundClause harness."}
+- {id: FR-016-AC-1, path: spec/replay/matrix/tests.md, role: examined, excerpt: "FR-016-AC-1 through FR-016-AC-5, FR-016-AC-11 through FR-016-AC-23 | TC-026 | Covered; AC-1 through AC-5 and AC-21 through AC-23 use a direct test-only KaniObligationIdentity fixture"}
+- {id: interface-001:generate_kani_bundle, path: spec/core/functional/interface-001-codegen-api.md, role: examined, excerpt: "generate_kani_bundle operation entry and table row removed"}
+```
