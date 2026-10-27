@@ -1,23 +1,13 @@
-//! FR-016: the skeleton spine over one Boolean clause. A Kani obligation is generated
-//! from a hand-built bound package, proved, falsified by an injected violation, and the
-//! counterexample is replayed natively through QSL's layer-6 `replay` facade, which settles the
-//! same violation.
+//! FR-016: the surviving replay adapter and function-contract identity behavior.
 //!
-//! What the input passes through, in ADR-011 terms: the clause enters at the Contract IR side as
-//! a hand-written `BoundPackage` projection (no contract is compiled, so E1 to E4 and the
-//! contract-to-IR step do not run), CG generates the Kani obligation from it (E7), the installed
-//! prover proves and falsifies it (E8), and the decoded counterexample is replayed by
-//! `qsl_replay::replay` (E9), which recompiles QSL source and evaluates the function. The QSL
-//! source here is a hand-mirrored native twin of the subject and clause, tied to the Rust side
-//! only by the clause and its argument names. The replay request's limits are unlimited
-//! stand-ins, because no proving run carries limits. The package id and parameter node ids come
-//! from `qsl_replay::call_site`, and every request type from `qsl-replay`'s own re-exports.
-//!
-//! The default lane covers the replay adapter against QSL. The `kani` lane (`make kani`,
-//! `#[ignore]` here, not part of `make ci`) runs the real prover.
+//! A direct test-only `KaniObligationIdentity` supplies persisted argument bindings for
+//! deterministic playback, domain, native replay and O-09 identity checks. It asserts no
+//! generated harness or installed proof. QSL's `call_site` supplies the package and parameter
+//! identities; its `replay` facade recompiles the source and evaluates the selected function.
+//! The installed E7-E9 control awaits a genuine V2 generated harness under IR-1047.
 
 use ix_trace_rs::trace;
-use std::{collections::BTreeMap, path::PathBuf};
+use std::collections::BTreeMap;
 
 use qsl_replay::{
     call_site, ByteDigest, CallSiteRefusal, CanonicalAssignment, Code, DeclaredDomain,
@@ -29,19 +19,18 @@ use qsl_replay::{
 };
 use qsl_replay::{Witness, WitnessValue};
 use quire_contract_codegen::{
-    decode_falsification, execute_kani_obligation, parse_assertion_playback, replay_counterexample,
-    replay_counterexample_through, replay_falsification, DependencyLock, DependencyLockError,
-    EvidenceFailureCause, KaniExecutionRequest, KaniInstallation, KaniObligationHarness,
-    KaniRunOutcome, LockedSource, ObligationKind, ReplayInputs, ReplayPackage, ReplayPackageError,
+    replay_counterexample, replay_counterexample_through, replay_falsification, DependencyLock,
+    DependencyLockError, EvidenceFailureCause, HarnessSymbol, KaniBindingRole, KaniIntegerBounds,
+    KaniObligationIdentity, KaniPrimitiveType, KaniSolver, LockedSource, ModuleSymbol,
+    ObligationBinding, ObligationKind, ReplayInputs, ReplayPackage, ReplayPackageError,
     ReplayParameter, ReplayVerdict, SpineReplayError, WitnessDecodeLimits,
 };
+use quire_contract_model::{
+    ClauseId, ClauseRef, IntegerDomain, OverflowPolicy, RequirementRef, SourceSpan,
+};
 use quire_semantic_value::catalog::{Category, InternalFault};
+use serde_json::json;
 
-use super::kani_obligations::{bound_package, supported_contract_harnesses, write_crate};
-
-const SUBJECT_PATH: &str = "crate::subject::withdraw";
-
-const HEALTHY_SUBJECT: &str = "pub mod subject {\n    pub fn withdraw(amount_current: i64, balance_pre: i64) -> i64 {\n        balance_pre - amount_current\n    }\n}\n";
 const PROFILE: &str = "profile v = \"quire.value.complete/v1\";\n";
 const AUTHORITY: &str = "agent-ix";
 const IDENTITY: &str = "test:skeleton-spine";
@@ -108,11 +97,10 @@ fn inputs(source: &str, dependencies: Vec<DependencyLock>) -> ReplayInputs {
     }
 }
 
-/// The request for `package` in the tests whose subject is not the identity: the harness of the
-/// hand-built package, with its arguments renamed to the function's own parameters, so the slot is
-/// the identity `ReplayPackage::request` derives and not a value the test fills in.
+/// Build a request for a selected function by binding the direct test identity to its parameters.
+/// `ReplayPackage::request` derives the identity slot from that binding.
 fn request_of(package: &ReplayPackage, source: ReplaySource) -> qsl_replay::ReplayRequestWire {
-    let mut identity = spine_harness().identity;
+    let mut identity = spine_identity();
     let template = identity.arguments[0].clone();
     identity.arguments = package
         .parameters()
@@ -149,7 +137,7 @@ fn compile_native_twin(source: &str, function: &str) -> ReplayPackage {
         .expect("the native twin compiles and declares the function");
     if function == FUNCTION {
         package
-            .with_kani_identity(&spine_harness().identity)
+            .with_kani_identity(&spine_identity())
             .expect("the retained proof identity binds the native twin")
     } else {
         package
@@ -802,8 +790,7 @@ fn recomputed(
     Sha256::digest(text.as_bytes()).into()
 }
 
-/// The golden arguments of the hand-built package's harness: `amount_current` and `balance_pre`,
-/// each with the bounds the harness declares.
+/// The direct test identity's arguments and their declared bounds.
 fn golden_arguments(
     identity: &quire_contract_codegen::KaniObligationIdentity,
 ) -> [(&'static str, String); 2] {
@@ -823,23 +810,23 @@ fn golden_arguments(
 #[trace("FR-016-AC-21", "TC-026")]
 #[test]
 fn tc_026_the_request_slot_is_the_recomputed_function_contract_digest() {
-    let harness = spine_harness();
-    assert_eq!(harness.identity.kind, ObligationKind::Postcondition);
+    let harness = spine_identity();
+    assert_eq!(harness.kind, ObligationKind::Postcondition);
     let source = identity_unit("");
     let package = compile_native_twin(&source, FUNCTION);
     let packet = package
         .backend_witness_packet(
-            &harness.identity,
+            &harness,
             Witness::parse("<<<assertion|h|c|>>>").expect("the fixture witness parses"),
         )
         .expect("the identity is built");
     let wire = package
-        .request(&harness.identity, packet)
+        .request(&harness, packet)
         .expect("the selected function admits its backend packet");
     let expected = recomputed(
         &site_of(&source, FUNCTION),
         "postcondition",
-        &golden_arguments(&harness.identity),
+        &golden_arguments(&harness),
     );
     assert_eq!(wire.obligation_identity, expected);
     let transcript = playback(&harness, 1, 5);
@@ -855,26 +842,21 @@ fn tc_026_the_request_slot_is_the_recomputed_function_contract_digest() {
 #[trace("FR-016-AC-21", "TC-026")]
 #[test]
 fn tc_026_the_request_replay_counterexample_sends_carries_the_recomputed_digest() {
-    let harness = spine_harness();
+    let harness = spine_identity();
     let source = identity_unit("");
     let package = compile_native_twin(&source, FUNCTION);
     let mut sent = Vec::new();
     // The function holds for every in-domain input, so this replays to an evidence failure; the
     // verdict is not what is under test, the request is.
-    replay_counterexample_through(
-        &harness.identity,
-        &playback(&harness, 1, 5),
-        &package,
-        |wire| {
-            sent.push(wire.obligation_identity);
-            qsl_replay::replay(wire, ReplayLimits::default())
-        },
-    )
+    replay_counterexample_through(&harness, &playback(&harness, 1, 5), &package, |wire| {
+        sent.push(wire.obligation_identity);
+        qsl_replay::replay(wire, ReplayLimits::default())
+    })
     .expect("QSL settles the replay");
     let expected = recomputed(
         &site_of(&source, FUNCTION),
         "postcondition",
-        &golden_arguments(&harness.identity),
+        &golden_arguments(&harness),
     );
     assert_eq!(sent, vec![expected]);
 }
@@ -884,14 +866,14 @@ fn tc_026_the_request_replay_counterexample_sends_carries_the_recomputed_digest(
 #[trace("FR-024-AC-43", "FR-024-AC-46", "TC-035")]
 #[test]
 fn tc_035_function_replay_refuses_another_proving_run_identity_before_execution() {
-    let harness = spine_harness();
+    let harness = spine_identity();
     let package = compile_native_twin(&native_source(VIOLATING_TWIN), FUNCTION);
-    let mut other = harness.identity.clone();
+    let mut other = harness.clone();
     other.contract_symbol = Some("other_function_contract".to_owned());
     other.subject_path = Some("crate::subject::other_function".to_owned());
     let packet = package
         .backend_witness_packet(
-            &harness.identity,
+            &harness,
             Witness::parse("<<<assertion|h|c|>>>").expect("the fixture witness parses"),
         )
         .expect("the retained proof identity binds the twin");
@@ -918,13 +900,13 @@ fn tc_035_function_replay_refuses_another_proving_run_identity_before_execution(
 #[trace("FR-016-AC-21", "TC-026")]
 #[test]
 fn tc_026_a_boolean_argument_and_identifier_order_match_the_golden_text() {
-    let harness = spine_harness();
+    let harness = spine_identity();
     let source = format!(
         "language \"ix:native\" edition \"1-draft\";\n{PROFILE}\
          function flagged using v(flag: Boolean, amount_current: Int[0, 1000]): Boolean pure \
          {{ flag or amount_current <= 1000 }}\n"
     );
-    let mut identity = harness.identity.clone();
+    let mut identity = harness.clone();
     let amount = identity.arguments[0].clone();
     let flag = quire_contract_codegen::ObligationBinding {
         identifier: "flag".to_owned(),
@@ -965,24 +947,24 @@ fn tc_026_a_boolean_argument_and_identifier_order_match_the_golden_text() {
 #[test]
 fn tc_026_a_harness_that_is_not_the_functions_parameters_has_no_identity() {
     use quire_contract_codegen::ObligationIdentityError as Refusal;
-    let harness = spine_harness();
+    let harness = spine_identity();
     let package = compile_native_twin(&identity_unit(""), FUNCTION);
 
-    let mut missing = harness.identity.clone();
+    let mut missing = harness.clone();
     missing.arguments.truncate(1);
     assert!(matches!(
         package.obligation_identity(&missing),
         Err(Refusal::UnboundParameter { parameter }) if parameter == "balance_pre"
     ));
 
-    let mut unbounded = harness.identity.clone();
+    let mut unbounded = harness.clone();
     unbounded.arguments[0].integer_bounds = None;
     assert!(matches!(
         package.obligation_identity(&unbounded),
         Err(Refusal::UnboundedDomain { argument }) if argument == "amount_current"
     ));
 
-    let mut bounded_boolean = harness.identity.clone();
+    let mut bounded_boolean = harness.clone();
     bounded_boolean.arguments[0].primitive_type =
         quire_contract_codegen::KaniPrimitiveType::Boolean;
     assert!(matches!(
@@ -998,8 +980,8 @@ fn tc_026_a_harness_that_is_not_the_functions_parameters_has_no_identity() {
 #[trace("FR-016-AC-22", "TC-026")]
 #[test]
 fn tc_026_the_identity_separates_functions_kinds_and_domains_and_ignores_text_and_span() {
-    let harnesses = supported_contract_harnesses(&bound_package(1000), SUBJECT_PATH);
-    let base = &harnesses[1].identity;
+    let harnesses = spine_identities();
+    let base = &harnesses[1];
     let source = identity_unit("");
     let identity = identity_of(&source, FUNCTION, base);
 
@@ -1015,13 +997,12 @@ fn tc_026_the_identity_separates_functions_kinds_and_domains_and_ignores_text_an
     assert_eq!(identity, identity_of(&commented, FUNCTION, base));
 
     let mut respanned = base.clone();
-    respanned.source_span = harnesses[0].identity.source_span.clone();
+    respanned.source_span = harnesses[0].source_span.clone();
     assert_ne!(respanned.source_span, base.source_span);
     assert_eq!(identity, identity_of(&source, FUNCTION, &respanned));
 
     let other_kind = harnesses
         .iter()
-        .map(|harness| &harness.identity)
         .find(|other| other.kind != base.kind && other.arguments == base.arguments)
         .expect("a harness of another kind over the same arguments");
     assert_ne!(identity, identity_of(&source, FUNCTION, other_kind));
@@ -1041,20 +1022,17 @@ fn tc_026_the_identity_separates_functions_kinds_and_domains_and_ignores_text_an
 #[trace("FR-016-AC-22", "TC-026")]
 #[test]
 fn tc_026_a_two_conjunct_function_has_one_identity_per_kind() {
-    let harness = spine_harness();
+    let harness = spine_identity();
     let source = identity_unit("");
     let expected = recomputed(
         &site_of(&source, TWO_CONJUNCTS),
         "postcondition",
-        &golden_arguments(&harness.identity),
+        &golden_arguments(&harness),
     );
     let package = compile_native_twin(&source, TWO_CONJUNCTS);
-    let obligation = package.obligation_identity(&harness.identity).unwrap();
+    let obligation = package.obligation_identity(&harness).unwrap();
     assert_eq!(*obligation.as_bytes(), expected);
-    assert_eq!(
-        obligation,
-        package.obligation_identity(&harness.identity).unwrap()
-    );
+    assert_eq!(obligation, package.obligation_identity(&harness).unwrap());
 }
 
 /// With the function, declaration, kind and arguments fixed, an unrelated declaration added to
@@ -1063,14 +1041,14 @@ fn tc_026_a_two_conjunct_function_has_one_identity_per_kind() {
 #[trace("FR-016-AC-23", "TC-026")]
 #[test]
 fn tc_026_an_unrelated_declaration_does_not_change_the_identity() {
-    let harness = spine_harness();
+    let harness = spine_identity();
     let alone = native_source("balance_pre - amount_current");
-    let before = identity_of(&alone, FUNCTION, &harness.identity);
+    let before = identity_of(&alone, FUNCTION, &harness);
     let extended =
         format!("{alone}function unrelated using v(z: Int[0, 5]): Boolean pure {{ z <= 5 }}\n");
-    assert_eq!(before, identity_of(&extended, FUNCTION, &harness.identity));
+    assert_eq!(before, identity_of(&extended, FUNCTION, &harness));
 
-    let mut unbound = harness.identity.clone();
+    let mut unbound = harness.clone();
     unbound.arguments[0].identifier = "not_a_parameter".to_owned();
     let package = compile_native_twin(&alone, FUNCTION);
     assert!(matches!(
@@ -1080,16 +1058,61 @@ fn tc_026_an_unrelated_declaration_does_not_change_the_identity() {
     ));
 }
 
-/// The harness of the hand-built package, the obligation the synthetic transcripts name.
-fn spine_harness() -> KaniObligationHarness {
-    let package = bound_package(1000);
-    supported_contract_harnesses(&package, SUBJECT_PATH).remove(1)
+/// A direct identity fixture for the surviving replay API. No generated V1 harness is implied.
+fn spine_identity() -> KaniObligationIdentity {
+    identity_fixture(ObligationKind::Postcondition, "balance-never-grows", 20)
+}
+
+fn spine_identities() -> [KaniObligationIdentity; 2] {
+    [
+        identity_fixture(ObligationKind::Precondition, "amount-within-balance", 10),
+        spine_identity(),
+    ]
+}
+
+fn identity_fixture(kind: ObligationKind, clause: &str, line: u32) -> KaniObligationIdentity {
+    let span: SourceSpan = serde_json::from_value(json!({
+        "start": {"source": {"document": "test/skeleton-spine", "revision": 1}, "line": line, "column": 1, "byte_offset": line},
+        "end": {"source": {"document": "test/skeleton-spine", "revision": 1}, "line": line, "column": 2, "byte_offset": line + 1}
+    }))
+    .expect("valid test source span");
+    let bounds = KaniIntegerBounds {
+        domain: IntegerDomain::Signed,
+        minimum: 0,
+        maximum: 1000,
+        overflow: OverflowPolicy::Reject,
+    };
+    let argument = |identifier: &str| ObligationBinding {
+        identifier: identifier.to_owned(),
+        role: KaniBindingRole::Argument,
+        primitive_type: KaniPrimitiveType::I64,
+        integer_bounds: Some(bounds.clone()),
+        dependencies: Vec::new(),
+    };
+    KaniObligationIdentity {
+        ceilings: crate::common::proof_ceilings::proof_ceilings(),
+        kind,
+        clause: ClauseRef::new(
+            RequirementRef::parse("test/skeleton-spine", "FR-200", 1).unwrap(),
+            ClauseId::new(clause).unwrap(),
+        ),
+        source_span: span,
+        oracles: Vec::new(),
+        module_symbol: ModuleSymbol::try_from("kani_skeleton_spine").unwrap(),
+        harness_symbol: HarnessSymbol::try_from("proof").unwrap(),
+        contract_symbol: Some("contract".to_owned()),
+        subject_path: Some("crate::subject::withdraw".to_owned()),
+        arguments: vec![argument("amount_current"), argument("balance_pre")],
+        results: Vec::new(),
+        solver: KaniSolver::Cadical,
+        unwind: 4,
+        options: Vec::new(),
+    }
 }
 
 /// A Kani playback transcript for `harness` carrying the two argument values in persisted
 /// order (`amount_current`, `balance_pre`).
-fn playback(harness: &KaniObligationHarness, amount: i64, balance: i64) -> String {
-    let identity = &harness.identity;
+fn playback(harness: &KaniObligationIdentity, amount: i64, balance: i64) -> String {
     let values = [amount, balance]
         .map(|value| {
             let bytes = value.to_le_bytes().map(|byte| byte.to_string()).join(", ");
@@ -1104,7 +1127,7 @@ fn playback(harness: &KaniObligationHarness, amount: i64, balance: i64) -> Strin
              let concrete_vals: Vec<Vec<u8>> = vec![\n{values}    ];\n\
              kani::concrete_playback_run(concrete_vals, synthetic);\n\
          }}\n",
-        identity.module_symbol, identity.harness_symbol
+        harness.module_symbol, harness.harness_symbol
     )
 }
 
@@ -1112,9 +1135,9 @@ fn playback(harness: &KaniObligationHarness, amount: i64, balance: i64) -> Strin
 #[trace("FR-016-AC-3", "TC-026")]
 #[test]
 fn tc_026_an_in_domain_counterexample_the_twin_falsifies_is_reproduced() {
-    let harness = spine_harness();
+    let harness = spine_identity();
     let package = compile_native_twin(&native_source(VIOLATING_TWIN), FUNCTION);
-    let verdict = replay_counterexample(&harness.identity, &playback(&harness, 1, 5), &package)
+    let verdict = replay_counterexample(&harness, &playback(&harness, 1, 5), &package)
         .expect("the replay settles");
     assert_eq!(verdict, ReplayVerdict::Reproduced);
 }
@@ -1122,7 +1145,7 @@ fn tc_026_an_in_domain_counterexample_the_twin_falsifies_is_reproduced() {
 #[trace("TC-026", "FR-016-AC-6")]
 #[test]
 fn tc_026_function_replay_refuses_poisoned_suffixes_at_both_decode_bounds() {
-    let harness = spine_harness();
+    let harness = spine_identity();
     let transcript = playback(&harness, 1, 5);
     let source = native_source(VIOLATING_TWIN);
     let limits = WitnessDecodeLimits {
@@ -1134,12 +1157,12 @@ fn tc_026_function_replay_refuses_poisoned_suffixes_at_both_decode_bounds() {
         run.decode_limits = limits;
         ReplayPackage::new(run, FUNCTION)
             .expect("native twin compiles")
-            .with_kani_identity(&harness.identity)
+            .with_kani_identity(&harness)
             .expect("the retained proof identity binds the twin")
     };
     let package = make_package(limits);
     assert_eq!(
-        replay_counterexample(&harness.identity, &transcript, &package).expect("at bounds"),
+        replay_counterexample(&harness, &transcript, &package).expect("at bounds"),
         ReplayVerdict::Reproduced
     );
     let mut separate = inputs(&source, Vec::new());
@@ -1147,10 +1170,10 @@ fn tc_026_function_replay_refuses_poisoned_suffixes_at_both_decode_bounds() {
     separate.replay_limits = ReplayLimits::default().with_input_bytes(1);
     let separate = ReplayPackage::new(separate, FUNCTION)
         .expect("native twin compiles")
-        .with_kani_identity(&harness.identity)
+        .with_kani_identity(&harness)
         .expect("the retained proof identity binds the twin");
     let mut calls = 0;
-    let refused = replay_counterexample_through(&harness.identity, &transcript, &separate, |_| {
+    let refused = replay_counterexample_through(&harness, &transcript, &separate, |_| {
         calls += 1;
         Err(ReplayRefusal::Fault(InternalFault::new(
             "replay",
@@ -1181,7 +1204,7 @@ fn tc_026_function_replay_refuses_poisoned_suffixes_at_both_decode_bounds() {
         ),
     ] {
         let package = make_package(limits);
-        let verdict = replay_counterexample(&harness.identity, &poisoned, &package)
+        let verdict = replay_counterexample(&harness, &poisoned, &package)
             .expect("over-bound evidence yields a verdict");
         assert!(
             matches!(
@@ -1191,7 +1214,7 @@ fn tc_026_function_replay_refuses_poisoned_suffixes_at_both_decode_bounds() {
             ),
             "{verdict:?}"
         );
-        let through = replay_counterexample_through(&harness.identity, &poisoned, &package, |_| {
+        let through = replay_counterexample_through(&harness, &poisoned, &package, |_| {
             panic!("over-bound playback must not reach the executor")
         })
         .expect("over-bound evidence yields a verdict");
@@ -1207,7 +1230,7 @@ fn tc_026_function_replay_refuses_poisoned_suffixes_at_both_decode_bounds() {
             bytes: poisoned.len(),
             values: 3,
         });
-        let control = replay_counterexample(&harness.identity, &poisoned, &unbounded)
+        let control = replay_counterexample(&harness, &poisoned, &unbounded)
             .expect("poisoned suffix produces a decode verdict");
         let poisoned_code = if code == "cg_witness_decode_bytes_limit" {
             "kani_witness_multiple_assertions_refused"
@@ -1229,19 +1252,15 @@ fn tc_026_function_replay_refuses_poisoned_suffixes_at_both_decode_bounds() {
 #[trace("FR-016-AC-12", "TC-026")]
 #[test]
 fn tc_026_an_executor_fault_remains_a_typed_replay_refusal() {
-    let harness = spine_harness();
+    let harness = spine_identity();
     let package = compile_native_twin(&native_source(VIOLATING_TWIN), FUNCTION);
     let fault = InternalFault::new("replay", "injected-executor-fault");
     let mut calls = 0;
-    let result = replay_counterexample_through(
-        &harness.identity,
-        &playback(&harness, 1, 5),
-        &package,
-        |_| {
+    let result =
+        replay_counterexample_through(&harness, &playback(&harness, 1, 5), &package, |_| {
             calls += 1;
             Err(ReplayRefusal::Fault(fault.clone()))
-        },
-    );
+        });
     assert_eq!(calls, 1, "the decoded counterexample reached the executor");
     assert!(
         matches!(result, Err(SpineReplayError::Refused(refusal))
@@ -1255,9 +1274,9 @@ fn tc_026_an_executor_fault_remains_a_typed_replay_refusal() {
 #[trace("FR-016-AC-2", "TC-026")]
 #[test]
 fn tc_026_an_out_of_domain_counterexample_is_evidence_failure() {
-    let harness = spine_harness();
+    let harness = spine_identity();
     let package = compile_native_twin(&native_source(VIOLATING_TWIN), FUNCTION);
-    let verdict = replay_counterexample(&harness.identity, &playback(&harness, 1, 5000), &package)
+    let verdict = replay_counterexample(&harness, &playback(&harness, 1, 5000), &package)
         .expect("the verdict is reached");
     assert_eq!(
         verdict,
@@ -1272,7 +1291,7 @@ fn tc_026_an_out_of_domain_counterexample_is_evidence_failure() {
 #[trace("TC-035", "FR-024-AC-3")]
 #[test]
 fn tc_035_public_function_domain_boundaries_stop_before_replay() {
-    let harness = spine_harness();
+    let harness = spine_identity();
     let package = compile_native_twin(&native_source(VIOLATING_TWIN), FUNCTION);
     for (argument, amount, balance, expected_domain_failure) in [
         ("amount_current", 0, 5, false),
@@ -1286,7 +1305,7 @@ fn tc_035_public_function_domain_boundaries_stop_before_replay() {
     ] {
         let mut calls = 0;
         let result = replay_counterexample_through(
-            &harness.identity,
+            &harness,
             &playback(&harness, amount, balance),
             &package,
             |wire| {
@@ -1315,7 +1334,7 @@ fn tc_035_public_function_domain_boundaries_stop_before_replay() {
 #[trace("FR-016-AC-1", "TC-026")]
 #[test]
 fn tc_026_each_malformed_counterexample_class_is_a_decode_evidence_failure() {
-    let harness = spine_harness();
+    let harness = spine_identity();
     let package = compile_native_twin(&native_source(VIOLATING_TWIN), FUNCTION);
     let one_value = playback(&harness, 1, 5).replacen(
         "        // 5\n        vec![5, 0, 0, 0, 0, 0, 0, 0],\n",
@@ -1329,8 +1348,8 @@ fn tc_026_each_malformed_counterexample_class_is_a_decode_evidence_failure() {
         (one_value, Some("kani_witness_arity_mismatch")),
         (short_value, Some("kani_witness_width_mismatch")),
     ] {
-        let verdict = replay_counterexample(&harness.identity, &transcript, &package)
-            .expect("the verdict is reached");
+        let verdict =
+            replay_counterexample(&harness, &transcript, &package).expect("the verdict is reached");
         let ReplayVerdict::EvidenceFailure(EvidenceFailureCause::Decode(failure)) = &verdict else {
             panic!("expected a decode failure for {transcript:?}: {verdict:?}");
         };
@@ -1345,12 +1364,11 @@ fn tc_026_each_malformed_counterexample_class_is_a_decode_evidence_failure() {
 #[trace("FR-016-AC-5", "TC-026")]
 #[test]
 fn tc_026_a_counterexample_for_another_harness_is_never_replayed() {
-    let harness = spine_harness();
+    let harness = spine_identity();
     let package = compile_native_twin(&native_source(VIOLATING_TWIN), FUNCTION);
-    let other =
-        playback(&harness, 1, 5).replace(harness.identity.harness_symbol.as_str(), "sibling");
+    let other = playback(&harness, 1, 5).replace(harness.harness_symbol.as_str(), "sibling");
     let verdict =
-        replay_counterexample(&harness.identity, &other, &package).expect("the verdict is reached");
+        replay_counterexample(&harness, &other, &package).expect("the verdict is reached");
     assert!(
         matches!(
             &verdict,
@@ -1366,9 +1384,9 @@ fn tc_026_a_counterexample_for_another_harness_is_never_replayed() {
 #[trace("FR-016-AC-4", "TC-026")]
 #[test]
 fn tc_026_a_counterexample_the_twin_holds_is_evidence_failure() {
-    let harness = spine_harness();
+    let harness = spine_identity();
     let package = compile_native_twin(&native_source(HEALTHY_TWIN), FUNCTION);
-    let verdict = replay_counterexample(&harness.identity, &playback(&harness, 1, 5), &package)
+    let verdict = replay_counterexample(&harness, &playback(&harness, 1, 5), &package)
         .expect("the replay settles");
     assert_eq!(verdict, not_reproduced());
 }
@@ -1379,15 +1397,11 @@ fn tc_026_a_counterexample_the_twin_holds_is_evidence_failure() {
 #[trace("FR-016-AC-9", "TC-026")]
 #[test]
 fn tc_026_the_replay_verdict_is_decided_by_the_exact_witness_values() {
-    let harness = spine_harness();
+    let harness = spine_identity();
     let package = compile_native_twin(&point_source(1, 5), FUNCTION);
     let replay = |amount: i64, balance: i64| {
-        replay_counterexample(
-            &harness.identity,
-            &playback(&harness, amount, balance),
-            &package,
-        )
-        .expect("the replay settles")
+        replay_counterexample(&harness, &playback(&harness, amount, balance), &package)
+            .expect("the replay settles")
     };
     assert_eq!(replay(1, 5), ReplayVerdict::Reproduced);
     for (amount, balance) in [(0, 5), (2, 5), (1, 4), (1, 6), (5, 1)] {
@@ -1440,142 +1454,4 @@ fn printed_values(transcript: &str) -> (Vec<i64>, Vec<i64>) {
         }
     }
     (comments, bytes)
-}
-
-/// Runs `subject` under the installed prover with `harness`, returning the classified outcome.
-fn prove(harness: &KaniObligationHarness, subject: &str) -> KaniRunOutcome {
-    let cancel = quire_exact::Cancel::new();
-    let installation = KaniInstallation::discover().expect("cargo-kani is installed");
-    let scratch = write_crate(harness, subject);
-    let directory = &scratch.path;
-    let evidence = execute_kani_obligation(&KaniExecutionRequest {
-        cancel: &cancel,
-        installation: &installation,
-        harness: harness.into(),
-        crate_directory: directory,
-        target_directory: &PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kani-spine"),
-        home_directory: None,
-    })
-    .unwrap_or_else(|refusal| panic!("{refusal}"));
-    evidence.outcome
-}
-
-/// The spine over the hand-built bound package. The healthy subject verifies; a violation
-/// injected into the subject is falsified, and its counterexample replays through QSL to the
-/// same violation.
-#[trace("FR-016-AC-9", "FR-016-AC-10", "TC-026")]
-#[test]
-#[ignore = "kani lane: run serially through `make kani`"]
-fn tc_026_one_boolean_clause_goes_from_a_bound_package_through_kani_to_native_replay() {
-    let package = bound_package(1000);
-    let harness = supported_contract_harnesses(&package, SUBJECT_PATH).remove(1);
-
-    assert_eq!(prove(&harness, HEALTHY_SUBJECT), KaniRunOutcome::Verified);
-
-    // Mutation control inside the generated obligation module: the ensures bound is tightened
-    // past what the subject satisfies at zero, so the same healthy subject is falsified.
-    let mut mutated = harness.clone();
-    let bound = "*post_state >= 0_i64";
-    assert_eq!(mutated.rust.contents.matches(bound).count(), 1);
-    mutated.rust.contents = mutated.rust.contents.replace(bound, "*post_state >= 1_i64");
-    let outcome = prove(&mutated, HEALTHY_SUBJECT);
-    assert!(
-        matches!(outcome, KaniRunOutcome::Falsified { .. }),
-        "the tightened ensures must be falsified: {outcome:?}"
-    );
-
-    // The injected violation: the subject credits instead of debiting.
-    let violating = HEALTHY_SUBJECT.replace(
-        "balance_pre - amount_current",
-        "balance_pre + amount_current",
-    );
-    assert_ne!(violating, HEALTHY_SUBJECT);
-    let outcome = prove(&harness, &violating);
-    let KaniRunOutcome::Falsified { counterexample } = &outcome else {
-        panic!("the injected violation must be falsified: {outcome:?}");
-    };
-
-    // The counterexample decodes to typed values, and QSL replays them to the same violation.
-    let parsed = parse_assertion_playback(
-        counterexample,
-        harness.identity.harness_symbol.as_str(),
-        harness.identity.module_symbol.as_str(),
-        usize::MAX,
-        usize::MAX,
-    )
-    .expect("the observed Kani assertion playback parses");
-    let decoded = decode_falsification(
-        harness.identity.harness_symbol.as_str(),
-        harness.identity.module_symbol.as_str(),
-        &harness.identity.arguments,
-        &parsed,
-        crate::unbounded_decode_limits(),
-    )
-    .expect("the counterexample decodes");
-    let get = |name: &str| match decoded.iter().find(|(n, _)| n == name) {
-        Some((_, WitnessValue::Integer(value))) => *value,
-        other => panic!("{name} decodes to an integer, got {other:?}"),
-    };
-    let violating_twin = compile_native_twin(&native_source(VIOLATING_TWIN), FUNCTION);
-    assert_eq!(
-        replay_counterexample(&harness.identity, counterexample, &violating_twin)
-            .expect("QSL settles the replay"),
-        ReplayVerdict::Reproduced
-    );
-
-    // The witness the replay must evaluate is read from Kani's own printed block by a parser that
-    // shares nothing with `decode_falsification`: the `// {value}` comment lines and, separately,
-    // the little-endian byte vectors, each in the order of Kani's `kani::any()` calls, which is
-    // the persisted argument order. Both reads must agree with each other and with the decoder.
-    let identifiers: Vec<&str> = harness
-        .identity
-        .arguments
-        .iter()
-        .map(|binding| binding.identifier.as_str())
-        .collect();
-    assert_eq!(identifiers, ["amount_current", "balance_pre"]);
-    let (printed, bytes) = printed_values(counterexample);
-    assert_eq!(printed, bytes, "Kani's comments and bytes disagree");
-    let [amount, balance] = printed[..] else {
-        panic!("Kani printed {printed:?}, expected one value per argument");
-    };
-    assert_eq!(
-        (get("amount_current"), get("balance_pre")),
-        (i128::from(amount), i128::from(balance)),
-        "the decoder disagrees with the values Kani printed"
-    );
-    assert!(
-        amount <= balance,
-        "the counterexample satisfies the proved precondition"
-    );
-
-    // The verdict is decided by the values Kani printed: a twin false only at that point is
-    // reproduced by the real transcript, and a twin false only at a neighbouring point is not.
-    let point = compile_native_twin(&point_source(amount, balance), FUNCTION);
-    assert_eq!(
-        replay_counterexample(&harness.identity, counterexample, &point)
-            .expect("QSL settles the replay"),
-        ReplayVerdict::Reproduced,
-        "the replay did not evaluate the witness Kani printed ({amount}, {balance})"
-    );
-    let neighbour = if amount < 1000 {
-        amount + 1
-    } else {
-        amount - 1
-    };
-    let elsewhere = compile_native_twin(&point_source(neighbour, balance), FUNCTION);
-    assert_eq!(
-        replay_counterexample(&harness.identity, counterexample, &elsewhere)
-            .expect("QSL settles the replay"),
-        not_reproduced(),
-        "a twin false only away from the witness must not reproduce"
-    );
-
-    // The same counterexample against the healthy twin does not reproduce.
-    let healthy_twin = compile_native_twin(&native_source(HEALTHY_TWIN), FUNCTION);
-    assert_eq!(
-        replay_counterexample(&harness.identity, counterexample, &healthy_twin)
-            .expect("QSL settles the replay"),
-        not_reproduced()
-    );
 }
