@@ -58,3 +58,10 @@ scope:
 | --- | --- | --- |
 | FND-001 | fixed | Round 1, head ad57b91c. The FR-041 hold bullet now states a narrow exception for that row alone. While the hold is valid, absence from the build is reported `held` rather than failed under the ordinary absent-module rule, and the AC-4 positive proof and mutation controls are suspended. The gate SHALL exit zero only when hold declaration and reporting are valid and all non-held controls and other lane checks pass. TC-056 step 6 and Expected Results agree. The FR-041, NFR-006 and FR-016 AC rows are byte-identical to origin/main. |
 | FND-002 | fixed | Round 1, head ad57b91c. NFR-006 now requires separate `kani-gate:` lines for the held identity, reason, expiry and count, and keeps the exact fields and order of the `result= ran= expected= elapsed= kani= tree=` line. TC-056 step 6 says the same. The existing TC-045 tests in `tests/it/kani_gate.rs:342,413` select the line by its `kani-gate: result=` prefix, so the added lines do not conflict with them. |
+
+Disposition pass 2, head bc82713c649ad68f8eb5873c36690af3c2ff5ba1. No finding here is still open,
+so this pass adds no rows. The delta was re-checked against both closed findings. FR-041's hold
+bullet still states the narrow absent-module and AC-4 exception and the exit-zero condition.
+NFR-006 and TC-056 are unchanged in this delta and keep the separate `kani-gate:` hold lines with
+the `result=` line unchanged. The replay matrix row split still covers AC-1–5, AC-8, AC-9–23,
+AC-6, AC-24 and AC-25 once each. No new integrity finding.

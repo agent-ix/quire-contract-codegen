@@ -38,3 +38,8 @@ Disposition pass 1, head ad57b91cb39b7ad610ad191af92c15537eecdf9a. This review h
 to disposition. The fix delta from d9ce52c9 was re-checked: it changes only `spec/**` and
 `reviews/**` Markdown, adds no `.rs`, `Cargo.toml`, script, Makefile or JSON change, and adds no
 new code finding.
+
+Disposition pass 2, head bc82713c649ad68f8eb5873c36690af3c2ff5ba1. This review still has no
+findings to disposition. The delta from ad57b91c changes only `spec/**` and `reviews/**`
+Markdown (four spec files, two matrices, four SR files). It adds no `.rs`, `Cargo.toml`, script,
+Makefile or JSON change, and adds no new code finding.
