@@ -557,7 +557,7 @@ fn tc_017_bound_admission_uses_the_public_clause_and_domain() {
         oracle_error.source_span.as_ref()
     );
 
-    // The guarded division discharges its non-zero-divisor obligation and now generates a native
+    // The guarded division discharges its non-zero-divisor obligation and generates a native
     // oracle. The strategy still cannot classify the non-scalar relation it receives.
     let obligation = decode(&obligation_value);
     let division_oracles = match generate_bound_oracles(&obligation).unwrap() {
