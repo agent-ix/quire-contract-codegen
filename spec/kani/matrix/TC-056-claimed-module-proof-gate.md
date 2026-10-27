@@ -28,10 +28,11 @@ before its deletion PR, an operator hold for only that named V1 module claim row
 exists yet" and expiry "until the V2 named independent expectation + real positive/falsifying
 control exists". Deleting the V1 module or dropping its claim supplies no proof evidence.
 Execute the positive procedure on the production V2 Boolean implication scalar module
-after its named expectation root and claim are reviewed; IR-1047 owns that replacement
-and hold expiry. At this spec head, the generator still inlines the expectation and the claim
-test still selects V1 source. The hold is PLANNED
-at this spec head. The held V1 row remains Open, and
+as an additional claim after its named expectation root and claim are reviewed. This
+implication claim has a different proposition from the held FR-003@4 Boolean state-transition
+claim; it does not remove that row or expire its hold. IR-1047 Acceptance 4 remains
+unmet. At this spec head, the generator still inlines the expectation and the claim
+test still selects V1 source. The hold is PLANNED at this spec head. The held V1 row remains Open, and
 all non-held controls stay required.
 
 1. Check in a reviewed nonempty claim declaration for the generated modules the gate says it
@@ -82,12 +83,14 @@ all non-held controls stay required.
    in-domain playback with `left` false. Require the current-run source diff,
    invocation and check output. A mutant that verifies, refuses, times out or fails
    compilation does not count (FR-041-AC-8).
-8. Replace only the V1-sourced held declaration row with the reviewed V2 generated
-   claim after the above controls pass. Require the V1 hold to disappear while any
-   other held or failing row still follows the named policy. Run `make kani-gate` on
-   the current candidate; it must execute this claim test in the one required lane
-   and fail if any non-held claim or helper control fails, is missing or is skipped
-   (FR-041-AC-9, NFR-006-AC-19).
+8. Add the reviewed V2 generated implication claim as a separate non-held row after
+   the above controls pass. Retain the historical FR-003@4 V1 declaration row under
+   its hold; assert that the V2 implication does not receive FR-003@4 credit or erase
+   the held identity from the merge-base declaration. Run `make kani-gate` on the
+   current candidate; it must execute this claim test in the one required lane and
+   fail if any non-held claim or helper control fails, is missing or is skipped.
+   Confirm the historical row remains reported held, not discharged
+   (FR-041-AC-1, FR-041-AC-9, NFR-006-AC-19).
 9. While the IR-348 hold is active, inspect the one reviewed V1 claim row and its exact reason
    and expiry. Require the claim test to validate the retained declaration and held output
    without treating its success as proof credit. Require separate `kani-gate:` lines for the held
@@ -105,7 +108,8 @@ every claimed module and shared helper has a compiling, executed mutation with a
 check. A compiled module with no SUCCESS proposition is named `unreached`. No build-only result,
 stub, process refusal or stored old verdict counts as a current proof or mutation result. The
 operator-held V1 row is listed and counted separately on `kani-gate:` lines with its reason and
-expiry and remains unproved until IR-1047 supplies the V2 replacement. The ordinary
+expiry and remains unproved. A successful separate V2 implication claim has its own
+proof credit and does not discharge FR-003@4 or expire that hold. The ordinary
 absent-module and positive/mutation failures apply to every non-held row; only the valid V1 hold
 excepts the absent V1 module and its suspended controls. With the only current claim held,
 zero proofs and mutations are discharged, regardless of a passing claim test.
@@ -115,5 +119,7 @@ zero proofs and mutations are discharged, regardless of a passing claim test.
 Open for IR-19 implementation. The hold itself is PLANNED for IR-348's immediate V1 deletion
 code slice in or before its deletion PR. The current V1 module declaration and
 `guard_sources()[0]` fixture are to be operator-held under IR-348 pending the named V2 independent
-expectation and real positive/falsifying control; the V2 implication renderer is the selected replacement owner, but its inline expectation
-is not yet a named call-graph root. No real-Kani result is asserted by this specification artifact.
+expectation and real positive/falsifying control for that same claim; the V2 implication
+renderer owns only an additional distinct claim, and its inline expectation is not yet a
+named call-graph root. IR-1047 Acceptance 4 remains unmet. No real-Kani result is
+asserted by this specification artifact.

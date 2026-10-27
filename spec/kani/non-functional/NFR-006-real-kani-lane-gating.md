@@ -50,7 +50,9 @@ relationships:
   control fails, is missing or is skipped. A hold on another claim, a missing reason or expiry,
   or omission of the held row from the reviewed declaration shall fail the gate. This hold is
   limited to the V1 source and expires "until the V2 named independent expectation + real
-  positive/falsifying control exists" under IR-1047; it does not remove FR-041 or NFR-006-AC-19.
+  positive/falsifying control exists" for that FR-003@4 claim under IR-1047;
+  a different V2 implication claim cannot meet its expiry. This does not remove
+  FR-041 or NFR-006-AC-19.
 - The `make kani-gate` target shall print one run-result line of the form `kani-gate:
   result=<passed|failed> ran=<n> expected=<n> elapsed=<s>s kani=<version> tree=<clean|dirty>`,
   with `kani` the version the launcher reports. The line describes the run; it is not a
@@ -211,13 +213,15 @@ under the reason "V1 deleted by owner ruling 2026-10-27; no genuine V2 named ind
 expectation/control exists yet" and the expiry "until the V2 named independent expectation +
 real positive/falsifying control exists". The lane must continue to run
 FR-041's claim census and real mutation controls. The current V1 claim source selected by
-`kani_generation::guard_sources()[0]` and named in `scripts/kani_claims.json` needs the
-production V2 Boolean implication scalar module with named subject and independent
-expectation roots under IR-1047; deleting the source, dropping the claim or removing this gate cannot
-satisfy AC-19. While this is the only claimed module and is held, zero module proofs and
+`kani_generation::guard_sources()[0]` and named in `scripts/kani_claims.json` remains
+an unproved FR-003@4 Boolean state-transition claim. IR-1047 specifies an additional,
+separately named V2 implication scalar module with independent expectation and subject
+roots; its proof cannot discharge the historical row or expire its hold. Deleting the
+source, dropping the historical claim or removing this gate cannot satisfy AC-19. While this is the only claimed module and is held, zero module proofs and
 mutations are discharged. The IR-348 immediate V1 deletion code slice must implement the
-hold in or before its deletion PR; at this spec head it remains PLANNED. No V2 replacement or
-current-run proof is identified here.
+hold in or before its deletion PR; at this spec head it remains PLANNED. No
+historical-claim replacement or current-run proof is identified here; IR-1047
+Acceptance 4 remains unmet.
 
 ## Open decisions
 
