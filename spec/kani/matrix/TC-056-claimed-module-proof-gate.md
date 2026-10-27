@@ -91,7 +91,22 @@ all non-held controls stay required.
    fail if any non-held claim or helper control fails, is missing or is skipped.
    Confirm the historical row remains reported held, not discharged
    (FR-041-AC-1, FR-041-AC-9, NFR-006-AC-19).
-9. While the IR-348 hold is active, inspect the one reviewed V1 claim row and its exact reason
+9. For the future held-claim expiry, generate a production V2 module from an admitted
+   package carrying the original FR-003@4 Boolean transition: precondition
+   `input_current || state_pre`, postcondition `state_post`, and the actual transition
+   subject. Require the same reviewed module/claim identity in the generated module,
+   retained manifest row and current compiled census, plus source provenance and a
+   separately named independent expectation. Compute exact subject/expectation
+   helper intersection from the current graph. Run installed Kani on the healthy
+   module and an in-module source mutant; require an in-module SUCCESS and satisfied
+   cover, then a compiling, executed in-module FAILURE with in-domain playback.
+   Update the retained row's V2 source fields and clear `held` only after these
+   same-claim controls pass. In negative controls, remove the row, omit its compiled
+   module, change the obligation, substitute the V2 implication module, or provide
+   a stored old verdict; require refusal and no hold expiry (FR-041-AC-1,
+   FR-041-AC-10). This procedure is PLANNED under IR-1049 and does not claim
+   IR-1047 Acceptance 4 met.
+10. While the IR-348 hold is active, inspect the one reviewed V1 claim row and its exact reason
    and expiry. Require the claim test to validate the retained declaration and held output
    without treating its success as proof credit. Require separate `kani-gate:` lines for the held
    identity, reason, expiry and count, leaving the existing run-result line unchanged. Assert
@@ -109,7 +124,9 @@ check. A compiled module with no SUCCESS proposition is named `unreached`. No bu
 stub, process refusal or stored old verdict counts as a current proof or mutation result. The
 operator-held V1 row is listed and counted separately on `kani-gate:` lines with its reason and
 expiry and remains unproved. A successful separate V2 implication claim has its own
-proof credit and does not discharge FR-003@4 or expire that hold. The ordinary
+proof credit and does not discharge FR-003@4 or expire that hold. Hold expiry needs
+FR-041-AC-10's same-claim V2 producer, retained identity and current-run controls.
+The ordinary
 absent-module and positive/mutation failures apply to every non-held row; only the valid V1 hold
 excepts the absent V1 module and its suspended controls. With the only current claim held,
 zero proofs and mutations are discharged, regardless of a passing claim test.
@@ -121,5 +138,6 @@ code slice in or before its deletion PR. The current V1 module declaration and
 `guard_sources()[0]` fixture are to be operator-held under IR-348 pending the named V2 independent
 expectation and real positive/falsifying control for that same claim; the V2 implication
 renderer owns only an additional distinct claim, and its inline expectation is not yet a
-named call-graph root. IR-1047 Acceptance 4 remains unmet. No real-Kani result is
+named call-graph root. The same-claim V2 producer and retained-row update are PLANNED
+under IR-1049. IR-1047 Acceptance 4 remains unmet. No real-Kani result is
 asserted by this specification artifact.

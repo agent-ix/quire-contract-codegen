@@ -124,6 +124,30 @@ about a semantic stage the test input did not traverse.
   control that is absent, skipped or unsuccessful. The held V1 row remains visible
   and unproved; its eventual disposition and IR-1047 Acceptance 4 remain open.
 
+## Held FR-003@4 claim continuity (IR-1049, planned)
+
+- When a V2 producer is available for the original FR-003@4 Boolean state-transition
+  obligation, that producer SHALL consume an admitted V2 package carrying the same
+  precondition `input_current || state_pre`, postcondition `state_post` and actual
+  transition subject. It SHALL preserve the reviewed claim identity
+  `kani_fr_003_4_proof_boolean_transition_module` in the compiled generated module,
+  preserve the obligation's source provenance, and expose a separately named
+  expectation rooted in the current compiled call graph. The expectation SHALL be
+  independent of the subject, its oracle and `quire-exact` where FR-041 requires;
+  the claim test SHALL derive the exact shared-helper intersection from that build.
+  A V2 implication proof is a different claim and SHALL NOT satisfy this condition.
+- When the installed backend produces an in-module location-attributed `SUCCESS`
+  proposition and satisfied cover for that same FR-003@4 V2 module, and a distinct
+  source mutation inside it compiles, executes and produces an in-module `FAILURE`
+  check with in-domain playback, the gate SHALL update the retained manifest row's
+  harness, subject, expectation and mutation sources to that generated V2 module
+  while retaining its exact module/claim identity. It SHALL remove `held` from that
+  row only in the same delivery as these current-run controls. The row SHALL appear
+  in the current compiled-module census; a removed row, absent compiled module,
+  different obligation or merely renamed implication module SHALL fail under
+  FR-041-AC-1. No hold expiry follows from a saved result, an optional run or
+  another claim's proof.
+
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
@@ -137,6 +161,7 @@ about a semantic stage the test input did not traverse.
 | FR-041-AC-7 | The V2 module exposes separate named subject and expectation roots in the current compiled call graph. The subject reaches the runtime implication operation; the expectation evaluates `!left || right` over the same Boolean inputs and reaches neither subject, oracle nor `quire-exact`. The observed helper intersection exactly matches the declared helper mutations, including an explicit empty set. | Test and Inspection |
 | FR-041-AC-8 | The unmodified generated V2 module has a location-attributed SUCCESS proposition and satisfied final cover with installed Kani. Replacing only its parsed subject-call expression with `false` compiles and executes the same harness, then yields an in-module FAILURE at the subject-versus-expectation assertion with in-domain playback where `left` is false; each computed shared helper has its own positive and falsifying control. | Test |
 | FR-041-AC-9 | After AC-6 through AC-8 pass in the current lane, the reviewed V2 implication claim is added as a separate non-held row; the historical FR-003@4 V1 row remains held, visible and unproved. The required `make kani-gate` run executes the claim test and fails on any missing, skipped or failing non-held claim or helper control. This criterion does not discharge the V1 claim or complete IR-1047 Acceptance 4. | Test |
+| FR-041-AC-10 | A production V2 module for the original FR-003@4 Boolean state-transition obligation preserves the retained manifest row's exact module/claim identity and appears in the current compiled census, with the same precondition, postcondition, actual transition subject, checked-package/source provenance and a separately named independent expectation. Only after installed Kani gives that same module an in-module SUCCESS proposition and satisfied cover, and its in-module source mutant compiles, executes and reports an in-module FAILURE check with in-domain playback, the retained row's harness, subject, expectation and mutation references are updated to that compiled V2 source and its hold is removed in the same delivery. A removed or absent claim, different obligation, V2 implication proof, or saved verdict does not expire the hold. PLANNED (IR-1049); IR-1047 Acceptance 4 remains unmet at this spec head. | Test and Inspection |
 
 ## Status
 
@@ -152,9 +177,9 @@ additional, distinct claim. Its current generated expectation is inline and has 
 call-graph root; the claim test still selects V1 source. No qualifying V2 claim or current-run
 FR-041 evidence is asserted by this draft. A proved V2 implication claim cannot discharge the
 held FR-003@4 Boolean state-transition claim. That historical row stays held and unproved;
-IR-1047 Acceptance 4, including its disposition and hold expiry, remains unmet and open.
-While the only current claim is held, no module proof or mutation is discharged.
-FR-041-AC-1 through AC-5 remain unchanged and unfulfilled for the held claim;
+IR-1047 Acceptance 4, including same-claim V2 source and hold expiry, remains unmet and
+open under IR-1049 and FR-041-AC-10. While the only current claim is held, no module
+proof or mutation is discharged. FR-041-AC-1 through AC-5 remain unchanged and unfulfilled for the held claim;
 non-held claims retain the full gate.
 
 ## Dependencies

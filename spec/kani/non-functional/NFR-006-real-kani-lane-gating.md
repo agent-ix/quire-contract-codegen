@@ -216,7 +216,9 @@ FR-041's claim census and real mutation controls. The current V1 claim source se
 `kani_generation::guard_sources()[0]` and named in `scripts/kani_claims.json` remains
 an unproved FR-003@4 Boolean state-transition claim. IR-1047 specifies an additional,
 separately named V2 implication scalar module with independent expectation and subject
-roots; its proof cannot discharge the historical row or expire its hold. Deleting the
+roots; its proof cannot discharge the historical row or expire its hold. The
+same-claim V2 FR-003@4 source and retained-row update are PLANNED under IR-1049
+and FR-041-AC-10. Deleting the
 source, dropping the historical claim or removing this gate cannot satisfy AC-19. While this is the only claimed module and is held, zero module proofs and
 mutations are discharged. The IR-348 immediate V1 deletion code slice must implement the
 hold in or before its deletion PR; at this spec head it remains PLANNED. No
