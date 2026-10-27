@@ -147,7 +147,7 @@ pub use core::contract_package::{
 pub use kani::abi::{KaniBindingRole, KaniIntegerBounds, KaniPrimitiveType, KaniSolver};
 pub use kani::census::{
     ProofDependencyEdge, ProofDependencyKind, ProofDependencyRequest, ProofDependencyState,
-    ProofReadiness,
+    ProofExecutionState, ProofReadiness,
 };
 pub use kani::classify::{
     classify_kani_run, ClassifiedRun, KaniInconclusiveReason, KaniRunOutcome,

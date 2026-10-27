@@ -12,6 +12,14 @@ relationships:
 
 ## Description
 
+**IR-348 retirement disposition (2026-10-27).** The V1 bundle controls in steps 16 and 17
+belong to retired FR-015-AC-54/56. Step 18's inspection remains required for surviving emitters,
+and FR-015-AC-7/53/58 remain open for their surviving harness families. The historical V1
+procedure below remains for traceability and does not count as current V2 evidence. IR-1044
+backs the V2 generation-time census in steps 4, 7 and 13 through two tagged tests over an admitted
+QSL precondition; no installed-Kani verdict follows from that evidence. IR-917 owns the remaining
+QSL-authored V2 clause control.
+
 Verify that bounded contracts produce one harness per obligation kind and
 refuse non-finite obligations. IR-268 covers the collection half of planned V2
 symbolic obligations: the claim is an admitted QSL clause/function body over a
@@ -262,16 +270,18 @@ unsatisfiable requires as `cover_unsatisfied`.
    (FR-015-AC-20).
 3. Request a precondition that reads a post-state value. It is refused naming the node, with no
    harness (FR-015-AC-21).
-4. Request obligations with a declared census that is empty-identity, duplicate-identity,
-   kind/state/path-inconsistent or non-`Required`. Each is refused with no harness (FR-015-AC-22).
+4. Request a supported V2 clause obligation with a declared census that is empty-identity,
+   duplicate-identity, kind/state/path-inconsistent or non-`Required`. Each is refused as a typed
+   invalid request with no harness (FR-015-AC-22, FR-015-AC-44).
 5. Request items that settle `supported`, `requires-bound` and `unsupported` together. Each has
    exactly one `ObligationDisposition`, and each item that is not `supported` keeps its source
    identity and reason with no harness and no assumption (FR-015-AC-23).
 6. Run a falsifiable plain bounded-integer comparison harness. The falsified run prints a concrete
    playback (FR-015-AC-24).
-7. Request obligations with valid censuses whose dependencies are all passed, one missing and one
-   failed. Each folds into the identity with readiness `ready`, `incomplete` and `incomplete`, and
-   every harness records execution `not_run` (FR-015-AC-25).
+7. Request a supported V2 clause obligation with valid censuses whose dependencies are all passed,
+   one missing and one failed. Parse each persisted identity record and inspect the full sorted
+   census, readiness `ready`, `incomplete` and `incomplete`, and execution `not_run`
+   (FR-015-AC-25, FR-015-AC-45).
 8. Generate the operation-contract and frame-effect harnesses of one `postcondition` state clause
    over one integer field. Each carries one cover, an identity scoped to the operation, anchor,
    frame and object, and the IR range of each state field (FR-015-AC-26 to FR-015-AC-28). Each clause or frame
@@ -287,7 +297,10 @@ unsatisfiable requires as `cover_unsatisfied`.
    arm, a `Refused` arm and a failing catch-all. The installed backend verifies the healthy `x + 1`
    harness and falsifies it with the oracle's `Add` replaced by `Subtract` (FR-015-AC-37).
 
-## V2 clause claims and the V2 census (planned, IR-489)
+## V2 clause claims and the V2 census
+
+The generation-time census portion of step 13 is implemented for supported V2 clauses (IR-1044).
+The remaining V2 clause controls in this section retain their stated planned status.
 
 10. Request one V2 clause claim each over a `precondition`, a `postcondition` and an
     `invariant` node of an admitted `CheckedPackageV2`. Each yields one harness of its own
@@ -330,10 +343,10 @@ unsatisfiable requires as `cover_unsatisfied`.
     and not tested here. Request a postcondition without its sibling precondition
     (FR-015-AC-43).
 13. Declare the four invalid censuses of FR-015-AC-22 and the three valid censuses of
-    FR-015-AC-25 on V2 clause claims, with the dependency list reordered. The invalid ones
-    are refused; the valid ones fold into the identity and settle `ready`, `incomplete` and
-    `incomplete`, and every harness records execution `not_run` (FR-015-AC-44,
-    FR-015-AC-45).
+    FR-015-AC-25 on a supported V2 clause claim, with the dependency list reordered. The invalid
+    ones yield typed refusal and no harness. Parse every valid harness's persisted identity record:
+    require the complete normalized census, `ready`, `incomplete` and `incomplete`, and
+    `not_run`; reordering leaves its bytes unchanged (FR-015-AC-44, FR-015-AC-45).
 14. Count the covers and locate each relative to the assumptions and the subject call; run
     a clause with jointly unsatisfiable assumptions; regenerate from equal inputs; vary the
     unwind bound, the subject, a parameter's domain and the source span: the harness

@@ -155,6 +155,30 @@ failure is reported.
 | FR-016-AC-24 | A lock whose only defect is one library identity selected twice is refused by QSL's `DependencyInput::new` as `DuplicateIdentity`, code `invalid_package` with cause `conflicting-definition`, and reaches the caller as `DependencyLockError::Input`. | Test (TC-026) |
 | FR-016-AC-25 | In an installed-Kani run that classifies a generated harness as `Falsified`, the retained counterexample is byte-identical to the first eligible assertion playback for that harness in the same launcher's complete captured stdout order, excluding cover blocks, and native replay uses values decoded from that retained counterexample; a `Verified` run supplies no counterexample. A test oracle observing stdout independently compares the complete fence interior, trimmed only of surrounding whitespace, with the retained counterexample before decoding or replay. Substituting another valid, self-consistent playback immediately after classification fails that oracle even when the replacement's comments, bytes, decoded values and replay agree. | Test (TC-026) |
 
+## Status
+
+FR-016-AC-8 remains Open and partially backed after the 2026-10-27 IR-348 retirement ruling.
+The positional decoder and typed non-argument refusal tests in `src/replay/witness.rs` survive.
+The V2 `state_clause_kani_playback_adapter_refuses_wrong_evidence` test in
+`tests/it/kani_obligations_state_clause_replay.rs` also survives: it checks a generated
+state-frame postcondition's persisted draw order against playback and refuses mismatched
+assertion evidence. It does not compare emitted symbolic argument order with persisted bindings
+or execute the assertion in real Kani. The only emission-order and real-Kani persisted-schema controls in
+`tests/it/kani_argument_order.rs` and `tests/it/kani_witness_join.rs` use the retiring V1
+`BoundClause` producer. A genuine V2 producer must supply persisted argument bindings and
+emitted symbolic arguments for corresponding order, naming and real-Kani decode evidence.
+The original AC-8 wording and verification method above remain unchanged.
+
+FR-016-AC-25 remains Planned/Open under IR-604. In `tests/it/kani_stdout_capture.rs`, the
+ignored `tc_026_installed_kani_falsification_is_bound_to_process_stdout` uses a V1 `BoundClause`
+harness. It compared the retained counterexample byte-for-byte with the first eligible assertion
+playback in independently captured stdout, excluding cover blocks, and rejected a valid
+post-classification substitute. That genuine V1 evidence retires with its producer and gives no
+credit to a surviving harness. The observing-launcher helper and the other three AC-25-tagged
+tests have no V1 dependency and survive. IR-604 still owes the same independent stdout binding
+and substitution control on a surviving generated harness. The original AC-25 wording and
+verification method above remain unchanged.
+
 ## Dependencies
 
 - **Upstream**: [FR-015](../../kani/functional/FR-015-bounded-kani-obligations.md); QSL's

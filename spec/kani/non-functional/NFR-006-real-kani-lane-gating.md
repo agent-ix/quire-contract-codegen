@@ -41,6 +41,18 @@ relationships:
   claimed-module census and real mutation controls in its one required lane, and shall exit
   non-zero if any claimed module or shared helper fails that requirement. The controls shall not
   be satisfied by a second optional target or by a stored verdict from an earlier run.
+- For the one IR-348 operator-held V1 module claim row in `scripts/kani_claims.json`, the one
+  required lane shall print separate `kani-gate:` lines naming that row's identity, reason,
+  expiry and held count; the existing `kani-gate: result=... ran=... expected=... elapsed=...
+  kani=... tree=...` line shall retain its exact fields and order. The held count is separate
+  from `ran` and `expected`. The lane shall never report that row as proved or its controls
+  as passed. The lane shall run every non-held selected control and exit non-zero if any such
+  control fails, is missing or is skipped. A hold on another claim, a missing reason or expiry,
+  or omission of the held row from the reviewed declaration shall fail the gate. This hold is
+  limited to the V1 source and expires "until the V2 named independent expectation + real
+  positive/falsifying control exists" for that FR-003@4 claim under IR-1047;
+  a different V2 implication claim cannot meet its expiry. This does not remove
+  FR-041 or NFR-006-AC-19.
 - The `make kani-gate` target shall print one run-result line of the form `kani-gate:
   result=<passed|failed> ran=<n> expected=<n> elapsed=<s>s kani=<version> tree=<clean|dirty>`,
   with `kani` the version the launcher reports. The line describes the run; it is not a
@@ -179,7 +191,7 @@ decision (Open decisions); until the owner rules, the answer is no.
 | NFR-006-AC-1 | `make kani-scope` prints `required` and the path for each of `src/kani/generate/negotiate.rs`, `src/oracle/boolean_v1.rs`, `src/routed/generate.rs`, `src/replay/witness.rs`, `src/core/identity.rs`, `src/publication/mod.rs`, `tests/it/kani_batching.rs`, `tests/it/skeleton_spine.rs`, `tests/it/bounded_kani_corpus.rs`, `tests/it/kani_obligations_state_frame.rs`, `tests/it/scratch_crate.rs`, `tests/exact_scalar_support/package.rs`, `tests/checked_package_support/base.rs`, `tests/checked_package_support/rekey.rs`, `tests/state_frame_support/model.rs`, `schemas/kani-proof-graph-v2.schema.json`, `schemas/generated-rust-kani-v2.schema.json`, `Cargo.toml` and `Cargo.lock`, each fed alone. | Test (TC-045) |
 | NFR-006-AC-2 | `make kani-scope` prints `not required` for each of `spec/kani/functional/FR-017-kani-execution-evidence.md`, `reviews/REV-018-bound-coverage-observations.md`, `src/strategy/mod.rs`, `src/evidence/mod.rs`, `Makefile` and `.github/workflows/ci.yml`, each fed alone. | Test (TC-045) |
 | NFR-006-AC-3 | A rename of `src/kani/old.rs` to `src/strategy/new.rs`, and a rename of `src/strategy/old.rs` to `src/kani/new.rs`, each print `required`. | Test (TC-045) |
-| NFR-006-AC-4 | `make -n kani` and `make -n kani-gate` expand to the same `cargo test` command line, and that line holds each of the six filters `kani_obligations`, `skeleton_spine`, `kani_witness_join`, `bounded_kani_corpus`, `kani_generation` and `kani_batching`. | Test (TC-045) |
+| NFR-006-AC-4 | OPEN during IR-348 migration: the `kani_generation` filter remains and must select V2 tests after V1-only tests retire. Original criterion retained: `make -n kani` and `make -n kani-gate` expand to the same `cargo test` command line, and that line holds each of the six filters `kani_obligations`, `skeleton_spine`, `kani_witness_join`, `bounded_kani_corpus`, `kani_generation` and `kani_batching`. | Test (TC-045) |
 | NFR-006-AC-5 | `make kani-gate` starts the lane's `cargo test` once with `--test-threads=1`, holds the lock named by `KANI_LOCK` while it runs, and does not start it while another process holds that lock. | Test (TC-045) |
 | NFR-006-AC-6 | `make kani-gate` exits non-zero and prints `result=failed` when the lane's filters list zero tests, when fewer tests run than are listed, and when any test fails; it exits zero and prints `result=passed` only when every listed test ran and passed and the count is above zero. | Test (TC-045) |
 | NFR-006-AC-7 | The passing run-result line has the fields `result`, `ran`, `expected`, `elapsed`, `kani`, `tree` in that order, with `ran` equal to `expected`, a non-empty `kani` equal to the version the launcher reports, and `tree=clean`; it has no commit token. A run whose launcher reports no version prints `result=failed`. | Test (TC-045) |
@@ -195,6 +207,23 @@ decision (Open decisions); until the owner rules, the answer is no.
 | NFR-006-AC-17 | Before a version tag is pushed, the full gate actually passes on the clean, stable candidate to be tagged; a copied release-ticket line cannot substitute for that run. | Inspection |
 | NFR-006-AC-18 | Every `include!`, `include_str!`, `include_bytes!` and `#[path]` target named in a file of `tests/it` that holds a lane test, and in each file those name in turn, matches a pattern of the Kani-touching set. | Test (TC-045) |
 | NFR-006-AC-19 | On a clean current candidate, `make kani-gate` runs FR-041's module census and real mutation controls in its one required lane, and a failure of any claim or shared-helper control makes the gate exit non-zero. An optional mutation target or saved earlier result cannot substitute. | Test |
+
+NFR-006-AC-19 remains Open during IR-348 V1 retirement. Only the V1-sourced claim row is HELD
+under the reason "V1 deleted by owner ruling 2026-10-27; no genuine V2 named independent
+expectation/control exists yet" and the expiry "until the V2 named independent expectation +
+real positive/falsifying control exists". The lane must continue to run
+FR-041's claim census and real mutation controls. The current V1 claim source selected by
+`kani_generation::guard_sources()[0]` and named in `scripts/kani_claims.json` remains
+an unproved FR-003@4 Boolean state-transition claim. IR-1047 specifies an additional,
+separately named V2 implication scalar module with independent expectation and subject
+roots; its proof cannot discharge the historical row or expire its hold. The
+same-claim V2 FR-003@4 source and retained-row update are PLANNED under IR-1049
+and FR-041-AC-10. Deleting the
+source, dropping the historical claim or removing this gate cannot satisfy AC-19. While this is the only claimed module and is held, zero module proofs and
+mutations are discharged. The IR-348 immediate V1 deletion code slice must implement the
+hold in or before its deletion PR; at this spec head it remains PLANNED. No
+historical-claim replacement or current-run proof is identified here; IR-1047
+Acceptance 4 remains unmet.
 
 ## Open decisions
 
