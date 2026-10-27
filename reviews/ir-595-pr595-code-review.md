@@ -78,3 +78,7 @@ The claim origin index is assigned after sorting surviving declarations by node 
 | FND-003 | fixed | Merged #596 defines exact-oracle canonical body-root order separately from V2 function identity; this head records actual function_node_id and a tagged test derives it independently from the admitted graph. |
 | FND-004 | still-open | The new `Command::new(env!("CARGO"))` at `owner_render.rs:519` remains on head 79235258c071c25d66d5a7f9c8f5d4626e89b586 and the required language-boundary guard fails. |
 | FND-004 | fixed | Head d02ec3ea00bffdf0d6ea043e864d3df9e4edc728 removes the dynamic Cargo-launch unit test; the static renderer test remains, existing tagged generated-crate integration covers add/equality/nested execution, and hosted language-boundary guard passes. |
+
+## Final configuration delta verification
+
+Head `5d8cb895f91c4a15101ea2d7c25df3c2fd2c7f0b` adds only a crate-scoped `AGPL-3.0-or-later` exception for `quire-checked` in `deny.toml`. `Cargo.lock` resolves `quire-checked` from the pinned first-party `quire-eval` revision `a464a64f9ee0dfbfc94f18697b7b32a9779ef588`; that revision's workspace manifest declares `AGPL-3.0-or-later`. The change does not broaden the third-party license allow-list or alter source/tests. No new finding. The final cargo-deny gate is pending the code lead's rerun.
