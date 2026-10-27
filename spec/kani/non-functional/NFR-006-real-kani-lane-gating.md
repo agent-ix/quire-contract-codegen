@@ -211,8 +211,9 @@ under the reason "V1 deleted by owner ruling 2026-10-27; no genuine V2 named ind
 expectation/control exists yet" and the expiry "until the V2 named independent expectation +
 real positive/falsifying control exists". The lane must continue to run
 FR-041's claim census and real mutation controls. The current V1 claim source selected by
-`kani_generation::guard_sources()[0]` and named in `scripts/kani_claims.json` needs a genuine
-generated V2 replacement under IR-1047; deleting the source, dropping the claim or removing this gate cannot
+`kani_generation::guard_sources()[0]` and named in `scripts/kani_claims.json` needs the
+production V2 Boolean implication scalar module with named subject and independent
+expectation roots under IR-1047; deleting the source, dropping the claim or removing this gate cannot
 satisfy AC-19. While this is the only claimed module and is held, zero module proofs and
 mutations are discharged. The IR-348 immediate V1 deletion code slice must implement the
 hold in or before its deletion PR; at this spec head it remains PLANNED. No V2 replacement or
