@@ -75,12 +75,11 @@ merged (see "Integer divide and remainder").
 
 ### Scope
 
-The Boolean oracle here is the output of `generate_boolean_oracle` and of the named generator
-that the V1 Kani bundle, the V1 bound-oracle generator, the tri-state harness generator and the
-Kani obligation clause lowering share, all in `src/oracle/boolean_v1.rs`. It is retired with that
-file at AD-004 step 6, with the other V1 readers; step 4f deleted the V1 bundle and retained
-this renderer, because the V1 bound generator and the tri-state harness generator still
-call it; step 4f removed its V1 Kani obligation-arm caller. The exact V2 oracles of FR-014,
+The Boolean oracle here is the output of `generate_boolean_oracle` in
+`src/oracle/boolean_v1.rs`. The V1 bound-oracle generator and tri-state harness generator still
+call it; before step 4f, the V1 Kani bundle and Kani obligation clause lowering also called it.
+This renderer retires with that file at AD-004 step 6, with the other V1 readers; step 4f deleted
+the V1 bundle and removed its V1 Kani obligation-arm caller. The exact V2 oracles of FR-014,
 FR-018 and FR-021 now call `quire-exact` directly. The surviving native divide and remainder
 behavior remains planned under IR-1045;
 the dependency lock prerequisite is met.
