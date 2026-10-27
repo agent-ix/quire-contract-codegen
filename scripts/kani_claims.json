@@ -8,6 +8,11 @@
       "mutation": {
         "from": "crate::subject(input_current, state_pre)",
         "to": "false"
+      },
+      "hold": {
+        "reason": "V1 deleted by owner ruling 2026-10-27; no genuine V2 named independent expectation/control exists yet",
+        "expiry": "until the V2 named independent expectation + real positive/falsifying control exists",
+        "follow_up": "IR-1047"
       }
     }
   ],

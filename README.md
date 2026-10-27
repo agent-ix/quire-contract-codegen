@@ -68,7 +68,7 @@ case: a healthy twin does not reproduce the violation, so QSL settles
 | --- | --- | --- |
 | Rust oracles | `generate_exact_scalar_oracles`, `generate_composite_equality_oracles`, `generate_exact_function_oracles` | A small Rust crate (`Cargo.toml`, `src/lib.rs`) that computes each contract operation exactly, plus a claim map saying which clause each function came from or why it was refused. |
 | Property tests | `generate_tristate_harness`, `generate_bound_strategy`, `generate_enum_strategy`, `generate_i64_strategy` | Proptest strategies and a harness that records every case as accepted, rejected by the precondition, or discarded, with the accounting kept. |
-| Kani proofs | `negotiate_kani_obligations`, `generate_kani_bundle`, `generate_state_frame_obligations`, `generate_bounded_kani_corpus_case` | Kani harnesses with explicit bounds, and a proof-dependency graph that says whether the proof is ready, conditional or incomplete. |
+| Kani proofs | `negotiate_kani_obligations`, `generate_state_frame_obligations`, `generate_bounded_kani_corpus_case` | Kani harnesses with explicit bounds and typed per-obligation dispositions. |
 | Running Kani | `execute_kani_obligation`, `execute_kani_obligations`, `classify_kani_run` | The run's outcome, classified (see below). |
 | Replay | `decode_falsification`, `replay_falsification`, `replay_counterexample` | A Kani counterexample decoded and re-run in QSL. |
 | Evidence | `analyze_bound_coverage`, `parse_llvm_coverage`, `classify_clause` | Observations of which bounded cases and clauses a test run reached. |
