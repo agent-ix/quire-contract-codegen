@@ -764,10 +764,18 @@ fn generated_for_source_body(
     function: &str,
 ) -> quire_contract_codegen::ExactFunctionOracles {
     let item = item(package, probe, function);
+    generated_for_source_items(package, functions, &[item])
+}
+
+fn generated_for_source_items(
+    package: &CheckedPackageV2,
+    functions: &[ExactFunctionDeclaration],
+    items: &[ExactFunctionItem],
+) -> quire_contract_codegen::ExactFunctionOracles {
     let mut roots = functions
         .iter()
         .map(|declaration| declaration.node_id.clone())
-        .chain(std::iter::once(item.call_node_id.clone()))
+        .chain(items.iter().map(|item| item.call_node_id.clone()))
         .collect::<Vec<_>>();
     roots.sort();
     let positions = package::driver_positions(&roots);
@@ -781,8 +789,11 @@ fn generated_for_source_body(
             .map(|declaration| position(&declaration.node_id))
             .collect::<Vec<_>>(),
         functions,
-        &[position(&item.call_node_id)],
-        &[item],
+        &items
+            .iter()
+            .map(|item| position(&item.call_node_id))
+            .collect::<Vec<_>>(),
+        items,
     )
     .expect("genuine source request generates a typed disposition")
 }
@@ -841,6 +852,59 @@ fn tc_031_reordered_source_call_refuses_positional_nested_body() {
         }
     ));
     assert_eq!(generated.location_map.len(), 1, "only add may render");
+}
+
+/// Trace: FR-021-AC-2, TC-031. A checked call to `add` cannot render a
+/// request-named, same-arity call to `unrelated`.
+#[trace("FR-021-AC-2", "TC-031")]
+#[test]
+fn tc_031_source_callee_refuses_requested_alternate_and_keeps_sibling() {
+    let package = admitted_source();
+    let integer = type_id(&package, "integer");
+    let unrelated = declared_source_body(
+        &package,
+        "unrelated",
+        integer.clone(),
+        ExactFunctionBody::Scalar {
+            operator: IntegerOperator::Subtract,
+        },
+    );
+    let nested = declared_source_body(
+        &package,
+        "nested",
+        integer,
+        ExactFunctionBody::Call {
+            callee: "unrelated".to_owned(),
+        },
+    );
+    let healthy = item(&package, "probe_unrelated", "unrelated");
+    let adverse = item(&package, "probe_nested", "nested");
+    let generated = generated_for_source_items(
+        &package,
+        &[unrelated, nested],
+        &[healthy.clone(), adverse.clone()],
+    );
+    let disposition = |node_id: &CheckedNodeId| {
+        &generated
+            .claim_map
+            .items
+            .iter()
+            .find(|claim| &claim.node_id == node_id)
+            .expect("both QSL call items retain a disposition")
+            .result
+    };
+    assert!(matches!(
+        disposition(&adverse.call_node_id),
+        ClaimDisposition::Refused {
+            refusal: quire_contract_codegen::ExactFunctionRefusal::BodyMismatch
+        }
+    ));
+    assert!(matches!(
+        disposition(&healthy.call_node_id),
+        ClaimDisposition::Generated(item) if item.function == "unrelated"
+    ));
+    assert_eq!(generated.location_map.len(), 1);
+    assert_eq!(generated.location_map[0].function, "unrelated");
 }
 
 /// Trace: FR-021-AC-2, TC-031. A source `=` does not authorize a `!=` body.

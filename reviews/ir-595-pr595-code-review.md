@@ -62,3 +62,11 @@ The equality classifier checks only binary form and arity, never the admitted op
 
 The claim origin index is assigned after sorting surviving declarations by node digest, while AC-3 calls for the request-order function index. The edited tagged test computes the same digest sort instead of the independent request order. Reconcile AC-3 with AC-13 permutation determinism without narrowing either AC. The relevant requirement is FR-021-AC-3.
 
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Head 2da9e1554346ed1d4bcc0babf7ee00a80c974b27 checks scalar/equality operands against source parameter-node order and nested body callee plus ordered argument references against the admitted checked graph. |
+| FND-002 | fixed | Equality classification now exhaustively maps operand kind and requested Equal/NotEqual to the admitted operation identity and refuses a mismatch. |
+| FND-003 | fixed | Merged #596 defines exact-oracle canonical body-root order separately from V2 function identity; this head records actual function_node_id and a tagged test derives it independently from the admitted graph. |

@@ -52,3 +52,16 @@ FR-021 owns the function generator, generated body renderer, checked-closure ada
 
 The only static-location versus QSL-issued origin assertion covers the own-package nested callable. The imported corpus runs and compares outcomes and charges, but never compares its CG location-map origin with the imported QSL call-site origin, leaving AC-17’s imported leg unverified. The relevant requirement is FR-021-AC-17.
 
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-002 | medium | The nested-body callee identity guard is not backed by a QSL-authored adverse test. The new swapped-argument test rejects before it can isolate a wrong callee, and the existing wrong-callee test mutates the requested item binding, not the source body’s callee. A regression that removes the source callee comparison would leave these tests green while a generated nested body could call the request-named function instead of its checked source callee. | src/oracle/function/mod.rs:1714-1745; tests/it/exact_function_agreement.rs:805-843; tests/it/exact_function_generation.rs:3099-3114 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The QSL-authored locked library now has a nested imported body, and the tagged test compares its CG static origin with the QSL-issued imported call-site origin. |
+| FND-002 | still-open | Add a QSL-authored source containing a nested call to callee A while the request names another admitted callee B with the same argument shape; assert typed BodyMismatch and healthy sibling isolation. |
