@@ -16,6 +16,7 @@ use crate::{
     core::artifact::Artifact,
     core::identity::{HarnessPath, HarnessSymbol, ModuleSymbol},
     kani::abi::{KaniBindingRole, KaniIntegerBounds, KaniPrimitiveType, KaniSolver},
+    kani::census::{ProofDependencyEdge, ProofExecutionState, ProofReadiness},
 };
 
 /// Contract IR's admitted identity for Boolean implication.
@@ -159,6 +160,12 @@ pub struct KaniObligationHarness {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct V2ClauseObligationIdentity {
+    /// Validated declared dependencies, sorted by proof identity.
+    pub dependencies: Vec<ProofDependencyEdge>,
+    /// Readiness derived from the declared dependencies.
+    pub readiness: ProofReadiness,
+    /// Generation records no backend execution.
+    pub proof_execution_state: ProofExecutionState,
     /// Selected integer ABI; absent on the general route.
     #[serde(skip_serializing_if = "ScalarIntegerRepresentation::is_general")]
     pub integer_representation: ScalarIntegerRepresentation,

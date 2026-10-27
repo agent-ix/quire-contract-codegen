@@ -10,20 +10,26 @@ relationships:
 
 ## Description
 
-Verify generated Kani source, framing, typed bindings, and dependency graphs preserve assumptions and
-block complete-proof claims when required dependencies are not successful. Keep model-domain bounds
-distinct from assumed proof edges.
+Verify the generation-time declared proof-dependency census on supported V2
+clause obligations. A census changes the sealed harness identity and persisted
+record, but generation never claims that the proof ran. The former V1 bundle's
+`ProofDependencyGraph`, assumed and stubbed edges, and its backend procedure are
+historical; they supply no V2 evidence after AD-004 step 4f. Other surviving
+proof-family and installed-backend controls remain in TC-025.
 
 ## Test Procedure
 
-Generate fixtures with complete, missing, failed, and assumed dependency edges under the Kani
-adapter; execute bounded proofs and inspect graph/evidence classifications. Include Boolean and
-bounded-integer bindings, reorder the caller dependency census, and require one stable source marker
-per proof assumption/stub. Inspect model-domain binding records independently and confirm they do not
-alter dependency readiness.
+Use an admitted QSL V2 precondition through the public Kani obligation request.
+Declare empty and duplicate identities, a state or path inconsistent with its
+kind, and a non-`Required` kind. Require typed invalid-request records and no
+harness. Declare two passed required dependencies, then change one to missing
+and failed. Reverse the declaration order. For every supported case, parse the
+persisted identity record and compare its full sorted dependency list, derived
+readiness and proof execution state against independent expected values.
 
 ## Expected Results
 
-Only complete successful dependency closure can support a complete proof; every assumption,
-option, typed domain bound, and non-success state remains visible. Generation always reports
-`proofExecutionState: not_run`; a ready graph is not a completed Kani proof.
+Only all-passed required dependencies yield `ready`; missing or failed yields
+`incomplete`. Reordering leaves the full harness and persisted record unchanged.
+The record reports `proofExecutionState: not_run` for every valid census. No
+generation-time readiness value is an installed-Kani proof verdict.
