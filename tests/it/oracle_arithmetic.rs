@@ -1289,7 +1289,34 @@ fn tc_044_native_division_matches_independent_member_model() {
             &[("x_current", x), ("y_current", y)],
             "&mut meter()",
         );
-        writeln!(checks, "#[test]\nfn reproduction_{index}() {{ assert_eq!({invocation}, rt::Outcome::Completed(true)); }}").unwrap();
+        let (dividend, divisor, minimum, maximum) = if operator == NumericOperator::Divide {
+            ("10", "5", "1", "10")
+        } else {
+            ("-10", "-1", "-10", "5")
+        };
+        let selected = if operator == NumericOperator::Divide {
+            "quotient"
+        } else {
+            "remainder"
+        };
+        let rejected = if operator == NumericOperator::Divide {
+            "remainder"
+        } else {
+            "quotient"
+        };
+        writeln!(
+            checks,
+            "#[test]\nfn reproduction_{index}() {{
+            let dividend = {dividend}_i128;
+            let divisor = {divisor}_i128;
+            let quotient = dividend / divisor;
+            let remainder = dividend % divisor;
+            assert!(({minimum}..={maximum}).contains(&{selected}));
+            assert!(!({minimum}..={maximum}).contains(&{rejected}));
+            assert_eq!({invocation}, rt::Outcome::Completed({selected} <= {maximum}));
+        }}"
+        )
+        .unwrap();
         modules.push((module, source));
     }
     run_crate("division-model", &modules, &checks);

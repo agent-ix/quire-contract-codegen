@@ -1415,11 +1415,10 @@ fn tc_003_dependency_normalization_is_injective_and_artifact_names_are_bounded()
     }
 }
 
-/// TC-003, and TC-044 (FR-031-AC-18): a division whose divisor and range IR discharged is still
-/// refused, because the oracle takes no raw `/`.
-#[trace("TC-044", "FR-031-AC-18")]
+/// A division whose divisor and range IR discharged uses the exact member operation.
+#[trace("TC-044", "FR-031-AC-2")]
 #[test]
-fn tc_023_native_proven_division_is_refused_until_the_ir_601_ruling() {
+fn tc_044_native_proven_division_uses_exact_member() {
     let integer = IntegerType::new(IntegerDomain::Signed, -10, 10, OverflowPolicy::Reject).unwrap();
     let environment = DeclarationEnvironment::new(
         requirement(),
