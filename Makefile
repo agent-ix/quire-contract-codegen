@@ -53,10 +53,12 @@ lint:
 export QSPEC_DIR
 QSPEC_FIXTURES := positive-union-nodes positive-clause-operations positive-all-families
 GATES_BIN := target/cg-gates
+GATES_CARGO_TARGET_DIR := $(if $(strip $(CARGO_TARGET_DIR)),$(CARGO_TARGET_DIR),target)
 
-$(GATES_BIN): scripts/cg_gates.rs
+$(GATES_BIN): scripts/cg_gates.rs Cargo.toml Cargo.lock Makefile
 	@mkdir -p target
-	CARGO_MANIFEST_DIR=$(CURDIR) rustup run $(MSRV) rustc --edition=2021 $< -o $@
+	$(CARGO) +$(MSRV) build $(LOCKED) --bin cg_gates --target-dir "$(GATES_CARGO_TARGET_DIR)"
+	install -m 755 "$(GATES_CARGO_TARGET_DIR)/debug/cg_gates" $@
 
 .PHONY: qspec-preflight
 qspec-preflight:
