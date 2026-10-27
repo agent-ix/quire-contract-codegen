@@ -1914,7 +1914,10 @@ fn hand_written_identity(site: &OperationSite) -> [u8; 32] {
 /// The state-clause and frame-effect harness sources, for the cover-last guard (FR-015-AC-58).
 pub(crate) fn guard_sources() -> Vec<(&'static str, String)> {
     let generated = generate(&emitted_fixture(&Twin::new(), "BalanceNeverDrops"));
+    let precondition =
+        v2_precondition_fixture_harness(Twin::with_bounded_other_precondition(), "OtherBelowLimit");
     vec![
+        ("v2 precondition", precondition.rust.contents),
         ("state clause", generated.postcondition.rust.contents),
         ("frame effect", generated.frame.rust.contents),
     ]

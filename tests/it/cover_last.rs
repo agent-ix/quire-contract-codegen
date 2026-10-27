@@ -20,8 +20,9 @@ use ix_trace_rs::trace;
 
 /// Every family the inspection drives, with the one source file that emits it. A file in this
 /// table is a file the scan allows to spell a proof attribute.
-const FAMILIES: [(&str, &str); 6] = [
+const FAMILIES: [(&str, &str); 7] = [
     ("scalar", "kani/generate/render.rs"),
+    ("v2 precondition", "kani/generate/render.rs"),
     ("state clause", "kani/generate/frame.rs"),
     ("frame effect", "kani/generate/frame.rs"),
     (
@@ -142,7 +143,6 @@ fn emitted() -> Vec<(&'static str, String)> {
 #[trace(
     "FR-015-AC-7",
     "FR-015-AC-53",
-    "FR-015-AC-54",
     "FR-015-AC-55",
     "FR-015-AC-58",
     "FR-015-AC-116",
