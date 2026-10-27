@@ -1252,7 +1252,6 @@ fn tc_025_a_quantity_conversion_claim_is_unrendered_with_no_harness() {
         .collect::<Vec<_>>();
     let KaniObligationOutcome::Emitted {
         records,
-        harnesses,
         scalar_harnesses,
         state_frame_harnesses,
         collection_harnesses,
@@ -1262,7 +1261,6 @@ fn tc_025_a_quantity_conversion_claim_is_unrendered_with_no_harness() {
         panic!("a refused claim settles per item");
     };
     // The whole artifact set is empty: no harness of any family is emitted for the obligations.
-    assert!(harnesses.is_empty(), "V1 harnesses");
     assert!(scalar_harnesses.is_empty(), "scalar harnesses");
     assert!(state_frame_harnesses.is_empty(), "state-frame harnesses");
     assert!(collection_harnesses.is_empty(), "collection harnesses");
@@ -1367,17 +1365,12 @@ fn tc_025_a_present_node_with_an_unrecognized_kind_is_refused_rather_than_silent
     let outcome = negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap();
     let KaniObligationOutcome::Emitted {
         records,
-        harnesses,
         scalar_harnesses,
         ..
     } = outcome
     else {
         panic!("unexpected rejection");
     };
-    assert!(
-        harnesses.is_empty(),
-        "an unrecognized node kind must emit no V1 harness"
-    );
     assert!(
         scalar_harnesses.is_empty(),
         "an unrecognized node kind must emit no harness"
