@@ -439,7 +439,7 @@ fn qsl_parameter_precondition_is_a_separate_v2_cover_obligation() {
 }
 
 /// A malformed declaration rejects the V2 request before any harness is exposed.
-#[trace("FR-015-AC-22", "FR-015-AC-44", "TC-025")]
+#[trace("FR-015-AC-22", "FR-015-AC-44", "TC-005", "TC-025")]
 #[test]
 fn v2_clause_census_refuses_invalid_declared_dependencies() {
     let (package, clause) =
@@ -516,7 +516,7 @@ fn v2_clause_census_refuses_invalid_declared_dependencies() {
 }
 
 /// The normalized census is part of the sealed identity while generation has no run verdict.
-#[trace("FR-015-AC-25", "FR-015-AC-45", "TC-025")]
+#[trace("FR-015-AC-25", "FR-015-AC-45", "TC-005", "TC-025")]
 #[test]
 fn v2_clause_census_is_order_independent_and_records_readiness() {
     let (package, clause) =
