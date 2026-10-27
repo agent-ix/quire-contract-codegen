@@ -41,17 +41,15 @@ outcome instead.
 A generated oracle that panics or wraps disagrees with the language it claims to evaluate, and a
 Kani proof or a conformance campaign over it proves or tests a different operation. This
 requirement fixes what the Boolean oracle emits and means for integer arithmetic and comparison,
-so that the meaning of an operator is stated once, in the exact kernel, and the emitter
-restates none of it, other than in the V1 Kani bundle. There the fixed-width arithmetic is a
-second implementation of the rule, kept because QSL's exemplar mutates its text, and held to the
-kernel's meaning by a differential test (see "Two consumers, two shapes of the same rule").
+so that the meaning of an operator is stated once, in the exact kernel, and the surviving emitter
+restates none of it. The retired V1 Kani bundle's fixed-width arithmetic was a second
+implementation, recorded as historical rationale under the retired bundle criteria below.
 
-The defect is reachable in two ways. Contract IR discharges the definedness obligation of an
+The native boundary needs explicit handling. Contract IR discharges the definedness obligation of an
 arithmetic node from declared bounds and dominating guards, so an operand inside its declared
-domain cannot overflow or divide by zero in an expression IR admitted. But the generated function
-is `pub` and takes any `i64`, and FR-015 and `interface-001`'s `kani_slice` assert a
-subject-produced value's domain rather than assuming it, so the oracle is evaluated at operand
-values the declared domain excludes. Add, subtract and multiply over an integer type whose
+domain cannot overflow or divide by zero in an expression IR admitted. The generated function
+is `pub` and takes any `i64`, including values outside the declared domain. Add, subtract and
+multiply over an integer type whose
 overflow policy is `saturate` raise no obligation at all, so that arithmetic is admitted for
 every operand value, and the raw operator is wrong on in-domain values too: over `0..=10` it
 computes `10 + 1` as `11`, where the policy requires the result to stay in range.
