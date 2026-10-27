@@ -106,7 +106,7 @@ whichever QSL meets first; AC-24 is therefore limited to a lock whose only defec
 identity.
 
 FR-016-AC-21 to AC-23 are implemented and tested in the default suite
-(`tests/it/skeleton_spine.rs`, and unit tests in `src/replay/obligation.rs` and
+(`tests/it/skeleton_spine.rs` with a direct test-only identity fixture, and unit tests in `src/replay/obligation.rs` and
 `src/replay/function.rs`): `ReplayPackage::obligation_identity` builds the O-09 function-contract
 digest in `core::canonical` over the `FunctionSite`'s `function` and `declaration`, the harness's
 kind and its arguments ascending by identifier, and `replay_counterexample` puts it in the
@@ -123,13 +123,14 @@ Partial. FR-016-AC-9 through AC-11 are implemented and tested in the default sui
 (`tests/it/skeleton_spine.rs`): a falsifying input replays through
 `qsl_replay::replay` and settles the violation, a witness at which the function
 holds and a healthy twin settle `inconclusive` naming both verdicts, and each
-adapter refusal is its own typed error. The ignored Kani lane (`make kani`, not
-part of `make ci`) replays a real prover counterexample the same way.
+adapter refusal is its own typed error. Its former ignored Kani lane used the retired V1
+`BoundClause` generator and no longer supplies installed-prover evidence. IR-1047 owns the
+genuine V2 generated harness and real-Kani counterexample control for AC-9 and AC-10.
 
 The verdict is tied to the exact witness values, not to any violating input. A twin whose clause
 is false at a single point is reproduced only by the transcript carrying that point, and
 neighbouring points settle `inconclusive` (default suite,
-`tc_026_the_replay_verdict_is_decided_by_the_exact_witness_values`). In the Kani lane the point is
+`tc_026_the_replay_verdict_is_decided_by_the_exact_witness_values`). In the retired V1 Kani control the point was
 read from Kani's own printed block, by a reader that shares no code with `decode_falsification`
 (the `// value` comment lines and, separately, the little-endian byte vectors, which must agree
 with each other and with the decoder), and a neighbour control must not reproduce. On a throwaway

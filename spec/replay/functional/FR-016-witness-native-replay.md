@@ -157,6 +157,15 @@ failure is reported.
 
 ## Status
 
+FR-016-AC-1 through AC-5 and AC-21 through AC-23 retain default-suite evidence through a
+direct test-only `KaniObligationIdentity` fixture and the surviving replay and identity APIs.
+That fixture is an input to those APIs, not a replacement V1 generator or a proof claim.
+FR-016-AC-9 and AC-10 retain their default native replay tests, but the
+`skeleton_spine.rs` installed-prover E7-E9 control uses the retired V1 `BoundClause` generator.
+That installed path is Open and partially backed until IR-1047 supplies a genuine V2 generated
+harness and real-Kani counterexample control. The original AC text and verification methods
+remain unchanged.
+
 FR-016-AC-8 remains Open and partially backed after the 2026-10-27 IR-348 retirement ruling.
 The positional decoder and typed non-argument refusal tests in `src/replay/witness.rs` survive.
 The V2 `state_clause_kani_playback_adapter_refuses_wrong_evidence` test in
