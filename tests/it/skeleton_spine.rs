@@ -118,6 +118,9 @@ fn request_of(package: &ReplayPackage, source: ReplaySource) -> qsl_replay::Repl
         ReplaySource::ObservedTemporal(_) => {
             panic!("the function witness fixture cannot carry an observed temporal envelope")
         }
+        ReplaySource::ModelGraph(_) => {
+            panic!("the function witness fixture cannot carry a model graph envelope")
+        }
     };
     let package = package
         .clone()
