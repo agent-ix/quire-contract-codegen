@@ -101,7 +101,7 @@ column is marked `⚠️` or `🚧` in the table that owns it, that table govern
 
 | Test ID | Title | Type | Priority | Traces To | Status |
 |---|---|---|---|---|---|
-| TC-005 | Enforce Kani proof dependencies | Analysis | P0 | FR-015-AC-22, FR-015-AC-25, FR-015-AC-44, FR-015-AC-45 | ⚠️ V2 generation-time census implemented (IR-1044), with tagged focused tests; independent acceptance pending. Retired V1 graph and installed-Kani proof controls supply no credit. |
+| TC-005 | Enforce Kani proof dependencies | Analysis | P0 | FR-015-AC-22, FR-015-AC-25, FR-015-AC-44, FR-015-AC-45 | 🚧 V2 generation-time census implemented (IR-1044), with tagged focused tests; independent acceptance pending. Retired V1 graph and installed-Kani proof controls supply no credit. |
 | TC-014 | Verify bounded numeric and state Kani contracts | Analysis | P0 | FR-015-AC-11, FR-015-AC-19, FR-015-AC-24 | 🚧 Planned |
 | TC-023 | Verify bounded Kani profile corpus parity | Integration | P0 | FR-015-AC-55 | ✅ Covered by a nonignored tagged test |
 | TC-023 | Verify bounded Kani profile corpus parity | Integration | P0 | FR-015-AC-57 | 🚧 Tagged only by ignored tests; real-Kani classification and playback remain unverified by a running test |
