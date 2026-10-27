@@ -97,3 +97,4 @@ Re-checked at exact head 5380318cb380788ba0512e8765d2faa651078965: fix diff 6499
 | FND-005 | fixed | The `assign_names` doc now reads "Settles generated scalar module and harness names across the request". The single-variant `NameKey` is benign and needs no change. |
 | FND-006 | fixed | generate/mod.rs:4 now reads "Dependency census validation shared with bounded corpus generation." |
 | FND-007 | fixed | harness.rs:20 now reads "/// A caller-built FR-017 contract execution input." |
+| FND-008 | fixed | Round 2 at exact head ed2ca70ccaf079c9c08c4d377b287f48843529ef (fix ed2ca70c, which touches only reviews/). reviews/ir-348-{code-review,gap-analysis,spec-review-base,spec-review-integrity}.md are byte-identical to 64992f5b, so SR-585006, SR-585010, SR-585007 and SR-585008 are restored. SR-601001 to SR-601004 are committed as reviews/SR-60100N-pr601-ir-348-<method>.md, identical to the round-1 scratch artifacts. Each of the eight ids appears in exactly one file. |
