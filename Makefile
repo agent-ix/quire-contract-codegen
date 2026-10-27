@@ -87,7 +87,7 @@ test: qspec-preflight qspec-preflight-selftest
 # target directory.
 #
 # Integration tests live in the single `it` binary (`tests/it/main.rs`); the
-# `kani_obligations`, `skeleton_spine`, `kani_witness_join`,
+# `kani_obligations`, `skeleton_spine`,
 # `bounded_kani_corpus`, `kani_generation` and `kani_batching` filters select those modules'
 # tests, and `--ignored` runs only their `#[ignore]`d real-prover tests: the
 # real-Kani obligation runs, the skeleton spine (one Boolean clause through the
@@ -109,7 +109,7 @@ tools:
 
 KANI_LOCK ?= /tmp/agent-e-heavy-build.lock
 # Keep each ignored installed-Kani test module in this lane; kani-scope selects the gate by path.
-KANI_FILTERS := kani_obligations kani_obligations_symbolic_domains skeleton_spine kani_stdout_capture kani_witness_join bounded_kani_corpus kani_generation kani_batching
+KANI_FILTERS := kani_obligations kani_obligations_symbolic_domains skeleton_spine kani_stdout_capture bounded_kani_corpus kani_generation kani_batching
 KANI_TEST := $(CARGO) +$(MSRV) test $(LOCKED) -j 4 --test it --target-dir target-codex-backends -- --ignored --test-threads=1 $(KANI_FILTERS)
 
 .PHONY: kani kani-scope kani-gate

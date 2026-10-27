@@ -1085,7 +1085,7 @@ fn tc_025_every_rendered_operation_states_its_own_native_relation() {
 /// Unbounded, non-finite, model-dependent, frame and definedness-bearing items are typed
 /// refusals with no harness. These generation-time classifications (`ObligationDisposition`,
 /// `UnsupportedObligation`) are never available to `execute_kani_obligation`, which requires a
-/// `KaniObligationHarness`: an item this test refuses never produces one, so there is no way to
+/// a generated harness: an item this test refuses never produces one, so there is no way to
 /// report the refusal as an execution outcome (`KaniRunOutcome`) instead of what it is.
 /// Upstream: agent-ix/quire-contract-ir FR-036-AC-2, TC-045
 #[trace("FR-015-AC-3", "FR-017-CON-2", "TC-025", "TC-027")]
@@ -1671,7 +1671,7 @@ fn tc_025_a_caller_declared_operation_is_refused_with_no_harness() {
 
 /// One invalid item rejects the request after every item is accounted, and exposes no bytes.
 /// The whole-request refusals below (`KaniObligationError`) are generation-time classifications
-/// too: a rejected `negotiate_kani_obligations` call returns no `KaniObligationHarness` at all,
+/// too: a rejected `negotiate_kani_obligations` call returns no harness at all,
 /// so `execute_kani_obligation` has nothing to run and nothing to misreport as an execution
 /// outcome in place of the refusal it actually is.
 /// Upstream: agent-ix/quire-contract-ir FR-036-AC-4, TC-045
