@@ -58,11 +58,12 @@ about a semantic stage the test input did not traverse.
   control; a dirty-tree or other process refusal alone is not a falsifying mutation. The gate SHALL
   retain the exact mutation diff, invocation and failing check output as current-run evidence.
 - The gate SHALL accept no predetermined verdict or stubbed executor as proof evidence.
-- While the 2026-10-27 IR-348 V1 retirement hold is active, the gate SHALL mark only the
-  `kani_fr_003_4_proof_boolean_transition_module` claim row in `scripts/kani_claims.json` as
-  `held` in the reviewed declaration. Its reason SHALL be
+- While the 2026-10-27 IR-348 V1 retirement hold is active, the checked-in reviewed
+  declaration SHALL mark only the `kani_fr_003_4_proof_boolean_transition_module` claim row
+  in `scripts/kani_claims.json` as `held`. The gate SHALL accept a hold only on that row and
+  validate it. While this hold is active, the reviewed declaration SHALL record reason
   "V1 deleted by owner ruling 2026-10-27; no genuine V2 named independent expectation/control
-  exists yet" and its expiry SHALL be "until the V2 named independent expectation + real
+  exists yet" and expiry "until the V2 named independent expectation + real
   positive/falsifying control exists". The gate SHALL retain that exact row in the reviewed
   declaration and compare it with the merge-base declaration, even after the V1 module is absent
   from the compiled build. For this row alone, while the hold is valid, absence from the build is

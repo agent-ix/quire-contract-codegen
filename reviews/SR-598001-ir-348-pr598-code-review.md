@@ -31,3 +31,10 @@ SR-598002 (base), SR-598003 (integrity) and SR-598004 (EARS).
 scope:
 - {id: diff-file-list, path: ".", role: examined, excerpt: "8 files changed, all under spec/: FR-041, TC-056, kani tests.md, NFR-006, FR-016, TC-026, replay tests.md, spec.md"}
 ```
+
+## Dispositions
+
+Disposition pass 1, head ad57b91cb39b7ad610ad191af92c15537eecdf9a. This review had no findings
+to disposition. The fix delta from d9ce52c9 was re-checked: it changes only `spec/**` and
+`reviews/**` Markdown, adds no `.rs`, `Cargo.toml`, script, Makefile or JSON change, and adds no
+new code finding.

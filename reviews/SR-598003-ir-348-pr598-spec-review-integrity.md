@@ -51,3 +51,10 @@ scope:
 - {id: replay-tests.md:FR-016-rows, path: spec/replay/matrix/tests.md, role: examined, excerpt: "FR-016-AC-1 through FR-016-AC-5, FR-016-AC-9 through FR-016-AC-23 ... FR-016-AC-8 ... FR-016-AC-6 ... FR-016-AC-24 ... FR-016-AC-25"}
 - {id: kani-tests.md:rows, path: spec/kani/matrix/tests.md, role: examined, excerpt: "Open (IR-19): only the V1 claim row is operator-held, printed with reason/expiry and counted separately"}
 ```
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1, head ad57b91c. The FR-041 hold bullet now states a narrow exception for that row alone. While the hold is valid, absence from the build is reported `held` rather than failed under the ordinary absent-module rule, and the AC-4 positive proof and mutation controls are suspended. The gate SHALL exit zero only when hold declaration and reporting are valid and all non-held controls and other lane checks pass. TC-056 step 6 and Expected Results agree. The FR-041, NFR-006 and FR-016 AC rows are byte-identical to origin/main. |
+| FND-002 | fixed | Round 1, head ad57b91c. NFR-006 now requires separate `kani-gate:` lines for the held identity, reason, expiry and count, and keeps the exact fields and order of the `result= ran= expected= elapsed= kani= tree=` line. TC-056 step 6 says the same. The existing TC-045 tests in `tests/it/kani_gate.rs:342,413` select the line by its `kani-gate: result=` prefix, so the added lines do not conflict with them. |

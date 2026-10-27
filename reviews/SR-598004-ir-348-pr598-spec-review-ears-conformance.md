@@ -39,3 +39,18 @@ scope:
 - {id: NFR-006:hold-bullet, path: spec/kani/non-functional/NFR-006-real-kani-lane-gating.md, role: examined, excerpt: "For the one IR-348 operator-held V1 module claim row in scripts/kani_claims.json, the one required lane shall print that row's identity, reason and expiry and count it as held separately from ran and expected."}
 - {id: NFR-006:AC-19-note, path: spec/kani/non-functional/NFR-006-real-kani-lane-gating.md, role: examined, excerpt: "NFR-006-AC-19 remains Open during IR-348 V1 retirement. Only the V1-sourced claim row is HELD"}
 ```
+
+## New findings (disposition pass 1)
+
+Re-checked at head ad57b91cb39b7ad610ad191af92c15537eecdf9a against the previous head d9ce52c9.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | low | The rewritten FR-041 hold bullet gives the wrong actor: "the gate SHALL mark only the `kani_fr_003_4_proof_boolean_transition_module` claim row in `scripts/kani_claims.json` as `held` in the reviewed declaration". The reviewed declaration is a checked-in input that the gate compares, not one it writes. As worded, it obliges the gate to edit a reviewed file. It should say the reviewed declaration SHALL mark only that row `held`, and that the gate SHALL accept a hold only on that row. | spec/kani/functional/FR-041-claimed-module-proof-gate.md:61-63 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1, head ad57b91c. The undefined "merge-base identity remain visible" clause is gone. The bullet now says "The gate SHALL retain that exact row in the reviewed declaration and compare it with the merge-base declaration, even after the V1 module is absent from the compiled build", and a removed claim relative to the merge-base declaration SHALL fail the gate. |
+| FND-002 | fixed | Round 1, head ad57b91c. The bullet now opens in state-driven form ("While the 2026-10-27 IR-348 V1 retirement hold is active, the gate SHALL ...") with SHALL reason and expiry, and names its expiry under IR-1047. The "may be marked" permission wording is gone. |

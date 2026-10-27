@@ -169,12 +169,15 @@ or execute the assertion in real Kani. The only emission-order and real-Kani per
 emitted symbolic arguments for corresponding order, naming and real-Kani decode evidence.
 The original AC-8 wording and verification method above remain unchanged.
 
-FR-016-AC-25 remains Planned/Open under IR-604. The tagged observing-launcher helper in
-`tests/it/kani_stdout_capture.rs` and its V1 consumer retire with the V1 path. The helper's
-stdout pass-through assertion alone did not compare a retained counterexample against the
-complete independent stdout fence, and its retirement supplies no AC-25 credit. IR-604 still
-owes an independent stdout oracle and post-classification substitution control for a surviving
-generated harness. The original AC-25 wording and verification method above remain unchanged.
+FR-016-AC-25 remains Planned/Open under IR-604. In `tests/it/kani_stdout_capture.rs`, the
+ignored `tc_026_installed_kani_falsification_is_bound_to_process_stdout` uses a V1 `BoundClause`
+harness. It compared the retained counterexample byte-for-byte with the first eligible assertion
+playback in independently captured stdout, excluding cover blocks, and rejected a valid
+post-classification substitute. That genuine V1 evidence retires with its producer and gives no
+credit to a surviving harness. The observing-launcher helper and the other three AC-25-tagged
+tests have no V1 dependency and survive. IR-604 still owes the same independent stdout binding
+and substitution control on a surviving generated harness. The original AC-25 wording and
+verification method above remain unchanged.
 
 ## Dependencies
 

@@ -90,3 +90,20 @@ scope:
 - {id: spec.md:kani-registry, path: spec/spec.md, role: examined, excerpt: "Live on the measured pre-deletion source base, but IR-348 retires the V1 bundle, clause arm, V1-only readers and public operation immediately at AD-004 step 4f"}
 - {id: TC-026, path: spec/replay/matrix/TC-026-witness-native-replay.md, role: context_only, excerpt: "FR-016-AC-1 through AC-5 and AC-13 are implemented and tested in the default suite through replay_counterexample"}
 ```
+
+## New findings (disposition pass 1)
+
+Re-checked at head ad57b91cb39b7ad610ad191af92c15537eecdf9a against the previous head d9ce52c9.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | medium | The new FR-016-AC-25 disposition misdescribes the evidence it retires. FR-016 Status says the file's "stdout pass-through assertion alone did not compare a retained counterexample against the complete independent stdout fence", and TC-026 says it "never independently compares" them. But the ignored `tc_026_installed_kani_falsification_is_bound_to_process_stdout` compares the retained counterexample byte-for-byte with the observed stdout assertion block (cover blocks excluded) and rejects a valid post-classification substitute. That is V1-producer AC-25-shaped evidence being lost, not pass-through only. Three of the four tagged tests and the `KaniStdoutCapture`/`assertion_playback` helper have no V1 dependency. Only the falsification test uses V1 `supported_contract_harnesses` (`ObligationItem::BoundClause`), and the helper is what IR-604 needs for a surviving harness. The no-credit outcome (Planned/Open) is correct. | spec/replay/functional/FR-016-witness-native-replay.md:171-177; spec/replay/matrix/TC-026-witness-native-replay.md:171-176; spec/replay/matrix/tests.md:17; tests/it/kani_stdout_capture.rs:51-66,145-284; tests/it/kani_obligations.rs:421-433 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | FR-016 Status, TC-026 and the replay matrix AC-8 row now name the surviving V2 `state_clause_kani_playback_adapter_refuses_wrong_evidence`, say what it checks (persisted draw order against playback, mismatched assertion evidence) and what it does not (emitted symbolic argument order, real-Kani decode). AC-8 stays Partially backed/Open, and the TC-026 summary row is lowered to Partial. |
+| FND-002 | still-open | FR-041 Status, TC-056 Status and its summary row, and the NFR-006 AC-19 note now say the hold is PLANNED and owned by IR-348's immediate V1 deletion code slice, in or before its deletion PR. But two `spec/kani/matrix/tests.md` rows still describe it as current state. Line 80 (FR-041): "with only the V1 claim row operator-held under IR-348". Line 91 (NFR-006 AC-19): "only the V1 claim row is operator-held, printed with reason/expiry and counted separately". `scripts/kani_claims.json`, the `Claim` struct and `cg_gates.rs` still have no hold. |
+| FND-003 | fixed | FR-041 hold bullet and Status, TC-056 step 6 and Expected Results, the TC-056 summary row and the NFR-006 AC-19 note now say that while the sole current claim is held, zero claimed modules, proofs or mutations are discharged, and that a passing claim test validates declaration/reporting only, with no FR-041 proof credit. |
+| FND-004 | fixed | `spec/spec.md` adds the registry row "V2 clause claim and proof census / FR-015-AC-38 to FR-015-AC-49 / PLANNED (IR-489, AD-004 steps 4c and 4d); the V1 deletion under IR-348 does not discharge these criteria." This matches `spec/kani/matrix/tests.md:38`. |
