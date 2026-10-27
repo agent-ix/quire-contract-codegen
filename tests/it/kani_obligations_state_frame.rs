@@ -559,7 +559,8 @@ fn v2_clause_census_is_order_independent_and_records_readiness() {
     ];
     let reversed = [passed[1], passed[0]];
     let ready = evaluate(&passed);
-    assert_eq!(ready, evaluate(&reversed));
+    let reordered = evaluate(&reversed);
+    assert_eq!(ready, reordered);
     assert_eq!(ready.identity.readiness, ProofReadiness::Ready);
     assert_eq!(
         ready.identity.proof_execution_state,
@@ -567,10 +568,33 @@ fn v2_clause_census_is_order_independent_and_records_readiness() {
     );
     assert_eq!(ready.identity.dependencies[0].proof_id, "proof_a");
     assert_eq!(ready.identity.dependencies[1].proof_id, "proof_b");
-    assert!(ready
-        .record
-        .contents
-        .contains("\"proofExecutionState\":\"not_run\""));
+    let persisted = |harness: &quire_contract_codegen::KaniV2ClauseObligationHarness| -> Value {
+        serde_json::from_str(&harness.record.contents).expect("persisted V2 identity record")
+    };
+    let expected_edge = |proof_id, state| {
+        json!({
+            "proofId": proof_id,
+            "kind": "required",
+            "state": state,
+            "sourceSite": null
+        })
+    };
+    let assert_census = |record: &Value, first_state: &str, readiness: &str| {
+        assert_eq!(
+            record["identity"]["dependencies"],
+            json!([
+                expected_edge("proof_a", first_state),
+                expected_edge("proof_b", "passed")
+            ])
+        );
+        assert_eq!(record["identity"]["readiness"], readiness);
+        assert_eq!(record["identity"]["proofExecutionState"], "not_run");
+    };
+    let ready_record = persisted(&ready);
+    let reordered_record = persisted(&reordered);
+    assert_census(&ready_record, "passed", "ready");
+    assert_census(&reordered_record, "passed", "ready");
+    assert_eq!(ready_record, reordered_record);
     for state in [ProofDependencyState::Missing, ProofDependencyState::Failed] {
         let incomplete = evaluate(&[dependency("proof_a", state), passed[0]]);
         assert_eq!(incomplete.identity.readiness, ProofReadiness::Incomplete);
@@ -579,6 +603,15 @@ fn v2_clause_census_is_order_independent_and_records_readiness() {
         assert_eq!(
             incomplete.identity.proof_execution_state,
             ProofExecutionState::NotRun
+        );
+        assert_census(
+            &persisted(&incomplete),
+            match state {
+                ProofDependencyState::Missing => "missing",
+                ProofDependencyState::Failed => "failed",
+                _ => unreachable!("the loop names only incomplete states"),
+            },
+            "incomplete",
         );
     }
 }
