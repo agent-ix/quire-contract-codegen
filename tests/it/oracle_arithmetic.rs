@@ -1223,7 +1223,7 @@ fn tc_044_native_division_zero_and_minimum_vectors() {
         );
         let assertion = match expected {
             "zero" => "assert_eq!(outcome, rt::Outcome::Undefined(rt::Undefined::DivisionByZero));",
-            "quotient" => "match outcome { rt::Outcome::Refused(reason @ rt::Refusal::DivisionOutOfDomain { member: rt::DivisionMember::Quotient, .. }) => { assert_eq!(reason.code(), Some(\"division_out_of_domain\")); assert_eq!(reason.cause(), Some(\"quotient-outside-domain\")); if let rt::Refusal::DivisionOutOfDomain { domain, .. } = &reason { assert_eq!(domain.lower(), &rt::Integer::from(-5)); assert_eq!(domain.upper(), &rt::Integer::from(5)); } }, other => panic!(\"{other:?}\") }",
+            "quotient" => "match outcome { rt::Outcome::Refused(reason @ rt::Refusal::DivisionOutOfDomain { member: rt::DivisionMember::Quotient, .. }) => { assert_eq!(reason.code(), Some(\"division_out_of_domain\")); assert_eq!(reason.cause(), Some(\"quotient-outside-domain\")); if let rt::Refusal::DivisionOutOfDomain { domain, .. } = &reason { assert_eq!(domain.lower(), &rt::Integer::from(-5_i64)); assert_eq!(domain.upper(), &rt::Integer::from(5_i64)); } }, other => panic!(\"{other:?}\") }",
             _ => "assert_eq!(outcome, rt::Outcome::Completed(true));",
         };
         writeln!(
@@ -1268,7 +1268,7 @@ fn tc_044_native_division_matches_independent_member_model() {
                     let member = i128::from(x) {operation} i128::from(y);
                     if !(-10..=10).contains(&member) {{
                         rt::Outcome::Refused(rt::Refusal::DivisionOutOfDomain {{
-                            domain: Box::new(rt::IntegerInterval::new(rt::Integer::from(-10), rt::Integer::from(10)).unwrap()),
+                            domain: Box::new(rt::IntegerInterval::new(rt::Integer::from(-10_i64), rt::Integer::from(10_i64)).unwrap()),
                             member: rt::DivisionMember::{},
                         }})
                     }} else {{ rt::Outcome::Completed(member <= -4) }}
@@ -1337,7 +1337,7 @@ fn tc_044_native_division_matches_independent_member_model() {
                 let quotient = 10_i128 / i128::from(y);
                 if (1..=10).contains(&quotient) {{ rt::Outcome::Completed(quotient <= 10) }}
                 else {{ rt::Outcome::Refused(rt::Refusal::DivisionOutOfDomain {{
-                    domain: Box::new(rt::IntegerInterval::new(rt::Integer::from(1), rt::Integer::from(10)).unwrap()),
+                    domain: Box::new(rt::IntegerInterval::new(rt::Integer::from(1_i64), rt::Integer::from(10_i64)).unwrap()),
                     member: rt::DivisionMember::Quotient,
                 }}) }}
             }};

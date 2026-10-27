@@ -72,6 +72,7 @@ struct RenderedExpression {
 struct Helpers {
     bound: bool,
     equality: bool,
+    boolean_retain: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -792,6 +793,9 @@ fn arithmetic_refusal(
 /// always present; the others are emitted only when the body calls them.
 fn native_helper_lines(helpers: Helpers) -> Vec<String> {
     let mut source = String::from(NATIVE_CARRY_HELPER);
+    if helpers.boolean_retain {
+        source.push_str(NATIVE_BOOLEAN_RETAIN_HELPER);
+    }
     if helpers.bound {
         source.push_str(NATIVE_BOUND_HELPER);
     }
@@ -811,7 +815,9 @@ fn carry<T, U>(outcome: rt::Outcome<T>) -> Result<T, rt::Outcome<U>> {
         rt::Outcome::Incomplete(record) => Err(rt::Outcome::Incomplete(record)),
     }
 }
+";
 
+const NATIVE_BOOLEAN_RETAIN_HELPER: &str = "
 /// Retains one completed connective result, or returns the exact denied charge.
 fn completed_boolean(value: bool, meter: &mut rt::Meter) -> rt::Outcome<bool> {
     match rt::retain_boolean(value, meter) {
@@ -1059,6 +1065,9 @@ impl<'a> Renderer<'a> {
             expression.kind(),
             ExpressionKind::BooleanNot { .. } | ExpressionKind::Boolean { .. }
         );
+        if connective {
+            self.helpers.boolean_retain = true;
+        }
         if !connective && !self.holds_arithmetic() {
             self.emit("rt::Outcome::Completed(")?;
             self.plain_node(expression)?;
