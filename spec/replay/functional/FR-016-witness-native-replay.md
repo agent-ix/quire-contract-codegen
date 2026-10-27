@@ -159,11 +159,22 @@ failure is reported.
 
 FR-016-AC-8 remains Open and partially backed after the 2026-10-27 IR-348 retirement ruling.
 The positional decoder and typed non-argument refusal tests in `src/replay/witness.rs` survive.
-The only emission-order and real-Kani persisted-schema controls in
+The V2 `state_clause_kani_playback_adapter_refuses_wrong_evidence` test in
+`tests/it/kani_obligations_state_clause_replay.rs` also survives: it checks a generated
+state-frame postcondition's persisted draw order against playback and refuses mismatched
+assertion evidence. It does not compare emitted symbolic argument order with persisted bindings
+or execute the assertion in real Kani. The only emission-order and real-Kani persisted-schema controls in
 `tests/it/kani_argument_order.rs` and `tests/it/kani_witness_join.rs` use the retiring V1
 `BoundClause` producer. A genuine V2 producer must supply persisted argument bindings and
 emitted symbolic arguments for corresponding order, naming and real-Kani decode evidence.
 The original AC-8 wording and verification method above remain unchanged.
+
+FR-016-AC-25 remains Planned/Open under IR-604. The tagged observing-launcher helper in
+`tests/it/kani_stdout_capture.rs` and its V1 consumer retire with the V1 path. The helper's
+stdout pass-through assertion alone did not compare a retained counterexample against the
+complete independent stdout fence, and its retirement supplies no AC-25 credit. IR-604 still
+owes an independent stdout oracle and post-classification substitution control for a surviving
+generated harness. The original AC-25 wording and verification method above remain unchanged.
 
 ## Dependencies
 

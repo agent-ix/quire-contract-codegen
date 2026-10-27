@@ -22,12 +22,14 @@ it does not create another repository gate.
 
 The current claim-control fixture uses `kani_generation::guard_sources()[0]`, a V1 bundle
 module named by `scripts/kani_claims.json`. Under the 2026-10-27 IR-348 retirement ruling,
-that source is historical. The operator holds only that named V1 module claim row, with reason
+that source is historical. The IR-348 immediate V1 deletion code slice must implement, in or
+before its deletion PR, an operator hold for only that named V1 module claim row, with reason
 "V1 deleted by owner ruling 2026-10-27; no genuine V2 named independent expectation/control
 exists yet" and expiry "until the V2 named independent expectation + real positive/falsifying
 control exists". Deleting the V1 module or dropping its claim supplies no proof evidence.
 Execute the positive procedure on a genuine generated V2 module after its claim is reviewed;
-IR-1047 owns that replacement, and none is identified yet. The held V1 row remains Open, and
+IR-1047 owns that replacement and hold expiry, and none is identified yet. The hold is PLANNED
+at this spec head. The held V1 row remains Open, and
 all non-held controls stay required.
 
 1. Check in a reviewed nonempty claim declaration for the generated modules the gate says it
@@ -59,10 +61,13 @@ all non-held controls stay required.
    and mutation controls in its one required real-Kani lane, keeps NFR-006's lock, freshness and
    test-count behavior, and exits non-zero if any step above fails (NFR-006-AC-19).
 6. While the IR-348 hold is active, inspect the one reviewed V1 claim row and its exact reason
-   and expiry. Require the lane to print the held module, reason and expiry and to report its
-   count separately from runnable claims. Assert that a hold on another row, a missing reason or
-   expiry, a removed declaration row, and any failed, missing or skipped non-held control make
-   the gate fail. The held row supplies no FR-041 proof credit.
+   and expiry. Require the claim test to validate the retained declaration and held output
+   without treating its success as proof credit. Require separate `kani-gate:` lines for the held
+   identity, reason, expiry and count, leaving the existing run-result line unchanged. Assert
+   that a hold on another row, a missing reason or expiry, a removed declaration row, and any
+   failed, missing or skipped non-held control make the gate fail. With the only current claim
+   held, assert zero claimed modules, proofs and mutations discharged. The gate may exit zero
+   only when hold validation, all non-held controls and other lane checks pass.
 
 ## Expected Results
 
@@ -71,12 +76,16 @@ SUCCESS proposition, the fresh build-derived helper set agrees with its checked-
 every claimed module and shared helper has a compiling, executed mutation with a real failed
 check. A compiled module with no SUCCESS proposition is named `unreached`. No build-only result,
 stub, process refusal or stored old verdict counts as a current proof or mutation result. The
-operator-held V1 row is listed and counted separately with its reason and expiry and remains
-unproved until IR-1047 supplies the V2 replacement.
+operator-held V1 row is listed and counted separately on `kani-gate:` lines with its reason and
+expiry and remains unproved until IR-1047 supplies the V2 replacement. The ordinary
+absent-module and positive/mutation failures apply to every non-held row; only the valid V1 hold
+excepts the absent V1 module and its suspended controls. With the only current claim held,
+zero proofs and mutations are discharged, regardless of a passing claim test.
 
 ## Status
 
-Open for IR-19 implementation. The current V1 module declaration and
-`guard_sources()[0]` fixture are operator-held under IR-348 pending the named V2 independent
+Open for IR-19 implementation. The hold itself is PLANNED for IR-348's immediate V1 deletion
+code slice in or before its deletion PR. The current V1 module declaration and
+`guard_sources()[0]` fixture are to be operator-held under IR-348 pending the named V2 independent
 expectation and real positive/falsifying control; no genuine generated V2 replacement is
 identified. No real-Kani result is asserted by this specification artifact.

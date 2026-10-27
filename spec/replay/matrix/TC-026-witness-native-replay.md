@@ -157,12 +157,22 @@ tests the terminal mapping for a fault wrapped in `SpineReplayError::Refused`.
 
 FR-016-AC-8 remains a generic persisted argument order and positional naming requirement.
 The `src/replay/witness.rs` unit tests continue to check schema order, positional naming and
-non-argument refusal. The `tests/it/kani_argument_order.rs` emission-order test and the ignored
+non-argument refusal. The surviving V2
+`state_clause_kani_playback_adapter_refuses_wrong_evidence` test checks a generated state-frame
+postcondition's persisted draw order against playback and refuses mismatched assertion evidence;
+it does not prove emitted symbolic argument order or a real-Kani decode. The
+`tests/it/kani_argument_order.rs` emission-order test and the ignored
 real-backend `tests/it/kani_witness_join.rs` test construct V1 `BoundClause` harnesses; their
 evidence retires with that path under the 2026-10-27 IR-348 no-legacy ruling. AC-8 is therefore
 partially backed and Open until a genuine V2 producer persists argument bindings and a matching
 emitted harness is checked for emission order and real-Kani decode. The surviving decoder unit
-tests alone do not prove that producer-to-persisted-schema coupling.
+tests and V2 playback adapter alone do not prove that producer-to-persisted-schema coupling.
+
+FR-016-AC-25 stays Planned/Open under IR-604. The tagged observing-launcher test in
+`tests/it/kani_stdout_capture.rs` is support for the V1 Kani run and retires with its V1 consumer.
+It checks stdout pass-through but never independently compares the retained counterexample with
+the complete stdout playback fence. A surviving generated harness still needs that independent
+stdout oracle and the post-classification substitution control; no AC-25 credit is claimed.
 
 FR-016-AC-1 through AC-5 and AC-13 are implemented and tested in the default suite
 through `replay_counterexample`: a transcript that decodes to nothing, has the wrong

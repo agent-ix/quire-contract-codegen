@@ -42,8 +42,10 @@ relationships:
   non-zero if any claimed module or shared helper fails that requirement. The controls shall not
   be satisfied by a second optional target or by a stored verdict from an earlier run.
 - For the one IR-348 operator-held V1 module claim row in `scripts/kani_claims.json`, the one
-  required lane shall print that row's identity, reason and expiry and count it as `held`
-  separately from `ran` and `expected`. It shall never report that row as proved or its controls
+  required lane shall print separate `kani-gate:` lines naming that row's identity, reason,
+  expiry and held count; the existing `kani-gate: result=... ran=... expected=... elapsed=...
+  kani=... tree=...` line shall retain its exact fields and order. The held count is separate
+  from `ran` and `expected`. The lane shall never report that row as proved or its controls
   as passed. The lane shall run every non-held selected control and exit non-zero if any such
   control fails, is missing or is skipped. A hold on another claim, a missing reason or expiry,
   or omission of the held row from the reviewed declaration shall fail the gate. This hold is
@@ -211,7 +213,10 @@ real positive/falsifying control exists". The lane must continue to run
 FR-041's claim census and real mutation controls. The current V1 claim source selected by
 `kani_generation::guard_sources()[0]` and named in `scripts/kani_claims.json` needs a genuine
 generated V2 replacement under IR-1047; deleting the source, dropping the claim or removing this gate cannot
-satisfy AC-19. No V2 replacement or current-run proof is identified here.
+satisfy AC-19. While this is the only claimed module and is held, zero module proofs and
+mutations are discharged. The IR-348 immediate V1 deletion code slice must implement the
+hold in or before its deletion PR; at this spec head it remains PLANNED. No V2 replacement or
+current-run proof is identified here.
 
 ## Open decisions
 
