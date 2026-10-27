@@ -58,6 +58,12 @@ case "$1" in
     else
       printf '%s' "${FAKE_BRANCH_PATHS:-}"
     fi ;;
+  ls-tree)
+    [[ " $* " == " ls-tree --name-only base -- scripts/kani_claims.json " ]] || exit 3
+    printf 'scripts/kani_claims.json\n' ;;
+  show)
+    [[ "${2-}" == 'base:scripts/kani_claims.json' ]] || exit 3
+    printf '{"modules":[{"name":"kani_fr_003_4_proof_boolean_transition_module"}]}\n' ;;
   rev-parse)
     if [[ "${FAKE_MOVE_HEAD:-no}" == yes ]]; then
       count=$(cat "$FAKE_HEAD_COUNT" 2>/dev/null || printf 0)
@@ -734,8 +740,6 @@ fn ignored_lane_selection_and_transitive_include_targets_match_scope() {
         "tests/checked_package_support/base.rs",
         "tests/checked_package_support/rekey.rs",
         "tests/state_frame_support/subject.rs",
-        "schemas/kani-proof-graph-v2.schema.json",
-        "schemas/generated-rust-kani-v2.schema.json",
         "schemas/kani-corpus-proof-graph-v1.schema.json",
     ] {
         assert!(
