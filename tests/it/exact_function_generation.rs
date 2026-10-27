@@ -1864,13 +1864,64 @@ fn tc_031_ac11_model_and_state_are_distinct_blockers() {
     );
 }
 
+fn assert_healthy_ac12_siblings(
+    package: &CheckedPackageV2,
+    baseline: &quire_contract_codegen::ExactFunctionOracles,
+    oracles: &quire_contract_codegen::ExactFunctionOracles,
+) {
+    let mut surviving = ["add", "eq"]
+        .into_iter()
+        .map(|name| {
+            (
+                super::exact_function_agreement::body_id(package, name),
+                name,
+            )
+        })
+        .collect::<Vec<_>>();
+    surviving.sort_by(|left, right| left.0.cmp(&right.0));
+    for name in ["add", "eq"] {
+        let original = baseline
+            .claim_map
+            .items
+            .iter()
+            .find(|claim| {
+                matches!(
+                    &claim.result,
+                    ClaimDisposition::Generated(generated) if generated.function == name
+                )
+            })
+            .expect("healthy baseline");
+        let mut expected = original.clone();
+        let ClaimDisposition::Generated(generated) = &mut expected.result else {
+            unreachable!("the selected baseline claim is generated")
+        };
+        // AC-3 renumbers the exact body-root index when `nested` no longer survives.
+        let quire_contract_codegen::RecordedOrigin::Body { index, .. } =
+            &mut generated.function_origin;
+        *index = surviving
+            .iter()
+            .position(|(_, candidate)| *candidate == name)
+            .expect("healthy body root survives");
+        let actual = oracles
+            .claim_map
+            .items
+            .iter()
+            .find(|claim| claim.node_id == original.node_id);
+        assert_eq!(
+            actual,
+            Some(&expected),
+            "{name} changes with bad nested body"
+        );
+    }
+}
+
 /// A declared function whose own body fails to
 /// lower -- here, a nested `call` naming an absent callee -- refuses every
 /// item bound to that function, without changing `unrelated_fn`'s item.
 #[trace("FR-021-AC-12", "TC-031")]
 #[test]
 fn tc_031_ac12_dangling_callee_refuses_only_its_own_items() {
-    let (_, baseline) = super::exact_function_agreement::genuine_corpus();
+    let (package, baseline) = super::exact_function_agreement::genuine_corpus();
     let (_, oracles) = super::exact_function_agreement::genuine_corpus_with_bad_nested(
         quire_contract_codegen::ExactFunctionBody::Call {
             callee: "not_declared_anywhere".to_owned(),
@@ -1893,15 +1944,7 @@ fn tc_031_ac12_dangling_callee_refuses_only_its_own_items() {
             refusal: ExactFunctionRefusal::UnknownCallee { callee }
         } if callee == "not_declared_anywhere"
     ));
-    for name in ["add", "eq"] {
-        let original = baseline.claim_map.items.iter().find(|claim| matches!(
-            &claim.result, ClaimDisposition::Generated(generated) if generated.function == name
-        )).expect("healthy baseline");
-        assert!(
-            oracles.claim_map.items.contains(original),
-            "{name} changes with bad nested body"
-        );
-    }
+    assert_healthy_ac12_siblings(&package, &baseline, &oracles);
 }
 
 /// FR-021-AC-12 (second case). A function whose own body
@@ -1911,7 +1954,7 @@ fn tc_031_ac12_dangling_callee_refuses_only_its_own_items() {
 #[trace("FR-021-AC-12", "TC-031")]
 #[test]
 fn tc_031_ac12_form_mismatch_refuses_only_its_own_item() {
-    let (_, baseline) = super::exact_function_agreement::genuine_corpus();
+    let (package, baseline) = super::exact_function_agreement::genuine_corpus();
     let (_, oracles) = super::exact_function_agreement::genuine_corpus_with_bad_nested(
         quire_contract_codegen::ExactFunctionBody::Scalar {
             operator: quire_contract_codegen::oracle::operator_catalog::IntegerOperator::Add,
@@ -1940,15 +1983,7 @@ fn tc_031_ac12_form_mismatch_refuses_only_its_own_item() {
             refusal: ExactFunctionRefusal::FormMismatch { .. }
         }
     ));
-    for name in ["add", "eq"] {
-        let original = baseline.claim_map.items.iter().find(|claim| matches!(
-            &claim.result, ClaimDisposition::Generated(generated) if generated.function == name
-        )).expect("healthy baseline");
-        assert!(
-            oracles.claim_map.items.contains(original),
-            "{name} changes with bad nested body"
-        );
-    }
+    assert_healthy_ac12_siblings(&package, &baseline, &oracles);
 }
 
 /// A directly requested case call-node settles to Unsupported, retains its request identity, and does not alter a healthy function sibling.
