@@ -1725,9 +1725,9 @@ fn tc_031_scalar_body_operator_must_match_checked_operation_identity() {
 
 /// The claim-map entry for a generated item
 /// records the applied function's name and its `Origin::Body{function,
-/// index}` equal to the request's scheduled-function ordering (survivors
-/// sorted by declaring node id, digest domain then digest) -- read from the
-/// generator's own bookkeeping, not from the generated source text.
+/// index}` in canonical order of surviving exact declarations' body-root
+/// keys. The claim also records the actual V2 function node independently
+/// of the generated source text.
 #[trace("FR-021-AC-3", "TC-031")]
 #[test]
 fn tc_031_ac3_claim_records_function_and_origin_from_the_request() {
@@ -1746,6 +1746,15 @@ fn tc_031_ac3_claim_records_function_and_origin_from_the_request() {
         let ClaimDisposition::Generated(generated) = &claim.result else {
             panic!("genuine source claim refused: {claim:?}");
         };
+        assert_eq!(
+            generated.function_node_id,
+            super::exact_function_agreement::function_id(&package, &generated.function),
+            "claim records the admitted V2 function declaration, not its body root"
+        );
+        assert_ne!(
+            generated.function_node_id,
+            super::exact_function_agreement::body_id(&package, &generated.function)
+        );
         let expected_index = ordered
             .iter()
             .position(|(_, name)| *name == generated.function)

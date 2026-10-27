@@ -125,6 +125,7 @@ fn generated_library_body_matches_importer_facade_application() {
         source,
         &unit,
         &library,
+        &library,
         arguments.clone(),
         ObjectClosure::default(),
         &mut generated_meter,

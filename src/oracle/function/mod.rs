@@ -1482,6 +1482,8 @@ pub struct GeneratedExactFunctionClaim {
     pub contract_package_identity: CheckedSemanticId,
     /// Exact requested node key.
     pub node_id: CheckedNodeId,
+    /// Actual declaring V2 function node, distinct from the body-root key.
+    pub function_node_id: CheckedNodeId,
     /// Package id.
     pub package_id: CheckedSemanticId,
     /// Semantic type key of the `call` expression node.
@@ -1496,8 +1498,8 @@ pub struct GeneratedExactFunctionClaim {
     pub dependencies: Vec<CheckedNodeId>,
     /// The applied function's name.
     pub function: String,
-    /// The applied function's `Origin::Body { function, index }`, equal to
-    /// the request's scheduled-function ordering after typed refusals (AC-3).
+    /// The applied function's `Origin::Body { function, index }`, indexed in
+    /// canonical body-root node order among surviving declarations (AC-3).
     pub function_origin: RecordedOrigin,
     /// Reconstructed declaration closure keys. Always empty in this V1: no
     /// requested item's supported operand types reach a composite
@@ -1675,6 +1677,72 @@ fn source_call_matches<'a>(
                 .is_some_and(|expected_id| actual_id == expected_id)
         })
     }) && expected.next().is_none()
+}
+
+/// Resolve the source function's parameter nodes in declared order. The
+/// generated body takes positional arguments, so every body reference must
+/// use this exact sequence before it can be rendered.
+fn source_parameter_ids<'a>(
+    graph: &impl NodeLookup<'a>,
+    function_node_id: &CheckedNodeId,
+) -> Option<Vec<CheckedNodeId>> {
+    let parameters = graph
+        .get_term(function_node_id)
+        .and_then(|term| binding_value(term, "parameters"))
+        .and_then(aggregate_members)?;
+    parameters
+        .iter()
+        .map(|term| reference_in_graph(term, graph).cloned())
+        .collect()
+}
+
+fn source_argument_refs_match<'a>(
+    graph: &impl NodeLookup<'a>,
+    function_node_id: &CheckedNodeId,
+    arguments: &[CheckedTerm],
+) -> bool {
+    let Some(parameters) = source_parameter_ids(graph, function_node_id) else {
+        return false;
+    };
+    arguments.len() == parameters.len()
+        && arguments
+            .iter()
+            .zip(&parameters)
+            .all(|(argument, parameter)| reference_in_graph(argument, graph) == Some(parameter))
+}
+
+fn source_nested_body_matches<Body: GraphBody>(
+    index: &FunctionSourceIndex<'_, Body>,
+    caller_name: &str,
+    caller_body: &CheckedNodeId,
+    callee_name: &str,
+    callee_body: &CheckedNodeId,
+) -> bool {
+    let Some(caller) = index.source_function_node_id(caller_name, caller_body) else {
+        return false;
+    };
+    let Some(callee) = index.source_function_node_id(callee_name, callee_body) else {
+        return false;
+    };
+    let Some(body) = index.graph.term(caller_body) else {
+        return false;
+    };
+    let CheckedTerm::Application {
+        operator: ApplicationOperator::Call,
+        arguments,
+        ..
+    } = body
+    else {
+        return false;
+    };
+    application_identity(body) == Some("quire.op.function.call")
+        && arguments
+            .first()
+            .and_then(|term| reference_in_graph(term, &index.graph))
+            == Some(callee)
+        && arguments
+            .get(1..)
+            .is_some_and(|arguments| source_argument_refs_match(&index.graph, caller, arguments))
 }
 
 struct FunctionSourceIndex<'a, Body: GraphBody = serde_json::Value> {
@@ -2548,6 +2616,7 @@ fn classify_body_shape<'r, Body>(
     node: &CheckedSemanticNodeV2<Body>,
     body: Option<&CheckedTerm>,
     declaration: &'r ExactFunctionDeclaration,
+    parameter_kinds: &[OperandKind],
 ) -> Result<ClassifiedBody<'r>, ExactFunctionRefusal> {
     match &declaration.body {
         ExactFunctionBody::Scalar { operator } => {
@@ -2587,6 +2656,24 @@ fn classify_body_shape<'r, Body>(
                 .and_then(application_arguments)
                 .filter(|arguments| arguments.len() == 2)
                 .ok_or(ExactFunctionRefusal::BodyMismatch)?;
+            let expected_identity = match (parameter_kinds, operator) {
+                ([OperandKind::Integer, OperandKind::Integer], EqualityOperatorKind::Equal) => {
+                    "quire.op.integer.eq"
+                }
+                ([OperandKind::Integer, OperandKind::Integer], EqualityOperatorKind::NotEqual) => {
+                    "quire.op.integer.ne"
+                }
+                ([OperandKind::Boolean, OperandKind::Boolean], EqualityOperatorKind::Equal) => {
+                    "quire.op.boolean.eq"
+                }
+                ([OperandKind::Boolean, OperandKind::Boolean], EqualityOperatorKind::NotEqual) => {
+                    "quire.op.boolean.ne"
+                }
+                _ => return Err(ExactFunctionRefusal::BodyMismatch),
+            };
+            if body.and_then(application_identity) != Some(expected_identity) {
+                return Err(ExactFunctionRefusal::BodyMismatch);
+            }
             let _ = arguments;
             Ok(ClassifiedBody::Equality(*operator))
         }
@@ -2752,22 +2839,35 @@ pub fn generate_exact_function_oracles(
                 });
             }
             let (closure, _) = admitted_binary_body(admitted, graph)?;
-            let body =
-                classify_body_shape(closure.root, graph.term(&closure.root.node_id), declaration)?;
             let mut parameter_kinds = Vec::with_capacity(declaration.parameters.len());
             for parameter in &declaration.parameters {
                 parameter_kinds.push(resolve_operand_type(graph, &parameter.type_node_id)?);
             }
             let result_kind = resolve_operand_type(graph, &declaration.result_type)?;
             validate_signature(declaration, &parameter_kinds, result_kind)?;
+            let body = classify_body_shape(
+                closure.root,
+                graph.term(&closure.root.node_id),
+                declaration,
+                &parameter_kinds,
+            )?;
             // A classified expression root is not authority to register a
             // function. Retain only bodies bound by one admitted source
             // function declaration; otherwise no concrete claim or location
             // entry may be emitted for it.
             if !matches!(declaration.body, ExactFunctionBody::Call { .. }) {
-                source_index
+                let function_node_id = source_index
                     .source_function_node_id(&declaration.name, &declaration.node_id)
                     .ok_or(ExactFunctionRefusal::BodyMismatch)?;
+                if !graph
+                    .term(&closure.root.node_id)
+                    .and_then(application_arguments)
+                    .is_some_and(|arguments| {
+                        source_argument_refs_match(graph, function_node_id, arguments)
+                    })
+                {
+                    return Err(ExactFunctionRefusal::BodyMismatch);
+                }
             }
             Ok(Stage1Shape {
                 body,
@@ -2792,10 +2892,15 @@ pub fn generate_exact_function_oracles(
                     })),
                     Some(callee_node_id) => match resolved.get(callee_node_id) {
                         Some(Ok(())) => Some(
-                            source_index
-                                .source_function_node_id(&declaration.name, &declaration.node_id)
-                                .map(|_| ())
-                                .ok_or(ExactFunctionRefusal::BodyMismatch),
+                            source_nested_body_matches(
+                                &source_index,
+                                &declaration.name,
+                                &declaration.node_id,
+                                callee,
+                                callee_node_id,
+                            )
+                            .then_some(())
+                            .ok_or(ExactFunctionRefusal::BodyMismatch),
                         ),
                         Some(Err(_)) => Some(Err(ExactFunctionRefusal::UnknownCallee {
                             callee: callee.clone(),
@@ -3258,6 +3363,7 @@ fn item_disposition<'a>(
             oracle_symbol: String::new(),
             contract_package_identity: package.identity().clone(),
             node_id: item.call_node_id.clone(),
+            function_node_id: source_function_id.clone(),
             package_id: package.wire().package.source.package_id.clone(),
             semantic_type: node.semantic_type.clone(),
             source_map: occurrences.to_vec(),
@@ -3776,6 +3882,7 @@ mod tests {
             oracle_symbol: "oracle_f".to_owned(),
             contract_package_identity: identity.clone(),
             node_id: node_id.clone(),
+            function_node_id: node_id.clone(),
             package_id: identity.clone(),
             semantic_type: node_id.clone(),
             source_map: Vec::new(),
@@ -3795,6 +3902,7 @@ mod tests {
             serde_json::json!(identity)
         );
         assert_eq!(value["node_id"], serde_json::json!(node_id));
+        assert_eq!(value["function_node_id"], serde_json::json!(node_id));
         assert!(value.get("ir_id").is_none());
         for key in ["claims", "bounds", "dependencies"] {
             assert_eq!(value[key], serde_json::json!([]), "{key}");

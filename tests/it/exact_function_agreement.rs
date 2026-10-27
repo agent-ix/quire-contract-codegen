@@ -3,7 +3,7 @@
 use ix_trace_rs::trace;
 use qsl_replay::{
     acquire_checked_closure, ApplicationEnvironment, DependencyInput, ReplayLimits, SourceIdentity,
-    StageLimits,
+    StageLimits, SuppliedLibrary,
 };
 use quire_contract_codegen::oracle::operator_catalog::IntegerOperator;
 use quire_contract_codegen::{checked_function_wire_id, checked_package_digest};
@@ -41,12 +41,17 @@ const SOURCE: &str = concat!(
     "function probe_unrelated using v(x: Int[0, 9], y: Int[0, 9]): Integer pure { unrelated(x, y) }\n",
     "function add_fn using v(x: Int[0, 9], y: Int[0, 9]): Integer pure { x + y }\n",
     "function probe_add_fn using v(x: Int[0, 9], y: Int[0, 9]): Integer pure { add_fn(x, y) }\n",
+    "function repeated using v(x: Int[0, 9], y: Int[0, 9]): Integer pure { x + x }\n",
+    "function probe_repeated using v(x: Int[0, 9], y: Int[0, 9]): Integer pure { repeated(x, y) }\n",
+    "function swapped using v(x: Int[0, 9], y: Int[0, 9]): Integer pure { add(y, x) }\n",
+    "function probe_swapped using v(x: Int[0, 9], y: Int[0, 9]): Integer pure { swapped(x, y) }\n",
 );
 
 const LIBRARY_SOURCE: &str = concat!(
     "language \"ix:native\" edition \"1-draft\";\n",
     "profile v = \"quire.value.complete/v1\";\n",
-    "function imported using v(x: Int[0, 9], y: Int[0, 9]): Integer pure { x + y }\n",
+    "function imported_base using v(x: Int[0, 9], y: Int[0, 9]): Integer pure { x + y }\n",
+    "function imported using v(x: Int[0, 9], y: Int[0, 9]): Integer pure { imported_base(x, y) }\n",
     "function probe_imported using v(x: Int[0, 9], y: Int[0, 9]): Integer pure { imported(x, y) }\n",
 );
 
@@ -59,6 +64,10 @@ const IMPORTER_SOURCE: &str = concat!(
 
 fn library_identity() -> SourceIdentity {
     SourceIdentity::new("agent-ix", "function-library", "git", "1")
+}
+
+fn importer_identity() -> SourceIdentity {
+    SourceIdentity::new("agent-ix", "function-importer", "git", "1")
 }
 
 fn source_identity() -> SourceIdentity {
@@ -93,7 +102,7 @@ fn admitted_source() -> CheckedPackageV2 {
     admitted_source_text(SOURCE)
 }
 
-fn function_id(package: &CheckedPackageV2, name: &str) -> CheckedNodeId {
+pub(super) fn function_id(package: &CheckedPackageV2, name: &str) -> CheckedNodeId {
     package
         .graph()
         .nodes
@@ -643,7 +652,10 @@ pub(super) fn genuine_temporal_and_healthy(
     )
 }
 
-fn imported_corpus() -> quire_contract_codegen::ExactFunctionOracles {
+fn imported_corpus() -> (
+    CheckedPackageV2,
+    quire_contract_codegen::ExactFunctionOracles,
+) {
     let compiled = acquire_checked_closure(
         library_identity(),
         "function-library.native",
@@ -665,9 +677,9 @@ fn imported_corpus() -> quire_contract_codegen::ExactFunctionOracles {
         panic!("IR admits the exact QSL library bytes: {read:?}");
     };
     let library = *library;
-    let declaration = ExactFunctionDeclaration {
-        node_id: body_id(&library, "imported"),
-        name: "imported".to_owned(),
+    let imported_base = ExactFunctionDeclaration {
+        node_id: body_id(&library, "imported_base"),
+        name: "imported_base".to_owned(),
         parameters: ["x", "y"]
             .into_iter()
             .map(|name| FunctionParameter {
@@ -681,21 +693,177 @@ fn imported_corpus() -> quire_contract_codegen::ExactFunctionOracles {
         },
         capability_requirements: Vec::new(),
     };
+    let declaration = ExactFunctionDeclaration {
+        node_id: body_id(&library, "imported"),
+        name: "imported".to_owned(),
+        parameters: ["x", "y"]
+            .into_iter()
+            .map(|name| FunctionParameter {
+                name: name.to_owned(),
+                type_node_id: type_id(&library, "integer"),
+            })
+            .collect(),
+        result_type: type_id(&library, "integer"),
+        body: ExactFunctionBody::Call {
+            callee: "imported_base".to_owned(),
+        },
+        capability_requirements: Vec::new(),
+    };
     let item = item(&library, "probe_imported", "imported");
-    let mut roots = vec![declaration.node_id.clone(), item.call_node_id.clone()];
+    let mut roots = vec![
+        imported_base.node_id.clone(),
+        declaration.node_id.clone(),
+        item.call_node_id.clone(),
+    ];
     roots.sort();
     let positions = package::driver_positions(&roots);
     let position = |id: &CheckedNodeId| roots.iter().position(|root| root == id).unwrap();
     let contract = package::admitted_function_contract(&library, &roots);
-    generate_exact_function_oracles(
+    let generated = generate_exact_function_oracles(
         &contract,
         &positions,
-        &[position(&declaration.node_id)],
-        &[declaration],
+        &[
+            position(&imported_base.node_id),
+            position(&declaration.node_id),
+        ],
+        &[imported_base, declaration],
         &[position(&item.call_node_id)],
         &[item],
     )
-    .expect("one imported library body and its QSL-authored call")
+    .expect("one imported library body and its QSL-authored call");
+    (library, generated)
+}
+
+fn declared_source_body(
+    package: &CheckedPackageV2,
+    name: &str,
+    result_type: CheckedNodeId,
+    body: ExactFunctionBody,
+) -> ExactFunctionDeclaration {
+    let integer = type_id(package, "integer");
+    ExactFunctionDeclaration {
+        node_id: body_id(package, name),
+        name: name.to_owned(),
+        parameters: ["x", "y"]
+            .into_iter()
+            .map(|name| FunctionParameter {
+                name: name.to_owned(),
+                type_node_id: integer.clone(),
+            })
+            .collect(),
+        result_type,
+        body,
+        capability_requirements: Vec::new(),
+    }
+}
+
+fn generated_for_source_body(
+    package: &CheckedPackageV2,
+    functions: &[ExactFunctionDeclaration],
+    probe: &str,
+    function: &str,
+) -> quire_contract_codegen::ExactFunctionOracles {
+    let item = item(package, probe, function);
+    let mut roots = functions
+        .iter()
+        .map(|declaration| declaration.node_id.clone())
+        .chain(std::iter::once(item.call_node_id.clone()))
+        .collect::<Vec<_>>();
+    roots.sort();
+    let positions = package::driver_positions(&roots);
+    let position = |id: &CheckedNodeId| roots.iter().position(|root| root == id).unwrap();
+    let contract = package::admitted_function_contract(package, &roots);
+    generate_exact_function_oracles(
+        &contract,
+        &positions,
+        &functions
+            .iter()
+            .map(|declaration| position(&declaration.node_id))
+            .collect::<Vec<_>>(),
+        functions,
+        &[position(&item.call_node_id)],
+        &[item],
+    )
+    .expect("genuine source request generates a typed disposition")
+}
+
+/// Trace: FR-021-AC-2, TC-031. Positional rendering cannot turn x+x into x+y.
+#[trace("FR-021-AC-2", "TC-031")]
+#[test]
+fn tc_031_repeated_source_operand_refuses_positional_add_body() {
+    let package = admitted_source();
+    let requested = declared_source_body(
+        &package,
+        "repeated",
+        type_id(&package, "integer"),
+        ExactFunctionBody::Scalar {
+            operator: IntegerOperator::Add,
+        },
+    );
+    let generated = generated_for_source_body(&package, &[requested], "probe_repeated", "repeated");
+    assert!(matches!(
+        &generated.claim_map.items[0].result,
+        ClaimDisposition::Refused {
+            refusal: quire_contract_codegen::ExactFunctionRefusal::BodyMismatch
+        }
+    ));
+    assert!(generated.location_map.is_empty());
+}
+
+/// Trace: FR-021-AC-2, TC-031. A checked add(y,x) cannot render add(x,y).
+#[trace("FR-021-AC-2", "TC-031")]
+#[test]
+fn tc_031_reordered_source_call_refuses_positional_nested_body() {
+    let package = admitted_source();
+    let integer = type_id(&package, "integer");
+    let add = declared_source_body(
+        &package,
+        "add",
+        integer.clone(),
+        ExactFunctionBody::Scalar {
+            operator: IntegerOperator::Add,
+        },
+    );
+    let swapped = declared_source_body(
+        &package,
+        "swapped",
+        integer,
+        ExactFunctionBody::Call {
+            callee: "add".to_owned(),
+        },
+    );
+    let generated =
+        generated_for_source_body(&package, &[add, swapped], "probe_swapped", "swapped");
+    assert!(matches!(
+        &generated.claim_map.items[0].result,
+        ClaimDisposition::Refused {
+            refusal: quire_contract_codegen::ExactFunctionRefusal::BodyMismatch
+        }
+    ));
+    assert_eq!(generated.location_map.len(), 1, "only add may render");
+}
+
+/// Trace: FR-021-AC-2, TC-031. A source `=` does not authorize a `!=` body.
+#[trace("FR-021-AC-2", "TC-031")]
+#[test]
+fn tc_031_source_equal_refuses_requested_not_equal_body() {
+    let package = admitted_source();
+    let requested = declared_source_body(
+        &package,
+        "eq",
+        type_id(&package, "boolean"),
+        ExactFunctionBody::CompositeEquality {
+            operator: EqualityOperatorKind::NotEqual,
+        },
+    );
+    let generated = generated_for_source_body(&package, &[requested], "probe_eq", "eq");
+    assert!(matches!(
+        &generated.claim_map.items[0].result,
+        ClaimDisposition::Refused {
+            refusal: quire_contract_codegen::ExactFunctionRefusal::BodyMismatch
+        }
+    ));
+    assert!(generated.location_map.is_empty());
 }
 
 fn genuine_corpus_request(
@@ -967,6 +1135,81 @@ fn tc_031_nested_static_origin_matches_the_qsl_checked_call_site() {
     assert_eq!(static_index, qsl_index);
 }
 
+/// Trace: FR-021-AC-17, TC-031. The imported owner's static root-call origin
+/// is compared with the QSL-issued site from that same locked library.
+#[trace("FR-021-AC-17", "TC-031")]
+#[test]
+fn tc_031_imported_static_origin_matches_the_qsl_checked_call_site() {
+    let (library, generated) = imported_corpus();
+    let imported_claim = generated
+        .claim_map
+        .items
+        .iter()
+        .find_map(|claim| match &claim.result {
+            ClaimDisposition::Generated(item) if item.function == "imported" => Some(item),
+            _ => None,
+        })
+        .expect("imported exact claim");
+    assert_eq!(
+        imported_claim.function_node_id,
+        function_id(&library, "imported")
+    );
+    let static_origin = &generated
+        .location_map
+        .iter()
+        .find(|entry| entry.function == "imported")
+        .expect("imported location record")
+        .location
+        .origin;
+    let dependencies = DependencyInput::new([SuppliedLibrary {
+        identity: "test/function-library".to_owned(),
+        source: library_identity(),
+        path: "function-library.native".to_owned(),
+        bytes: LIBRARY_SOURCE.as_bytes().to_vec(),
+    }])
+    .expect("one genuine QSL library dependency");
+    let acquired = acquire_checked_closure(
+        importer_identity(),
+        "function-importer.native",
+        IMPORTER_SOURCE.as_bytes(),
+        [],
+        &dependencies,
+        StageLimits::default(),
+        ReplayLimits::default(),
+    )
+    .expect("QSL acquires importer and locked library");
+    let handle = acquired.handle();
+    let owner = checked_package_digest(library.package_id()).expect("library owner");
+    let wire = checked_function_wire_id(&function_id(&library, "imported"))
+        .expect("imported function wire id");
+    let selection = handle
+        .lookup_callable(owner, wire)
+        .expect("QSL selects imported caller");
+    let site = quire_contract_codegen::selected_nested_call_site(
+        &library,
+        &body_id(&library, "imported"),
+        handle,
+        &selection,
+    )
+    .expect("QSL issues the imported owner's call site");
+    assert_eq!(site.owner_package_id(), owner);
+    let (
+        quire_contract_codegen::RecordedOrigin::Body {
+            function: static_name,
+            index: static_index,
+        },
+        quire_semantic_value::location::Origin::Body {
+            function: qsl_name,
+            index: qsl_index,
+        },
+    ) = (static_origin, &site.location().origin)
+    else {
+        panic!("different imported call origin kinds");
+    };
+    assert_eq!(static_name, qsl_name);
+    assert_eq!(static_index, qsl_index);
+}
+
 /// Trace: FR-021-AC-2, FR-021-AC-32, FR-021-AC-35, TC-031.
 #[trace("FR-021-AC-2", "FR-021-AC-32", "FR-021-AC-35", "TC-031")]
 #[test]
@@ -1020,7 +1263,7 @@ fn tc_031_generated_function_crate_matches_independent_fr485_session() {
 #[test]
 fn tc_031_generated_imported_owner_matches_independent_fr485_session() {
     const IMPORTED_CRATE: &str = "quire-exact-function-imported-oracles";
-    let generated = imported_corpus();
+    let (_library, generated) = imported_corpus();
     let [claim] = generated.claim_map.items.as_slice() else {
         panic!("one imported claim");
     };
