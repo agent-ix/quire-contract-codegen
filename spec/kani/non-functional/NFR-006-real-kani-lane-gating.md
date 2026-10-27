@@ -41,6 +41,14 @@ relationships:
   claimed-module census and real mutation controls in its one required lane, and shall exit
   non-zero if any claimed module or shared helper fails that requirement. The controls shall not
   be satisfied by a second optional target or by a stored verdict from an earlier run.
+- For the one IR-348 operator-held V1 module claim row in `scripts/kani_claims.json`, the one
+  required lane shall print that row's identity, reason and expiry and count it as `held`
+  separately from `ran` and `expected`. It shall never report that row as proved or its controls
+  as passed. The lane shall run every non-held selected control and exit non-zero if any such
+  control fails, is missing or is skipped. A hold on another claim, a missing reason or expiry,
+  or omission of the held row from the reviewed declaration shall fail the gate. This hold is
+  limited to the V1 source and expires "until the V2 named independent expectation + real
+  positive/falsifying control exists" under IR-1047; it does not remove FR-041 or NFR-006-AC-19.
 - The `make kani-gate` target shall print one run-result line of the form `kani-gate:
   result=<passed|failed> ran=<n> expected=<n> elapsed=<s>s kani=<version> tree=<clean|dirty>`,
   with `kani` the version the launcher reports. The line describes the run; it is not a
@@ -196,10 +204,13 @@ decision (Open decisions); until the owner rules, the answer is no.
 | NFR-006-AC-18 | Every `include!`, `include_str!`, `include_bytes!` and `#[path]` target named in a file of `tests/it` that holds a lane test, and in each file those name in turn, matches a pattern of the Kani-touching set. | Test (TC-045) |
 | NFR-006-AC-19 | On a clean current candidate, `make kani-gate` runs FR-041's module census and real mutation controls in its one required lane, and a failure of any claim or shared-helper control makes the gate exit non-zero. An optional mutation target or saved earlier result cannot substitute. | Test |
 
-NFR-006-AC-19 remains Open during IR-348 V1 retirement. The lane must continue to run
+NFR-006-AC-19 remains Open during IR-348 V1 retirement. Only the V1-sourced claim row is HELD
+under the reason "V1 deleted by owner ruling 2026-10-27; no genuine V2 named independent
+expectation/control exists yet" and the expiry "until the V2 named independent expectation +
+real positive/falsifying control exists". The lane must continue to run
 FR-041's claim census and real mutation controls. The current V1 claim source selected by
 `kani_generation::guard_sources()[0]` and named in `scripts/kani_claims.json` needs a genuine
-generated V2 replacement; deleting the source, dropping the claim or removing this gate cannot
+generated V2 replacement under IR-1047; deleting the source, dropping the claim or removing this gate cannot
 satisfy AC-19. No V2 replacement or current-run proof is identified here.
 
 ## Open decisions

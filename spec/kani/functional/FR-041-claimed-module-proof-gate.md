@@ -58,6 +58,18 @@ about a semantic stage the test input did not traverse.
   control; a dirty-tree or other process refusal alone is not a falsifying mutation. The gate SHALL
   retain the exact mutation diff, invocation and failing check output as current-run evidence.
 - The gate SHALL accept no predetermined verdict or stubbed executor as proof evidence.
+- Under the 2026-10-27 IR-348 operator ruling, only the V1-sourced module claim row named by
+  `scripts/kani_claims.json` may be marked `held` in that reviewed declaration. Its reason is
+  "V1 deleted by owner ruling 2026-10-27; no genuine V2 named independent expectation/control
+  exists yet" and its expiry is "until the V2 named independent expectation + real
+  positive/falsifying control exists". A held row remains visible and unproved; the gate SHALL
+  print its module identity, reason and expiry and count held rows separately from discharged
+  rows. Its absent compiled V1 module is reported as held rather than accepted as a discharged
+  claim; the declaration row and its merge-base identity remain visible. The gate SHALL still
+  run every non-held claim and shared-helper control and exit non-zero for
+  any non-held failure. An absent hold reason or expiry, an undeclared held name, or a hold on a
+  different module is invalid. The hold grants no FR-041 acceptance credit and cannot erase a
+  declaration or satisfy a positive or mutation control.
 
 ## Acceptance Criteria
 
@@ -71,13 +83,16 @@ about a semantic stage the test input did not traverse.
 
 ## Status
 
-Open. The current test `tests/it/kani_generation_claims.rs` takes
+Open, with only the V1-sourced module claim operator-held under IR-348. The current test
+`tests/it/kani_generation_claims.rs` takes
 `kani_generation::guard_sources()[0]`, which is a V1 bundle source in
 `tests/it/kani_generation.rs`; `scripts/kani_claims.json` names that generated V1 module.
 IR-348 retirement removes that claim source. A genuine generated V2 module, its reviewed claim,
 current-build census and real-Kani proof and mutation controls must replace it. No qualifying V2
-source or current-run evidence is identified here. FR-041-AC-1 through AC-5 and the gate remain
-unchanged.
+source or current-run evidence is identified here. The hold expires only when the V2 named
+independent expectation and real positive/falsifying control exist. IR-1047 owns that V2
+replacement and hold expiry. FR-041-AC-1 through AC-5 remain unchanged and unfulfilled for the
+held claim; non-held claims retain the full gate.
 
 ## Dependencies
 

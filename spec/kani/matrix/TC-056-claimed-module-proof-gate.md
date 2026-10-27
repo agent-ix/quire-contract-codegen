@@ -22,9 +22,13 @@ it does not create another repository gate.
 
 The current claim-control fixture uses `kani_generation::guard_sources()[0]`, a V1 bundle
 module named by `scripts/kani_claims.json`. Under the 2026-10-27 IR-348 retirement ruling,
-that source is historical. Execute this procedure on a genuine generated V2 module after its
-claim is reviewed; deleting the V1 module or dropping the claim supplies no positive proof or
-mutation evidence. A qualifying V2 source and current-run evidence remain Open.
+that source is historical. The operator holds only that named V1 module claim row, with reason
+"V1 deleted by owner ruling 2026-10-27; no genuine V2 named independent expectation/control
+exists yet" and expiry "until the V2 named independent expectation + real positive/falsifying
+control exists". Deleting the V1 module or dropping its claim supplies no proof evidence.
+Execute the positive procedure on a genuine generated V2 module after its claim is reviewed;
+IR-1047 owns that replacement, and none is identified yet. The held V1 row remains Open, and
+all non-held controls stay required.
 
 1. Check in a reviewed nonempty claim declaration for the generated modules the gate says it
    proves. Build the current candidate and compare those identities with the compiled modules.
@@ -54,17 +58,25 @@ mutation evidence. A qualifying V2 source and current-run evidence remain Open.
 5. Invoke `make kani-gate` on a clean current candidate. Confirm it includes the module census
    and mutation controls in its one required real-Kani lane, keeps NFR-006's lock, freshness and
    test-count behavior, and exits non-zero if any step above fails (NFR-006-AC-19).
+6. While the IR-348 hold is active, inspect the one reviewed V1 claim row and its exact reason
+   and expiry. Require the lane to print the held module, reason and expiry and to report its
+   count separately from runnable claims. Assert that a hold on another row, a missing reason or
+   expiry, a removed declaration row, and any failed, missing or skipped non-held control make
+   the gate fail. The held row supplies no FR-041 proof credit.
 
 ## Expected Results
 
-The existing `make kani-gate` passes only when every declared, compiled claim has an in-module
+The existing `make kani-gate` passes only when every non-held declared, compiled claim has an in-module
 SUCCESS proposition, the fresh build-derived helper set agrees with its checked-in evidence, and
 every claimed module and shared helper has a compiling, executed mutation with a real failed
 check. A compiled module with no SUCCESS proposition is named `unreached`. No build-only result,
-stub, process refusal or stored old verdict counts as a current proof or mutation result.
+stub, process refusal or stored old verdict counts as a current proof or mutation result. The
+operator-held V1 row is listed and counted separately with its reason and expiry and remains
+unproved until IR-1047 supplies the V2 replacement.
 
 ## Status
 
 Open for IR-19 implementation. The current V1 module declaration and
-`guard_sources()[0]` fixture retire under IR-348; no genuine generated V2 replacement is
+`guard_sources()[0]` fixture are operator-held under IR-348 pending the named V2 independent
+expectation and real positive/falsifying control; no genuine generated V2 replacement is
 identified. No real-Kani result is asserted by this specification artifact.
