@@ -10,7 +10,7 @@ use qsl_replay::{
     compile_package, parity_obligation, DependencyInput, DigestDomain, DigestRecord, Domain,
     DomainKey, DomainKind, EqualityOperator, FiniteBound, InconclusiveCause, Integer,
     OperandIdentity, ParityBoundRefusal, ProofBound, Refinement, ReplayLimits, ReplayRefusal,
-    ReplayRequest, ReplaySource, ScalarIdentityMismatch, ScalarLimits, SourceIdentity, StageLimits,
+    ReplayRequest, ScalarIdentityMismatch, ScalarLimits, SourceIdentity, StageLimits,
     SuppliedLibrary, TerminalValue, VerifiedShadow, VerifiedShadowResult, WireNodeId,
 };
 use quire_contract_codegen::{
@@ -747,7 +747,7 @@ fn tc_035_original_composite_request_requires_its_own_packet() {
     );
 
     let mut wrong_arm = packet.clone();
-    wrong_arm.source = Some(ReplaySource::Witness(
+    wrong_arm.source = Some(qsl_replay::EnvelopeSource::Witness(
         qsl_replay::Witness::parse("<<<assertion|h|c|>>>").expect("valid fixture witness"),
     ));
     assert!(matches!(

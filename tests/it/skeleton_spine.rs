@@ -115,6 +115,9 @@ fn request_of(package: &ReplayPackage, source: ReplaySource) -> qsl_replay::Repl
         ReplaySource::Input(_) => {
             Witness::parse("<<<assertion|h|c|>>>").expect("the fixture witness parses")
         }
+        ReplaySource::ObservedTemporal(_) => {
+            panic!("the function witness fixture cannot carry an observed temporal envelope")
+        }
     };
     let package = package
         .clone()
@@ -215,7 +218,10 @@ fn tc_026_the_replayed_verdict_depends_on_the_witness_value() {
         replay_against(&native_source(VIOLATING_TWIN), &values(0, 5)).expect("the replay settles");
     assert_eq!(result.settlement(), WitnessSettlement::Inconclusive);
     let cause = result.disagreement().expect("both verdicts are named");
-    assert_eq!((cause.proved(), cause.replayed()), (violation(), success()));
+    assert_eq!(
+        (cause.proved(), cause.replayed()),
+        (Some(violation()), Some(success()))
+    );
 }
 
 /// The healthy twin holds the clause at a real counterexample's input, so QSL settles
@@ -228,7 +234,10 @@ fn tc_026_a_healthy_native_twin_does_not_reproduce_the_violation() {
         replay_against(&native_source(HEALTHY_TWIN), &values(1, 5)).expect("the replay settles");
     assert_eq!(result.settlement(), WitnessSettlement::Inconclusive);
     let cause = result.disagreement().expect("both verdicts are named");
-    assert_eq!((cause.proved(), cause.replayed()), (violation(), success()));
+    assert_eq!(
+        (cause.proved(), cause.replayed()),
+        (Some(violation()), Some(success()))
+    );
 }
 
 /// A decoded value no replay parameter binds is refused before any call.

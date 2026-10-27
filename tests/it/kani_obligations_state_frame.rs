@@ -4512,7 +4512,10 @@ fn tc_035_the_frame_witness_is_rendered_from_the_decoded_playback() {
             panic!("a frame replay is a witness replay");
         };
         assert_eq!(witness.transcript(), expected);
-        assert_eq!(replay.packet.source, Some(replay.wire.source.clone()));
+        assert_eq!(
+            replay.packet.source,
+            Some(qsl_replay::EnvelopeSource::Witness(witness.clone()))
+        );
     }
 }
 

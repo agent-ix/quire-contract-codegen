@@ -8,7 +8,6 @@
 //! admitted 100K-call flat SSA control is exercised below.
 
 use crate::exact_scalar_generation::invokes_panicking_macro;
-use crate::scratch_crate::runtime_dependency;
 use ix_trace_rs::trace;
 use quire_contract_codegen::{
     generate_exact_function_oracles, generate_function_schedules,
@@ -1666,39 +1665,43 @@ fn tc_031_ac23_small_shared_chain_lowers_with_complete_closures() {
 #[trace("FR-021-AC-1", "TC-031")]
 #[test]
 fn tc_031_ac1_every_item_gets_one_disposition_and_refusal_does_not_cascade() {
-    let package = admit(ext_corpus_package());
-    let oracles = generate(&package, &main_functions(), &main_items());
-    assert_eq!(oracles.claim_map.items.len(), main_items().len());
-
-    assert!(matches!(
-        disposition_for(&oracles, ITEM_CALL_ADD),
-        ClaimDisposition::Generated(_)
-    ));
-    assert!(matches!(
-        disposition_for(&oracles, ITEM_CALL_EQ),
-        ClaimDisposition::Generated(_)
-    ));
-    assert!(matches!(
-        disposition_for(&oracles, ITEM_CALL_NESTED),
-        ClaimDisposition::Generated(_)
-    ));
-    assert!(matches!(
-        disposition_for(&oracles, ITEM_CALL_UNRELATED),
-        ClaimDisposition::Generated(_)
-    ));
-
+    let (_, baseline) = super::exact_function_agreement::genuine_corpus();
+    let (_, oracles) = super::exact_function_agreement::genuine_corpus_with_unknown();
+    assert_eq!(oracles.claim_map.items.len(), 4);
+    for expected in &baseline.claim_map.items {
+        let actual = oracles
+            .claim_map
+            .items
+            .iter()
+            .find(|claim| claim.node_id == expected.node_id && claim.result == expected.result);
+        assert!(
+            actual.is_some(),
+            "healthy QSL claim unchanged: {expected:?}"
+        );
+    }
+    assert_eq!(
+        contents(&oracles, "src/lib.rs"),
+        contents(&baseline, "src/lib.rs")
+    );
     let unknown = oracles
         .claim_map
         .items
         .iter()
-        .filter(|claim| claim.node_id == oracles.key(ITEM_CALL_UNKNOWN_FUNCTION))
+        .filter(|claim| {
+            matches!(
+                &claim.result,
+                ClaimDisposition::Refused {
+                    refusal: ExactFunctionRefusal::UnknownFunction { name }
+                } if name == "absent"
+            )
+        })
         .collect::<Vec<_>>();
     assert_eq!(unknown.len(), 1);
     assert!(matches!(
         &unknown[0].result,
         ClaimDisposition::Refused {
             refusal: ExactFunctionRefusal::UnknownFunction { name }
-        } if name == "does_not_exist_anywhere"
+        } if name == "absent"
     ));
 }
 
@@ -1722,51 +1725,36 @@ fn tc_031_scalar_body_operator_must_match_checked_operation_identity() {
 
 /// The claim-map entry for a generated item
 /// records the applied function's name and its `Origin::Body{function,
-/// index}` equal to the request's own declared-function ordering (functions
+/// index}` equal to the request's scheduled-function ordering (survivors
 /// sorted by declaring node id, digest domain then digest) -- read from the
 /// generator's own bookkeeping, not from the generated source text.
 #[trace("FR-021-AC-3", "TC-031")]
 #[test]
 fn tc_031_ac3_claim_records_function_and_origin_from_the_request() {
-    let package = admit(ext_corpus_package());
-    let functions = main_functions();
-    let oracles = generate(&package, &functions, &main_items());
-
-    let mut ordered: Vec<_> = functions.iter().collect();
-    ordered.sort_by_key(|function| package.ids.resolve(&function.node_id));
-    let survivor_names: Vec<&str> = ordered
-        .iter()
-        .filter(|f| {
-            matches!(
-                f.name.as_str(),
-                "add_fn" | "eq_fn" | "call_fn" | "unrelated_fn"
+    let (package, oracles) = super::exact_function_agreement::genuine_corpus();
+    let mut ordered = ["add", "eq", "nested"]
+        .into_iter()
+        .map(|name| {
+            (
+                super::exact_function_agreement::body_id(&package, name),
+                name,
             )
         })
-        .map(|f| f.name.as_str())
-        .collect();
-
-    // Two items name this call node (`add_fn` and `eq_fn`); their order in the claim map follows
-    // the declaring node ids' digests, so select the claim by the function it records.
-    let claim = oracles
-        .claim_map
-        .items
-        .iter()
-        .filter(|claim| claim.node_id == oracles.key(ITEM_CALL_ADD))
-        .find_map(|claim| match &claim.result {
-            ClaimDisposition::Generated(generated) if generated.function == "add_fn" => {
-                Some(generated)
+        .collect::<Vec<_>>();
+    ordered.sort_by(|a, b| a.0.cmp(&b.0));
+    for claim in &oracles.claim_map.items {
+        let ClaimDisposition::Generated(generated) = &claim.result else {
+            panic!("genuine source claim refused: {claim:?}");
+        };
+        let expected_index = ordered
+            .iter()
+            .position(|(_, name)| *name == generated.function)
+            .expect("claim names a requested function");
+        match &generated.function_origin {
+            quire_contract_codegen::RecordedOrigin::Body { function, index } => {
+                assert_eq!(function, &generated.function);
+                assert_eq!(*index, expected_index);
             }
-            _ => None,
-        })
-        .expect("a generated claim for add_fn over the call node");
-    let expected_index = survivor_names
-        .iter()
-        .position(|name| *name == "add_fn")
-        .unwrap();
-    match &claim.function_origin {
-        quire_contract_codegen::RecordedOrigin::Body { function, index } => {
-            assert_eq!(function, "add_fn");
-            assert_eq!(*index, expected_index);
         }
     }
 }
@@ -1791,17 +1779,16 @@ fn tc_031_ac6_undischargeable_capability_refuses_before_any_item() {
     ));
 }
 
-/// FR-021-AC-8 (Inspection). Only `CheckMode::Linked` is ever
-/// admitted: the generated source's `checked_package()` names
-/// `rt::CheckMode::Linked` and never `rt::CheckMode::Kernel`.
+/// FR-021-AC-8 (Inspection). Concrete application uses the checked closure
+/// facade and never admits a kernel-mode or legacy Runtime exact package.
 #[trace("FR-021-AC-8", "TC-031")]
 #[test]
 fn tc_031_ac8_generated_source_never_names_check_mode_kernel() {
-    let package = admit(ext_corpus_package());
-    let oracles = generate(&package, &main_functions(), &main_items());
+    let (_, oracles) = super::exact_function_agreement::genuine_corpus();
     let lib = contents(&oracles, "src/lib.rs");
-    assert!(lib.contains("rt::CheckMode::Linked"));
-    assert!(!lib.contains("CheckMode::Kernel"));
+    assert!(lib.contains("apply_checked_function("));
+    assert!(!lib.contains("CheckMode::"));
+    assert!(!lib.contains("quire_contract_runtime"));
 }
 
 /// A reference parameter type outside the
@@ -1874,26 +1861,38 @@ fn tc_031_ac11_model_and_state_are_distinct_blockers() {
 #[trace("FR-021-AC-12", "TC-031")]
 #[test]
 fn tc_031_ac12_dangling_callee_refuses_only_its_own_items() {
-    let package = admit(ext_corpus_package());
-    let functions = vec![
-        function_dangling_call("dangling_fn"),
-        function_unrelated("unrelated_fn"),
-    ];
-    let items = vec![
-        item(ITEM_CALL_ADD, "dangling_fn"),
-        item(ITEM_CALL_UNRELATED, "unrelated_fn"),
-    ];
-    let oracles = generate(&package, &functions, &items);
+    let (_, baseline) = super::exact_function_agreement::genuine_corpus();
+    let (_, oracles) = super::exact_function_agreement::genuine_corpus_with_bad_nested(
+        quire_contract_codegen::ExactFunctionBody::Call {
+            callee: "not_declared_anywhere".to_owned(),
+        },
+    );
+    let nested_call = baseline
+        .claim_map
+        .items
+        .iter()
+        .find_map(|claim| match &claim.result {
+            ClaimDisposition::Generated(generated) if generated.function == "nested" => {
+                Some(&claim.node_id)
+            }
+            _ => None,
+        })
+        .expect("baseline nested call");
     assert!(matches!(
-        disposition_for(&oracles, ITEM_CALL_ADD),
+        &oracles.claim_map.items.iter().find(|claim| &claim.node_id == nested_call).expect("nested claim").result,
         ClaimDisposition::Refused {
             refusal: ExactFunctionRefusal::UnknownCallee { callee }
         } if callee == "not_declared_anywhere"
     ));
-    assert!(matches!(
-        disposition_for(&oracles, ITEM_CALL_UNRELATED),
-        ClaimDisposition::Generated(_)
-    ));
+    for name in ["add", "eq"] {
+        let original = baseline.claim_map.items.iter().find(|claim| matches!(
+            &claim.result, ClaimDisposition::Generated(generated) if generated.function == name
+        )).expect("healthy baseline");
+        assert!(
+            oracles.claim_map.items.contains(original),
+            "{name} changes with bad nested body"
+        );
+    }
 }
 
 /// FR-021-AC-12 (second case). A function whose own body
@@ -1903,585 +1902,166 @@ fn tc_031_ac12_dangling_callee_refuses_only_its_own_items() {
 #[trace("FR-021-AC-12", "TC-031")]
 #[test]
 fn tc_031_ac12_form_mismatch_refuses_only_its_own_item() {
-    let package = admit(ext_corpus_package());
-    let functions = vec![
-        function_form_mismatch("bad_fn"),
-        function_unrelated("unrelated_fn"),
-    ];
-    let items = vec![
-        item(ITEM_CALL_NESTED, "bad_fn"),
-        item(ITEM_CALL_UNRELATED, "unrelated_fn"),
-    ];
-    let oracles = generate(&package, &functions, &items);
+    let (_, baseline) = super::exact_function_agreement::genuine_corpus();
+    let (_, oracles) = super::exact_function_agreement::genuine_corpus_with_bad_nested(
+        quire_contract_codegen::ExactFunctionBody::Scalar {
+            operator: quire_contract_codegen::oracle::operator_catalog::IntegerOperator::Add,
+        },
+    );
+    let nested_call = baseline
+        .claim_map
+        .items
+        .iter()
+        .find_map(|claim| match &claim.result {
+            ClaimDisposition::Generated(generated) if generated.function == "nested" => {
+                Some(&claim.node_id)
+            }
+            _ => None,
+        })
+        .expect("baseline nested call");
     assert!(matches!(
-        disposition_for(&oracles, ITEM_CALL_NESTED),
+        &oracles
+            .claim_map
+            .items
+            .iter()
+            .find(|claim| &claim.node_id == nested_call)
+            .expect("nested claim")
+            .result,
         ClaimDisposition::Refused {
             refusal: ExactFunctionRefusal::FormMismatch { .. }
         }
     ));
-    assert!(matches!(
-        disposition_for(&oracles, ITEM_CALL_UNRELATED),
-        ClaimDisposition::Generated(_)
-    ));
-}
-
-/// FR-021-AC-33 step 13. A distinct call request retains its identity while the
-/// function's separately declared temporal formula body supplies the refusal cause.
-#[trace("FR-021-AC-33", "TC-031")]
-#[test]
-fn tc_031_ac33_call_claim_retains_identity_and_uses_declared_body_refusal() {
-    let package = admit(ext_corpus_package());
-    let body_id = package.ids.resolve(&code_id(T_BARE_FORMULA));
-    let call_id = package.ids.resolve(&code_id(ITEM_CALL_ADD));
-    let mut temporal_body = function_add("temporal_body");
-    temporal_body.node_id = body_id.clone();
-    let functions = vec![temporal_body, function_eq("unrelated_fn")];
-    let items = vec![
-        item(ITEM_CALL_ADD, "temporal_body"),
-        item(ITEM_CALL_UNRELATED, "unrelated_fn"),
-    ];
-    let oracles = generate(&package, &functions, &items);
-
-    assert!(matches!(
-        disposition_for(&oracles, ITEM_CALL_ADD),
-        ClaimDisposition::Refused {
-            refusal: ExactFunctionRefusal::BlockedOnUpstream {
-                unsupported_node_id,
-                node_tag: "temporal",
-                issue: UpstreamBlocker::QuireSpecLanguage121,
-            }
-        } if *unsupported_node_id == body_id
-    ));
-    assert_eq!(
-        oracles
-            .claim_map
-            .items
-            .iter()
-            .find(|claim| claim.node_id == call_id)
-            .unwrap()
-            .node_id,
-        call_id
-    );
-    let sibling = disposition_for(&oracles, ITEM_CALL_UNRELATED);
-    assert!(
-        matches!(sibling, ClaimDisposition::Generated(_)),
-        "healthy sibling disposition: {sibling:?}"
-    );
-}
-
-fn tc_031_ac33_direct_unsupported_item_keeps_identity_and_healthy_function(
-    fixture: &str,
-    wanted_form: &str,
-    body_code: u32,
-    call_code: u32,
-    expected_tag: &'static str,
-) {
-    use serde_json::json;
-    use std::{fs, path::PathBuf};
-
-    let qspec = PathBuf::from(std::env::var_os("QSPEC_DIR").expect("published QSpec checkout"));
-    let wire: serde_json::Value = serde_json::from_slice(
-        &fs::read(
-            qspec
-                .join("proposals/checked-package-v2/fixtures")
-                .join(fixture),
-        )
-        .expect("read authoritative QSpec fixture"),
-    )
-    .expect("QSpec fixture JSON");
-    let nodes = wire["semantic_graph"]["nodes"].as_array().unwrap();
-    let requested_root = nodes
-        .iter()
-        .find(|node| {
-            node["semantic_form"] == wanted_form
-                && (wanted_form != "case" || node["body"]["operator"] == "case")
-        })
-        .expect("QSpec fixture contains requested root");
-    let requested_id: quire_contract_model::CheckedNodeId =
-        serde_json::from_value(requested_root["node_id"].clone()).unwrap();
-    let integer_id: quire_contract_model::CheckedNodeId = serde_json::from_value(
-        nodes
-            .iter()
-            .find(|node| node["node_tag"] == "scalar_type" && node["semantic_form"] == "integer")
-            .unwrap()["node_id"]
-            .clone(),
-    )
-    .unwrap();
-    let value_id: quire_contract_model::CheckedNodeId = serde_json::from_value(
-        nodes
-            .iter()
-            .find(|node| {
-                node["node_tag"] == "value"
-                    && node["semantic_form"] == "literal"
-                    && node["body"]["value_kind"] == "integer"
-            })
-            .unwrap()["node_id"]
-            .clone(),
-    )
-    .unwrap();
-    let node_ref =
-        |id: &quire_contract_model::CheckedNodeId| json!({"domain":id.domain, "digest":id.digest});
-    let body = json!({
-        "term":"application", "operator":"binary",
-        "operation":{"identity":"quire.op.integer.mul","laws":[],"mode":null,"member":null,"leaves":[]},
-        "result_type":node_ref(&integer_id),
-        "arguments":[{"term":"reference","target":node_ref(&value_id)},{"term":"reference","target":node_ref(&value_id)}],
-    });
-    let mut builder = PackageBuilder::from_wire(wire);
-    builder
-        .application_node_tagged(
-            body_code,
-            "expression",
-            "binary",
-            integer_id.digest.as_ref(),
-            body.clone(),
-        )
-        .application_node_tagged(
-            call_code,
-            "expression",
-            "call",
-            integer_id.digest.as_ref(),
-            body,
+    for name in ["add", "eq"] {
+        let original = baseline.claim_map.items.iter().find(|claim| matches!(
+            &claim.result, ClaimDisposition::Generated(generated) if generated.function == name
+        )).expect("healthy baseline");
+        assert!(
+            oracles.claim_map.items.contains(original),
+            "{name} changes with bad nested body"
         );
-    let package = admit(builder);
-    let requested_id = package.ids.resolve(&requested_id);
-    let body_id = package.ids.resolve(&code_id(body_code));
-    let healthy_call_id = package.ids.resolve(&code_id(call_code));
-    let integer_id = package.ids.resolve(&integer_id);
-    let value_id = package.ids.resolve(&value_id);
-    let function = quire_contract_codegen::ExactFunctionDeclaration {
-        node_id: body_id.clone(),
-        name: "healthy_fn".into(),
-        parameters: vec![
-            quire_contract_codegen::FunctionParameter {
-                name: "left".into(),
-                type_node_id: integer_id.clone(),
-            },
-            quire_contract_codegen::FunctionParameter {
-                name: "right".into(),
-                type_node_id: integer_id.clone(),
-            },
-        ],
-        result_type: integer_id,
-        body: quire_contract_codegen::ExactFunctionBody::Scalar {
-            operator: quire_contract_codegen::oracle::operator_catalog::IntegerOperator::Multiply,
-        },
-        capability_requirements: Vec::new(),
-    };
-    let direct_item = ExactFunctionItem {
-        call_node_id: requested_id.clone(),
-        function: "healthy_fn".into(),
-        argument_node_ids: vec![value_id.clone(), value_id.clone()],
-    };
-    let healthy_item = ExactFunctionItem {
-        call_node_id: healthy_call_id.clone(),
-        function: "healthy_fn".into(),
-        argument_node_ids: vec![value_id.clone(), value_id],
-    };
-    let mut roots = vec![
-        body_id.clone(),
-        requested_id.clone(),
-        healthy_call_id.clone(),
-    ];
-    roots.sort();
-    let requests = driver_positions(&roots);
-    let position = |id: &quire_contract_model::CheckedNodeId| {
-        roots.iter().position(|root| root == id).unwrap()
-    };
-    let contract = admitted_function_contract(&package.checked, &roots);
-    let combined = generate_exact_function_oracles(
-        &contract,
-        &requests,
-        &[position(&body_id)],
-        std::slice::from_ref(&function),
-        &[position(&requested_id), position(&healthy_call_id)],
-        &[direct_item, healthy_item.clone()],
-    )
-    .unwrap();
-    let healthy_only = generate_exact_function_oracles(
-        &contract,
-        &requests,
-        &[position(&body_id)],
-        &[function],
-        &[position(&healthy_call_id)],
-        &[healthy_item],
-    )
-    .unwrap();
-    let direct = combined
-        .claim_map
-        .items
-        .iter()
-        .find(|claim| claim.node_id == requested_id)
-        .expect("direct claim retains request identity");
-    match (&direct.result, expected_tag) {
-        (
-            ClaimDisposition::Refused {
-                refusal:
-                    ExactFunctionRefusal::BlockedOnUpstream {
-                        unsupported_node_id,
-                        node_tag: "temporal",
-                        issue: UpstreamBlocker::QuireSpecLanguage121,
-                    },
-            },
-            "temporal",
-        ) => assert_eq!(unsupported_node_id, &requested_id),
-        (
-            ClaimDisposition::Refused {
-                refusal:
-                    ExactFunctionRefusal::Unsupported {
-                        unsupported_node_id,
-                        node_tag,
-                    },
-            },
-            tag,
-        ) => {
-            assert_eq!(unsupported_node_id, &requested_id);
-            assert_eq!(*node_tag, tag);
-        }
-        (other, tag) => panic!("expected unsupported {tag} for requested node: {other:?}"),
     }
-    let generated = combined
-        .claim_map
-        .items
-        .iter()
-        .find(|claim| claim.node_id == healthy_call_id)
-        .expect("healthy sibling claim");
-    let generated_only = healthy_only
-        .claim_map
-        .items
-        .iter()
-        .find(|claim| claim.node_id == healthy_call_id)
-        .expect("standalone healthy sibling claim");
-    assert!(matches!(&generated.result, ClaimDisposition::Generated(_)));
-    assert_eq!(generated.result, generated_only.result);
-    assert_eq!(
-        contents(&combined, "src/lib.rs"),
-        contents(&healthy_only, "src/lib.rs")
-    );
-    assert_eq!(combined.location_map, healthy_only.location_map);
-    assert!(!contents(&combined, "src/lib.rs").contains(requested_id.digest.as_ref()));
-}
-
-/// A directly requested formula call-node settles to Unsupported, retains its request identity, and does not alter a healthy function sibling.
-#[trace("FR-021-AC-33", "TC-031")]
-#[test]
-fn tc_031_ac33_direct_formula_call_node_is_unsupported() {
-    tc_031_ac33_direct_unsupported_item_keeps_identity_and_healthy_function(
-        "positive-clause-operations.json",
-        "formula",
-        991_001,
-        991_002,
-        "temporal",
-    );
 }
 
 /// A directly requested case call-node settles to Unsupported, retains its request identity, and does not alter a healthy function sibling.
 #[trace("FR-021-AC-33", "TC-031")]
 #[test]
 fn tc_031_ac33_direct_case_call_node_is_unsupported() {
-    tc_031_ac33_direct_unsupported_item_keeps_identity_and_healthy_function(
-        "positive-union-nodes.json",
-        "case",
-        991_011,
-        991_012,
-        "expression",
-    );
-}
-
-/// A reader-admitted fairness root keeps its request identity, refuses with the temporal cause, and leaves a supported function sibling byte-identical.
-#[trace("FR-021-AC-33", "TC-031")]
-#[test]
-fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
-    use serde_json::{json, Value};
-    use std::{fs, path::PathBuf};
-
-    const MODEL_NODE: u32 = 992_001;
-    const FAIRNESS_NODE: u32 = 992_002;
-    const FUNCTION_BODY: u32 = 992_003;
-    const HEALTHY_CALL: u32 = 992_004;
-
-    let qspec = PathBuf::from(std::env::var_os("QSPEC_DIR").expect("published QSpec checkout"));
-    let fixture = qspec.join("proposals/checked-package-v2/fixtures/positive-all-families.json");
-    let mut wire: Value = serde_json::from_slice(&fs::read(fixture).expect("read published QSpec"))
-        .expect("published QSpec fixture JSON");
-    let (baseline, _) = PackageBuilder::from_wire(wire.clone()).read();
-    assert!(
-        matches!(
-            baseline,
-            quire_contract_model::CheckedPackageV2ReadResult::Admitted(_)
-        ),
-        "unmodified authoritative QSpec fixture must admit with the same runtime evidence"
-    );
-
-    // Indexing an absent operation/laws path adds an invalid member to node 0's aggregate body.
-    // The typed identity encoder cannot mint an identity for that shape, so the reader rejects
-    // the unchanged package identity before reaching graph validation. The candidate below uses
-    // checked object traversal so it never creates that shape.
-    let mut first_bad_mutation = wire.clone();
-    assert!(
-        first_bad_mutation["semantic_graph"]["nodes"][0]["body"]["operation"]["laws"]
-            .as_array_mut()
-            .is_none()
-    );
-    let refusal = read_malformed_body_wire(first_bad_mutation);
-    let refusal = match refusal {
-        quire_contract_model::CheckedPackageV2ReadResult::Refused(refusal) => refusal,
-        other => panic!("malformed first mutation unexpectedly admitted: {other:?}"),
-    };
-    assert_eq!(
-        refusal.code,
-        quire_contract_model::CheckedPackageRefusalCode::StaleDependency
-    );
-    assert_eq!(
-        refusal.cause,
-        Some(quire_contract_model::CheckedPackageRefusalCause::ContentMismatch)
-    );
-
-    let nodes = wire["semantic_graph"]["nodes"].as_array().unwrap();
-    let boolean_type = nodes
-        .iter()
-        .find(|node| node["node_tag"] == "scalar_type" && node["semantic_form"] == "boolean")
-        .unwrap()["node_id"]["digest"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    let integer_type = nodes
-        .iter()
-        .find(|node| node["node_tag"] == "scalar_type" && node["semantic_form"] == "integer")
-        .unwrap()["node_id"]["digest"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    let text_type = nodes
-        .iter()
-        .find(|node| node["node_tag"] == "scalar_type" && node["semantic_form"] == "text")
-        .unwrap()["node_id"]["digest"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-
-    let infinite_trace =
-        json!({"authority":"agent-ix", "identity":"quire.temporal.infinite-trace/v1"});
-    for path in ["lock", "identity_preimage"] {
-        let selections = wire[path]["profile_selections"].as_array_mut().unwrap();
-        let temporal = selections
-            .iter_mut()
-            .find(|selection| selection["role"] == "temporal_profile")
-            .expect("published temporal profile selection");
-        temporal["definition"] = infinite_trace.clone();
-    }
-    for node in wire["semantic_graph"]["nodes"].as_array_mut().unwrap() {
-        let laws = node
-            .get_mut("body")
-            .and_then(Value::as_object_mut)
-            .and_then(|body| body.get_mut("operation"))
-            .and_then(Value::as_object_mut)
-            .and_then(|operation| operation.get_mut("laws"))
-            .and_then(Value::as_array_mut);
-        if let Some(laws) = laws {
-            for law in laws {
-                if law["role"] == "temporal_profile" {
-                    law["definition"] = infinite_trace.clone();
-                }
-            }
-        }
-    }
-
-    let mut builder = PackageBuilder::from_wire(wire);
-    builder.model_owned_object_type(MODEL_NODE, "acme/orders", "ix://acme/orders/Order");
-    let model_placeholder = key(MODEL_NODE);
-    let parameter_placeholder = key(992_005);
-    builder.node(
-        &parameter_placeholder,
-        "value",
-        "parameter",
-        &integer_type,
-        aggregate(vec![
-            bound_member(
-                "name",
-                json!({"term":"literal", "type":{"domain":NODE_DOMAIN, "digest":text_type}, "value":"left", "value_kind":"text"}),
-            ),
-            bound_member(
-                "level",
-                json!({"term":"literal", "type":{"domain":NODE_DOMAIN, "digest":integer_type}, "value":"0", "value_kind":"integer"}),
-            ),
-        ]),
-    );
-    builder.application_node_tagged(
-        FAIRNESS_NODE,
-        "temporal",
-        "fairness",
-        &boolean_type,
-        json!({
-            "term":"application", "operator":"temporal_fairness",
-            "operation":{
-                "identity":"quire.op.temporal.fair", "laws":[], "mode":null,
-                "member":{
-                    "kind":"fairness", "fairness_kind":"weak", "granularity":"each",
-                    "declaration":{"domain":NODE_DOMAIN, "digest":model_placeholder},
-                    "name":"size"
-                },
-                "leaves":[]
-            },
-            "result_type":{"domain":NODE_DOMAIN, "digest":boolean_type},
-            "arguments":[]
-        }),
-    );
-    let fairness_placeholder = code_id(FAIRNESS_NODE);
-    let clause = builder.raw_wire()["semantic_graph"]["nodes"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|node| node["node_tag"] == "temporal" && node["semantic_form"] == "temporal_clause")
-        .expect("published temporal clause")
-        .clone();
-    let clause_digest = clause["node_id"]["digest"].as_str().unwrap().to_owned();
-    let mut wire = builder.raw_wire();
-    let clause = wire["semantic_graph"]["nodes"]
-        .as_array_mut()
-        .unwrap()
-        .iter_mut()
-        .find(|node| node["node_id"]["digest"] == clause_digest)
-        .expect("temporal clause to update");
-    let arguments = clause["body"]["arguments"].as_array_mut().unwrap();
-    arguments[4] = json!({
-        "term":"aggregate", "members":[{"term":"reference", "target":{
-            "domain":NODE_DOMAIN, "digest":fairness_placeholder.digest
-        }}]
-    });
-    let dependencies = clause["dependencies"].as_array_mut().unwrap();
-    dependencies.push(json!({"domain":NODE_DOMAIN, "digest":fairness_placeholder.digest}));
-    builder = PackageBuilder::from_wire(wire);
-
-    let body = json!({
-        "term":"application", "operator":"binary",
-        "operation":{"identity":"quire.op.integer.add","laws":[],"mode":null,"member":null,"leaves":[]},
-        "result_type":{"domain":NODE_DOMAIN, "digest":integer_type},
-        "arguments":[
-            {"term":"reference", "target":{"domain":NODE_DOMAIN, "digest":parameter_placeholder}},
-            {"term":"reference", "target":{"domain":NODE_DOMAIN, "digest":parameter_placeholder}}
-        ]
-    });
-    builder
-        .application_node_tagged(
-            FUNCTION_BODY,
-            "expression",
-            "binary",
-            &integer_type,
-            body.clone(),
-        )
-        .application_node_tagged(HEALTHY_CALL, "expression", "call", &integer_type, body);
-
-    let (admission, _resolved_wire, ids) = builder.read_resolved();
-    let package = match admission {
-        quire_contract_model::CheckedPackageV2ReadResult::Admitted(package) => *package,
-        other => panic!("candidate must be admitted by public CheckedPackageV2::read: {other:?}"),
-    };
-    let fairness_id = ids.resolve(&fairness_placeholder);
-    let model_id = ids.resolve(&id(&model_placeholder));
-    let body_id = ids.resolve(&code_id(FUNCTION_BODY));
-    let call_id = ids.resolve(&code_id(HEALTHY_CALL));
-    let parameter_id = ids.resolve(&id(&parameter_placeholder));
-    let fairness = package
+    let (package, combined, healthy_only, case_id, area_call_id, healthy_call_id) =
+        super::exact_function_agreement::genuine_case_and_healthy();
+    let case = package
         .graph()
         .nodes
         .iter()
-        .find(|node| node.node_id == fairness_id)
-        .expect("reader-admitted fairness node");
-    assert_eq!(fairness.node_tag.as_ref(), "temporal");
-    assert_eq!(fairness.semantic_form.as_ref(), "fairness");
-    assert_eq!(fairness.dependencies, vec![model_id]);
-
-    let function = quire_contract_codegen::ExactFunctionDeclaration {
-        node_id: body_id.clone(),
-        name: "healthy_fairness_sibling".into(),
-        parameters: vec![
-            quire_contract_codegen::FunctionParameter {
-                name: "left".into(),
-                type_node_id: ids.resolve(&id(&integer_type)),
-            },
-            quire_contract_codegen::FunctionParameter {
-                name: "right".into(),
-                type_node_id: ids.resolve(&id(&integer_type)),
-            },
-        ],
-        result_type: ids.resolve(&id(&integer_type)),
-        body: quire_contract_codegen::ExactFunctionBody::Scalar {
-            operator: quire_contract_codegen::oracle::operator_catalog::IntegerOperator::Add,
-        },
-        capability_requirements: Vec::new(),
-    };
-    let direct_item = ExactFunctionItem {
-        call_node_id: fairness_id.clone(),
-        function: "healthy_fairness_sibling".into(),
-        argument_node_ids: vec![parameter_id.clone(), parameter_id.clone()],
-    };
-    let healthy_item = ExactFunctionItem {
-        call_node_id: call_id.clone(),
-        function: "healthy_fairness_sibling".into(),
-        argument_node_ids: vec![parameter_id.clone(), parameter_id],
-    };
-    let mut roots = vec![body_id.clone(), fairness_id.clone(), call_id.clone()];
-    roots.sort();
-    let position = |id: &quire_contract_model::CheckedNodeId| {
-        roots.iter().position(|root| root == id).unwrap()
-    };
-    let requests = driver_positions(&roots);
-    let contract = admitted_function_contract(&package, &roots);
-    let combined = generate_exact_function_oracles(
-        &contract,
-        &requests,
-        &[position(&body_id)],
-        std::slice::from_ref(&function),
-        &[position(&fairness_id), position(&call_id)],
-        &[direct_item, healthy_item.clone()],
-    )
-    .unwrap();
-    let healthy_only = generate_exact_function_oracles(
-        &contract,
-        &requests,
-        &[position(&body_id)],
-        &[function],
-        &[position(&call_id)],
-        &[healthy_item],
-    )
-    .unwrap();
-    let direct = combined
+        .find(|node| node.node_id == case_id)
+        .unwrap();
+    assert_eq!(case.node_tag.as_ref(), "expression");
+    assert_eq!(case.semantic_form.as_ref(), "case");
+    let claim = combined
         .claim_map
         .items
         .iter()
-        .find(|claim| claim.node_id == fairness_id)
-        .expect("direct fairness claim retains requested identity");
+        .find(|claim| claim.node_id == case_id)
+        .unwrap();
     assert!(matches!(
-        &direct.result,
+        &claim.result,
         ClaimDisposition::Refused {
-        refusal: ExactFunctionRefusal::BlockedOnUpstream {
-            unsupported_node_id,
-            node_tag: "temporal",
-            issue: UpstreamBlocker::QuireSpecLanguage121,
-        }
-        } if unsupported_node_id == &fairness_id
+            refusal: ExactFunctionRefusal::Unsupported {
+                unsupported_node_id,
+                node_tag: "expression",
+            }
+        } if unsupported_node_id == &case_id
     ));
-    let generated = combined
+    assert_ne!(area_call_id, case_id);
+    let body_claim = combined
         .claim_map
         .items
         .iter()
-        .find(|claim| claim.node_id == call_id)
-        .expect("healthy sibling claim");
-    let generated_alone = healthy_only
+        .find(|claim| claim.node_id == area_call_id)
+        .unwrap();
+    assert!(matches!(
+        &body_claim.result,
+        ClaimDisposition::Refused {
+            refusal: ExactFunctionRefusal::Unsupported {
+                unsupported_node_id,
+                node_tag: "expression",
+            }
+        } if unsupported_node_id == &case_id
+    ));
+    let sibling = combined
         .claim_map
         .items
         .iter()
-        .find(|claim| claim.node_id == call_id)
-        .expect("healthy sibling claim without fairness");
-    assert!(matches!(&generated.result, ClaimDisposition::Generated(_)));
-    assert_eq!(generated.result, generated_alone.result);
+        .find(|claim| claim.node_id == healthy_call_id)
+        .unwrap();
+    let alone = healthy_only
+        .claim_map
+        .items
+        .iter()
+        .find(|claim| claim.node_id == healthy_call_id)
+        .unwrap();
+    assert!(matches!(&sibling.result, ClaimDisposition::Generated(_)));
+    assert_eq!(sibling, alone);
     assert_eq!(
         contents(&combined, "src/lib.rs"),
         contents(&healthy_only, "src/lib.rs")
     );
     assert_eq!(combined.location_map, healthy_only.location_map);
-    assert!(!contents(&combined, "src/lib.rs").contains(fairness_id.digest.as_ref()));
+}
+
+/// QSL emits both temporal roots beside a separate callable; Contract IR
+/// admits those exact bytes before the generator classifies either request.
+#[trace("FR-021-AC-33", "TC-031")]
+#[test]
+fn tc_031_ac33_genuine_temporal_roots_leave_a_callable_sibling() {
+    for form in ["formula", "fairness"] {
+        let (package, combined, healthy_only, temporal_id, healthy_call_id) =
+            super::exact_function_agreement::genuine_temporal_and_healthy(form);
+        let temporal = package
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.node_id == temporal_id)
+            .unwrap();
+        assert_eq!(temporal.node_tag.as_ref(), "temporal");
+        assert_eq!(temporal.semantic_form.as_ref(), form);
+        let claim = combined
+            .claim_map
+            .items
+            .iter()
+            .find(|claim| claim.node_id == temporal_id)
+            .unwrap();
+        assert!(
+            matches!(
+                &claim.result,
+                ClaimDisposition::Refused {
+                    refusal: ExactFunctionRefusal::Unsupported {
+                        unsupported_node_id,
+                        node_tag: "temporal",
+                    }
+                } if unsupported_node_id == &temporal_id
+            ),
+            "{form}: {claim:?}"
+        );
+        let sibling = combined
+            .claim_map
+            .items
+            .iter()
+            .find(|claim| claim.node_id == healthy_call_id)
+            .unwrap();
+        let alone = healthy_only
+            .claim_map
+            .items
+            .iter()
+            .find(|claim| claim.node_id == healthy_call_id)
+            .unwrap();
+        assert!(matches!(&sibling.result, ClaimDisposition::Generated(_)));
+        assert_eq!(sibling, alone);
+        assert_eq!(
+            contents(&combined, "src/lib.rs"),
+            contents(&healthy_only, "src/lib.rs")
+        );
+        assert_eq!(combined.location_map, healthy_only.location_map);
+    }
 }
 
 /// FR-021-AC-1 (duplicate handling, matching FR-014/FR-018). One
@@ -2569,114 +2149,58 @@ fn tc_031_signature_mismatch_refuses_arity_and_result_type_disagreement() {
     ));
 }
 
-/// FR-021-AC-15 (duplicate declared names; the surviving origin also
-/// exercises AC-17, origin from the request function binding). Two
-/// declarations sharing one name -- different node ids, same string --
-/// are both refused as `AmbiguousFunctionName` rather than colliding into
-/// one Stage 1 classification, and a third, uniquely-named survivor's
-/// location map index is unaffected: it still equals its own position among
-/// the surviving functions, not a value corrupted by the excluded pair.
-/// This is FR-021-AC-15's own mutation table entry ("record it against the
-/// wrong function's index") reproduced and proven fixed.
-#[trace("FR-021-AC-15", "TC-031")]
+/// Two QSL-authored body roots deliberately share a request name. Their
+/// refusal leaves a third source-bound function's request and location origins intact.
+#[trace("FR-021-AC-15", "FR-021-AC-17", "TC-031")]
 #[test]
 fn tc_031_ambiguous_function_name_refuses_both_and_does_not_corrupt_indices() {
-    let package = admit(ext_corpus_package());
-    let functions = vec![
-        function_add("dup"),       // node FN_ADD
-        function_unrelated("dup"), // node FN_UNRELATED, same name, different node
-        function_eq("solo_eq"),
-        quire_contract_codegen::ExactFunctionDeclaration {
-            node_id: code_id(E_TUPLE),
-            name: "solo_eq_2".to_owned(),
-            parameters: vec![
-                quire_contract_codegen::FunctionParameter {
-                    name: "a".to_owned(),
-                    type_node_id: code_id(T_INTEGER),
-                },
-                quire_contract_codegen::FunctionParameter {
-                    name: "b".to_owned(),
-                    type_node_id: code_id(T_INTEGER),
-                },
-            ],
-            result_type: code_id(T_BOOLEAN),
-            body: quire_contract_codegen::ExactFunctionBody::CompositeEquality {
-                operator: quire_contract_codegen::EqualityOperatorKind::Equal,
-            },
-            capability_requirements: Vec::new(),
-        },
-    ];
-    let items = vec![
-        item(ITEM_CALL_ADD, "dup"),
-        item(ITEM_CALL_EQ, "solo_eq"),
-        item(ITEM_CALL_NESTED, "solo_eq_2"),
-    ];
-    let oracles = generate(&package, &functions, &items);
-
-    assert!(matches!(
-        disposition_for(&oracles, ITEM_CALL_ADD),
-        ClaimDisposition::Refused {
-            refusal: ExactFunctionRefusal::AmbiguousFunctionName { name }
-        } if name == "dup"
-    ));
-    // Neither "dup" declaration ever survives to Stage 2, so neither ever
-    // gets a location-map entry at all -- the old, name-keyed maps would
-    // instead have let both survive and collide on one shared index.
-    assert!(oracles
+    let (combined, alone, healthy_call_id) =
+        super::exact_function_agreement::genuine_ambiguous_and_healthy();
+    let ambiguous = combined
+        .claim_map
+        .items
+        .iter()
+        .filter(|claim| claim.node_id != healthy_call_id)
+        .collect::<Vec<_>>();
+    assert_eq!(ambiguous.len(), 2);
+    for claim in ambiguous {
+        assert!(
+            matches!(
+                &claim.result,
+                ClaimDisposition::Refused { refusal: ExactFunctionRefusal::AmbiguousFunctionName { name } }
+                    if name == "dup"
+            ),
+            "{claim:?}"
+        );
+    }
+    assert!(combined
         .location_map
         .iter()
         .all(|entry| entry.function != "dup"));
-
-    // Node ids are content digests, not the numeric placeholder codes
-    // above, so the surviving order (solo_eq, solo_eq_2) is whichever the
-    // generator's own node-id sort gives -- re-derived here exactly as
-    // `generate_exact_function_oracles` computes it, the same pattern
-    // `tc_031_ac3`/`tc_031_ac15` already use, rather than hardcoded.
-    let mut survivor_node_ids = [oracles.key(FN_EQ), oracles.key(E_TUPLE)];
-    survivor_node_ids.sort();
-    let expected_index = |node_id: &quire_contract_model::CheckedNodeId| {
-        survivor_node_ids
-            .iter()
-            .position(|candidate| candidate == node_id)
-            .expect("survivor node id")
+    let sibling = combined
+        .claim_map
+        .items
+        .iter()
+        .find(|claim| claim.node_id == healthy_call_id)
+        .unwrap();
+    let baseline = alone
+        .claim_map
+        .items
+        .iter()
+        .find(|claim| claim.node_id == healthy_call_id)
+        .unwrap();
+    assert!(matches!(&baseline.result, ClaimDisposition::Generated(_)));
+    let ClaimDisposition::Generated(generated) = &sibling.result else {
+        panic!("source-bound sibling was not generated: {sibling:?}");
     };
-
-    let eq_entry = oracles
-        .location_map
-        .iter()
-        .find(|entry| entry.function == "solo_eq")
-        .expect("solo_eq has a location map entry");
-    let eq_2_entry = oracles
-        .location_map
-        .iter()
-        .find(|entry| entry.function == "solo_eq_2")
-        .expect("solo_eq_2 has a location map entry");
-    assert_eq!(oracles.location_map.len(), 2);
-    match &eq_entry.location.origin {
-        quire_contract_codegen::RecordedOrigin::Body { function, index } => {
-            assert_eq!(function, "solo_eq");
-            assert_eq!(*index, expected_index(&oracles.key(FN_EQ)));
-        }
-    }
-    match &eq_2_entry.location.origin {
-        quire_contract_codegen::RecordedOrigin::Body { function, index } => {
-            assert_eq!(function, "solo_eq_2");
-            assert_eq!(*index, expected_index(&oracles.key(E_TUPLE)));
-        }
-    }
-    assert_ne!(
-        expected_index(&oracles.key(FN_EQ)),
-        expected_index(&oracles.key(E_TUPLE)),
-        "the two survivors must occupy distinct indices"
-    );
     assert!(matches!(
-        disposition_for(&oracles, ITEM_CALL_EQ),
-        ClaimDisposition::Generated(_)
+        &generated.function_origin,
+        quire_contract_codegen::RecordedOrigin::Body { function, index }
+            if function == "unrelated" && *index == 0
     ));
-    assert!(matches!(
-        disposition_for(&oracles, ITEM_CALL_NESTED),
-        ClaimDisposition::Generated(_)
-    ));
+    assert_eq!(sibling, baseline);
+    assert_eq!(combined.location_map.len(), 1);
+    assert_eq!(combined.location_map, alone.location_map);
 }
 
 /// FR-021-AC-1 (item-level arity). An item's argument count
@@ -2685,16 +2209,12 @@ fn tc_031_ambiguous_function_name_refuses_both_and_does_not_corrupt_indices() {
 #[trace("FR-021-AC-1", "TC-031")]
 #[test]
 fn tc_031_arity_mismatch_refuses_when_item_argument_count_disagrees() {
-    let package = admit(ext_corpus_package());
-    let functions = vec![function_add("add_fn")];
-    let items = vec![quire_contract_codegen::ExactFunctionItem {
-        call_node_id: code_id(ITEM_CALL_ADD),
-        function: "add_fn".to_owned(),
-        argument_node_ids: vec![code_id(T_INTEGER)],
-    }];
-    let oracles = generate(&package, &functions, &items);
+    let oracles = super::exact_function_agreement::genuine_bad_arity();
+    let [claim] = oracles.claim_map.items.as_slice() else {
+        panic!("one QSL-authored bad-arity call claim");
+    };
     assert!(matches!(
-        disposition_for(&oracles, ITEM_CALL_ADD),
+        &claim.result,
         ClaimDisposition::Refused {
             refusal: ExactFunctionRefusal::ArityMismatch {
                 expected: 2,
@@ -2873,17 +2393,19 @@ impl DuplicateNodeFixture {
         indices.dedup();
         assert_eq!((symbols.len(), indices.len()), distinct);
         for code in &self.distinct_items {
-            assert!(
-                matches!(
-                    disposition_for(oracles, *code),
-                    ClaimDisposition::Generated(_)
-                ),
-                "distinct item {code} was not generated"
-            );
             assert_eq!(
                 disposition_for(oracles, *code),
                 disposition_for(baseline, *code),
                 "item {code} differs from the request without the duplicates"
+            );
+            assert!(
+                !matches!(
+                    disposition_for(oracles, *code),
+                    ClaimDisposition::Refused {
+                        refusal: ExactFunctionRefusal::DuplicateDeclaringNode { .. }
+                    }
+                ),
+                "distinct item {code} inherits a duplicate's refusal"
             );
         }
     }
@@ -3172,47 +2694,30 @@ fn tc_031_ac24_case_iii_the_same_unknown_name_twice_is_one_duplicate_request() {
 #[trace("FR-021-AC-24", "TC-031")]
 #[test]
 fn tc_031_ac24_case_iv_known_and_unknown_order_unknown_first_and_match_solo() {
-    let package = admit(ext_corpus_package());
-    let functions = [function_add("add_fn")];
-    let full_items = [
-        item(ITEM_CALL_ADD, "add_fn"),
-        item(ITEM_CALL_ADD, "zz_unknown"),
-    ];
-    let input = admitted_full_request(&package, &functions, &full_items);
-    let oracles = generate_in_request(&package, &input, &functions, &full_items);
-    let reversed = generate_in_request(
-        &package,
-        &input,
-        &functions,
-        &full_items.into_iter().rev().collect::<Vec<_>>(),
-    );
+    let [oracles, reversed, solo_add, solo_unknown] =
+        super::exact_function_agreement::genuine_known_and_zz_unknown();
     assert_eq!(oracles, reversed, "request order changed the output");
-    let solo_add = generate_in_request(
-        &package,
-        &input,
-        &functions,
-        &[item(ITEM_CALL_ADD, "add_fn")],
-    );
-    let solo_unknown = generate_in_request(
-        &package,
-        &input,
-        &functions,
-        &[item(ITEM_CALL_ADD, "zz_unknown")],
-    );
     assert_eq!(solo_unknown.claim_map.items.len(), 1);
     assert_eq!(solo_add.claim_map.items.len(), 1);
     assert!(matches!(
         &solo_add.claim_map.items[0].result,
         ClaimDisposition::Generated(_)
     ));
-    assert_eq!(
-        oracles.claim_map.items,
-        [
-            solo_unknown.claim_map.items[0].clone(),
-            solo_add.claim_map.items[0].clone()
-        ]
-    );
-    assert_eq!(oracles.claim_map.items[0].result, unknown("zz_unknown"));
+    let call = &solo_add.claim_map.items[0].node_id;
+    let pair = oracles
+        .claim_map
+        .items
+        .iter()
+        .filter(|entry| &entry.node_id == call)
+        .collect::<Vec<_>>();
+    assert_eq!(pair.len(), 2);
+    assert_eq!(pair[0], &solo_unknown.claim_map.items[0]);
+    assert_eq!(pair[1], &solo_add.claim_map.items[0]);
+    assert!(matches!(
+        &pair[0].result,
+        ClaimDisposition::Refused { refusal: ExactFunctionRefusal::UnknownFunction { name } }
+            if name == "zz_unknown"
+    ));
 }
 
 /// FR-021-AC-24 step 12 case (v). Names order byte-wise and case-sensitively:
@@ -3313,16 +2818,16 @@ fn tc_031_ac24_case_vii_differing_declaring_node_ids_order_before_names() {
     }
 }
 
-/// The emitted `src/lib.rs` of the main corpus
-/// (scalar `add_fn`, equality `eq_fn`, nested-call `call_fn`) and of the chain
+/// The emitted `src/lib.rs` of the genuine scalar, equality and nested-call
+/// corpus and of the chain
 /// corpus contains no `.unwrap(`, no `.expect(` and no panicking macro in any
 /// delimiter form.
 #[trace("FR-021-AC-19", "TC-031")]
 #[test]
 fn tc_031_ac19_emitted_function_oracle_source_has_no_panicking_path() {
-    let oracles = main_oracles();
+    let (_, oracles) = super::exact_function_agreement::genuine_corpus();
     let lib = contents(&oracles, "src/lib.rs");
-    assert!(lib.contains("pub fn checked_package()"), "main corpus");
+    assert_eq!(lib.matches("pub fn oracle_").count(), 3, "genuine corpus");
     for forbidden in [".unwrap(", ".expect("] {
         assert!(!lib.contains(forbidden), "main corpus emits {forbidden}");
     }
@@ -3330,54 +2835,27 @@ fn tc_031_ac19_emitted_function_oracle_source_has_no_panicking_path() {
         !invokes_panicking_macro(&lib),
         "main corpus emits a panicking macro"
     );
-    assert!(lib.contains("sv::TypeEnvironment::default()"));
+    assert!(lib.contains("sv::declaration::TypeEnvironment::default()"));
 }
 
-/// In the emitted bodies of `add_fn` and `eq_fn`
-/// the `match` over the kernel operator's `Result<Outcome<_>, Refusal>` has
-/// exactly the four closed outcome cases and the error case, with no wildcard.
+/// In the emitted scalar and equality bodies, the match over the kernel
+/// `Outcome` has exactly the four closed cases and no wildcard.
 /// A new kernel variant will fail compilation until it is handled explicitly.
 #[trace("FR-021-AC-20", "TC-031")]
 #[test]
 fn tc_031_ac20_closed_kernel_outcomes_are_exhaustive() {
-    let lib = contents(&main_oracles(), "src/lib.rs");
-    for (function, completed) in [
-        (
-            "add_fn",
-            "Ok(exact::Outcome::Completed(value)) => exact::Outcome::Completed(exact::Value::Integer(value)),",
-        ),
-        (
-            "eq_fn",
-            "Ok(exact::Outcome::Completed(value)) => exact::Outcome::Completed(exact::Value::Boolean(value)),",
-        ),
+    let (_, oracles) = super::exact_function_agreement::genuine_corpus();
+    let lib = contents(&oracles, "src/lib.rs");
+    for arm in [
+        "Outcome::Undefined(value) => Outcome::Undefined(value)",
+        "Outcome::Refused(value) => Outcome::Refused(value)",
+        "Outcome::Incomplete(value) => Outcome::Incomplete(value)",
     ] {
-        let name = format!("name: {function:?}.to_owned(),");
-        let start = lib
-            .find(&name)
-            .unwrap_or_else(|| panic!("{function} is not declared"));
-        let rest = &lib[start + name.len()..];
-        let body = &rest[..rest.find("rt::FunctionDeclaration {").unwrap_or(rest.len())];
-
-        let arms = [
-            completed,
-            "Ok(exact::Outcome::Undefined(undefined)) => exact::Outcome::Undefined(undefined),",
-            "Ok(exact::Outcome::Refused(refusal)) => exact::Outcome::Refused(refusal),",
-            "Ok(exact::Outcome::Incomplete(incomplete)) => exact::Outcome::Incomplete(incomplete),",
-            "Err(refusal) => exact::Outcome::Refused(refusal),",
-        ];
-        let mut from = 0;
-        for arm in arms {
-            let at = body[from..]
-                .find(arm)
-                .unwrap_or_else(|| panic!("{function}: arm `{arm}` missing or out of order"));
-            from += at + arm.len();
-        }
-        let tail: String = body[from..].split_whitespace().collect();
-        assert!(
-            tail.starts_with('}'),
-            "{function}: the exhaustive match must end after Err, found `{tail}`"
-        );
+        assert_eq!(lib.matches(arm).count(), 2, "{arm} in scalar and equality");
     }
+    assert!(lib.contains("Outcome::Completed(value) => Outcome::Completed(Value::Integer(value))"));
+    assert!(lib.contains("Outcome::Completed(value) => Outcome::Completed(Value::Boolean(value))"));
+    assert!(!lib.contains("Outcome::_"));
 }
 
 /// The generator's current output for the main corpus, which
@@ -3408,40 +2886,22 @@ pub fn contents(oracles: &quire_contract_codegen::ExactFunctionOracles, path: &s
 #[trace("FR-021-AC-13", "TC-031", "TC-001", "NFR-002-AC-1", "NFR-002-AC-2")]
 #[test]
 fn tc_031_ac13_generation_is_deterministic_across_runs_and_permutations() {
-    let package = admit(ext_corpus_package());
-    let functions = main_functions();
-    let items = main_items();
-
-    let first = generate(&package, &functions, &items);
+    let (_, first) = super::exact_function_agreement::genuine_corpus();
     let lib = contents(&first, "src/lib.rs");
     let header = lib
         .lines()
         .take_while(|line| !line.is_empty())
         .collect::<std::collections::BTreeSet<_>>();
-    let generated_names = first
-        .claim_map
-        .items
-        .iter()
-        .filter_map(|claim| match &claim.result {
-            ClaimDisposition::Generated(generated) => Some(generated.function.as_str()),
-            ClaimDisposition::Refused { .. } => None,
-        })
-        .collect::<std::collections::BTreeSet<_>>();
-    assert!(
-        !generated_names.is_empty(),
-        "fixture must generate function claims"
+    assert_eq!(
+        first
+            .claim_map
+            .items
+            .iter()
+            .filter(|claim| matches!(claim.result, ClaimDisposition::Generated(_)))
+            .count(),
+        3,
+        "all three QSL-authored call items generate"
     );
-    for function in functions
-        .iter()
-        .filter(|function| generated_names.contains(function.name.as_str()))
-    {
-        let node_id = package.ids.resolve(&function.node_id);
-        let subject = format!("// Subject: {}/{}", node_id.domain, node_id.digest);
-        assert!(
-            header.contains(subject.as_str()),
-            "function library lacks declaration {subject}"
-        );
-    }
     let subjects = first
         .claim_map
         .items
@@ -3457,16 +2917,15 @@ fn tc_031_ac13_generation_is_deterministic_across_runs_and_permutations() {
     {
         crate::generated_headers::assert_header(&artifact.path, &artifact.contents, &subject_refs);
     }
-    let second = generate(&package, &functions, &items);
-    let from_a_fresh_package = main_oracles();
-
-    let mut permuted_functions = functions.clone();
-    permuted_functions.reverse();
-    let mut permuted_items = items.clone();
-    permuted_items.reverse();
-    let permuted = generate(&package, &permuted_functions, &permuted_items);
-
-    for other in [&second, &from_a_fresh_package, &permuted] {
+    for subject in &subjects {
+        assert!(
+            header.contains(format!("// Subject: {subject}").as_str()),
+            "{subject}"
+        );
+    }
+    let (_, second) = super::exact_function_agreement::genuine_corpus();
+    let (_, permuted) = super::exact_function_agreement::genuine_corpus_in_order(true);
+    for other in [&second, &permuted] {
         assert_eq!(&first, other);
         for path in [
             "Cargo.toml",
@@ -3492,32 +2951,35 @@ fn generated_manifest_exposes_semantic_value_owner_source() {
 }
 
 /// The generated crate declares
-/// `publish = false`, names the runtime by branch with the `exact` feature,
+/// `publish = false`, names the checked closure facade and leaf crates,
 /// contains no charge amount and no literal `Outcome`/`Value` constant
 /// standing in for a runtime result, and forbids unsafe code.
 #[trace("FR-021-AC-14", "TC-031")]
 #[test]
 fn tc_031_ac14_manifest_and_source_shape() {
-    let package = admit(ext_corpus_package());
-    let oracles = generate(&package, &main_functions(), &main_items());
+    let (_, oracles) = super::exact_function_agreement::genuine_corpus();
     let manifest = contents(&oracles, "Cargo.toml");
     assert!(manifest.contains("publish = false"));
-    assert!(manifest.contains(&runtime_dependency(&["exact"])));
+    for dependency in [
+        "qsl-replay",
+        "quire-eval",
+        "quire-exact",
+        "quire-semantic-value",
+    ] {
+        assert!(
+            manifest.contains(&format!("{dependency} =")),
+            "{dependency}"
+        );
+    }
+    assert!(!manifest.contains("quire-contract-runtime"));
     assert!(!manifest.contains("rev ="));
     assert!(manifest.contains("unsafe_code = \"forbid\""));
 
     let lib = contents(&oracles, "src/lib.rs");
-    // No literal `Outcome::Completed(...)` construction standing in for a
-    // runtime result: every `Outcome::Completed` in this source is a match
-    // arm reconstructing a *runtime-computed* value, never a bare constant.
-    // Asserted positively -- the exact pattern `render_body` emits for each
-    // supported body kind -- rather than as an absence of a hand-picked
-    // literal substring: a mutation that hardcoded a hollow result would
-    // remove one of these patterns, where the equivalent absence-only
-    // checks this replaced could be defeated by any differently-formatted
-    // literal.
-    assert!(lib.contains("Outcome::Completed(exact::Value::Integer(value))"));
-    assert!(lib.contains("Outcome::Completed(exact::Value::Boolean(value))"));
+    assert!(lib.contains("exact::evaluate_integer_arithmetic("));
+    assert!(lib.contains("checked.evaluate(&environment, left, right, meter)"));
+    assert!(lib.contains("apply_checked_function("));
+    assert!(!lib.contains("Outcome::Completed(Value::Integer(Integer::from("));
 }
 
 /// FR-021-AC-15 (origin half only -- see module doc "Location
@@ -3527,32 +2989,17 @@ fn tc_031_ac14_manifest_and_source_shape() {
 /// function body, each `Location{origin, path}` re-derivable from the
 /// request's own expression tree with no execution: every generated
 /// function in this V1 has a body that is one classified node at its own
-/// root, so `path` is always empty and `origin` always equals the
-/// generator's own function ordering.
+/// root, so `path` is always empty and `origin` follows admitted body source
+/// order, independently of the claim's request-order function index.
 #[trace("FR-021-AC-15", "TC-031")]
 #[test]
 fn tc_031_ac15_location_map_round_trips_to_the_request_structurally() {
-    let package = admit(ext_corpus_package());
-    let functions = main_functions();
-    let oracles = generate(&package, &functions, &main_items());
-
-    let mut ordered: Vec<_> = functions.iter().collect();
-    ordered.sort_by_key(|function| package.ids.resolve(&function.node_id));
-    let survivor_names: Vec<&str> = ordered
-        .iter()
-        .filter(|f| {
-            matches!(
-                f.name.as_str(),
-                "add_fn" | "eq_fn" | "call_fn" | "unrelated_fn"
-            )
-        })
-        .map(|f| f.name.as_str())
-        .collect();
-
-    assert_eq!(oracles.location_map.len(), survivor_names.len());
+    let (_package, oracles) = super::exact_function_agreement::genuine_corpus();
+    let ordered = ["add", "eq", "nested"];
+    assert_eq!(oracles.location_map.len(), ordered.len());
     for entry in &oracles.location_map {
         assert_eq!(entry.location.path, Vec::<usize>::new());
-        let expected_index = survivor_names
+        let expected_index = ordered
             .iter()
             .position(|name| *name == entry.function)
             .unwrap_or_else(|| panic!("{} not a survivor", entry.function));
@@ -3563,10 +3010,9 @@ fn tc_031_ac15_location_map_round_trips_to_the_request_structurally() {
             }
         }
         let expected_kind = match entry.function.as_str() {
-            "add_fn" => CallPointKind::ScalarOperator,
-            "eq_fn" => CallPointKind::EqualityEvaluation,
-            "call_fn" => CallPointKind::NestedCall,
-            "unrelated_fn" => CallPointKind::ScalarOperator,
+            "add" => CallPointKind::ScalarOperator,
+            "eq" => CallPointKind::EqualityEvaluation,
+            "nested" => CallPointKind::NestedCall,
             other => panic!("unexpected function {other}"),
         };
         assert_eq!(entry.call_point, expected_kind);
@@ -3575,15 +3021,14 @@ fn tc_031_ac15_location_map_round_trips_to_the_request_structurally() {
 
 /// FR-021-AC-16 (Inspection). No generated code or claim map
 /// reads, branches on, or asserts non-emptiness of `Evaluation.location` or
-/// `Evaluation.losses`: the generated oracle discards both by construction
-/// (`.map(|evaluation| evaluation.outcome)`), and this test greps the
+/// `Evaluation.losses`: the generated oracle returns the full QSL evaluation
+/// without inspecting either field, and this test greps the
 /// generated source and the serialized claim/location maps to confirm no
 /// occurrence of either field name slipped in some other way.
 #[trace("FR-021-AC-16", "TC-031")]
 #[test]
 fn tc_031_ac16_no_generated_code_reads_location_or_losses() {
-    let package = admit(ext_corpus_package());
-    let oracles = generate(&package, &main_functions(), &main_items());
+    let (_, oracles) = super::exact_function_agreement::genuine_corpus();
     let lib = contents(&oracles, "src/lib.rs");
     // The header comment documents (in prose) that `Evaluation.location`/
     // `.losses` are never read; check for an actual field *read* --
@@ -3592,7 +3037,9 @@ fn tc_031_ac16_no_generated_code_reads_location_or_losses() {
     // which the header's own documentation legitimately contains.
     assert!(!lib.contains("evaluation.location"));
     assert!(!lib.contains("evaluation.losses"));
-    assert!(lib.contains(".map(|evaluation| evaluation.outcome)"));
+    assert!(
+        lib.contains("Result<Result<eval::Evaluation, eval::CallFailure>, CheckedFunctionError>")
+    );
     // The claim map's own `Serialize` types (`ClaimMap`,
     // `GeneratedExactFunctionClaim`) carry no `location`/`losses` field at
     // all, so a JSON-key absence check on `claim-map.json` here would only

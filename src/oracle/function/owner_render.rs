@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Source rendering for concrete FR-485 function bodies.
 
+#[cfg(test)]
+use super::ExactFunctionDeclaration;
 use super::{
-    BinaryIntegerOperator, CheckedNodeId, EqualityOperatorKind, ExactFunctionDeclaration,
-    ExactFunctionRefusal, FunctionSourceIndex, GraphBody,
+    BinaryIntegerOperator, CheckedNodeId, ClassifiedBody, ClassifiedFunction, EqualityOperatorKind,
+    ExactFunctionRefusal, FunctionNames, FunctionSourceIndex, GraphBody,
 };
 
 /// The body forms the direct renderer can emit before nested call-site provenance lands.
+#[cfg(test)]
 pub(super) enum DirectBody {
     Scalar(BinaryIntegerOperator),
     Equality(EqualityOperatorKind),
@@ -14,6 +17,7 @@ pub(super) enum DirectBody {
 
 /// Resolve the callable declaration in the admitted graph before rendering a direct body.
 /// A body-expression ID alone is never a QSL callable key.
+#[cfg(test)]
 pub(super) fn checked_item<Body: GraphBody>(
     index: &FunctionSourceIndex<'_, Body>,
     symbol: &str,
@@ -26,6 +30,39 @@ pub(super) fn checked_item<Body: GraphBody>(
     match body {
         DirectBody::Scalar(operator) => Ok(scalar_item(symbol, callable, operator)),
         DirectBody::Equality(operator) => Ok(equality_item(symbol, callable, operator)),
+    }
+}
+
+/// Render a survivor from its admitted callable and body identities.
+pub(super) fn classified_item<Body: GraphBody>(
+    index: &FunctionSourceIndex<'_, Body>,
+    names: &FunctionNames<'_>,
+    symbol: &str,
+    function: &ClassifiedFunction<'_>,
+) -> Result<String, ExactFunctionRefusal> {
+    let declaration = function.declaration;
+    let caller = index
+        .source_function_node_id(&declaration.name, &declaration.node_id)
+        .ok_or(ExactFunctionRefusal::BodyMismatch)?;
+    match &function.body {
+        ClassifiedBody::Scalar(operator) => Ok(scalar_item(symbol, caller, *operator)),
+        ClassifiedBody::Equality(operator) => Ok(equality_item(symbol, caller, *operator)),
+        ClassifiedBody::Call(callee) => {
+            let callee_body = names.unique_node_id(callee).ok_or_else(|| {
+                ExactFunctionRefusal::UnknownCallee {
+                    callee: (*callee).to_owned(),
+                }
+            })?;
+            let callee_function = index
+                .source_function_node_id(callee, callee_body)
+                .ok_or(ExactFunctionRefusal::BodyMismatch)?;
+            Ok(call_item(
+                symbol,
+                caller,
+                callee_function,
+                &function.body_node_id,
+            ))
+        }
     }
 }
 
@@ -467,60 +504,18 @@ mod tests {
             "quire-contract-codegen = {{ path = {:?} }}",
             env!("CARGO_MANIFEST_DIR")
         );
-        let mut manifest = crate::core::profile::function_oracle_crate_manifest("ir595-direct-leaf")
+        let manifest = crate::core::profile::function_oracle_crate_manifest("ir595-direct-leaf")
             .replace(
                 "quire-contract-codegen = { git = \"https://github.com/agent-ix/quire-contract-codegen\", branch = \"main\" }",
                 &local_codegen,
             );
-        let root_lock =
-            fs::read_to_string(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("Cargo.lock"))
-                .expect("read CG's selected dependency cohort");
-        let cargo_home = std::env::var_os("CARGO_HOME")
-            .map(PathBuf::from)
-            .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".cargo")))
-            .expect("Cargo home");
-        let checkouts = cargo_home.join("git/checkouts");
-        let checkout = |package_name: &str, checkout_prefix: &str| {
-            let name = format!("name = {package_name:?}");
-            let package = root_lock
-                .split("[[package]]")
-                .find(|block| block.lines().any(|line| line == name))
-                .expect("CG locks the selected package");
-            let revision = package
-                .lines()
-                .find_map(|line| line.strip_prefix("source = \"")?.split('#').nth(1))
-                .and_then(|revision| revision.strip_suffix('"'))
-                .expect("selected Git revision");
-            fs::read_dir(&checkouts)
-                .expect("Cargo Git checkouts")
-                .filter_map(Result::ok)
-                .filter(|entry| {
-                    entry
-                        .file_name()
-                        .to_string_lossy()
-                        .starts_with(checkout_prefix)
-                })
-                .flat_map(|entry| fs::read_dir(entry.path()).into_iter().flatten())
-                .filter_map(Result::ok)
-                .find(|entry| revision.starts_with(&*entry.file_name().to_string_lossy()))
-                .expect("CG's selected Git checkout is available")
-                .path()
-        };
-        let runtime_checkout = checkout("quire-contract-runtime", "quire-contract-runtime-");
-        let ir_checkout = checkout("quire-contract-model", "quire-contract-ir-");
-        manifest.push_str(&format!(
-            "\n[patch.\"https://github.com/agent-ix/quire-contract-runtime\"]\nquire-contract-runtime = {{ path = {:?} }}\n",
-            runtime_checkout,
-        ));
-        manifest.push_str(&format!(
-            "\n[patch.\"https://github.com/agent-ix/quire-contract-ir\"]\nquire-contract-ir = {{ path = {:?} }}\nquire-contract-model = {{ path = {:?} }}\n",
-            ir_checkout,
-            ir_checkout.join("crates/quire-contract-model"),
-        ));
         fs::write(directory.0.join("Cargo.toml"), manifest).expect("direct manifest");
-        let target = std::env::var_os("CARGO_TARGET_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target"));
+        fs::copy(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("Cargo.lock"),
+            directory.0.join("Cargo.lock"),
+        )
+        .expect("reuse CG's selected dependency cohort");
+        let target = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target");
         let output = Command::new(env!("CARGO"))
             .args(["test", "--offline", "--quiet"])
             .env("CARGO_TARGET_DIR", target)

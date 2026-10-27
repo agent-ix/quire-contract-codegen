@@ -42,7 +42,19 @@ pub(super) fn run_agreement_cases<'a>(
     extra_files: &[(&'a str, &'a str)],
     cases: &str,
 ) {
-    run_agreement_cases_with_expectation(label, artifacts, extra_files, cases, None);
+    run_agreement_cases_with_expectation(label, artifacts, extra_files, cases, None, false);
+}
+
+/// Run one generated function corpus in this worktree's shared target directory.
+/// Its generated package has a unique source path and keeps the dependency
+/// cohort selected by this repository's seeded lock.
+pub(super) fn run_agreement_cases_in_repo_target<'a>(
+    label: &str,
+    artifacts: impl IntoIterator<Item = (&'a str, &'a str)>,
+    extra_files: &[(&'a str, &'a str)],
+    cases: &str,
+) {
+    run_agreement_cases_with_expectation(label, artifacts, extra_files, cases, None, true);
 }
 
 /// Require a named native assertion failure, never a setup or compiler failure.
@@ -53,7 +65,14 @@ pub(super) fn run_agreement_mutant<'a>(
     cases: &str,
     failed_test: &str,
 ) {
-    run_agreement_cases_with_expectation(label, artifacts, extra_files, cases, Some(failed_test));
+    run_agreement_cases_with_expectation(
+        label,
+        artifacts,
+        extra_files,
+        cases,
+        Some(failed_test),
+        false,
+    );
 }
 
 fn run_agreement_cases_with_expectation<'a>(
@@ -62,6 +81,7 @@ fn run_agreement_cases_with_expectation<'a>(
     extra_files: &[(&'a str, &'a str)],
     cases: &str,
     failed_test: Option<&str>,
+    shared_target: bool,
 ) {
     let scratch = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
     let root = scratch.join(label);
@@ -89,9 +109,14 @@ fn run_agreement_cases_with_expectation<'a>(
     fs::write(&manifest_path, manifest).expect("extend generated manifest");
     super::scratch_crate::resolve_seeded_lock(&root);
 
+    let target = if shared_target {
+        repository.join("target")
+    } else {
+        root.join("target")
+    };
     let output = Command::new(env!("CARGO"))
         .args(["test", "--locked", "--offline", "--test", "agreement"])
-        .env("CARGO_TARGET_DIR", root.join("target"))
+        .env("CARGO_TARGET_DIR", target)
         .env_remove("RUSTFLAGS")
         .env_remove("CARGO_ENCODED_RUSTFLAGS")
         .current_dir(&root)

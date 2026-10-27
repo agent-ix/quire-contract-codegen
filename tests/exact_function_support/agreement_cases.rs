@@ -1,431 +1,382 @@
-//! FR-021-AC-2, AC-4, AC-5, AC-9, AC-17: generated function-application
-//! oracles agree with an independently assembled direct Contract Runtime
-//! call; `InputRefusal` surfaces unchanged; a denial injected at `function.call`
-//! yields `Outcome::Incomplete` with no charge applied; and the static
-//! location map's `origin` half is confirmed against the runtime's own
-//! `CheckRefusal`.
-//!
-//! This file is not part of the `it` binary. It is the `agreement` integration
-//! test of a scratch crate that `tests/it/exact_function_agreement.rs` writes
-//! at test time from the generator's current output: the crate itself is the
-//! main FR-021 corpus. AC-17 needs the generator
-//! itself and stays in `tests/it/exact_function_agreement.rs`.
-//!
-//! Agreement with the QSL application authority (FR-021-AC-18) is outside
-//! CG's boundary and not claimed here: this repository reaches QSL only
-//! through `qsl-replay`'s public API, and that agreement is owned by
-//! quire-integration IR-842 (FR-014-AC-47). This file's agreement legs are
-//! exactly two: the generated oracle and a direct Contract Runtime call.
+//! Executed FR-021 corpus: generated bodies and independent FR-485 session application.
+//! The parent IT test writes the generated crate and the source literal used here.
 
-/// The generated main-corpus crate under test. `names.rs`, written beside the scratch crate's
-/// manifest at test time, re-exports each executed oracle as `oracle_<function>`.
 mod generated {
     pub use quire_exact_function_oracles::*;
     include!(concat!(env!("CARGO_MANIFEST_DIR"), "/names.rs"));
 }
 
-use quire_contract_runtime::exact as rt;
-use quire_semantic_value::declaration as sv;
-use quire_exact as exact;
+use qsl_replay::{
+    acquire_checked_closure, ApplicationEnvironment, DependencyInput, ReplayLimits, SourceIdentity,
+    StageLimits,
+};
+use quire_contract_codegen::{
+    checked_function_wire_id, checked_package_digest, CheckedFunctionError, CheckedFunctionSource,
+};
+use quire_contract_model::{
+    CheckedNodeId, CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2,
+    CheckedPackageV2ReadResult,
+};
+use quire_eval::FamilyOutcome;
+use quire_exact::{
+    ChargePoint, InjectedDenial, Integer, LimitKind, Meter, Outcome, ScalarLimits, Value,
+};
+use quire_semantic_value::object_closure::ObjectClosure;
 use std::num::NonZeroU64;
 
-const UNLIMITED: exact::ScalarLimits = exact::ScalarLimits {
-    integer_bits: u64::MAX,
-    decimal_digits: u64::MAX,
-    scale_expansion: u64::MAX,
-    text_input_bytes: u64::MAX,
-    text_scalars: u64::MAX,
-    normalized_scalars: u64::MAX,
-    unit_edges: u64::MAX,
-    value_occurrences: u64::MAX,
-    work_units: u64::MAX,
-    result_units: u64::MAX,
-};
-
-fn empty_objects() -> quire_semantic_value::object_closure::ObjectClosure {
-    let types =
-        sv::TypeEnvironment::new(Vec::new(), core::iter::empty::<sv::ObjectTypeDeclaration>())
-            .expect("empty declaration closure admits");
-    quire_semantic_value::object_closure::ObjectClosure::new(&types, core::iter::empty(), &[]).expect("no objects admits trivially")
+fn source_identity() -> SourceIdentity {
+    SourceIdentity::new("agent-ix", "ir595-agreement", "git", "1")
 }
 
-/// A direct, independently assembled `PackageDeclarations` mirroring the
-/// generated crate's own `add_fn`/`call_fn`/`eq_fn`/`unrelated_fn` -- built
-/// fresh from real `Body` closures, never read back from the generated
-/// source. Function insertion order here does not need to match the
-/// generator's own `Origin::Body{index}` assignment: AC-2 compares
-/// *outcomes and charges*, not indices (AC-3 covers indices, in
-/// `exact_function_generation.rs`).
-fn direct_package() -> rt::CheckedPackage {
-    fn add_body() -> rt::Body {
-        Box::new(
-            |frame: &rt::Frame, args: &[exact::Value]| -> exact::Outcome<exact::Value> {
-                let [exact::Value::Integer(left), exact::Value::Integer(right)] = args else {
-                    return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {
-                        cause: exact::CheckedInvariantCause::GeneratedArgumentShapeMismatch,
-                    });
-                };
-                match frame.meter(|meter| {
-                    exact::evaluate_integer_arithmetic(
-                        exact::IntegerArithmetic::Add(left, right),
-                        None,
-                        meter,
-                    )
-                }) {
-                    Ok(exact::Outcome::Completed(value)) => {
-                        exact::Outcome::Completed(exact::Value::Integer(value))
-                    }
-                    Ok(exact::Outcome::Undefined(undefined)) => exact::Outcome::Undefined(undefined),
-                    Ok(exact::Outcome::Refused(refusal)) => exact::Outcome::Refused(refusal),
-                    Ok(exact::Outcome::Incomplete(incomplete)) => exact::Outcome::Incomplete(incomplete),
-                    Err(refusal) => exact::Outcome::Refused(refusal),
-                }
-            },
-        )
-    }
-
-    let functions = vec![
-        rt::FunctionDeclaration {
-            name: "add_fn".to_owned(),
-            parameters: vec![
-                ("a".to_owned(), exact::ValueType::Integer),
-                ("b".to_owned(), exact::ValueType::Integer),
-            ],
-            result: exact::ValueType::Integer,
-            ieee_requirements: Vec::new(),
-            integer_division_consumers: Vec::new(),
-            measure_discharged: true,
-            body: add_body(),
-        },
-        rt::FunctionDeclaration {
-            name: "unrelated_fn".to_owned(),
-            parameters: vec![
-                ("a".to_owned(), exact::ValueType::Integer),
-                ("b".to_owned(), exact::ValueType::Integer),
-            ],
-            result: exact::ValueType::Integer,
-            ieee_requirements: Vec::new(),
-            integer_division_consumers: Vec::new(),
-            measure_discharged: true,
-            body: add_body(),
-        },
-        rt::FunctionDeclaration {
-            name: "eq_fn".to_owned(),
-            parameters: vec![
-                ("a".to_owned(), exact::ValueType::Integer),
-                ("b".to_owned(), exact::ValueType::Integer),
-            ],
-            result: exact::ValueType::Boolean,
-            ieee_requirements: Vec::new(),
-            integer_division_consumers: Vec::new(),
-            measure_discharged: true,
-            body: Box::new(
-                |frame: &rt::Frame, args: &[exact::Value]| -> exact::Outcome<exact::Value> {
-                    let [left, right] = args else {
-                        return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {
-                            cause: exact::CheckedInvariantCause::GeneratedArgumentShapeMismatch,
-                        });
-                    };
-                    let environment = sv::TypeEnvironment::new(
-                        Vec::new(),
-                        core::iter::empty::<sv::ObjectTypeDeclaration>(),
-                    )
-                    .expect("empty declaration closure admits");
-                    let checked = environment
-                        .check_equality(
-                            sv::EqualityOperator::Equal,
-                            sv::EqualityOperand::typed(exact::ValueType::Integer),
-                            sv::EqualityOperand::typed(exact::ValueType::Integer),
-                            &quire_semantic_value::enumeration::EnumMemberIndex::default(),
-                        )
-                        .expect("Integer/Integer Equal admits");
-                    match frame.meter(|meter| checked.evaluate(&environment, left, right, meter)) {
-                        Ok(exact::Outcome::Completed(value)) => {
-                            exact::Outcome::Completed(exact::Value::Boolean(value))
-                        }
-                        Ok(exact::Outcome::Undefined(undefined)) => exact::Outcome::Undefined(undefined),
-                        Ok(exact::Outcome::Refused(refusal)) => exact::Outcome::Refused(refusal),
-                        Ok(exact::Outcome::Incomplete(incomplete)) => {
-                            exact::Outcome::Incomplete(incomplete)
-                        }
-                        Err(refusal) => exact::Outcome::Refused(refusal),
-                    }
-                },
-            ),
-        },
-        rt::FunctionDeclaration {
-            name: "call_fn".to_owned(),
-            parameters: vec![
-                ("a".to_owned(), exact::ValueType::Integer),
-                ("b".to_owned(), exact::ValueType::Integer),
-            ],
-            result: exact::ValueType::Integer,
-            ieee_requirements: Vec::new(),
-            integer_division_consumers: Vec::new(),
-            measure_discharged: true,
-            body: Box::new(
-                |frame: &rt::Frame, args: &[exact::Value]| -> exact::Outcome<exact::Value> {
-                    frame.call("add_fn", args)
-                },
-            ),
-        },
-    ];
-    rt::PackageDeclarations {
-        types: sv::TypeEnvironment::new(
-            Vec::new(),
-            core::iter::empty::<sv::ObjectTypeDeclaration>(),
-        )
-        .expect("empty declaration closure admits"),
-        functions,
-    }
-    .check(rt::CheckMode::Linked, rt::CheckingLimits::default())
-    .expect("direct package admits")
-}
-
-/// Same comparison shape a generated oracle itself exposes: `package.call`
-/// returns `Result<Evaluation, InputRefusal>`, and the generated oracle
-/// maps that down to `Result<Outcome<Value>, InputRefusal>`
-/// (`.map(|evaluation| evaluation.outcome)`, AC-16) before returning it --
-/// so the direct leg here does the identical `.map` before formatting, or
-/// the two Debug strings would differ on `Evaluation`'s `location`/`losses`
-/// fields alone, which is not what AC-2 is asking to compare.
-fn call_debug(package: &rt::CheckedPackage, function: &str, arguments: Vec<exact::Value>) -> String {
-    let objects = empty_objects();
-    let mut meter = exact::Meter::new(UNLIMITED);
-    let outcome = package
-        .call(function, arguments, &objects, &mut meter)
-        .map(|evaluation| evaluation.outcome);
-    format!("{outcome:?} consumed={:?}", meter.admitted_charges())
-}
-
-/// Trace: FR-021-AC-2, TC-031. The generated oracle's `Outcome<Value>` and
-/// admitted charge sequence equal a direct `CheckedPackage::call` on an
-/// independently assembled package, for the scalar (add_fn), equality
-/// (eq_fn), and nested-call (call_fn) forms -- TC-031 step 1(a)'s
-/// multi-form package.
-#[test]
-fn tc_031_ac2_generated_oracle_agrees_with_direct_runtime_call() {
-    let direct = direct_package();
-    let generated = generated::checked_package().expect("generated package admits");
-    let objects = empty_objects();
-
-    // add_fn(2, 3)
-    {
-        let args = vec![
-            exact::Value::Integer(2i64.into()),
-            exact::Value::Integer(3i64.into()),
-        ];
-        let direct_result = call_debug(&direct, "add_fn", args.clone());
-        let mut meter = exact::Meter::new(UNLIMITED);
-        let generated_result =
-            generated::oracle_add_fn(
-                &generated, args, &objects, &mut meter,
-            );
-        assert_eq!(
-            format!(
-                "{:?} consumed={:?}",
-                generated_result,
-                meter.admitted_charges()
-            ),
-            direct_result,
-        );
-    }
-
-    // eq_fn(5, 5) and eq_fn(5, 6)
-    for (a, b) in [(5i64, 5i64), (5i64, 6i64)] {
-        let args = vec![exact::Value::Integer(a.into()), exact::Value::Integer(b.into())];
-        let direct_result = call_debug(&direct, "eq_fn", args.clone());
-        let mut meter = exact::Meter::new(UNLIMITED);
-        let generated_result =
-            generated::oracle_eq_fn(
-                &generated, args, &objects, &mut meter,
-            );
-        assert_eq!(
-            format!(
-                "{:?} consumed={:?}",
-                generated_result,
-                meter.admitted_charges()
-            ),
-            direct_result,
-        );
-    }
-
-    // call_fn(7, 8) -- nests into add_fn via Frame::call.
-    {
-        let args = vec![
-            exact::Value::Integer(7i64.into()),
-            exact::Value::Integer(8i64.into()),
-        ];
-        let direct_result = call_debug(&direct, "call_fn", args.clone());
-        let mut meter = exact::Meter::new(UNLIMITED);
-        let generated_result =
-            generated::oracle_call_fn(
-                &generated, args, &objects, &mut meter,
-            );
-        assert_eq!(
-            format!(
-                "{:?} consumed={:?}",
-                generated_result,
-                meter.admitted_charges()
-            ),
-            direct_result,
-        );
+fn source<'a>(dependencies: &'a DependencyInput) -> CheckedFunctionSource<'a> {
+    CheckedFunctionSource {
+        source: source_identity(),
+        path: "ir595-agreement.native",
+        bytes: generated::SOURCE.as_bytes(),
+        packages: &[],
+        dependencies,
+        limits: StageLimits::default(),
+        replay_limits: ReplayLimits::default(),
     }
 }
 
-/// Trace: FR-021-AC-4, TC-031. `InputRefusal::Arity` and `::WrongValueKind`
-/// are returned by the generated oracle unchanged, before any charge;
-/// `Meter::admitted_charges()` is empty on both. `::UnknownFunction` has no
-/// generated-oracle path at all (an item naming an undeclared function is
-/// refused at generation time and emits no oracle -- see
-/// `exact_function_generation.rs`'s AC-1 test), so it is driven here
-/// directly against `CheckedPackage::call`, the same entry point every
-/// generated oracle itself delegates to unchanged. `::DanglingReference` is
-/// not exercised: the runtime's `validate_arguments`
-/// (`quire-contract-runtime/src/exact/expression.rs`) checks
-/// `value_type.admits(argument)` -- `WrongValueKind` -- before it ever
-/// walks a value for a dangling reference, and a `Value::Reference`
-/// supplied for this generator's Integer/Boolean-only parameter kinds
-/// always fails that first check. `DanglingReference` is structurally
-/// unreachable for any oracle this generator can produce (a
-/// reference-typed parameter is refused at generation time, AC-10, blocked
-/// on qsl#120), so no test here asserts it.
-#[test]
-fn tc_031_ac4_input_refusal_surfaces_unchanged_before_any_charge() {
-    let generated = generated::checked_package().expect("generated package admits");
-    let objects = empty_objects();
-
-    // Arity: add_fn takes 2 arguments.
-    {
-        let mut meter = exact::Meter::new(UNLIMITED);
-        let result =
-            generated::oracle_add_fn(
-                &generated,
-                vec![exact::Value::Integer(1i64.into())],
-                &objects,
-                &mut meter,
-            );
-        assert!(matches!(
-            result,
-            Err(rt::InputRefusal::Arity {
-                declared: 2,
-                supplied: 1
-            })
-        ));
-        assert!(meter.admitted_charges().is_empty());
-    }
-
-    // WrongValueKind: add_fn's first parameter is Integer, not Boolean.
-    {
-        let mut meter = exact::Meter::new(UNLIMITED);
-        let result =
-            generated::oracle_add_fn(
-                &generated,
-                vec![exact::Value::Boolean(true), exact::Value::Integer(1i64.into())],
-                &objects,
-                &mut meter,
-            );
-        assert!(matches!(
-            result,
-            Err(rt::InputRefusal::WrongValueKind { parameter: 0 })
-        ));
-        assert!(meter.admitted_charges().is_empty());
-    }
-
-    // A Reference value supplied for add_fn's Integer parameter fails
-    // `value_type.admits(argument)` before the runtime ever walks it for a
-    // dangling reference -- see this test's own doc comment for why
-    // `DanglingReference` itself is untested here.
-    {
-        let mut meter = exact::Meter::new(UNLIMITED);
-        let dangling = exact::ObjectReference::new(
-            exact::UniverseId::from_digest([6; 32]),
-            exact::EffectiveId::from_digest([7; 32]),
-            exact::ObjectId::new("object").expect("object identity"),
-        );
-        let result =
-            generated::oracle_add_fn(
-                &generated,
-                vec![
-                    exact::Value::Reference(dangling),
-                    exact::Value::Integer(1i64.into()),
-                ],
-                &objects,
-                &mut meter,
-            );
-        assert!(matches!(
-            result,
-            Err(rt::InputRefusal::WrongValueKind { parameter: 0 })
-        ));
-        assert!(meter.admitted_charges().is_empty());
-    }
-
-    // UnknownFunction: driven directly, since no generated oracle exists
-    // for an undeclared name.
-    {
-        let mut meter = exact::Meter::new(UNLIMITED);
-        let result = generated.call("does_not_exist_anywhere", Vec::new(), &objects, &mut meter);
-        assert!(
-            matches!(result, Err(rt::InputRefusal::UnknownFunction(name)) if name == "does_not_exist_anywhere")
-        );
-        assert!(meter.admitted_charges().is_empty());
-    }
-}
-
-/// Trace: FR-021-AC-5, TC-031. Arity is decided before any per-argument
-/// value-kind check: a call with both the wrong count *and* a wrong kind
-/// among the supplied arguments reports `Arity`, never `WrongValueKind` --
-/// matching FR-273-AC-2's own ordering, which the generated oracle inherits
-/// unchanged by delegating wholesale to `CheckedPackage::call`.
-#[test]
-fn tc_031_ac5_arity_is_decided_before_value_kind() {
-    let generated = generated::checked_package().expect("generated package admits");
-    let objects = empty_objects();
-    let mut meter = exact::Meter::new(UNLIMITED);
-    let result =
-        generated::oracle_add_fn(
-            &generated,
-            vec![exact::Value::Boolean(true)], // wrong arity AND wrong kind
-            &objects,
-            &mut meter,
-        );
-    assert!(matches!(
-        result,
-        Err(rt::InputRefusal::Arity {
-            declared: 2,
-            supplied: 1
-        })
-    ));
-}
-
-/// Trace: FR-021-AC-9, TC-031. A denial injected at the `function.call`
-/// charge point yields `Outcome::Incomplete` naming that point, and the
-/// denied charge is never applied.
-#[test]
-fn tc_031_ac9_denial_at_function_call_yields_incomplete_with_no_charge_applied() {
-    let generated = generated::checked_package().expect("generated package admits");
-    let objects = empty_objects();
-    let denial = exact::InjectedDenial {
-        point: exact::ChargePoint::FunctionCall,
-        occurrence: NonZeroU64::new(1).unwrap(),
+fn package() -> CheckedPackageV2 {
+    let acquired = acquire_checked_closure(
+        source_identity(),
+        "ir595-agreement.native",
+        generated::SOURCE.as_bytes(),
+        [],
+        &DependencyInput::default(),
+        StageLimits::default(),
+        ReplayLimits::default(),
+    )
+    .expect("QSL admits the exact source used by the generator");
+    let mut evidence = CheckedPackageEvidence::new();
+    evidence.support_feature("quire.value.complete/v1");
+    let read = CheckedPackageV2::read(
+        acquired.package().bytes(),
+        CheckedPackageReadLimits::bounded(),
+        &evidence,
+    );
+    let CheckedPackageV2ReadResult::Admitted(package) = read else {
+        panic!("Contract IR admits the same QSL bytes: {read:?}");
     };
-    let mut meter = exact::Meter::new(UNLIMITED).with_injected_denial(denial);
-    let result =
-        generated::oracle_add_fn(
-            &generated,
-            vec![
-                exact::Value::Integer(1i64.into()),
-                exact::Value::Integer(2i64.into()),
-            ],
-            &objects,
-            &mut meter,
+    *package
+}
+
+fn unrelated_package() -> CheckedPackageV2 {
+    const OTHER: &str = concat!(
+        "language \"ix:native\" edition \"1-draft\";\n",
+        "profile v = \"quire.value.complete/v1\";\n",
+        "function unrelated using v(x: Int[0, 9], y: Int[0, 9]): Integer pure { x - y }\n",
+    );
+    let acquired = acquire_checked_closure(
+        source_identity(),
+        "ir595-other.native",
+        OTHER.as_bytes(),
+        [],
+        &DependencyInput::default(),
+        StageLimits::default(),
+        ReplayLimits::default(),
+    )
+    .expect("QSL admits the unrelated source");
+    let mut evidence = CheckedPackageEvidence::new();
+    evidence.support_feature("quire.value.complete/v1");
+    let read = CheckedPackageV2::read(
+        acquired.package().bytes(),
+        CheckedPackageReadLimits::bounded(),
+        &evidence,
+    );
+    let CheckedPackageV2ReadResult::Admitted(package) = read else {
+        panic!("IR admits the unrelated QSL bytes: {read:?}");
+    };
+    *package
+}
+
+fn function(package: &CheckedPackageV2, name: &str) -> CheckedNodeId {
+    package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| {
+            node.declaration
+                .as_ref()
+                .is_some_and(|declaration| declaration.qualified_name == [Box::<str>::from(name)])
+        })
+        .unwrap_or_else(|| panic!("checked function {name}"))
+        .node_id
+        .clone()
+}
+
+fn meter() -> Meter {
+    let ceiling = u64::from(u32::MAX);
+    Meter::new(ScalarLimits {
+        integer_bits: ceiling,
+        decimal_digits: ceiling,
+        scale_expansion: ceiling,
+        text_input_bytes: ceiling,
+        text_scalars: ceiling,
+        normalized_scalars: ceiling,
+        unit_edges: ceiling,
+        value_occurrences: ceiling,
+        work_units: ceiling,
+        result_units: ceiling,
+    })
+}
+
+fn direct(
+    name: &str,
+    package: &CheckedPackageV2,
+    arguments: Vec<Value>,
+    meter: &mut Meter,
+) -> quire_eval::Evaluation {
+    let acquired = acquire_checked_closure(
+        source_identity(),
+        "ir595-agreement.native",
+        generated::SOURCE.as_bytes(),
+        [],
+        &DependencyInput::default(),
+        StageLimits::default(),
+        ReplayLimits::default(),
+    )
+    .expect("independent QSL acquisition");
+    let handle = acquired.handle();
+    let owner = checked_package_digest(package.package_id()).expect("admitted owner digest");
+    let wire = checked_function_wire_id(&function(package, name)).expect("admitted wire key");
+    let selection = handle
+        .lookup_callable(owner, wire)
+        .expect("QSL selects the function");
+    let mut registry = handle.registry();
+    let environment = ApplicationEnvironment::new(ObjectClosure::default());
+    registry
+        .begin_call(&selection, arguments, &environment, meter)
+        .expect("direct QSL Begin")
+        .run()
+        .expect("interpreted body completes")
+}
+
+fn generated(
+    name: &str,
+    package: &CheckedPackageV2,
+    arguments: Vec<Value>,
+    meter: &mut Meter,
+) -> quire_eval::Evaluation {
+    let dependencies = DependencyInput::default();
+    let source = source(&dependencies);
+    let result = match name {
+        "add" => generated::oracle_add(
+            source,
+            package,
+            package,
+            arguments,
+            ObjectClosure::default(),
+            meter,
+        ),
+        "eq" => generated::oracle_eq(
+            source,
+            package,
+            package,
+            arguments,
+            ObjectClosure::default(),
+            meter,
+        ),
+        "nested" => generated::oracle_nested(
+            source,
+            package,
+            package,
+            package,
+            arguments,
+            ObjectClosure::default(),
+            meter,
+        ),
+        _ => panic!("unsupported corpus function"),
+    };
+    result
+        .expect("checked owner, lookup, registration and Begin")
+        .expect("generated body completes")
+}
+
+/// Trace: FR-021-AC-2, FR-021-AC-32, FR-021-AC-35, TC-031.
+#[test]
+fn generated_and_independent_fr485_session_match_in_outcome_and_charges() {
+    let package = package();
+    for (name, left, right) in [
+        ("add", 3_u64, 4_u64),
+        ("eq", 3_u64, 4_u64),
+        ("nested", 3_u64, 4_u64),
+    ] {
+        let arguments = vec![
+            Value::Integer(Integer::from(left)),
+            Value::Integer(Integer::from(right)),
+        ];
+        let mut generated_meter = meter();
+        let actual = generated(name, &package, arguments.clone(), &mut generated_meter);
+        let mut direct_meter = meter();
+        let expected = direct(name, &package, arguments, &mut direct_meter);
+        assert_eq!(
+            format!("{:?}", actual.outcome),
+            format!("{:?}", expected.outcome),
+            "{name}"
         );
-    match result {
-        Ok(exact::Outcome::Incomplete(incomplete)) => {
-            assert_eq!(incomplete.charge_point, exact::ChargePoint::FunctionCall);
+        assert_eq!(actual.location, expected.location, "{name} location");
+        assert_eq!(actual.losses, expected.losses, "{name} losses");
+        assert_eq!(
+            generated_meter.admitted_charges(),
+            direct_meter.admitted_charges(),
+            "{name} charge order"
+        );
+        for kind in LimitKind::ALL {
+            assert_eq!(
+                generated_meter.consumed(kind),
+                direct_meter.consumed(kind),
+                "{name} {kind:?}"
+            );
         }
-        other => panic!("expected Ok(Outcome::Incomplete(..)) naming function.call, got {other:?}"),
+        assert!(matches!(
+            actual.outcome,
+            FamilyOutcome::Evaluated(Outcome::Completed(_))
+        ));
     }
-    // The denied charge point is never applied: no charge was admitted.
-    assert!(meter.admitted_charges().is_empty());
+}
+
+fn direct_begin_refusal(
+    package: &CheckedPackageV2,
+    arguments: Vec<Value>,
+    meter: &mut Meter,
+) -> qsl_replay::ApplicationBeginRefusal {
+    let acquired = acquire_checked_closure(
+        source_identity(),
+        "ir595-agreement.native",
+        generated::SOURCE.as_bytes(),
+        [],
+        &DependencyInput::default(),
+        StageLimits::default(),
+        ReplayLimits::default(),
+    )
+    .expect("independent QSL acquisition");
+    let handle = acquired.handle();
+    let owner = checked_package_digest(package.package_id()).expect("admitted owner digest");
+    let wire = checked_function_wire_id(&function(package, "add")).expect("admitted wire key");
+    let selection = handle
+        .lookup_callable(owner, wire)
+        .expect("QSL selects add");
+    let mut registry = handle.registry();
+    let environment = ApplicationEnvironment::new(ObjectClosure::default());
+    match registry.begin_call(&selection, arguments, &environment, meter) {
+        Ok(_) => panic!("malformed input unexpectedly began"),
+        Err(refusal) => refusal,
+    }
+}
+
+/// Trace: FR-021-AC-4, FR-021-AC-5, TC-031.
+#[test]
+fn qsl_input_refusals_precede_application_charges_and_arity_precedes_kind() {
+    let package = package();
+    for arguments in [
+        vec![Value::Integer(Integer::from(1_u64))],
+        vec![Value::Boolean(true), Value::Integer(Integer::from(1_u64))],
+        vec![Value::Boolean(true)],
+    ] {
+        let dependencies = DependencyInput::default();
+        let mut generated_meter = meter();
+        let actual = generated::oracle_add(
+            source(&dependencies),
+            &package,
+            &package,
+            arguments.clone(),
+            ObjectClosure::default(),
+            &mut generated_meter,
+        )
+        .expect_err("generated application refuses invalid input");
+        let CheckedFunctionError::ApplicationBeginRefused(actual) = actual else {
+            panic!("expected Begin input refusal, got {actual:?}");
+        };
+        let mut direct_meter = meter();
+        let expected = direct_begin_refusal(&package, arguments, &mut direct_meter);
+        assert_eq!(format!("{actual:?}"), format!("{expected:?}"));
+        assert_eq!(generated_meter.admission_count(), 0);
+        assert_eq!(direct_meter.admission_count(), 0);
+        for kind in LimitKind::ALL {
+            assert_eq!(generated_meter.consumed(kind), 0, "{kind:?}");
+            assert_eq!(direct_meter.consumed(kind), 0, "{kind:?}");
+        }
+    }
+}
+
+/// Trace: FR-021-AC-9, TC-031.
+#[test]
+fn function_call_denial_is_incomplete_without_an_admitted_charge() {
+    let package = package();
+    let denial = InjectedDenial {
+        point: ChargePoint::FunctionCall,
+        occurrence: NonZeroU64::new(1).expect("nonzero occurrence"),
+    };
+    let arguments = vec![
+        Value::Integer(Integer::from(3_u64)),
+        Value::Integer(Integer::from(4_u64)),
+    ];
+    let dependencies = DependencyInput::default();
+    let mut generated_meter = meter().with_injected_denial(denial);
+    let actual = generated::oracle_add(
+        source(&dependencies),
+        &package,
+        &package,
+        arguments.clone(),
+        ObjectClosure::default(),
+        &mut generated_meter,
+    )
+    .expect("checked application")
+    .expect("terminal incomplete");
+    let mut direct_meter = meter().with_injected_denial(denial);
+    let expected = direct("add", &package, arguments, &mut direct_meter);
+    assert_eq!(
+        format!("{:?}", actual.outcome),
+        format!("{:?}", expected.outcome)
+    );
+    assert!(matches!(
+        actual.outcome,
+        FamilyOutcome::Evaluated(Outcome::Incomplete(ref incomplete))
+            if incomplete.charge_point == ChargePoint::FunctionCall
+    ));
+    assert_eq!(generated_meter.admission_count(), 0);
+    assert_eq!(direct_meter.admission_count(), 0);
+}
+
+/// Trace: FR-021-AC-36, FR-021-AC-37, TC-031.
+#[test]
+fn wrong_unit_or_owner_refuses_before_registration_and_charge() {
+    let admitted = package();
+    let unrelated = unrelated_package();
+    let arguments = vec![
+        Value::Integer(Integer::from(3_u64)),
+        Value::Integer(Integer::from(4_u64)),
+    ];
+    for (unit, owner) in [(&unrelated, &admitted), (&admitted, &unrelated)] {
+        let dependencies = DependencyInput::default();
+        let mut meter = meter();
+        let failure = generated::oracle_add(
+            source(&dependencies),
+            unit,
+            owner,
+            arguments.clone(),
+            ObjectClosure::default(),
+            &mut meter,
+        )
+        .expect_err("mismatched admitted identity must refuse");
+        assert!(matches!(
+            failure,
+            CheckedFunctionError::OwnerIdentityMismatch
+        ));
+        assert_eq!(meter.admission_count(), 0);
+        for kind in LimitKind::ALL {
+            assert_eq!(meter.consumed(kind), 0, "{kind:?}");
+        }
+    }
+    let mut healthy_meter = meter();
+    let healthy = generated("add", &admitted, arguments, &mut healthy_meter);
+    assert!(matches!(
+        healthy.outcome,
+        FamilyOutcome::Evaluated(Outcome::Completed(_))
+    ));
+    assert!(healthy_meter.admission_count() > 0);
 }

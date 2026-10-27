@@ -35,7 +35,6 @@ pub(crate) fn oracle_crate_manifest(crate_name: &str) -> String {
 }
 
 /// The concrete function oracle's checked-closure facade and direct leaf dependencies.
-#[cfg(test)]
 pub(crate) fn function_oracle_crate_manifest(crate_name: &str) -> String {
     format!(
         "[package]\nname = \"{crate_name}\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[lib]\npath = \"src/lib.rs\"\n\n[dependencies]\nquire-contract-codegen = {{ git = \"https://github.com/agent-ix/quire-contract-codegen\", branch = \"main\" }}\nquire-contract-model = {{ git = \"https://github.com/agent-ix/quire-contract-ir\", branch = \"main\" }}\nqsl-replay = {{ git = \"https://github.com/agent-ix/quire-spec-language\", branch = \"main\" }}\nquire-eval = {{ git = \"https://github.com/agent-ix/quire-eval\", branch = \"main\" }}\nquire-exact = {{ {EXACT_DEPENDENCY_SOURCE} }}\nquire-semantic-value = {{ {SEMANTIC_VALUE_DEPENDENCY_SOURCE} }}\n\n[lints.rust]\nunsafe_code = \"forbid\"\n\n{ORACLE_KANI_METADATA}[workspace]\n"

@@ -53,6 +53,10 @@ pub fn admitted_function_contract(
             CheckedNodeTag::Value,
             CheckedNodeTag::Expression,
             CheckedNodeTag::Function,
+            // Admit the genuine temporal roots and their model selection so
+            // CG can classify formula/fairness by the source node's form.
+            CheckedNodeTag::Temporal,
+            CheckedNodeTag::Model,
             CheckedNodeTag::Claim,
             CheckedNodeTag::Correspondence,
         ]),
