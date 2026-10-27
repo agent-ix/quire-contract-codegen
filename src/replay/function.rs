@@ -278,9 +278,11 @@ fn replay_falsification_through(
     let request = request(ReplaySource::Witness(witness))?;
     match execute(request) {
         Ok(ReplayResult::Witness(result)) => Ok(result),
-        Ok(ReplayResult::Input(_) | ReplayResult::ObservedTemporal(_)) => {
-            Err(SpineReplayError::WrongArm)
-        }
+        Ok(
+            ReplayResult::Input(_)
+            | ReplayResult::ObservedTemporal(_)
+            | ReplayResult::ModelGraph(_),
+        ) => Err(SpineReplayError::WrongArm),
         Err(refusal) => Err(SpineReplayError::Refused(Box::new(refusal))),
     }
 }
