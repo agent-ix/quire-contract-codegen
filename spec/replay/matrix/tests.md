@@ -10,7 +10,8 @@ type: TestMatrix
 
 | Functional Req | Acceptance Criteria | Test Cases | Status |
 |---|---|---|---|
-| FR-016 | FR-016-AC-1 through FR-016-AC-5, FR-016-AC-9 through FR-016-AC-23 | TC-026 | ✅ Covered |
+| FR-016 | FR-016-AC-1 through FR-016-AC-5, FR-016-AC-11 through FR-016-AC-23 | TC-026 | ✅ Covered; AC-1 through AC-5 and AC-21 through AC-23 use a direct test-only `KaniObligationIdentity` fixture for the surviving replay and identity APIs, without a V1 generator claim. |
+| FR-016 | FR-016-AC-9, FR-016-AC-10 | TC-026 | ⚠️ Partially backed, Open under IR-1047: default native replay tests survive; the V1 `skeleton_spine.rs` installed-prover E7-E9 control retires and requires a genuine V2 generated harness and real-Kani counterexample. |
 | FR-016 | FR-016-AC-8 | TC-026 | ⚠️ Partially backed, Open under IR-348: `src/replay/witness.rs` unit tests retain positional schema/naming/refusal evidence; the surviving V2 `state_clause_kani_playback_adapter_refuses_wrong_evidence` checks generated state-frame persisted draw order against playback and mismatched assertion evidence, but not emitted symbolic argument order or a real-Kani decode. `kani_argument_order.rs` and ignored real-Kani `kani_witness_join.rs` use the retiring V1 `BoundClause` producer. Genuine V2 emission-order and real-Kani decode evidence is still required. |
 | FR-016 | FR-016-AC-6 | TC-026 | ✅ Covered (IR-891): required byte and value-count bounds, at-bound controls and poisoned over-bound suffixes across the decode entry points |
 | FR-016 | FR-016-AC-24 | TC-026 | ✅ Covered (IR-611); `tc_026_a_lock_repeating_a_dependency_is_refused` asserts QSL's `DuplicateIdentity` refusal (`invalid_package`) arriving as `DependencyLockError::Input`, with no duplicate check of this crate's own |
