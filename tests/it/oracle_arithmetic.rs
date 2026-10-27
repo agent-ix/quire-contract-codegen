@@ -1349,7 +1349,7 @@ fn tc_044_native_division_matches_independent_member_model() {
 }
 
 /// The mixed add/remainder clause retains its completed connective after both integer results;
-/// denial of that final point leaves the two admitted result charges intact.
+/// denial of that final point leaves the integer and ordering result charges intact.
 #[trace("TC-044", "FR-031-AC-22", "FR-031-AC-26")]
 #[test]
 fn tc_044_mixed_division_connective_retain_denial_is_typed() {
@@ -1370,12 +1370,12 @@ fn tc_044_mixed_division_connective_retain_denial_is_typed() {
     let checks = format!(
         "#[test]\nfn completed_and_denied() {{
             assert_eq!({completed}, rt::Outcome::Completed(true));
-            let mut limited = rt::Meter::new(rt::ScalarLimits {{ result_units: 2, ..UNLIMITED }});
+            let mut limited = rt::Meter::new(rt::ScalarLimits {{ result_units: 3, ..UNLIMITED }});
             match {denied} {{
                 rt::Outcome::Incomplete(stop) => assert_eq!(stop.charge_point, rt::ChargePoint::BooleanResultRetain),
                 other => panic!(\"expected denied Boolean retain, got {{other:?}}\"),
             }}
-            assert_eq!(limited.consumed(rt::LimitKind::ResultUnits), 2);
+            assert_eq!(limited.consumed(rt::LimitKind::ResultUnits), 3);
             assert_eq!(limited.admitted_charges().iter().filter(|charge| charge.point == rt::ChargePoint::BooleanResultRetain).count(), 0);
         }}"
     );
