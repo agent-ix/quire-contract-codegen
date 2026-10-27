@@ -1153,6 +1153,15 @@ fn tc_044_native_division_uses_one_exact_member_and_domain() {
         assert_no_raw_arithmetic(&source);
         assert_eq!(scanned.calls_to("rt::divide"), 1, "{source}");
         assert_eq!(scanned.calls_to("rt::modulo"), 0, "{source}");
+        for forbidden in ["div_euclid", "rem_euclid"] {
+            assert!(
+                scanned
+                    .methods
+                    .iter()
+                    .all(|method| method.as_str() != forbidden),
+                "no {forbidden} method in the native oracle: {source}"
+            );
+        }
         assert!(
             source.contains("rt::DivisionProfile::Truncating"),
             "{source}"
