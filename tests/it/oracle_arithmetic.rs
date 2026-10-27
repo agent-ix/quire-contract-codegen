@@ -10,8 +10,8 @@ use std::{cell::Cell, fmt::Write as _, fs, path::PathBuf, process::Command};
 use crate::scratch_crate::{runtime_dependency, write_manifest, TemporaryDirectory};
 use quire_contract_codegen::EXACT_DEPENDENCY_SOURCE;
 use quire_contract_codegen::{
-    generate_boolean_oracle, generate_kani_bundle, GenerationDiagnostic, GenerationErrorCode,
-    GenerationTerminalState, KaniDiagnostic, KaniErrorCode, KaniRequest, KaniSolver, OracleRequest,
+    generate_boolean_oracle, GenerationDiagnostic, GenerationErrorCode, GenerationTerminalState,
+    OracleRequest,
 };
 use quire_contract_model::{
     AnchorName, BooleanOperator, ClauseId, ComparisonOperator, DeclarationEnvironment,
@@ -240,35 +240,6 @@ impl Built {
         self.generate()
             .expect_err("the construction is refused")
             .remove(0)
-    }
-
-    /// The Kani bundle holding this clause as its postcondition, with the canonical absent
-    /// precondition, as the QSL exemplar's subject has.
-    pub(crate) fn bundle(
-        &self,
-    ) -> Result<quire_contract_codegen::KaniArtifactBundle, Vec<KaniDiagnostic>> {
-        let precondition =
-            Expression::new(ExpressionKind::BooleanLiteral { value: true }, span(40, 41));
-        let precondition = self
-            .environment
-            .check_expression(&precondition, &ValueType::Boolean, &handler(), true)
-            .unwrap();
-        let postcondition = self.typed();
-        let pre = ClauseId::new("pre").unwrap();
-        let post = ClauseId::new("post").unwrap();
-        generate_kani_bundle(&KaniRequest {
-            ceilings: crate::common::proof_ceilings::proof_ceilings(),
-            requirement: self.environment.owner(),
-            precondition_clause: &pre,
-            postcondition_clause: &post,
-            precondition: &precondition,
-            postcondition: &postcondition,
-            proof_id: "arithmetic",
-            subject_path: "crate::subject",
-            unwind: 2,
-            solver: KaniSolver::Cadical,
-            dependencies: &[],
-        })
     }
 }
 
@@ -1116,49 +1087,6 @@ fn tc_044_divide_and_remainder_are_refused_by_the_native_oracle() {
             refusal.message
         );
         assert!(built.generate().is_err(), "{case}");
-    }
-}
-
-/// FR-031-AC-18, bundle consumer: the same constructions are refused by `generate_kani_bundle`
-/// with `ClauseGenerationFailed` retaining the oracle's own code and the node's span, and no
-/// harness. The same holds for a `saturate` add, subtract and multiply (FR-031-AC-11).
-#[trace("TC-044", "FR-031-AC-18", "FR-031-AC-11")]
-#[test]
-fn tc_044_divide_remainder_and_saturate_are_refused_by_the_bundle() {
-    for (case, built) in division_constructions() {
-        let refusals = built.bundle().expect_err(case);
-        assert_eq!(refusals.len(), 1, "{case}");
-        let refusal = &refusals[0];
-        assert_eq!(
-            refusal.code,
-            KaniErrorCode::ClauseGenerationFailed,
-            "{case}"
-        );
-        assert_eq!(
-            refusal.generation_code,
-            Some(GenerationErrorCode::UnsupportedIntegerDivision),
-            "{case}"
-        );
-        assert_eq!(
-            refusal.terminal_state,
-            GenerationTerminalState::Unsupported,
-            "{case}"
-        );
-        assert_eq!(refusal.source_span.as_ref(), Some(&built.node), "{case}");
-        assert!(refusal.message.contains("IR-601"), "{case}");
-    }
-    for built in [
-        saturate_arithmetic(NumericOperator::Add, i64::MIN, i64::MAX, 1, 0),
-        saturate_arithmetic(NumericOperator::Subtract, i64::MIN, i64::MAX, 1, 0),
-        saturate_arithmetic(NumericOperator::Multiply, 0, 10, 2, 10),
-    ] {
-        let refusal = built.bundle().unwrap_err().remove(0);
-        assert_eq!(refusal.code, KaniErrorCode::ClauseGenerationFailed);
-        assert_eq!(
-            refusal.generation_code,
-            Some(GenerationErrorCode::UnsupportedSaturatingArithmetic)
-        );
-        assert_eq!(refusal.source_span.as_ref(), Some(&built.node));
     }
 }
 

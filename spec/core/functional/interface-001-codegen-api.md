@@ -46,11 +46,6 @@ operations:
     planned_v2_inputs: [admitted CheckedPackageV2, checked clause id, authentic claim occurrence, population Satisfying|Violating|Broad|Boundary, campaign policy]
     output: GeneratedArtifactBundle | StrategyDiagnostic
     semantics: V1 interim behavior is bound_strategy_slice; V2 replacement admits one selected claim through IR's public clause-context typed comparison accessor, keeps its exact ordered operands and declaration domains, and uses the shared `lower_typed_integer_comparison` unit in `src/oracle` for the direct read/read and read/literal forms of integer.eq/ne/lt/le/gt/ge; it emits a complete constructive population, census and subject-free runner or one typed located refusal without artifacts; the execution point comes only through IR-1013's planned typed accessor for the accepted QSL ClauseBinding.execution_point keyed by this checked clause and authentic claim occurrence on the v2 node, never from clause kind or an independent caller field; see v2_bound_strategy_slice and FR-008 through FR-013
-  - name: generate_kani_bundle
-    status: live interim V1 entry; AD-004 step 4f removes it after the V2 contract arm serves its families; FR-015 owns the current bundle cover and ADR-001 Q1 owns the target
-    inputs: [typed precondition, typed postcondition, direct checked dependency types and observations, subject path, dependency census]
-    output: KaniArtifactBundle | KaniDiagnosticSet
-    semantics: deterministic Boolean/i64 Kani source and v2 dependency/binding graph using exact oracle predicates and IR-owned model bounds; generation records proof execution as not_run and never claims proof completion
   - name: write_bundle_atomic
     inputs: [ArtifactBundle, destination directory]
     output: PublishedBundleIdentity | IO diagnostic
@@ -441,7 +436,6 @@ remain public until their separately gated retirement slices.
 | generate_i64_strategy | operation |
 | generate_enum_strategy | operation |
 | generate_bound_strategy | operation |
-| generate_kani_bundle | operation |
 | write_bundle_atomic | operation |
 | analyze_coverage | operation |
 | analyze_bound_coverage | operation |

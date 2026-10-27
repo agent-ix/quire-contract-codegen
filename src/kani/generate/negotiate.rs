@@ -6,15 +6,8 @@
 //! whole request and no harness is returned. Otherwise one harness is returned per supported
 //! item and never one for any other disposition.
 //!
-//! Each supported item is one IR clause lowered to one obligation — a precondition, postcondition
-//! or invariant is never combined with another into a single proof. Symbolic inputs are
-//! `kani::any()` values constrained only by `kani::assume` of the inclusive integer bounds the IR
-//! declares for that dependency; no other assumption is emitted. Preconditions a postcondition or
-//! invariant relies on are named by the IR anchor they share, must themselves be supported items
-//! of the same request, and are recorded in the harness identity.
-//!
-//! Operation identity must be exact. Frozen V1 bound clauses carry their operators as IR enum
-//! variants and are lowered. A CheckedPackage V2 scalar claim whose node this generator
+//! Each supported item is one admitted claim lowered to one obligation. Symbolic inputs are
+//! `kani::any()` values constrained by the IR domain. A CheckedPackage V2 scalar claim whose node this generator
 //! successfully lowered and checked, and whose node's own catalogued `operation.identity`,
 //! `operation.mode` and (for the one family with more than one catalogued law definition)
 //! `operation.laws` all confirm the request item's own descriptor, is [`OperationProvenance::IrConfirmed`]
@@ -31,9 +24,7 @@
 //! the only case of [`OperationProvenance::CallerDeclared`] this generator refuses under
 //! that name: `CallerDeclaredOperation` is constructed once, inside the `Generated` arm of
 //! `classify_claim`, so a claim codegen refused outright is classified through the `Refused` arm
-//! instead and never reaches it. V1 has no
-//! frame clause kind, and V2 frames have no finite encoding in the scalar profile, so the clause
-//! and scalar arms emit no frame harness. A [`ObligationItem::StateFrame`] item is the arm that
+//! instead and never reaches it. A [`ObligationItem::StateFrame`] item is the arm that
 //! does: one role of one `postcondition` `state_clause`, whose harness comes from
 //! `generate_state_frame_role` and whose refusal becomes its record by
 //! `state_frame_disposition`, each item settling on its own. A V2 scalar claim's graph node that is present but is neither the one
@@ -43,11 +34,6 @@
 //! absent from the graph entirely is refused the same way as [`InvalidObligationItem::UnknownNode`]
 //! (see `refuse_unknown_node_kind`).
 //!
-//! A render whose generated source would exceed [`MAX_GENERATED_SOURCE_BYTES`] is refused
-//! as [`UnsupportedObligation::ResourceLimitExceeded`], and one that fits that ceiling but fails
-//! `syn::parse_file` is refused as [`UnsupportedObligation::InvalidGeneratedSyntax`]; the two
-//! grounds are checked in that order and are never conflated with the internal-invariant
-//! [`UnsupportedObligation::RenderFailed`] fallback.
 
 // These admitted QSL fixtures exercise request-level lookup work in this Kani layer.
 #[cfg(test)]
@@ -87,19 +73,15 @@ mod request_lookup_work {
 use std::collections::{BTreeMap, BTreeSet};
 
 use quire_contract_model::{
-    BoundClause, BoundPackage, CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticId,
-    CheckedSemanticNodeV2, CheckedSourceMapEntry, CheckedTerm, ClauseKind, ClauseRef,
-    ContractPackageV1, ExecutionPoint,
+    CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticId, CheckedSemanticNodeV2,
+    CheckedSourceMapEntry, CheckedTerm, ContractPackageV1,
 };
 
 use crate::{
-    core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES},
     core::contract_package::ContractDriverResultSelection,
-    core::diagnostic::GenerationErrorCode,
     core::identity::HarnessSymbol,
     core::ir::clause::ClauseGraphView,
     core::naming::unique_names,
-    kani::abi::{adapter_options, KaniSolver},
     kani::census::{
         normalize_dependencies, ProofDependencyEdge, ProofDependencyKind, ProofDependencyRequest,
         ProofDependencyState,
@@ -107,15 +89,10 @@ use crate::{
     kani::generate::clause::v2::{
         lower as lower_v2_clause, render_clause as render_v2_clause, LoweredV2Clause,
     },
-    kani::generate::clause::{
-        abi, clause_stem, contract_contexts, lower_clause, obligation_kind, symbols, LoweredClause,
-        SlotContext,
-    },
     kani::generate::collection::{
         collection_symbols_conflict, lower_collection_claim, render_collection,
         CollectionDomainRefusal, CollectionGraph, LoweredCollectionClaim,
     },
-    kani::generate::contract::render_contract,
     kani::generate::frame::{generate_state_frame_role, StateFrameRequest},
     kani::generate::outcome::{
         state_frame_disposition, CollectionUnsupportedReason, InvalidObligationItem,
@@ -123,17 +100,11 @@ use crate::{
         ObligationItem, ObligationRecord, ObligationSubject, StateFrameRefusal, StateFrameRole,
         UnsupportedObligation, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
     },
-    kani::generate::precondition::render_precondition,
-    kani::generate::record::{harness_path, record},
     kani::generate::scalar::{
         derive_domain, lower_scalar_claim, render_scalar, scalar_stem, unsatisfiable,
         LoweredScalarClaim, ScalarLoweringRefusal,
     },
-    kani::identity::{
-        EmbeddedOracle, KaniObligationHarness, KaniObligationIdentity, ObligationKind,
-        StateFrameHarness,
-    },
-    oracle::boolean_v1::{generate_named_boolean_oracle, OracleRequest, OracleShape},
+    kani::identity::{ObligationKind, StateFrameHarness},
     oracle::checked_graph::CheckedGraph,
     oracle::claim::{ClaimDisposition, ClaimMap, UpstreamBlocker},
     oracle::scalar::{
@@ -323,12 +294,10 @@ fn negotiate_integer_policy(
             }
         }
     }
-    reject_duplicates_and_mixtures(request.items, &mut states);
+    reject_duplicates_and_mixtures(&mut states);
     assign_names(request.items, &mut states);
-    resolve_assumptions(&mut states);
     let rejected = states.iter().any(|state| state.outcome.is_invalid());
     let mut records = Vec::with_capacity(states.len());
-    let mut harnesses = Vec::new();
     let mut scalar_harnesses = Vec::new();
     let mut state_frame_harnesses = Vec::new();
     let mut collection_harnesses: Vec<crate::kani::identity::KaniCollectionObligationHarness> =
@@ -339,16 +308,6 @@ fn negotiate_integer_policy(
             state.outcome.disposition_without_harness(request)
         } else {
             match state.outcome {
-                Outcome::Lowered(lowered) => match render(request, &lowered) {
-                    Ok(harness) => {
-                        let symbol = harness.identity.harness_symbol.clone();
-                        harnesses.push(harness);
-                        ObligationDisposition::Supported {
-                            harness_symbol: symbol,
-                        }
-                    }
-                    Err(reason) => ObligationDisposition::Unsupported { reason },
-                },
                 Outcome::LoweredScalar(lowered) => match render_scalar(request, &lowered) {
                     Ok(harness) => {
                         let symbol = harness.identity.harness_symbol.clone();
@@ -420,7 +379,7 @@ fn negotiate_integer_policy(
     } else {
         KaniObligationOutcome::Emitted {
             records,
-            harnesses,
+            harnesses: Vec::new(),
             scalar_harnesses,
             state_frame_harnesses,
             collection_harnesses,
@@ -462,10 +421,6 @@ struct ItemState<'a> {
 
 #[derive(Clone, Eq, PartialEq)]
 enum ItemIdentity {
-    Clause {
-        package: String,
-        clause: ClauseRef,
-    },
     Node {
         package: String,
         node: CheckedNodeId,
@@ -489,7 +444,6 @@ enum ItemIdentity {
 }
 
 enum Outcome<'a> {
-    Lowered(Box<LoweredClause<'a>>),
     LoweredScalar(Box<LoweredScalarClaim>),
     LoweredCollection(Box<LoweredCollectionClaim>),
     LoweredV2Clause(Box<LoweredV2Clause>),
@@ -512,8 +466,7 @@ impl Outcome<'_> {
                 state_frame_disposition(refusal.clone()),
                 ObligationDisposition::InvalidRequest { .. }
             ),
-            Self::Lowered(_)
-            | Self::LoweredScalar(_)
+            Self::LoweredScalar(_)
             | Self::LoweredCollection(_)
             | Self::LoweredV2Clause(_)
             | Self::StateFrame(_)
@@ -528,7 +481,6 @@ impl Outcome<'_> {
     ) -> ObligationDisposition {
         match self {
             // A lowered item in a rejected request is accounted but not emitted.
-            Self::Lowered(lowered) => supported_without_harness(&lowered.symbols.harness),
             Self::LoweredScalar(lowered) => supported_without_harness(&lowered.harness_symbol),
             Self::LoweredCollection(lowered) => match render_collection(request, &lowered) {
                 Ok(harness) => supported_without_harness(harness.identity.harness_symbol.as_str()),
@@ -584,7 +536,6 @@ fn classify<'a>(
             dependencies,
             native,
         ),
-        ObligationItem::BoundClause { package, clause } => classify_clause(package, clause),
         ObligationItem::ScalarClaim {
             package,
             claim_map,
@@ -816,17 +767,7 @@ fn classify_state_frame<'a>(
 /// The full identity a generated name is ordered by when several items share its readable stem.
 #[derive(Clone, Eq, Ord, PartialEq, PartialOrd)]
 enum NameKey {
-    Clause(String, u64, String),
     Node(CheckedNodeId, usize),
-}
-
-fn clause_key(clause: &ClauseRef) -> NameKey {
-    let requirement = clause.requirement();
-    NameKey::Clause(
-        requirement.requirement().as_str().to_owned(),
-        requirement.revision().get(),
-        clause.clause().as_str().to_owned(),
-    )
 }
 
 /// Settles every lowered item's generated names across the request with [`unique_names`]: clause
@@ -834,51 +775,10 @@ fn clause_key(clause: &ClauseRef) -> NameKey {
 /// module and harness names of every clause and scalar obligation. A name depends on its item and
 /// on the siblings sharing its readable stem, never on the item's request position.
 fn assign_names(items: &[ObligationItem<'_>], states: &mut [ItemState<'_>]) {
-    let oracle_slots = states
-        .iter()
-        .enumerate()
-        .filter_map(|(index, state)| match &state.outcome {
-            Outcome::Lowered(lowered) => Some((
-                index,
-                (
-                    lowered.oracle.symbol.clone(),
-                    clause_key(&lowered.oracle.clause),
-                ),
-            )),
-            _ => None,
-        })
-        .collect::<Vec<_>>();
-    let oracle_names = unique_names(oracle_slots.iter().map(|(_, slot)| slot.clone()).collect());
-    for ((index, (stem, _)), name) in oracle_slots.into_iter().zip(oracle_names) {
-        if name == stem {
-            continue;
-        }
-        let renamed = match &states[index].outcome {
-            Outcome::Lowered(lowered) => named_oracle_source(lowered.clause, &name),
-            _ => continue,
-        };
-        match renamed {
-            Ok(source) => {
-                if let Outcome::Lowered(lowered) = &mut states[index].outcome {
-                    lowered.oracle.symbol = name;
-                    lowered.oracle.source = source;
-                }
-            }
-            Err(reason) => states[index].outcome = Outcome::Unsupported(reason),
-        }
-    }
-
     let module_slots = states
         .iter()
         .enumerate()
         .filter_map(|(index, state)| match &state.outcome {
-            Outcome::Lowered(lowered) => Some((
-                index,
-                (
-                    clause_stem(lowered.clause.identity()),
-                    clause_key(lowered.clause.identity()),
-                ),
-            )),
             Outcome::LoweredScalar(lowered) => {
                 let Some(ObligationItem::ScalarClaim { claim_index, .. }) = items.get(index) else {
                     return None;
@@ -897,109 +797,12 @@ fn assign_names(items: &[ObligationItem<'_>], states: &mut [ItemState<'_>]) {
     let module_names = unique_names(module_slots.iter().map(|(_, slot)| slot.clone()).collect());
     for ((index, _), name) in module_slots.into_iter().zip(module_names) {
         match &mut states[index].outcome {
-            Outcome::Lowered(lowered) => lowered.symbols = symbols(&name),
             Outcome::LoweredScalar(lowered) => {
                 lowered.module_symbol = format!("{name}_module");
                 lowered.harness_symbol = format!("{name}_proof");
             }
             _ => {}
         }
-    }
-}
-
-/// The source of `clause`'s oracle with its function named `symbol`.
-fn named_oracle_source(
-    clause: &BoundClause,
-    symbol: &str,
-) -> Result<String, UnsupportedObligation> {
-    let identity = clause.identity();
-    generate_named_boolean_oracle(
-        &OracleRequest {
-            requirement: identity.requirement(),
-            clause: identity.clause(),
-            expression: clause.expression(),
-        },
-        symbol,
-        // Embedded where a plain `bool` is required: arithmetic is refused (FR-031).
-        OracleShape::PlainBool,
-    )
-    .map(|bundle| bundle.rust.contents)
-    .map_err(|diagnostics| UnsupportedObligation::ClauseLowering {
-        generation_code: diagnostics
-            .first()
-            .map_or(GenerationErrorCode::UnsupportedExpression, |diagnostic| {
-                diagnostic.code
-            }),
-    })
-}
-
-fn classify_clause<'a>(package: &'a BoundPackage, clause_ref: &ClauseRef) -> ItemState<'a> {
-    let package_digest = package.digest().to_string();
-    let identity = Some(ItemIdentity::Clause {
-        package: package_digest,
-        clause: clause_ref.clone(),
-    });
-    let Some(clause) = package
-        .clauses()
-        .iter()
-        .find(|candidate| candidate.identity() == clause_ref)
-    else {
-        return ItemState {
-            kind: None,
-            subject: ObligationSubject::BoundClause {
-                clause: clause_ref.clone(),
-                source_span: None,
-            },
-            identity,
-            outcome: Outcome::Invalid(InvalidObligationItem::UnknownClause),
-        };
-    };
-    let kind = obligation_kind(clause.kind());
-    let subject = ObligationSubject::BoundClause {
-        clause: clause_ref.clone(),
-        source_span: Some(clause.source().clone()),
-    };
-    let outcome = match kind {
-        None => Outcome::Unsupported(UnsupportedObligation::ClauseKindNotObligation {
-            kind: clause.kind(),
-        }),
-        Some(kind) => match lower_clause(clause, kind) {
-            Ok(oracle) => {
-                let standalone = match kind {
-                    ObligationKind::Precondition => {
-                        abi(&[(&oracle, SlotContext::Precondition)]).map(|_| ())
-                    }
-                    ObligationKind::Postcondition => {
-                        abi(&[(&oracle, SlotContext::Postcondition)]).map(|_| ())
-                    }
-                    ObligationKind::Invariant => abi(&[
-                        (&oracle, SlotContext::InvariantBefore),
-                        (&oracle, SlotContext::InvariantAfter),
-                    ])
-                    .map(|_| ()),
-                    ObligationKind::Frame => Ok(()),
-                };
-                match standalone {
-                    Ok(()) => Outcome::Lowered(Box::new(LoweredClause {
-                        package,
-                        clause,
-                        kind,
-                        symbols: symbols(&clause_stem(clause_ref)),
-                        oracle,
-                        assumed: Vec::new(),
-                        signature: Vec::new(),
-                    })),
-                    Err(reason) => Outcome::Unsupported(reason),
-                }
-            }
-            Err(reason) => Outcome::Unsupported(reason),
-        },
-    };
-    ItemState {
-        kind,
-        subject,
-        identity,
-        outcome,
     }
 }
 
@@ -1104,8 +907,7 @@ pub(crate) fn classify_scalar_form<'a>(
         Outcome::Unsupported(refusal) => ScalarFormAssessment::Unsupported(refusal),
         Outcome::RequiresBound(_) => ScalarFormAssessment::RequiresBound,
         Outcome::Invalid(refusal) => ScalarFormAssessment::Invalid(refusal),
-        Outcome::Lowered(_)
-        | Outcome::LoweredCollection(_)
+        Outcome::LoweredCollection(_)
         | Outcome::LoweredV2Clause(_)
         | Outcome::StateFrame(_)
         | Outcome::StateFrameRefused(_) => {
@@ -1321,8 +1123,7 @@ fn classify_claim<'a>(lookup: &ContractLookup<'_>, claim: &ExactScalarClaim) -> 
     }
 }
 
-fn reject_duplicates_and_mixtures(items: &[ObligationItem<'_>], states: &mut [ItemState<'_>]) {
-    let mut first_bound_package: Option<String> = None;
+fn reject_duplicates_and_mixtures(states: &mut [ItemState<'_>]) {
     let mut first_state_package: Option<String> = None;
     for index in 0..states.len() {
         let Some(identity) = states[index].identity.clone() else {
@@ -1335,17 +1136,6 @@ fn reject_duplicates_and_mixtures(items: &[ObligationItem<'_>], states: &mut [It
             states[index].outcome =
                 Outcome::Invalid(InvalidObligationItem::DuplicateItem { first_index });
             continue;
-        }
-        if let ObligationItem::BoundClause { package, .. } = items[index] {
-            let digest = package.digest().to_string();
-            match &first_bound_package {
-                None => first_bound_package = Some(digest),
-                Some(first) if *first != digest => {
-                    states[index].outcome =
-                        Outcome::Invalid(InvalidObligationItem::MixedBoundPackages);
-                }
-                Some(_) => {}
-            }
         }
         if let ItemIdentity::StateFrame { package, .. } = &identity {
             match &first_state_package {
@@ -1360,268 +1150,12 @@ fn reject_duplicates_and_mixtures(items: &[ObligationItem<'_>], states: &mut [It
     }
 }
 
-/// The operation a precondition is anchored to, or a postcondition/invariant relies on.
-fn anchor_operation(anchor: &ExecutionPoint) -> Option<&str> {
-    match anchor {
-        ExecutionPoint::Pre { operation } | ExecutionPoint::Post { operation } => {
-            Some(operation.as_str())
-        }
-        ExecutionPoint::Handler { name } => Some(name.as_str()),
-        ExecutionPoint::Initialization { .. } => None,
-    }
-}
-
-/// Attaches every package precondition sharing a postcondition's or invariant's anchor, refusing
-/// the obligation when such a precondition is not a supported item of this request.
-fn resolve_assumptions(states: &mut [ItemState<'_>]) {
-    let supported_preconditions = states
-        .iter()
-        .filter_map(|state| match &state.outcome {
-            Outcome::Lowered(lowered) if lowered.kind == ObligationKind::Precondition => {
-                Some((lowered.oracle.clause.clone(), lowered.oracle.clone()))
-            }
-            _ => None,
-        })
-        .collect::<BTreeMap<_, _>>();
-    for state in states.iter_mut() {
-        let Outcome::Lowered(lowered) = &mut state.outcome else {
-            continue;
-        };
-        if lowered.kind == ObligationKind::Precondition {
-            continue;
-        }
-        let Some(operation) = anchor_operation(&lowered.oracle.anchor) else {
-            continue;
-        };
-        let mut refusal = None;
-        for candidate in lowered.package.clauses() {
-            let shares_anchor = candidate.kind() == ClauseKind::Precondition
-                && anchor_operation(candidate.anchor()) == Some(operation);
-            if !shares_anchor {
-                continue;
-            }
-            match supported_preconditions.get(candidate.identity()) {
-                Some(oracle) => lowered.assumed.push(oracle.clone()),
-                None => {
-                    refusal = Some(UnsupportedObligation::PreconditionNotNegotiated {
-                        precondition: candidate.identity().clone(),
-                    });
-                    break;
-                }
-            }
-        }
-        if refusal.is_none() {
-            refusal = abi(&contract_contexts(lowered)).err();
-        }
-        if let Some(reason) = refusal {
-            state.outcome = Outcome::Unsupported(reason);
-        }
-    }
-    unify_subject_signatures(states);
-}
-
-/// The subject a group of contract obligations share.
-#[derive(Clone, Eq, Ord, PartialEq, PartialOrd)]
-enum SubjectGroup {
-    /// Every contract obligation anchored to this operation.
-    Operation(String),
-    /// A contract obligation with no operation anchor, alone.
-    Item(usize),
-}
-
-/// Gives every supported contract obligation on one operation the same subject signature, the
-/// union of their slots, or refuses all of them when that union conflicts.
-fn unify_subject_signatures(states: &mut [ItemState<'_>]) {
-    let mut groups: BTreeMap<SubjectGroup, Vec<usize>> = BTreeMap::new();
-    for (index, state) in states.iter().enumerate() {
-        let Outcome::Lowered(lowered) = &state.outcome else {
-            continue;
-        };
-        if lowered.kind == ObligationKind::Precondition {
-            continue;
-        }
-        let group = anchor_operation(&lowered.oracle.anchor)
-            .map_or(SubjectGroup::Item(index), |operation| {
-                SubjectGroup::Operation(operation.to_owned())
-            });
-        groups.entry(group).or_default().push(index);
-    }
-    for (group, members) in groups {
-        let signature = members
-            .iter()
-            .filter_map(|&index| match &states[index].outcome {
-                Outcome::Lowered(lowered) => Some(contract_contexts(lowered)),
-                _ => None,
-            })
-            .flatten()
-            .map(|(oracle, context)| (oracle.clone(), context))
-            .collect::<Vec<_>>();
-        let union = abi(&signature
-            .iter()
-            .map(|(oracle, context)| (oracle, *context))
-            .collect::<Vec<_>>());
-        let refusal = match (union, group) {
-            (Ok(_), _) => None,
-            (
-                Err(UnsupportedObligation::AbiConflict { identifier }),
-                SubjectGroup::Operation(operation),
-            ) => Some(UnsupportedObligation::SubjectSignatureConflict {
-                operation,
-                identifier,
-            }),
-            (Err(reason), _) => Some(reason),
-        };
-        for index in members {
-            match &refusal {
-                Some(reason) => states[index].outcome = Outcome::Unsupported(reason.clone()),
-                None => {
-                    if let Outcome::Lowered(lowered) = &mut states[index].outcome {
-                        lowered.signature.clone_from(&signature);
-                    }
-                }
-            }
-        }
-    }
-}
-
-const fn kind_name(kind: ObligationKind) -> &'static str {
-    match kind {
-        ObligationKind::Precondition => "precondition",
-        ObligationKind::Postcondition => "postcondition",
-        ObligationKind::Invariant => "invariant",
-        ObligationKind::Frame => "frame",
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Rendering
-// ---------------------------------------------------------------------------
-
-fn render(
-    request: &KaniObligationRequest<'_>,
-    lowered: &LoweredClause<'_>,
-) -> Result<KaniObligationHarness, UnsupportedObligation> {
-    let contexts = match lowered.kind {
-        ObligationKind::Precondition => contract_contexts(lowered),
-        ObligationKind::Postcondition | ObligationKind::Invariant | ObligationKind::Frame => {
-            lowered
-                .signature
-                .iter()
-                .map(|(oracle, context)| (oracle, *context))
-                .collect()
-        }
-    };
-    let abi = abi(&contexts)?;
-    let path = harness_path(&lowered.symbols.module, &lowered.symbols.harness)?;
-    let options = adapter_options(
-        &path.to_string(),
-        request.unwind,
-        KaniSolver::Cadical,
-        false,
-    );
-    // `assign_names` gave every clause oracle in the request a distinct name.
-    let mut embedded = vec![&lowered.oracle];
-    embedded.extend(&lowered.assumed);
-    let oracle_sources = embedded
-        .iter()
-        .map(|oracle| oracle.source.as_str())
-        .collect::<Vec<_>>();
-    let is_contract = lowered.kind != ObligationKind::Precondition;
-    let identity = KaniObligationIdentity {
-        ceilings: request.ceilings,
-        kind: lowered.kind,
-        clause: lowered.clause.identity().clone(),
-        source_span: lowered.clause.source().clone(),
-        oracles: embedded
-            .iter()
-            .map(|oracle| EmbeddedOracle {
-                clause: oracle.clause.clone(),
-                kind: oracle.kind,
-                symbol: oracle.symbol.clone(),
-            })
-            .collect(),
-        module_symbol: path.module,
-        harness_symbol: path.harness,
-        contract_symbol: is_contract.then(|| lowered.symbols.contract.clone()),
-        subject_path: is_contract.then(|| request.subject_path.to_owned()),
-        arguments: abi.arguments.clone(),
-        results: abi.results.clone(),
-        solver: KaniSolver::Cadical,
-        unwind: request.unwind,
-        options,
-    };
-    let body = match lowered.kind {
-        ObligationKind::Precondition => {
-            render_precondition(lowered, &abi).ok_or(UnsupportedObligation::RenderFailed)?
-        }
-        ObligationKind::Postcondition | ObligationKind::Invariant => {
-            render_contract(request.subject_path, lowered, &abi)
-                .ok_or(UnsupportedObligation::RenderFailed)?
-        }
-        ObligationKind::Frame => return Err(UnsupportedObligation::FrameNotClauseRendered),
-    };
-    let clause = lowered.clause.identity();
-    let mut source = format!(
-        "// SPDX-License-Identifier: MIT OR Apache-2.0\n\
-// Obligation: {} {}@{}/{}\n\n",
-        kind_name(lowered.kind),
-        clause.requirement().requirement().as_str(),
-        clause.requirement().revision().get(),
-        clause.clause().as_str(),
-    );
-    for oracle_source in &oracle_sources {
-        source.push_str(oracle_source);
-        source.push('\n');
-    }
-    source.push_str(&body);
-    let subject = format!(
-        "{}@{}/{}",
-        clause.requirement().requirement().as_str(),
-        clause.requirement().revision().get(),
-        clause.clause().as_str()
-    );
-    let subjects = std::iter::once(subject)
-        .chain(embedded.iter().map(|oracle| {
-            let clause = &oracle.clause;
-            format!(
-                "{}@{}/{}",
-                clause.requirement().requirement().as_str(),
-                clause.requirement().revision().get(),
-                clause.clause().as_str()
-            )
-        }))
-        .collect::<Vec<_>>();
-    let source =
-        crate::core::provenance::with_rust_header(source, subjects.iter().map(String::as_str));
-    if source.len() > MAX_GENERATED_SOURCE_BYTES {
-        return Err(UnsupportedObligation::ResourceLimitExceeded {
-            bytes: source.len(),
-        });
-    }
-    if let Err(error) = syn::parse_file(&source) {
-        return Err(UnsupportedObligation::InvalidGeneratedSyntax {
-            error: error.to_string(),
-        });
-    }
-    let rust = Artifact::new(
-        format!("src/generated/{}.rs", lowered.symbols.module),
-        source,
-    );
-    let record = record(&lowered.symbols.module, &identity, &rust)?;
-    Ok(KaniObligationHarness {
-        identity,
-        rust,
-        record,
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use ix_trace_rs::trace;
     use serde_json::json;
 
     use super::*;
-    use quire_contract_model::{ClauseId, RequirementRef, EXECUTABLE_PROJECTION_FORMAT};
 
     #[test]
     fn request_views_keep_every_original_source_occurrence_and_package_separate() {
@@ -1876,159 +1410,6 @@ mod tests {
             excessive_work.is_empty(),
             "request-level graph/source scans repeat per item: {excessive_work:?}"
         );
-    }
-
-    // ---- FND-003 regression: the byte-ceiling and syntax refusals split out of `RenderFailed`
-    // ----
-    //
-    // `render`'s two checks are ordered size-then-syntax, so an oversized source never reaches
-    // the syntax check; a legitimate IR fixture large enough to cross `MAX_GENERATED_SOURCE_BYTES`
-    // (1 MiB) would need pathological nesting this crate has no fixture builder for. Instead these
-    // tests run one real, minimal, legitimately-lowered precondition through `classify` -- the
-    // same path `negotiate_kani_obligations` uses -- and then mutate `ClauseOracle.source`, the
-    // exact field `render` concatenates into the generated text it measures and parses, before
-    // calling `render` directly. This exercises the real check, not a reimplementation of it.
-
-    fn render_probe_package() -> BoundPackage {
-        let package_id = "test/kani-obligations-render-probe";
-        let doc = json!({"document": "kani-obligations-render-probe", "revision": 1});
-        let span = |line: u64| {
-            json!({"start":{"source":doc,"line":line,"column":1,"byte_offset":line - 1},
-                "end":{"source":doc,"line":line,"column":2,"byte_offset":line}})
-        };
-        let owner = json!({"package": package_id, "requirement": "FR-200", "revision": 1});
-        let int_type = json!({"kind":"integer","domain":"signed","minimum":"0","maximum":"1000",
-            "overflow":"reject"});
-        let read = |name: &str, line: u64| json!({"node":"value_reference","name":name,"observation":"current","source":span(line)});
-        let identity = |kind: &str, name: &str| {
-            json!({"node":"reference","identity":{"requirement":owner,"kind":kind,
-                "observation":"current","path":[name]}})
-        };
-        let amount =
-            json!({"name":"amount","kind":"input","value_type":int_type,"source":span(11)});
-        let balance =
-            json!({"name":"balance","kind":"state","value_type":int_type,"source":span(12)});
-        let expression = json!({"node":"compare","operator":"less_equal",
-            "left":read("amount", 13),"right":read("balance", 14),"source":span(11)});
-        let package_clause = json!({"id":"amount-within-balance","kind":"precondition",
-            "anchor":{"kind":"pre","operation":"withdraw"},"source":span(10),
-            "body":{"node":"composite",
-                "children":[identity("input","amount"),identity("state","balance")]}});
-        let binding = json!({"clause":{"requirement":owner,"clause":"amount-within-balance"},
-            "expression":{"owner":owner,"types":[],"values":[amount,balance],"functions":[],
-                "expression":expression,"expected_type":{"kind":"boolean"},
-                "execution_point":{"kind":"pre","operation":"withdraw"},"clause_root":true}});
-        let projection = json!({
-            "format": EXECUTABLE_PROJECTION_FORMAT,
-            "package": {"id":package_id,"schema_version":{"major":1,"minor":1},
-                "source":doc,"requirements":[{"id":"FR-200","revision":1,"source":span(1),
-                    "clauses":[package_clause]}]},
-            "bindings": [binding],
-        });
-        BoundPackage::from_json_bytes(&serde_json::to_vec(&projection).unwrap())
-            .unwrap_or_else(|diagnostics| panic!("render-probe fixture must bind: {diagnostics:?}"))
-    }
-
-    fn render_probe_clause() -> ClauseRef {
-        ClauseRef::new(
-            RequirementRef::parse("test/kani-obligations-render-probe", "FR-200", 1).unwrap(),
-            ClauseId::new("amount-within-balance").unwrap(),
-        )
-    }
-
-    fn render_probe_request<'a>(items: &'a [ObligationItem<'a>]) -> KaniObligationRequest<'a> {
-        KaniObligationRequest {
-            ceilings: crate::kani::test_support::proof_ceilings::proof_ceilings(),
-            items,
-            subject_path: "render_probe::subject",
-            unwind: 4,
-        }
-    }
-
-    /// Real, legitimately-lowered `LoweredClause` for the probe package's one precondition, with
-    /// its embedded oracle source intact for the caller to mutate.
-    fn render_probe_lowered<'a>(item: &ObligationItem<'a>) -> Box<LoweredClause<'a>> {
-        let Outcome::Lowered(lowered) = classify(
-            item,
-            4,
-            render_probe_request(&[]).ceilings,
-            &mut BTreeMap::new(),
-            &mut BTreeMap::new(),
-            false,
-        )
-        .outcome
-        else {
-            panic!("render-probe precondition must lower to a harness");
-        };
-        lowered
-    }
-
-    #[trace("FR-015-AC-13", "TC-025")]
-    #[test]
-    fn render_refuses_a_generated_source_over_the_byte_ceiling() {
-        let package = render_probe_package();
-        let clause_ref = render_probe_clause();
-        let items = [ObligationItem::BoundClause {
-            package: &package,
-            clause: &clause_ref,
-        }];
-        let request = render_probe_request(&items);
-        let mut lowered = render_probe_lowered(&items[0]);
-        // Oversized before the syntax check ever runs -- `render` checks byte length first, so
-        // garbage content alone is enough to exercise this ground, and it stays garbage on
-        // purpose to prove the length check short-circuits the syntax check.
-        lowered.oracle.source = "x".repeat(MAX_GENERATED_SOURCE_BYTES + 1);
-        match render(&request, &lowered) {
-            Err(UnsupportedObligation::ResourceLimitExceeded { bytes }) => {
-                assert!(bytes > MAX_GENERATED_SOURCE_BYTES);
-            }
-            Err(other) => panic!("expected ResourceLimitExceeded, got {other:?}"),
-            Ok(_) => panic!("an oversized generated source must not render"),
-        }
-    }
-
-    #[trace("FR-015-AC-13", "TC-025")]
-    #[test]
-    fn render_refuses_a_generated_source_that_fails_to_parse() {
-        let package = render_probe_package();
-        let clause_ref = render_probe_clause();
-        let items = [ObligationItem::BoundClause {
-            package: &package,
-            clause: &clause_ref,
-        }];
-        let request = render_probe_request(&items);
-        let mut lowered = render_probe_lowered(&items[0]);
-        // Well under the byte ceiling, but not valid Rust: an unbalanced brace `syn::parse_file`
-        // rejects.
-        lowered.oracle.source = "fn broken( {".to_owned();
-        assert!(lowered.oracle.source.len() <= MAX_GENERATED_SOURCE_BYTES);
-        match render(&request, &lowered) {
-            Err(UnsupportedObligation::InvalidGeneratedSyntax { error }) => {
-                assert!(!error.is_empty());
-            }
-            Err(other) => panic!("expected InvalidGeneratedSyntax, got {other:?}"),
-            Ok(_) => panic!("a malformed generated source must not render"),
-        }
-    }
-
-    /// A frame is not a clause oracle: the clause renderer refuses one by name rather than as
-    /// an internal render failure.
-    #[trace("FR-015-AC-1", "TC-025")]
-    #[test]
-    fn render_refuses_a_frame_as_not_a_clause_oracle() {
-        let package = render_probe_package();
-        let clause_ref = render_probe_clause();
-        let items = [ObligationItem::BoundClause {
-            package: &package,
-            clause: &clause_ref,
-        }];
-        let request = render_probe_request(&items);
-        let mut lowered = render_probe_lowered(&items[0]);
-        lowered.kind = ObligationKind::Frame;
-        assert!(matches!(
-            render(&request, &lowered),
-            Err(UnsupportedObligation::FrameNotClauseRendered)
-        ));
     }
 
     // Fixture dependencies are upstream QSL, strict IR reader and canonical encoding only.

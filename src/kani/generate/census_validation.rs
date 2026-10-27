@@ -1,7 +1,4 @@
-//! INTERIM: census validation and the V1 bundle's error type it returns.
-//! The bounded-Kani corpus calls them. This file survives the deletion of `v1_bundle.rs` at
-//! step 4f; step 4g, or the V2 census input, deletes `validate_dependencies` and the error
-//! type (AD-004).
+//! Dependency census validation for bounded Kani corpus cases.
 
 use std::collections::BTreeSet;
 
@@ -13,7 +10,7 @@ use crate::{
     kani::census::{ProofDependencyKind, ProofDependencyRequest, ProofDependencyState},
 };
 
-/// Stable reason a Kani bundle could not be generated.
+/// Stable reason a bounded Kani corpus case could not be generated.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum KaniErrorCode {
@@ -77,7 +74,7 @@ pub struct KaniDiagnostic {
 /// against), and its kind/state/path combination is one of the three closed shapes (`Required`,
 /// `Assumed`, `Stubbed`).
 ///
-/// Shared by [`generate_kani_bundle`](super::v1_bundle::generate_kani_bundle)'s request validation and the bounded-Kani corpus's
+/// Used by the bounded-Kani corpus's
 /// declared-census validation, so there is exactly one definition of what a valid
 /// proof-dependency census looks like rather than two that can drift apart.
 pub(crate) fn validate_dependencies(
