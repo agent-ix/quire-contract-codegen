@@ -145,10 +145,10 @@ process-stdout test oracle described above is planned under IR-604; its mutation
 turn the lane red for a replacement made immediately after `Falsified` classification.
 
 What stays unbacked: the native twin is hand-mirrored QSL source, not derived from the contract or
-the Rust subject, and the input package is hand-built, so the contract-to-Contract-IR step does not
-run. The Kani lane is `#[ignore]` and outside `make ci`; NFR-006 instead requires `make kani-gate`
-before opening and merging a Kani-touching PR. The default suite pins the replay end and the
-decoder against a synthetic transcript only. FR-016-AC-6 is covered by tagged witness unit,
+the Rust subject, and the identity fixture is built directly in the test, so the contract-to-Contract-IR
+and generated-harness steps do not run. The retired installed-Kani spine is absent from the Kani
+lane; NFR-006 still requires `make kani-gate` for a Kani-touching PR. The default suite pins the
+replay end and decoder against a synthetic transcript only. FR-016-AC-6 is covered by tagged witness unit,
 spine, frame, state-clause and bounded-corpus tests; the bounded-corpus test runs in the Kani lane.
 Former FR-016-AC-7 is retired under IR-604 because Kani supplies no scalar-charge,
 consumed-counter or replay-limit counterpart to QSL's accounting result.

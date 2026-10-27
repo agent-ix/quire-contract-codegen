@@ -33,7 +33,7 @@ use std::{
     time::Duration,
 };
 
-use crate::scratch_crate::{runtime_dependency, write_manifest, TemporaryDirectory};
+use crate::scratch_crate::{write_manifest, TemporaryDirectory};
 use ix_trace_rs::trace;
 use package::{
     application, bounded, code_id, corpus_package, golden_items, id, integer_add, key, op,
@@ -46,18 +46,17 @@ use quire_contract_codegen::{
     routed_contract_lowering_profile, run_terminal_value, ClaimDisposition, ClaimMap,
     ExactScalarClaim, ExactScalarItem, ExactScalarOperation, ExactScalarRefusal,
     InvalidObligationItem, KaniExecutionRefusal, KaniExecutionRequest, KaniFailurePhase,
-    KaniInconclusiveReason, KaniInstallation, KaniObligationError, KaniObligationHarness,
-    KaniObligationOutcome, KaniObligationRequest, KaniRunOutcome, KaniScalarNativeRequest,
-    KaniScalarObligationHarness, KaniSolver, KaniTool, KaniToolError, ObligationDisposition,
-    ObligationItem, ObligationKind, ObligationRecord, ObligationSubject, OperationProvenance,
-    UnsupportedObligation, UpstreamBlocker, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
+    KaniInconclusiveReason, KaniInstallation, KaniObligationError, KaniObligationOutcome,
+    KaniObligationRequest, KaniRunOutcome, KaniScalarNativeRequest, KaniScalarObligationHarness,
+    KaniSolver, KaniTool, KaniToolError, ObligationDisposition, ObligationItem, ObligationKind,
+    ObligationRecord, ObligationSubject, OperationProvenance, UnsupportedObligation,
+    UpstreamBlocker, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
 };
 use quire_contract_model::{
-    BoundPackage, CheckedNodeId, CheckedPackageReadLimits, CheckedPackageV2, ClauseId, ClauseKind,
-    ClauseRef, ContractDependencies, ContractPackageReadResult, ContractPackageV1,
-    ContractPackageWireV1, DiagnosticCode, RequirementRef, EXECUTABLE_PROJECTION_FORMAT,
+    CheckedNodeId, CheckedPackageReadLimits, CheckedPackageV2, ContractDependencies,
+    ContractPackageReadResult, ContractPackageV1, ContractPackageWireV1,
 };
-use serde_json::{json, Value};
+use serde_json::json;
 
 const PACKAGE: &str = "test/kani-obligations";
 const PRECONDITION: &str = "amount-within-balance";
@@ -70,282 +69,6 @@ const ASSERTION: &str = "amount-nonnegative";
 /// time-heavy on these small obligations; this is a ceiling against a genuine hang, not a
 /// performance target.
 pub(crate) const REAL_KANI_TIMEOUT: Duration = Duration::from_secs(600);
-// ---- V1 fixture --------------------------------------------------------------
-
-fn span(line: u64) -> Value {
-    let source = json!({"document":"kani-obligations", "revision":1});
-    json!({"start":{"source":source,"line":line,"column":1,"byte_offset":line - 1},
-        "end":{"source":source,"line":line,"column":2,"byte_offset":line}})
-}
-
-fn int(minimum: i64, maximum: i64) -> Value {
-    json!({"kind":"integer","domain":"signed","minimum":minimum.to_string(),"maximum":maximum.to_string(),"overflow":"reject"})
-}
-
-fn owner() -> Value {
-    json!({"package":PACKAGE,"requirement":"FR-200","revision":1})
-}
-
-fn read(name: &str, observation: &str, line: u64) -> Value {
-    json!({"node":"value_reference","name":name,"observation":observation,"source":span(line)})
-}
-
-fn identity(kind: &str, name: &str, observation: &str) -> Value {
-    json!({"node":"reference","identity":{"requirement":owner(),"kind":kind,"observation":observation,"path":[name]}})
-}
-
-struct ClauseFixture {
-    id: &'static str,
-    kind: &'static str,
-    anchor: Value,
-    line: u64,
-    references: Vec<Value>,
-    values: Vec<Value>,
-    expression: Value,
-}
-
-fn amount(line: u64) -> Value {
-    json!({"name":"amount","kind":"input","value_type":int(0, 1000),"source":span(line)})
-}
-
-fn balance(line: u64, maximum: i64) -> Value {
-    json!({"name":"balance","kind":"state","value_type":int(0, maximum),"source":span(line)})
-}
-
-fn clauses(balance_maximum_in_invariant: i64) -> Vec<ClauseFixture> {
-    let pre = json!({"kind":"pre","operation":"withdraw"});
-    vec![
-        ClauseFixture {
-            id: PRECONDITION,
-            kind: "precondition",
-            anchor: pre.clone(),
-            line: 10,
-            references: vec![
-                identity("input", "amount", "current"),
-                identity("state", "balance", "current"),
-            ],
-            values: vec![amount(11), balance(12, 1000)],
-            expression: json!({"node":"compare","operator":"less_equal",
-                "left":read("amount", "current", 13),"right":read("balance", "current", 14),
-                "source":span(11)}),
-        },
-        ClauseFixture {
-            id: POSTCONDITION,
-            kind: "postcondition",
-            anchor: json!({"kind":"post","operation":"withdraw"}),
-            line: 20,
-            references: vec![
-                identity("state", "balance", "post"),
-                identity("state", "balance", "pre"),
-            ],
-            values: vec![balance(21, 1000)],
-            expression: json!({"node":"compare","operator":"less_equal",
-                "left":read("balance", "post", 22),"right":read("balance", "pre", 23),
-                "source":span(21)}),
-        },
-        ClauseFixture {
-            id: INVARIANT,
-            kind: "invariant",
-            anchor: json!({"kind":"handler","name":"withdraw"}),
-            line: 30,
-            references: vec![identity("state", "balance", "current")],
-            values: vec![balance(31, balance_maximum_in_invariant)],
-            expression: json!({"node":"compare","operator":"greater_equal",
-                "left":read("balance", "current", 32),
-                "right":{"node":"integer_literal","value":"0","value_type":int(0, balance_maximum_in_invariant),"source":span(33)},
-                "source":span(31)}),
-        },
-        ClauseFixture {
-            id: DEFINEDNESS,
-            kind: "precondition",
-            anchor: json!({"kind":"pre","operation":"deposit"}),
-            line: 40,
-            references: vec![identity("input", "amount", "current")],
-            values: vec![amount(41)],
-            // `amount != 0 && 1000 / amount <= 1000`: the division carries a guarded
-            // non-zero-divisor obligation.
-            expression: json!({"node":"boolean","operator":"short_circuit_and",
-                "left":{"node":"compare","operator":"not_equal","left":read("amount", "current", 42),
-                    "right":{"node":"integer_literal","value":"0","value_type":int(0, 1000),"source":span(43)},
-                    "source":span(42)},
-                "right":{"node":"compare","operator":"less_equal",
-                    "left":{"node":"numeric","operator":"divide",
-                        "left":{"node":"integer_literal","value":"1000","value_type":int(0, 1000),"source":span(44)},
-                        "right":read("amount", "current", 45),"source":span(44)},
-                    "right":{"node":"integer_literal","value":"1000","value_type":int(0, 1000),"source":span(46)},
-                    "source":span(44)},
-                "source":span(41)}),
-        },
-        ClauseFixture {
-            id: ASSERTION,
-            kind: "assertion",
-            anchor: json!({"kind":"pre","operation":"audit"}),
-            line: 50,
-            references: vec![identity("input", "amount", "current")],
-            values: vec![amount(51)],
-            expression: json!({"node":"compare","operator":"greater_equal",
-                "left":read("amount", "current", 52),
-                "right":{"node":"integer_literal","value":"0","value_type":int(0, 1000),"source":span(53)},
-                "source":span(51)}),
-        },
-    ]
-}
-
-const TRANSFER_SMALL: &str = "transfer-at-most-five";
-const TRANSFER_LARGE: &str = "transfer-at-least-ten";
-const TRANSFER_IMPOSSIBLE: &str = "transfer-balance-negative";
-const REFUND_CAPPED: &str = "refund-within-fee";
-const REFUND_NONNEGATIVE: &str = "refund-balance-nonnegative";
-
-fn literal(value: i64, line: u64) -> Value {
-    json!({"node":"integer_literal","value":value.to_string(),"value_type":int(0, 1000),"source":span(line)})
-}
-
-fn compare(operator: &str, left: Value, right: Value, line: u64) -> Value {
-    json!({"node":"compare","operator":operator,"left":left,"right":right,"source":span(line)})
-}
-
-/// `transfer`: two preconditions, each satisfiable in `0..=1000` but not together, and a
-/// postcondition no result satisfies. `refund`: a postcondition reading input `fee` that the
-/// invariant on the same operation does not read; `refund_invariant_maximum` sets the invariant's
-/// balance type so the two can disagree on a shared slot.
-fn operation_group_clauses(refund_invariant_maximum: i64) -> Vec<ClauseFixture> {
-    let transfer = json!({"kind":"pre","operation":"transfer"});
-    let fee = json!({"name":"fee","kind":"input","value_type":int(0, 1000),"source":span(91)});
-    vec![
-        ClauseFixture {
-            id: TRANSFER_SMALL,
-            kind: "precondition",
-            anchor: transfer.clone(),
-            line: 60,
-            references: vec![identity("input", "amount", "current")],
-            values: vec![amount(61)],
-            expression: compare(
-                "less_equal",
-                read("amount", "current", 62),
-                literal(5, 63),
-                61,
-            ),
-        },
-        ClauseFixture {
-            id: TRANSFER_LARGE,
-            kind: "precondition",
-            anchor: transfer,
-            line: 70,
-            references: vec![identity("input", "amount", "current")],
-            values: vec![amount(71)],
-            expression: compare(
-                "greater_equal",
-                read("amount", "current", 72),
-                literal(10, 73),
-                71,
-            ),
-        },
-        ClauseFixture {
-            id: TRANSFER_IMPOSSIBLE,
-            kind: "postcondition",
-            anchor: json!({"kind":"post","operation":"transfer"}),
-            line: 80,
-            references: vec![identity("state", "balance", "post")],
-            values: vec![balance(81, 1000)],
-            expression: compare("less", read("balance", "post", 82), literal(0, 83), 81),
-        },
-        ClauseFixture {
-            id: REFUND_CAPPED,
-            kind: "postcondition",
-            anchor: json!({"kind":"post","operation":"refund"}),
-            line: 90,
-            references: vec![
-                identity("state", "balance", "post"),
-                identity("input", "fee", "current"),
-            ],
-            values: vec![balance(92, 1000), fee],
-            expression: compare(
-                "less_equal",
-                read("balance", "post", 93),
-                read("fee", "current", 94),
-                91,
-            ),
-        },
-        ClauseFixture {
-            id: REFUND_NONNEGATIVE,
-            kind: "invariant",
-            anchor: json!({"kind":"handler","name":"refund"}),
-            line: 100,
-            references: vec![identity("state", "balance", "current")],
-            values: vec![balance(101, refund_invariant_maximum)],
-            expression: json!({"node":"compare","operator":"greater_equal",
-                "left":read("balance", "current", 102),
-                "right":{"node":"integer_literal","value":"0","value_type":int(0, refund_invariant_maximum),"source":span(103)},
-                "source":span(101)}),
-        },
-    ]
-}
-
-fn operation_group_package(refund_invariant_maximum: i64) -> BoundPackage {
-    let mut fixtures = clauses(1000);
-    fixtures.extend(operation_group_clauses(refund_invariant_maximum));
-    BoundPackage::from_json_bytes(&serde_json::to_vec(&projection_of(&fixtures)).unwrap())
-        .unwrap_or_else(|diagnostics| panic!("fixture projection must bind: {diagnostics:?}"))
-}
-
-fn projection(balance_maximum_in_invariant: i64) -> Value {
-    projection_of(&clauses(balance_maximum_in_invariant))
-}
-
-fn projection_of(fixtures: &[ClauseFixture]) -> Value {
-    let package_clauses = fixtures
-        .iter()
-        .map(|clause| {
-            let body = match clause.references.as_slice() {
-                [single] => single.clone(),
-                many => json!({"node":"composite","children":many}),
-            };
-            json!({"id":clause.id,"kind":clause.kind,"anchor":clause.anchor,
-                "source":span(clause.line),"body":body})
-        })
-        .collect::<Vec<_>>();
-    let bindings = fixtures
-        .iter()
-        .map(|clause| {
-            json!({"clause":{"requirement":owner(),"clause":clause.id},
-                "expression":{"owner":owner(),"types":[],"values":clause.values,"functions":[],
-                    "expression":clause.expression,"expected_type":{"kind":"boolean"},
-                    "execution_point":clause.anchor,"clause_root":true}})
-        })
-        .collect::<Vec<_>>();
-    json!({
-        "format":EXECUTABLE_PROJECTION_FORMAT,
-        "package":{"id":PACKAGE,"schema_version":{"major":1,"minor":1},
-            "source":{"document":"kani-obligations","revision":1},
-            "requirements":[{"id":"FR-200","revision":1,"source":span(1),"clauses":package_clauses}]},
-        "bindings":bindings
-    })
-}
-
-pub(crate) fn bound_package(balance_maximum_in_invariant: i64) -> BoundPackage {
-    BoundPackage::from_json_bytes(
-        &serde_json::to_vec(&projection(balance_maximum_in_invariant)).unwrap(),
-    )
-    .unwrap_or_else(|diagnostics| panic!("fixture projection must bind: {diagnostics:?}"))
-}
-
-pub(crate) fn ir295_definedness_clause() -> quire_contract_model::BoundClause {
-    bound_package(1000)
-        .clauses()
-        .iter()
-        .find(|clause| clause.identity().clause().as_str() == DEFINEDNESS)
-        .expect("IR-295 fixture contains the definedness clause")
-        .clone()
-}
-
-fn clause(id: &str) -> ClauseRef {
-    ClauseRef::new(
-        RequirementRef::parse(PACKAGE, "FR-200", 1).unwrap(),
-        ClauseId::new(id).unwrap(),
-    )
-}
-
 fn request<'a>(
     items: &'a [ObligationItem<'a>],
     subject_path: &'a str,
@@ -355,15 +78,6 @@ fn request<'a>(
         items,
         subject_path,
         unwind: 4,
-    }
-}
-
-fn emitted(outcome: KaniObligationOutcome) -> (Vec<ObligationRecord>, Vec<KaniObligationHarness>) {
-    match outcome {
-        KaniObligationOutcome::Emitted {
-            records, harnesses, ..
-        } => (records, harnesses),
-        KaniObligationOutcome::Rejected { records } => panic!("unexpected rejection: {records:#?}"),
     }
 }
 
@@ -385,27 +99,6 @@ fn unsupported(record: &ObligationRecord) -> &UnsupportedObligation {
         ObligationDisposition::Unsupported { reason } => reason,
         other => panic!("expected unsupported, got {other:?}"),
     }
-}
-
-pub(crate) fn supported_contract_harnesses(
-    package: &BoundPackage,
-    subject: &str,
-) -> Vec<KaniObligationHarness> {
-    let refs = [
-        clause(PRECONDITION),
-        clause(POSTCONDITION),
-        clause(INVARIANT),
-    ];
-    let items = refs
-        .iter()
-        .map(|clause| ObligationItem::BoundClause { package, clause })
-        .collect::<Vec<_>>();
-    let (records, harnesses) =
-        emitted(negotiate_kani_obligations(&request(&items, subject)).unwrap());
-    assert!(records
-        .iter()
-        .all(|record| matches!(record.disposition, ObligationDisposition::Supported { .. })));
-    harnesses
 }
 
 /// The admitted scalar harness source for the cover-last guard.
@@ -1896,68 +1589,6 @@ fn tc_027_non_executable_launchers_are_refused_before_anything_runs() {
 }
 
 // ---- kani lane ---------------------------------------------------------------
-
-const HEALTHY_SUBJECT: &str = "/// Withdraws `amount` from `balance`.\n#[must_use]\npub fn withdraw(amount_current: i64, balance_pre: i64) -> i64 {\n    balance_pre - amount_current\n}\n";
-const SEEDED_FAILING_SUBJECT: &str = "/// Seeded defect: credits instead of debiting.\n#[must_use]\npub fn withdraw(amount_current: i64, balance_pre: i64) -> i64 {\n    balance_pre + amount_current\n}\n";
-const VACUOUS_SUBJECT: &str = "/// Returns a balance no postcondition result satisfies.\n#[must_use]\npub fn transfer(amount_current: i64) -> i64 {\n    amount_current\n}\n";
-
-pub(crate) fn write_crate(harness: &KaniObligationHarness, subject: &str) -> TemporaryDirectory {
-    let scratch = TemporaryDirectory::new("quire-kani-obligations-crate");
-    let directory = &scratch.path;
-    fs::write(
-        directory.join("src/lib.rs"),
-        format!(
-            "//! Generated obligation check crate.\n\n{}\n{subject}",
-            harness.rust.contents
-        ),
-    )
-    .unwrap();
-    write_manifest(
-        directory,
-        &format!(
-            "[package]\nname = \"generated-kani-obligation\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
-            runtime_dependency(&["exact"])
-        ),
-    );
-    fs::write(
-        directory.join("build.rs"),
-        "fn main() { println!(\"cargo:rustc-check-cfg=cfg(kani)\"); }\n",
-    )
-    .unwrap();
-    scratch
-}
-
-fn run(
-    installation: &KaniInstallation,
-    harness: &KaniObligationHarness,
-    subject: &str,
-    evidence_directory: &Path,
-    label: &str,
-) -> quire_contract_codegen::KaniExecutionEvidence {
-    let cancel = quire_exact::Cancel::new();
-    let scratch = write_crate(harness, subject);
-    let crate_directory = &scratch.path;
-    let evidence = execute_kani_obligation(&KaniExecutionRequest {
-        cancel: &cancel,
-        installation,
-        harness: harness.into(),
-        crate_directory,
-        target_directory: &PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kani-obligations"),
-        home_directory: None,
-    })
-    .unwrap_or_else(|refusal| panic!("{label}: {refusal}"));
-    fs::write(
-        evidence_directory.join(format!("{label}.json")),
-        serde_json::to_string_pretty(&evidence).unwrap(),
-    )
-    .unwrap();
-    fs::write(
-        evidence_directory.join(format!("{label}.harness.rs")),
-        &harness.rust.contents,
-    )
-    .unwrap();
-    evidence
-}
 
 /// One item that does not compile: it reads a name nothing defines. The V2 scalar subject
 /// resolves, so this is the only compile error.
