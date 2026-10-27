@@ -65,3 +65,4 @@ The only static-location versus QSL-issued origin assertion covers the own-packa
 | --- | --- | --- |
 | FND-001 | fixed | The QSL-authored locked library now has a nested imported body, and the tagged test compares its CG static origin with the QSL-issued imported call-site origin. |
 | FND-002 | still-open | Add a QSL-authored source containing a nested call to callee A while the request names another admitted callee B with the same argument shape; assert typed BodyMismatch and healthy sibling isolation. |
+| FND-002 | fixed | Head 79235258c071c25d66d5a7f9c8f5d4626e89b586 uses a QSL-admitted source where `nested` calls `add(x, y)` but requests the same-arity `unrelated` callee; the test asserts typed `BodyMismatch` and a generated healthy sibling with one location. |

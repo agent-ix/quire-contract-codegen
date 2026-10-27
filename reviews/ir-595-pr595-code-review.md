@@ -63,6 +63,12 @@ The equality classifier checks only binary form and arity, never the admitted op
 The claim origin index is assigned after sorting surviving declarations by node digest, while AC-3 calls for the request-order function index. The edited tagged test computes the same digest sort instead of the independent request order. Reconcile AC-3 with AC-13 permutation determinism without narrowing either AC. The relevant requirement is FR-021-AC-3.
 
 
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | high | The new generated-crate unit test launches Cargo dynamically with `Command::new(env!("CARGO"))`. The required language-boundary guard rejects the added `dynamic-rust-launch` site, so this PR head cannot pass its required gate. Replace that dynamic launch with an allowed static assertion or test arrangement while retaining the generated-body compile evidence. | src/oracle/function/owner_render.rs:519; GitHub Actions run 40447167652, job 122001084374 |
+
 ## Dispositions
 
 | FND | outcome | reason |
@@ -70,3 +76,5 @@ The claim origin index is assigned after sorting surviving declarations by node 
 | FND-001 | fixed | Head 2da9e1554346ed1d4bcc0babf7ee00a80c974b27 checks scalar/equality operands against source parameter-node order and nested body callee plus ordered argument references against the admitted checked graph. |
 | FND-002 | fixed | Equality classification now exhaustively maps operand kind and requested Equal/NotEqual to the admitted operation identity and refuses a mismatch. |
 | FND-003 | fixed | Merged #596 defines exact-oracle canonical body-root order separately from V2 function identity; this head records actual function_node_id and a tagged test derives it independently from the admitted graph. |
+| FND-004 | still-open | The new `Command::new(env!("CARGO"))` at `owner_render.rs:519` remains on head 79235258c071c25d66d5a7f9c8f5d4626e89b586 and the required language-boundary guard fails. |
+| FND-004 | fixed | Head d02ec3ea00bffdf0d6ea043e864d3df9e4edc728 removes the dynamic Cargo-launch unit test; the static renderer test remains, existing tagged generated-crate integration covers add/equality/nested execution, and hosted language-boundary guard passes. |
