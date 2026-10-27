@@ -344,13 +344,13 @@ mod tests {
     const SOURCE: &str = concat!(
         "language \"ix:native\" edition \"1-draft\";\n",
         "profile v = \"quire.value.complete/v1\";\n",
-        "function f using v(x: Int[0,9]): Integer pure { x }\n",
-        "function g using v(x: Int[0,9]): Integer pure { x }\n",
+        "function f using v(x: Integer): Integer pure { x }\n",
+        "function g using v(x: Integer): Integer pure { x }\n",
     );
     const OTHER_SOURCE: &str = concat!(
         "language \"ix:native\" edition \"1-draft\";\n",
         "profile v = \"quire.value.complete/v1\";\n",
-        "function f using v(x: Int[0,9]): Integer pure { x }\n",
+        "function f using v(x: Integer): Integer pure { x }\n",
     );
     const LIBRARY_SOURCE: &str = concat!(
         "language \"ix:native\" edition \"1-draft\";\n",
@@ -376,12 +376,13 @@ mod tests {
         .expect("genuine checked source");
         let mut evidence = CheckedPackageEvidence::new();
         evidence.support_feature("quire.value.complete/v1");
-        let CheckedPackageV2ReadResult::Admitted(package) = CheckedPackageV2::read(
+        let read = CheckedPackageV2::read(
             compiled.package().bytes(),
             CheckedPackageReadLimits::bounded(),
             &evidence,
-        ) else {
-            panic!("the same QSL emission must be admitted by Contract IR");
+        );
+        let CheckedPackageV2ReadResult::Admitted(package) = read else {
+            panic!("the same QSL emission must be admitted by Contract IR: {read:?}");
         };
         let function = |name: &str| {
             package
