@@ -93,8 +93,14 @@ fn native_tc025_arithmetic_mutant_falsifies() {
         healthy.record.clone(),
     );
     let counterexample = run_mutant(&mutant, manifest);
-    let playback = crate::replay::scalar::parse_scalar_playback(&mutant.identity, &counterexample)
-        .expect("actual backend playback is valid");
+    let playback = crate::kani::output::playback::parse_assertion_playback(
+        &counterexample,
+        mutant.identity.harness_symbol.as_str(),
+        mutant.identity.module_symbol.as_str(),
+        crate::replay::scalar::SCALAR_PLAYBACK_BYTES,
+        usize::MAX,
+    )
+    .expect("actual backend playback is valid");
     let witness = crate::replay::scalar::decode_scalar_falsification(&mutant.identity, &playback)
         .expect("actual backend witness decodes against original intervals");
     let [left, right] = witness.as_slice() else {
@@ -131,8 +137,14 @@ fn native_original_tc027_false_bound_falsifies() {
         healthy.record.clone(),
     );
     let counterexample = run_mutant(&mutant, manifest);
-    let playback = crate::replay::scalar::parse_scalar_playback(&mutant.identity, &counterexample)
-        .expect("actual backend playback is valid");
+    let playback = crate::kani::output::playback::parse_assertion_playback(
+        &counterexample,
+        mutant.identity.harness_symbol.as_str(),
+        mutant.identity.module_symbol.as_str(),
+        crate::replay::scalar::SCALAR_PLAYBACK_BYTES,
+        usize::MAX,
+    )
+    .expect("actual backend playback is valid");
     let witness = crate::replay::scalar::decode_scalar_falsification(&mutant.identity, &playback)
         .expect("actual backend witness decodes against original intervals");
     let [left, right] = witness.as_slice() else {

@@ -763,7 +763,7 @@ Where the runner, report parser and witness decode sit. One module reads Kani's 
 | Report parse | `kani/output/report.rs` | the JSON file, typed |
 | Playback extraction | `kani/output/playback.rs` | the printed block, as a payload; Kani's report carries no concrete playback |
 | Run classification and vacuity | `kani/classify.rs` | the typed report and `Option<CounterexamplePlayback>` extracted by `kani/output/playback.rs`; step 5 removed the console-text input |
-| Witness decode | `replay/witness.rs` | `decode_falsification` takes typed playback entries from `kani/output/playback.rs`; public replay entries in `witness`, `function`, `scalar`, `state_clause` and `frame` still take transcript text and call the output parser before decoding (L-6 residual below) |
+| Witness decode | `replay/witness.rs` | `decode_falsification` and the V2 clause entry take typed playback entries from `kani/output/playback.rs`; public replay entries in `function`, `state_clause` and `frame` still take transcript text and call the output parser before decoding (L-6 residual below) |
 | FR-029 map: `KaniRunOutcome` to a terminal value | `kani/terminal.rs` | typed run outcome only |
 | C-09 map: IR's `KaniOutcome` with the replay outcome to `TerminalValue` | `kani/terminal.rs`, a public entry | typed outcome and the replay-outcome type it defines; total over the pair (step 5) |
 | Pairing the two inputs | the driver, outside this crate | runs the replay and calls the C-09 entry with both |
@@ -933,8 +933,8 @@ requirement is authored.
   console-text classifier input and moved decoded-value comment parsing into
   `kani/output/playback.rs`; witness decoding still compares the resulting typed
   `RenderedValue`. The output reader supplies `CounterexamplePlayback` for classification and
-  typed entries for witness decoding. Public or replay-facing entries in `replay/witness.rs`,
-  `replay/function.rs`, `replay/scalar.rs`, `replay/state_clause.rs` and `replay/frame.rs` still
+  typed entries for witness decoding. Public or replay-facing entries in
+  `replay/function.rs`, `replay/state_clause.rs` and `replay/frame.rs` still
   accept transcript text and call the output parser before decoding. L-6 remains partial until
   each entry takes parsed playback at its boundary, as itemized under Interim exceptions.
 - L-7. The report path is `<target-dir>/quire-kani-report-<pid>-<seq>.json`, unique to the launch,
@@ -1465,9 +1465,7 @@ Each is a place where the target of this AD is not yet true, stated so that no s
 
 | Exception | Where | Removed by |
 | --- | --- | --- |
-| The public V2 clause witness entry takes transcript text, then calls the output parser before typed decoding | `replay/witness.rs`, `decode_v2_clause_falsification` | IR-348 step 5 completion: pass typed `Playback` |
 | Public function replay entries and their internal helpers take transcript text, then call the output parser before typed decoding | `replay/function.rs`, `replay_counterexample`, `BoundedCorpusCase::replay_counterexample`, `replay_counterexample_through`, `replay_harness_counterexample` and `replay_harness_counterexample_through` | IR-348 step 5 completion: pass typed `Playback` at the public entries and through their helpers |
-| Scalar replay entry takes transcript text, then calls the output parser before typed decoding | `replay/scalar.rs`, `parse_scalar_playback` | IR-348 step 5 completion: pass typed `Playback` |
 | State-clause replay entry re-parses `KaniRunOutcome::Falsified` text before typed decoding | `replay/state_clause.rs`, `StateClauseReplayInputs::decode_falsification` | IR-348 step 5 completion: pass typed `Playback` |
 | The public frame replay input carries transcript text, which `FrameReplay::new` passes to the parser through `decoded_state` | `replay/frame.rs`, `FrameReplayInputs::playback`, `FrameReplay::new` and `decoded_state` | IR-348 step 5 completion: pass typed `Playback` at `FrameReplayInputs::playback` and through its helpers |
 | The V1 bundle generator, still live | `kani/generate/v1_bundle.rs` | step 4f deletes the file |
