@@ -1072,8 +1072,8 @@ fn spine_identities() -> [KaniObligationIdentity; 2] {
 
 fn identity_fixture(kind: ObligationKind, clause: &str, line: u32) -> KaniObligationIdentity {
     let span: SourceSpan = serde_json::from_value(json!({
-        "start": {"source": {"document": "test/skeleton-spine", "revision": 1}, "line": line, "column": 1, "byte_offset": line},
-        "end": {"source": {"document": "test/skeleton-spine", "revision": 1}, "line": line, "column": 2, "byte_offset": line + 1}
+        "start": {"source": {"document": "skeleton-spine", "revision": 1}, "line": line, "column": 1, "byte_offset": line},
+        "end": {"source": {"document": "skeleton-spine", "revision": 1}, "line": line, "column": 2, "byte_offset": line + 1}
     }))
     .expect("valid test source span");
     let bounds = KaniIntegerBounds {
