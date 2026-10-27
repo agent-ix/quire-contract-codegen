@@ -571,20 +571,12 @@ fn v2_clause_census_is_order_independent_and_records_readiness() {
     let persisted = |harness: &quire_contract_codegen::KaniV2ClauseObligationHarness| -> Value {
         serde_json::from_str(&harness.record.contents).expect("persisted V2 identity record")
     };
-    let expected_edge = |proof_id, state| {
-        json!({
-            "proofId": proof_id,
-            "kind": "required",
-            "state": state,
-            "sourceSite": null
-        })
-    };
     let assert_census = |record: &Value, first_state: &str, readiness: &str| {
         assert_eq!(
             record["identity"]["dependencies"],
             json!([
-                expected_edge("proof_a", first_state),
-                expected_edge("proof_b", "passed")
+                {"proofId": "proof_a", "kind": "required", "state": first_state, "sourceSite": null},
+                {"proofId": "proof_b", "kind": "required", "state": "passed", "sourceSite": null}
             ])
         );
         assert_eq!(record["identity"]["readiness"], readiness);
