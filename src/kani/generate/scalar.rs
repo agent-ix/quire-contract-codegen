@@ -32,7 +32,7 @@ pub(super) struct LoweredScalarClaim {
     pub(super) node_id: CheckedNodeId,
     pub(super) operation_identity: String,
     /// The oracle's own self-contained source (`GeneratedScalarClaim::oracle_source`), embedded
-    /// verbatim ahead of the harness module, exactly as a V1 harness embeds its `ClauseOracle`s.
+    /// verbatim ahead of the generated scalar harness module.
     oracle_source: String,
     native_integer_selection: Option<crate::core::native_integer::NativeIntegerSelection>,
     oracle_symbol: String,
