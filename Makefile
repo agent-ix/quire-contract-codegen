@@ -5,8 +5,7 @@
 # Native orchestration: every target calls the toolchain that owns the job.
 # =============================================================================
 
-TRUSTED_HOME := $(shell /usr/bin/python3 -c 'import os,pwd; print(pwd.getpwuid(os.getuid()).pw_dir)')
-override CARGO := $(TRUSTED_HOME)/.cargo/bin/cargo
+override CARGO := cargo
 override MSRV := 1.98.1
 QUIRE ?= quire
 # --locked only when no local patch is active: a patch rewrites the resolution.
