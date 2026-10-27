@@ -16,3 +16,7 @@ type: SuiteRegistry
 | SUITE-008 | Bounded Kani generation and execution | `cargo test --locked --target-dir target-codex-backends --test it kani_generation -- --test-threads=1` | cargo-kani / rustc | Analysis |
 | SUITE-010 | Atomic generated-boundary publication | `cargo test --lib publication` | quire-contract-codegen / rustc | Integration |
 | SUITE-011 | Kani obligation execution | `make kani` | cargo-kani / rustc | Analysis |
+
+SUITE-008 retains its `kani_generation` selector after IR-348 retires V1 bundle tests.
+IR-348 replaces that selector's V1-only tests with V2 tests and reconciles the selected-test
+count; the historical command alone is not evidence that the replacement control passed.

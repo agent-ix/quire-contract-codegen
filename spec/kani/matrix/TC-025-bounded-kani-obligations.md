@@ -12,6 +12,12 @@ relationships:
 
 ## Description
 
+**IR-348 retirement disposition (2026-10-27).** The V1 bundle controls in steps 16 and 17
+belong to retired FR-015-AC-54/56. Step 18's inspection remains required for surviving emitters,
+and FR-015-AC-7/53/58 remain open for their surviving harness families. The historical V1
+procedure below remains for traceability and does not count as current V2 evidence. IR-1044 owns
+the V2 census cases in this procedure; IR-917 owns the remaining QSL-authored V2 clause control.
+
 Verify that bounded contracts produce one harness per obligation kind and
 refuse non-finite obligations. IR-268 covers the collection half of planned V2
 symbolic obligations: the claim is an admitted QSL clause/function body over a
