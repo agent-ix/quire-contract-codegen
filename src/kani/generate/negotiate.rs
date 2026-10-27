@@ -742,17 +742,14 @@ fn assign_names(items: &[ObligationItem<'_>], states: &mut [ItemState]) {
         .collect::<Vec<_>>();
     let module_names = unique_names(module_slots.iter().map(|(_, slot)| slot.clone()).collect());
     for ((index, _), name) in module_slots.into_iter().zip(module_names) {
-        match &mut states[index].outcome {
-            Outcome::LoweredScalar(lowered) => {
-                lowered.module_symbol = format!("{name}_module");
-                lowered.harness_symbol = format!("{name}_proof");
-            }
-            _ => {}
+        if let Outcome::LoweredScalar(lowered) = &mut states[index].outcome {
+            lowered.module_symbol = format!("{name}_module");
+            lowered.harness_symbol = format!("{name}_proof");
         }
     }
 }
 
-fn classify_node<'a>(
+fn classify_node(
     package: &ContractPackageV1,
     lookup: &ContractLookup<'_>,
     claim_map: &ClaimMap<ExactScalarClaim>,
@@ -891,7 +888,7 @@ pub(crate) enum ScalarFormAssessment {
 /// `expression`-tagged nodes), and that reason is more specific than this one -- this ground
 /// exists for the gap those checks do not cover: a node this generator would otherwise have
 /// accounted as `Supported` with a null `kind`.
-fn refuse_unknown_node_kind<'a, Body>(
+fn refuse_unknown_node_kind<Body>(
     graph_node: Option<&CheckedSemanticNodeV2<Body>>,
     kind: Option<ObligationKind>,
     outcome: Outcome,
