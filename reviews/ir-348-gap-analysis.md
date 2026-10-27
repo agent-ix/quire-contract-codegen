@@ -1,65 +1,72 @@
 ---
-id: SR-601002
-title: "IR-348 PR #601 gap-analysis (V1 Kani retirement: AC-to-test ownership)"
+id: SR-585010
+title: IR-348 CG589 exact scalar gap analysis
 type: SpecReview
 analysis: gap-analysis
-scope: "agent-ix/quire-contract-codegen; PR #601 head 64992f5be8aebb7d036fba5491fa9ef61af70d29 against merge-base 46dbaccacbd96f55654fc4b331a9d42883e70a2c; deleted and changed tests under tests/it and src unit tests, scripts/cg_gates.rs, spec/*/matrix/tests.md rows for every AC that lost a tagged test; IR-348"
+scope: "agent-ix/quire-contract-codegen; IR-348; PR589; af15747de1c9ffe1cdd9b5d7c8c64b7fd02f142c; AD-004 L-8, FR-014"
 review_set: subset
+relationships:
+  - { target: "ix://agent-ix/quire-contract-codegen/AD-004", type: references }
+  - { target: "ix://agent-ix/quire-contract-codegen/FR-014", type: references }
 ---
 
 ## Summary
 
-Ticket: IR-348. Plan completion: not assessed. This gap-analysis has no plan input. It was done by
-hand from the diff and was not a full `quoin matrix` run, because the brief makes this a static
-review with no cargo or test runs.
+Ticket: IR-348. Independent Opus 5.5 planless gap analysis of CG #589 at original head `af15747d`. The diff introduces no new untagged criterion, uncovered path or stub. The repository matrix still reports two older FR-014 gaps outside this PR's scope.
 
-Method: collect every requirement id in a `#[trace]` or trace comment on a removed line. For each
-one, count the tagged tests left at head. Then read the matrix row for every AC left with none.
+## Verdict
 
-Seventeen AC ids lost every tagged test: FR-005-AC-4, FR-015-AC-1/4/8/13/19/20/24/25/54/56,
-FR-031-AC-11/19/20/21 and FR-036-AC-2/3. Sixteen of them are already marked Planned, Open or
-Retired in their matrix rows. The exception is FR-015-AC-4. FR-016-AC-9 and AC-10 keep their
-default native replay tests, and their installed-Kani control is recorded as Open under IR-1047,
-which is honest: no false PASS. FR-041-AC-1 to AC-5 stay Open, and the hold grants no credit.
+FAIL under the strict repository-wide gap rule because FR-014-AC-54 is untagged. The PR's own exact-scalar slice is CONDITIONAL pending code-review findings. The two reported matrix gaps predate this PR and are not attributed to it.
 
 ## Findings
 
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
-| FND-001 | high | The matrix row "FR-015-AC-3 through FR-015-AC-6 ✅ Covered" still includes FR-015-AC-4. The PR deleted its only tagged test, `tc_025_assumptions_constrain_only_arguments_to_their_ir_bounds`, a V1 `BoundClause` test, and no test anywhere in `src` or `tests` now carries `FR-015-AC-4`. The matrix therefore claims coverage that no test backs. | spec/kani/matrix/tests.md:14; spec/kani/functional/FR-015-bounded-kani-obligations.md:752 |
-| FND-002 | medium | The FR-041 hold the PR adds to `cg_gates.rs::claim_counts` has no negative control. No test checks that a hold on another module, a missing reason or expiry, or two held rows fails the gate. No test checks the `kani-gate: held=` and `claims active=` lines NFR-006 requires either. The claim test's `validate_claim_holds` checks only the one valid checked-in row. | scripts/cg_gates.rs:243-281; tests/it/kani_generation_claims.rs:67-101 |
-
-## Verdict
-
-Changes requested, for FND-001: a ✅ row with no backing test is a false coverage claim. Either
-split FR-015-AC-4 out as Open after IR-348, or tag a surviving V2 test that really asserts it.
-FND-002 is a test gap in gate code that the PR itself introduced.
-
-Test ownership is otherwise right:
-
-- The V2 routed-scalar real-Kani test moved into the `kani_generation` lane intact.
-- The plain-Bool arithmetic refusal test was renamed and kept its FR-031-AC-10 trace.
-- The FR-016 identity tests now rely on a direct test-only fixture, and nothing presents that
-  fixture as generator evidence.
-- No surviving AC lost its only test, except FR-015-AC-4 above.
+| FND-001 | high | FR-014-AC-54 is untagged in the computed matrix. It is planned under IR-917 and predates this PR. | spec/oracle/functional/FR-014-exact-scalar-oracles.md:612 |
+| FND-002 | low | FR-014-AC-47 is an Inspection criterion with no source symbol (method-without-symbol) in the computed matrix; this predates the PR. | spec/oracle/functional/FR-014-exact-scalar-oracles.md:605 |
 
 ## Coverage
 
+Read-only `quire matrix --scope . --format json` at the original head: FR-014 has 53 criteria, 51 tagged, AC-47 `method-without-symbol` and AC-54 untagged. Examined changed source and the scoped AD-004 L-8 guard; the diff adds or removes no FR-014 trace tag. Reverse-gap and plan completion were not assessed; plan completion: not assessed. No semantic intent↔test↔code review was requested.
+
+## Examined scope and bindings
+
 ```yaml
+clean: false
 scope:
-- {id: FR-015-AC-4, path: spec/kani/functional/FR-015-bounded-kani-obligations.md, role: examined, excerpt: "No harness assumption excludes an undefined, refused or incomplete runtime outcome."}
-- {id: FR-015-AC-1, path: spec/kani/matrix/tests.md, role: examined, excerpt: "Planned/open; AC-2's only tagged V1 BoundClause test retires under IR-348"}
-- {id: FR-015-AC-8, path: spec/kani/matrix/tests.md, role: examined, excerpt: "Open after IR-348: their only tagged BoundClause tests retire"}
-- {id: FR-015-AC-13, path: spec/kani/matrix/tests.md, role: examined, excerpt: "Open after IR-348: its only tagged V1 BoundClause test retires"}
-- {id: FR-015-AC-19, path: spec/kani/matrix/tests.md, role: examined, excerpt: "Planned/open: AC-19/20/24 lose V1 evidence and require supported-path measurement"}
-- {id: FR-015-AC-54, path: spec/kani/matrix/tests.md, role: examined, excerpt: "AC-54/56 retired as V1 bundle-only under the 2026-10-27 IR-348 ruling"}
-- {id: FR-031-AC-11, path: spec/oracle/matrix/tests.md, role: examined, excerpt: "Retired V1 bundle-only claim under the 2026-10-27 IR-348 ruling"}
-- {id: FR-031-AC-19, path: spec/oracle/matrix/tests.md, role: examined, excerpt: "FR-031-AC-19 through FR-031-AC-21 Retired V1 bundle-only claims"}
-- {id: FR-005-AC-4, path: spec/core/matrix/tests.md, role: examined, excerpt: "FR-005 | FR-005-AC-4 | TC-007 | Planned"}
-- {id: FR-036-AC-2, path: spec/evidence/matrix/tests.md, role: examined, excerpt: "TC-051 ... Planned; Gated on IR-759; no executed producer/consumer test claimed"}
-- {id: FR-016-AC-9, path: spec/replay/matrix/tests.md, role: examined, excerpt: "FR-016-AC-9, FR-016-AC-10 | TC-026 | Partially backed, Open under IR-1047"}
-- {id: FR-016-AC-21, path: tests/it/skeleton_spine.rs, role: examined, excerpt: "tc_026_the_request_slot_is_the_recomputed_function_contract_digest uses spine_identity()"}
-- {id: FR-041, path: spec/kani/functional/FR-041-claimed-module-proof-gate.md, role: examined, excerpt: "A missing hold reason or expiry, a held name absent from the declaration, a removed claim relative to the merge-base declaration, or a hold on any other module SHALL fail the gate."}
-- {id: FR-031-AC-10, path: tests/it/oracle_arithmetic.rs, role: examined, excerpt: "#[trace(\"TC-044\", \"FR-031-AC-10\")] fn tc_044_boolean_sinks_refuse_arithmetic()"}
-- {id: FR-017-AC-7, path: tests/it/kani_generation.rs, role: examined, excerpt: "#[trace(\"NFR-006-AC-4\", \"FR-017-AC-6\", \"FR-017-AC-7\", \"FR-017-AC-11\", \"TC-045\")] fn kani_generation_real_v2_scalar_verifies()"}
+- id: AD-004-L-8
+  path: spec/assurance/AD-004-cg-crate-layout.md
+  role: examined
+  excerpt: 'L-8. `serde_json::Value` and `.get("` appear for body terms only in `core/ir`.
+    Test: a grep gate.'
+- id: FR-014-AC-47
+  path: spec/oracle/functional/FR-014-exact-scalar-oracles.md
+  role: examined
+  excerpt: No test name, trace tag, test output line or doc comment of every oracle-agreement
+    corpus of FR-014, FR-018 and FR-021 (the TC-185, TC-186, TC-187, TC-192 and TC-193
+    vectors, the FR-014-AC-37 corpus, the composite-equality corpus and the function-application
+    corpus), no TC-024, TC-029 or TC-031 step and no oracle-matrix row for those cases
+    or corpora claims, or presents as evidence, agreement with the QSL value authority;
+    text that states this boundary is permitted.
+- id: FR-014-AC-54
+  path: spec/oracle/functional/FR-014-exact-scalar-oracles.md
+  role: examined
+  excerpt: PLANNED (IR-917). A QSL-authored V2 clause comparison containing an integer
+    literal wrapped by the checked FR-093 `quire.op.numeric.narrow` shape derives
+    and generates its clause-identified oracle when the complete literal parses and
+    lies in the target `Int[..]` interval. The oracle uses the unchanged integer value
+    and yields the same ordered admitted charges, consumed counters and outcome as
+    independent direct-owner evaluation of that clause arithmetic with that integer;
+    the wrapper itself admits no charge. Missing target or operand, out-of-range literal,
+    nonliteral operand and unparseable li
+bindings: []
 ```
+
+## Dispositions
+
+### Round 1 — exact `15cfb7a636ed5f72a0804a8c63954445e94ad082`
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | deferred | Pre-existing FR-014-AC-54 is PLANNED under IR-917; CG #589 changes neither this criterion nor its tests. Repository-wide matrix remains red. |
+| FND-002 | deferred | Pre-existing Inspection criterion method-without-symbol; CG #589 adds or removes no FR-014 trace tags. Out of scope for this PR. |
