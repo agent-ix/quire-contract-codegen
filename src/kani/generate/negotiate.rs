@@ -379,7 +379,6 @@ fn negotiate_integer_policy(
     } else {
         KaniObligationOutcome::Emitted {
             records,
-            harnesses: Vec::new(),
             scalar_harnesses,
             state_frame_harnesses,
             collection_harnesses,
@@ -412,11 +411,11 @@ fn validate_request(request: &KaniObligationRequest<'_>) -> Result<(), KaniOblig
 // Negotiation
 // ---------------------------------------------------------------------------
 
-struct ItemState<'a> {
+struct ItemState {
     kind: Option<ObligationKind>,
     subject: ObligationSubject,
     identity: Option<ItemIdentity>,
-    outcome: Outcome<'a>,
+    outcome: Outcome,
 }
 
 #[derive(Clone, Eq, PartialEq)]
@@ -443,7 +442,7 @@ enum ItemIdentity {
     },
 }
 
-enum Outcome<'a> {
+enum Outcome {
     LoweredScalar(Box<LoweredScalarClaim>),
     LoweredCollection(Box<LoweredCollectionClaim>),
     LoweredV2Clause(Box<LoweredV2Clause>),
@@ -457,7 +456,7 @@ enum Outcome<'a> {
     Invalid(InvalidObligationItem),
 }
 
-impl Outcome<'_> {
+impl Outcome {
     /// Whether this item rejects the whole request.
     fn is_invalid(&self) -> bool {
         match self {
@@ -524,7 +523,7 @@ fn classify<'a>(
     scalar_lookups: &mut BTreeMap<*const ContractPackageV1, ContractLookup<'a>>,
     checked_lookups: &mut CheckedLookups<'a>,
     native: bool,
-) -> ItemState<'a> {
+) -> ItemState {
     match *item {
         ObligationItem::V2Clause {
             package,
@@ -592,7 +591,7 @@ fn classify_v2_clause<'a>(
     clause: &'a CheckedNodeId,
     dependencies: Option<&[ProofDependencyRequest<'_>]>,
     native: bool,
-) -> ItemState<'a> {
+) -> ItemState {
     let package = lookup.package;
     let view = lookup.clause();
     let graph_node = view.node(clause);
@@ -695,7 +694,7 @@ fn classify_collection<'a>(
     function_id: &'a CheckedNodeId,
     node_id: &'a CheckedNodeId,
     lookup: &mut CheckedLookup<'a>,
-) -> ItemState<'a> {
+) -> ItemState {
     let package = lookup.package;
     let outcome = match lower_collection_claim(lookup.collection(), function_id, node_id) {
         Ok(lowered) => Outcome::LoweredCollection(Box::new(lowered)),
@@ -731,7 +730,7 @@ fn classify_collection<'a>(
     }
 }
 
-fn collection_refusal(node_id: &CheckedNodeId, reason: CollectionUnsupportedReason) -> Outcome<'_> {
+fn collection_refusal(node_id: &CheckedNodeId, reason: CollectionUnsupportedReason) -> Outcome {
     Outcome::Unsupported(UnsupportedObligation::CollectionClaimNotRendered {
         node_id: node_id.clone(),
         reason,
@@ -744,7 +743,7 @@ fn classify_state_frame<'a>(
     request: &StateFrameRequest<'a>,
     role: StateFrameRole,
     lookup: &CheckedLookup<'a>,
-) -> ItemState<'a> {
+) -> ItemState {
     let outcome = match generate_state_frame_role(request, role) {
         Ok(harness) => Outcome::StateFrame(Box::new(harness)),
         Err(refusal) => Outcome::StateFrameRefused(refusal),
@@ -774,7 +773,7 @@ enum NameKey {
 /// oracle functions (any may be embedded beside another as an assumed precondition), then the
 /// module and harness names of every clause and scalar obligation. A name depends on its item and
 /// on the siblings sharing its readable stem, never on the item's request position.
-fn assign_names(items: &[ObligationItem<'_>], states: &mut [ItemState<'_>]) {
+fn assign_names(items: &[ObligationItem<'_>], states: &mut [ItemState]) {
     let module_slots = states
         .iter()
         .enumerate()
@@ -813,7 +812,7 @@ fn classify_node<'a>(
     node_id: &CheckedNodeId,
     claim_index: usize,
     result_selection: &ContractDriverResultSelection,
-) -> ItemState<'a> {
+) -> ItemState {
     let graph_node = lookup.node(node_id);
     let kind = graph_node.and_then(|node| {
         (&*node.node_tag == "state" && &*node.semantic_form == "frame")
@@ -948,8 +947,8 @@ pub(crate) enum ScalarFormAssessment {
 fn refuse_unknown_node_kind<'a, Body>(
     graph_node: Option<&CheckedSemanticNodeV2<Body>>,
     kind: Option<ObligationKind>,
-    outcome: Outcome<'a>,
-) -> Outcome<'a> {
+    outcome: Outcome,
+) -> Outcome {
     if kind.is_some() {
         return outcome;
     }
@@ -969,7 +968,7 @@ fn refuse_unknown_node_kind<'a, Body>(
     })
 }
 
-fn classify_claim<'a>(lookup: &ContractLookup<'_>, claim: &ExactScalarClaim) -> Outcome<'a> {
+fn classify_claim(lookup: &ContractLookup<'_>, claim: &ExactScalarClaim) -> Outcome {
     let graph = |id: &CheckedNodeId| lookup.node(id);
     match &claim.result {
         ClaimDisposition::Generated(generated) => {
@@ -1123,7 +1122,7 @@ fn classify_claim<'a>(lookup: &ContractLookup<'_>, claim: &ExactScalarClaim) -> 
     }
 }
 
-fn reject_duplicates_and_mixtures(states: &mut [ItemState<'_>]) {
+fn reject_duplicates_and_mixtures(states: &mut [ItemState]) {
     let mut first_state_package: Option<String> = None;
     for index in 0..states.len() {
         let Some(identity) = states[index].identity.clone() else {
