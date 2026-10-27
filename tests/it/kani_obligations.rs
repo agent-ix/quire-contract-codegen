@@ -58,13 +58,6 @@ use quire_contract_model::{
 };
 use serde_json::json;
 
-const PACKAGE: &str = "test/kani-obligations";
-const PRECONDITION: &str = "amount-within-balance";
-const POSTCONDITION: &str = "balance-never-grows";
-const INVARIANT: &str = "balance-nonnegative";
-const DEFINEDNESS: &str = "doubled-amount-fits";
-const ASSERTION: &str = "amount-nonnegative";
-
 /// Budget for the kani lane's real `cargo-kani` runs. Generous because CBMC is memory- and
 /// time-heavy on these small obligations; this is a ceiling against a genuine hang, not a
 /// performance target.
