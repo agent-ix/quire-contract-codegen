@@ -20,6 +20,12 @@ it does not create another repository gate.
 
 ## Test Procedure
 
+The current claim-control fixture uses `kani_generation::guard_sources()[0]`, a V1 bundle
+module named by `scripts/kani_claims.json`. Under the 2026-10-27 IR-348 retirement ruling,
+that source is historical. Execute this procedure on a genuine generated V2 module after its
+claim is reviewed; deleting the V1 module or dropping the claim supplies no positive proof or
+mutation evidence. A qualifying V2 source and current-run evidence remain Open.
+
 1. Check in a reviewed nonempty claim declaration for the generated modules the gate says it
    proves. Build the current candidate and compare those identities with the compiled modules.
    In isolated negative controls, omit one declared module from the build, remove one claim
@@ -59,4 +65,6 @@ stub, process refusal or stored old verdict counts as a current proof or mutatio
 
 ## Status
 
-Planned for IR-19 implementation. No real-Kani result is asserted by this specification artifact.
+Open for IR-19 implementation. The current V1 module declaration and
+`guard_sources()[0]` fixture retire under IR-348; no genuine generated V2 replacement is
+identified. No real-Kani result is asserted by this specification artifact.

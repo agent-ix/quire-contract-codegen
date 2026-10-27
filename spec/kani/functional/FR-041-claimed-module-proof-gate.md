@@ -69,6 +69,16 @@ about a semantic stage the test input did not traverse.
 | FR-041-AC-4 | Each claimed module and computed shared helper has a positive unmodified real-Kani proof and a source mutation that compiles, executes, and reports a failed proposition check. Deleting a control or making its mutant verify, fail to compile, time out, skip execution, or merely trip the dirty-tree guard fails the gate; evidence names the exact diff, command and failed check from this run. | Test |
 | FR-041-AC-5 | A stubbed executor, predetermined outcome or build-only run produces no qualifying module evidence and cannot pass the gate. | Test |
 
+## Status
+
+Open. The current test `tests/it/kani_generation_claims.rs` takes
+`kani_generation::guard_sources()[0]`, which is a V1 bundle source in
+`tests/it/kani_generation.rs`; `scripts/kani_claims.json` names that generated V1 module.
+IR-348 retirement removes that claim source. A genuine generated V2 module, its reviewed claim,
+current-build census and real-Kani proof and mutation controls must replace it. No qualifying V2
+source or current-run evidence is identified here. FR-041-AC-1 through AC-5 and the gate remain
+unchanged.
+
 ## Dependencies
 
 - **Upstream**: [FR-017](./FR-017-kani-execution-evidence.md) supplies typed per-check report evidence;

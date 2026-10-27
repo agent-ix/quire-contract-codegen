@@ -155,10 +155,14 @@ FR-016-AC-12 is covered by
 `tc_026_an_executor_fault_remains_a_typed_replay_refusal`. FR-029-AC-10 already
 tests the terminal mapping for a fault wrapped in `SpineReplayError::Refused`.
 
-FR-016-AC-8 is implemented and tested in the default suite: schema
-order and naming by position (`src/replay/witness.rs` unit tests) and the
-harness emission order (`tests/it/kani_argument_order.rs`); the real-backend
-decode runs in the ignored Kani lane (`tests/it/kani_witness_join.rs`).
+FR-016-AC-8 remains a generic persisted argument order and positional naming requirement.
+The `src/replay/witness.rs` unit tests continue to check schema order, positional naming and
+non-argument refusal. The `tests/it/kani_argument_order.rs` emission-order test and the ignored
+real-backend `tests/it/kani_witness_join.rs` test construct V1 `BoundClause` harnesses; their
+evidence retires with that path under the 2026-10-27 IR-348 no-legacy ruling. AC-8 is therefore
+partially backed and Open until a genuine V2 producer persists argument bindings and a matching
+emitted harness is checked for emission order and real-Kani decode. The surviving decoder unit
+tests alone do not prove that producer-to-persisted-schema coupling.
 
 FR-016-AC-1 through AC-5 and AC-13 are implemented and tested in the default suite
 through `replay_counterexample`: a transcript that decodes to nothing, has the wrong

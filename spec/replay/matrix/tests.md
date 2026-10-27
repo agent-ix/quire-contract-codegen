@@ -10,7 +10,8 @@ type: TestMatrix
 
 | Functional Req | Acceptance Criteria | Test Cases | Status |
 |---|---|---|---|
-| FR-016 | FR-016-AC-1 through FR-016-AC-5, FR-016-AC-8 through FR-016-AC-23 | TC-026 | ✅ Covered |
+| FR-016 | FR-016-AC-1 through FR-016-AC-5, FR-016-AC-9 through FR-016-AC-23 | TC-026 | ✅ Covered |
+| FR-016 | FR-016-AC-8 | TC-026 | ⚠️ Partially backed, Open under IR-348: `src/replay/witness.rs` unit tests retain positional schema/naming/refusal evidence, while `kani_argument_order.rs` and ignored real-Kani `kani_witness_join.rs` use the retiring V1 `BoundClause` producer. Genuine V2 persisted-binding, emission-order and real-Kani decode evidence is still required. |
 | FR-016 | FR-016-AC-6 | TC-026 | ✅ Covered (IR-891): required byte and value-count bounds, at-bound controls and poisoned over-bound suffixes across the decode entry points |
 | FR-016 | FR-016-AC-24 | TC-026 | ✅ Covered (IR-611); `tc_026_a_lock_repeating_a_dependency_is_refused` asserts QSL's `DuplicateIdentity` refusal (`invalid_package`) arriving as `DependencyLockError::Input`, with no duplicate check of this crate's own |
 | FR-016 | FR-016-AC-25 | TC-026 | 🚧 Planned (IR-604): an independent stdout test oracle checks the retained counterexample against its actual Kani run, with a post-classification substitution control |

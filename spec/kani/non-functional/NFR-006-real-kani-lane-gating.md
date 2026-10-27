@@ -196,6 +196,12 @@ decision (Open decisions); until the owner rules, the answer is no.
 | NFR-006-AC-18 | Every `include!`, `include_str!`, `include_bytes!` and `#[path]` target named in a file of `tests/it` that holds a lane test, and in each file those name in turn, matches a pattern of the Kani-touching set. | Test (TC-045) |
 | NFR-006-AC-19 | On a clean current candidate, `make kani-gate` runs FR-041's module census and real mutation controls in its one required lane, and a failure of any claim or shared-helper control makes the gate exit non-zero. An optional mutation target or saved earlier result cannot substitute. | Test |
 
+NFR-006-AC-19 remains Open during IR-348 V1 retirement. The lane must continue to run
+FR-041's claim census and real mutation controls. The current V1 claim source selected by
+`kani_generation::guard_sources()[0]` and named in `scripts/kani_claims.json` needs a genuine
+generated V2 replacement; deleting the source, dropping the claim or removing this gate cannot
+satisfy AC-19. No V2 replacement or current-run proof is identified here.
+
 ## Open decisions
 
 - Whether the owner may ever waive the lane for one change, and who may record the waiver. The default,
