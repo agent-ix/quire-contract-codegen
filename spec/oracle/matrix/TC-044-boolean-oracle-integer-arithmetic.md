@@ -35,7 +35,7 @@ after it.
 This case is ⚠️ Partially covered. IR-596's earlier real-Kani bundle results in
 `tests/it/kani_generation.rs` are historical after V1 retirement. They do not replace a QSL
 exemplar run or discharge V2 clause work. The native divide and remainder cases O-3/O-5, zero
-divisor, comparison and saturating refusal remain planned under IR-1045. The obsolete
+divisor, comparison and saturating refusal are implemented on the IR-1045 branch. The obsolete
 `UnsupportedIntegerDivision` cleanup is tracked by IR-348 after that native replacement.
 The steps that call `quire_exact::divide` or migrate the native oracle (1's divide half, 4's O-3
 and O-5, 5, 7's divide and remainder half, 11's removed-code assertion (FR-031-AC-27), 14 and 16)
@@ -272,7 +272,7 @@ Overflow under `reject` is `Refused(IntegerOutOfDomain)`, a zero divisor is
 `Quotient` and the minimum remainder negative one completes with 0, R-1 and R-2 complete, with no
 panic and no wrapped value, all agreeing with an independent plain-integer model. A native
 `saturate` arithmetic clause is refused with `UnsupportedSaturatingArithmetic`; the six
-comparisons agree with the kernel. IR-1045 must measure FR-031-AC-2/6/16/17/18/22/26 on the
+comparisons agree with the kernel. IR-1045 measures FR-031-AC-2/6/16/17/18/22/26 on the
 surviving native path. The V1 bundle expected results recorded in the procedure are retired
 historical claims, not expected results for the active route. IR-348 removes the interim error
 code under AC-27 after its native replacement can emit the specified outcomes.
