@@ -1137,11 +1137,15 @@ fn tc_044_saturating_divide_and_remainder_are_refused_by_the_native_oracle() {
 #[test]
 fn tc_044_native_division_uses_one_exact_member_and_domain() {
     for (built, member, interval) in [
-        (z1_z2(), "Quotient", "bound(1_i64, 10_i64)"),
         (
-            o3_o5(NumericOperator::Remainder),
+            member_only_reproduction(NumericOperator::Divide),
+            "Quotient",
+            "bound(1_i64, 10_i64)",
+        ),
+        (
+            member_only_reproduction(NumericOperator::Remainder),
             "Remainder",
-            "bound(-5_i64, 5_i64)",
+            "bound(-10_i64, 5_i64)",
         ),
     ] {
         let source = built.source();
