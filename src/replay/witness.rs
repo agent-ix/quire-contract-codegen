@@ -37,7 +37,7 @@ use qsl_replay::WitnessValue;
 use crate::kani::{
     abi::{KaniBindingRole, KaniPrimitiveType},
     identity::{KaniV2ClauseObligationHarness, ObligationBinding},
-    output::playback::{parse_assertion_playback, Playback, PlaybackRefusal},
+    output::playback::{Playback, PlaybackRefusal},
 };
 
 /// Why a persisted argument schema could not type a Kani playback.
@@ -177,11 +177,11 @@ pub fn decode_falsification(
 ///
 /// # Errors
 ///
-/// Returns [`DecodeFailure`] for changed harness provenance, malformed playback, or a value
+/// Returns [`DecodeFailure`] for changed harness provenance, invalid typed playback, or a value
 /// outside the checked clause's inclusive parameter domain.
 pub fn decode_v2_clause_falsification(
     harness: &KaniV2ClauseObligationHarness,
-    transcript: &str,
+    playback: &Playback<'_>,
     limits: WitnessDecodeLimits,
 ) -> Result<Vec<(String, WitnessValue)>, DecodeFailure> {
     let identity = &harness.identity;
@@ -203,19 +203,11 @@ pub fn decode_v2_clause_falsification(
             dependencies: Vec::new(),
         })
         .collect::<Vec<_>>();
-    let parsed = parse_assertion_playback(
-        transcript,
-        identity.harness_symbol.as_str(),
-        identity.module_symbol.as_str(),
-        limits.bytes,
-        limits.values,
-    )
-    .map_err(DecodeFailure::from)?;
     let decoded = decode_falsification(
         identity.harness_symbol.as_str(),
         identity.module_symbol.as_str(),
         &bindings,
-        &parsed,
+        playback,
         limits,
     )?;
     for ((name, value), argument) in decoded.iter().zip(&identity.arguments) {

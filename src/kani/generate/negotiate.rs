@@ -82,6 +82,11 @@ use crate::{
     core::identity::HarnessSymbol,
     core::ir::clause::ClauseGraphView,
     core::naming::unique_names,
+    kani::abi::{adapter_options, KaniSolver},
+    kani::census::{
+        normalize_dependencies, ProofDependencyEdge, ProofDependencyKind, ProofDependencyRequest,
+        ProofDependencyState,
+    },
     kani::generate::clause::v2::{
         lower as lower_v2_clause, render_clause as render_v2_clause, LoweredV2Clause,
     },
@@ -521,9 +526,16 @@ fn classify<'a>(
     native: bool,
 ) -> ItemState {
     match *item {
-        ObligationItem::V2Clause { package, clause } => {
-            classify_v2_clause(checked_lookup(checked_lookups, package), clause, native)
-        }
+        ObligationItem::V2Clause {
+            package,
+            clause,
+            dependencies,
+        } => classify_v2_clause(
+            checked_lookup(checked_lookups, package),
+            clause,
+            dependencies,
+            native,
+        ),
         ObligationItem::ScalarClaim {
             package,
             claim_map,
@@ -578,6 +590,7 @@ fn classify<'a>(
 fn classify_v2_clause<'a>(
     lookup: &mut CheckedLookup<'a>,
     clause: &'a CheckedNodeId,
+    dependencies: Option<&[ProofDependencyRequest<'_>]>,
     native: bool,
 ) -> ItemState {
     let package = lookup.package;
@@ -596,7 +609,7 @@ fn classify_v2_clause<'a>(
             "invariant" => Some(ObligationKind::Invariant),
             _ => None,
         });
-    let outcome = match graph_node {
+    let mut outcome = match graph_node {
         None => Outcome::Invalid(InvalidObligationItem::UnknownNode),
         Some(node) if &*node.node_tag != "state" || &*node.semantic_form != "state_clause" => {
             Outcome::Unsupported(UnsupportedObligation::UnknownNodeKind {
@@ -623,6 +636,16 @@ fn classify_v2_clause<'a>(
             }),
         },
     };
+    if let Some(dependencies) = dependencies {
+        match validate_v2_dependencies(dependencies) {
+            Ok(edges) => {
+                if let Outcome::LoweredV2Clause(lowered) = &mut outcome {
+                    lowered.set_dependencies(edges);
+                }
+            }
+            Err(reason) => outcome = Outcome::Invalid(reason),
+        }
+    }
     ItemState {
         kind,
         subject: ObligationSubject::CheckedNode {
@@ -635,6 +658,37 @@ fn classify_v2_clause<'a>(
         }),
         outcome,
     }
+}
+
+fn validate_v2_dependencies(
+    dependencies: &[ProofDependencyRequest<'_>],
+) -> Result<Vec<ProofDependencyEdge>, InvalidObligationItem> {
+    let mut identities = BTreeMap::new();
+    for (index, dependency) in dependencies.iter().enumerate() {
+        if dependency.proof_id.is_empty() || dependency.proof_id.chars().any(char::is_control) {
+            return Err(InvalidObligationItem::EmptyProofDependencyIdentity { index });
+        }
+        if let Some(first_index) = identities.insert(dependency.proof_id, index) {
+            return Err(InvalidObligationItem::DuplicateProofDependencyIdentity {
+                index,
+                first_index,
+            });
+        }
+        if dependency.kind != ProofDependencyKind::Required {
+            return Err(InvalidObligationItem::NonRequiredProofDependency { index });
+        }
+        if !matches!(
+            dependency.state,
+            ProofDependencyState::Passed
+                | ProofDependencyState::Missing
+                | ProofDependencyState::Failed
+        ) || dependency.original_path.is_some()
+            || dependency.replacement_path.is_some()
+        {
+            return Err(InvalidObligationItem::InconsistentProofDependency { index });
+        }
+    }
+    Ok(normalize_dependencies(dependencies))
 }
 
 fn classify_collection<'a>(
@@ -1161,10 +1215,12 @@ mod tests {
         let good = ObligationItem::V2Clause {
             package: &package,
             clause: &clause,
+            dependencies: None,
         };
         let refused = ObligationItem::V2Clause {
             package: &package,
             clause: non_clause,
+            dependencies: None,
         };
         let evaluate = |items: &[ObligationItem<'_>]| {
             negotiate_kani_obligations(&KaniObligationRequest {
@@ -1297,6 +1353,7 @@ mod tests {
                     .map(|clause| ObligationItem::V2Clause {
                         package: &package,
                         clause,
+                        dependencies: None,
                     })
                     .collect::<Vec<_>>();
                 let request = KaniObligationRequest {

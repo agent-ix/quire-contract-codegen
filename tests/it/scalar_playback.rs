@@ -7,11 +7,11 @@ use crate::common::proof_ceilings::proof_ceilings;
 use ix_trace_rs::trace;
 use qsl_replay::{compile_package, DependencyInput, ReplayLimits, SourceIdentity, StageLimits};
 use quire_contract_codegen::{
-    decode_scalar_falsification, generate_routed, parse_scalar_playback,
+    decode_scalar_falsification, generate_routed, parse_assertion_playback,
     routed_contract_lowering_profile, BackendDescriptor, Candidate, ContractDriverResultSelection,
     ContractRequestPosition, DecodeFailure, GenerationContexts, KaniGenerationContext,
     KaniScalarObligationHarness, KindOutput, ProviderOrigin, RoutedGenerationItem, ScalarLimits,
-    ScalarObligationIdentity, ScalarOriginalLimitsError,
+    ScalarObligationIdentity, ScalarOriginalLimitsError, SCALAR_PLAYBACK_BYTES,
 };
 use quire_contract_model::{
     CheckedOccurrenceRole, CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2,
@@ -19,13 +19,18 @@ use quire_contract_model::{
     ContractPackageReadResult, ContractPackageWireV1,
 };
 
-const PLAYBACK_BYTES: usize = 8 * 1024 * 1024;
-
 fn decode_from_transcript(
     identity: &ScalarObligationIdentity,
     transcript: &str,
 ) -> Result<Vec<i64>, DecodeFailure> {
-    let parsed = parse_scalar_playback(identity, transcript)?;
+    let parsed = parse_assertion_playback(
+        transcript,
+        identity.harness_symbol.as_str(),
+        identity.module_symbol.as_str(),
+        SCALAR_PLAYBACK_BYTES,
+        usize::MAX,
+    )
+    .map_err(DecodeFailure::from)?;
     decode_scalar_falsification(identity, &parsed)
 }
 
@@ -419,14 +424,14 @@ fn assertion_selection_and_malformed_blocks_use_adapter_refusals() {
     }
 }
 
-#[trace("FR-032-AC-2", "FR-032-AC-3")]
+#[trace("FR-032-AC-3")]
 #[test]
-fn schema_then_byte_ceiling_then_decode_then_domain_precedence() {
+fn typed_schema_byte_ceiling_decode_and_domain_refusals() {
     let identity = sum();
-    let oversized = "x".repeat(PLAYBACK_BYTES + 1);
+    let oversized = "x".repeat(SCALAR_PLAYBACK_BYTES + 1);
     refusal(&identity, &oversized, "cg_witness_decode_bytes_limit");
     let mut at_limit = transcript(&identity, &[3, 17]);
-    at_limit.push_str(&" ".repeat(PLAYBACK_BYTES - at_limit.len()));
+    at_limit.push_str(&" ".repeat(SCALAR_PLAYBACK_BYTES - at_limit.len()));
     assert_eq!(
         decode_from_transcript(&identity, &at_limit),
         Ok(vec![3, 17])
@@ -437,16 +442,40 @@ fn schema_then_byte_ceiling_then_decode_then_domain_precedence() {
     invalid.arguments[0].minimum = 10;
     let error = refusal(
         &invalid,
-        &oversized,
+        &at_limit,
         "cg_scalar_witness_schema_range_invalid",
     );
     assert_eq!(error.context, invalid.arguments[0].identifier);
 }
 
-#[trace("FR-032-AC-2", "FR-032-AC-3")]
+#[trace("FR-032-AC-2")]
 #[test]
-fn unsupported_operator_and_invalid_persisted_schema_refuse_before_parsing() {
+fn scalar_decoder_rejects_playback_above_its_limit_after_a_loose_parse() {
     let identity = sum();
+    let mut oversized = transcript(&identity, &[3, 17]);
+    oversized.push_str(&" ".repeat(SCALAR_PLAYBACK_BYTES + 1 - oversized.len()));
+    let playback = parse_assertion_playback(
+        &oversized,
+        identity.harness_symbol.as_str(),
+        identity.module_symbol.as_str(),
+        SCALAR_PLAYBACK_BYTES + 1,
+        usize::MAX,
+    )
+    .expect("the output reader accepts the caller's larger limit");
+    let refusal = decode_scalar_falsification(&identity, &playback)
+        .expect_err("scalar decoder enforces its own smaller byte limit");
+    assert_eq!(refusal.code, "cg_witness_decode_bytes_limit");
+    assert_eq!(
+        refusal.context,
+        format!("{};bytes={SCALAR_PLAYBACK_BYTES}", identity.module_symbol)
+    );
+}
+
+#[trace("FR-032-AC-3")]
+#[test]
+fn unsupported_operator_and_invalid_persisted_schema_refuse_typed_playback() {
+    let identity = sum();
+    let valid = transcript(&identity, &[3, 17]);
     for operation in [
         "quire.op.boolean.implies",
         "quire.op.integer.div",
@@ -458,7 +487,7 @@ fn unsupported_operator_and_invalid_persisted_schema_refuse_before_parsing() {
         unsupported.operation_identity = operation.to_owned();
         refusal(
             &unsupported,
-            "no block",
+            &valid,
             "cg_scalar_witness_operation_unsupported",
         );
     }
@@ -466,14 +495,14 @@ fn unsupported_operator_and_invalid_persisted_schema_refuse_before_parsing() {
     wrong_arity.arguments.pop();
     refusal(
         &wrong_arity,
-        "no block",
+        &valid,
         "cg_scalar_witness_schema_arity_mismatch",
     );
     let mut duplicate = identity.clone();
     duplicate.arguments[1].identifier = duplicate.arguments[0].identifier.clone();
     refusal(
         &duplicate,
-        "no block",
+        &valid,
         "cg_scalar_witness_schema_duplicate_binding",
     );
 }

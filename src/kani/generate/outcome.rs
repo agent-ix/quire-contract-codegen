@@ -56,6 +56,8 @@ pub enum ObligationItem<'a> {
         package: &'a CheckedPackageV2,
         /// The selected state clause.
         clause: &'a CheckedNodeId,
+        /// Optional caller-declared proof-dependency census for this clause.
+        dependencies: Option<&'a [crate::kani::census::ProofDependencyRequest<'a>]>,
     },
     /// One role of one `postcondition` `state_clause` of an admitted package. The inputs are
     /// those of [`StateFrameRequest`](crate::kani::generate::frame::StateFrameRequest), and the
@@ -341,6 +343,28 @@ pub enum UnsupportedObligation {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(tag = "code", rename_all = "snake_case")]
 pub enum InvalidObligationItem {
+    /// A declared dependency has an empty or control-bearing identity.
+    EmptyProofDependencyIdentity {
+        /// Zero-based index in the declared census.
+        index: usize,
+    },
+    /// A declared dependency repeats an earlier proof identity.
+    DuplicateProofDependencyIdentity {
+        /// Zero-based index of the repeated entry.
+        index: usize,
+        /// Zero-based index of the first entry.
+        first_index: usize,
+    },
+    /// A dependency kind, retained state, and path declaration disagree.
+    InconsistentProofDependency {
+        /// Zero-based index in the declared census.
+        index: usize,
+    },
+    /// Contract obligations accept only separately required proofs.
+    NonRequiredProofDependency {
+        /// Zero-based index in the declared census.
+        index: usize,
+    },
     /// The admitted ContractPackage names a different checked source.
     ScalarSourceMismatch,
     /// The selected scalar driver position does not match admitted accounting.

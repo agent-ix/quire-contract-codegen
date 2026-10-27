@@ -50,7 +50,9 @@ relationships:
   control fails, is missing or is skipped. A hold on another claim, a missing reason or expiry,
   or omission of the held row from the reviewed declaration shall fail the gate. This hold is
   limited to the V1 source and expires "until the V2 named independent expectation + real
-  positive/falsifying control exists" under IR-1047; it does not remove FR-041 or NFR-006-AC-19.
+  positive/falsifying control exists" for that FR-003@4 claim under IR-1047;
+  a different V2 implication claim cannot meet its expiry. This does not remove
+  FR-041 or NFR-006-AC-19.
 - The `make kani-gate` target shall print one run-result line of the form `kani-gate:
   result=<passed|failed> ran=<n> expected=<n> elapsed=<s>s kani=<version> tree=<clean|dirty>`,
   with `kani` the version the launcher reports. The line describes the run; it is not a
@@ -208,13 +210,16 @@ decision (Open decisions); until the owner rules, the answer is no.
 NFR-006-AC-19 remains Open during IR-348 V1 retirement. Only the V1-sourced claim row is HELD
 under the reason "V1 deleted by owner ruling 2026-10-27; no genuine V2 named independent
 expectation/control exists yet" and the expiry "until the V2 named independent expectation +
-real positive/falsifying control exists". The lane continues to run
-FR-041's claim census and real mutation controls for non-held rows. The retired V1 claim source is
-absent; `kani_generation::guard_sources()[0]` selects a V2 scalar harness but supplies no FR-041
-module proof. A genuine generated V2 replacement is required under IR-1047; dropping the claim or removing this gate cannot
-satisfy AC-19. While this is the only claimed module and is held, zero module proofs and
-mutations are discharged. IR-348 implements the bounded hold and its reporting; no V2 replacement or
-current-run proof is identified here.
+real positive/falsifying control exists". The lane continues to run FR-041's claim
+census and real mutation controls for non-held rows. The retired V1 claim source is absent;
+`kani_generation::guard_sources()[0]` selects a V2 scalar harness but supplies no FR-041
+module proof. IR-1047 specifies an additional, separately named V2 implication scalar
+module with independent subject and expectation roots; that proof cannot discharge the
+historical FR-003@4 row or expire its hold. The same-claim V2 source and retained-row update
+are PLANNED under IR-1049 and FR-041-AC-10. Dropping the historical claim or removing the
+gate cannot satisfy AC-19. While the only current claim is held, zero module proofs and
+mutations are discharged. IR-348 implements the bounded hold and its reporting; no V2
+replacement or current-run proof is identified here. IR-1047 Acceptance 4 remains unmet.
 
 ## Open decisions
 

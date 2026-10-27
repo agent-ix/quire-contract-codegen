@@ -78,8 +78,75 @@ about a semantic stage the test input did not traverse.
   control SHALL make it exit non-zero. A missing hold reason or expiry, a held name absent from
   the declaration, a removed claim relative to the merge-base declaration, or a hold on any
   other module SHALL fail the gate. The exception expires under IR-1047 when the genuine V2
-  named independent expectation and real positive/falsifying control exist. IR-348's immediate
-  V1 deletion code slice SHALL implement the hold in or before its deletion PR.
+  named independent expectation and real positive/falsifying control exist for that
+  FR-003@4 Boolean state-transition claim. A separate implication claim does not meet
+  that expiry condition. IR-348's immediate V1 deletion code slice SHALL implement
+  the hold in or before its deletion PR.
+
+## Additional V2 claim (IR-1047, planned)
+
+- When an additional V2 claim is declared, the generator SHALL obtain an admitted V2 Boolean
+  implication scalar claim from the production `KaniObligationRequest` path and render its
+  module through `src/kani/generate/scalar.rs::render_boolean_implies`. The claim test in
+  `tests/it/kani_generation_claims.rs` SHALL assemble the current generated Rust artifact,
+  its required runtime dependency and its separate scratch-crate subject source; it SHALL
+  derive the declared module and harness identities from the generated identity record,
+  never from a copied V1 source or a hand-authored module.
+- The generated module SHALL call a named `subject_boolean_implication` function rooted in
+  the compiled call graph. That function SHALL call the production
+  `quire_contract_runtime::operators::implies_short_circuit(left, || right)` subject. A
+  separately named `expected_boolean_implication(left, right)` function SHALL compute
+  `!left || right` directly from the same symbolic Boolean operands. The generated
+  harness SHALL compare both the compiled subject and its embedded FR-014 oracle with
+  that expectation and retain its final non-vacuity cover. Neither expectation path
+  SHALL call the subject, the oracle or `quire-exact`; the two named roots and their
+  transitive callees SHALL be inspectable in the current build's call graph.
+- When the V2 claim is declared, the claim test SHALL use the generated module symbol,
+  exact harness symbol, named subject root and named expectation root for the compiled
+  census and shared-helper intersection. It SHALL reject a missing, renamed,
+  uncompiled or `unreached` module under the ordinary named FR-041 causes. For every
+  computed shared helper, it SHALL require its own reviewed source mutation and
+  current-run real-Kani positive/falsifying control; it SHALL record an explicit empty
+  set when the roots share none.
+- The V2 module's falsifying mutation SHALL change only its parsed subject-call
+  expression inside the generated module to `false`. The unmodified module SHALL
+  produce an in-module `SUCCESS` check and a satisfied final cover under installed
+  Kani; the mutant SHALL compile, execute, and report an in-module `FAILURE` at the
+  subject-versus-expectation assertion with in-domain playback where `left` is false.
+  This source mutation, not a stored verdict or a stand-in runner, SHALL be the
+  claim's FR-041 control.
+- Once those current-run controls pass, `scripts/kani_claims.json` SHALL add the
+  generated V2 implication claim as a separate non-held row and retain the historical
+  V1 `kani_fr_003_4_proof_boolean_transition_module` row under its existing hold.
+  A V2 implication proof SHALL NOT discharge the distinct FR-003@4 Boolean state-transition
+  claim or expire that row's hold. `make kani-gate` SHALL continue to run TC-056 in
+  its one required real-Kani lane and fail for a non-held claim or shared-helper
+  control that is absent, skipped or unsuccessful. The held V1 row remains visible
+  and unproved; its eventual disposition and IR-1047 Acceptance 4 remain open.
+
+## Held FR-003@4 claim continuity (IR-1049, planned)
+
+- When a V2 producer is available for the original FR-003@4 Boolean state-transition
+  obligation, that producer SHALL consume an admitted V2 package carrying the same
+  precondition `input_current || state_pre`, postcondition `state_post` and actual
+  transition subject. It SHALL preserve the reviewed claim identity
+  `kani_fr_003_4_proof_boolean_transition_module` in the compiled generated module,
+  preserve the obligation's source provenance, and expose a separately named
+  expectation rooted in the current compiled call graph. The expectation SHALL be
+  independent of the subject, its oracle and `quire-exact` where FR-041 requires;
+  the claim test SHALL derive the exact shared-helper intersection from that build.
+  A V2 implication proof is a different claim and SHALL NOT satisfy this condition.
+- When the installed backend produces an in-module location-attributed `SUCCESS`
+  proposition and satisfied cover for that same FR-003@4 V2 module, and a distinct
+  source mutation inside it compiles, executes and produces an in-module `FAILURE`
+  check with in-domain playback, the gate SHALL update the retained manifest row's
+  harness, subject, expectation and mutation sources to that generated V2 module
+  while retaining its exact module/claim identity. It SHALL remove `held` from that
+  row only in the same delivery as these current-run controls. The row SHALL appear
+  in the current compiled-module census; a removed row, absent compiled module,
+  different obligation or merely renamed implication module SHALL fail under
+  FR-041-AC-1. No hold expiry follows from a saved result, an optional run or
+  another claim's proof.
 
 ## Acceptance Criteria
 
@@ -90,19 +157,25 @@ about a semantic stage the test input did not traverse.
 | FR-041-AC-3 | The current build's transitive expectation/subject reachability yields the shared-helper intersection; the gate fails when the checked-in generated evidence omits or adds a helper, and records an explicit empty set when none is shared. For an exact operation, the expectation uses QSpec vectors or a model with no `quire-exact` call. | Test and Inspection |
 | FR-041-AC-4 | Each claimed module and computed shared helper has a positive unmodified real-Kani proof and a source mutation that compiles, executes, and reports a failed proposition check. Deleting a control or making its mutant verify, fail to compile, time out, skip execution, or merely trip the dirty-tree guard fails the gate; evidence names the exact diff, command and failed check from this run. | Test |
 | FR-041-AC-5 | A stubbed executor, predetermined outcome or build-only run produces no qualifying module evidence and cannot pass the gate. | Test |
+| FR-041-AC-6 | The reviewed V2 claim is produced by the admitted V2 Boolean implication request through the production scalar renderer; its generated module and harness identities match the compiled census and the declaration. A V1 source, hand-authored module, missing module, changed identity or uncompiled claim is rejected by name. | Test |
+| FR-041-AC-7 | The V2 module exposes separate named subject and expectation roots in the current compiled call graph. The subject reaches the runtime implication operation; the expectation evaluates `!left || right` over the same Boolean inputs and reaches neither subject, oracle nor `quire-exact`. The observed helper intersection exactly matches the declared helper mutations, including an explicit empty set. | Test and Inspection |
+| FR-041-AC-8 | The unmodified generated V2 module has a location-attributed SUCCESS proposition and satisfied final cover with installed Kani. Replacing only its parsed subject-call expression with `false` compiles and executes the same harness, then yields an in-module FAILURE at the subject-versus-expectation assertion with in-domain playback where `left` is false; each computed shared helper has its own positive and falsifying control. | Test |
+| FR-041-AC-9 | After AC-6 through AC-8 pass in the current lane, the reviewed V2 implication claim is added as a separate non-held row; the historical FR-003@4 V1 row remains held, visible and unproved. The required `make kani-gate` run executes the claim test and fails on any missing, skipped or failing non-held claim or helper control. This criterion does not discharge the V1 claim or complete IR-1047 Acceptance 4. | Test |
+| FR-041-AC-10 | A production V2 module for the original FR-003@4 Boolean state-transition obligation preserves the retained manifest row's exact module/claim identity and appears in the current compiled census, with the same precondition, postcondition, actual transition subject, checked-package/source provenance and a separately named independent expectation. Only after installed Kani gives that same module an in-module SUCCESS proposition and satisfied cover, and its in-module source mutant compiles, executes and reports an in-module FAILURE check with in-domain playback, the retained row's harness, subject, expectation and mutation references are updated to that compiled V2 source and its hold is removed in the same delivery. A removed or absent claim, different obligation, V2 implication proof, or saved verdict does not expire the hold. PLANNED (IR-1049); IR-1047 Acceptance 4 remains unmet at this spec head. | Test and Inspection |
 
 ## Status
 
 Open; IR-348 implements the bounded hold for the retired V1 module claim row in
-`scripts/kani_claims.json`. The claim test and gate validate the held declaration, report the
-reason and expiry, and compare the claim names with the merge-base declaration. The V1 source was
-removed; `kani_generation::guard_sources()[0]` now selects a surviving V2 scalar harness and
-provides no replacement FR-041 module proof. A genuine generated V2 module, its reviewed claim,
-current-build census and real-Kani proof and mutation controls must replace it. No qualifying V2
-source or current-run evidence is identified here. The hold expires only when the V2 named
-independent expectation and real positive/falsifying control exist. IR-1047 owns that V2
-replacement and hold expiry. While the only current claim is held, no module proof or mutation
-is discharged. FR-041-AC-1 through AC-5 remain unchanged and unfulfilled for the held claim;
+`scripts/kani_claims.json`. The claim test and gate validate the held declaration, report its
+reason and expiry, and compare claim names with the merge-base declaration. The V1 source was
+removed; `kani_generation::guard_sources()[0]` selects a surviving V2 scalar harness but
+provides no FR-041 module proof. The V2 Boolean implication scalar renderer is the selected
+production owner for an additional, distinct claim. Its expectation remains inline with no
+named call-graph root. A proved implication claim cannot discharge the held FR-003@4 Boolean
+state-transition claim. That historical row stays visible, held and unproved; its same-claim
+V2 source and hold expiry are PLANNED under IR-1049 and FR-041-AC-10. IR-1047 Acceptance 4
+remains unmet. No current-run FR-041 proof or mutation evidence is asserted. FR-041-AC-1
+through AC-5 remain unchanged and unfulfilled for the held claim;
 non-held claims retain the full gate.
 
 ## Dependencies
