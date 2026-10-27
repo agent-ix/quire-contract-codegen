@@ -240,6 +240,46 @@ fn proof_reports_present() -> bool {
     original_ok && mutation_ok
 }
 
+fn claim_counts() -> Result<(usize, usize), String> {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/kani_claims.json");
+    let bytes = fs::read(&path).map_err(|error| format!("read claim declaration: {error}"))?;
+    let declaration: serde_json::Value = serde_json::from_slice(&bytes)
+        .map_err(|error| format!("parse claim declaration: {error}"))?;
+    let modules = declaration["modules"]
+        .as_array()
+        .ok_or("claim declaration has no module array")?;
+    if modules.is_empty() {
+        return Err("claim declaration has no modules".into());
+    }
+    let mut held = 0;
+    for module in modules {
+        let Some(hold) = module.get("hold") else {
+            continue;
+        };
+        let name = module["name"].as_str().ok_or("claim has no name")?;
+        let reason = hold["reason"].as_str().ok_or("claim hold has no reason")?;
+        let expiry = hold["expiry"].as_str().ok_or("claim hold has no expiry")?;
+        let follow_up = hold["follow_up"]
+            .as_str()
+            .ok_or("claim hold has no follow-up")?;
+        if name != "kani_fr_003_4_proof_boolean_transition_module"
+            || reason != "V1 deleted by owner ruling 2026-10-27; no genuine V2 named independent expectation/control exists yet"
+            || expiry != "until the V2 named independent expectation + real positive/falsifying control exists"
+            || follow_up != "IR-1047"
+        {
+            return Err(format!("unauthorized claim hold: {name}"));
+        }
+        println!("kani-gate: held={name} reason={reason} expiry={expiry} follow_up={follow_up}");
+        held += 1;
+    }
+    if held > 1 {
+        return Err("more than one claim held".into());
+    }
+    let active = modules.len() - held;
+    println!("kani-gate: claims active={active} held={held}");
+    Ok((active, held))
+}
+
 fn passed_count(output: &str) -> Option<usize> {
     let lines: Vec<_> = output
         .lines()
@@ -296,6 +336,7 @@ fn gate_held(test_command: &[String]) -> Result<(), String> {
         gate_result("failed", 0, 0, start, "unavailable", "clean");
         return Err("Kani version unavailable".into());
     }
+    let (active_claims, _held_claims) = claim_counts()?;
     let before = git_state()?;
     if !before.1.is_empty() {
         gate_result("failed", 0, 0, start, &version, "dirty");
@@ -416,7 +457,7 @@ fn gate_held(test_command: &[String]) -> Result<(), String> {
         && tree == "clean"
         && claim_list
         && claim_run
-        && proof_reports_present()
+        && (active_claims == 0 || proof_reports_present())
     {
         gate_result("passed", ran, expected, start, &version, tree);
         Ok(())
