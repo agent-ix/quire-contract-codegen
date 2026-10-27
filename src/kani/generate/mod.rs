@@ -1,7 +1,7 @@
 //! The one Kani generator: the request and result vocabulary, the negotiation entry and the
 //! family lowerers.
 
-// Census validation; interim, see the file header.
+// Dependency census validation shared with bounded corpus generation.
 pub(crate) mod census_validation;
 // Admitted V2 clause lowering.
 pub(crate) mod clause;

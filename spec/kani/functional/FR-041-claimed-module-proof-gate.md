@@ -93,14 +93,11 @@ about a semantic stage the test input did not traverse.
 
 ## Status
 
-Open; the V1-sourced module claim hold is PLANNED under IR-348's immediate V1 deletion code
-slice and is not implemented at this spec head. The current test
-`tests/it/kani_generation_claims.rs` takes
-`kani_generation::guard_sources()[0]`, which is a V1 bundle source in
-`tests/it/kani_generation.rs`; `scripts/kani_claims.json` names that generated V1 module.
-IR-348 retirement removes that claim source; the hold implementation must land in or before the
-V1 deletion PR so the claim test still validates the declaration and output without false proof
-credit. A genuine generated V2 module, its reviewed claim,
+Open; IR-348 implements the bounded hold for the retired V1 module claim row in
+`scripts/kani_claims.json`. The claim test and gate validate the held declaration, report the
+reason and expiry, and compare the claim names with the merge-base declaration. The V1 source was
+removed; `kani_generation::guard_sources()[0]` now selects a surviving V2 scalar harness and
+provides no replacement FR-041 module proof. A genuine generated V2 module, its reviewed claim,
 current-build census and real-Kani proof and mutation controls must replace it. No qualifying V2
 source or current-run evidence is identified here. The hold expires only when the V2 named
 independent expectation and real positive/falsifying control exist. IR-1047 owns that V2

@@ -2,6 +2,7 @@
 //! The scope table is the authority for reachability; the gate reuses it for freshness.
 
 use std::{
+    collections::BTreeSet,
     env, fs,
     io::{self, BufRead, BufReader, Write},
     path::{Path, PathBuf},
@@ -240,18 +241,54 @@ fn proof_reports_present() -> bool {
     original_ok && mutation_ok
 }
 
-fn claim_counts() -> Result<(usize, usize), String> {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/kani_claims.json");
-    let bytes = fs::read(&path).map_err(|error| format!("read claim declaration: {error}"))?;
-    let declaration: serde_json::Value = serde_json::from_slice(&bytes)
-        .map_err(|error| format!("parse claim declaration: {error}"))?;
+fn claim_names(modules: &[serde_json::Value]) -> Result<BTreeSet<String>, String> {
+    modules
+        .iter()
+        .map(|module| {
+            module["name"]
+                .as_str()
+                .map(str::to_owned)
+                .ok_or_else(|| "claim has no name".to_owned())
+        })
+        .collect()
+}
+
+fn base_claim_names() -> Result<BTreeSet<String>, String> {
+    let base = merge_base()?;
+    let path = "scripts/kani_claims.json";
+    let present = git(&["ls-tree", "--name-only", &base, "--", path])?;
+    if present.is_empty() {
+        return Ok(BTreeSet::new());
+    }
+    if present.trim() != path {
+        return Err(format!("unexpected base claim tree entry: {present:?}"));
+    }
+    let object = format!("{base}:{path}");
+    let previous = git(&["show", &object])?;
+    let declaration: serde_json::Value = serde_json::from_str(&previous)
+        .map_err(|error| format!("base claim declaration must parse: {error}"))?;
     let modules = declaration["modules"]
         .as_array()
-        .ok_or("claim declaration has no module array")?;
+        .ok_or("base claim declaration has no module array")?;
+    claim_names(modules)
+}
+
+fn validate_claim_rows(
+    modules: &[serde_json::Value],
+    base_names: &BTreeSet<String>,
+) -> Result<(usize, Vec<String>), String> {
     if modules.is_empty() {
         return Err("claim declaration has no modules".into());
     }
-    let mut held = 0;
+    let current = claim_names(modules)?;
+    if current.len() != modules.len() {
+        return Err("duplicate claimed module".into());
+    }
+    let removed: Vec<_> = base_names.difference(&current).cloned().collect();
+    if !removed.is_empty() {
+        return Err(format!("removed claimed module(s): {}", removed.join(", ")));
+    }
+    let mut held_lines = Vec::new();
     for module in modules {
         let Some(hold) = module.get("hold") else {
             continue;
@@ -269,15 +306,100 @@ fn claim_counts() -> Result<(usize, usize), String> {
         {
             return Err(format!("unauthorized claim hold: {name}"));
         }
-        println!("kani-gate: held={name} reason={reason} expiry={expiry} follow_up={follow_up}");
-        held += 1;
+        held_lines.push(format!(
+            "kani-gate: held={name} reason={reason} expiry={expiry} follow_up={follow_up}"
+        ));
     }
-    if held > 1 {
+    if held_lines.len() > 1 {
         return Err("more than one claim held".into());
     }
-    let active = modules.len() - held;
-    println!("kani-gate: claims active={active} held={held}");
+    Ok((modules.len() - held_lines.len(), held_lines))
+}
+
+fn claim_counts() -> Result<(usize, usize), String> {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/kani_claims.json");
+    let bytes = fs::read(&path).map_err(|error| format!("read claim declaration: {error}"))?;
+    let declaration: serde_json::Value = serde_json::from_slice(&bytes)
+        .map_err(|error| format!("parse claim declaration: {error}"))?;
+    let modules = declaration["modules"]
+        .as_array()
+        .ok_or("claim declaration has no module array")?;
+    let (active, held_lines) = validate_claim_rows(modules, &base_claim_names()?)?;
+    for line in &held_lines {
+        println!("{line}");
+    }
+    let held = held_lines.len();
+    println!("{}", claim_count_line(active, held));
     Ok((active, held))
+}
+
+fn claim_count_line(active: usize, held: usize) -> String {
+    format!("kani-gate: claims active={active} held={held}")
+}
+
+#[cfg(test)]
+mod claim_hold_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn held(name: &str) -> serde_json::Value {
+        json!({
+            "name": name,
+            "hold": {
+                "reason": "V1 deleted by owner ruling 2026-10-27; no genuine V2 named independent expectation/control exists yet",
+                "expiry": "until the V2 named independent expectation + real positive/falsifying control exists",
+                "follow_up": "IR-1047"
+            }
+        })
+    }
+
+    #[test]
+    fn sole_retired_claim_hold_is_reported_without_proof_credit() {
+        let base = BTreeSet::from(["kani_fr_003_4_proof_boolean_transition_module".to_owned()]);
+        let (active, lines) = validate_claim_rows(
+            &[held("kani_fr_003_4_proof_boolean_transition_module")],
+            &base,
+        )
+        .expect("the reviewed hold is admitted");
+        assert_eq!(active, 0);
+        assert_eq!(lines.len(), 1);
+        assert_eq!(
+            claim_count_line(active, lines.len()),
+            "kani-gate: claims active=0 held=1"
+        );
+        assert_eq!(
+            lines[0],
+            "kani-gate: held=kani_fr_003_4_proof_boolean_transition_module reason=V1 deleted by owner ruling 2026-10-27; no genuine V2 named independent expectation/control exists yet expiry=until the V2 named independent expectation + real positive/falsifying control exists follow_up=IR-1047"
+        );
+    }
+
+    #[test]
+    fn unauthorized_or_incomplete_holds_and_removed_base_rows_fail() {
+        let name = "kani_fr_003_4_proof_boolean_transition_module";
+        let base = BTreeSet::from([name.to_owned()]);
+        let valid = held(name);
+        let other = held("another_module");
+        assert!(validate_claim_rows(&[other], &BTreeSet::new())
+            .unwrap_err()
+            .contains("unauthorized claim hold"));
+        let mut no_reason = valid.clone();
+        no_reason["hold"].as_object_mut().unwrap().remove("reason");
+        assert!(validate_claim_rows(&[no_reason], &base)
+            .unwrap_err()
+            .contains("no reason"));
+        let mut no_expiry = valid.clone();
+        no_expiry["hold"].as_object_mut().unwrap().remove("expiry");
+        assert!(validate_claim_rows(&[no_expiry], &base)
+            .unwrap_err()
+            .contains("no expiry"));
+        assert!(validate_claim_rows(&[valid.clone(), valid.clone()], &base)
+            .unwrap_err()
+            .contains("duplicate claimed module"));
+        let removed_base = BTreeSet::from([name.to_owned(), "former_active_module".to_owned()]);
+        assert!(validate_claim_rows(&[valid], &removed_base)
+            .unwrap_err()
+            .contains("removed claimed module(s): former_active_module"));
+    }
 }
 
 fn passed_count(output: &str) -> Option<usize> {

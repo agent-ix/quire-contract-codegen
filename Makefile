@@ -90,9 +90,7 @@ test: qspec-preflight qspec-preflight-selftest
 # `kani_obligations`, `skeleton_spine`,
 # `bounded_kani_corpus`, `kani_generation` and `kani_batching` filters select those modules'
 # tests, and `--ignored` runs only their `#[ignore]`d real-prover tests: the
-# real-Kani obligation runs, the skeleton spine (one Boolean clause through the
-# real prover and native replay through QSL), the witness join (a real
-# counterexample replayed natively), the bounded corpus cases, the
+# real-Kani obligation runs, the bounded corpus cases, the
 # generation adapter proofs and the harness batching runs (the launcher process
 # count before and after, and a real mixed batch) run through `cargo kani`. The filters
 # follow `--` because libtest accepts several; cargo's own positional filter

@@ -161,17 +161,17 @@ The `src/replay/witness.rs` unit tests continue to check schema order, positiona
 non-argument refusal. The surviving V2
 `state_clause_kani_playback_adapter_refuses_wrong_evidence` test checks a generated state-frame
 postcondition's persisted draw order against playback and refuses mismatched assertion evidence;
-it does not prove emitted symbolic argument order or a real-Kani decode. The
-`tests/it/kani_argument_order.rs` emission-order test and the ignored
-real-backend `tests/it/kani_witness_join.rs` test construct V1 `BoundClause` harnesses; their
-evidence retires with that path under the 2026-10-27 IR-348 no-legacy ruling. AC-8 is therefore
+it does not prove emitted symbolic argument order or a real-Kani decode. The removed
+`tests/it/kani_argument_order.rs` emission-order test and ignored
+real-backend `tests/it/kani_witness_join.rs` test constructed V1 `BoundClause` harnesses; their
+evidence retired with that path under the 2026-10-27 IR-348 no-legacy ruling. AC-8 is therefore
 partially backed and Open until a genuine V2 producer persists argument bindings and a matching
 emitted harness is checked for emission order and real-Kani decode. The surviving decoder unit
 tests and V2 playback adapter alone do not prove that producer-to-persisted-schema coupling.
 
-FR-016-AC-25 stays Planned/Open under IR-604. The ignored
-`tc_026_installed_kani_falsification_is_bound_to_process_stdout` test uses a V1 `BoundClause`
-harness and retires with that producer. It genuinely compared the retained counterexample
+FR-016-AC-25 stays Planned/Open under IR-604. The removed
+`tc_026_installed_kani_falsification_is_bound_to_process_stdout` test used a V1 `BoundClause`
+harness. It compared the retained counterexample
 byte-for-byte with the first eligible assertion playback in independently captured stdout,
 excluding cover blocks, and rejected a valid substitute chosen after classification. The
 observing-launcher helper and the other three AC-25-tagged tests in

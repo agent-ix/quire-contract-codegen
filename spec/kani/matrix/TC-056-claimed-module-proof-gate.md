@@ -20,16 +20,16 @@ it does not create another repository gate.
 
 ## Test Procedure
 
-The current claim-control fixture uses `kani_generation::guard_sources()[0]`, a V1 bundle
+The former claim-control fixture used `kani_generation::guard_sources()[0]` as a V1 bundle
 module named by `scripts/kani_claims.json`. Under the 2026-10-27 IR-348 retirement ruling,
-that source is historical. The IR-348 immediate V1 deletion code slice must implement, in or
-before its deletion PR, an operator hold for only that named V1 module claim row, with reason
+that source was removed; `guard_sources()[0]` now selects a surviving V2 scalar harness.
+IR-348 implements an operator hold for only that named V1 module claim row, with reason
 "V1 deleted by owner ruling 2026-10-27; no genuine V2 named independent expectation/control
 exists yet" and expiry "until the V2 named independent expectation + real positive/falsifying
 control exists". Deleting the V1 module or dropping its claim supplies no proof evidence.
 Execute the positive procedure on a genuine generated V2 module after its claim is reviewed;
-IR-1047 owns that replacement and hold expiry, and none is identified yet. The hold is PLANNED
-at this spec head. The held V1 row remains Open, and
+IR-1047 owns that replacement and hold expiry, and none is identified yet. The hold is implemented
+but the held V1 row remains Open, and
 all non-held controls stay required.
 
 1. Check in a reviewed nonempty claim declaration for the generated modules the gate says it
@@ -84,8 +84,8 @@ zero proofs and mutations are discharged, regardless of a passing claim test.
 
 ## Status
 
-Open for IR-19 implementation. The hold itself is PLANNED for IR-348's immediate V1 deletion
-code slice in or before its deletion PR. The current V1 module declaration and
-`guard_sources()[0]` fixture are to be operator-held under IR-348 pending the named V2 independent
+Open for IR-19 implementation. IR-348 implements the bounded hold for the retained V1 claim row.
+The V1 source is removed and `guard_sources()[0]` now selects a V2 scalar harness without an
+FR-041 module proof. The hold remains until the named V2 independent
 expectation and real positive/falsifying control; no genuine generated V2 replacement is
 identified. No real-Kani result is asserted by this specification artifact.

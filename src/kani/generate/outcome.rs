@@ -205,11 +205,8 @@ pub enum UnsupportedObligation {
     /// invalid Rust rather than a resource ceiling. Distinct from [`Self::ResourceLimitExceeded`]
     /// for the same reason.
     ///
-    /// Known narrowing: the analogous
-    /// [`KaniErrorCode::InvalidGeneratedSyntax`](crate::kani::generate::census_validation::KaniErrorCode::InvalidGeneratedSyntax)
-    /// is classified `Inconclusive` by its `terminal_state` (a generator defect, not an honest
-    /// refusal), distinct from `ResourceLimitExceeded`'s `Unsupported`. [`ObligationDisposition`]
-    /// has no inconclusive-equivalent arm, so this variant is reported through the same
+    /// Known narrowing: [`ObligationDisposition`]
+    /// has no inconclusive-equivalent arm, so this generator defect is reported through the same
     /// `ObligationDisposition::Unsupported` as every genuine refusal -- a real generator defect
     /// reaching this ground is currently indistinguishable from an honest one. Restructuring
     /// `ObligationDisposition`'s terminal-state semantics to carry that distinction is out of
