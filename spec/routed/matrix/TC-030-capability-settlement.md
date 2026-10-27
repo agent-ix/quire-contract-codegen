@@ -26,6 +26,11 @@ relationships:
 ---
 # TC-030: Verify capability settlement at one negotiation point
 
+The 2026-10-27 IR-348 owner ruling retires the `V1BoundClause` form. Any historical
+`V1BoundClause` test in the procedures below is retired with that route and cannot count as
+evidence for FR-019-AC-25/26/33. Their surviving typed V2 form, status and refusal cases remain
+open; IR-348 updates the live status register and tests with the route deletion.
+
 ## Description
 
 Verify that every requested capability claim is settled by exactly one

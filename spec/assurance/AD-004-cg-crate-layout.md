@@ -225,7 +225,8 @@ src/
                               like the other families. It imports `outcome` and `record` and no
                               other file of generate/
       clause.rs               the V1 clause lowering that precondition.rs and contract.rs share
-                              (ClauseOracle, the subject ABI, slots); interim, reshaped by step 4c
+                              (ClauseOracle, the subject ABI, slots); deleted by step 4f;
+                              step 4c adds a separate V2 lowering
       record.rs               the validated harness path and the persisted per-harness record every
                               family's render step builds last; holds today's items only, and later
                               steps may move them
@@ -695,10 +696,11 @@ domain (4h); the corpus template (4g); anything about `negotiate_kani_obligation
 renamed call. Whether `record.rs` is absorbed into the spec is not decided: `record.rs` is
 unchanged by 4b.
 
-**The contract families need a V2 input first.** The precondition, postcondition and invariant
-families exist only over V1 (see Current state). Deleting the V1 arm without a V2 replacement would
-delete the families that step 4e makes the public entry. So the V2 input is a step of its own,
-before 4e (step 4c). Its design intent: a clause claim names a precondition, postcondition or
+**The contract families need a V2 input.** At this AD's original baseline, the precondition,
+postcondition and invariant families existed only over V1 (see Current state). IR-489 has since
+authored the V2 input spec, and IR-948 has delivered precondition and invariant slices. Remaining
+V2 clause and mutation controls belong to IR-917. The immediate step 4f retirement does not
+claim those controls passed. Step 4c's design intent: a clause claim names a precondition, postcondition or
 invariant clause node of an admitted `CheckedPackageV2`, and the contract lowering reads that node
 and embeds the FR-014 oracle of its Boolean connectives, bounded-integer comparisons and the
 integer arithmetic expressions in the clause body (the control's shape is a population-rule
@@ -706,15 +708,14 @@ postcondition, `amount < 1000` implies `amount + 1 <= 1000`, so arithmetic in a 
 scope, or the control cannot move onto this arm), as the scalar family embeds the oracle of its
 claim and as `state_frame` already reads postcondition clause nodes from V2. The exact input type is the spec change's to define. That change is an
 FR-015 amendment in this repository's spec lane. IR-364 does not carry it: IR-364 covers the V2
-strategy chain (FR-008 to FR-013; the FR-002 and FR-004 V2 criteria are IR-815), not FR-015. I found no ticket for the
-FR-015 V2 contract input; the planner should file one.
+strategy chain (FR-008 to FR-013; the FR-002 and FR-004 V2 criteria are IR-815), not FR-015.
 
 What happens to the other generators:
 
 | Generator | Fate |
 | --- | --- |
 | `generate_kani_bundle` | Deleted in the immediate step 4f retirement PR, without waiting for 4c, 4d, 4e or a QSL exemplar move. Its public entry leaves `interface-001`. FR-003's optional stubbing was dropped by the IR-311 ruling. |
-| `kani_obligations` scalar, precondition, contract renderers | The scalar renderer becomes a family lowerer. Step 4f removes V1 precondition and contract rendering; step 4c later supplies V2 family lowerers through `render.rs`. |
+| `kani_obligations` scalar, precondition, contract renderers | The scalar renderer becomes a family lowerer. Step 4f removes V1-only precondition and contract rendering; V2 precondition and invariant slices already delivered under IR-948 survive, while remaining V2 clause work continues under IR-917. |
 | `state_frame` renderers | Become the frame lowerer. |
 | `bounded_kani_corpus` renderer | Keeps its own template until step 4g (an interim exception to L-3; its cover is FR-015-AC-55, IR-464). QSL-353 supplies emission-to-admission evidence but does not itself supply a symbolic corpus. Step 4g retires the hand-built lowerer by family as the V2 arithmetic, collection and graph cases and the typed model-derived symbolic domains of FR-015-AC-96 to AC-102 are backed; FR-015-AC-109 has retired arithmetic, while collection and graph remain under FR-015-AC-110 and FR-015-AC-111. Admitted cases render through `HarnessSpec` and `render.rs`. Until the final slice, the hand-built path returns a generated-case `BoundedCorpusExpectation` under FR-015-AC-91, never a run verdict. After step 4g, corpus generation returns no `KaniOutcome`: a verdict comes only from a run (FR-015-AC-95). |
 
@@ -1065,12 +1066,11 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
      rename of `render_scalar` (surface listed in P-1). It does not touch the precondition, contract, frame,
      collection, corpus or V1 templates, and it leaves L-3 unlanded (L-3 lands after 4f, 4g and
      4h); after 4b the FR-015-AC-58 guard's list of driven files loses `scalar.rs` and gains `render.rs`.
-   - 4c: the V2 contract arm, following immediate V1 retirement. First a spec PR in this repository's spec lane amends FR-015 with the
-     V2 clause input (design intent above; no ticket found, the planner should file one). Then
-     the code: the precondition and contract families take the V2 input and render through
-     `HarnessSpec`. The control cannot move in this step: only the QSL-owned follow-up after 4e
-     can change the quire-integration test to route through the V2 arm. The V1 arm and bundle are
-     already deleted by 4f; this step does not reintroduce their templates.
+   - 4c: the V2 contract arm. IR-489 authored its FR-015 input spec; IR-948 delivered V2
+     precondition and invariant slices. IR-917 owns remaining QSL-authored clause and mutation
+     controls through `HarnessSpec`. QSL-1154 owns moving the quire-integration exemplar to the
+     supported V2 arm. Step 4f deletes only V1-only templates and does not remove delivered V2
+     slices or reintroduce a V1 template.
    - 4d: the V2 census input (FR-015's census and FR-015-AC-22 and AC-25), carried on the harness
      identity and backed by the types in `kani/census.rs`; and the frame family ported, with
      `generate_state_frame_obligations` becoming an `ObligationItem` arm.
@@ -1109,17 +1109,26 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
      verbatim; if the V2 side does not back them, their matrix rows are planned or unbacked,
      with an owning follow-up, and no criterion is deleted or rewritten. Former external consumers
      are inventoried and routed to their repository owners; this PR does not copy their files.
-   **Criterion and evidence disposition for 4f.** This architecture decision changes the
-   deletion gate, not any acceptance criterion. FR-015-AC-22/25 (V2 census), AC-40 to AC-49
-   (V2 contract clauses), and AC-53/54/58 (cover-last and emitting-entry guards) remain as
-   written. FR-031-AC-11/18/19/20/21/23/24/25 and TC-044 step 10 still name bundle-specific
-   arithmetic or refusal behavior; their V1 evidence disappears with the bundle, and the
-   surviving arithmetic/control claim needs an owner disposition before those rows can be
-   marked backed. NFR-006-AC-1/4 and its `kani_generation` filters must be reconciled with
-   the surviving test lane. `interface-001` must remove the deprecated public operation; this
-   removal alone does not satisfy the still-open V2 criteria. QSL's QI IT-011 exemplar is a
-   direct external caller and requires QSL-owned source/spec and control disposition. None
-   of these obligations is declared passed by deleting a V1 test or source file.
+   **Criterion and evidence disposition for 4f (2026-10-27 owner ruling, IR-348).** Each
+   requirement file retains the original criterion text and identifies a retired V1-only row
+   or an open surviving obligation. No row is marked retargeted solely because a similar V2
+   criterion is planned.
+
+   | Criteria | Status after V1 retirement | Owner |
+   | --- | --- | --- |
+   | FR-031-AC-11/19/20/21/23/24/25; FR-015-AC-54/56 | Retired V1-bundle-only claims; their historical text remains in place. No V2 proof is inferred from the old Kani run or differential. | IR-348 |
+   | FR-031-AC-18 | The bundle-consumer half retires; the native saturating divide/remainder refusal stays open. | IR-348 records the split; native implementation remains separately owned. |
+   | FR-015-AC-7/53/58 | The V1 contract/bundle portions retire; the exact cover-last and emitting-entry controls remain open for all surviving harness families, including corpus. | IR-348 for test-list update; IR-917 for V2 clause proof controls. |
+   | FR-015-AC-19/20/24; FR-005-AC-4 | The prior V1 evidence retires. Original transition, oracle, playback and cross-lane agreement claims stay open until measured on supported paths. | IR-348 records the gap; IR-917 owns the QSL-authored V2 clause control. |
+   | FR-015-AC-22/25, AC-44/45 | Unbacked V2 census requirements, unchanged by removal of `ProofDependencyGraph`. | IR-1044. |
+   | FR-015-AC-40/41 and other V2 clause rows | Remain independently planned or partly implemented; IR-489 authored the 4c spec, IR-948 delivered precondition/invariant slices, and IR-917 owns the remaining QSL-authored clause/mutation control. | IR-917 for remaining control. |
+   | FR-019-AC-25/26/33 | V1 `BoundClause` roles and tests retire, while the surviving typed V2 form/status/refusal obligations stay open. | IR-348 for V1 route deletion and status register. |
+   | NFR-006-AC-4; SUITE-008 | The `kani_generation` filter remains and must select V2 tests. The suite command stays in place; its test inventory and gate counts are reconciled after V1 tests retire. | IR-348. |
+   | `interface-001`; QI IT-011 | Remove the deprecated public operation and update the direct external QI caller and its proof/control evidence without copying fixtures. | IR-348 for CG API; QSL-1154 for QI. |
+
+   A test deletion does not discharge any surviving criterion. FR-015-AC-53/58 require
+   inspection of the emitters that remain, and FR-005-AC-4 requires measured agreement or
+   an explicit difference. The V2 census, clause and QI controls are not deletion gates.
 
    - 4g: the corpus, retired per family in three slices with no compatibility wrapper and no second
      public generator (IR-598, FR-015-AC-109 to AC-111); step 4b (IR-858) gates every slice. The
@@ -1130,7 +1139,11 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
      on IR-805, deletes the `Graph` arm, `finite_reference_graphs.rs`, the classifier, the corpus
      replay (`replay_counterexample` on the corpus case, `compile_corpus_qsl_package` and their
      identity helpers in `replay/function.rs`, with their only caller) and the whole public
-     corpus API with the generation-time `KaniOutcome`. It removes the corpus's calls to `validate_dependencies` but not `census_validation.rs`: every item there is also used by `v1_bundle.rs` (public `KaniDiagnostic` and `KaniErrorCode` included), so its items go once their last caller is gone, as 4f says. Until a family's slice lands, that family's corpus arm stays as it is,
+     corpus API with the generation-time `KaniOutcome`. It removes the corpus's calls to
+     `validate_dependencies`. After 4f deletes `v1_bundle.rs`, any remaining
+     `census_validation.rs` item stays only for a live corpus caller; step 4g or the V2 census
+     input removes each item when its last caller leaves. Until a family's slice lands, that
+     family's corpus arm stays as it is,
      with its own template: it has
      no symbolic input (a ground `assert!` over literals), and its cover after that assertion
      (FR-015-AC-55, IR-464) is reachability past the assertion only. It is an interim exception
@@ -1345,10 +1358,11 @@ tables; each table states the count it covers, and the per-destination rows add 
   retired at 4f but is still live (`tests/it/kani_generation.rs` drives it, and the planner records
   that QSL's V1 control runs through it; relayed), so it needs a home that exists and that 4f
   deletes whole: `kani/generate/v1_bundle.rs`, a file with an INTERIM header that says so.
-  `validate_dependencies` must outlive 4f (the corpus calls it), and it returns `KaniDiagnostic`, so
-  `KaniDiagnostic`, `KaniErrorCode` and the three helpers `validate_dependencies` uses
-  (`validate_plain_identity`, `validate_path`, `single_diagnostic`) go to a second interim file,
-  `kani/generate/census_validation.rs`, which 4f does not touch. `deterministic_json` also goes
+  `validate_dependencies` must outlive 4f while the corpus calls it, and it returns
+  `KaniDiagnostic`, so `KaniDiagnostic`, `KaniErrorCode` and its required validation helpers
+  stay in `kani/generate/census_validation.rs`. Step 4f deletes any helper and error variant
+  used only by the bundle; later steps remove the remaining items when the corpus stops calling
+  them. `deterministic_json` also goes
   there, not into `v1_bundle.rs`: the corpus calls it, step 1a (held) is what deletes it, and 4f
   must not strand the corpus if 4f merges first. The private `artifact` wrapper has one caller (the
   bundle) and goes with it; step 1a deletes it with the other eight.
@@ -1376,8 +1390,10 @@ tables; each table states the count it covers, and the per-destination rows add 
   `contract_contexts`, `symbolic_arguments`) in `clause.rs`; `render_precondition` in
   `precondition.rs` and `render_contract` in `contract.rs`. `clause.rs` is justified by the AD
   itself: step 4c gives the precondition and contract families a V2 input and says the V1
-  lowering takes `BoundClause`, so the shared V1 lowering is its own file that 4c reshapes and 4f
-  trims. The three items that `render_scalar` and `render` both call (`harness_path`, `record` and
+  lowering takes `BoundClause`, so the shared V1 lowering is its own interim file. Step 4f
+  deletes its V1-only contents and the V1 `precondition.rs` and `contract.rs` renderers, then
+  step 4c supplies separate V2 lowering and rendering through `HarnessSpec`. The three items
+  that `render_scalar` and `render` both call (`harness_path`, `record` and
   `artifact`) are in `record.rs`, below both files: in `negotiate.rs` they would be imported by
   `scalar.rs` against the order, and in `scalar.rs` they would be a helper of one family that the
   other's dispatch borrows. `record.rs` holds today's items only; later steps may move them.
@@ -1652,9 +1668,9 @@ and each interim file carries a header naming the step that deletes it.
 - The layout test reads `use` lines and bare `crate::<Item>` paths in code, not the compiler's graph. A path in a macro, a
   `super::` import or an intra-doc link (comments are not read) would escape it. The measured edge list in this AD was made the same way
   and has the same blind spot.
-- Step 4c needs a spec change and has no ticket. If it slips, 4e and the supported V2 contract
-  family slip with it; step 4f still deletes the deprecated V1 path. The corresponding FR-015
-  obligations remain open until the V2 implementation and evidence land.
+- IR-489 authored the step 4c spec and IR-948 delivered V2 precondition/invariant slices.
+  IR-917's remaining QSL-authored clause and mutation controls can slip without delaying step
+  4f's deprecated V1 deletion; their FR-015 obligations remain open until evidence lands.
 - QSL's exemplars currently call `generate_kani_bundle`. Step 4f makes that legacy call unavailable.
   The QSL owner must move the control to the supported entry and measure any missing V2 behavior.
   An external consumer gap is recorded with its owner; it does not keep the deprecated path alive.
@@ -1699,8 +1715,8 @@ what it could against the code; the checks are stated.
 | `ContentDigest` and the canonical encoding | CG depends on `quire-canonical` directly (`branch = "main"`, no `qsl-replay` re-export). `ContentDigest` is a CG type over its digest, with no `ByteDigest` wrapper except where a QSL API requires one. The obligation preimage is encoded by `quire-canonical` (RFC 8785), and `core::canonical` is the one place that calls it; the `serde_json` `deterministic_json` copies are deleted. QSL still pins it by tag, so step 1a waits on CG's lock resolving it to one entry. Cites AD-003, which is merged and not edited here. | QSL; relayed by the IR planner |
 
 SuiteRegistry (SUR-001): moves to `spec/core/functional/suites.md` in step 7; ADR-0056 is not
-amended (IR planner, IR-344). No question remains open in this AD except the missing ticket for the
-FR-015 V2 contract input (step 4c).
+amended (IR planner, IR-344). V2 census work is tracked by IR-1044; remaining QSL-authored
+V2 clause and mutation controls are tracked by IR-917.
 
 ### Not verified in this AD
 

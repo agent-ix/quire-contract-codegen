@@ -12,6 +12,13 @@ relationships:
 
 ## Description
 
+**IR-348 retirement disposition (2026-10-27).** The V1 bundle-only procedures in steps 10,
+12, 13, 15 and 16 are historical and no longer count as active coverage for retired
+FR-031-AC-11/19/20/21/23/24/25. Step 11 retains its native saturating-refusal cases, while its
+bundle cases retire. IR-1045 owns surviving native AC-2/6/16/17/18/22/26; IR-348 records the
+AC-27 cleanup after native replacement. The original procedure below remains for traceability,
+but its old bundle results cannot be cited as V2 proof. QSL-1154 owns the former QI exemplar.
+
 Verify that the native Boolean oracle renders integer add, subtract, multiply, divide and
 remainder as exact-kernel operations (`quire_exact`) and the six integer comparisons as the meaning
 the kernel gives them, that overflow, a zero divisor and the minimum divided by negative one there
@@ -25,16 +32,11 @@ and a zero divisor a falsifiable Kani property, and agrees with the native oracl
 domain. Finally it verifies that the defect cases fail on the tree before the change and pass
 after it.
 
-This case is ⚠️ Partially covered. IR-596's closing code change implemented the steps that do not
-concern division, in `tests/it/oracle_arithmetic.rs`, with the real-Kani steps (the exemplar
-controls of step 10 and the overflow property of step 12) in `tests/it/kani_generation.rs`, run
-through `make kani`. The QSL exemplar run of step 10 (`tests/qsl_kani_exemplar.rs` in the
-integration repository) is pending: it needs a checkout of the integration repository, and the CG
-run of the same bundle shape is the closest equivalent, not a substitute. The divide and remainder
-change (IR-602) is planned: the O-3 and O-5 rows of step 4, step 5, the divide and remainder half
-of step 7 and the rewritten step 11 (FR-031-AC-2, AC-6, AC-16, AC-17 and AC-18), and the new steps
-14 to 17 (FR-031-AC-22 to AC-27). Until that code lands the divide and remainder constructions are
-refused at generation with the interim code, which is the failing run those steps record first.
+This case is ⚠️ Partially covered. IR-596's earlier real-Kani bundle results in
+`tests/it/kani_generation.rs` are historical after V1 retirement. They do not replace a QSL
+exemplar run or discharge V2 clause work. The native divide and remainder cases O-3/O-5, zero
+divisor, comparison and saturating refusal remain planned under IR-1045. The obsolete
+`UnsupportedIntegerDivision` cleanup is tracked by IR-348 after that native replacement.
 The steps that call `quire_exact::divide` or migrate the native oracle (1's divide half, 4's O-3
 and O-5, 5, 7's divide and remainder half, 11's removed-code assertion (FR-031-AC-27), 14 and 16)
 require a compatible dependency graph. At CG's locked revisions, QSL replay passes
@@ -262,21 +264,15 @@ kernel and can be implemented independently of those kernel calls.
 
 ## Expected Results
 
-Every add, subtract, multiply, divide and remainder in the native oracle is a `quire_exact` call.
+For surviving native criteria, every add, subtract, multiply, divide and remainder in the native
+oracle is a `quire_exact` call.
 Overflow under `reject` is `Refused(IntegerOutOfDomain)`, a zero divisor is
 `Undefined(DivisionByZero)`, a divide or remainder member outside the interval is
 `Refused(DivisionOutOfDomain)`, the minimum divided by negative one is refused with member
 `Quotient` and the minimum remainder negative one completes with 0, R-1 and R-2 complete, with no
-panic and no wrapped value, all agreeing with an independent plain-integer model; the Kani bundle
-oracle keeps the infix operators (`wrapping_rem` for a remainder), in the shape the exemplar's
-mutation targets, proves the exemplar and its equivalent mutant, falsifies the `left + right + 1`
-mutant at `amount_current = 999`, fails Kani's overflow and zero-divisor checks on an operand
-outside the discharge, and agrees with the native oracle inside the domain; a `saturate`
-arithmetic clause of any of the five operators is refused at its node with
-`UnsupportedSaturatingArithmetic` in both consumers, and `UnsupportedIntegerDivision` exists
-nowhere; the six comparisons agree with the kernel; every other consumer that needs a `bool`
-refuses an arithmetic clause; and the overflow, zero-divisor, minimum-by-negative-one, `saturate`
-and differential cases each failed on the tree before the change and pass after it, with the code
-change recording both runs and the exemplar's runs. The divide and remainder rows (FR-031-AC-2,
-AC-6, AC-16, AC-17, AC-18 and AC-22 to AC-27) are verified by the IR-602 code change;
-the lock prerequisite is already met.
+panic and no wrapped value, all agreeing with an independent plain-integer model. A native
+`saturate` arithmetic clause is refused with `UnsupportedSaturatingArithmetic`; the six
+comparisons agree with the kernel. IR-1045 must measure FR-031-AC-2/6/16/17/18/22/26 on the
+surviving native path. The V1 bundle expected results recorded in the procedure are retired
+historical claims, not expected results for the active route. IR-348 removes the interim error
+code under AC-27 after its native replacement can emit the specified outcomes.

@@ -12,13 +12,13 @@ type: TestMatrix
 |---|---|---|---|
 | FR-015 | FR-015-AC-1, FR-015-AC-2 | TC-025 | 🚧 Planned |
 | FR-015 | FR-015-AC-3 through FR-015-AC-6 | TC-025 | ✅ Covered |
-| FR-015 | FR-015-AC-7 | TC-025 | ✅ Covered; every emitted harness kind (precondition, V1 contract, scalar, state-clause, frame-effect, V1 bundle, corpus) ends with its one cover, which FR-015-AC-53 to FR-015-AC-58 (IR-464) state and guard |
+| FR-015 | FR-015-AC-7 | TC-025 | ⚠️ Partially backed after IR-348: cover-last remains for surviving scalar, state-clause, frame-effect and corpus emitters; historical V1 contract/bundle portions retired by the 2026-10-27 owner ruling. The surviving emitter list and real-Kani control need fresh evidence. |
 | FR-015 | FR-015-AC-8 through FR-015-AC-12 | TC-025 | ✅ Covered |
 | FR-015 | FR-015-AC-13 | TC-025 | ✅ Covered |
 | FR-015 | FR-015-AC-14 | TC-025 | ✅ Covered |
 | FR-015 | FR-015-AC-15 | TC-033 | 🚧 Planned; the test's underivable claim is `integer.eq`, which FR-014-AC-35 makes derivable |
 | FR-015 | FR-015-AC-16 through FR-015-AC-18 | TC-033 | ✅ Covered |
-| FR-015 | FR-015-AC-19 through FR-015-AC-25 | TC-025 | 🚧 Planned |
+| FR-015 | FR-015-AC-19 through FR-015-AC-25 | TC-025 | 🚧 Planned/open: AC-19/20/24 lose V1 evidence and require supported-path measurement; AC-22/25 V2 census is owned by IR-1044. Deleting `ProofDependencyGraph` does not back this row. |
 | FR-015 | FR-015-AC-50 | TC-025 | ✅ Covered; negotiate reports a byte-ceiling and an unrecognised lowering refusal as `OracleRefused`, unchanged (IR-547) |
 | FR-015 | FR-015-AC-26, FR-015-AC-28 through FR-015-AC-36 | TC-025 | 🚧 Partly covered by existing state/frame assertions; emitted selected-model-declaration ranges and fail-closed non-model/unselected-object refusals are planned under AC-27 and AC-77 to AC-81 |
 | FR-015 | FR-015-AC-27 | TC-025 | 🚧 Planned (IR-624): the QSL-emitted selected model declaration supplies ranges through the accessor and the clause comparison is asserted; the old hand-built body-range claim is retired and replaced by a non-model/unselected-object refusal |
@@ -26,7 +26,7 @@ type: TestMatrix
 | FR-015 | FR-015-AC-60, FR-015-AC-68 | TC-025 | ✅ Covered (IR-461); crate-internal tests over an admitted V2 package compare each negotiated item with direct `generate_state_frame_role`, including exact supported harness bytes, record order and symbols, both one-role refusals, and a lowering refusal that records both roles alike with no harness. The two-role entry is checked for both-success and refusal cases. |
 | FR-015 | FR-015-AC-66, FR-015-AC-67 | TC-025 | 🚧 Partly covered: IR-461 backs the total refusal mapping and malformed graph field-name behavior. The old body-member `BoundNotResolvedCause` probes and their mapping assertions are retired under IR-624; new accessor causes `ModelFieldsUnavailable`, `MemberAbsent`, and `ModelMemberNotI64Range` require updated mapping tests. Lowering `RequiresBound` keeps its actual node and wins before accessor resolution when a clause reads native `Integer`. |
 | FR-015 | FR-015-AC-37 | TC-025 | ✅ Covered |
-| FR-015 | FR-015-AC-53, FR-015-AC-54, FR-015-AC-56, FR-015-AC-58 | TC-025 | ✅ Covered (IR-464); a cover as the last statement of every harness kind (`syn` inspection of each emitting entry point, and a scan of the non-test string literals of `src/` that fails a file the inspection does not drive), and the V1 bundle's real-Kani outcomes (`Verified` for a bundle whose requires some bounded argument satisfies and whose `ensures` holds for every such argument, `CoverUnsatisfied` for one whose requires no bounded argument satisfies, `Falsified` for a broken `ensures`), run in the `kani` lane |
+| FR-015 | FR-015-AC-53, FR-015-AC-54, FR-015-AC-56, FR-015-AC-58 | TC-025 | ⚠️ AC-54/56 retired as V1 bundle-only under the 2026-10-27 IR-348 ruling. AC-53/58 remain open for surviving emitters; the prior bundle Kani outcomes are historical evidence only. Keep the `kani_generation` filter with V2 tests under NFR-006-AC-4. |
 | FR-015 | FR-015-AC-55 | TC-023 | ✅ Covered by a nonignored tagged test of the corpus harness's final `kani::cover!` after its assertion; other tagged controls are ignored |
 | FR-015 | FR-015-AC-57 | TC-023 | 🚧 Tagged only by ignored tests of real-Kani corpus classification and corpus playback replay (`tc_023_real_corpus_playback_replays_through_its_qsl_source`); no running-test coverage credit |
 | FR-015 | FR-015-AC-51, FR-015-AC-52 | TC-023 | 🚧 Untagged in the computed matrix; profile-mismatch refusal and profile-revision context still need tagged verification |
