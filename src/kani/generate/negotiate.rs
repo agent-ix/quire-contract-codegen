@@ -82,7 +82,6 @@ use crate::{
     core::identity::HarnessSymbol,
     core::ir::clause::ClauseGraphView,
     core::naming::unique_names,
-    kani::abi::{adapter_options, KaniSolver},
     kani::census::{
         normalize_dependencies, ProofDependencyEdge, ProofDependencyKind, ProofDependencyRequest,
         ProofDependencyState,
