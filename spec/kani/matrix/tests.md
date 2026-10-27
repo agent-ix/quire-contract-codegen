@@ -10,11 +10,11 @@ type: TestMatrix
 
 | Functional Req | Acceptance Criteria | Test Cases | Status |
 |---|---|---|---|
-| FR-015 | FR-015-AC-1, FR-015-AC-2 | TC-025 | 🚧 Planned |
+| FR-015 | FR-015-AC-1, FR-015-AC-2 | TC-025 | 🚧 Planned/open; AC-2's only tagged V1 `BoundClause` test retires under IR-348, and surviving V2 identity evidence remains required. |
 | FR-015 | FR-015-AC-3 through FR-015-AC-6 | TC-025 | ✅ Covered |
-| FR-015 | FR-015-AC-7 | TC-025 | ⚠️ Partially backed after IR-348: cover-last remains for surviving scalar, state-clause, frame-effect and corpus emitters; historical V1 contract/bundle portions retired by the 2026-10-27 owner ruling. The surviving emitter list and real-Kani control need fresh evidence. |
-| FR-015 | FR-015-AC-8 through FR-015-AC-12 | TC-025 | ✅ Covered |
-| FR-015 | FR-015-AC-13 | TC-025 | ✅ Covered |
+| FR-015 | FR-015-AC-7 | TC-025 | ⚠️ Partially backed after IR-348: cover-last remains for surviving V2 precondition, scalar, state-clause, frame-effect and corpus emitters; historical V1 contract/bundle portions retired by the 2026-10-27 owner ruling. The surviving emitter list and real-Kani control need fresh evidence. |
+| FR-015 | FR-015-AC-8 through FR-015-AC-12 | TC-025 | 🚧 Open after IR-348: their only tagged `BoundClause` tests retire; V2 precondition/postcondition and other surviving clauses require replacement evidence. Invariant remains unsupported. |
+| FR-015 | FR-015-AC-13 | TC-025 | 🚧 Open after IR-348: its only tagged V1 `BoundClause` test retires; surviving V2 source-size and syntax refusal need replacement evidence. |
 | FR-015 | FR-015-AC-14 | TC-025 | ✅ Covered |
 | FR-015 | FR-015-AC-15 | TC-033 | 🚧 Planned; the test's underivable claim is `integer.eq`, which FR-014-AC-35 makes derivable |
 | FR-015 | FR-015-AC-16 through FR-015-AC-18 | TC-033 | ✅ Covered |

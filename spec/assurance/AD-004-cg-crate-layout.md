@@ -698,8 +698,8 @@ unchanged by 4b.
 
 **The contract families need a V2 input.** At this AD's original baseline, the precondition,
 postcondition and invariant families existed only over V1 (see Current state). IR-489 has since
-authored the V2 input spec, and IR-948 has delivered precondition and invariant slices. Remaining
-V2 clause and mutation controls belong to IR-917. The immediate step 4f retirement does not
+authored the V2 input spec, and IR-948 has delivered precondition and postcondition slices. V2 invariant rendering still
+refuses and remains open under IR-266; QSL-authored clause and mutation controls remain under IR-917. The immediate step 4f retirement does not
 claim those controls passed. Step 4c's design intent: a clause claim names a precondition, postcondition or
 invariant clause node of an admitted `CheckedPackageV2`, and the contract lowering reads that node
 and embeds the FR-014 oracle of its Boolean connectives, bounded-integer comparisons and the
@@ -715,7 +715,7 @@ What happens to the other generators:
 | Generator | Fate |
 | --- | --- |
 | `generate_kani_bundle` | Deleted in the immediate step 4f retirement PR, without waiting for 4c, 4d, 4e or a QSL exemplar move. Its public entry leaves `interface-001`. FR-003's optional stubbing was dropped by the IR-311 ruling. |
-| `kani_obligations` scalar, precondition, contract renderers | The scalar renderer becomes a family lowerer. Step 4f removes V1-only precondition and contract rendering; V2 precondition and invariant slices already delivered under IR-948 survive, while remaining V2 clause work continues under IR-917. |
+| `kani_obligations` scalar, precondition, contract renderers | The scalar renderer becomes a family lowerer. Step 4f removes V1-only precondition and contract rendering; V2 precondition and postcondition slices already delivered under IR-948 survive, while invariant rendering remains open under IR-266 and QSL-authored clause mutation work continues under IR-917. |
 | `state_frame` renderers | Become the frame lowerer. |
 | `bounded_kani_corpus` renderer | Keeps its own template until step 4g (an interim exception to L-3; its cover is FR-015-AC-55, IR-464). QSL-353 supplies emission-to-admission evidence but does not itself supply a symbolic corpus. Step 4g retires the hand-built lowerer by family as the V2 arithmetic, collection and graph cases and the typed model-derived symbolic domains of FR-015-AC-96 to AC-102 are backed; FR-015-AC-109 has retired arithmetic, while collection and graph remain under FR-015-AC-110 and FR-015-AC-111. Admitted cases render through `HarnessSpec` and `render.rs`. Until the final slice, the hand-built path returns a generated-case `BoundedCorpusExpectation` under FR-015-AC-91, never a run verdict. After step 4g, corpus generation returns no `KaniOutcome`: a verdict comes only from a run (FR-015-AC-95). |
 
@@ -1067,7 +1067,8 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
      collection, corpus or V1 templates, and it leaves L-3 unlanded (L-3 lands after 4f, 4g and
      4h); after 4b the FR-015-AC-58 guard's list of driven files loses `scalar.rs` and gains `render.rs`.
    - 4c: the V2 contract arm. IR-489 authored its FR-015 input spec; IR-948 delivered V2
-     precondition and invariant slices. IR-917 owns remaining QSL-authored clause and mutation
+     precondition and postcondition slices. IR-266 owns unrendered V2 invariant support;
+     IR-917 owns remaining QSL-authored clause and mutation
      controls through `HarnessSpec`. QSL-1154 owns moving the quire-integration exemplar to the
      supported V2 arm. Step 4f deletes only V1-only templates and does not remove delivered V2
      slices or reintroduce a V1 template.
@@ -1117,11 +1118,12 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
    | Criteria | Status after V1 retirement | Owner |
    | --- | --- | --- |
    | FR-031-AC-11/19/20/21/23/24/25; FR-015-AC-54/56 | Retired V1-bundle-only claims; their historical text remains in place. No V2 proof is inferred from the old Kani run or differential. | IR-348 |
-   | FR-031-AC-18 | The bundle-consumer half retires; the native saturating divide/remainder refusal stays open. | IR-348 records the split; native implementation remains separately owned. |
-   | FR-015-AC-7/53/58 | The V1 contract/bundle portions retire; the exact cover-last and emitting-entry controls remain open for all surviving harness families, including corpus. | IR-348 for test-list update; IR-917 for V2 clause proof controls. |
+   | FR-031-AC-18 | The bundle-consumer half retires; the native saturating divide/remainder refusal stays open. | IR-348 records the split; IR-1045 owns native implementation. |
+   | FR-015-AC-7/53/58 | The V1 contract/bundle portions retire; exact cover-last and emitting-entry controls remain open for the surviving V2 precondition, scalar, state-clause, frame-effect and corpus families. | IR-348 for test-list update; IR-917 for V2 clause proof controls. |
+   | FR-015-AC-2/8/9/10/11/12/13; FR-031-AC-10 | Their only tagged V1 `BoundClause` tests retire. Surviving V2 identity, assumption, refusal and native-consumer claims stay open; no coverage is carried forward from the removed tests. | IR-348 for status/test replacement; IR-266 for unrendered invariant support. |
    | FR-015-AC-19/20/24; FR-005-AC-4 | The prior V1 evidence retires. Original transition, oracle, playback and cross-lane agreement claims stay open until measured on supported paths. | IR-348 records the gap; IR-917 owns the QSL-authored V2 clause control. |
    | FR-015-AC-22/25, AC-44/45 | Unbacked V2 census requirements, unchanged by removal of `ProofDependencyGraph`. | IR-1044. |
-   | FR-015-AC-40/41 and other V2 clause rows | Remain independently planned or partly implemented; IR-489 authored the 4c spec, IR-948 delivered precondition/invariant slices, and IR-917 owns the remaining QSL-authored clause/mutation control. | IR-917 for remaining control. |
+   | FR-015-AC-40/41 and other V2 clause rows | Remain independently planned or partly implemented; IR-489 authored the 4c spec, IR-948 delivered precondition/postcondition slices; V2 invariant still refuses. IR-917 owns QSL-authored clause/mutation controls. | IR-266 for invariant; IR-917 for remaining control. |
    | FR-019-AC-25/26/33 | V1 `BoundClause` roles and tests retire, while the surviving typed V2 form/status/refusal obligations stay open. | IR-348 for V1 route deletion and status register. |
    | NFR-006-AC-4; SUITE-008 | The `kani_generation` filter remains and must select V2 tests. The suite command stays in place; its test inventory and gate counts are reconciled after V1 tests retire. | IR-348. |
    | `interface-001`; QI IT-011 | Remove the deprecated public operation and update the direct external QI caller and its proof/control evidence without copying fixtures. | IR-348 for CG API; QSL-1154 for QI. |
@@ -1668,7 +1670,8 @@ and each interim file carries a header naming the step that deletes it.
 - The layout test reads `use` lines and bare `crate::<Item>` paths in code, not the compiler's graph. A path in a macro, a
   `super::` import or an intra-doc link (comments are not read) would escape it. The measured edge list in this AD was made the same way
   and has the same blind spot.
-- IR-489 authored the step 4c spec and IR-948 delivered V2 precondition/invariant slices.
+- IR-489 authored the step 4c spec and IR-948 delivered V2 precondition/postcondition slices.
+  V2 invariant still refuses and is open under IR-266.
   IR-917's remaining QSL-authored clause and mutation controls can slip without delaying step
   4f's deprecated V1 deletion; their FR-015 obligations remain open until evidence lands.
 - QSL's exemplars currently call `generate_kani_bundle`. Step 4f makes that legacy call unavailable.
