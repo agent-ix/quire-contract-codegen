@@ -742,7 +742,10 @@ fn tc_035_original_composite_request_requires_its_own_packet() {
     let readback = ReplayRequest::decode(request.wire().clone(), ReplayLimits::default())
         .expect("the packet-backed request has a typed QSL readback");
     assert_eq!(
-        readback.replay_target().occurrence_key(),
+        readback
+            .replay_target()
+            .expect("composite packet has a replay target")
+            .occurrence_key(),
         packet.occurrence_key.as_ref()
     );
 
@@ -932,7 +935,10 @@ fn tc_035_original_composite_packets_bind_distinct_real_occurrences() {
         let readback = ReplayRequest::decode(request.wire().clone(), ReplayLimits::default())
             .expect("QSL reads the packet-backed occurrence");
         assert_eq!(
-            readback.replay_target().occurrence_key(),
+            readback
+                .replay_target()
+                .expect("composite packet has a replay target")
+                .occurrence_key(),
             packet.occurrence_key.as_ref()
         );
     }

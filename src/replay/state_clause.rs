@@ -423,8 +423,7 @@ impl<'a> From<&'a StateClauseReplayResult> for ReplaySettlement<'a> {
                     | (WitnessSettlement::ReproducedWithEvaluatedWitness, _, _) => Self::CgDefect,
                 }
             }
-            // The envelope is on the witness arm, so the result is: an input-arm result is not
-            // one this adapter asked for.
+            // The envelope is on the witness arm; every other result arm is unexpected here.
             ReplayResult::Input(_)
             | ReplayResult::ObservedTemporal(_)
             | ReplayResult::ModelGraph(_) => Self::CgDefect,
