@@ -1025,7 +1025,7 @@ fn generate_exact_imports(importer: &str) -> Option<&'static [&'static str]> {
     match importer {
         "outcome" => Some(&[]),
         "collection" => Some(&["outcome", "record", "spec", "render"]),
-        "frame" => Some(&["outcome"]),
+        "frame" => Some(&["outcome", "spec", "render"]),
         "negotiate" => Some(&[
             "outcome",
             "record",

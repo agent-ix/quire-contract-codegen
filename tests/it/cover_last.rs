@@ -6,7 +6,7 @@
 //! `#[kani::proof_for_contract]`. The scan reads the non-test string literals of `src/` and fails
 //! when a file outside the driven set spells either proof attribute, so a new emitter cannot be
 //! added without being driven here. The scalar and symbolic collection families use the private
-//! HarnessSpec renderer; the remaining families retain their own emitters.
+//! HarnessSpec renderer; the corpus retains its own emitter until retirement.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -23,8 +23,8 @@ use ix_trace_rs::trace;
 const FAMILIES: [(&str, &str); 7] = [
     ("scalar", "kani/generate/render.rs"),
     ("v2 precondition", "kani/generate/render.rs"),
-    ("state clause", "kani/generate/frame.rs"),
-    ("frame effect", "kani/generate/frame.rs"),
+    ("state clause", "kani/generate/render.rs"),
+    ("frame effect", "kani/generate/render.rs"),
     (
         "corpus graph",
         "kani/generate/corpus/bounded_kani_corpus.rs",
@@ -182,9 +182,8 @@ fn tc_025_the_cover_inspection_rejects_a_misplaced_duplicated_or_missing_cover()
 /// The proof-attribute templates each driven file holds, as `proof_spellings` counts them. A
 /// driven file with more spellings than this has a template no entry point above drives; raise
 /// the count only together with a driver and a family in `FAMILIES`.
-const PROOF_TEMPLATES: [(&str, usize); 3] = [
-    ("kani/generate/render.rs", 2),
-    ("kani/generate/frame.rs", 2),
+const PROOF_TEMPLATES: [(&str, usize); 2] = [
+    ("kani/generate/render.rs", 3),
     ("kani/generate/corpus/bounded_kani_corpus.rs", 1),
 ];
 
@@ -305,4 +304,39 @@ fn tc_025_no_proof_attribute_is_spelled_outside_what_the_inspection_drives() {
     let driven: BTreeSet<&str> = FAMILIES.iter().map(|(_, file)| *file).collect();
     let counted: BTreeSet<&str> = PROOF_TEMPLATES.iter().map(|(file, _)| *file).collect();
     assert_eq!(driven, counted, "every counted file has a driven family");
+}
+
+/// The frame port leaves only the live corpus template outside the shared renderer.
+#[trace("FR-015-AC-58", "TC-025")]
+#[test]
+fn tc_025_frame_renderer_owns_every_non_corpus_kani_spelling() {
+    const SPELLINGS: [&str; 7] = [
+        "#[kani::proof]",
+        "#[kani::proof_for_contract]",
+        "kani::requires",
+        "kani::ensures",
+        "kani::any",
+        "kani::assume",
+        "kani::cover!",
+    ];
+    let mut outside = Vec::new();
+    for (file, text) in source_files() {
+        if TEST_CODE_FILES.contains(&file.as_str())
+            || file == "kani/generate/render.rs"
+            || file == "kani/generate/corpus/bounded_kani_corpus.rs"
+        {
+            continue;
+        }
+        for literal in non_test_string_literals(&text) {
+            for spelling in SPELLINGS {
+                if literal.contains(spelling) {
+                    outside.push((file.clone(), spelling));
+                }
+            }
+        }
+    }
+    assert!(
+        outside.is_empty(),
+        "Kani spelling outside renderer: {outside:?}"
+    );
 }
