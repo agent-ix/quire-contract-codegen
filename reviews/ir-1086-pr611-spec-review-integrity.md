@@ -119,3 +119,13 @@ Disposition pass 1 at exact head 2ea5e10663fa0ca7164b02f8a1381e80ca150ddc (fix c
 | --- | --- | --- |
 | FND-001 | fixed | AC-30 now carries `PLANNED (IR-1086).`; Current state no longer claims AC-30 met (range is AC-11 and AC-13 to AC-29, with AC-12 and AC-30 planned), and the IR-459 bullet says IR-1086 replaces the text input. Carving out AC-12 (IR-965) agrees with TC-035 step 10 and tests.md; it is not a narrowing. Residual owner attribution is new FND-003. |
 | FND-002 | fixed | The FR-024 Inputs frame bullet and interface-001 `FrameReplay::new` inputs now name parsed `Playback` from the falsified outcome's complete counterexample text plus requested decode limits; no input still names playback text. interface-001 semantics add the minimum-limit recheck. Residual "does today" wording is new FND-004. |
+
+Disposition pass 2 at exact head caabc352fca0a0e6ebb2638c8bf7d3f39e5cec8a (fix commit caabc352
+over 2ea5e106). The spec diff touches only FR-024: the Inputs frame bullet, the AC-30 row prefix
+and the Current state sentence. The AC-30 body after the prefix, TC-035 and interface-001 are
+unchanged since pass 1.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-003 | fixed | AC-30 now reads `PLANNED (IR-1086, IR-624).`; Current state says AC-30 "remains planned for typed frame intake under IR-1086 and the QSL-emitted harness without `Twin::aligned` under IR-624", which agrees with TC-035's narrative (IR-624) and FR-024-AC-32. The AC-30 body is byte-identical apart from the prefix. |
+| FND-004 | fixed | The Inputs frame bullet now ends "which the caller supplies." with "as `FrameReplayInputs` does today" removed; no spec text still claims `FrameReplayInputs` carries requested limits today (`src/replay/frame.rs:579` still decodes under `run.decode_limits` only). The "(IR-459; typed intake planned in IR-1086)" lead-in keeps the change visible. |
