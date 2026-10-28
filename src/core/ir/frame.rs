@@ -55,7 +55,10 @@ impl<'g> ClauseGraphView<'g> {
         if self.kind(anchor)? != CheckedNodeKind::State(StateForm::OperationAnchor) {
             return None;
         }
-        let members = aggregate_members(self.term(anchor))?;
+        let CheckedTerm::OperationAnchorBody(body) = self.term(anchor)? else {
+            return None;
+        };
+        let members = &body.members;
         let [context, operation, frame] =
             bound_members(members, ["context", "operation", "frame"])?;
         let object = reference(context)?.clone();
