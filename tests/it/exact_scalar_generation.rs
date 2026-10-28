@@ -2042,7 +2042,10 @@ fn tc_024_corpus_reader_admits_anonymous_integer_ranges() {
         panic!("admitted conversion is an application");
     };
     assert_eq!(body_type, &result_type);
-    let mode = operation.mode().expect("admitted rounding mode");
+    let mode = operation
+        .mode()
+        .expect("authenticated operation view")
+        .expect("admitted rounding mode");
     assert_eq!(mode.kind, quire_contract_model::OperationModeKind::Rounding);
     assert_eq!(mode.value, "nearest-away");
 }
@@ -3881,6 +3884,7 @@ fn quantity_conversion_derives_and_preserves_target_provenance() {
         };
         let target = operation
             .member_declaration()
+            .expect("authenticated operation view")
             .expect("admitted conversion target");
         assert_eq!(generated.quantity_conversion_target.as_ref(), Some(target));
         assert_eq!(

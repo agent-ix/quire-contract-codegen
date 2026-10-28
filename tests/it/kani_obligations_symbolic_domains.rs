@@ -796,6 +796,7 @@ fn qsl_emits_and_ir_admits_the_authored_collection_and_reference_shapes() {
     assert_eq!(projection.identity(), Some("quire.op.record.project"));
     let (declaration, name) = projection
         .projection_field()
+        .expect("authenticated operation view")
         .expect("admitted field projection");
     assert_eq!(name, "items");
     assert_eq!(
