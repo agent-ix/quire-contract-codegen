@@ -131,3 +131,13 @@ scope:
     AC-110; graph/profile lowerers and module entry retire at AC-111, ending the graph
     operation's AC-123 direct-result obligation.
 ```
+
+## Dispositions
+
+Round 1, fix head 72e7b1e366aa370c2d7771ee3f404dc8cedbeb1a (fix delta from 43bc4397; merge-base with main still fb50acdc). Verdict after round 1: PASS. All three findings fixed; no new findings. The delta changes only the FR-015-AC-123 verification column (widened to Test (TC-023) and Inspection), the interface-001 corpus error_surface tense and one TC-023 sentence, plus a committed copy of this review under reviews/pr614/. No other AC row changed. Out-of-scope note, not a finding: AD-003 line 130 and NFR-005 line 140 still say "planned IR-621" CG adoption; this PR does not touch those files. The committed reviews/pr614 copy predates this section and must be replaced with this file before merge.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | TC-023 now requires the AC-123-tagged control `public_family_and_corpus_results_have_direct_ir_errors_and_unchanged_successes` (present at tests/it/bounded_kani_corpus.rs:902) to stay from AC-110 to AC-111 with a Graph-request corpus case. Its graph and corpus direct-result types and graph checks stay active after the Collection variant retires. |
+| FND-002 | fixed | interface-001:95 now reads "IR-621 retired public FamilyLoweringError and BoundedCorpusError, ...". This matches src/ and tests/, where none of those names occur. |
+| FND-003 | fixed | FR-015-AC-123's method column now reads `Test (TC-023) and Inspection`, matching AC-109/110/111. |
