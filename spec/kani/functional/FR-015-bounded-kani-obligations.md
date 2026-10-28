@@ -46,9 +46,9 @@ FR-015-AC-1 to FR-015-AC-37 and their surviving obligations remain unchanged.
 Implemented (IR-464): FR-015-AC-7 requires a cover in every generated harness. The retired
 V1 bundle generator and the still-live bounded Kani corpus generator once emitted a harness
 with none, so a run of either could not classify `Verified` (FR-017-AC-4); the corpus
-now ends its harness with one. FR-015-AC-53 to FR-015-AC-58 retain the original seven-kind
-cover obligations and the guard against an emitted harness without one. The V1 bundle and
-contract kinds have retired; the surviving V2 kinds still require their own evidence.
+now ends its harness with one. FR-015-AC-53/58 remain open for the surviving kinds and guard against
+an emitted harness without a final cover. AC-54/56 are retired with the V1 bundle; AC-55/57
+retain their corpus obligations. The surviving V2 kinds still require their own evidence.
 
 Planned (IR-264, IR-241): composite equality over records and tuples is the first family whose
 production harness cannot verify within any ceiling this crate has measured (FR-028, Rationale), so

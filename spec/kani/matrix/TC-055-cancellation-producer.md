@@ -14,7 +14,7 @@ relationships:
 
 ## Description
 
-Plan a discriminating production-path check for [FR-040](../functional/FR-040-cancellation-producer.md).
+Check the production path for [FR-040](../functional/FR-040-cancellation-producer.md).
 The event reader must supply the observed source; a prebuilt IR outcome tests only the terminal
 map. The existing [TC-041](./TC-041-ir-outcome-terminal-map.md) continues to own the separate
 [FR-030](../functional/FR-030-ir-outcome-terminal-map.md) AC-7 source inspection.
@@ -61,5 +61,6 @@ source-bearing map is exhaustive, uses the one exact cause type and has no metad
 
 ## Status
 
-Planned for IR-701 implementation. No test or real-Kani execution result is asserted by this
-specification artifact.
+Implemented by IR-701 (CG #383): FR-040-AC-1 to AC-7 have tagged tests in
+`src/kani/run/execute.rs` and `tests/it/terminal_map.rs`. This status records
+source and trace coverage; it asserts no new real-Kani result on this spec head.

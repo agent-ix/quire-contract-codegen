@@ -87,9 +87,9 @@ scalar proof qualification are distinct, both still required.
 | Production ContractPackage consumption | [FR-039](core/functional/FR-039-contract-package-consumption.md) one admitted FR-330 package for negotiation and generation | [TC-053](core/matrix/TC-053-contract-package-consumption.md) planned production integration checks |
 | Caller Text admission | [FR-035](oracle/functional/FR-035-caller-text-admission.md) proposed generated admission oracle and bounded proof; [FR-017](kani/functional/FR-017-kani-execution-evidence.md) planned caller-harness execution evidence | [TC-050](oracle/matrix/TC-050-caller-text-admission.md) planned runtime and real-Kani checks |
 | Boolean oracle integer arithmetic and comparison | FR-031 | TC-044 |
-| Kani obligations and execution | FR-015 generation, FR-017 execution, FR-025 subject ABI, FR-028 bounds and ceilings, [FR-034](kani/functional/FR-034-caller-death-ownership.md) planned original-caller lifecycle ownership, [FR-040](kani/functional/FR-040-cancellation-producer.md) planned caller cancellation producer | TC-025, TC-027, TC-036, TC-039, [TC-049](kani/matrix/TC-049-caller-death-ownership.md) planned production guardian verification, [TC-055](kani/matrix/TC-055-cancellation-producer.md) planned cancellation path |
+| Kani obligations and execution | FR-015 generation, FR-017 execution, FR-025 subject ABI, FR-028 bounds and ceilings, [FR-034](kani/functional/FR-034-caller-death-ownership.md) planned original-caller lifecycle ownership, [FR-040](kani/functional/FR-040-cancellation-producer.md) live caller cancellation producer | TC-025, TC-027, TC-036, TC-039, [TC-049](kani/matrix/TC-049-caller-death-ownership.md) planned production guardian verification, [TC-055](kani/matrix/TC-055-cancellation-producer.md) tagged cancellation path |
 | Finite rational function predicates | [FR-046](kani/functional/FR-046-rational-function-predicate-harnesses.md) planned whole-function proof and canonical finite encoding | [TC-060](kani/matrix/TC-060-rational-function-predicate-harnesses.md) planned generated-proof and replay controls |
-| Real-Kani lane gating | NFR-006 and [FR-041](kani/functional/FR-041-claimed-module-proof-gate.md) planned additional V2 implication claim discharge; historical FR-003@4 claim held pending same-claim V2 source (FR-041-AC-10) | TC-045 and [TC-056](kani/matrix/TC-056-claimed-module-proof-gate.md) planned proof-claim controls |
+| Real-Kani lane gating | NFR-006 and [FR-041](kani/functional/FR-041-claimed-module-proof-gate.md) live claim-gate controls (AC-1 to AC-5) and planned V2 implication discharge (AC-6 to AC-9); historical FR-003@4 claim held pending same-claim V2 source (FR-041-AC-10) | TC-045 and [TC-056](kani/matrix/TC-056-claimed-module-proof-gate.md) live claim-gate controls and planned V2 claim controls |
 | Typed obligation inventories, criterion-keyed candidate tuples and separate producer facts | [FR-036](evidence/functional/FR-036-source-obligation-census.md) | [TC-051](evidence/matrix/TC-051-source-obligation-census.md) planned; Gated on IR-759 |
 | Backend adapter (routed) | FR-026 adapter trait and registration | TC-037 |
 | HP-2 SMT induction producer | [FR-045](routed/functional/FR-045-hyper-smt-induction-map.md) CG solver-run evidence and outcome handoff over QSL-owned hyper queries | [TC-059](routed/matrix/TC-059-hyper-smt-induction-map.md) planned |
@@ -135,8 +135,8 @@ source tree and crate-root re-exports, is:
 | `kani/generate/corpus/{mod.rs,bounded_kani_corpus.rs}`; `generate_bounded_kani_corpus_case` and its public request/result types | FR-015-AC-51 to AC-58, AC-90 to AC-95 and AC-109 to AC-111 | Live graph/collection finite-input corpus. Arithmetic retired at AC-109; collection AC-110 and graph/final API AC-111 remain planned, gated as those criteria state. Corpus replay persists until AC-111. |
 | `kani/generate/lower/{mod.rs,bounded_kani_profile.rs,finite_reference_graphs.rs,bounded_collections.rs}`; `classify_bounded_kani_profile`, `prepare_finite_graph_reaches`, `prepare_bounded_collection_query` and public types | FR-015-AC-82 to AC-89 and AC-109 to AC-111 | Remaining finite-input auxiliaries are live. The collection lowerer retires at AC-110; graph/profile lowerers and module entry retire at AC-111. |
 | `kani/{abi,identity}.rs` and the public Kani ABI, identity and harness types | FR-015 proof identity; FR-025 generated subject ABI; FR-028 ceilings | Live support vocabulary. Composite leaf ABI remains planned. |
-| `kani/run/{execute,harness,launch,memory,namespace,owners,process,report_file,scalar,tool,mod.rs}` and the public execution, native scalar, process, tool and memory operations/types | FR-017 execution/evidence; FR-028 ceilings; FR-034 caller-death ownership; FR-040 cancellation producer; NFR-006 lane | Live bounded run and report handling. FR-034 original-caller guardian and FR-040 cancellation producer remain planned; no completion is inferred from the existing owned-launch machinery. |
-| `kani/output/{diagnostics,playback,report,mod.rs}`, `kani/classify.rs` and the public parse/classification/report types | FR-017 output and verdict classification; FR-016 playback decode | Live output processing and playback extraction. |
+| `kani/run/{execute,harness,launch,memory,namespace,owners,process,report_file,scalar,tool,mod.rs}` and the public execution, native scalar, process, tool and memory operations/types | FR-017 execution/evidence; FR-028 ceilings; FR-034 caller-death ownership; FR-040 cancellation producer; NFR-006 lane | Live bounded run and report handling. FR-040 caller cancellation is live through `KaniExecutionRequest.cancel`, bounded launcher observation and typed cancellation results (IR-701, CG #383). FR-034 original-caller guardian remains planned; existing launch ownership does not complete it. |
+| `kani/output/{diagnostics,playback,report,mod.rs}`, `kani/classify.rs` and the public parse/classification/report types | FR-017 output and verdict classification; FR-016 playback decode; FR-024 state-clause replay intake through `parse_state_clause_falsification` | Live output processing, playback extraction and the public FR-024 parser added by CG #605. |
 | `kani/terminal.rs` and public terminal-map operations | FR-029 and FR-030 | Live terminal maps; the backend adapter trait remains planned under FR-026. |
 | `kani/generate/role_parity_tests.rs` and `kani/test_support.rs` | FR-014-AC-38 and FR-015-AC-60/68; FR-015/FR-017 tests using shared helpers | Test-only role parity and fixture helpers. |
 | `kani/mod.rs` and `kani/generate/mod.rs` | The child-module owners above | Module declarations and test-only helpers; no separate generation API. |
@@ -145,10 +145,16 @@ source tree and crate-root re-exports, is:
 The reverse inventory is: FR-015 owns generation, census, corpus and proof identity;
 FR-025 owns the generated binding/subject ABI; FR-017 owns execution and run
 classification; FR-028 and NFR-006 constrain ceilings and the real-Kani lane;
-FR-029/030 own terminal mapping; FR-016/024 own playback and envelope intake.
-FR-034/040, FR-041 and FR-046 retain planned obligations without a completed
-implementation claim here. FR-015's V2 contract/invariant, composite and graph
-obligations remain planned or partial where their individual criteria say so.
+FR-029/030 own terminal mapping; FR-016/024 own playback and envelope intake,
+including FR-024's public parser in `kani/classify.rs`. FR-040's cancellation producer
+is live in `kani/run/execute.rs` and `kani/run/launch.rs`, with tagged tests for
+AC-1 to AC-7. FR-041's claim-gate controls for AC-1 to AC-5 are live in
+`scripts/cg_gates.rs` and `scripts/kani_claims.json`, with tagged tests in
+`tests/it/kani_generation_claims.rs` and `tests/it/kani_gate.rs`; its V2 claim
+and historical hold discharge (AC-6 to AC-10) remain planned. FR-034 and
+FR-046 retain planned obligations without a completed implementation claim here.
+FR-015's V2 contract/invariant, composite and graph obligations remain planned
+or partial where their individual criteria say so.
 The computed matrix supplies trace-tag status, not a proof verdict: a tagged
 criterion can still have a partial or planned installed-backend obligation.
 
