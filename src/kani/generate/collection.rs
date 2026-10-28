@@ -530,6 +530,7 @@ fn resolve_collection_field(
     };
     let (field_declaration, field_name) = operation
         .projection_field()
+        .map_err(|_| CollectionDomainRefusal::UnsupportedShape)?
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
     let field_name = field_name.to_owned();
     let declaration = admitted_declaration(graph, &field_declaration.digest)?;

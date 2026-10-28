@@ -107,7 +107,7 @@ pub(crate) fn clause_kind(body: &CheckedTerm) -> Option<&str> {
     let CheckedTerm::Application { operation, .. } = body else {
         return None;
     };
-    Some(operation.state_clause_kind()?.as_wire())
+    Some(operation.state_clause_kind().ok()??.as_wire())
 }
 
 /// The selected field declaration and name of a record projection.
@@ -115,7 +115,7 @@ pub(crate) fn projected_field(body: &CheckedTerm) -> Option<(CheckedNodeId, &str
     let CheckedTerm::Application { operation, .. } = body else {
         return None;
     };
-    let (declaration, name) = operation.projection_field()?;
+    let (declaration, name) = operation.projection_field().ok()??;
     Some((declaration.clone(), name))
 }
 

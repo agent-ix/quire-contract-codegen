@@ -633,7 +633,8 @@ fn checked_state_clause_role<'a>(
 ) -> Option<&'a str> {
     Some(
         checked_operation(package, node_id)?
-            .state_clause_kind()?
+            .state_clause_kind()
+            .ok()??
             .as_wire(),
     )
 }

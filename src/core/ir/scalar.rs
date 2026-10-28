@@ -23,14 +23,14 @@ pub(crate) fn identity(term: Option<&CheckedTerm>) -> Option<&str> {
 
 /// The value of an operation mode with the requested kind.
 pub(crate) fn mode<'a>(term: Option<&'a CheckedTerm>, kind: &str) -> Option<&'a str> {
-    let mode = operation(term)?.mode()?;
+    let mode = operation(term)?.mode().ok()??;
     (mode.kind == OperationModeKind::from_wire(kind)?).then_some(mode.value)
 }
 
 /// Whether an operation names the selected law definition.
 pub(crate) fn has_law(term: Option<&CheckedTerm>, identity: &str) -> bool {
     operation(term)
-        .map(CheckedApplicationOperation::law_definitions)
+        .and_then(|operation| operation.law_definitions().ok())
         .into_iter()
         .flatten()
         .any(|definition| definition.identity.as_ref() == identity)
@@ -43,7 +43,7 @@ pub(crate) fn quantity_conversion_target(
 ) -> Option<CheckedNodeId> {
     let operation = operation(term)?;
     (operation.identity()? == conversion_identity)
-        .then(|| operation.member_declaration().cloned())?
+        .then(|| operation.member_declaration().ok().flatten().cloned())?
 }
 
 #[cfg(test)]

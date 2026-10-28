@@ -250,7 +250,7 @@ impl Reader<'_, '_> {
         let CheckedTerm::Application { operation, .. } = project else {
             return None;
         };
-        let (declaration, name) = operation.projection_field()?;
+        let (declaration, name) = operation.projection_field().ok()??;
         if !matches!(side, ClauseInputSide::Current | ClauseInputSide::Pre) {
             return None;
         }

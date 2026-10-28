@@ -598,7 +598,9 @@ fn classify_v2_clause<'a>(
     let kind = package
         .term(clause)
         .and_then(|term| match term {
-            CheckedTerm::Application { operation, .. } => operation.state_clause_kind(),
+            CheckedTerm::Application { operation, .. } => {
+                operation.state_clause_kind().ok().flatten()
+            }
             _ => None,
         })
         .and_then(|kind| match kind {
