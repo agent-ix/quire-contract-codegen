@@ -570,8 +570,11 @@ fn tc_023_graph_corpus_ends_its_harness_with_one_cover_after_its_assertion() {
 /// The harness of one true graph case, for the cover-last guard (FR-015-AC-58).
 pub(crate) fn guard_sources() -> Vec<(&'static str, String)> {
     let (profile, dispatch, input) = fixture();
-    let requests = [(
-        "corpus graph",
+    let generated = generate_bounded_kani_corpus_case(
+        crate::common::proof_ceilings::proof_ceilings(),
+        &profile,
+        &dispatch,
+        &input,
         BoundedCorpusRequest::Graph(GraphRequest {
             source_id: "source".to_owned(),
             start_id: "a".to_owned(),
@@ -579,23 +582,11 @@ pub(crate) fn guard_sources() -> Vec<(&'static str, String)> {
             field_id: "next".to_owned(),
             max_expansions: 2,
         }),
-    )];
-    requests
-        .into_iter()
-        .map(|(family, request)| {
-            let generated = generate_bounded_kani_corpus_case(
-                crate::common::proof_ceilings::proof_ceilings(),
-                &profile,
-                &dispatch,
-                &input,
-                request,
-                &[],
-                &mut EmittedCorpusIdentities::new(),
-            )
-            .unwrap();
-            (family, generated.artifacts.kani_harness.contents)
-        })
-        .collect()
+        &[],
+        &mut EmittedCorpusIdentities::new(),
+    )
+    .unwrap();
+    vec![("corpus graph", generated.artifacts.kani_harness.contents)]
 }
 
 /// The graph family's emitted `proof_graph` artifact is a real `CORPUS_PROOF_GRAPH_SCHEMA`
@@ -605,47 +596,91 @@ pub(crate) fn guard_sources() -> Vec<(&'static str, String)> {
 #[test]
 fn tc_023_proof_graph_artifact_validates_against_its_published_schema() {
     let (profile, dispatch, input) = fixture();
-    let cases = [BoundedCorpusRequest::Graph(GraphRequest {
+    let request = BoundedCorpusRequest::Graph(GraphRequest {
         source_id: "source".to_owned(),
         start_id: "a".to_owned(),
         target_id: "b".to_owned(),
         field_id: "next".to_owned(),
         max_expansions: 2,
-    })];
-    for request in cases {
-        let generated = generate_bounded_kani_corpus_case(
-            crate::common::proof_ceilings::proof_ceilings(),
-            &profile,
-            &dispatch,
-            &input,
-            request,
-            &[],
-            &mut EmittedCorpusIdentities::new(),
-        )
+    });
+    let generated = generate_bounded_kani_corpus_case(
+        crate::common::proof_ceilings::proof_ceilings(),
+        &profile,
+        &dispatch,
+        &input,
+        request,
+        &[],
+        &mut EmittedCorpusIdentities::new(),
+    )
+    .unwrap();
+    let instance: serde_json::Value =
+        serde_json::from_str(&generated.artifacts.proof_graph.contents)
+            .expect("the corpus proof-dependency graph must parse as JSON");
+    // The old struct-order encoder wrote `schemaVersion`
+    // second; canonical bytes sort `dependencies` before it and end with one newline.
+    let graph_text = &generated.artifacts.proof_graph.contents;
+    assert!(
+        graph_text.find("\"dependencies\"").unwrap()
+            < graph_text.find("\"schemaVersion\"").unwrap()
+    );
+    assert!(graph_text.ends_with("}\n"));
+    assert!(!graph_text.ends_with("}\n\n"));
+    validate(
+        include_str!("../../schemas/kani-corpus-proof-graph-v1.schema.json"),
+        &instance,
+    );
+    let graph: CorpusProofDependencyGraph = serde_json::from_str(
+        &generated.artifacts.proof_graph.contents,
+    )
+    .expect("the corpus proof-dependency graph must deserialize as CorpusProofDependencyGraph");
+    assert_eq!(graph.schema_version, CORPUS_PROOF_GRAPH_SCHEMA);
+    assert!(graph.dependencies.is_empty());
+    assert_eq!(graph.readiness, ProofReadiness::Ready);
+}
+
+/// The published finite corpus schema accepts graph cases and rejects retired families.
+#[trace("FR-015-AC-110", "FR-028-AC-1", "TC-023")]
+#[test]
+fn tc_023_proof_graph_schema_rejects_retired_corpus_families() {
+    let schema: serde_json::Value = serde_json::from_str(include_str!(
+        "../../schemas/kani-corpus-proof-graph-v1.schema.json"
+    ))
+    .unwrap();
+    let validator = JSONSchema::options()
+        .with_draft(Draft::Draft7)
+        .compile(&schema)
         .unwrap();
-        let instance: serde_json::Value =
-            serde_json::from_str(&generated.artifacts.proof_graph.contents)
-                .expect("the corpus proof-dependency graph must parse as JSON");
-        // The old struct-order encoder wrote `schemaVersion`
-        // second; canonical bytes sort `dependencies` before it and end with one newline.
-        let graph_text = &generated.artifacts.proof_graph.contents;
-        assert!(
-            graph_text.find("\"dependencies\"").unwrap()
-                < graph_text.find("\"schemaVersion\"").unwrap()
-        );
-        assert!(graph_text.ends_with("}\n"));
-        assert!(!graph_text.ends_with("}\n\n"));
-        validate(
-            include_str!("../../schemas/kani-corpus-proof-graph-v1.schema.json"),
-            &instance,
-        );
-        let graph: CorpusProofDependencyGraph = serde_json::from_str(
-            &generated.artifacts.proof_graph.contents,
-        )
-        .expect("the corpus proof-dependency graph must deserialize as CorpusProofDependencyGraph");
-        assert_eq!(graph.schema_version, CORPUS_PROOF_GRAPH_SCHEMA);
-        assert!(graph.dependencies.is_empty());
-        assert_eq!(graph.readiness, ProofReadiness::Ready);
+    let (profile, dispatch, input) = fixture();
+    let generated = generate_bounded_kani_corpus_case(
+        crate::common::proof_ceilings::proof_ceilings(),
+        &profile,
+        &dispatch,
+        &input,
+        BoundedCorpusRequest::Graph(GraphRequest {
+            source_id: "source".to_owned(),
+            start_id: "a".to_owned(),
+            target_id: "b".to_owned(),
+            field_id: "next".to_owned(),
+            max_expansions: 2,
+        }),
+        &[],
+        &mut EmittedCorpusIdentities::new(),
+    )
+    .unwrap();
+    let graph: serde_json::Value =
+        serde_json::from_str(&generated.artifacts.proof_graph.contents).unwrap();
+    assert!(validator.is_valid(&graph));
+    for (field, retired) in [
+        ("family", "collection"),
+        ("family", "arithmetic"),
+        ("construct", "bounded-collection-query"),
+        ("construct", "checked-arithmetic"),
+        ("identity", "collection_0000000000000000000000000000000000000000000000000000000000000000"),
+        ("proofId", "corpus_case_arithmetic_0000000000000000000000000000000000000000000000000000000000000000"),
+    ] {
+        let mut retired_graph = graph.clone();
+        retired_graph[field] = serde_json::json!(retired);
+        assert!(!validator.is_valid(&retired_graph), "{field}={retired} remained admitted");
     }
 }
 

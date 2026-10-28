@@ -1398,7 +1398,6 @@ mod tests {
         );
     }
 
-    #[trace("FR-015-AC-101", "TC-025")]
     #[test]
     fn unresolved_projection_declaration_is_field_not_admitted() {
         let graph = CollectionNodeIndex::from_nodes(std::iter::empty());

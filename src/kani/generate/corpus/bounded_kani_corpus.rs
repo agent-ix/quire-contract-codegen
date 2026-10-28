@@ -706,10 +706,9 @@ pub(crate) mod tests {
     };
     use quire_contract_model::std001_code;
 
-    use super::GraphRequest;
     use super::{
         generate_bounded_kani_corpus_case, BoundedCorpusRequest, CorpusProofDependencyGraph,
-        EmittedCorpusIdentities, ProofReadiness, CORPUS_PROOF_GRAPH_SCHEMA,
+        EmittedCorpusIdentities, GraphRequest, ProofReadiness, CORPUS_PROOF_GRAPH_SCHEMA,
     };
     use crate::kani::census::{ProofDependencyKind, ProofDependencyRequest, ProofDependencyState};
 
@@ -735,6 +734,28 @@ pub(crate) mod tests {
                 .unwrap()
             })
             .collect()
+    }
+
+    /// The finite corpus request remains a closed graph-only family after collection retirement.
+    #[trace("FR-015-AC-110", "TC-023")]
+    #[test]
+    fn tc_023_retired_collection_corpus_leaves_only_the_graph_request() {
+        let request = reach("source", "a", "b", "next", 2);
+        let graph = match request {
+            BoundedCorpusRequest::Graph(graph) => graph,
+        };
+        let case = emit(
+            &fixture(),
+            BoundedCorpusRequest::Graph(graph),
+            &[],
+            &mut EmittedCorpusIdentities::new(),
+        )
+        .expect("the remaining graph family emits");
+        assert!(case
+            .artifacts
+            .kani_harness
+            .path
+            .starts_with("corpus/graph_"));
     }
 
     /// Each graph case retains source bytes that QSL compiles into the selected function
@@ -842,6 +863,35 @@ pub(crate) mod tests {
         );
     }
 
+    /// The surviving graph case name binds an independently authored canonical JSON preimage.
+    #[trace("FR-015-AC-94", "TC-023")]
+    #[test]
+    fn tc_023_graph_case_name_matches_hand_authored_canonical_preimage() {
+        const PREIMAGE: &str = concat!(
+            r#"{"ceilings":{"memoryBytes":17179869184,"wallClock":{"nanos":0,"secs":600}},"#,
+            r#""construct":"finite-reference-graph","dependencies":[],"input":{"bounds":{"#,
+            r#""max_input_bytes":2,"max_objects":2,"max_references":1},"completeness":"complete","#,
+            r#""inputBytes":1,"modelId":"model","objects":[["a","node","s"],["b","node","s"]],"#,
+            r#""profile":{"abi_revision":"abi","profile":"kani-bounded/1","revision":"r1"},"#,
+            r#""references":[["a","next","b"]],"sourceId":"source"},"#,
+            r#""profile":{"abi_revision":"abi","profile":"kani-bounded/1","revision":"r1"},"#,
+            r#""request":{"graph":{"field_id":"next","max_expansions":3,"source_id":"source","#,
+            r#""start_id":"a","target_id":"b"}}}"#,
+        );
+        let expected = format!(
+            "graph_{:x}",
+            qsl_replay::ByteDigest::of(PREIMAGE.as_bytes())
+        );
+        let case = emit(
+            &fixture(),
+            reach("source", "a", "b", "next", 3),
+            &[],
+            &mut EmittedCorpusIdentities::new(),
+        )
+        .expect("the graph fixture is admitted");
+        assert_eq!(case_name(&case), expected);
+    }
+
     /// The owning input's object maps may exceed the final case-name
     /// ceiling even though their normalized tuples fit. Admission is decided by the final bytes.
     #[trace("TC-023")]
@@ -873,15 +923,14 @@ pub(crate) mod tests {
         );
 
         let request = reach("source", "000000", "000001", "next", 3);
-        let identity = super::CaseIdentity {
-            ceilings: crate::kani::test_support::proof_ceilings::proof_ceilings(),
-            construct: "finite-reference-graph",
-            profile: fixture.0.selection(),
-            input: normalized,
-            request: super::RequestIdentity::from(&request),
-            dependencies: &[],
-        };
-        assert_eq!(identity.digest().unwrap().len(), 64);
+        let admitted = emit(&fixture, request, &[], &mut EmittedCorpusIdentities::new())
+            .expect("the compact identity admits the full graph case");
+        assert!(!admitted.expectation.expected_assertion_holds());
+        assert!(admitted
+            .artifacts
+            .kani_harness
+            .path
+            .starts_with("corpus/graph_"));
     }
 
     /// The caller supplies the dependency census, so it can offer a
@@ -1041,59 +1090,57 @@ pub(crate) mod tests {
     #[test]
     fn tc_023_generates_deterministic_complete_graph_artifacts() {
         let (profile, dispatch, input) = fixture();
-        let cases = vec![BoundedCorpusRequest::Graph(GraphRequest {
+        let request = BoundedCorpusRequest::Graph(GraphRequest {
             source_id: "source".to_owned(),
             start_id: "a".to_owned(),
             target_id: "b".to_owned(),
             field_id: "next".to_owned(),
             max_expansions: 2,
-        })];
-        for request in cases {
-            // A fresh counter per call: an identical request yields identical output.
-            let first = generate_bounded_kani_corpus_case(
-                crate::kani::test_support::proof_ceilings::proof_ceilings(),
-                &profile,
-                &dispatch,
-                &input,
-                request.clone(),
-                &[],
-                &mut EmittedCorpusIdentities::new(),
-            )
-            .unwrap();
-            let second = generate_bounded_kani_corpus_case(
-                crate::kani::test_support::proof_ceilings::proof_ceilings(),
-                &profile,
-                &dispatch,
-                &input,
-                request,
-                &[],
-                &mut EmittedCorpusIdentities::new(),
-            )
-            .unwrap();
-            assert_eq!(first, second);
-            assert!(first.expectation.expected_assertion_holds());
-            assert!(!first
-                .artifacts
-                .kani_harness
-                .contents
-                .contains("kani::assume"));
-            let graph: CorpusProofDependencyGraph =
-                serde_json::from_str(&first.artifacts.proof_graph.contents)
-                    .expect("the corpus proof-dependency graph must deserialize");
-            assert_eq!(graph.schema_version, CORPUS_PROOF_GRAPH_SCHEMA);
-            assert!(graph.dependencies.is_empty());
-            assert_eq!(graph.readiness, ProofReadiness::Ready);
-            assert_eq!(
-                graph.proof_id,
-                proof_symbol(&first.artifacts.kani_harness.contents),
-                "the graph's proof id must equal the harness's own #[kani::proof] symbol"
-            );
-            syn::parse_file(&format!(
-                "{}\n{}",
-                first.artifacts.oracle.contents, first.artifacts.kani_harness.contents
-            ))
-            .expect("the generated oracle and Kani harness must be valid Rust syntax");
-        }
+        });
+        // A fresh counter per call: an identical request yields identical output.
+        let first = generate_bounded_kani_corpus_case(
+            crate::kani::test_support::proof_ceilings::proof_ceilings(),
+            &profile,
+            &dispatch,
+            &input,
+            request.clone(),
+            &[],
+            &mut EmittedCorpusIdentities::new(),
+        )
+        .unwrap();
+        let second = generate_bounded_kani_corpus_case(
+            crate::kani::test_support::proof_ceilings::proof_ceilings(),
+            &profile,
+            &dispatch,
+            &input,
+            request,
+            &[],
+            &mut EmittedCorpusIdentities::new(),
+        )
+        .unwrap();
+        assert_eq!(first, second);
+        assert!(first.expectation.expected_assertion_holds());
+        assert!(!first
+            .artifacts
+            .kani_harness
+            .contents
+            .contains("kani::assume"));
+        let graph: CorpusProofDependencyGraph =
+            serde_json::from_str(&first.artifacts.proof_graph.contents)
+                .expect("the corpus proof-dependency graph must deserialize");
+        assert_eq!(graph.schema_version, CORPUS_PROOF_GRAPH_SCHEMA);
+        assert!(graph.dependencies.is_empty());
+        assert_eq!(graph.readiness, ProofReadiness::Ready);
+        assert_eq!(
+            graph.proof_id,
+            proof_symbol(&first.artifacts.kani_harness.contents),
+            "the graph's proof id must equal the harness's own #[kani::proof] symbol"
+        );
+        syn::parse_file(&format!(
+            "{}\n{}",
+            first.artifacts.oracle.contents, first.artifacts.kani_harness.contents
+        ))
+        .expect("the generated oracle and Kani harness must be valid Rust syntax");
     }
 
     /// A declared `Required` dependency must actually reach the emitted graph, not be silently
@@ -1594,6 +1641,25 @@ pub(crate) mod tests {
         assert!(
             !seen.contains(&revised),
             "the profile selection is part of the identity"
+        );
+
+        let with_third_object = |identity: &str| {
+            fixture_with(
+                |_| {},
+                |input| {
+                    input.bounds.max_objects = 3;
+                    input.objects.push(FiniteObject {
+                        identity: identity.to_owned(),
+                        type_id: "node".to_owned(),
+                        snapshot_id: "s".to_owned(),
+                    });
+                },
+            )
+        };
+        assert_ne!(
+            identity_of(&with_third_object("c"), request()),
+            identity_of(&with_third_object("d"), request()),
+            "renaming a non-endpoint object alone changes the graph identity"
         );
     }
 

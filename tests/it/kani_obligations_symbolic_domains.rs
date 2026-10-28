@@ -378,6 +378,37 @@ fn collection_item_outcome(
     .expect("valid collection request")
 }
 
+/// QSL-admitted collection claims still emit a symbolic V2 harness after finite corpus retirement.
+#[trace("FR-015-AC-110", "TC-023", "TC-025")]
+#[test]
+fn collection_claim_uses_the_v2_symbolic_harness_without_a_finite_corpus_request() {
+    let fixture = emitted();
+    let outcome = collection_item_outcome(&fixture, "quire.op.collection.forall", 8);
+    let KaniObligationOutcome::Emitted {
+        records,
+        collection_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("the admitted collection claim must emit a V2 harness");
+    };
+    assert_eq!(records.len(), 1);
+    assert!(matches!(
+        records[0].disposition,
+        ObligationDisposition::Supported { .. }
+    ));
+    assert_eq!(collection_harnesses.len(), 1);
+    let harness = &collection_harnesses[0].rust.contents;
+    assert!(
+        harness.contains("kani::any"),
+        "symbolic input remains: {harness}"
+    );
+    assert!(
+        !harness.contains("Vec<i128>"),
+        "finite corpus input returned: {harness}"
+    );
+}
+
 fn write_collection_scratch(harness: &KaniCollectionObligationHarness) -> TemporaryDirectory {
     let scratch = TemporaryDirectory::new("quire-kani-symbolic-domains-collection");
     let directory = &scratch.path;
@@ -1513,7 +1544,6 @@ fn collection_run_evidence_preserves_every_ordered_identity_option() {
     assert_eq!(evidence.exit_code, Some(1));
 }
 
-#[trace("FR-015-AC-97", "FR-015-AC-102", "TC-025")]
 #[trace("FR-015-AC-97", "FR-015-AC-102", "TC-025")]
 #[test]
 fn ordered_set_shape_is_refused_without_erasing_its_uniqueness_semantics() {
