@@ -486,9 +486,13 @@ one identity record, one cover rule and one entry, not one function:
 - `kani/generate/render.rs` is the only code that emits `#[kani::proof]`, `#[kani::proof_for_contract]`,
   `kani::requires`, `kani::ensures`, `kani::any`, `kani::assume` and `kani::cover!`. A layout test
   checks string literals in non-test source (not comments, so doc prose that names them passes).
-- The scalar, V2 clause and collection families return `HarnessSpec`s. A ported family formats
-  no harness structure (statements, attributes, macros, layout, cover placement); the one text
-  it supplies is an expression fragment (`ExprText`, decision H-2). The frame family renders through `HarnessSpec` after step 4i; collection was ported at step 4h.
+- The scalar, V2 clause, collection and frame families return `HarnessSpec`s. A ported family
+  formats no proof-module structure (attributes, macros, layout or cover placement). The
+  statement shape supplies checked expression fragments (`ExprText`, decision H-2); the
+  collection shape supplies its typed domain and predicate; the frame shape supplies its
+  provenance header, validated state and subject paths, ordered fields and ranges, comparison
+  operator, and assertion messages for renderer escaping. `render.rs` owns the proof-module structure for
+  all three shapes. Collection was ported at step 4h and frame at step 4i.
   `generate_state_frame_obligations`
   becomes a frame arm of `ObligationItem`, so `negotiate_kani_obligations` is the one public
   generation entry; ADR-004 owns what the frame arm asserts.
@@ -512,7 +516,9 @@ paths, fields, ranges and the unwind bound. This is the frame exception to the s
 constructor's literal-true-cover refusal, preserving FR-015-AC-7.
 
 **Decision H-1. The shape of `HarnessSpec` (`kani/generate/spec.rs`).** A `HarnessSpec` is a typed
-description of one harness, with no Kani spelling in it. Its fields:
+description of one harness, with no Kani spelling in it. This table records the shared fields
+and the step 4b statement shape; collection and frame add their own typed shapes in steps 4h
+and 4i:
 
 | Field | Type and meaning |
 | --- | --- |
@@ -552,10 +558,10 @@ description of one harness, with no Kani spelling in it. Its fields:
   `BorrowMut(name)`.
 - `Assert { condition, message }`: `assert!(<condition>, "<message>");`.
 
-**Decision H-2. `ExprText` is the one text a lowerer supplies, and it is an expression only.**
-`ExprText` is one Rust expression as text, for the native `i128` expression, the outcome `match`
-and the `matches!` of the cover: the family's own meaning, not harness structure. It is a
-validated newtype whose constructor refuses text that:
+**Decision H-2. A statement-shape `ExprText` is an expression only.**
+For that shape, `ExprText` is one Rust expression as text, for the native `i128` expression, the
+outcome `match` and the `matches!` of the cover: the family's own meaning, not harness structure.
+It is a validated newtype whose constructor refuses text that:
 
 - does not parse as a `syn::Expr`;
 - spells `kani::` or `#[`;
@@ -574,32 +580,38 @@ for four arithmetic expressions, and `syn` is already the validity check on the 
 The cost is that an `ExprText` is checked for parse, form and the absence of Kani spellings, not
 for meaning; the real-Kani lane remains the meaning check.
 
-A `message` (of an `Assert` or the `Cover`) is a string with no `"`, `\`, `{`, `}` or line
-break; the constructor refuses one that has any, as a typed error, rather than escaping it, because
-the scalar assertion message interpolates the operation identity and an escape rule would change
-bytes. `label` follows the same rule except that it may hold backticks and may not hold a line
-break.
+For the statement shape, a `message` (of an `Assert` or the `Cover`) is a string with no `"`,
+`\`, `{`, `}` or line break; its constructor refuses one that has any, as a typed error, rather
+than escaping it, because the scalar assertion message interpolates the operation identity and
+an escape rule would change bytes. `label` follows the same rule except that it may hold
+backticks and may not hold a line break. The frame constructor applies this rule to its fixed
+cover message; the frame assertion messages may contain braces and are escaped as Rust string
+literals by `render.rs`.
 
-**Decision H-3. Invariants, enforced by the family-specific `HarnessSpec` constructors.** A refusal is a
-typed `HarnessSpecError`; none is a panic.
+**Decision H-3. Invariants enforced by the `HarnessSpec` constructors.** A refusal is a typed
+`HarnessSpecError`; none is a panic. Items 1 and 5 apply to every shape. Items 2-4 and the
+statement-specific part of item 6 apply to `HarnessShape::Statements`.
 
 1. Exactly one cover. The AD's earlier wording was "at least one"; FR-015-AC-7 says every
-   generated harness has exactly one non-vacuity cover, and L-4 follows it. A spec with no cover
-   or two covers does not construct.
+   generated harness has exactly one non-vacuity cover, and L-4 follows it. The statement
+   constructor refuses zero or two covers; the collection and frame constructors create one
+   cover each. No family can add a second cover through its source data.
 2. Exactly one `Call`, and every `Input` and `Assume` precedes it. Every `Assert` follows it.
 3. A binding name is bound once, except that a `then` `Let` may rebind its own input's name (the
    `rt::Integer` shadow). Every name, `result` and `callee` is a valid Rust identifier.
 4. Every `Input` domain has `minimum <= maximum` and lies within the type of `ty`. An inverted or
    out-of-type domain is a typed refusal, not a harness whose assumption is unsatisfiable.
 5. `unwind` is in `1..=MAX_OBLIGATION_UNWIND`.
-6. Every `ExprText` satisfies H-2 and every message satisfies the message rule of H-2. The cover
-   condition is an `ExprText` that is not the literal `true`. This last rule is new in 4b: no
-   FR-015 text forbids a `true` cover today, but a `true` cover is reachable whenever the harness is
-   and so is not the property's own reachability that IR-464 requires. A frame harness's
-   `kani::cover!(true, ...)` (FR-015-AC-7) is 4d's to allow in its own spec change.
+6. For the statement shape, every `ExprText` satisfies H-2, every message satisfies its message
+   rule, and the cover condition is not literal `true`. That last rule makes the scalar cover
+   express the property's own reachability. The collection shape derives its cover from the
+   typed cardinality endpoints. The frame shape stores one literal-true cover under
+   FR-015-AC-7, after its subject call and assertions; its fixed cover message is validated,
+   while assertion messages are escaped by the renderer as described above.
 
-Placement is not an invariant of the spec because the spec does not choose it: the cover is a field
-outside `body` precisely so no family can put it elsewhere.
+Placement is not an invariant of the spec because the spec does not choose it: the cover is held
+outside the statement `body` and outside the collection and frame assertion data, so no family
+can put it elsewhere.
 
 **Decision H-4. Ownership and visibility.** Each family lowerer constructs its `HarnessSpec`
 (`scalar.rs` at 4b); nothing else constructs one, and `negotiate.rs` does not. `HarnessSpec`,
@@ -621,16 +633,20 @@ spec, from the same lowered claim, and `record.rs` joins identity and artifact a
    At 4b that covered the ported scalar family only. Steps 4f and 4h subsequently removed the
    V1 bundle and moved collection rendering here. The corpus still spells its own template, so L-3 (render.rs is the only site for all seven spellings) remains open until 4g retires the corpus. Step 4i moved frame rendering here. After the
    port `scalar.rs` spells none of them.
-2. It places the cover. The body is the header, the oracle source, the module wrapper, the
-   attribute, then the `body` statements in spec order, then the cover as the last statement of
-   the function, after every assumption, the call and every assertion (IR-464, FR-015-AC-7).
-   Nothing a lowerer provides can change where the cover goes (H-2 keeps a cover or an assertion
-   out of an `ExprText`).
-3. It holds no family-specific template text. It has one emitter per `Statement` variant, per
-   `ProofKind` and per `Init`; a family's meaning reaches it only as data (`label`, `ExprText`,
-   `message`). This is evidenced by behaviour (FR-015-AC-113): specs whose labels, expressions and
-   messages are not the scalar family's render to source that holds exactly what the spec
-   supplied and the fixed structure, and nothing else.
+2. It places the cover. For the statement shape it emits the header, oracle source, module
+   wrapper, attribute and ordered `body`, then the cover as the function's last statement. For
+   the frame shape it emits the header, module wrapper, symbolic state and range assumptions,
+   subject call and role assertions, then the cover; the collection shape has the same
+   cover-last rule after its claim assertion. Nothing a lowerer provides can move the cover
+   before an assumption, call or assertion (IR-464, FR-015-AC-7).
+3. It has explicit emitters for the statement, collection and frame shapes. The statement
+   emitter handles each `Statement`, `ProofKind` and `Init` variant. The frame emitter owns the
+   frame-only proof template; `FrameSpec` supplies its validated paths, fields, ranges,
+   comparison operator, provenance header and assertion messages as data. The collection
+   emitter likewise owns the collection proof template. Thus one file owns every ported
+   family's Kani spellings and cover placement. FR-015-AC-113 verifies that statement specs
+   with non-scalar labels, expressions and messages render their supplied data in the fixed
+   statement structure.
 4. Design rationale: it is a pure function of the spec, with no map or set iteration, no clock,
    no environment and no address-dependent formatting, so equal specs render equal bytes.
    The scalar harness wrapper and body preserve the pre-port template's actual whitespace: eight
@@ -639,8 +655,7 @@ spec, from the same lowered claim, and `record.rs` joins identity and artifact a
 5. It validates what it renders as today's `render_scalar` does, in the same order and with the
    same refusals: first `ResourceLimitExceeded` when the source exceeds `MAX_GENERATED_SOURCE_BYTES`
    (core/artifact), then `InvalidGeneratedSyntax` when `syn::parse_file` rejects the source. Those
-   two checks leave `scalar.rs`; a family not yet ported keeps its own check (collection and
-   frame carried the same two checks before step 4i).
+   two checks leave `scalar.rs`; the still-live corpus template keeps its own checks until 4g.
 6. It returns the `Artifact` at `src/generated/<module>.rs`; it builds no identity and no record.
    It imports `spec`, `outcome` (for `UnsupportedObligation`), `core::artifact` and `kani::abi`,
    and not `record`.
