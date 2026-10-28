@@ -13,12 +13,12 @@ use crate::scratch_crate::TemporaryDirectory;
 use ix_trace_rs::trace;
 use jsonschema::{Draft, JSONSchema};
 use quire_contract_codegen::{
-    classify_kani_run, generate_bounded_kani_corpus_case, prepare_bounded_collection_query,
-    prepare_finite_graph_reaches, select_counterexample, BoundedCorpusCase, BoundedCorpusRequest,
-    CollectionLowering, CollectionQuery, CorpusProofDependencyGraph, EmittedCorpusIdentities,
-    GraphLowering, GraphRequest, KaniInconclusiveReason, KaniRunOutcome, ProofDependencyKind,
-    ProofDependencyRequest, ProofDependencyState, ProofReadiness, QueryKind, ReplayVerdict,
-    CORPUS_PROOF_GRAPH_SCHEMA,
+    classify_kani_run, generate_bounded_kani_corpus_case, parse_assertion_playback,
+    prepare_bounded_collection_query, prepare_finite_graph_reaches, select_counterexample,
+    BoundedCorpusCase, BoundedCorpusRequest, CollectionLowering, CollectionQuery,
+    CorpusProofDependencyGraph, EmittedCorpusIdentities, GraphLowering, GraphRequest,
+    KaniInconclusiveReason, KaniRunOutcome, Playback, ProofDependencyKind, ProofDependencyRequest,
+    ProofDependencyState, ProofReadiness, QueryKind, ReplayVerdict, CORPUS_PROOF_GRAPH_SCHEMA,
 };
 use quire_contract_ir::kani::{
     CapabilityDisposition, CapabilityEntry, DispatchIndex, FiniteInput, FiniteObject,
@@ -27,6 +27,17 @@ use quire_contract_ir::kani::{
 };
 
 use quire_contract_model::{std001_code, Std001Code};
+
+fn typed_playback(transcript: &str) -> Playback<'_> {
+    parse_assertion_playback(
+        transcript,
+        "corpus-replay-test",
+        "corpus",
+        usize::MAX,
+        usize::MAX,
+    )
+    .expect("the complete assertion playback parses")
+}
 
 /// A generated case can carry only an expectation; it has no run-authenticated
 /// Kani outcome that the public terminal mapper could certify before Kani runs.
@@ -499,7 +510,7 @@ fn tc_023_real_corpus_playback_replays_through_its_qsl_source() {
         let playback = falsification_playback(classify_corpus(&case, harness_filter));
         assert_eq!(
             case.replay_counterexample(
-                &playback,
+                &typed_playback(&playback),
                 quire_contract_codegen::WitnessDecodeLimits {
                     bytes: playback.len(),
                     values: 0
@@ -537,7 +548,7 @@ fn tc_026_corpus_replay_refuses_poisoned_suffixes_at_both_decode_bounds() {
     let playback = falsification_playback(classify_corpus(&case, "corpus_case_collection"));
     assert_eq!(
         case.replay_counterexample(
-            &playback,
+            &typed_playback(&playback),
             quire_contract_codegen::WitnessDecodeLimits {
                 bytes: playback.len(),
                 values: 0
@@ -546,10 +557,10 @@ fn tc_026_corpus_replay_refuses_poisoned_suffixes_at_both_decode_bounds() {
         .unwrap(),
         ReplayVerdict::Reproduced,
     );
-    let poisoned = format!("{playback}{playback}");
+    let poisoned = format!("{playback}\ntrailing captured output");
     let verdict = case
         .replay_counterexample(
-            &poisoned,
+            &typed_playback(&poisoned),
             quire_contract_codegen::WitnessDecodeLimits {
                 bytes: playback.len(),
                 values: 0,
@@ -563,26 +574,22 @@ fn tc_026_corpus_replay_refuses_poisoned_suffixes_at_both_decode_bounds() {
     ));
     let control = case
         .replay_counterexample(
-            &poisoned,
+            &typed_playback(&poisoned),
             quire_contract_codegen::WitnessDecodeLimits {
                 bytes: poisoned.len(),
                 values: 0,
             },
         )
-        .expect("duplicate assertion yields a decode verdict");
-    assert!(matches!(
-        control,
-        ReplayVerdict::EvidenceFailure(quire_contract_codegen::EvidenceFailureCause::Decode(ref cause))
-        if cause.code == "kani_witness_multiple_assertions_refused"
-    ));
+        .expect("the complete source fits the byte bound");
+    assert_eq!(control, ReplayVerdict::Reproduced);
     let poisoned_value = playback.replace(
         "let concrete_vals: Vec<Vec<u8>> = vec![\n    ];",
-        "let concrete_vals: Vec<Vec<u8>> = vec![\n        // 0\n        vec![not_a_byte],\n    ];",
+        "let concrete_vals: Vec<Vec<u8>> = vec![\n        // 0\n        vec![0, 0, 0, 0, 0, 0, 0, 0],\n    ];",
     );
     assert_ne!(poisoned_value, playback);
     let verdict = case
         .replay_counterexample(
-            &poisoned_value,
+            &typed_playback(&poisoned_value),
             quire_contract_codegen::WitnessDecodeLimits {
                 bytes: poisoned_value.len(),
                 values: 0,
@@ -596,17 +603,17 @@ fn tc_026_corpus_replay_refuses_poisoned_suffixes_at_both_decode_bounds() {
     ));
     let control = case
         .replay_counterexample(
-            &poisoned_value,
+            &typed_playback(&poisoned_value),
             quire_contract_codegen::WitnessDecodeLimits {
                 bytes: poisoned_value.len(),
                 values: 1,
             },
         )
-        .expect("invalid byte yields a decode verdict");
+        .expect("extra value yields a decode verdict");
     assert!(matches!(
         control,
         ReplayVerdict::EvidenceFailure(quire_contract_codegen::EvidenceFailureCause::Decode(ref cause))
-        if cause.code == "kani_witness_byte_invalid"
+        if cause.code == "kani_witness_arity_mismatch"
     ));
 }
 

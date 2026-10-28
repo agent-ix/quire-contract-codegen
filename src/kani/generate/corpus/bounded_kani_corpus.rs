@@ -922,10 +922,18 @@ mod tests {
              }}\n",
             case.harness_symbol.as_str()
         );
+        let parsed = crate::kani::output::playback::parse_assertion_playback(
+            &transcript,
+            case.harness_symbol.as_str(),
+            "corpus",
+            usize::MAX,
+            usize::MAX,
+        )
+        .unwrap();
         assert!(case
-            .replay_rejects_other_case_package(&transcript, &cases[1])
+            .replay_rejects_other_case_package(&parsed, &cases[1])
             .unwrap());
-        assert!(case.replay_rejects_wrong_harness(&transcript).unwrap());
+        assert!(case.replay_rejects_wrong_harness(&parsed).unwrap());
     }
 
     /// Owner serializers supply each value; the input projection
