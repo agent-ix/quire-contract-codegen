@@ -15,8 +15,8 @@ use std::cell::RefCell;
 use qsl_replay::{
     replay_state_clause, CallSiteRefusal, ClauseName, ClauseSelectionInput, DisagreementCause,
     DomainKey, DomainKind, EvaluatedValue, FiniteBound, Identifier, Integer, ReplayRequestWire,
-    ReplayResult, ReplaySource, ReplayTargetMembers, StateClauseReplayResult, TerminalValue,
-    Verdict, WireNodeId, WitnessEnvelope, WitnessPacket, WitnessRefusal, WitnessSettlement,
+    ReplayResult, ReplayTargetMembers, StateClauseReplayResult, TerminalValue, Verdict, WireNodeId,
+    WitnessEnvelope, WitnessPacket, WitnessRefusal, WitnessSettlement,
 };
 use quire_contract_codegen::{
     parse_state_clause_falsification, run_terminal_value, DocumentLabel, KaniRunOutcome,

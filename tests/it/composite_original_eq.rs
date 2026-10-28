@@ -10,9 +10,8 @@ use qsl_replay::{
     compile_package, parity_obligation, DependencyInput, DigestDomain, DigestRecord, Domain,
     DomainKey, DomainKind, EqualityOperator, FiniteBound, InconclusiveCause, Integer,
     OperandIdentity, ParityBoundRefusal, ProofBound, Refinement, ReplayLimits, ReplayRefusal,
-    ReplayRequest, ReplaySource, ReplayTarget, ScalarIdentityMismatch, ScalarLimits,
-    SourceIdentity, StageLimits, SuppliedLibrary, TerminalValue, VerifiedShadow,
-    VerifiedShadowResult, WireNodeId,
+    ReplayRequest, ReplayTarget, ScalarIdentityMismatch, ScalarLimits, SourceIdentity, StageLimits,
+    SuppliedLibrary, TerminalValue, VerifiedShadow, VerifiedShadowResult, WireNodeId,
 };
 use quire_contract_codegen::{
     CompositeBuildError, CompositePacketMember, DependencyLock, LockedSource,
