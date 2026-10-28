@@ -809,11 +809,13 @@ post-parse identity and limit checks. The existing non-falsified-run test moves
 to the helper's pre-parse boundary. Function replay now accepts parsed `Playback` at every public
 and helper entry and independently rechecks its byte and value limits before native execution.
 The free function path uses the package's proving-run limits; the corpus method uses its required
-caller-supplied limits. No production function replay caller currently performs the bounded parse
-of complete retained text before this typed entry. That caller integration remains an L-6 residual,
-alongside frame replay's text intake.
-The removal of IR's witness-accessor re-parse (IR-277) is
-on IR's side: CG imports no IR witness type already (AD-001), so nothing in CG depends on those
+caller-supplied limits. Existing function replay test callers parse the complete retained text once
+under finite byte and value limits before passing `Playback` to the typed entry, retaining
+`source_len` for replay's independent byte check. The CG function replay boundary is complete.
+IR-1106 owns the later production intake in quire-driver, which currently stops at generation;
+that external integration is not evidence of a CG production caller today. Frame replay retains
+its separate L-6 residual below. The removal of IR's witness-accessor re-parse (IR-277) is on IR's
+side: CG imports no IR witness type already (AD-001), so nothing in CG depends on those
 accessors. Batching (IR-277) touches `run/` only, plus the keyed parse above.
 
 ### One input model
@@ -961,16 +963,15 @@ requirement is authored.
   `RenderedValue`. The output reader supplies `CounterexamplePlayback` for classification and
   typed entries for witness decoding. Function replay entries now accept parsed `Playback` and
   recheck its byte and value bounds before decoding. `replay/function.rs` no longer reads Kani
-  output text. No production function replay caller supplies a bounded parse from the retained
-  counterexample yet. Public frame replay entries still accept transcript text and call the output
-  parser before decoding. The state-clause L-6 slice makes its decode entry take parsed
+  output text. Test callers perform the bounded parse of the complete retained counterexample;
+  IR-1106 owns production driver intake. Public frame replay entries still accept transcript text
+  and call the output parser before decoding. The state-clause L-6 slice makes its decode entry take parsed
   `Playback` from `kani/output/playback.rs`
   through `kani/classify.rs::parse_state_clause_falsification` after that helper's
   falsified-run check and bounded parse. It retains harness identity,
   selected clause, generated postcondition assertion, property and state-field draw-order
-  checks before binding values. L-6 remains partial until function replay has a production caller
-  that performs the bounded parse and frame replay takes parsed playback at its boundary, as
-  itemized under Interim exceptions.
+  checks before binding values. CG's function replay boundary is complete; L-6 remains partial
+  until frame replay takes parsed playback at its boundary, as itemized under Interim exceptions.
 - L-7. The report path is `<target-dir>/quire-kani-report-<pid>-<seq>.json`, unique to the launch,
   removed only by its own run before launch and after reading, and absent from every
   `ArtifactBundle`. Test: a stand-in launcher that leaves another run's report, and concurrent
@@ -1498,7 +1499,6 @@ Each is a place where the target of this AD is not yet true, stated so that no s
 
 | Exception | Where | Removed by |
 | --- | --- | --- |
-| No production function replay caller performs a bounded parse of the complete retained counterexample before invoking the typed replay entry | The intended driver integration outside this crate; `replay/function.rs` itself accepts only `Playback` | Function replay driver integration must pass the complete retained counterexample through `kani/output/playback.rs` under caller and run bounds before replay |
 | The public frame replay input carries transcript text, which `FrameReplay::new` passes to the parser through `decoded_state` | `replay/frame.rs`, `FrameReplayInputs::playback`, `FrameReplay::new` and `decoded_state` | IR-348 step 5 completion: pass typed `Playback` at `FrameReplayInputs::playback` and through its helpers |
 | `validate_dependencies` and the diagnostic type it returns | `kani/generate/census_validation.rs` | 4g or the V2 census input; `deterministic_json` was already deleted by PR #356 |
 | The frame family still renders its own template | `kani/generate/frame.rs` | IR-1084 ports frame rendering to `HarnessSpec` and `render.rs` after CG #608 / IR-1079 and the remaining frame L-6 slice; separate from step 4d's V2 census work |

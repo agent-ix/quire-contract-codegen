@@ -74,6 +74,11 @@ const UNLIMITED: ScalarLimits = ScalarLimits {
     result_units: u64::MAX,
 };
 
+const FUNCTION_PLAYBACK_LIMITS: WitnessDecodeLimits = WitnessDecodeLimits {
+    bytes: 4096,
+    values: 2,
+};
+
 fn locked(identity: &str, bytes: &[u8]) -> LockedSource {
     LockedSource {
         authority: AUTHORITY.to_owned(),
@@ -88,7 +93,7 @@ fn locked(identity: &str, bytes: &[u8]) -> LockedSource {
 /// proving run carries limits.
 fn inputs(source: &str, dependencies: Vec<DependencyLock>) -> ReplayInputs {
     ReplayInputs {
-        decode_limits: crate::unbounded_decode_limits(),
+        decode_limits: FUNCTION_PLAYBACK_LIMITS,
         source: locked(IDENTITY, source.as_bytes()),
         dependencies,
         accounting_limits: UNLIMITED,
@@ -1129,14 +1134,14 @@ fn identity_fixture(kind: ObligationKind, clause: &str, line: u32) -> KaniObliga
     }
 }
 
-/// Parses a complete synthetic transcript for typed replay tests that exercise decode bounds.
+/// Parses a complete synthetic transcript under the same finite limits as the replay package.
 fn typed_playback(transcript: &str) -> Playback<'_> {
     parse_assertion_playback(
         transcript,
         "function-replay-test",
         "function",
-        usize::MAX,
-        usize::MAX,
+        FUNCTION_PLAYBACK_LIMITS.bytes,
+        FUNCTION_PLAYBACK_LIMITS.values,
     )
     .expect("the complete assertion playback parses")
 }
@@ -1244,7 +1249,7 @@ fn tc_026_function_replay_refuses_poisoned_suffixes_at_both_decode_bounds() {
                 "        // 0\n        vec![0, 0, 0, 0, 0, 0, 0, 0],\n    ];",
             ),
             WitnessDecodeLimits {
-                bytes: usize::MAX,
+                bytes: FUNCTION_PLAYBACK_LIMITS.bytes,
                 values: 2,
             },
             "cg_witness_decode_values_limit",
@@ -1264,8 +1269,21 @@ fn tc_026_function_replay_refuses_poisoned_suffixes_at_both_decode_bounds() {
                 .as_str(),
             code
         );
+        // A wider but finite caller parse isolates replay's independent limit check.
+        let wider_limits = WitnessDecodeLimits {
+            bytes: poisoned.len(),
+            values: 3,
+        };
+        let parsed = parse_assertion_playback(
+            &poisoned,
+            harness.harness_symbol.as_str(),
+            harness.module_symbol.as_str(),
+            wider_limits.bytes,
+            wider_limits.values,
+        )
+        .expect("the complete transcript parses under wider finite limits");
         let package = make_package(limits);
-        let verdict = replay_counterexample(&harness, &typed_playback(&poisoned), &package)
+        let verdict = replay_counterexample(&harness, &parsed, &package)
             .expect("over-bound evidence yields a verdict");
         assert!(
             matches!(
@@ -1275,11 +1293,10 @@ fn tc_026_function_replay_refuses_poisoned_suffixes_at_both_decode_bounds() {
             ),
             "{verdict:?}"
         );
-        let through =
-            replay_counterexample_through(&harness, &typed_playback(&poisoned), &package, |_| {
-                panic!("over-bound playback must not reach the executor")
-            })
-            .expect("over-bound evidence yields a verdict");
+        let through = replay_counterexample_through(&harness, &parsed, &package, |_| {
+            panic!("over-bound playback must not reach the executor")
+        })
+        .expect("over-bound evidence yields a verdict");
         assert!(
             matches!(
                 through,
@@ -1288,11 +1305,8 @@ fn tc_026_function_replay_refuses_poisoned_suffixes_at_both_decode_bounds() {
             ),
             "{through:?}"
         );
-        let unbounded = make_package(WitnessDecodeLimits {
-            bytes: poisoned.len(),
-            values: 3,
-        });
-        let control = replay_counterexample(&harness, &typed_playback(&poisoned), &unbounded)
+        let wider = make_package(wider_limits);
+        let control = replay_counterexample(&harness, &parsed, &wider)
             .expect("poisoned suffix produces a decode verdict");
         if code == "cg_witness_decode_bytes_limit" {
             assert_eq!(control, ReplayVerdict::Reproduced);
@@ -1428,8 +1442,8 @@ fn tc_026_malformed_counterexamples_stop_at_output_or_decode() {
         "not a playback block",
         "function-replay-test",
         "function",
-        usize::MAX,
-        usize::MAX,
+        "not a playback block".len(),
+        FUNCTION_PLAYBACK_LIMITS.values,
     );
     assert_eq!(
         missing
