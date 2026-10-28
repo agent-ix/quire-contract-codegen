@@ -46,14 +46,17 @@ until specified.
   in-domain census from [FR-010](./FR-010-domain-boundary-campaigns.md).
 - The selected claim's V2 comparison oracle (FR-008), embedded in the same bundle; no V1 bound
   oracle generation output is an input.
+- Planned (IR-1072): a V2 selected-claim entry request holds one admitted `CheckedPackageV2` and
+  the complete claim key: checked clause id, claim owner node id, and authentic `claim`
+  `CheckedOccurrence`. The owner is part of that key; the caller supplies no second owner field.
 - Planned (IR-1013, FR-058): one admitted `CheckedPackageV2`, the selected checked clause id, and
   that clause's authentic `claim` `CheckedOccurrence`. Together they select one accepted QSL
-  `ClauseBinding.execution_point`; Contract IR's planned typed accessor returns its owned
+  `ClauseBinding.execution_point`; Contract IR's typed accessor returns its owned
   `CheckedExecutionPoint` (variant and exact nonempty point name) for that package, clause, and
   occurrence. QSpec's V2 `AnchorName` wire domain admits every nonempty string; the checked point
   retains that domain without converting through the legacy `ExecutionPoint<AnchorName>` model
   type, whose identifier validation remains at its own boundary. QSL owns `ClauseBinding`; the
-  current V2 API has no point accessor, and the caller
+  CG's current V2 strategy API has no selected-claim entry, and the caller
   supplies no separate point. The QSL driver supplies the FR-331 bound item for that selected
   `claim`. A process-provider FR-331 frame carries `request.package_id`, which its reader checks
   against the frame's canonical package bytes; CG compares that id with its separately admitted
@@ -79,9 +82,18 @@ until specified.
   `StrategyErrorCode::OwnerIdentityMismatch`, `StrategyErrorCode::UnboundModelElement`, or
   `StrategyErrorCode::InvalidIdentityRendering`, with no artifact.
   QSL `export_bindings` refusals remain with the driver.
+- Planned (IR-1072): the selected-claim entry returns either a typed V2 selection for the exact
+  supplied key or a distinct typed V2 selection diagnostic retaining Contract IR's refusal code,
+  clause id, claim owner id, and occurrence. This entry alone emits no strategy bundle or runner.
 
 ## Behavior
 
+- When a V2 selected-claim request enters CG, the generator shall pass its complete claim key to
+  `CheckedPackageV2::clause_execution_point(&clause_id, (&claim_owner_node_id,
+  &claim_occurrence))` and retain the selected checked point only for that key. If Contract IR
+  refuses the lookup, then the generator shall preserve its refusal code and selected identities in
+  the distinct typed V2 selection diagnostic without publishing an artifact. The generator shall
+  not widen the V1 `StrategyDiagnostic` or infer the owner from the occurrence.
 - The runner shall map an oracle result to a runtime verdict by the selected checked clause's kind
   (the clause kind IR's comparison accessor returns for the selected clause):
   - for a `Precondition` clause, `true` to `Passed` and `false` to `RejectedPrecondition`;
@@ -89,8 +101,9 @@ until specified.
   - for an `Invariant` clause, `true` to `Passed` and `false` to `FailedPostcondition` whose clause
     observation carries the runtime's invariant clause kind, which quire-contract-runtime
     implements but does not yet specify.
-- When a V2 claim is selected, the generator shall call the planned Contract IR FR-058 typed
-  accessor with the admitted package, checked clause id, and selected `claim` occurrence.
+- When a V2 claim is selected, the generator shall call the Contract IR FR-058 typed
+  accessor on the admitted package with the checked clause id and selected owner-bound `claim`
+  occurrence.
 - The generator shall use only the accepted QSL binding point returned for that exact tuple.
 - When generation is requested, CG shall require the selected FR-331 bound item's `claim`
   occurrence to be authentic for the checked clause in the admitted package and shall read every
@@ -216,6 +229,7 @@ producer and artifact association required by FR-004.
 | FR-011-AC-10 | PLANNED. The QSL driver forwards only FR-331 items accepted by `export_bindings`; its `UnknownItem`, `Unbound`, and `Fault` results stay driver-side. An out-of-driver non-claim or absent occurrence returns CG `StrategyErrorCode::MissingClaimOccurrence`, and a selected claim with an unbound referenced model element returns `StrategyErrorCode::UnboundModelElement` naming it. Neither produces an artifact or verdict, and a matched sibling remains unaffected. | Test (TC-020) |
 | FR-011-AC-11 | PLANNED. Malformed, truncated, case-folded, or otherwise noncanonical `qocc2_`/`qpkg2_` text yields `StrategyErrorCode::InvalidIdentityRendering` before bundle publication or verdict/report mutation, without normalization; exact typed or canonical-text comparisons agree on the accepted pair. | Test (TC-020) |
 | FR-011-AC-12 | PLANNED. Repeated numeric runner generation with the same admitted package, selected driver-bound FR-331 claim, checked clause, and campaign policy yields byte-identical source and map. | Test (TC-020) |
+| FR-011-AC-13 | PLANNED (IR-1072). The public V2 selected-claim entry accepts an admitted `CheckedPackageV2` and a typed complete claim key (checked clause id, claim owner node id, authentic `claim` `CheckedOccurrence`) without a second caller-supplied owner; a matching key selects only that claim and its exact checked point. With the same clause and occurrence but a different claim owner, the entry returns a distinct typed V2 diagnostic retaining Contract IR `CheckedExecutionPointRefusal::MissingClaimOccurrence` and the supplied clause, owner, and occurrence, and publishes no artifact. The V1 `BoundPackage` entry and `StrategyDiagnostic` are unchanged. | Test |
 
 ## Open Questions
 
