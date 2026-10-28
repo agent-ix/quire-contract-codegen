@@ -1614,9 +1614,42 @@ fn feasible_ordered_set_emits_symbolic_ordered_unique_slots() {
         .contains("for prior in 0..index"));
 }
 
-#[trace("FR-015-AC-97", "FR-015-AC-102", "TC-025")]
+#[trace("FR-015-AC-96", "TC-025")]
 #[test]
-fn ordered_set_shape_is_refused_without_erasing_its_uniqueness_semantics() {
+fn boolean_ordered_set_keeps_both_values_and_distinct_active_slots() {
+    let mut document = model_document();
+    let node = document["types"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|ty| ty.get("identity").and_then(Value::as_str) == Some(NODE_ID))
+        .unwrap();
+    let flags = node["fields"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|field| field.get("name").and_then(Value::as_str) == Some("flags"))
+        .unwrap();
+    flags["multiplicity"]["unique"] = json!(true);
+    let fixture = emitted_from_document_and_body(
+        document,
+        "forall(flag in deref(input).flags: flag != false)",
+    );
+    let harness = collection_harness(&fixture, "quire.op.collection.forall");
+    assert_eq!(
+        harness.identity.collection_kind,
+        CollectionKindIdentity::OrderedSet
+    );
+    assert_eq!(harness.identity.maximum_length, 2);
+    assert_eq!(harness.identity.element, CollectionElementIdentity::Boolean);
+    let source = &harness.rust.contents;
+    assert!(source.contains("let selected_flags: [bool; 2] = kani::any();"));
+    assert!(source.contains("kani::assume(item != selected_flags[prior as usize]);"));
+    assert!(source.contains("let item = selected_flags[index as usize];"));
+}
+
+#[test]
+fn ordered_set_over_capacity_keeps_the_existing_typed_refusal_without_a_harness() {
     let mut document = model_document();
     let node = document["types"]
         .as_array_mut()
