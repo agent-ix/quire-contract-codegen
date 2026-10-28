@@ -68,6 +68,43 @@ body, malformed or absent selected declaration, and an over-ceiling domain.
 Check typed `requires_bound` versus `unsupported`, no emitted harness for each
 refusal, and one disposition per item in a mixed request.
 
+For FR-015-AC-96 (IR-1091, pending owner decision), use QSL-emitted,
+IR-admitted unique Boolean and bounded `IntRange` fields after the applicable
+form, empty-domain, representation, unwind and memory checks pass. A feasible
+unique maximum equal to its distinct-value capacity retains both cardinality
+endpoints and every distinct-value/order assumption. With the same adequate
+ceilings, a maximum one above capacity settles `unsupported` with
+`UniqueElementCapacityExceeded` naming the capacity and declared maximum,
+with no harness or proof credit even when the minimum is at most capacity;
+it is not an invalid-model or invalid-package result. Set the minimum above
+capacity and require the same typed refusal, not a shortened maximum or a
+vacuous proof. Keep a comparable non-unique field eligible for its full
+maximum. Check Boolean capacity `2` and an inclusive bounded `IntRange` capacity.
+
+At the capacity decision boundary, use a property over representable `i64`
+endpoints and declared `u64` maxima with an independent widened-integer oracle:
+refuse exactly when `maximum > upper - lower + 1` for nonempty `IntRange`, and
+when `maximum > 2` for Boolean, after the earlier checks pass. Cover a
+single-value interval, negative endpoints, maximum below/equal/above capacity,
+and the full `i64::MIN..=i64::MAX` interval whose capacity is `2^64`; the
+full-width case must not overflow or falsely refuse a `u64` maximum. Exercise
+small admitted fixtures end to end; the full-width capacity arithmetic can be
+checked before rendering without allocating an enormous symbolic array.
+
+For precedence, separately pair a unique maximum above the mathematical
+capacity with an unsupported collection form, an unrepresentable endpoint,
+insufficient unwind, and insufficient memory. Use an empty `IntRange` with a
+positive declared maximum as its own case; it has no distinct-value capacity.
+Require the existing
+`UnsupportedFieldType`, `UnsatisfiableElementDomain`,
+`DomainNotRepresentableInI64`, `UnwindBelowCollectionBound`, and
+`SymbolicDomainExceedsMemoryCeiling` reasons respectively, each with no
+harness; the representability, unwind and memory controls are three distinct
+FR-015-AC-101 checks, not one disjunctive control. The current
+`ordered_set_shape_is_refused_without_erasing_its_uniqueness_semantics`
+control establishes only the present unsupported-form behavior; it does not
+back the new capacity-refusal or feasible-unique obligations.
+
 Change one selected field bound, claim, subject and unwind separately to check
 identity changes; repeat equal inputs for byte identity. Compare recorded
 identity domains and complete ordered options with generated source and FR-017
