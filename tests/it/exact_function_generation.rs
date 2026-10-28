@@ -2117,17 +2117,6 @@ fn tc_031_ac33_direct_unsupported_item_keeps_identity_and_healthy_function(
         (
             ClaimDisposition::Refused {
                 refusal:
-                    ExactFunctionRefusal::BlockedOnUpstream {
-                        unsupported_node_id,
-                        node_tag: "temporal",
-                        issue: UpstreamBlocker::QuireSpecLanguage121,
-                    },
-            },
-            "temporal",
-        ) => assert_eq!(unsupported_node_id, &requested_id),
-        (
-            ClaimDisposition::Refused {
-                refusal:
                     ExactFunctionRefusal::Unsupported {
                         unsupported_node_id,
                         node_tag,
@@ -2188,7 +2177,8 @@ fn tc_031_ac33_direct_case_call_node_is_unsupported() {
     );
 }
 
-/// A reader-admitted fairness root keeps its request identity, refuses with the temporal cause, and leaves a supported function sibling byte-identical.
+/// An authenticated fairness root is Unsupported, while its enclosing clause and
+/// the same root after a plain V1 read retain the QSL-121 blocker.
 #[trace("FR-021-AC-33", "TC-031")]
 #[test]
 fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
@@ -2388,6 +2378,7 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
         other => panic!("candidate must be admitted by public CheckedPackageV2::read: {other:?}"),
     };
     let fairness_id = ids.resolve(&fairness_placeholder);
+    let clause_id = ids.resolve(&id(&clause_digest));
     let model_id = ids.resolve(&id(&model_placeholder));
     let body_id = ids.resolve(&code_id(FUNCTION_BODY));
     let call_id = ids.resolve(&code_id(HEALTHY_CALL));
@@ -2426,12 +2417,22 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
         function: "healthy_fairness_sibling".into(),
         argument_node_ids: vec![parameter_id.clone(), parameter_id.clone()],
     };
+    let clause_item = ExactFunctionItem {
+        call_node_id: clause_id.clone(),
+        function: "healthy_fairness_sibling".into(),
+        argument_node_ids: direct_item.argument_node_ids.clone(),
+    };
     let healthy_item = ExactFunctionItem {
         call_node_id: call_id.clone(),
         function: "healthy_fairness_sibling".into(),
         argument_node_ids: vec![parameter_id.clone(), parameter_id],
     };
-    let mut roots = vec![body_id.clone(), fairness_id.clone(), call_id.clone()];
+    let mut roots = vec![
+        body_id.clone(),
+        fairness_id.clone(),
+        clause_id.clone(),
+        call_id.clone(),
+    ];
     roots.sort();
     let position = |id: &quire_contract_model::CheckedNodeId| {
         roots.iter().position(|root| root == id).unwrap()
@@ -2443,15 +2444,19 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
         &requests,
         &[position(&body_id)],
         std::slice::from_ref(&function),
-        &[position(&fairness_id), position(&call_id)],
-        &[direct_item, healthy_item.clone()],
+        &[
+            position(&fairness_id),
+            position(&clause_id),
+            position(&call_id),
+        ],
+        &[direct_item.clone(), clause_item, healthy_item.clone()],
     )
     .unwrap();
     let healthy_only = generate_exact_function_oracles(
         &contract,
         &requests,
         &[position(&body_id)],
-        &[function],
+        std::slice::from_ref(&function),
         &[position(&call_id)],
         &[healthy_item],
     )
@@ -2474,6 +2479,67 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
         ),
         "direct result: {:?}",
         direct.result
+    );
+    let clause = combined
+        .claim_map
+        .items
+        .iter()
+        .find(|claim| claim.node_id == clause_id)
+        .expect("temporal clause claim retains requested identity");
+    assert!(
+        matches!(
+            &clause.result,
+            ClaimDisposition::Refused {
+                refusal: ExactFunctionRefusal::BlockedOnUpstream {
+                    node_tag: "temporal",
+                    issue: UpstreamBlocker::QuireSpecLanguage121,
+                    ..
+                }
+            }
+        ),
+        "clause result: {:?}",
+        clause.result
+    );
+    let plain = match quire_contract_model::ContractPackageWireV1::read(
+        &quire_canonical::to_vec(
+            &serde_json::to_value(contract.wire()).expect("project admitted V1 wire"),
+            quire_canonical::Limits::new(1 << 20),
+        )
+        .expect("encode canonical admitted V1 wire"),
+        quire_contract_model::CheckedPackageReadLimits::bounded(),
+        &quire_contract_model::ContractDependencies::new(),
+    ) {
+        quire_contract_model::ContractPackageReadResult::Admitted(package) => *package,
+        other => panic!("plain V1 read admits the same wire: {other:?}"),
+    };
+    let plain_oracles = generate_exact_function_oracles(
+        &plain,
+        &requests,
+        &[position(&body_id)],
+        std::slice::from_ref(&function),
+        &[position(&fairness_id)],
+        &[direct_item],
+    )
+    .unwrap();
+    let plain_direct = plain_oracles
+        .claim_map
+        .items
+        .iter()
+        .find(|claim| claim.node_id == fairness_id)
+        .expect("plain-read fairness claim retains requested identity");
+    assert!(
+        matches!(
+            &plain_direct.result,
+            ClaimDisposition::Refused {
+                refusal: ExactFunctionRefusal::BlockedOnUpstream {
+                    node_tag: "temporal",
+                    issue: UpstreamBlocker::QuireSpecLanguage121,
+                    ..
+                }
+            }
+        ),
+        "plain-read direct result: {:?}",
+        plain_direct.result
     );
     let generated = combined
         .claim_map

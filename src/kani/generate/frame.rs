@@ -872,6 +872,8 @@ pub(crate) fn field_range(
             | CheckedMemberType::Float32
             | CheckedMemberType::Float64
             | CheckedMemberType::String
+            | CheckedMemberType::Bytes
+            | CheckedMemberType::JsonObject
             | CheckedMemberType::TextBounds { .. }
             | CheckedMemberType::Uuid
             | CheckedMemberType::Timestamp

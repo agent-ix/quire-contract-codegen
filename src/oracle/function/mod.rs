@@ -146,12 +146,12 @@ use crate::oracle::equality::EqualityOperatorKind;
 use crate::oracle::operator_catalog::IntegerOperator;
 use crate::oracle::{classify_lowering_failure, direct_unsupported_form, LoweringFailure};
 use quire_contract_model::{
-    ApplicationOperator, CheckedNodeId, CheckedNodeTag, CheckedPackageIncomplete,
+    ApplicationOperator, CheckedNodeId, CheckedNodeKind, CheckedNodeTag, CheckedPackageIncomplete,
     CheckedPackageReadLimits, CheckedPackageRefusal, CheckedPackageV2, CheckedSemanticId,
     CheckedSemanticNodeV2, CheckedSourceMapEntry, CheckedTerm, CompleteLoweringProfileV2,
     CompleteLoweringRecordV2, ContractDependencies, ContractFeatureRecordV1,
     ContractPackageReadResult, ContractPackageV1, ContractPackageWireV1, ContractReachedClosureV1,
-    LiteralKind,
+    LiteralKind, TemporalForm,
 };
 use quire_contract_runtime::exact as rt;
 use quire_exact::{self as exact, Outcome, Refusal};
@@ -2998,20 +2998,46 @@ pub fn generate_exact_function_oracles(
             let admitted = accounting
                 .at(position, &item.call_node_id)
                 .map_err(OracleGenerationError::PackageRequest)?;
-            match item_disposition(
-                &names,
-                &resolved,
-                &survivor_index,
-                &package_refusal,
-                (package, &source_index),
-                item,
-                admitted,
-            ) {
-                Ok((stem, claim, declaration)) => {
-                    pending.push((claims.len(), stem, key.clone(), declaration));
-                    ClaimDisposition::Generated(Box::new(claim))
+            if let (
+                Ok(Some(CheckedNodeKind::Temporal(TemporalForm::Formula | TemporalForm::Fairness))),
+                PackageItem::Refused {
+                    record:
+                        ContractFeatureRecordV1::Unsupported {
+                            unsupported_node_id,
+                            node_tag,
+                            ..
+                        },
+                    ..
+                },
+            ) = (package.unsupported_source_kind_at(position), &admitted)
+            {
+                // V1 excludes refused roots from its represented graph. The
+                // source-authenticated root kind distinguishes a direct
+                // fairness/formula request from a temporal clause. Keep the
+                // IR record's first unsupported reachable node and tag.
+                ClaimDisposition::Refused {
+                    refusal: ExactFunctionRefusal::Unsupported {
+                        unsupported_node_id: unsupported_node_id.clone(),
+                        node_tag: CheckedNodeTag::from_wire(node_tag.as_ref())
+                            .map_or("unknown", CheckedNodeTag::as_wire),
+                    },
                 }
-                Err(refusal) => ClaimDisposition::Refused { refusal },
+            } else {
+                match item_disposition(
+                    &names,
+                    &resolved,
+                    &survivor_index,
+                    &package_refusal,
+                    (package, &source_index),
+                    item,
+                    admitted,
+                ) {
+                    Ok((stem, claim, declaration)) => {
+                        pending.push((claims.len(), stem, key.clone(), declaration));
+                        ClaimDisposition::Generated(Box::new(claim))
+                    }
+                    Err(refusal) => ClaimDisposition::Refused { refusal },
+                }
             }
         };
         claims.push(ExactFunctionClaim {
