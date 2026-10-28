@@ -2352,18 +2352,18 @@ fn tc_024_ac44_direct_temporal_formula_is_unsupported() {
         .any(|claim| matches!(claim.result, ClaimDisposition::Generated(_))));
 }
 
-/// FR-014-AC-7 uses an admitted protocol clause because the scalar corpus's
+/// FR-014-AC-7 uses an admitted protocol obligation because the scalar corpus's
 /// former unary application is no longer a valid protocol body in Contract IR.
 #[trace("FR-014-AC-7", "TC-024")]
 #[test]
-fn tc_024_admitted_protocol_clause_is_unsupported() {
+fn tc_024_admitted_protocol_node_is_unsupported() {
     let package = qspec_package("positive-all-families.json");
     let node = package
         .graph()
         .nodes
         .iter()
-        .find(|node| node.semantic_form.as_ref() == "protocol_clause")
-        .expect("QSpec fixture has an admitted protocol clause");
+        .find(|node| node.semantic_form.as_ref() == "obligation")
+        .expect("QSpec fixture has an admitted protocol obligation");
     let requested_id = node.node_id.clone();
     let oracles = generate_exact_scalar_oracles(
         &package,
@@ -2387,9 +2387,7 @@ fn tc_024_admitted_protocol_clause_is_unsupported() {
     else {
         panic!("expected typed protocol refusal, got {:?}", claim.result);
     };
-    assert!(package.graph().nodes.iter().any(|node| {
-        node.node_id == *unsupported_node_id && node.node_tag.as_ref() == "protocol"
-    }));
+    assert_eq!(unsupported_node_id, &requested_id);
     assert!(!contents(&oracles, "src/lib.rs").contains(requested_id.digest.as_ref()));
 }
 

@@ -55,10 +55,7 @@ impl<'g> ClauseGraphView<'g> {
         if self.kind(anchor)? != CheckedNodeKind::State(StateForm::OperationAnchor) {
             return None;
         }
-        let CheckedTerm::OperationAnchorBody(body) = self.term(anchor)? else {
-            return None;
-        };
-        let members = &body.members;
+        let members = unpointed_anchor_members(self.term(anchor)?)?;
         let [context, operation, frame] =
             bound_members(members, ["context", "operation", "frame"])?;
         let object = reference(context)?.clone();
@@ -73,6 +70,13 @@ impl<'g> ClauseGraphView<'g> {
             frame,
         })
     }
+}
+
+fn unpointed_anchor_members(term: &CheckedTerm) -> Option<&[CheckedTerm; 3]> {
+    let CheckedTerm::OperationAnchorBody(body) = term else {
+        return None;
+    };
+    body.execution_point.is_none().then_some(&body.members)
 }
 
 /// A term resolved to the node holding it, if it names one.
@@ -126,6 +130,31 @@ pub(crate) fn parameter_references(term: &CheckedTerm) -> Option<Vec<CheckedNode
 
 #[cfg(test)]
 mod tests {
+    use super::unpointed_anchor_members;
+    use quire_contract_model::{
+        CheckedOperationAnchorBody, CheckedTerm, ExecutionPoint, ExecutionPointName,
+    };
+
+    /// Trace: AD-004 L-8.
+    #[test]
+    fn pointed_operation_anchor_is_not_a_frame_scope() {
+        let members = std::array::from_fn(|_| CheckedTerm::aggregate(Vec::new()));
+        let point = ExecutionPoint::Pre {
+            operation: ExecutionPointName::new("deposit").expect("nonempty point name"),
+        };
+        let pointed = CheckedTerm::OperationAnchorBody(Box::new(CheckedOperationAnchorBody {
+            members: members.clone(),
+            execution_point: Some(point),
+        }));
+        assert!(unpointed_anchor_members(&pointed).is_none());
+
+        let unpointed = CheckedTerm::OperationAnchorBody(Box::new(CheckedOperationAnchorBody {
+            members,
+            execution_point: None,
+        }));
+        assert!(unpointed_anchor_members(&unpointed).is_some());
+    }
+
     #[test]
     fn function_oracle_reads_operation_identity_through_core_ir() {
         let source = include_str!("../../oracle/function/mod.rs");

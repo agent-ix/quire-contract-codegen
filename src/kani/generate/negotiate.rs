@@ -74,7 +74,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use quire_contract_model::{
     CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticId, CheckedSemanticNodeV2,
-    CheckedSourceMapEntry, CheckedTerm, ContractPackageV1,
+    CheckedSourceMapEntry, CheckedTerm, ContractPackageV1, StateClauseKind,
 };
 
 use crate::{
@@ -602,13 +602,9 @@ fn classify_v2_clause<'a>(
             _ => None,
         })
         .and_then(|kind| match kind {
-            quire_contract_model::StateClauseKind::Precondition => {
-                Some(ObligationKind::Precondition)
-            }
-            quire_contract_model::StateClauseKind::Postcondition => {
-                Some(ObligationKind::Postcondition)
-            }
-            quire_contract_model::StateClauseKind::Invariant => Some(ObligationKind::Invariant),
+            StateClauseKind::Precondition => Some(ObligationKind::Precondition),
+            StateClauseKind::Postcondition => Some(ObligationKind::Postcondition),
+            StateClauseKind::Invariant => Some(ObligationKind::Invariant),
             _ => None,
         });
     let mut outcome = match graph_node {

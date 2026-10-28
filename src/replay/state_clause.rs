@@ -26,10 +26,11 @@ use std::{collections::BTreeMap, fmt};
 use qsl_replay::{
     call_site, replay_state_clause, CallSiteRefusal, ClauseName, ClauseSelectionInput,
     DeclaredDomain, DigestDomain, DigestRecord, DocumentRef, DomainKey, DomainKind,
-    EmptyQualifiedName, FiniteBound, Integer, MalformedTranscript, OperationName, ProofBound,
-    ProofBoundRefusal, QualifiedName, ReplayRefusal, ReplayRequestWire, ReplayResult, ReplaySource,
-    ReplayTargetMembers, RequestTargetWire, StateClauseCounterexample, StateClauseReplayResult,
-    WireNodeId, WitnessEnvelope, WitnessPacket, WitnessRefusal, WitnessSettlement, WitnessValue,
+    EmptyQualifiedName, EnvelopeSource, FiniteBound, Integer, MalformedTranscript, OperationName,
+    ProofBound, ProofBoundRefusal, QualifiedName, ReplayRefusal, ReplayRequestWire, ReplayResult,
+    ReplaySource, ReplayTargetMembers, RequestTargetWire, StateClauseCounterexample,
+    StateClauseReplayResult, WireNodeId, WitnessEnvelope, WitnessPacket, WitnessRefusal,
+    WitnessSettlement, WitnessValue,
 };
 use quire_canonical::{Encode, FixedShape};
 use quire_contract_model::{CheckedModelFieldsError, CheckedNodeId, CheckedPackageV2};
@@ -701,7 +702,7 @@ impl StateClauseReplay {
             declared_domains: Some(domains),
             backend: Some(wire.backend.clone()),
             trace_position: Some(None),
-            source: Some(qsl_replay::EnvelopeSource::Witness(witness)),
+            source: Some(EnvelopeSource::Witness(witness)),
             family_payload: Some(payload),
         };
         Ok(Self {
