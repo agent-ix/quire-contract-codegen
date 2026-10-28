@@ -254,8 +254,8 @@ required dependency or target path.
      receives credit without the checker-admitted healthy source and actual
      mutated constructor run. TC-057 specifies the
      controls and all nine-cause comparison.
-13. Direct unsupported roots (FR-021-AC-33). Admit formula, fairness and case
-    roots through Contract IR's public V2 reader, using QSpec FR-370/FR-440
+13. Direct unsupported roots (FR-021-AC-11, FR-021-AC-33 and FR-021-AC-41).
+    Admit formula, fairness and case roots through Contract IR's public V2 reader, using QSpec FR-370/FR-440
     for formula/case shapes and Contract IR FR-038-AC-107 for fairness.
     Request each root first as an item's call-node id. For the separate body
     leg, use that root as a declared function's body and supply a distinct,
@@ -271,7 +271,16 @@ required dependency or target path.
     panic or omitted claim, and unchanged healthy claim, schedule source and
     location map. Request a temporal clause whose closure reaches formula or
     fairness as a separate QSL-121 blocker control. Preserve the existing
-    duplicate, capability and lowering precedence cases.
+    duplicate, capability and lowering precedence cases. Lower the direct
+    formula, direct fairness and clause-reaching-fairness requests to canonical
+    V1, then read the same bytes both with `read_with_source` and with plain
+    strict `read`. The authenticated package preserves the direct `Unsupported`
+    and clause QSL-121 outcomes above. For the plain-read package, assert
+    `UnauthenticatedRequestedRootKind { request_index, node_id }` naming the
+    lowest affected request index and its requested root under both item
+    permutations, before any claim map or artifact. A plain-read request with
+    no root-kind-dependent item keeps its existing result. Do not derive the
+    root kind from the first reachable `node_tag` or represented terms.
 14. Public admitted chain (FR-021-AC-34; PLANNED IR-768). Build one authentic
     `CheckedPackageV2` with 129 distinct function declarations, each with two
     bound Integer parameters. Give 128 functions separate admitted `expression`/
@@ -312,8 +321,10 @@ precedence remains testable. Concrete QSL-owner-path compilation and execution
 through FR-485 remain Planned pending IR-595; the QSL API is delivered, and no
 Contract Runtime `exact` path is required.
 
-Direct formula, fairness and case requests have one typed unsupported claim
+Source-authenticated direct formula, fairness and case requests have one typed unsupported claim
 per affected call item, retaining the call request's identity separately from
 the causative node. They add no schedule or location and do not alter the
 healthy function's bytes; the temporal-clause control keeps its QSL-121
-blocker.
+blocker. Plain-read V1 requests needing the temporal requested-root kind
+refuse the whole call with the requested index and root id before output;
+view-independent plain-read requests retain their prior result.
