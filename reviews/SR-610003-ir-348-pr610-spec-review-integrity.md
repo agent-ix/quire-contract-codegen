@@ -106,3 +106,24 @@ and the three committed SR artifacts. L-3 and L-5 stay open, and the L-12 end-st
 `make spec` exits 0. `quire validate --scope .` on AD-004 and the SR files exits 0 (quire 0.36.2,
 engine 0.50.2); its only warnings are the pre-existing FR-017/FR-014 EARS warnings. No Cargo, Kani
 or full gate was run, because this is a spec-only PR.
+
+## Disposition (round 3, exact head 5335c14a4cdbd456ce85c31a12a1d9d536ee97dd)
+
+Reviewer re-check of FND-001 and FND-005 at exact head `5335c14a4cdbd456ce85c31a12a1d9d536ee97dd`
+(on `origin/main` `66a818b863a9b984fc646da4a0779ae9ba3d63f5`), scoped to the fix diff
+`e9ace48e..5335c14a`. Posted to IR-348 as comment `44113ac3-a45e-423a-8e9f-db4dd44bab37`, a reply
+under `b4f81b8b-9c90-4b3d-9942-441651f302dc`. The readback matched byte-for-byte apart from the
+single trailing newline that Linear strips. Verdict: **APPROVED, all five findings fixed.**
+
+| ID | Disposition | Evidence |
+| --- | --- | --- |
+| FND-001 | fixed | The interim `record.rs` row ("not scheduled; `artifact` by step 1a") is deleted. `record.rs` is in the target tree (234), so it is not an interim exception. D-3 (1427-1431) now describes the step-2f placement in past tense and says PR #356 deleted `artifact`, and item-map row 1533 is marked historical. On origin/main `record.rs` defines only `harness_path` and `record`, and `src/` has no `fn artifact(`. The remaining `artifact` mentions (147, 314, 845, 978, 1008, 1398-1399, 1519) are original-state, target, plan or historical move records, not live claims. |
+| FND-002 | fixed (round 2) | Unchanged by this diff. |
+| FND-003 | fixed (round 2) | Unchanged by this diff. |
+| FND-004 | fixed (round 2) | Unchanged by this diff. |
+| FND-005 | fixed | The doubled-"frame" nit is fixed: step 4b now reads "L-3 also needs the IR-1084 frame renderer port". |
+
+No regression and no AC narrowing. `git diff --name-only origin/main...5335c14a` lists only AD-004
+and the three committed SR artifacts. Removing the row drops no obligation, and L-3, L-5 and L-12
+are unchanged. `make spec` exits 0 (quire 0.36.2, engine 0.50.2), with only the pre-existing
+FR-017/FR-014 EARS warnings. No Cargo, Kani or full gate was run, because this is a spec-only PR.
