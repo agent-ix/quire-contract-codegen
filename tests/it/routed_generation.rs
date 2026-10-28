@@ -2234,7 +2234,9 @@ fn tc_033_an_underivable_item_keeps_its_refusal_and_its_siblings_are_unaffected(
 #[trace(
     "FR-014-AC-2",
     "FR-014-AC-51",
+    "FR-014-AC-55",
     "FR-022-AC-11",
+    "FR-022-AC-30",
     "FR-015-AC-15",
     "TC-033"
 )]
@@ -2280,7 +2282,13 @@ fn tc_033_quantity_conversion_has_an_oracle_and_no_harness() {
 }
 
 /// A plain V1 read has the same wire and accounting but lacks authenticated operation views.
-#[trace("FR-014-AC-51", "FR-022-AC-11", "TC-033")]
+#[trace(
+    "FR-014-AC-51",
+    "FR-014-AC-55",
+    "FR-022-AC-11",
+    "FR-022-AC-30",
+    "TC-033"
+)]
 #[test]
 fn tc_033_quantity_conversion_requires_authenticated_operation_views() {
     let derived = derived();
@@ -2320,9 +2328,66 @@ fn tc_033_quantity_conversion_requires_authenticated_operation_views() {
         generate_routed(&plain, &input.positions, &routed, &contexts),
         Err(RoutedGenerationError::UnauthenticatedOperationView {
             request_index: 0,
-            ..
-        })
+            node_id: refused,
+        }) if refused == *node_id
     ));
+}
+
+/// The lowest affected driver index wins even when the caller permutes routed items.
+#[trace("FR-014-AC-55", "FR-022-AC-30", "TC-033")]
+#[test]
+fn tc_033_unauthenticated_view_refusal_uses_lowest_request_index() {
+    let derived = derived();
+    let conversion = derived
+        .quantity_conversions
+        .first()
+        .expect("genuine quantity conversion");
+    let division = &derived
+        .package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| operation_identity(&node.body) == Some("quire.op.integer.div"))
+        .expect("genuine integer division")
+        .node_id;
+    let integer = derived.generated.first().expect("genuine integer add");
+    let routed = [route(0, integer), route(1, division), route(2, conversion)];
+    let input = admitted_routing_input(&derived.package, &routed);
+    let roots = input
+        .positions
+        .iter()
+        .map(|position| position.node_id().clone())
+        .collect::<Vec<_>>();
+    let lowered = derived
+        .package
+        .lower(&roots, &routed_contract_lowering_profile());
+    let plain = match ContractPackageWireV1::read(
+        lowered.package.canonical_bytes().expect("FR-330 bytes"),
+        CheckedPackageReadLimits::bounded(),
+        &ContractDependencies::new(),
+    ) {
+        ContractPackageReadResult::Admitted(package) => package,
+        other => panic!("plain V1 package must admit: {other:?}"),
+    };
+    let contexts = kani_context("crate::subject", 1);
+    let integer_only = generate_routed(&plain, &input.positions, &routed[..1], &contexts)
+        .expect("plain-read integer route keeps its result");
+    assert_eq!(integer_only.items.len(), 1);
+    assert_eq!(integer_only.items[0].request_index, 0);
+    assert!(matches!(
+        kani_parts(&integer_only.items[0].output).0.disposition,
+        ObligationDisposition::Supported { .. }
+    ));
+    for order in [[2, 0, 1], [1, 2, 0]] {
+        let permuted = order.map(|index| routed[index].clone());
+        assert!(matches!(
+            generate_routed(&plain, &input.positions, &permuted, &contexts),
+            Err(RoutedGenerationError::UnauthenticatedOperationView {
+                request_index: 1,
+                node_id,
+            }) if node_id == *division
+        ));
+    }
 }
 
 /// `RoutedGeneration.claim_map` holds the four generated package claims and the
