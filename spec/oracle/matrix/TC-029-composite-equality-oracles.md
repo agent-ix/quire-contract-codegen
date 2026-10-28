@@ -41,7 +41,9 @@ the enum-only owner facade does not excuse dropping it.
    with distinct text profiles, distinct enum declarations, incompatible
    dimensions, distinct units, no common type, a `convert<T>` outside the table,
    a record with a `float64` field nested inside a `sequence`, a `reference`
-   composite form, model, relation, function, `call`, state, temporal and
+   composite whose target is a record value type rather than a permitted model
+   declaration, a valid-target reference equality with an ineligible operand,
+   model, relation, function, `call`, state, temporal and
    protocol nodes, both recursion-rule cycles, an
    unlowered node, a non-`binary` form, a descriptor disagreeing with its
    operand types, one node id repeated under one descriptor, and a request that
@@ -79,6 +81,15 @@ the enum-only owner facade does not excuse dropping it.
    from the generated source, that its siblings are unchanged, and that the
    three upstream blockers (quire-spec-language#120, quire-contract-runtime#34,
    quire-spec-language#121) are distinct values rather than one reason. Assert
+   the invalid-target reference composite is refused at Contract IR's strict
+   reader as `InvalidPackage/InvalidDerivedShape` at its reference type node id;
+   assert the valid-target reference equality's ineligible operand is refused
+   there as `IllTyped/OperatorIneligible` at the offending argument. Neither
+   reader refusal enters CG. Retain the independently admitted reference-bearing
+   record and unchanged healthy sibling. These controls follow Contract IR's
+   `crates/quire-contract-model/src/checked_package/v2/derived_keys.rs:452-475`
+   and `crates/quire-contract-model/src/checked_package/v2/operations.rs:2677-2738`.
+   Assert
    the generated source contains no `unwrap`, `expect`, panicking index or
    charge or pair-count literal, and that the crate manifest declares
    `publish = false` and the runtime dependency (git source, `branch = "main"`, no pinned `rev`)
@@ -550,6 +561,12 @@ Direct formula, fairness and case requests have one typed unsupported claim
 apiece, with request identity distinct from IR's causative node when they
 differ. No refused item contributes source, and the healthy sibling is
 unchanged; the temporal-clause control remains blocked on QSL-121.
+
+The invalid-target reference composite is refused by the strict reader as
+`InvalidPackage/InvalidDerivedShape` at its reference type node id. The
+valid-target ineligible reference equality is refused there as
+`IllTyped/OperatorIneligible` at the offending argument. Neither becomes a CG
+blocker, and the independent admitted reference-bearing record remains admitted.
 
 Every admitted shape and schedule is generated; every refused item is absent
 from the source and carries its own typed reason; bytes are identical across
