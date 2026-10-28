@@ -2388,6 +2388,41 @@ fn check_position(
     Ok(())
 }
 
+/// Preserve an authenticated direct temporal root's unsupported provenance.
+/// The V1 represented graph omits refused roots; a plain V1 read cannot
+/// distinguish a formula or fairness request from a temporal clause.
+fn authenticated_direct_temporal_refusal(
+    package: &ContractPackageV1,
+    position: usize,
+    item: &PackageItem<'_>,
+) -> Option<ExactFunctionRefusal> {
+    if !matches!(
+        package.unsupported_source_kind_at(position),
+        Ok(Some(CheckedNodeKind::Temporal(
+            TemporalForm::Formula | TemporalForm::Fairness
+        )))
+    ) {
+        return None;
+    }
+    let PackageItem::Refused {
+        record:
+            ContractFeatureRecordV1::Unsupported {
+                unsupported_node_id,
+                node_tag,
+                ..
+            },
+        ..
+    } = item
+    else {
+        return None;
+    };
+    Some(ExactFunctionRefusal::Unsupported {
+        unsupported_node_id: unsupported_node_id.clone(),
+        node_tag: CheckedNodeTag::from_wire(node_tag.as_ref())
+            .map_or("unknown", CheckedNodeTag::as_wire),
+    })
+}
+
 fn admitted_binary_body<'a>(
     item: PackageItem<'a>,
     graph: &Graph<'_>,
@@ -2788,6 +2823,11 @@ pub fn generate_exact_function_oracles(
                     capability: capability.clone(),
                 });
             }
+            if let Some(refusal) =
+                authenticated_direct_temporal_refusal(package, position, &admitted)
+            {
+                return Err(refusal);
+            }
             let (closure, _) = admitted_binary_body(admitted, graph)?;
             let body =
                 classify_body_shape(closure.root, graph.term(&closure.root.node_id), declaration)?;
@@ -2998,30 +3038,10 @@ pub fn generate_exact_function_oracles(
             let admitted = accounting
                 .at(position, &item.call_node_id)
                 .map_err(OracleGenerationError::PackageRequest)?;
-            if let (
-                Ok(Some(CheckedNodeKind::Temporal(TemporalForm::Formula | TemporalForm::Fairness))),
-                PackageItem::Refused {
-                    record:
-                        ContractFeatureRecordV1::Unsupported {
-                            unsupported_node_id,
-                            node_tag,
-                            ..
-                        },
-                    ..
-                },
-            ) = (package.unsupported_source_kind_at(position), &admitted)
+            if let Some(refusal) =
+                authenticated_direct_temporal_refusal(package, position, &admitted)
             {
-                // V1 excludes refused roots from its represented graph. The
-                // source-authenticated root kind distinguishes a direct
-                // fairness/formula request from a temporal clause. Keep the
-                // IR record's first unsupported reachable node and tag.
-                ClaimDisposition::Refused {
-                    refusal: ExactFunctionRefusal::Unsupported {
-                        unsupported_node_id: unsupported_node_id.clone(),
-                        node_tag: CheckedNodeTag::from_wire(node_tag.as_ref())
-                            .map_or("unknown", CheckedNodeTag::as_wire),
-                    },
-                }
+                ClaimDisposition::Refused { refusal }
             } else {
                 match item_disposition(
                     &names,

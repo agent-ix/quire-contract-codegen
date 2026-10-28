@@ -1945,10 +1945,9 @@ fn tc_031_ac33_call_claim_retains_identity_and_uses_declared_body_refusal() {
     assert!(matches!(
         disposition_for(&oracles, ITEM_CALL_ADD),
         ClaimDisposition::Refused {
-            refusal: ExactFunctionRefusal::BlockedOnUpstream {
+            refusal: ExactFunctionRefusal::Unsupported {
                 unsupported_node_id,
                 node_tag: "temporal",
-                issue: UpstreamBlocker::QuireSpecLanguage121,
             }
         } if *unsupported_node_id == body_id
     ));
@@ -2518,7 +2517,7 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
         &[position(&body_id)],
         std::slice::from_ref(&function),
         &[position(&fairness_id)],
-        &[direct_item],
+        std::slice::from_ref(&direct_item),
     )
     .unwrap();
     let plain_direct = plain_oracles
@@ -2561,6 +2560,43 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
     );
     assert_eq!(combined.location_map, healthy_only.location_map);
     assert!(!contents(&combined, "src/lib.rs").contains(fairness_id.digest.as_ref()));
+
+    let mut fairness_body = function.clone();
+    fairness_body.name = "fairness_body".into();
+    fairness_body.node_id = fairness_id.clone();
+    let body_call = ExactFunctionItem {
+        call_node_id: call_id.clone(),
+        function: fairness_body.name.clone(),
+        argument_node_ids: direct_item.argument_node_ids.clone(),
+    };
+    let body_oracles = generate_exact_function_oracles(
+        &contract,
+        &requests,
+        &[position(&fairness_id)],
+        &[fairness_body],
+        &[position(&call_id)],
+        &[body_call],
+    )
+    .unwrap();
+    let body_claim = body_oracles
+        .claim_map
+        .items
+        .iter()
+        .find(|claim| claim.node_id == call_id)
+        .expect("distinct call claim retains its own identity");
+    assert!(
+        matches!(
+            &body_claim.result,
+            ClaimDisposition::Refused {
+                refusal: ExactFunctionRefusal::Unsupported {
+                    unsupported_node_id,
+                    node_tag: "temporal",
+                }
+            } if unsupported_node_id == &fairness_id
+        ),
+        "declared fairness body result: {:?}",
+        body_claim.result
+    );
 }
 
 /// FR-021-AC-1 (duplicate handling, matching FR-014/FR-018). One
