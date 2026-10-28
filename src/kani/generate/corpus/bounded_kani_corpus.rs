@@ -38,15 +38,8 @@ use crate::{
 
 /// Stable schema identity for [`CorpusProofDependencyGraph`].
 ///
-/// Deliberately distinct from the V1 bundle's `quire.kani-proof-graph/v2`
-/// ([`crate::kani::generate::v1_bundle::ProofDependencyGraph`], validated against
-/// `schemas/kani-proof-graph-v2.schema.json`): that schema requires a Contract-IR `requirementId`/
-/// `requirementRevision` this corpus's finite-ABI input has no analogue for, and requires a
-/// cargo-kani CLI `options` array of at least fifteen entries that this generator never builds
-/// (`corpus`'s harnesses are plain `#[kani::proof]`, not `#[kani::proof_for_contract]`, and no
-/// unwind/solver/harness-filter option vector is ever assembled for them). Reusing that exact
-/// envelope here would mean fabricating those fields; this schema instead carries only what
-/// [`generate_bounded_kani_corpus_case`] actually derives (ir#80).
+/// This corpus schema carries only the fields that
+/// [`generate_bounded_kani_corpus_case`] actually derives, separate from retired bundle output.
 pub const CORPUS_PROOF_GRAPH_SCHEMA: &str = "quire.kani-corpus-proof-graph/v1";
 
 /// One semantic family represented in the bounded corpus.
@@ -123,8 +116,7 @@ pub struct BoundedCorpusArtifacts {
 /// Carries only what [`generate_bounded_kani_corpus_case`] actually derives: the case's own
 /// `#[kani::proof]` symbol, its semantic family/construct, its case name (the same name its
 /// sibling artifact paths carry), the derived readiness, and the sorted declared
-/// dependency census. See [`CORPUS_PROOF_GRAPH_SCHEMA`] for why this is a distinct envelope from
-/// `src/kani/generate/v1_bundle.rs`'s `quire.kani-proof-graph/v2`.
+/// dependency census. Its schema identity is [`CORPUS_PROOF_GRAPH_SCHEMA`].
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct CorpusProofDependencyGraph {
@@ -402,8 +394,7 @@ pub struct BoundedCorpusCase {
 /// intentionally contains no `kani::assume` call.
 ///
 /// `dependencies` is the caller-declared proof-dependency census for this exact case. It is
-/// validated with the same rules `generate_kani_bundle` applies to its own census
-/// (`crate::kani::generate::census_validation::validate_dependencies`),
+/// validated by `crate::kani::generate::census_validation::validate_dependencies`,
 /// plus a Required-only rule this corpus adds on top: the corpus's generated harnesses are
 /// self-contained by construction (literal operands/edges baked in at generation time, no external
 /// call, no `// proof-dependency-site:` marker, no `kani::assume`, no `#[kani::stub]`), so any

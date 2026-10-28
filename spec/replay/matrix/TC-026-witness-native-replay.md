@@ -106,7 +106,7 @@ whichever QSL meets first; AC-24 is therefore limited to a lock whose only defec
 identity.
 
 FR-016-AC-21 to AC-23 are implemented and tested in the default suite
-(`tests/it/skeleton_spine.rs`, and unit tests in `src/replay/obligation.rs` and
+(`tests/it/skeleton_spine.rs` with a direct test-only identity fixture, and unit tests in `src/replay/obligation.rs` and
 `src/replay/function.rs`): `ReplayPackage::obligation_identity` builds the O-09 function-contract
 digest in `core::canonical` over the `FunctionSite`'s `function` and `declaration`, the harness's
 kind and its arguments ascending by identifier, and `replay_counterexample` puts it in the
@@ -123,13 +123,14 @@ Partial. FR-016-AC-9 through AC-11 are implemented and tested in the default sui
 (`tests/it/skeleton_spine.rs`): a falsifying input replays through
 `qsl_replay::replay` and settles the violation, a witness at which the function
 holds and a healthy twin settle `inconclusive` naming both verdicts, and each
-adapter refusal is its own typed error. The ignored Kani lane (`make kani`, not
-part of `make ci`) replays a real prover counterexample the same way.
+adapter refusal is its own typed error. Its former ignored Kani lane used the retired V1
+`BoundClause` generator and no longer supplies installed-prover evidence. IR-1047 owns the
+genuine V2 generated harness and real-Kani counterexample control for AC-9 and AC-10.
 
 The verdict is tied to the exact witness values, not to any violating input. A twin whose clause
 is false at a single point is reproduced only by the transcript carrying that point, and
 neighbouring points settle `inconclusive` (default suite,
-`tc_026_the_replay_verdict_is_decided_by_the_exact_witness_values`). In the Kani lane the point is
+`tc_026_the_replay_verdict_is_decided_by_the_exact_witness_values`). In the retired V1 Kani control the point was
 read from Kani's own printed block, by a reader that shares no code with `decode_falsification`
 (the `// value` comment lines and, separately, the little-endian byte vectors, which must agree
 with each other and with the decoder), and a neighbour control must not reproduce. On a throwaway
@@ -144,10 +145,10 @@ process-stdout test oracle described above is planned under IR-604; its mutation
 turn the lane red for a replacement made immediately after `Falsified` classification.
 
 What stays unbacked: the native twin is hand-mirrored QSL source, not derived from the contract or
-the Rust subject, and the input package is hand-built, so the contract-to-Contract-IR step does not
-run. The Kani lane is `#[ignore]` and outside `make ci`; NFR-006 instead requires `make kani-gate`
-before opening and merging a Kani-touching PR. The default suite pins the replay end and the
-decoder against a synthetic transcript only. FR-016-AC-6 is covered by tagged witness unit,
+the Rust subject, and the identity fixture is built directly in the test, so the contract-to-Contract-IR
+and generated-harness steps do not run. The retired installed-Kani spine is absent from the Kani
+lane; NFR-006 still requires `make kani-gate` for a Kani-touching PR. The default suite pins the
+replay end and decoder against a synthetic transcript only. FR-016-AC-6 is covered by tagged witness unit,
 spine, frame, state-clause and bounded-corpus tests; the bounded-corpus test runs in the Kani lane.
 Former FR-016-AC-7 is retired under IR-604 because Kani supplies no scalar-charge,
 consumed-counter or replay-limit counterpart to QSL's accounting result.
@@ -160,17 +161,17 @@ The `src/replay/witness.rs` unit tests continue to check schema order, positiona
 non-argument refusal. The surviving V2
 `state_clause_kani_playback_adapter_refuses_wrong_evidence` test checks a generated state-frame
 postcondition's persisted draw order against playback and refuses mismatched assertion evidence;
-it does not prove emitted symbolic argument order or a real-Kani decode. The
-`tests/it/kani_argument_order.rs` emission-order test and the ignored
-real-backend `tests/it/kani_witness_join.rs` test construct V1 `BoundClause` harnesses; their
-evidence retires with that path under the 2026-10-27 IR-348 no-legacy ruling. AC-8 is therefore
+it does not prove emitted symbolic argument order or a real-Kani decode. The removed
+`tests/it/kani_argument_order.rs` emission-order test and ignored
+real-backend `tests/it/kani_witness_join.rs` test constructed V1 `BoundClause` harnesses; their
+evidence retired with that path under the 2026-10-27 IR-348 no-legacy ruling. AC-8 is therefore
 partially backed and Open until a genuine V2 producer persists argument bindings and a matching
 emitted harness is checked for emission order and real-Kani decode. The surviving decoder unit
 tests and V2 playback adapter alone do not prove that producer-to-persisted-schema coupling.
 
-FR-016-AC-25 stays Planned/Open under IR-604. The ignored
-`tc_026_installed_kani_falsification_is_bound_to_process_stdout` test uses a V1 `BoundClause`
-harness and retires with that producer. It genuinely compared the retained counterexample
+FR-016-AC-25 stays Planned/Open under IR-604. The removed
+`tc_026_installed_kani_falsification_is_bound_to_process_stdout` test used a V1 `BoundClause`
+harness. It compared the retained counterexample
 byte-for-byte with the first eligible assertion playback in independently captured stdout,
 excluding cover blocks, and rejected a valid substitute chosen after classification. The
 observing-launcher helper and the other three AC-25-tagged tests in

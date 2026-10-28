@@ -1,7 +1,7 @@
 //! The Kani subject ABI vocabulary: binding roles, primitive types, integer bounds, the solver
 //! choice and the adapter option vector.
 
-use quire_contract_model::{IntegerDomain, IntegerType, OverflowPolicy};
+use quire_contract_model::{IntegerDomain, OverflowPolicy};
 use serde::{Deserialize, Serialize};
 
 use crate::oracle::operator_catalog::{OperandOrder, Operator, ScalarKaniOperator};
@@ -79,18 +79,6 @@ pub struct KaniIntegerBounds {
     pub maximum: i64,
     /// Checked overflow policy; generation never replaces it.
     pub overflow: OverflowPolicy,
-}
-
-impl KaniIntegerBounds {
-    /// Narrows an IR interval only when the generated `i64` subject can represent both ends.
-    pub(crate) fn from_model(value: &IntegerType) -> Option<Self> {
-        Some(Self {
-            domain: value.domain(),
-            minimum: i64::try_from(value.minimum()).ok()?,
-            maximum: i64::try_from(value.maximum()).ok()?,
-            overflow: value.overflow(),
-        })
-    }
 }
 
 /// Supported solver choice for the Kani adapter.

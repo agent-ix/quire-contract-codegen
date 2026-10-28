@@ -53,10 +53,6 @@ pub(crate) enum OracleShape {
     /// `quire-exact` calls, and an oracle holding any returns `Outcome<bool>` and
     /// takes a trailing `&mut Meter`. An arithmetic-free oracle returns `bool`.
     Native,
-    /// The oracle `generate_kani_bundle` embeds in a `proof_for_contract` harness. It is
-    /// evaluated only by `cargo kani`, so add, subtract and multiply stay the infix `i64`
-    /// operators whose overflow is Kani's own falsifiable check, and it returns `bool`.
-    KaniBundle,
     /// A consumer that needs a plain `bool` and cannot carry an outcome. It refuses a clause
     /// holding integer arithmetic rather than read an `Outcome<bool>` as a `bool`.
     PlainBool,
@@ -64,7 +60,6 @@ pub(crate) enum OracleShape {
 
 struct RenderedExpression {
     source: String,
-    bytes: usize,
     implication_regions: Vec<(u32, u32)>,
     /// Whether the clause holds an integer arithmetic node.
     has_arithmetic: bool,
@@ -126,17 +121,15 @@ pub(crate) struct DependencyParameter {
 struct SourceBuilder {
     source: String,
     bytes: usize,
-    retain_source: bool,
     next_line: u32,
     implication_regions: Vec<(u32, u32)>,
 }
 
 impl SourceBuilder {
-    fn new(retain_source: bool) -> Self {
+    fn new() -> Self {
         Self {
             source: String::new(),
             bytes: 0,
-            retain_source,
             next_line: 1,
             implication_regions: Vec::new(),
         }
@@ -147,19 +140,9 @@ impl SourceBuilder {
             return Err(GenerationErrorCode::ResourceLimitExceeded);
         }
         self.bytes = self.bytes.saturating_add(value.len()).saturating_add(1);
-        if self.retain_source {
-            self.source.push_str(value);
-            self.source.push('\n');
-        }
+        self.source.push_str(value);
+        self.source.push('\n');
         self.next_line = self.next_line.saturating_add(1);
-        Ok(())
-    }
-
-    fn append_measured(&mut self, bytes: usize) -> Result<(), GenerationErrorCode> {
-        if self.bytes.saturating_add(bytes) > MAX_GENERATED_SOURCE_BYTES {
-            return Err(GenerationErrorCode::ResourceLimitExceeded);
-        }
-        self.bytes = self.bytes.saturating_add(bytes);
         Ok(())
     }
 }
@@ -194,55 +177,23 @@ pub(crate) fn generate_named_boolean_oracle(
     symbol: &str,
     shape: OracleShape,
 ) -> Result<OracleArtifactBundle, Vec<GenerationDiagnostic>> {
-    match generate_boolean_oracle_build(request, symbol, shape, true)? {
-        OracleBuild::Generated(bundle) => Ok(bundle),
-        OracleBuild::Measured(_) => Err(single_diagnostic(
-            request,
-            GenerationErrorCode::InternalInvariantViolation,
-            "generated.rust",
-            "generation requested retained source but the builder returned a measured plan",
-        )),
-    }
-}
-
-/// Runs the same typed analysis and source-line accounting as generation without retaining a
-/// generated Rust source string or constructing artifacts.
-pub(crate) fn measure_named_boolean_oracle(
-    request: &OracleRequest<'_>,
-    symbol: &str,
-    shape: OracleShape,
-) -> Result<usize, Vec<GenerationDiagnostic>> {
-    match generate_boolean_oracle_build(request, symbol, shape, false)? {
-        OracleBuild::Measured(bytes) => Ok(bytes),
-        OracleBuild::Generated(_) => Err(single_diagnostic(
-            request,
-            GenerationErrorCode::InternalInvariantViolation,
-            "generated.rust",
-            "measurement requested source-free accounting but the builder retained an artifact",
-        )),
-    }
-}
-
-enum OracleBuild {
-    Generated(OracleArtifactBundle),
-    Measured(usize),
+    generate_boolean_oracle_build(request, symbol, shape)
 }
 
 fn generate_boolean_oracle_build(
     request: &OracleRequest<'_>,
     symbol_text: &str,
     shape: OracleShape,
-    retain_source: bool,
-) -> Result<OracleBuild, Vec<GenerationDiagnostic>> {
+) -> Result<OracleArtifactBundle, Vec<GenerationDiagnostic>> {
     if request.expression.nodes().len() < 128 {
-        return generate_boolean_oracle_inner(request, symbol_text, shape, retain_source);
+        return generate_boolean_oracle_inner(request, symbol_text, shape);
     }
     std::thread::scope(|scope| {
         let handle = std::thread::Builder::new()
             .name("contract-oracle-generation".to_owned())
             .stack_size(16 * 1024 * 1024)
             .spawn_scoped(scope, || {
-                generate_boolean_oracle_inner(request, symbol_text, shape, retain_source)
+                generate_boolean_oracle_inner(request, symbol_text, shape)
             })
             .map_err(|error| {
                 single_diagnostic(
@@ -267,8 +218,7 @@ fn generate_boolean_oracle_inner(
     request: &OracleRequest<'_>,
     symbol_text: &str,
     shape: OracleShape,
-    retain_source: bool,
-) -> Result<OracleBuild, Vec<GenerationDiagnostic>> {
+) -> Result<OracleArtifactBundle, Vec<GenerationDiagnostic>> {
     if request.expression.value_type() != &ValueType::Boolean {
         return Err(expression_diagnostic(
             request,
@@ -308,7 +258,6 @@ fn generate_boolean_oracle_inner(
         request.expression.expression(),
         &parameter_lookup,
         shape,
-        retain_source,
     )?;
     // A native oracle holding arithmetic returns an outcome and takes the caller's meter; every
     // other oracle returns a plain bool.
@@ -350,16 +299,13 @@ fn generate_boolean_oracle_inner(
         "// @generated by quire-contract-codegen. Do not edit.".to_owned(),
         format!("// Requirement: {requirement}@{revision}; Clause: {clause}"),
     ];
-    if shape == OracleShape::KaniBundle && rendered.has_arithmetic {
-        header.push(KANI_ARITHMETIC_NOTE.to_owned());
-    }
     header.push(String::new());
     if returns_outcome {
         header.push("use quire_exact as rt;".to_owned());
         header.extend(native_helper_lines(rendered.helpers));
     }
 
-    let mut source = SourceBuilder::new(retain_source);
+    let mut source = SourceBuilder::new();
     for line in header.into_iter().chain([
         format!("/// Generated contract identity for `{requirement}@{revision}`."),
         format!("pub const {identity_symbol}: quire_contract_runtime::ContractIdentity<'static> ="),
@@ -378,19 +324,10 @@ fn generate_boolean_oracle_inner(
     }
     let expression_start = source.next_line;
     let offset = expression_start.saturating_sub(1);
-    if retain_source {
-        for line in rendered.source.lines() {
-            source.line(line).map_err(|_| resource_error(request))?;
-        }
-    } else {
-        source
-            .append_measured(rendered.bytes)
-            .map_err(|_| resource_error(request))?;
+    for line in rendered.source.lines() {
+        source.line(line).map_err(|_| resource_error(request))?;
     }
     source.line("}").map_err(|_| resource_error(request))?;
-    if !retain_source {
-        return Ok(OracleBuild::Measured(source.bytes));
-    }
     source.implication_regions = rendered
         .implication_regions
         .into_iter()
@@ -456,10 +393,7 @@ fn generate_boolean_oracle_inner(
         format!("source-maps/{symbol_text}.json"),
         source_map_contents,
     );
-    Ok(OracleBuild::Generated(OracleArtifactBundle {
-        rust,
-        source_map,
-    }))
+    Ok(OracleArtifactBundle { rust, source_map })
 }
 
 pub(crate) fn dependency_parameters(
@@ -868,10 +802,6 @@ fn arithmetic_refusal(
     }
 }
 
-/// Comment a Kani bundle oracle's file carries when it holds arithmetic (FR-031-AC-19). It holds
-/// no `+`, because the exemplar's mutation control counts the additions of the oracle text.
-const KANI_ARITHMETIC_NOTE: &str = "// Integer arithmetic in this oracle is checked by Kani, which fails the proof on overflow; this file is not a native evaluator.";
-
 /// The `use`-free helper functions of a native arithmetic oracle, as source lines. `carry` is
 /// always present; the others are emitted only when the body calls them.
 fn native_helper_lines(helpers: Helpers) -> Vec<String> {
@@ -964,17 +894,15 @@ fn render_expression(
     expression: &Expression,
     parameters: &BTreeMap<String, String>,
     shape: OracleShape,
-    retain_source: bool,
 ) -> Result<RenderedExpression, Vec<GenerationDiagnostic>> {
     let mut arithmetic = Vec::new();
     let has_arithmetic = mark_arithmetic(expression, &mut arithmetic);
     let mut renderer = Renderer {
         request,
-        shape,
         parameters,
         arithmetic,
         next_index: 0,
-        output: SourceBuilder::new(retain_source),
+        output: SourceBuilder::new(),
         helpers: Helpers::default(),
     };
     if shape == OracleShape::Native && has_arithmetic {
@@ -984,7 +912,6 @@ fn render_expression(
     }
     Ok(RenderedExpression {
         source: renderer.output.source,
-        bytes: renderer.output.bytes,
         implication_regions: renderer.output.implication_regions,
         has_arithmetic,
         helpers: renderer.helpers,
@@ -994,12 +921,9 @@ fn render_expression(
 /// Renders one clause's expression tree. Every `*_node` and `outcome_*` method consumes one node
 /// of authored preorder per call, so `next_index` names the typed node under render.
 ///
-/// The refusals of [`arithmetic_refusal`] are decided once, by the analysis that runs before any
-/// rendering. The renderer relies on them and only keeps the shape honest: an infix operator is
-/// printed for the Kani bundle shape alone.
+/// The refusals of [`arithmetic_refusal`] are decided once by analysis before rendering.
 struct Renderer<'a> {
     request: &'a OracleRequest<'a>,
-    shape: OracleShape,
     parameters: &'a BTreeMap<String, String>,
     arithmetic: Vec<bool>,
     next_index: usize,
@@ -1031,8 +955,7 @@ impl<'a> Renderer<'a> {
         index
     }
 
-    /// The expression as the plain Rust `bool` or `i64` it has always been: native operators, and
-    /// for the Kani bundle oracle the infix `+`, `-` and `*` on `i64`.
+    /// The expression as a plain Rust `bool` or `i64` for a plain-Boolean consumer.
     fn plain_node(&mut self, expression: &Expression) -> Rendered {
         self.take_index();
         match expression.kind() {
@@ -1094,49 +1017,12 @@ impl<'a> Renderer<'a> {
                 self.plain_node(right)?;
                 self.emit(")")
             }
-            ExpressionKind::Numeric {
-                operator,
-                left,
-                right,
-            } => {
-                let infix = self.infix_operator(expression, *operator)?;
-                self.emit("(")?;
-                self.plain_node(left)?;
-                self.emit(")")?;
-                self.emit(infix)?;
-                self.emit("(")?;
-                self.plain_node(right)?;
-                self.emit(")")
-            }
-            other => Err(unsupported_kind(self.request, expression, other)),
-        }
-    }
-
-    /// The infix operator of an add, subtract or multiply, for the Kani bundle oracle only: a
-    /// native oracle renders arithmetic as runtime calls and a plain-bool consumer refuses it, so
-    /// any other shape reaching a numeric node here is refused rather than printed. Divide and
-    /// remainder have no operator, so no raw `/` or `%` is ever rendered.
-    fn infix_operator(
-        &self,
-        expression: &Expression,
-        operator: NumericOperator,
-    ) -> Result<&'static str, Vec<GenerationDiagnostic>> {
-        if self.shape != OracleShape::KaniBundle {
-            return Err(unsupported_node(
+            ExpressionKind::Numeric { .. } => Err(unsupported_node(
                 self.request,
                 expression,
-                "integer arithmetic is rendered as an infix operator in the Kani bundle oracle only",
-            ));
-        }
-        match operator {
-            NumericOperator::Add => Ok("+"),
-            NumericOperator::Subtract => Ok("-"),
-            NumericOperator::Multiply => Ok("*"),
-            NumericOperator::Divide | NumericOperator::Remainder => Err(unsupported_node(
-                self.request,
-                expression,
-                "integer divide and remainder are refused",
+                "integer arithmetic requires the native outcome oracle",
             )),
+            other => Err(unsupported_kind(self.request, expression, other)),
         }
     }
 

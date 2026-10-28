@@ -3,18 +3,17 @@
 //! `generate/`: it imports no family.
 
 use quire_contract_model::{
-    BoundPackage, CheckedModelFieldsError, CheckedNodeId, CheckedNodeTag, CheckedPackageIncomplete,
+    CheckedModelFieldsError, CheckedNodeId, CheckedNodeTag, CheckedPackageIncomplete,
     CheckedPackageLimit, CheckedPackageRefusal, CheckedPackageV2, CheckedSourceMapEntry,
-    ClauseKind, ClauseRef, ContractPackageV1, DependencyIdentity, SourceSpan,
+    ContractPackageV1,
 };
 use serde::{Serialize, Serializer};
 
 use crate::{
     core::contract_package::ContractDriverResultSelection,
-    core::diagnostic::GenerationErrorCode,
     core::identity::HarnessSymbol,
     kani::identity::{
-        KaniCollectionObligationHarness, KaniObligationHarness, KaniScalarObligationHarness,
+        KaniCollectionObligationHarness, KaniScalarObligationHarness,
         KaniV2ClauseObligationHarness, ObligationKind, StateFrameHarness,
     },
     oracle::claim::{ClaimMap, UpstreamBlocker},
@@ -78,13 +77,6 @@ pub enum ObligationItem<'a> {
         /// Rust path of the operation subject.
         subject_path: &'a str,
     },
-    /// One clause of a frozen V1 bound package.
-    BoundClause {
-        /// The package the clause belongs to.
-        package: &'a BoundPackage,
-        /// The clause.
-        clause: &'a ClauseRef,
-    },
     /// One selected occurrence in an FR-014 exact scalar claim map.
     ScalarClaim {
         /// The admitted package the claim map was generated from.
@@ -145,13 +137,6 @@ pub enum KaniObligationError {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(tag = "item", rename_all = "snake_case")]
 pub enum ObligationSubject {
-    /// A V1 clause.
-    BoundClause {
-        /// Full package, requirement, revision and clause identity.
-        clause: ClauseRef,
-        /// The clause's QSL source span, when the clause exists in the package.
-        source_span: Option<SourceSpan>,
-    },
     /// A V2 node.
     CheckedNode {
         /// The node.
@@ -207,58 +192,9 @@ pub enum UnsupportedObligation {
         /// Selected clause node.
         node_id: CheckedNodeId,
     },
-    /// Assertion and case clauses are not contract obligations.
-    ClauseKindNotObligation {
-        /// The clause kind.
-        kind: ClauseKind,
-    },
-    /// The clause carries definedness obligations the harness cannot preserve; an assumption
-    /// would otherwise exclude undefined outcomes.
-    DefinednessNotEncoded {
-        /// Number of obligations.
-        obligations: usize,
-    },
-    /// The clause oracle could not be lowered.
-    ClauseLowering {
-        /// First oracle-lowering code.
-        generation_code: GenerationErrorCode,
-    },
-    /// A dependency's observation has no position at this obligation's execution point.
-    ObservationNotBindable {
-        /// The dependency.
-        dependency: DependencyIdentity,
-    },
-    /// Two dependencies claim one subject slot with different types or bounds.
-    AbiConflict {
-        /// The slot identifier.
-        identifier: String,
-    },
-    /// Contract obligations on one operation each bind, but their union gives one subject slot
-    /// two types or bounds, so no single subject signature serves all of their harnesses.
-    SubjectSignatureConflict {
-        /// The shared operation.
-        operation: String,
-        /// The slot identifier.
-        identifier: String,
-    },
-    /// A precondition sharing this obligation's anchor is not a supported item of the request.
-    PreconditionNotNegotiated {
-        /// The precondition.
-        precondition: ClauseRef,
-    },
-    /// No harness could be produced for a reason that is not the bounded-resource or syntax
-    /// ground below. Two distinct causes still collapse to this one code: (1) an
-    /// internal-invariant fallback for an otherwise-successful render -- its oracle function
-    /// symbol could not be located in generated source, or an ABI binding `abi` already
-    /// resolved could not be found again when assembling the harness body; and (2) the harness
-    /// identity or record struct failing to serialize as JSON. Distinct from
-    /// [`Self::ResourceLimitExceeded`] and [`Self::InvalidGeneratedSyntax`] below, which this
-    /// generator does split out.
+    /// A surviving renderer could not assemble or serialize a harness after admitting its item.
+    /// Distinct from the resource and syntax grounds below.
     RenderFailed,
-    /// A frame is not a clause oracle, so this renderer has no encoding for one. The frame
-    /// obligations of an operation are generated from its `state_clause` by
-    /// [`generate_state_frame_obligations`](crate::kani::generate::frame::generate_state_frame_obligations).
-    FrameNotClauseRendered,
     /// The generated harness source exceeds
     /// [`MAX_GENERATED_SOURCE_BYTES`](crate::core::artifact::MAX_GENERATED_SOURCE_BYTES), the same
     /// bounded-resource ceiling every other generator in this crate enforces. Distinct from
@@ -271,11 +207,8 @@ pub enum UnsupportedObligation {
     /// invalid Rust rather than a resource ceiling. Distinct from [`Self::ResourceLimitExceeded`]
     /// for the same reason.
     ///
-    /// Known narrowing: the analogous
-    /// [`KaniErrorCode::InvalidGeneratedSyntax`](crate::kani::generate::census_validation::KaniErrorCode::InvalidGeneratedSyntax)
-    /// is classified `Inconclusive` by its `terminal_state` (a generator defect, not an honest
-    /// refusal), distinct from `ResourceLimitExceeded`'s `Unsupported`. [`ObligationDisposition`]
-    /// has no inconclusive-equivalent arm, so this variant is reported through the same
+    /// Known narrowing: [`ObligationDisposition`]
+    /// has no inconclusive-equivalent arm, so this generator defect is reported through the same
     /// `ObligationDisposition::Unsupported` as every genuine refusal -- a real generator defect
     /// reaching this ground is currently indistinguishable from an honest one. Restructuring
     /// `ObligationDisposition`'s terminal-state semantics to carry that distinction is out of
@@ -447,16 +380,12 @@ pub enum InvalidObligationItem {
         /// Index of the first occurrence.
         first_index: usize,
     },
-    /// The clause is not an executable clause of the package.
-    UnknownClause,
     /// The selected claim index is absent or names another node, or (see
     /// `refuse_unknown_node_kind`) the claim
     /// naming it has no entry in the admitted graph -- the same code
     /// [`ExactScalarRefusal::InvalidInput`] already reports for "the node is not in the admitted
     /// graph" through `classify_claim`'s `Refused` arm.
     UnknownNode,
-    /// V1 items name more than one bound package.
-    MixedBoundPackages,
     /// The claim map was not generated from the package.
     PackageMismatch,
     /// A `StateFrame` item's state path or subject path is not a Rust path.
@@ -560,8 +489,6 @@ pub enum KaniObligationOutcome {
     Emitted {
         /// Every item's record, in request order.
         records: Vec<ObligationRecord>,
-        /// V1 frozen-clause harnesses.
-        harnesses: Vec<KaniObligationHarness>,
         /// V2 IR-confirmed exact-scalar claim harnesses.
         scalar_harnesses: Vec<KaniScalarObligationHarness>,
         /// State-clause harnesses, one per `supported` `StateFrame` record, in request order.

@@ -465,73 +465,13 @@ fn settle_one(manifest: Vec<BackendDescriptor>, item: RequestItem) -> ItemSettle
 }
 
 fn item(kind: RequestedKind, candidates: Candidates) -> RequestItem {
-    let package = crate::kani_obligations::bound_package(1_000);
-    let clause = package
-        .clauses()
-        .iter()
-        .find(|clause| {
-            matches!(
-                clause.kind(),
-                quire_contract_model::ClauseKind::Precondition
-                    | quire_contract_model::ClauseKind::Postcondition
-                    | quire_contract_model::ClauseKind::Invariant
-            )
-        })
-        .expect("fixture package has an admitted clause")
-        .clone();
     RequestItem {
         kind,
         extent: bounded(),
         named_backend: None,
         candidates,
-        kani_form: KaniForm::V1BoundClause {
-            clause: Box::new(clause),
-        },
+        kani_form: integer_scalar("quire.op.integer.add"),
     }
-}
-
-fn oversized_bound_clause() -> quire_contract_model::BoundClause {
-    use serde_json::{json, Value};
-
-    let source = json!({"document":"large-settlement-expression", "revision":1});
-    let span = json!({
-        "start":{"source":source,"line":1,"column":1,"byte_offset":0},
-        "end":{"source":source,"line":1,"column":2,"byte_offset":1}
-    });
-    let owner = json!({"package":"test/large-settlement", "requirement":"FR-019", "revision":1});
-    let anchor = json!({"kind":"pre", "operation":"check"});
-    let long_name = "x".repeat(256);
-    let identity = json!({"node":"reference", "identity":{
-        "requirement":owner, "kind":"input", "observation":"current", "path":[long_name]
-    }});
-    let mut level = (0..4096)
-        .map(|_| json!({"node":"value_reference", "name":long_name, "observation":"current", "source":span}))
-        .collect::<Vec<Value>>();
-    while level.len() > 1 {
-        level = level
-            .as_chunks::<2>()
-            .0
-            .iter()
-            .map(|pair| json!({"node":"boolean", "operator":"short_circuit_and", "left":pair[0], "right":pair[1], "source":span}))
-            .collect();
-    }
-    let projection = json!({
-        "format":quire_contract_model::EXECUTABLE_PROJECTION_FORMAT,
-        "package":{"id":"test/large-settlement", "schema_version":{"major":1,"minor":1},
-            "source":source, "requirements":[{"id":"FR-019","revision":1,"source":span,"clauses":[{
-                "id":"large-check", "kind":"precondition", "anchor":anchor, "source":span,
-                "body":identity
-            }]}]},
-        "bindings":[{"clause":{"requirement":owner,"clause":"large-check"}, "expression":{
-            "owner":owner,"types":[],"values":[{"name":long_name,"kind":"input","value_type":{"kind":"boolean"},"source":span}],
-            "functions":[],"expression":level.pop().unwrap(),"expected_type":{"kind":"boolean"},
-            "execution_point":anchor,"clause_root":true
-        }}]
-    });
-    quire_contract_model::BoundPackage::from_json_bytes(&serde_json::to_vec(&projection).unwrap())
-        .expect("large, balanced typed expression remains within IR node/depth bounds")
-        .clauses()[0]
-        .clone()
 }
 
 fn selected_scalar_form(package: CheckedPackageV2, node_id: CheckedNodeId) -> KaniForm {
@@ -2287,110 +2227,6 @@ fn kani_selected_division_preserves_exact_renderer_refusal() {
         quire_contract_codegen::ObligationDisposition::Unsupported { reason: refusal }
     );
     assert!(harness.is_none(), "refused division emits no Kani harness");
-}
-
-/// The classifier measures the same rendered source lines as generation and refuses before
-/// Supported when an admitted typed expression would exceed the generated-source ceiling.
-#[test]
-fn kani_form_preflight_refuses_admitted_expression_over_source_limit() {
-    let mut request = item(
-        RequestedKind::Known(CapabilityKind::OperationContract),
-        Candidates::Set(vec![candidate(BackendKind::Kani.identity())]),
-    );
-    request.kani_form = KaniForm::V1BoundClause {
-        clause: Box::new(oversized_bound_clause()),
-    };
-    let settled = settle_one(
-        vec![kani(vec![(
-            CapabilityKind::OperationContract,
-            Mode::Bounded,
-        )])],
-        request,
-    );
-    assert!(
-        matches!(
-            settled.disposition,
-            Disposition::Unsupported {
-                cause: Cause::KaniFormRefused {
-                    refusal: UnsupportedObligation::ClauseLowering {
-                        generation_code:
-                            quire_contract_codegen::GenerationErrorCode::ResourceLimitExceeded
-                    },
-                    ..
-                }
-            }
-        ),
-        "large admitted expression unexpectedly settled as {:?}",
-        settled.disposition
-    );
-}
-
-/// V1 roles with zero definedness obligations remain healthy controls, and a source clause with
-/// one such obligation preserves that exact count.
-#[trace("FR-019-AC-25", "FR-019-AC-26", "FR-019-AC-33")]
-#[test]
-fn kani_v1_planned_clause_selector_uses_the_exact_lowering_refusal() {
-    let package = crate::kani_obligations::bound_package(1_000);
-    for kind in [
-        quire_contract_model::ClauseKind::Precondition,
-        quire_contract_model::ClauseKind::Postcondition,
-        quire_contract_model::ClauseKind::Invariant,
-    ] {
-        let clause = package
-            .clauses()
-            .iter()
-            .find(|clause| clause.kind() == kind)
-            .expect("fixture has each executable clause role")
-            .clone();
-        let settled = settle_one(
-            vec![kani(vec![(
-                CapabilityKind::OperationContract,
-                Mode::Bounded,
-            )])],
-            RequestItem {
-                kind: RequestedKind::Known(CapabilityKind::OperationContract),
-                extent: bounded(),
-                named_backend: None,
-                candidates: Candidates::Set(vec![candidate(BackendKind::Kani.identity())]),
-                kani_form: KaniForm::V1BoundClause {
-                    clause: Box::new(clause),
-                },
-            },
-        );
-        assert!(
-            matches!(settled.disposition, Disposition::Supported { .. }),
-            "typed V1 {kind:?} clause was refused as {:?}",
-            settled.disposition
-        );
-    }
-
-    let mut request = item(
-        RequestedKind::Known(CapabilityKind::OperationContract),
-        Candidates::Set(vec![candidate(BackendKind::Kani.identity())]),
-    );
-    request.kani_form = KaniForm::V1BoundClause {
-        clause: Box::new(crate::kani_obligations::ir295_definedness_clause()),
-    };
-    let disposition = settle_one(
-        vec![kani(vec![(
-            CapabilityKind::OperationContract,
-            Mode::Bounded,
-        )])],
-        request,
-    )
-    .disposition;
-    assert!(
-        matches!(
-            disposition,
-            Disposition::Unsupported {
-                cause: Cause::KaniFormRefused {
-                    refusal: UnsupportedObligation::DefinednessNotEncoded { obligations },
-                    ..
-                }
-            } if obligations == 2
-        ),
-        "actual V1 definedness disposition: {disposition:?}"
-    );
 }
 
 fn v2_state_frame_form(

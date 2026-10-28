@@ -13,7 +13,7 @@
 //! `flock`) are `#[ignore]`d here exactly as they were before the merge and stay reachable by
 //! name filter: see `Makefile`'s `kani` target, which runs
 //! `cargo test --test it -- --ignored --test-threads=1` with the `kani_obligations`,
-//! `skeleton_spine`, `kani_witness_join`, `bounded_kani_corpus`, `kani_generation` and
+//! `skeleton_spine`, `bounded_kani_corpus`, `kani_generation` and
 //! `kani_batching` filters.
 //!
 //! `common` is `mod`-included by six former top-level files. Cargo tolerated that -- each file
@@ -72,7 +72,6 @@ mod exact_scalar_agreement;
 mod exact_scalar_generation;
 mod generated_headers;
 mod harness_generation;
-mod kani_argument_order;
 mod kani_batching;
 mod kani_gate;
 mod kani_generation;
@@ -82,7 +81,6 @@ mod kani_obligations_state_clause_replay;
 mod kani_obligations_state_frame;
 mod kani_obligations_symbolic_domains;
 mod kani_stdout_capture;
-mod kani_witness_join;
 mod layout;
 mod native_v2_helper_playback;
 mod no_generation_panics;

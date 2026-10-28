@@ -20,19 +20,19 @@ it does not create another repository gate.
 
 ## Test Procedure
 
-The current claim-control fixture uses `kani_generation::guard_sources()[0]`, a V1 bundle
+The former claim-control fixture used `kani_generation::guard_sources()[0]` as a V1 bundle
 module named by `scripts/kani_claims.json`. Under the 2026-10-27 IR-348 retirement ruling,
-that source is historical. The IR-348 immediate V1 deletion code slice must implement, in or
-before its deletion PR, an operator hold for only that named V1 module claim row, with reason
+that source was removed; `guard_sources()[0]` now selects a surviving V2 scalar harness.
+IR-348 implements an operator hold for only that named V1 module claim row, with reason
 "V1 deleted by owner ruling 2026-10-27; no genuine V2 named independent expectation/control
 exists yet" and expiry "until the V2 named independent expectation + real positive/falsifying
 control exists". Deleting the V1 module or dropping its claim supplies no proof evidence.
-Execute the positive procedure on the production V2 Boolean implication scalar module
-as an additional claim after its named expectation root and claim are reviewed. This
-implication claim has a different proposition from the held FR-003@4 Boolean state-transition
-claim; it does not remove that row or expire its hold. IR-1047 Acceptance 4 remains
-unmet. At this spec head, the generator still inlines the expectation and the claim
-test still selects V1 source. The hold is PLANNED at this spec head. The held V1 row remains Open, and
+Execute the positive procedure on the production V2 Boolean implication scalar
+module as an additional claim after its named expectation root and claim are reviewed. That
+implication differs from the held FR-003@4 Boolean state-transition claim and cannot expire
+its hold. The generator currently inlines its expectation. The same-claim V2 source and
+retained-row update are PLANNED under IR-1049; IR-1047 Acceptance 4 remains unmet. The hold
+is implemented, the held V1 row remains Open, and
 all non-held controls stay required.
 
 1. Check in a reviewed nonempty claim declaration for the generated modules the gate says it
@@ -133,11 +133,9 @@ zero proofs and mutations are discharged, regardless of a passing claim test.
 
 ## Status
 
-Open for IR-19 implementation. The hold itself is PLANNED for IR-348's immediate V1 deletion
-code slice in or before its deletion PR. The current V1 module declaration and
-`guard_sources()[0]` fixture are to be operator-held under IR-348 pending the named V2 independent
-expectation and real positive/falsifying control for that same claim; the V2 implication
-renderer owns only an additional distinct claim, and its inline expectation is not yet a
-named call-graph root. The same-claim V2 producer and retained-row update are PLANNED
-under IR-1049. IR-1047 Acceptance 4 remains unmet. No real-Kani result is
-asserted by this specification artifact.
+Open for IR-19 implementation. IR-348 implements the bounded hold for the retained
+V1 claim row. The V1 source is removed and `guard_sources()[0]` selects a V2 scalar harness
+without FR-041 module proof. The V2 implication renderer owns only an additional distinct
+claim; its inline expectation is not yet a named call-graph root. The same-claim V2 producer
+and retained-row update are PLANNED under IR-1049 and FR-041-AC-10. IR-1047 Acceptance 4
+remains unmet. No real-Kani result is asserted by this specification artifact.

@@ -41,17 +41,15 @@ outcome instead.
 A generated oracle that panics or wraps disagrees with the language it claims to evaluate, and a
 Kani proof or a conformance campaign over it proves or tests a different operation. This
 requirement fixes what the Boolean oracle emits and means for integer arithmetic and comparison,
-so that the meaning of an operator is stated once, in the exact kernel, and the emitter
-restates none of it, other than in the V1 Kani bundle. There the fixed-width arithmetic is a
-second implementation of the rule, kept because QSL's exemplar mutates its text, and held to the
-kernel's meaning by a differential test (see "Two consumers, two shapes of the same rule").
+so that the meaning of an operator is stated once, in the exact kernel, and the surviving emitter
+restates none of it. The retired V1 Kani bundle's fixed-width arithmetic was a second
+implementation, recorded as historical rationale under the retired bundle criteria below.
 
-The defect is reachable in two ways. Contract IR discharges the definedness obligation of an
+The native boundary needs explicit handling. Contract IR discharges the definedness obligation of an
 arithmetic node from declared bounds and dominating guards, so an operand inside its declared
-domain cannot overflow or divide by zero in an expression IR admitted. But the generated function
-is `pub` and takes any `i64`, and FR-015 and `interface-001`'s `kani_slice` assert a
-subject-produced value's domain rather than assuming it, so the oracle is evaluated at operand
-values the declared domain excludes. Add, subtract and multiply over an integer type whose
+domain cannot overflow or divide by zero in an expression IR admitted. The generated function
+is `pub` and takes any `i64`, including values outside the declared domain. Add, subtract and
+multiply over an integer type whose
 overflow policy is `saturate` raise no obligation at all, so that arithmetic is admitted for
 every operand value, and the raw operator is wrong on in-domain values too: over `0..=10` it
 computes `10 + 1` as `11`, where the policy requires the result to stay in range.
@@ -64,8 +62,8 @@ merged (see "Integer divide and remainder").
 - **IR-596's closing code change** implemented FR-031-AC-1, AC-3, AC-4, AC-5, AC-7, AC-8, AC-9,
   AC-10, AC-11, AC-12, AC-13, AC-14, AC-15, AC-19, AC-20 and AC-21. It refused divide and
   remainder at generation, with the interim code `UnsupportedIntegerDivision` naming IR-601, so
-  that no oracle emitted a raw `/` or `%`. The QSL exemplar run of FR-031-AC-11 is still pending:
-  it needs a checkout of the integration repository, and the run shall be recorded.
+  that no oracle emitted a raw `/` or `%`. The QSL exemplar run of FR-031-AC-11 was pending
+  before that V1 bundle criterion retired under IR-348; it is no longer a closing gate here.
 - **The native divide and remainder change (IR-1045)** remains planned for FR-031-AC-2, AC-6,
   AC-16, AC-17, the native portion of AC-18, AC-22 and AC-26. IR-602 was canceled after the
   2026-10-27 IR-348 ruling because its bundle work is V1-only. AC-11/19/20/21/23/24/25 are
@@ -77,12 +75,12 @@ merged (see "Integer divide and remainder").
 
 ### Scope
 
-The Boolean oracle here is the output of `generate_boolean_oracle` and of the named generator
-that the V1 Kani bundle, the V1 bound-oracle generator, the tri-state harness generator and the
-Kani obligation clause lowering share, all in `src/oracle/boolean_v1.rs`. It is retired with that
-file at AD-004 step 6, with the other V1 readers; step 4f deletes the V1 bundle and does not
-delete this renderer, because the V1 bound generator and the tri-state harness generator still
-call it; step 4f removes its V1 Kani obligation-arm caller. The exact V2 oracles of FR-014,
+The Boolean oracle here is the output of `generate_boolean_oracle` and of the crate-internal
+`generate_named_boolean_oracle` it wraps, both in `src/oracle/boolean_v1.rs`. The V1 bound-oracle
+generator and tri-state harness generator still call the named generator; before step 4f, the V1
+Kani bundle and Kani obligation clause lowering also called it.
+This renderer retires with that file at AD-004 step 6, with the other V1 readers; step 4f deleted
+the V1 bundle and removed its V1 Kani obligation-arm caller. The exact V2 oracles of FR-014,
 FR-018 and FR-021 now call `quire-exact` directly. The surviving native divide and remainder
 behavior remains planned under IR-1045;
 the dependency lock prerequisite is met.
@@ -118,18 +116,20 @@ and is not specified here.
   production code. Contract Runtime FR-275 states that, at its end state, generated oracles name
   the owning crate's own paths rather than a runtime re-export.
 
-### Two consumers, two shapes of the same rule
+### Native consumer and retired V1 bundle history
 
-The renderer serves two kinds of consumer, and they need different arithmetic.
+The surviving native renderer serves Rust consumers. Before IR-348 retired the V1 Kani bundle,
+the renderer served two kinds of consumer with different arithmetic:
 
 - **The native oracle**: `generate_boolean_oracle`, `generate_bound_oracles` and anything else
   that a Rust program evaluates. A wrapped or panicking result is the defect there, so the
   arithmetic is an exact-kernel call returning a typed outcome.
-- **The Kani bundle oracle**: the oracle that `generate_kani_bundle` embeds in a
-  `proof_for_contract` harness. It is evaluated only by `cargo kani`. QSL's Kani exemplar
-  (IT-011 in the integration repository, and IT-010-SC-05) runs the clause `amount < 1000` implies
-  `amount + 1 <= 1000` over `0..=1000` through that bundle, and its mutation control rewrites the
-  generated oracle's text: it requires exactly one `+` in the postcondition oracle and appends
+- **The retired Kani bundle oracle**: the oracle that `generate_kani_bundle` embedded in a
+  `proof_for_contract` harness. It was evaluated only by `cargo kani`. QSL's Kani exemplar
+  (IT-011 in the integration repository, and IT-010-SC-05) specified the clause `amount < 1000`
+  implies `amount + 1 <= 1000` over `0..=1000` through that bundle, and its mutation control
+  specified a rewrite of the generated oracle's text: it required exactly one `+` in the
+  postcondition oracle and appended
   ` + 1_i64` to it, so that the rule reads `amount + 2 <= 1000`.
 
 Real Kani measurements, made on a scratch crate built from the generator's own output for the
@@ -151,27 +151,27 @@ exemplar clause (Kani 0.68.0, CBMC 6.11.0, the exemplar's option vector):
   measured is in the clause rendering through `order_numbers`, not in exact arithmetic as such.
   This requirement does not claim that exact arithmetic is intractable under CBMC.
 
-The Kani bundle keeps a checked fixed-width path. The decisive reason is the exemplar's contract,
-not the tractability measurement: IT-011-SC-03 rewrites the generated oracle's text and requires
-exactly one `+` in it, and AD-004 L-5 requires the exemplar to pass through `generate_kani_bundle`
-until step 4e. Add, subtract and multiply therefore stay the infix `i64` operators, in the text
-shape the exemplar's mutation targets, and Kani's arithmetic
-check is what makes overflow a failing property. For a `reject` type the proof is provable, because
+The retired Kani bundle kept a checked fixed-width path. The decisive reason was the exemplar's
+contract, not the tractability measurement: IT-011-SC-03 rewrote the generated oracle's text and
+required exactly one `+` in it, and AD-004 L-5 required the exemplar to pass through
+`generate_kani_bundle` until step 4e. Add, subtract and multiply therefore used infix `i64`
+operators in the text shape the exemplar's mutation targeted, and Kani's arithmetic check made
+overflow a failing property. For a `reject` type the proof was provable, because
 Contract IR discharges the range obligation from declared bounds and the harness assumes the
 declared domain; if that discharge were wrong, Kani would fail the proof.
 
-This leaves two implementations of the rule: the kernel's exact operation for the native oracle
-and the fixed-width operator for the bundle oracle (the second implementation IR-594 flagged). It
-is justified by the exemplar's text-mutation contract and AD-004 L-5, which a call into the kernel
-would break, and it is held in step by a differential
-test (FR-031-AC-21 for add, subtract and multiply, FR-031-AC-25 for divide and remainder), not by
-a copy of the arithmetic in a table. The two differ in one
+Historically this left two implementations of the rule: the kernel's exact operation for the native
+oracle and the fixed-width operator for the bundle oracle (the second implementation IR-594
+flagged). The exemplar's text-mutation contract and AD-004 L-5 justified that V1 shape, which a
+call into the kernel would have broken. The retired differential criteria were FR-031-AC-21 for
+add, subtract and multiply and FR-031-AC-25 for divide and remainder. The two differed in one
 documented way: on an operand outside the declared domain the native oracle returns the
-kernel's refusal, and the bundle oracle fails Kani's overflow check, because under Kani the
-harness assumes the declared domain on every drawn input and asserts it on every produced value
+kernel's refusal, and the retired bundle oracle failed Kani's overflow check, because under Kani the
+harness assumed the declared domain on every drawn input and asserted it on every produced value
 before the oracle runs (`ensures` is `(result bounds) && oracle`).
 
-The same holds for divide and remainder, and the same measurement bears on it. `quire_exact::divide`
+The retired V1 divide and remainder plan used the same rationale, and the same measurement bears
+on it. `quire_exact::divide`
 computes over `quire_exact::Integer`, an arbitrary-precision integer backed by `num-bigint`, so a
 call to it under CBMC unwinds the big-integer vector growth and the division routine's recursion.
 A scratch crate that called `divide` over `x` in `0..=10` and `y` in `1..=10` (Kani 0.68.0,
@@ -204,8 +204,8 @@ The semantics, in the native oracle:
   Euclidean laws agree on non-negative operands and differ on negative ones, and the IR divide
   and remainder nodes name no law, and the Boolean oracle has no package to select one from.
   Truncating is what the earlier raw `/` and `%` computed on every in-domain operand, what Rust's
-  `checked_div` and `checked_rem` compute in IR's own arithmetic preimage, and so what the bundle
-  oracle's operators mean. The law is one constant of the generator. That IR and QSL want it is an
+  `checked_div` and `checked_rem` compute in IR's own arithmetic preimage, and so what the retired
+  bundle oracle's operators meant. The law is one constant of the generator. That IR and QSL want it is an
   open decision (Open decisions).
 - **A zero divisor** is `Undefined(DivisionByZero)`, for both members, and `divide` stops before
   it computes anything.
@@ -249,8 +249,7 @@ compiling, and an artifact that records the string no longer names a code the cr
 - For an expression with no arithmetic node, the same `bool`-returning function as before.
 - For an expression with at least one arithmetic node, a native oracle is a function that returns
   `quire_exact::Outcome<bool>` and takes a trailing `&mut quire_exact::Meter`, as the FR-014
-  oracles do. A Kani bundle oracle is a function that
-  returns `bool`, as before.
+  oracles do. The retired V1 Kani bundle oracle returned `bool`.
 
 ## Behavior
 
@@ -333,22 +332,24 @@ graph now resolves one kernel for this planned rendering.
 | Divide | `divide(Truncating, Quotient, l, r, Bounded(interval), meter)` | `Refused(DivisionOutOfDomain { member: Quotient })`; a zero divisor is `Undefined(DivisionByZero)` |
 | Remainder | `divide(Truncating, Remainder, l, r, Bounded(interval), meter)` | `Refused(DivisionOutOfDomain { member: Remainder })`; a zero divisor is `Undefined(DivisionByZero)` |
 
-### Arithmetic in the Kani bundle oracle
+### Retired V1 arithmetic in the Kani bundle oracle (IR-348 history)
 
-- The generator shall render integer add, subtract and multiply over a `reject` type, in the
-  oracle that `generate_kani_bundle` embeds, as the Rust infix operators `+`, `-` and `*` on the
-  two `i64` operand expressions, in the parenthesized text shape the generator emits today, with
-  one binary operator per arithmetic node. It shall not render them as an `exact::` call, a
-  `checked_`, `wrapping_`, `saturating_` or `overflowing_` method, or any helper call, so that
-  the one `+` of the exemplar clause stays one syntactic addition whose text can be extended.
-- The generator shall render integer divide over a `reject` type, in that oracle, as the Rust
-  infix operator `/` on the two `i64` operand expressions, and integer remainder as the method call
-  `wrapping_rem` on the left operand with the right operand as its argument, each in the
-  parenthesized text shape of the other operators, with one operator or one call per arithmetic
-  node. It shall not render either as an `exact::` call, as `modulo`, `div_euclid`, `rem_euclid`,
-  a `checked_`, `saturating_` or `overflowing_` method, or any helper call, and `wrapping_rem` on
-  a remainder node is the only method call it may emit for arithmetic. Both operators mean the
-  truncating law, the law the native oracle selects.
+The following describes the removed V1 emitter and imposes no live bundle requirement. Its
+original acceptance criteria remain in the retired rows below.
+
+- The generator rendered integer add, subtract and multiply over a `reject` type, in the
+  oracle that `generate_kani_bundle` embedded, as Rust infix operators `+`, `-` and `*` on the
+  two `i64` operand expressions, in a parenthesized text shape, with one binary operator per
+  arithmetic node. It did not render them as an `exact::` call, a `checked_`, `wrapping_`,
+  `saturating_` or `overflowing_` method, or any helper call, so that the one `+` of the exemplar
+  clause stayed one syntactic addition whose text could be extended.
+- The generator planned to render integer divide over a `reject` type in that oracle as Rust
+  infix `/` on the two `i64` operand expressions, and integer remainder as `wrapping_rem` on the
+  left operand with the right operand as its argument. The planned shape had one operator or call
+  per arithmetic node, with no `exact::` call, `modulo`, `div_euclid`, `rem_euclid`, `checked_`,
+  `saturating_` or `overflowing_` method, or helper call. `wrapping_rem` on a remainder node was
+  the sole planned arithmetic method call. Both operators used the truncating law selected by the
+  native oracle.
 - Why divide is infix and remainder is not. Kani 0.68.0 measures raw `/` on `i64` carrying two
   checks, "attempt to divide by zero" and "attempt to divide with overflow". IR FR-015 raises a
   non-zero-divisor obligation for every divide and, under `reject`, requires a range proof of the
@@ -366,13 +367,12 @@ graph now resolves one kernel for this planned rendering.
   a zero divisor (measured: verified at the minimum by negative one, failed with "attempt to
   calculate the remainder with a divisor of zero" on unconstrained operands). It wraps no result,
   because a remainder always lies within the magnitude of its divisor.
-- The bundle oracle shall return `bool`, shall take no meter, and shall contain no `unwrap`,
-  `expect` or panic macro. Under Kani its arithmetic carries Kani's own overflow check, whose
+- The retired bundle oracle returned `bool`, took no meter, and contained no `unwrap`,
+  `expect` or panic macro. Under Kani its arithmetic carried Kani's own overflow check, whose
   failure is a falsifiable property of the proof; for divide and remainder the falsifiable checks
   are the divide and remainder checks on a zero divisor and, for divide, on overflow.
-- The generated file of a bundle that holds an arithmetic node shall state in a comment that its
-  arithmetic is checked by Kani and that the file is not a native evaluator. The bundle is
-  consumed only by `cargo kani`.
+- The retired bundle's generated file stated in a comment that its arithmetic was checked by
+  Kani and that the file was not a native evaluator. The bundle was consumed only by `cargo kani`.
 
 ### Refusals
 
@@ -380,7 +380,7 @@ graph now resolves one kernel for this planned rendering.
   that names IR-601, and a divide or remainder node over a `reject` type is not refused for being
   a division (see "Integer divide and remainder" for the removal).
 - If an add, subtract, multiply, divide or remainder node's integer type has overflow policy
-  `saturate`, in either consumer, then the
+  `saturate`, in the surviving native consumer, then the
   generator shall refuse the expression with the code `UnsupportedSaturatingArithmetic` at that
   node's source span, as the first unsupported node in authored preorder, and emit no artifact.
   The diagnostic's message shall name the missing Contract Runtime saturating integer operation.
@@ -405,9 +405,9 @@ graph now resolves one kernel for this planned rendering.
 
 ### Comparison
 
-The table is the native oracle's. The Kani bundle oracle keeps the native operator and its `bool`
-result for every comparison, whether or not an operand holds arithmetic, since its arithmetic is
-fixed-width and its comparison of two `i64` values has no failure mode.
+The table is the native oracle's. Historically, the retired Kani bundle oracle kept the native
+operator and its `bool` result for every comparison, whether or not an operand held arithmetic,
+because its arithmetic was fixed-width and its comparison of two `i64` values had no failure mode.
 
 | `ComparisonOperator` | Both operands arithmetic-free | An operand holds arithmetic |
 |---|---|---|
@@ -421,7 +421,7 @@ fixed-width and its comparison of two `i64` values has no failure mode.
 - The generator shall keep the native operator and the `bool` result for a comparison of two
   arithmetic-free `i64` values, which has no failure mode. That comparison is held to the
   kernel's meaning by a differential test (FR-031-AC-4), not by a call.
-- The generator, other than for the Kani bundle oracle, shall not use a Rust comparison operator
+- The native generator shall not use a Rust comparison operator
   between the two operands of a comparison that has an arithmetic operand. Its outcome is the
   kernel's, and an `Outcome::Completed` boolean continues as above.
 - `quire_exact` exports no type environment or checked equality, which the earlier rendering of
@@ -435,7 +435,7 @@ fixed-width and its comparison of two `i64` values has no failure mode.
 
 ### Consumers
 
-- A generator other than the V1 Kani bundle that embeds the Boolean oracle where a plain `bool` is
+- A surviving generator that embeds the Boolean oracle where a plain `bool` is
   required shall refuse a clause that holds an arithmetic node, shall embed no raw arithmetic operator, and shall not read
   an `Outcome<bool>` as a `bool`. The tri-state harness generator shall refuse a clause whose
   first arithmetic node is an add, subtract, multiply, divide or remainder over a `reject` type
@@ -448,26 +448,22 @@ fixed-width and its comparison of two `i64` values has no failure mode.
   generators shall keep the `UnsupportedRelation` they return for a clause whose oracle generates,
   such as a discharged add or a guarded divide used as a comparison operand, and the
   `UnsupportedClause` carrying the oracle's code and span for a clause the oracle refuses, which
-  includes every clause refused by the refusals above. The Kani obligation clause lowering shall
-  keep its definedness refusal for a clause that carries an obligation, which is every `reject`
-  arithmetic node, and shall take the oracle's refusal otherwise.
-- The V1 Kani bundle (`generate_kani_bundle`) is a consumer that needs a plain `bool`, because it
-  places the oracle in a `requires` and an `ensures` clause. It shall use the Kani bundle oracle
-  above for add, subtract, multiply, divide and remainder over a `reject` type, and it shall
-  refuse a clause that holds a `saturate` arithmetic node of any of the five operators with
-  `ClauseGenerationFailed`, retaining the oracle's own code (`UnsupportedSaturatingArithmetic`)
-  and the node's span, and emit no harness. It shall not carry
-  an `Outcome<bool>`. The exemplar's text-mutation contract and AD-004 L-5 require the infix
-  shape (see the measurements above), and the bundle is deleted at AD-004 step 4f, where FR-014-AC-38 and FR-015-AC-40 and AC-41 own
-  the `Outcome<bool>` oracle of a V2 clause body. The covers that FR-015-AC-53 to AC-58 add to V1
-  bundle harnesses apply to a bundle with arithmetic as to any other.
-- QSL's exemplar is the regression gate of this consumer. IT-011 in the integration repository
-  runs the exemplar clause through `generate_kani_bundle` and real `cargo kani`, with its
-  controls IT-011-SC-01 to SC-04 (the verifying run, the connective mutation and the addition
-  mutation), and IT-010-SC-05 runs a comparison clause through the same bundle. AD-004 step 4a and
-  L-5 require that control to pass through `generate_kani_bundle` until step 4e, so the exemplar's
-  verifying run and both mutants (`left + right + 1` falsified at `amount_current = 999`, and the
-  equivalent mutant verifying) are required results of the closing code change.
+  includes every clause refused by the refusals above.
+- **Retired V1 consumer (IR-348 history).** `generate_kani_bundle` needed a plain `bool` because
+  it placed the oracle in `requires` and `ensures` clauses. Its add, subtract and multiply path
+  used the Kani bundle oracle above; divide and remainder and their `saturate` refusal were
+  planned. The planned refusal was `ClauseGenerationFailed` retaining the oracle's
+  `UnsupportedSaturatingArithmetic` code and node span, with no harness emitted. The bundle did
+  not carry `Outcome<bool>`. The exemplar's text-mutation contract and AD-004 L-5 explained the
+  infix shape before step 4f retired the bundle. FR-014-AC-38 and FR-015-AC-40 and AC-41 own
+  the `Outcome<bool>` oracle of a V2 clause body. The former V1 bundle covers of
+  FR-015-AC-53 to AC-58 were part of the retired bundle behavior.
+- **Retired V1 exemplar gate (IR-348 history).** QSL's IT-011 in the integration repository
+  specified an exemplar run through `generate_kani_bundle` and real `cargo kani`, with controls
+  IT-011-SC-01 to SC-04; IT-010-SC-05 specified a comparison run through the same bundle.
+  AD-004 step 4a and L-5 required that route until step 4e. The verifying run and mutants
+  (`left + right + 1` falsified at `amount_current = 999`, and the equivalent mutant verifying)
+  were specified outcomes, not a current gate or a claim of a completed QSL run.
 
 ### Test obligations
 
@@ -484,11 +480,10 @@ fixed-width and its comparison of two `i64` values has no failure mode.
   divisor through an expression IR admits under `reject`, and the proof of safety in each
   construction rests on a declared bound that the operand vector violates while the guards still
   pass. No case is replaced by a nearby vector.
-- The closing code change shall run the exemplar tests of the integration repository
-  (`tests/qsl_kani_exemplar.rs`: IT-011 and IT-010-SC-05) against its branch, before and after
-  the change, and record both runs. That needs a checkout of the integration repository with its
-  codegen dependency pointed at the branch, and the installed Kani backend. A run that cannot be
-  made is reported as not run and is not read as a pass.
+- **Retired V1 test obligation (IR-348 history).** The former closing change called for runs of
+  the integration repository's exemplar tests (`tests/qsl_kani_exemplar.rs`: IT-011 and
+  IT-010-SC-05) before and after the change. This was evidence for the retired bundle criterion,
+  not a current test obligation. A run that was not made is not read as a pass.
 
 ## Acceptance Criteria
 
@@ -527,13 +522,14 @@ fixed-width and its comparison of two `i64` values has no failure mode.
 
 - **Upstream**: `interface-001` (`oracle_slice`), [FR-014](./FR-014-exact-scalar-oracles.md) for the
   meter and `Outcome` convention of an exact oracle, [FR-018](./FR-018-composite-equality-oracles.md)
-  for the equality evaluation, [FR-015](../../kani/functional/FR-015-bounded-kani-obligations.md)
-  and [FR-028](../../kani/functional/FR-028-bounded-proof-ceilings.md) for the Kani bundle and its
-  ceilings, [FR-008](../../strategy/functional/FR-008-bound-domain-strategy-admission.md) for the
+  for the equality evaluation, [FR-008](../../strategy/functional/FR-008-bound-domain-strategy-admission.md) for the
   strategy admission, Contract IR FR-013 and FR-015, Contract Runtime FR-002, FR-006 and
   FR-007 (the identity items of a generated crate), and `quire-exact` FR-357 for the division
   operation. The IR-1045 native code change depends on QSL's single-member `divide` and CG
   then bumping QSL and `quire-exact` together ("Prerequisite: the one `quire-exact` lock entry").
+- **Retired V1 context**: [FR-015](../../kani/functional/FR-015-bounded-kani-obligations.md)
+  and [FR-028](../../kani/functional/FR-028-bounded-proof-ceilings.md) supplied the former Kani
+  bundle and its ceilings; IR-348 retired that consumer.
 - **Downstream**: [TC-044](../matrix/TC-044-boolean-oracle-integer-arithmetic.md).
 
 ## Open decisions
@@ -541,11 +537,11 @@ fixed-width and its comparison of two `i64` values has no failure mode.
 OD-1 remains a design decision. OD-2, OD-3, OD-4 and OD-6 have the dispositions below;
 the pending implementation and proof gates are separate from those decisions.
 
-- **OD-1, the law.** The generator selects `DivisionProfile::Truncating`. IR's divide and
+- **OD-1, the law.** The native generator selects `DivisionProfile::Truncating`. IR's divide and
   remainder nodes name no law, IR's own arithmetic preimage computes the truncating one, and
   so did the earlier raw operators, but no ruling names it for V1. To confirm with IR and QSL. If
-  the language wants floor or Euclidean division here, the constant and the bundle oracle's
-  `/` and `wrapping_rem` both change, because Rust's operators are truncating.
+  the language wants floor or Euclidean division here, the native generator's law constant must
+  change; the retired bundle operators no longer participate.
 - **OD-2, kernel ownership (closed by the merged API).** Contract Runtime removed its
   exact scalar, outcome and meter re-exports, so the native oracle must import those
   types and calls from `quire_exact` directly. QSV owns composite declarations and
@@ -559,13 +555,14 @@ the pending implementation and proof gates are separate from those decisions.
   (QSV declaration equality evaluation). `quire_exact::planned_equality` over
   `Value::Integer` operands, negated for not-equal, is therefore the same value and the same
   charges.
-- **OD-4, the Kani encoding of division.** The bundle takes fixed-width operators, with the
-  measurements in "Two consumers, two shapes of the same rule". `quire_exact::Integer` is
+- **OD-4, retired V1 Kani encoding of division.** The bundle was planned to use fixed-width
+  operators, with the measurements in "Native consumer and retired V1 bundle history".
+  `quire_exact::Integer` is
   `num-bigint`-backed, and the call gave no CBMC verdict in 900 seconds. Contract Runtime's copy
   of the integer holds an `i64` inline whenever the value fits, and its source comment cites
-  CBMC; `quire-exact`'s is a `BigInt` newtype. If QSL or IR want the bundle to prove the kernel's own division, the
-  kernel needs a fixed-width path CBMC can fold, and that is QSL's decision. Not verified here:
-  any divide under Kani through `quire_exact`.
+  CBMC; `quire-exact`'s is a `BigInt` newtype. Any future V2 proof of the kernel's own division
+  needs a separately specified, measurable route; this retired V1 decision supplies no current
+  requirement. No divide under Kani through `quire_exact` was verified here.
 - **OD-6, connective metering (closed by current contracts).** QSL's evaluator,
   `quire-exact` FR-362-AC-9, QSpec TC-191 and CG FR-014-AC-35/37 require one
   `boolean.result-retain` charge for every completed connective, including a
@@ -575,8 +572,8 @@ the pending implementation and proof gates are separate from those decisions.
 ## Out of Scope
 
 - **Moving QSL's exemplar onto the V2 contract arm.** AD-004 step 4e and QSL's follow-up own it.
-  Until then the exemplar runs through the V1 bundle and FR-031-AC-11 is its gate. Whether QSL
-  makes the exemplar run a required gate on its side is an open question to QSL.
+  The V1 bundle and FR-031-AC-11 gate are retired. Whether QSL makes a V2 exemplar run a required
+  gate on its side is an open question to QSL.
 - **Numeric negation.** `interface-001` and the generator refuse it, and this requirement does
   not change that.
 - **Rational, decimal, IEEE, quantity and text arithmetic.** The V1 Boolean oracle carries

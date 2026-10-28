@@ -5,8 +5,7 @@
 # Native orchestration: every target calls the toolchain that owns the job.
 # =============================================================================
 
-TRUSTED_HOME := $(shell /usr/bin/python3 -c 'import os,pwd; print(pwd.getpwuid(os.getuid()).pw_dir)')
-override CARGO := $(TRUSTED_HOME)/.cargo/bin/cargo
+override CARGO := cargo
 override MSRV := 1.98.1
 QUIRE ?= quire
 # --locked only when no local patch is active: a patch rewrites the resolution.
@@ -54,10 +53,12 @@ lint:
 export QSPEC_DIR
 QSPEC_FIXTURES := positive-union-nodes positive-clause-operations positive-all-families
 GATES_BIN := target/cg-gates
+GATES_CARGO_TARGET_DIR := $(if $(strip $(CARGO_TARGET_DIR)),$(CARGO_TARGET_DIR),target)
 
-$(GATES_BIN): scripts/cg_gates.rs
+$(GATES_BIN): scripts/cg_gates.rs Cargo.toml Cargo.lock Makefile
 	@mkdir -p target
-	CARGO_MANIFEST_DIR=$(CURDIR) rustup run $(MSRV) rustc --edition=2021 $< -o $@
+	$(CARGO) +$(MSRV) build $(LOCKED) --bin cg_gates --target-dir "$(GATES_CARGO_TARGET_DIR)"
+	install -m 755 "$(GATES_CARGO_TARGET_DIR)/debug/cg_gates" $@
 
 .PHONY: qspec-preflight
 qspec-preflight:
@@ -87,12 +88,10 @@ test: qspec-preflight qspec-preflight-selftest
 # target directory.
 #
 # Integration tests live in the single `it` binary (`tests/it/main.rs`); the
-# `kani_obligations`, `skeleton_spine`, `kani_witness_join`,
+# `kani_obligations`, `skeleton_spine`,
 # `bounded_kani_corpus`, `kani_generation` and `kani_batching` filters select those modules'
 # tests, and `--ignored` runs only their `#[ignore]`d real-prover tests: the
-# real-Kani obligation runs, the skeleton spine (one Boolean clause through the
-# real prover and native replay through QSL), the witness join (a real
-# counterexample replayed natively), the bounded corpus cases, the
+# real-Kani obligation runs, the bounded corpus cases, the
 # generation adapter proofs and the harness batching runs (the launcher process
 # count before and after, and a real mixed batch) run through `cargo kani`. The filters
 # follow `--` because libtest accepts several; cargo's own positional filter
@@ -109,7 +108,7 @@ tools:
 
 KANI_LOCK ?= /tmp/agent-e-heavy-build.lock
 # Keep each ignored installed-Kani test module in this lane; kani-scope selects the gate by path.
-KANI_FILTERS := kani_obligations kani_obligations_symbolic_domains skeleton_spine kani_stdout_capture kani_witness_join bounded_kani_corpus kani_generation kani_batching
+KANI_FILTERS := kani_obligations kani_obligations_symbolic_domains skeleton_spine kani_stdout_capture bounded_kani_corpus kani_generation kani_batching
 KANI_TEST := $(CARGO) +$(MSRV) test $(LOCKED) -j 4 --test it --target-dir target-codex-backends -- --ignored --test-threads=1 $(KANI_FILTERS)
 
 .PHONY: kani kani-scope kani-gate

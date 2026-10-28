@@ -757,9 +757,7 @@ pub(crate) fn guard_sources() -> Vec<(&'static str, String)> {
 
 /// Every supported family's emitted `proof_graph` artifact is a real `CORPUS_PROOF_GRAPH_SCHEMA`
 /// document -- not merely a JSON blob this crate's own `CorpusProofDependencyGraph` type happens
-/// to deserialize -- validated against the published schema file the same way
-/// `tests/it/kani_generation.rs` validates `quire.kani-proof-graph/v2` graphs against
-/// `schemas/kani-proof-graph-v2.schema.json`.
+/// to deserialize -- validated against the published corpus schema file.
 #[trace("TC-023", "FR-028-AC-1")]
 #[test]
 fn tc_023_proof_graph_artifact_validates_against_its_published_schema() {

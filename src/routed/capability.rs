@@ -14,7 +14,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use qsl_replay::{DomainKey, DomainKind, ProofBound};
-use quire_contract_model::{ApplicationOperator, CheckedTerm, ClauseKind};
+use quire_contract_model::{ApplicationOperator, CheckedTerm};
 use quire_contract_model::{
     CheckedNodeId, CheckedPackageIncomplete, CheckedPackageLimit, CheckedPackageRefusal,
     CheckedPackageRefusalCause, CheckedPackageRefusalCode, CheckedSemanticId, ContractPackageV1,
@@ -111,9 +111,7 @@ impl<'a> CapabilityLookups<'a> {
                         .or_default()
                         .insert(node_id.clone());
                 }
-                KaniForm::V1BoundClause { .. }
-                | KaniForm::V2StateFrame { .. }
-                | KaniForm::V2FunctionApplication { .. } => {}
+                KaniForm::V2StateFrame { .. } | KaniForm::V2FunctionApplication { .. } => {}
             }
         }
         Self {
@@ -407,12 +405,6 @@ pub enum Candidates {
 /// display output.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum KaniForm {
-    /// A clause copied from a bound V1 package. Its private fields and validated
-    /// expression come from Contract IR admission.
-    V1BoundClause {
-        /// The admitted typed clause.
-        clause: Box<quire_contract_model::BoundClause>,
-    },
     /// A checked claim and its exact admitted result occurrence.
     ///
     /// The operation identity, family, and provenance are read from the typed
@@ -531,8 +523,6 @@ pub enum KaniFormFamily {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum KaniFormName {
-    /// Admitted V1 bound clause.
-    V1BoundClause,
     /// V2 exact scalar claim.
     V2ScalarClaim,
     /// V2 state-clause contract/frame role.
@@ -568,7 +558,6 @@ pub enum KaniObligationRole {
 impl KaniFormName {
     const fn label(self) -> &'static str {
         match self {
-            Self::V1BoundClause => "v1_bound_clause",
             Self::V2ScalarClaim => "v2_scalar_claim",
             Self::V2StateFrame => "v2_state_frame",
             Self::V1CompositeEquality => "v1_composite_equality",
@@ -777,18 +766,6 @@ fn resolve_checked_reference<'a>(
 impl KaniForm {
     fn identity<'a>(&'a self, lookups: &mut CapabilityLookups<'a>) -> KaniFormIdentity {
         match self {
-            Self::V1BoundClause { clause } => KaniFormIdentity {
-                family: KaniFormFamily::Clause,
-                form: KaniFormName::V1BoundClause,
-                operation_identity: Some("v1.bound_clause".to_owned()),
-                role: match clause.kind() {
-                    ClauseKind::Precondition => Some(KaniObligationRole::Precondition),
-                    ClauseKind::Postcondition => Some(KaniObligationRole::Postcondition),
-                    ClauseKind::Invariant => Some(KaniObligationRole::Invariant),
-                    ClauseKind::Assertion | ClauseKind::Case | ClauseKind::Information => None,
-                },
-                state_frame_role: None,
-            },
             Self::V2ScalarClaim {
                 package, node_id, ..
             } => {
@@ -875,26 +852,6 @@ impl KaniForm {
         }
         let identity = self.identity(lookups);
         match self {
-            Self::V1BoundClause { clause } => {
-                let refusal = match clause.kind() {
-                    ClauseKind::Precondition | ClauseKind::Postcondition | ClauseKind::Invariant => {
-                        crate::kani::generate::clause::classify_bound_clause(clause).err()
-                    }
-                    kind => Some(
-                        crate::kani::generate::outcome::UnsupportedObligation::ClauseKindNotObligation {
-                            kind,
-                        },
-                    ),
-                };
-                match refusal {
-                    Some(refusal) => Err(Box::new(Cause::KaniFormRefused {
-                        form: identity,
-                        refusal,
-                        backend: backend.identity.clone(),
-                    })),
-                    None => Ok(KaniFormPreflightOutcome::Ready),
-                }
-            }
             Self::V2ScalarClaim {
                 package,
                 contract,
