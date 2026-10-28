@@ -33,14 +33,14 @@ use crate::{
     kani::{
         abi::{KaniBindingRole, KaniPrimitiveType},
         identity::{ObligationBinding, StateFrameIdentity, StateFrameProperty, StateUnrangedField},
-        output::playback::parse_assertion_playback,
+        output::playback::{parse_assertion_playback, WitnessDecodeLimits},
         terminal::ReplaySettlement,
     },
     replay::{
         function::{render_witness, DependencyLockError, ProvidedDocument, ReplayInputs},
         obligation::{frame_identity, frame_kind, ObligationIdentityError},
         state_clause::{IntegerValue, ObjectRef, SnapshotLink, SnapshotPopulation},
-        witness::{decode_playback, DecodeFailure, WitnessDecodeLimits},
+        witness::{decode_playback, DecodeFailure},
     },
 };
 

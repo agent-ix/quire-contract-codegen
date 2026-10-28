@@ -24,14 +24,11 @@ use quire_semantic_value::catalog::Category;
 use crate::{
     kani::generate::corpus::bounded_kani_corpus::BoundedCorpusCase,
     kani::identity::KaniObligationIdentity,
-    kani::output::playback::parse_assertion_playback,
+    kani::output::playback::{parse_assertion_playback, WitnessDecodeLimits},
     kani::terminal::ReplaySettlement,
     replay::{
         obligation::{contract_arguments, function_contract_identity, ObligationIdentityError},
-        witness::{
-            decode_falsification, decode_playback, first_out_of_domain, DecodeFailure,
-            WitnessDecodeLimits,
-        },
+        witness::{decode_falsification, decode_playback, first_out_of_domain, DecodeFailure},
     },
 };
 

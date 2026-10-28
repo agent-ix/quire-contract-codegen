@@ -46,12 +46,12 @@ use crate::{
             outcome::{BoundNotResolvedCause, StateFrameRefusal},
         },
         identity::{ObligationBinding, StateFrameIdentity, StateFrameProperty},
-        output::playback::Playback,
+        output::playback::{Playback, WitnessDecodeLimits},
         terminal::ReplaySettlement,
     },
     replay::{
         function::{render_witness, DependencyLockError, ProvidedDocument, ReplayInputs},
-        witness::{decode_playback, DecodeFailure, WitnessDecodeLimits},
+        witness::{decode_playback, DecodeFailure},
     },
 };
 
