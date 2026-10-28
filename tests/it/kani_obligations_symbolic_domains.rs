@@ -1514,6 +1514,7 @@ fn collection_run_evidence_preserves_every_ordered_identity_option() {
 }
 
 #[trace("FR-015-AC-97", "FR-015-AC-102", "TC-025")]
+#[trace("FR-015-AC-97", "FR-015-AC-102", "TC-025")]
 #[test]
 fn ordered_set_shape_is_refused_without_erasing_its_uniqueness_semantics() {
     let mut document = model_document();

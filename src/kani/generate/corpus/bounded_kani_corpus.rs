@@ -1,6 +1,6 @@
 //! Integrated bounded-Kani corpus generation over Contract IR's validated finite ABI.
 //!
-//! CG owns the semantic-family lowerers. This module owns the codegen-side
+//! CG owns the finite graph lowerer. This module owns the codegen-side
 //! vertical slice: once one lowering is admitted, it renders the corpus roles (oracle, strategy,
 //! Kani harness, QSL source and dependency, and proof-dependency graph) from the same profile
 //! selection, finite input, and declared proof-dependency census. A non-success outcome returns before any role is
@@ -30,9 +30,8 @@ use crate::{
         ProofDependencyRequest, ProofReadiness,
     },
     kani::generate::census_validation::validate_dependencies,
-    kani::generate::lower::{
-        bounded_collections::{prepare_bounded_collection_query, CollectionQuery, QueryKind},
-        finite_reference_graphs::{prepare_finite_graph_reaches, GraphLowering, GraphRequest},
+    kani::generate::lower::finite_reference_graphs::{
+        prepare_finite_graph_reaches, GraphLowering, GraphRequest,
     },
 };
 
@@ -47,22 +46,18 @@ pub const CORPUS_PROOF_GRAPH_SCHEMA: &str = "quire.kani-corpus-proof-graph/v1";
 pub enum BoundedCorpusFamily {
     /// Identity-preserving positive-length reachability.
     FiniteReferenceGraph,
-    /// Ordered, duplicate-preserving finite collection queries.
-    BoundedCollection,
 }
 
 impl BoundedCorpusFamily {
     const fn construct(self) -> &'static str {
         match self {
             Self::FiniteReferenceGraph => "finite-reference-graph",
-            Self::BoundedCollection => "bounded-collection-query",
         }
     }
 
     const fn label(self) -> &'static str {
         match self {
             Self::FiniteReferenceGraph => "graph",
-            Self::BoundedCollection => "collection",
         }
     }
 }
@@ -72,22 +67,18 @@ impl BoundedCorpusFamily {
 pub enum BoundedCorpusRequest {
     /// A finite positive-length reachability query.
     Graph(GraphRequest),
-    /// An ordered finite collection query.
-    Collection(CollectionQuery),
 }
 
 impl BoundedCorpusRequest {
     const fn family(&self) -> BoundedCorpusFamily {
         match self {
             Self::Graph(_) => BoundedCorpusFamily::FiniteReferenceGraph,
-            Self::Collection(_) => BoundedCorpusFamily::BoundedCollection,
         }
     }
 
     fn source_id(&self) -> &str {
         match self {
             Self::Graph(request) => &request.source_id,
-            Self::Collection(request) => &request.source_id,
         }
     }
 }
@@ -127,9 +118,9 @@ pub struct CorpusProofDependencyGraph {
     /// The corpus case's own `#[kani::proof]` symbol; identical to the suffix-bearing function
     /// name in [`BoundedCorpusArtifacts::kani_harness`].
     pub proof_id: String,
-    /// Semantic family label (e.g. `collection`).
+    /// Semantic family label (`graph`).
     pub family: String,
-    /// Contract IR construct name this case lowers (e.g. `bounded-collection-query`).
+    /// Contract IR construct name this case lowers (`finite-reference-graph`).
     pub construct: String,
     /// The corpus case's name, `{family}_{digest}`; the same name its artifact paths carry.
     pub identity: String,
@@ -191,19 +182,6 @@ enum RequestIdentity<'a> {
         field_id: &'a str,
         max_expansions: usize,
     },
-    Collection {
-        source_id: &'a str,
-        values: Vec<String>,
-        max_items: usize,
-        kind: QueryKindIdentity,
-    },
-}
-
-#[derive(Serialize, FixedShape)]
-#[serde(rename_all = "camelCase")]
-enum QueryKindIdentity {
-    ForAllNonNegative,
-    ExistsEqual(String),
 }
 
 impl<'a> From<&'a BoundedCorpusRequest> for RequestIdentity<'a> {
@@ -225,25 +203,6 @@ impl<'a> From<&'a BoundedCorpusRequest> for RequestIdentity<'a> {
                     target_id,
                     field_id,
                     max_expansions: *max_expansions,
-                }
-            }
-            BoundedCorpusRequest::Collection(request) => {
-                let CollectionQuery {
-                    source_id,
-                    values,
-                    max_items,
-                    kind,
-                } = request;
-                Self::Collection {
-                    source_id,
-                    values: values.iter().map(ToString::to_string).collect(),
-                    max_items: *max_items,
-                    kind: match kind {
-                        QueryKind::ForAllNonNegative => QueryKindIdentity::ForAllNonNegative,
-                        QueryKind::ExistsEqual(expected) => {
-                            QueryKindIdentity::ExistsEqual(expected.to_string())
-                        }
-                    },
                 }
             }
         }
@@ -512,29 +471,6 @@ pub fn generate_bounded_kani_corpus_case(
                 qsl_body,
             )
         }
-        BoundedCorpusRequest::Collection(request) => {
-            let lowered = prepare_bounded_collection_query(profile, dispatch, input, request)?;
-            let values = lowered
-                .query
-                .values
-                .iter()
-                .map(|value| format!("{value}i128"))
-                .collect::<Vec<_>>()
-                .join(", ");
-            let predicate = match lowered.query.kind {
-                QueryKind::ForAllNonNegative => {
-                    "values.iter().all(|value| *value >= 0i128)".to_owned()
-                }
-                QueryKind::ExistsEqual(expected) => {
-                    format!("values.iter().any(|value| *value == {expected}i128)")
-                }
-            };
-            (
-                lowered.value,
-                format!("{{ let values = [{values}]; {predicate} }}"),
-                render_collection_qsl(&lowered.query.values, lowered.query.kind),
-            )
-        }
     };
     let expectation = BoundedCorpusExpectation {
         assertion_holds: value,
@@ -579,27 +515,6 @@ pub fn generate_bounded_kani_corpus_case(
         harness_symbol,
         artifacts,
     })
-}
-
-fn render_collection_qsl(values: &[i128], kind: QueryKind) -> String {
-    match kind {
-        QueryKind::ForAllNonNegative => default_if_empty(
-            values
-                .iter()
-                .map(|value| format!("({value} >= 0)"))
-                .collect::<Vec<_>>()
-                .join(" and "),
-            "true",
-        ),
-        QueryKind::ExistsEqual(expected) => default_if_empty(
-            values
-                .iter()
-                .map(|value| format!("({value} = {expected})"))
-                .collect::<Vec<_>>()
-                .join(" or "),
-            "false",
-        ),
-    }
 }
 
 fn render_graph_qsl(lowered: &GraphLowering, input: &ValidatedFiniteInput) -> Option<String> {
@@ -791,11 +706,11 @@ pub(crate) mod tests {
     };
     use quire_contract_model::std001_code;
 
+    use super::GraphRequest;
     use super::{
         generate_bounded_kani_corpus_case, BoundedCorpusRequest, CorpusProofDependencyGraph,
         EmittedCorpusIdentities, ProofReadiness, CORPUS_PROOF_GRAPH_SCHEMA,
     };
-    use super::{CollectionQuery, GraphRequest, QueryKind};
     use crate::kani::census::{ProofDependencyKind, ProofDependencyRequest, ProofDependencyState};
 
     type InputEdit = Box<dyn Fn(&mut FiniteInput)>;
@@ -808,36 +723,21 @@ pub(crate) mod tests {
 
     pub(crate) fn false_cases() -> Vec<super::BoundedCorpusCase> {
         let fixture = fixture();
-        vec![
-            emit(
-                &fixture,
-                BoundedCorpusRequest::Graph(GraphRequest {
-                    source_id: "source".to_owned(),
-                    start_id: "b".to_owned(),
-                    target_id: "a".to_owned(),
-                    field_id: "next".to_owned(),
-                    max_expansions: 2,
-                }),
-                &[],
-                &mut EmittedCorpusIdentities::new(),
-            )
-            .unwrap(),
-            emit(
-                &fixture,
-                BoundedCorpusRequest::Collection(CollectionQuery {
-                    source_id: "source".to_owned(),
-                    values: vec![2, 2],
-                    max_items: 2,
-                    kind: QueryKind::ExistsEqual(7),
-                }),
-                &[],
-                &mut EmittedCorpusIdentities::new(),
-            )
-            .unwrap(),
-        ]
+        [("source", "a"), ("other-source", "b")]
+            .into_iter()
+            .map(|(source, target)| {
+                emit(
+                    &fixture,
+                    reach(source, "b", target, "next", 2),
+                    &[],
+                    &mut EmittedCorpusIdentities::new(),
+                )
+                .unwrap()
+            })
+            .collect()
     }
 
-    /// Each supported family retains source bytes that QSL compiles into the selected function
+    /// Each graph case retains source bytes that QSL compiles into the selected function
     /// used by replay. No case turns its generated verdict into a literal `ReplaySource::Input`.
     #[trace("TC-023")]
     #[test]
@@ -865,30 +765,6 @@ pub(crate) mod tests {
                     target_id: "a".to_owned(),
                     field_id: "next".to_owned(),
                     max_expansions: 2,
-                }),
-                &[],
-                &mut EmittedCorpusIdentities::new(),
-            )
-            .unwrap(),
-            emit(
-                &(profile.clone(), dispatch.clone(), input.clone()),
-                BoundedCorpusRequest::Collection(CollectionQuery {
-                    source_id: "source".to_owned(),
-                    values: vec![2, 2, 7],
-                    max_items: 3,
-                    kind: QueryKind::ExistsEqual(7),
-                }),
-                &[],
-                &mut EmittedCorpusIdentities::new(),
-            )
-            .unwrap(),
-            emit(
-                &(profile.clone(), dispatch.clone(), input.clone()),
-                BoundedCorpusRequest::Collection(CollectionQuery {
-                    source_id: "source".to_owned(),
-                    values: vec![2, 2],
-                    max_items: 2,
-                    kind: QueryKind::ExistsEqual(7),
                 }),
                 &[],
                 &mut EmittedCorpusIdentities::new(),
@@ -942,10 +818,10 @@ pub(crate) mod tests {
             source_site: None,
         };
         let dependencies = [edge];
-        let request = collection(3, "source");
+        let request = reach("source", "a", "b", "next", 3);
         let identity = super::CaseIdentity {
             ceilings,
-            construct: "bounded-collection-query",
+            construct: "finite-reference-graph",
             profile: profile.selection(),
             input: normalized,
             request: super::RequestIdentity::from(&request),
@@ -970,7 +846,7 @@ pub(crate) mod tests {
     /// ceiling even though their normalized tuples fit. Admission is decided by the final bytes.
     #[trace("TC-023")]
     #[test]
-    fn tc_023_compact_case_identity_admits_a_verbose_owner_input() {
+    fn tc_023_compact_case_identity_fits_a_verbose_owner_input() {
         let fixture = fixture_with(
             |_| {},
             |input| {
@@ -996,43 +872,16 @@ pub(crate) mod tests {
             "the compact identity input fits the final ceiling"
         );
 
-        let case = emit(
-            &fixture,
-            collection(3, "source"),
-            &[],
-            &mut EmittedCorpusIdentities::new(),
-        )
-        .expect("the bounded canonical case identity admits");
-        assert!(case_name(&case).starts_with("collection_"));
-    }
-
-    /// This preimage is authored from the fixture fields in RFC 8785
-    /// key order, not obtained from the generator or canonical encoder. Its content identity binds
-    /// the emitted name, so struct-order JSON cannot substitute for canonical encoding.
-    /// Serde's enum-level camelCase renames the variant, but leaves its struct-variant
-    /// `source_id` field in snake_case.
-    #[trace("TC-023")]
-    #[test]
-    fn tc_023_case_name_matches_hand_authored_canonical_preimage() {
-        const PREIMAGE: &str = concat!(
-            r#"{"ceilings":{"memoryBytes":17179869184,"wallClock":{"nanos":0,"secs":600}},"#,
-            r#""construct":"bounded-collection-query","dependencies":[],"input":{"bounds":{"#,
-            r#""max_input_bytes":2,"max_objects":2,"max_references":1},"completeness":"complete","#,
-            r#""inputBytes":1,"modelId":"model","objects":[["a","node","s"],["b","node","s"]],"#,
-            r#""profile":{"abi_revision":"abi","profile":"kani-bounded/1","revision":"r1"},"#,
-            r#""references":[["a","next","b"]],"sourceId":"source"},"#,
-            r#""profile":{"abi_revision":"abi","profile":"kani-bounded/1","revision":"r1"},"#,
-            r#""request":{"collection":{"kind":{"existsEqual":"7"},"max_items":3,"source_id":"source","values":["2","2","7"]}}}"#,
-        );
-        let digest = format!("{:x}", qsl_replay::ByteDigest::of(PREIMAGE.as_bytes()));
-        let case = emit(
-            &fixture(),
-            collection(3, "source"),
-            &[],
-            &mut EmittedCorpusIdentities::new(),
-        )
-        .expect("the fixture is an admitted collection case");
-        assert_eq!(case_name(&case), format!("collection_{digest}"));
+        let request = reach("source", "000000", "000001", "next", 3);
+        let identity = super::CaseIdentity {
+            ceilings: crate::kani::test_support::proof_ceilings::proof_ceilings(),
+            construct: "finite-reference-graph",
+            profile: fixture.0.selection(),
+            input: normalized,
+            request: super::RequestIdentity::from(&request),
+            dependencies: &[],
+        };
+        assert_eq!(identity.digest().unwrap().len(), 64);
     }
 
     /// The caller supplies the dependency census, so it can offer a
@@ -1052,9 +901,9 @@ pub(crate) mod tests {
             ceilings: crate::kani::test_support::proof_ceilings::proof_ceilings(),
             schema_version: CORPUS_PROOF_GRAPH_SCHEMA.to_owned(),
             proof_id: "corpus_proof".to_owned(),
-            family: "collection".to_owned(),
-            construct: "bounded-collection-query".to_owned(),
-            identity: "collection_case".to_owned(),
+            family: "graph".to_owned(),
+            construct: "finite-reference-graph".to_owned(),
+            identity: "graph_case".to_owned(),
             readiness: ProofReadiness::Ready,
             dependencies,
         };
@@ -1068,8 +917,8 @@ pub(crate) mod tests {
         ));
         let rendering = super::render_artifacts(
             graph.ceilings,
-            super::BoundedCorpusFamily::BoundedCollection,
-            "collection_case",
+            super::BoundedCorpusFamily::FiniteReferenceGraph,
+            "graph_case",
             true,
             "true",
             "true",
@@ -1094,7 +943,7 @@ pub(crate) mod tests {
                 &profile,
                 &dispatch,
                 &input,
-                collection(3, "source"),
+                reach("source", "a", "b", "next", 3),
                 &[],
                 &mut EmittedCorpusIdentities::new(),
             )
@@ -1139,36 +988,20 @@ pub(crate) mod tests {
         edit_selection(&mut selection);
         let profile = KaniProfile::new(
             selection.clone(),
-            vec![
-                CapabilityEntry {
-                    construct: "finite-reference-graph".to_owned(),
-                    disposition: CapabilityDisposition::Supported {
-                        module: "graphs".to_owned(),
-                    },
+            vec![CapabilityEntry {
+                construct: "finite-reference-graph".to_owned(),
+                disposition: CapabilityDisposition::Supported {
+                    module: "graphs".to_owned(),
                 },
-                CapabilityEntry {
-                    construct: "bounded-collection-query".to_owned(),
-                    disposition: CapabilityDisposition::Supported {
-                        module: "collections".to_owned(),
-                    },
-                },
-            ],
+            }],
         )
         .unwrap();
-        let dispatch = DispatchIndex::new(vec![
-            ModuleDescriptor {
-                module_id: "graphs".to_owned(),
-                family: SemanticFamily::ObjectsReferencesGraphs,
-                abi_revision: "abi".to_owned(),
-                constructs: vec!["finite-reference-graph".to_owned()],
-            },
-            ModuleDescriptor {
-                module_id: "collections".to_owned(),
-                family: SemanticFamily::CollectionsQueries,
-                abi_revision: "abi".to_owned(),
-                constructs: vec!["bounded-collection-query".to_owned()],
-            },
-        ])
+        let dispatch = DispatchIndex::new(vec![ModuleDescriptor {
+            module_id: "graphs".to_owned(),
+            family: SemanticFamily::ObjectsReferencesGraphs,
+            abi_revision: "abi".to_owned(),
+            constructs: vec!["finite-reference-graph".to_owned()],
+        }])
         .unwrap();
         let mut input = FiniteInput {
             model_id: "model".to_owned(),
@@ -1206,23 +1039,15 @@ pub(crate) mod tests {
 
     #[trace("TC-023")]
     #[test]
-    fn tc_023_generates_deterministic_complete_artifacts_for_every_supported_family() {
+    fn tc_023_generates_deterministic_complete_graph_artifacts() {
         let (profile, dispatch, input) = fixture();
-        let cases = vec![
-            BoundedCorpusRequest::Graph(GraphRequest {
-                source_id: "source".to_owned(),
-                start_id: "a".to_owned(),
-                target_id: "b".to_owned(),
-                field_id: "next".to_owned(),
-                max_expansions: 2,
-            }),
-            BoundedCorpusRequest::Collection(CollectionQuery {
-                source_id: "source".to_owned(),
-                values: vec![2, 2, 7],
-                max_items: 3,
-                kind: QueryKind::ExistsEqual(7),
-            }),
-        ];
+        let cases = vec![BoundedCorpusRequest::Graph(GraphRequest {
+            source_id: "source".to_owned(),
+            start_id: "a".to_owned(),
+            target_id: "b".to_owned(),
+            field_id: "next".to_owned(),
+            max_expansions: 2,
+        })];
         for request in cases {
             // A fresh counter per call: an identical request yields identical output.
             let first = generate_bounded_kani_corpus_case(
@@ -1289,7 +1114,7 @@ pub(crate) mod tests {
             &profile,
             &dispatch,
             &input,
-            collection(3, "with-dependency"),
+            reach("with-dependency", "a", "b", "next", 3),
             &[dependency],
             &mut EmittedCorpusIdentities::new(),
         )
@@ -1322,7 +1147,7 @@ pub(crate) mod tests {
             &profile,
             &dispatch,
             &input,
-            collection(3, "missing-dependency"),
+            reach("missing-dependency", "a", "b", "next", 3),
             &[dependency],
             &mut EmittedCorpusIdentities::new(),
         )
@@ -1352,7 +1177,7 @@ pub(crate) mod tests {
             &profile,
             &dispatch,
             &input,
-            collection(3, "duplicate-census"),
+            reach("duplicate-census", "a", "b", "next", 3),
             &[duplicate, duplicate],
             &mut emitted,
         )
@@ -1365,7 +1190,7 @@ pub(crate) mod tests {
             &profile,
             &dispatch,
             &input,
-            collection(3, "duplicate-census"),
+            reach("duplicate-census", "a", "b", "next", 3),
             &[],
             &mut emitted,
         )
@@ -1391,7 +1216,7 @@ pub(crate) mod tests {
             &profile,
             &dispatch,
             &other_input,
-            collection(3, "mismatched-profile"),
+            reach("mismatched-profile", "a", "b", "next", 3),
             &[],
             &mut emitted,
         )
@@ -1404,66 +1229,6 @@ pub(crate) mod tests {
             emitted.0.is_empty(),
             "the refused case must claim no identity in the registry"
         );
-    }
-
-    /// The profile's revision is the context of each passing and failing expectation, and of
-    /// an invalid census refusal.
-    #[trace("TC-023")]
-    #[test]
-    fn tc_023_expectations_and_refusals_carry_the_profile_revision_as_context() {
-        let (profile, dispatch, input) =
-            fixture_with(|selection| selection.revision = "rev-7".to_owned(), |_| {});
-        let proved = generate_bounded_kani_corpus_case(
-            crate::kani::test_support::proof_ceilings::proof_ceilings(),
-            &profile,
-            &dispatch,
-            &input,
-            collection(3, "proved-case"),
-            &[],
-            &mut EmittedCorpusIdentities::new(),
-        )
-        .unwrap();
-        assert!(proved.expectation.expected_assertion_holds());
-        assert_eq!(proved.expectation.context(), "rev-7");
-        let falsified = generate_bounded_kani_corpus_case(
-            crate::kani::test_support::proof_ceilings::proof_ceilings(),
-            &profile,
-            &dispatch,
-            &input,
-            BoundedCorpusRequest::Collection(CollectionQuery {
-                source_id: "counterexample-case".to_owned(),
-                values: vec![2, 2, 7],
-                max_items: 3,
-                kind: QueryKind::ExistsEqual(8),
-            }),
-            &[],
-            &mut EmittedCorpusIdentities::new(),
-        )
-        .unwrap();
-        assert!(!falsified.expectation.expected_assertion_holds());
-        assert_eq!(falsified.expectation.context(), "rev-7");
-        let duplicate = ProofDependencyRequest {
-            proof_id: "upstream-lemma",
-            kind: ProofDependencyKind::Required,
-            state: ProofDependencyState::Passed,
-            original_path: None,
-            replacement_path: None,
-        };
-        let refused = generate_bounded_kani_corpus_case(
-            crate::kani::test_support::proof_ceilings::proof_ceilings(),
-            &profile,
-            &dispatch,
-            &input,
-            collection(3, "refused-case"),
-            &[duplicate, duplicate],
-            &mut EmittedCorpusIdentities::new(),
-        )
-        .unwrap_err();
-        assert_eq!(
-            refused.code(),
-            std001_code!("kani_corpus_dependency_invalid")
-        );
-        assert_eq!(refused.context(), "rev-7");
     }
 
     /// This corpus's generated harnesses render no `// proof-dependency-site:` marker, no
@@ -1486,7 +1251,7 @@ pub(crate) mod tests {
             &profile,
             &dispatch,
             &input,
-            collection(3, "assumed-census"),
+            reach("assumed-census", "a", "b", "next", 3),
             &[assumed],
             &mut emitted,
         )
@@ -1499,7 +1264,7 @@ pub(crate) mod tests {
             &profile,
             &dispatch,
             &input,
-            collection(3, "assumed-census"),
+            reach("assumed-census", "a", "b", "next", 3),
             &[],
             &mut emitted,
         )
@@ -1507,34 +1272,6 @@ pub(crate) mod tests {
         assert_eq!(
             retry.artifacts.oracle.path,
             format!("corpus/{}.oracle.rs", case_name(&retry))
-        );
-    }
-
-    #[trace("TC-023")]
-    #[test]
-    fn tc_023_non_success_emits_no_partial_artifacts_or_boolean_claim() {
-        let (profile, dispatch, input) = fixture();
-        let error = generate_bounded_kani_corpus_case(
-            crate::kani::test_support::proof_ceilings::proof_ceilings(),
-            &profile,
-            &dispatch,
-            &input,
-            BoundedCorpusRequest::Collection(CollectionQuery {
-                source_id: "source".to_owned(),
-                values: vec![1, 2],
-                max_items: 1,
-                kind: QueryKind::ForAllNonNegative,
-            }),
-            &[],
-            &mut EmittedCorpusIdentities::new(),
-        )
-        .unwrap_err();
-        assert_eq!(error.kind(), KaniOutcomeKind::ResourceExhausted);
-        assert_eq!(error.boolean_claim(), None);
-        assert_eq!(
-            error.context(),
-            "r1",
-            "a lowering refusal returned through the corpus carries the profile revision"
         );
     }
 
@@ -1560,37 +1297,6 @@ pub(crate) mod tests {
         .unwrap();
         assert!(!generated.expectation.expected_assertion_holds());
         assert_eq!(generated.expectation.expected_success_checks(), 0);
-    }
-
-    #[trace("TC-023")]
-    #[test]
-    fn tc_023_collection_oracle_evaluates_the_selected_ordered_population() {
-        let (profile, dispatch, input) = fixture();
-        let generated = generate_bounded_kani_corpus_case(
-            crate::kani::test_support::proof_ceilings::proof_ceilings(),
-            &profile,
-            &dispatch,
-            &input,
-            BoundedCorpusRequest::Collection(CollectionQuery {
-                source_id: "source".to_owned(),
-                values: vec![2, 2, 7],
-                max_items: 3,
-                kind: QueryKind::ExistsEqual(7),
-            }),
-            &[],
-            &mut EmittedCorpusIdentities::new(),
-        )
-        .unwrap();
-        assert!(generated
-            .artifacts
-            .oracle
-            .contents
-            .contains("let values = [2i128, 2i128, 7i128]"));
-        assert!(generated
-            .artifacts
-            .oracle
-            .contents
-            .contains("values.iter().any(|value| *value == 7i128)"));
     }
 
     /// The case name carried by a case's own harness path.
@@ -1622,45 +1328,6 @@ pub(crate) mod tests {
         )
     }
 
-    fn collection(max_items: usize, source_id: &str) -> BoundedCorpusRequest {
-        BoundedCorpusRequest::Collection(CollectionQuery {
-            source_id: source_id.to_owned(),
-            values: vec![2, 2, 7],
-            max_items,
-            kind: QueryKind::ExistsEqual(7),
-        })
-    }
-
-    /// The canonical preimage keeps both adjacent wide i128
-    /// values exactly by spelling them as decimal strings, so the identity never rounds them.
-    #[trace("TC-023", "NFR-005-AC-1")]
-    #[test]
-    fn tc_023_wide_request_values_are_exact_canonical_strings() {
-        let wide = |value| {
-            BoundedCorpusRequest::Collection(CollectionQuery {
-                source_id: "wide".to_owned(),
-                values: vec![value],
-                max_items: 1,
-                kind: QueryKind::ExistsEqual(value),
-            })
-        };
-        let first_request = wide((1_i128 << 53) + 1);
-        let second_request = wide((1_i128 << 53) + 2);
-        let first = super::RequestIdentity::from(&first_request);
-        let second = super::RequestIdentity::from(&second_request);
-        let first_bytes = crate::core::canonical::content_bytes(&first).expect("string preimage");
-        let second_bytes = crate::core::canonical::content_bytes(&second).expect("string preimage");
-        assert_eq!(first_bytes, br#"{"collection":{"kind":{"existsEqual":"9007199254740993"},"max_items":1,"source_id":"wide","values":["9007199254740993"]}}"#);
-        assert_eq!(second_bytes, br#"{"collection":{"kind":{"existsEqual":"9007199254740994"},"max_items":1,"source_id":"wide","values":["9007199254740994"]}}"#);
-        assert_ne!(first_bytes, second_bytes);
-        assert!(first_bytes
-            .windows(b"9007199254740993".len())
-            .any(|part| part == b"9007199254740993"));
-        assert!(second_bytes
-            .windows(b"9007199254740994".len())
-            .any(|part| part == b"9007199254740994"));
-    }
-
     /// An over-bound canonical preimage returns the typed input
     /// refusal before lowering or claiming a registry identity; a valid retry still admits.
     #[trace("TC-023", "NFR-005-AC-1")]
@@ -1669,16 +1336,26 @@ pub(crate) mod tests {
         let fixture = fixture();
         let mut emitted = EmittedCorpusIdentities::new();
         let source_id = "x".repeat(1 << 20);
-        let refusal = emit(&fixture, collection(3, &source_id), &[], &mut emitted)
-            .expect_err("oversized preimage must refuse");
+        let refusal = emit(
+            &fixture,
+            reach(&source_id, "a", "b", "next", 3),
+            &[],
+            &mut emitted,
+        )
+        .expect_err("oversized preimage must refuse");
         assert_eq!(refusal.kind(), KaniOutcomeKind::InvalidInput);
         assert_eq!(
             refusal.code(),
             std001_code!("kani_corpus_identity_unencodable")
         );
         assert!(emitted.0.is_empty());
-        emit(&fixture, collection(3, "source"), &[], &mut emitted)
-            .expect("a later valid case still admits");
+        emit(
+            &fixture,
+            reach("source", "a", "b", "next", 3),
+            &[],
+            &mut emitted,
+        )
+        .expect("a later valid case still admits");
         assert_eq!(emitted.0.len(), 1);
     }
 
@@ -1691,9 +1368,9 @@ pub(crate) mod tests {
         let fixture = fixture();
         let requests = || {
             [
-                collection(3, "first"),
-                collection(3, "second"),
-                collection(5, "third"),
+                reach("first", "a", "b", "next", 3),
+                reach("second", "a", "b", "next", 3),
+                reach("third", "a", "b", "next", 5),
             ]
         };
         let mut forward = EmittedCorpusIdentities::new();
@@ -1718,7 +1395,7 @@ pub(crate) mod tests {
     }
 
     /// Requests that differ in any one field -- including a field the rendered oracle never
-    /// reads (`max_items`), the source id, or the declared census -- get distinct names, paths
+    /// reads (`max_expansions`), the source id, or the declared census -- get distinct names, paths
     /// and proof symbols, so no case overwrites another.
     #[trace("FR-015-AC-94", "TC-023")]
     #[test]
@@ -1733,11 +1410,16 @@ pub(crate) mod tests {
         }];
         let mut emitted = EmittedCorpusIdentities::new();
         let cases = [
-            emit(&fixture, collection(3, "a"), &[], &mut emitted),
-            emit(&fixture, collection(3, "b"), &[], &mut emitted),
-            emit(&fixture, collection(5, "a"), &[], &mut emitted),
-            emit(&fixture, collection(3, "a"), &census, &mut emitted),
-            emit(&fixture, collection(4, "a"), &[], &mut emitted),
+            emit(&fixture, reach("a", "a", "b", "next", 3), &[], &mut emitted),
+            emit(&fixture, reach("b", "a", "b", "next", 3), &[], &mut emitted),
+            emit(&fixture, reach("a", "a", "b", "next", 5), &[], &mut emitted),
+            emit(
+                &fixture,
+                reach("a", "a", "b", "next", 3),
+                &census,
+                &mut emitted,
+            ),
+            emit(&fixture, reach("a", "a", "b", "next", 4), &[], &mut emitted),
         ]
         .map(|case| case.expect("each distinct request is accepted"));
         let mut names: Vec<_> = cases.iter().map(case_name).collect();
@@ -1760,9 +1442,21 @@ pub(crate) mod tests {
     fn tc_023_a_request_emitted_twice_is_refused_as_an_identity_collision() {
         let fixture = fixture();
         let mut emitted = EmittedCorpusIdentities::new();
-        let first = emit(&fixture, collection(3, "same"), &[], &mut emitted).unwrap();
+        let first = emit(
+            &fixture,
+            reach("same", "a", "b", "next", 3),
+            &[],
+            &mut emitted,
+        )
+        .unwrap();
         for _ in 0..2 {
-            let refusal = emit(&fixture, collection(3, "same"), &[], &mut emitted).unwrap_err();
+            let refusal = emit(
+                &fixture,
+                reach("same", "a", "b", "next", 3),
+                &[],
+                &mut emitted,
+            )
+            .unwrap_err();
             assert_eq!(refusal.kind(), KaniOutcomeKind::InvalidInput);
             assert_eq!(
                 refusal.code(),
@@ -1772,7 +1466,7 @@ pub(crate) mod tests {
         }
         let again = emit(
             &fixture,
-            collection(3, "same"),
+            reach("same", "a", "b", "next", 3),
             &[],
             &mut EmittedCorpusIdentities::new(),
         )
@@ -1834,58 +1528,14 @@ pub(crate) mod tests {
         );
     }
 
-    #[trace("FR-015-AC-94", "TC-023")]
-    #[test]
-    fn tc_023_every_collection_request_field_changes_the_identity() {
-        let query = |source_id: &str, values: Vec<i128>, max_items, kind| {
-            BoundedCorpusRequest::Collection(CollectionQuery {
-                source_id: source_id.to_owned(),
-                values,
-                max_items,
-                kind,
-            })
-        };
-        assert_each_variation_changes_identity(
-            &fixture(),
-            query("s", vec![2, 2, 7], 3, QueryKind::ExistsEqual(7)),
-            vec![
-                (
-                    "source_id",
-                    query("t", vec![2, 2, 7], 3, QueryKind::ExistsEqual(7)),
-                ),
-                (
-                    "values",
-                    query("s", vec![2, 7, 7], 3, QueryKind::ExistsEqual(7)),
-                ),
-                (
-                    "max_items",
-                    query("s", vec![2, 2, 7], 4, QueryKind::ExistsEqual(7)),
-                ),
-                (
-                    "kind",
-                    query("s", vec![2, 2, 7], 3, QueryKind::ForAllNonNegative),
-                ),
-                (
-                    "expected value",
-                    query("s", vec![2, 2, 7], 3, QueryKind::ExistsEqual(2)),
-                ),
-            ],
-        );
-    }
-
     /// Every part of the finite input and the profile selection is part of the identity: the
     /// graph oracle is built from the input's references, and the input also fixes the bounds
     /// the case was admitted under.
     #[trace("FR-015-AC-94", "TC-023")]
     #[test]
     fn tc_023_every_input_and_profile_field_changes_the_identity() {
-        let request = || collection(3, "s");
+        let request = || reach("s", "a", "b", "next", 3);
         let base = identity_of(&fixture(), request());
-        let object = |identity: &str| FiniteObject {
-            identity: identity.to_owned(),
-            type_id: "node".to_owned(),
-            snapshot_id: "s".to_owned(),
-        };
         let edits: Vec<(&str, InputEdit)> = vec![
             ("model_id", Box::new(|i| i.model_id = "other".to_owned())),
             ("source_id", Box::new(|i| i.source_id = "other".to_owned())),
@@ -1896,13 +1546,6 @@ pub(crate) mod tests {
                 Box::new(|i| i.bounds.max_input_bytes = 3),
             ),
             ("input_bytes", Box::new(|i| i.input_bytes = 2)),
-            (
-                "object identity",
-                Box::new(move |i| {
-                    i.objects[1] = object("c");
-                    i.references[0].target_id = "c".to_owned();
-                }),
-            ),
             (
                 "object type_id",
                 Box::new(|i| i.objects[1].type_id = "other".to_owned()),
