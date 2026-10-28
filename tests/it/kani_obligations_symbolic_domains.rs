@@ -277,6 +277,18 @@ fn collection_identity(
 }
 
 fn collection_harness(fixture: &Emitted, operation: &str) -> KaniCollectionObligationHarness {
+    collection_harness_with_ceilings(
+        fixture,
+        operation,
+        crate::common::proof_ceilings::proof_ceilings_with_wall_clock(Duration::from_secs(600)),
+    )
+}
+
+fn collection_harness_with_ceilings(
+    fixture: &Emitted,
+    operation: &str,
+    ceilings: ProofCeilings,
+) -> KaniCollectionObligationHarness {
     let function_id = fixture
         .package
         .graph()
@@ -305,9 +317,7 @@ fn collection_harness(fixture: &Emitted, operation: &str) -> KaniCollectionOblig
         collection_harnesses,
         ..
     } = negotiate_kani_obligations(&KaniObligationRequest {
-        ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(
-            Duration::from_secs(600),
-        ),
+        ceilings,
         items: std::slice::from_ref(&item),
         subject_path: "crate::collection_subject",
         unwind: 8,
@@ -1441,6 +1451,82 @@ fn collection_identity_tracks_domains_claim_subject_and_unwind() {
         identity,
         collection_identity(&base, "quire.op.collection.forall", "crate::subject", 9,)
     );
+}
+
+#[trace("FR-015-AC-100", "TC-025")]
+#[cfg(target_os = "linux")]
+#[test]
+fn collection_run_evidence_preserves_every_ordered_identity_option() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let fixture = emitted_from_document_and_body(
+        model_document(),
+        "forall(item in deref(input).items: item >= 0)",
+    );
+    let harness = collection_harness_with_ceilings(
+        &fixture,
+        "quire.op.collection.forall",
+        ProofCeilings {
+            memory_bytes: std::num::NonZeroU64::new(128 * 1024 * 1024).unwrap(),
+            wall_clock: Duration::from_secs(10),
+        },
+    );
+    let scratch = write_collection_scratch(&harness);
+    let launcher = scratch.path.join("cargo-kani");
+    fs::write(
+        &launcher,
+        "#!/bin/sh\nprintf '%s\\n' \"$@\" > arguments.txt\nexit 1\n",
+    )
+    .unwrap();
+    fs::set_permissions(&launcher, fs::Permissions::from_mode(0o755)).unwrap();
+    let target_directory = scratch.path.join("target");
+    fs::create_dir(&target_directory).unwrap();
+    let installation = KaniInstallation::new(&launcher);
+    let cancel = quire_exact::Cancel::new();
+    let evidence = execute_kani_obligation(&KaniExecutionRequest {
+        cancel: &cancel,
+        installation: &installation,
+        harness: KaniExecutableHarness::from(&harness),
+        crate_directory: &scratch.path,
+        target_directory: &target_directory,
+        home_directory: None,
+    })
+    .expect("bounded launcher returns run evidence even without a proof report");
+    let received: Vec<String> = fs::read_to_string(scratch.path.join("arguments.txt"))
+        .expect("launcher received arguments")
+        .lines()
+        .map(str::to_owned)
+        .collect();
+    assert_eq!(
+        evidence.arguments, received,
+        "evidence must reflect the launched argv"
+    );
+    assert_eq!(received[0], "kani");
+    let options_end = 1 + harness.identity.options.len();
+    assert_eq!(
+        &received[1..options_end],
+        harness.identity.options.as_slice(),
+        "the complete ordered identity options must reach the launcher"
+    );
+    assert_eq!(
+        &received[options_end..options_end + 3],
+        ["-Z", "unstable-options", "--export-json"]
+    );
+    assert_eq!(received.len(), options_end + 4);
+    assert!(received[options_end + 3].starts_with(target_directory.to_str().unwrap()));
+    assert!(harness
+        .identity
+        .options
+        .windows(2)
+        .any(|pair| pair == ["--unwind", "8"]));
+    assert!(harness
+        .identity
+        .options
+        .windows(2)
+        .any(|pair| pair == ["--solver", "cadical"]));
+    assert_eq!(evidence.unwind, harness.identity.unwind);
+    assert_eq!(evidence.solver, harness.identity.solver);
+    assert_eq!(evidence.exit_code, Some(1));
 }
 
 #[trace("FR-015-AC-97", "FR-015-AC-102", "TC-025")]
