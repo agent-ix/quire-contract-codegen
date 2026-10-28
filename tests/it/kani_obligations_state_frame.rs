@@ -2109,17 +2109,18 @@ fn tc_035_frame_replay_rechecks_parsed_playback_bounds() {
             "cg_witness_decode_values_limit",
         ),
     ] {
-        let error = twin
-            .try_frame_replay_with_parse_limits(
-                "deposit",
-                &invocation,
-                "account",
-                "audit",
-                &run,
-                requested,
-                admitted,
-            )
-            .expect_err("replay must refuse a playback parsed under wider limits");
+        let error = match twin.try_frame_replay_with_parse_limits(
+            "deposit",
+            &invocation,
+            "account",
+            "audit",
+            &run,
+            requested,
+            admitted,
+        ) {
+            Ok(_) => panic!("replay must refuse a playback parsed under wider limits"),
+            Err(error) => error,
+        };
         assert!(matches!(error, FrameReplayError::Decode(cause) if cause.code == code));
     }
 }
