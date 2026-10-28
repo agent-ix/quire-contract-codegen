@@ -15,9 +15,9 @@ use qsl_replay::{
     CompositeIdentity, CompositeParityClaim, DependencyInput, DigestDomain, DigestRecord, Domain,
     DomainKey, EnvelopeSource, EqualityOperator, Identifier, IdentityEncodeError, NoPayload,
     OccurrenceKey, OperandIdentity, Origin, ParityArgument, ParityPreimage, ProofBound,
-    QualifiedName, ReplayRequest, ReplayRequestRefusal, ReplayRequestWire, ReplaySource,
-    ReplayTarget, ReplayTargetMembers, RequestTargetWire, Role, VerifiedShadow,
-    VerifiedShadowReport, WireNodeId, WitnessEnvelope, WitnessPacket, WitnessRefusal,
+    QualifiedName, ReplayRequest, ReplayRequestRefusal, ReplayRequestWire, ReplayTarget,
+    ReplayTargetMembers, RequestTargetWire, Role, VerifiedShadow, VerifiedShadowReport, WireNodeId,
+    WitnessEnvelope, WitnessPacket, WitnessRefusal,
 };
 use quire_contract_model::{
     CheckedCompositeOperandDomain, CheckedCompositeOperandError, CheckedCompositeOperands,

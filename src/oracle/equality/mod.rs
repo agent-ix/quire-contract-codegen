@@ -2453,7 +2453,9 @@ mod tests {
         value
     }
 
-    fn fixture_binding_name_mut(term: &mut CheckedTerm) -> &mut Box<str> {
+    fn fixture_binding_name_mut(
+        term: &mut CheckedTerm,
+    ) -> &mut quire_contract_model::checked_package::CheckedBindingName {
         let CheckedTerm::Binding { name, .. } = term else {
             panic!("fixture binding")
         };
@@ -3142,7 +3144,7 @@ mod tests {
                 expression,
                 Some(CheckedTerm::Application {
                     operator: ApplicationOperator::Binary,
-                    operation: json!({}),
+                    operation: serde_json::from_value(json!({})).expect("fixture operation"),
                     result_type: left.source_type.clone(),
                     arguments: vec![
                         CheckedTerm::Reference {

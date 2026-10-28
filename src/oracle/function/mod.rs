@@ -2890,9 +2890,14 @@ pub fn generate_exact_function_oracles(
             integer_division_consumers: Vec::new(),
             measure_discharged: true,
             body: Box::new(|_args| {
-                Outcome::Refused(Refusal::CheckedInvariant {
-                    cause: quire_exact::CheckedInvariantCause::GeneratedBodyPlaceholderInvoked,
-                })
+                Box::new(
+                    |_frame: &rt::Frame<'_, '_>, _completed: Option<exact::Value>| {
+                        rt::BodyStep::Return(Outcome::Refused(Refusal::CheckedInvariant {
+                            cause:
+                                quire_exact::CheckedInvariantCause::GeneratedBodyPlaceholderInvoked,
+                        }))
+                    },
+                )
             }),
         })
         .collect();
@@ -3545,7 +3550,10 @@ mod tests {
         };
         let call = CheckedTerm::Application {
             operator: ApplicationOperator::Call,
-            operation: serde_json::json!({"identity": "quire.op.function.call"}),
+            operation: serde_json::from_value(
+                serde_json::json!({"identity": "quire.op.function.call"}),
+            )
+            .expect("fixture operation"),
             result_type: nodes[0].semantic_type.clone(),
             arguments: vec![
                 reference(&nodes[0]),
@@ -3836,7 +3844,10 @@ mod tests {
             "binary",
             Some(CheckedTerm::Application {
                 operator: ApplicationOperator::Binary,
-                operation: serde_json::json!({"identity": "quire.op.integer.eq"}),
+                operation: serde_json::from_value(
+                    serde_json::json!({"identity": "quire.op.integer.eq"}),
+                )
+                .expect("fixture operation"),
                 arguments: vec![],
                 result_type: boolean.node_id.clone(),
             }),

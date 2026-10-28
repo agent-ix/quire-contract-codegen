@@ -8,7 +8,7 @@ use super::*;
 pub(in crate::oracle::scalar) fn app_term(operation: Value) -> CheckedTerm {
     CheckedTerm::Application {
         operator: ApplicationOperator::Binary,
-        operation,
+        operation: serde_json::from_value(operation).expect("fixture operation"),
         result_type: node_id('1'),
         arguments: Vec::new(),
     }
@@ -93,7 +93,8 @@ fn inference_application_node(
                 "binary"
             })
             .expect("closed fixture kind"),
-            operation: serde_json::json!({"identity": operation}),
+            operation: serde_json::from_value(serde_json::json!({"identity": operation}))
+                .expect("fixture operation"),
             result_type: node_id('0'),
             arguments,
         },
@@ -620,7 +621,8 @@ fn tc_024_a_conversion_narrows_only_its_one_referenced_argument() {
             '9',
             CheckedTerm::Application {
                 operator: ApplicationOperator::Convert,
-                operation: serde_json::json!({"identity": identity}),
+                operation: serde_json::from_value(serde_json::json!({"identity": identity}))
+                    .expect("fixture operation"),
                 result_type: node_id('0'),
                 arguments,
             },

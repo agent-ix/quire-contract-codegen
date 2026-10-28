@@ -1112,7 +1112,10 @@ mod tests {
                 },
                 Some(CheckedTerm::Application {
                     operator: ApplicationOperator::Call,
-                    operation: serde_json::json!({"identity": "quire.op.function.call"}),
+                    operation: serde_json::from_value(
+                        serde_json::json!({"identity": "quire.op.function.call"}),
+                    )
+                    .expect("fixture operation"),
                     result_type: integer_type.clone(),
                     arguments: vec![reference(&declaration), reference(&argument)],
                 }),

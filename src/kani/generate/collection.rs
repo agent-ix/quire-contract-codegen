@@ -1325,7 +1325,8 @@ mod tests {
         };
         let term = |operator, identity| CheckedTerm::Application {
             operator,
-            operation: serde_json::json!({"identity": identity}),
+            operation: serde_json::from_value(serde_json::json!({"identity": identity}))
+                .expect("fixture operation"),
             result_type: CheckedNodeId {
                 domain: "quire.checked-semantic-node/v1".into(),
                 digest: "2".repeat(64).into(),

@@ -1613,7 +1613,9 @@ mod tests {
         let readback = ReplayRequest::decode(request, package.inputs.replay_limits)
             .expect("QSL reads the packet-backed request");
         assert_eq!(
-            readback.replay_target().occurrence_key(),
+            readback
+                .replay_target()
+                .and_then(ReplayTarget::occurrence_key),
             packet.occurrence_key.as_ref()
         );
 
