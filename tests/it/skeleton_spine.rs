@@ -1256,9 +1256,12 @@ fn tc_026_function_replay_refuses_poisoned_suffixes_at_both_decode_bounds() {
             limits.bytes,
             limits.values,
         );
-        assert!(
-            bounded_parse.is_err(),
-            "the output reader must enforce {code}"
+        assert_eq!(
+            bounded_parse
+                .expect_err("the output reader must enforce the requested bound")
+                .code
+                .as_str(),
+            code
         );
         let package = make_package(limits);
         let verdict = replay_counterexample(&harness, &typed_playback(&poisoned), &package)
