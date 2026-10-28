@@ -55,11 +55,18 @@ conventions. They are listed under Risks as uncovered.
 
 ## Views
 
-The layout is described as what is there now, the target tree, the map from every module to its
+The layout is described from its original measured baseline, the target tree, the map from every module to its
 subsystem, the dependency direction, the one Kani generator, the Kani run and output edge, the one
 input model, the shared core, and the two recorded exceptions.
 
-### Current state (measured)
+The original measurement and step-2f item tables below are historical migration records, not a
+current source inventory. At the current source state, the collection family uses `HarnessSpec`
+and `render.rs` (step 4h, PR #588); the V1 Kani bundle, clause arm and routed form are deleted
+(step 4f, PR #601); and state-clause falsification is parsed at the classifier boundary and
+decoded from typed `Playback` (step 5 state-clause slice, PR #605). The remaining exceptions are
+listed under Interim exceptions; no acceptance criterion is discharged by this inventory update.
+
+### Original state (measured before migration)
 
 Measured on this repository after the subsystem restructure (PR 213), by reading `src/lib.rs` and
 grepping `src/`. Counts exclude `#[cfg(test)]` modules unless said so. The line numbers cited in
@@ -215,22 +222,20 @@ src/
       outcome.rs              the request and result vocabulary the entry and every family speak
                               (ObligationItem, UnsupportedObligation, ObligationRecord, ...); a leaf
                               inside generate/: it imports no family
-      scalar.rs  precondition.rs  contract.rs  frame.rs   family lowerers; each returns a HarnessSpec
-                              once its family is ported (scalar at 4b, precondition and contract at
-                              4c, frame at 4d). At step 2f each holds what its family lowers and
-                              renders today, moved verbatim
+      scalar.rs  frame.rs       scalar renders through HarnessSpec; frame retains its own template
+                              until its step-4d renderer port. The former V1 precondition.rs and
+                              contract.rs were deleted by 4f; V2 clauses live in clause/v2.rs
       collection.rs           the symbolic collection family: lowers an admitted model-field
                               collection claim to its typed domain and a HarnessSpec. Step 4h
                               moved its proof template to render.rs. It imports `outcome`,
                               `record`, `spec` and `render` from generate/
-      clause.rs               the V1 clause lowering that precondition.rs and contract.rs share
-                              (ClauseOracle, the subject ABI, slots); deleted by step 4f;
-                              step 4c adds a separate V2 lowering
+      clause.rs               the former V1 lowering was deleted by step 4f; this path now
+                              declares the separate V2 lowering in clause/v2.rs
       record.rs               the validated harness path and the persisted per-harness record every
                               family's render step builds last; holds today's items only, and later
                               steps may move them
-      v1_bundle.rs            INTERIM: `generate_kani_bundle` and what only it uses; deleted whole by
-                              step 4f
+      v1_bundle.rs            HISTORICAL: `generate_kani_bundle` and what only it used; deleted
+                              whole by step 4f
       census_validation.rs    INTERIM: `validate_dependencies`, the V1 bundle's error type it returns,
                               and `deterministic_json`; the corpus calls them. Survives 4f; deleted
                               with the corpus lowerer at 4g or by the V2 census input, and
@@ -305,7 +310,7 @@ Migration order, not moved.
 | `bound_coverage` | evidence | `evidence/bound_coverage.rs` | moved; V1 input |
 | `kani` (`KaniBindingRole`, `KaniPrimitiveType`, `KaniIntegerBounds`, `KaniSolver`, `adapter_options`, `i64_literal`, `readable_component`) | kani | `kani/abi.rs` | split (step 2f). `KaniSubjectBinding` is not an `abi` item: only the V1 bundle uses it, so it goes with the bundle below |
 | `kani` (`ProofDependencyEdge`, `Kind`, `State`, `Request`, `ProofReadiness`, `ProofExecutionState`, `normalize_dependencies`, `dependency_readiness`) | kani | `kani/census.rs` | split (step 2b); IR-1044 adds the V2 generation-time execution state, and the FR-015 census input and corpus use the shared types |
-| `kani` (`generate_kani_bundle`, `KaniArtifactBundle`, `ProofDependencyGraph`, `KaniRequest`, `KaniSubjectBinding`, bundle validation and rendering, except `validate_dependencies` and what it returns) | kani | `kani/generate/v1_bundle.rs` until step 4f; then none | retired immediately at step 4f. Step 2f moved them to the interim file `v1_bundle.rs`, which 4f deletes whole. `tests/it/kani_generation.rs` drives the V1 bundle and its V1-only calls retire with it; QSL's former consumer is tracked by its owner. |
+| `kani` (`generate_kani_bundle`, `KaniArtifactBundle`, `ProofDependencyGraph`, `KaniRequest`, `KaniSubjectBinding`, bundle validation and rendering, except `validate_dependencies` and what it returns) | kani | `kani/generate/v1_bundle.rs` until step 4f; then none | Retired at step 4f. Step 2f moved them to the interim file `v1_bundle.rs`, which 4f deleted whole. `tests/it/kani_generation.rs` drove the V1 bundle and its V1-only calls retired with it; QSL's former consumer is tracked by its owner. |
 | `kani` (`validate_dependencies`, `KaniDiagnostic`, `KaniErrorCode`, the identity and path helpers it uses) | kani | `kani/generate/census_validation.rs` | interim home (step 2f); stays until the corpus stops calling it (step 4g) or the V2 census input replaces it |
 | `kani` (`deterministic_json`, `artifact`) | core | `core/canonical.rs` | `deterministic_json` deleted and `Artifact::new` used directly by step 1a, which is held. Until it lands, `deterministic_json` stays in `kani/generate/census_validation.rs` (the file that survives 4f, because the corpus calls it) and the private `artifact` wrapper stays beside its only caller in `v1_bundle.rs` |
 | `kani_obligations` (harness and identity records, `ObligationKind`, `ObligationBinding`) | kani | `kani/identity.rs` | split (step 2b) |
@@ -429,17 +434,17 @@ Rules, each checkable:
   record types it needs live in `kani/identity.rs` (step 2b), so a harness is run from its identity
   and its source text.
 - Inside `kani/generate/` the order is `outcome`, `record`, `spec`, `render`, `census_validation`, then the families
-  (`scalar` and `collection`, `clause`, then `precondition` and `contract`, `frame`, `lower`,
-  `corpus`, `v1_bundle`), then `negotiate`, which imports `outcome`, `record`, `scalar`,
-  `collection`, `clause`, `precondition`, `contract` and `frame` (the `StateFrame` arm of step 4d
-  calls the frame family's role function; none of `lower`, `corpus`, `v1_bundle` or
+  (`scalar` and `collection`, then the V2 `clause`, `frame`, `lower`,
+  `corpus`), then `negotiate`, which imports `outcome`, `record`, `scalar`,
+  `collection`, `clause` and `frame` (the `StateFrame` arm of step 4d
+  calls the frame family's role function; none of `lower`, `corpus` or
   `census_validation`) and is imported by none. `collection` imports `outcome`, `record`, `spec` and `render` from
   this directory, besides `core`, `kani::abi` and `kani::identity`, and imports no other crate
   path, so never `negotiate`, `lower` or `corpus` either (the layout test lists exactly these
   seven prefixes for `collection.rs`); `scalar` and `collection` share a rank, so neither imports the other. `spec` imports `outcome` (for `MAX_OBLIGATION_UNWIND`), `core::identity` (for `HarnessPath`), `kani::abi` and `kani::identity` (for the typed collection predicate); `render` imports `spec`, `outcome`, `core::artifact` and `kani::abi`, and not `record`; a family that has been ported (scalar at 4b, collection at 4h) imports `spec` and `render`. A family file may import `outcome` and `record` and never `negotiate`: the passes that read the whole request
   (classification, name settlement, assumption resolution) are `negotiate`'s, and what lowers or
-  renders one item is its family's. `corpus` imports `lower` and `census_validation`; `v1_bundle`
-  imports `census_validation`; `frame` imports `outcome` only. `kani/test_support.rs` is
+  renders one item is its family's. `corpus` imports `lower` and `census_validation`;
+  `frame` imports `outcome` only. `kani/test_support.rs` is
   `#[cfg(test)]`, imports `identity` and `abi` and no generator, and may be imported by any test
   module under `kani/`.
 - A `#[cfg(test)]` module obeys the same direction as the file it sits in. A test that needs a
@@ -456,9 +461,8 @@ Rules, each checkable:
   `classify` to `output` remains in the allowed direction.
 - `serde_json::Value` is named only in `core/ir`, `core/canonical` and the report parser. No other
   file reads a field of a body term.
-- `BoundPackage` and `BoundClause` are named only in `strategy/`, `evidence/`, `oracle/boolean_v1.rs`,
-  `oracle/bound_v1.rs`, the V1 Kani arm and `routed/capability.rs`'s public V1 clause form and
-  preflight. Step 4f deletes the V1 Kani and routed paths. After step 4f none is named in `kani/`,
+- `BoundPackage` and `BoundClause` remain in the V1 oracle, strategy and evidence readers.
+  Step 4f deleted the V1 Kani arm and routed form; neither type is named in `kani/`,
   `routed/` or `replay/`.
 
 ### The one Kani generator
@@ -483,10 +487,11 @@ one identity record, one cover rule and one entry, not one function:
 - `kani/generate/render.rs` is the only code that emits `#[kani::proof]`, `#[kani::proof_for_contract]`,
   `kani::requires`, `kani::ensures`, `kani::any`, `kani::assume` and `kani::cover!`. A layout test
   checks string literals in non-test source (not comments, so doc prose that names them passes).
-- Five family lowerers (`scalar`, `precondition`, `contract`, `frame`, `collection`) each take
-  lowered IR claims and return `HarnessSpec`s. They format no harness structure (statements, attributes, macros, layout, cover placement); the one text a lowerer supplies is an expression fragment (`ExprText`, decision H-2). Until its step
-  ports it, a family returns what it lowers and renders today; the collection family is ported
-  at step 4h. `generate_state_frame_obligations`
+- The scalar, V2 clause and collection families return `HarnessSpec`s. A ported family formats
+  no harness structure (statements, attributes, macros, layout, cover placement); the one text
+  it supplies is an expression fragment (`ExprText`, decision H-2). The frame family retains
+  its own template until its renderer port; collection was ported at step 4h.
+  `generate_state_frame_obligations`
   becomes a frame arm of `ObligationItem`, so `negotiate_kani_obligations` is the one public
   generation entry; ADR-004 owns what the frame arm asserts.
 - `ScalarObligationIdentity`, `KaniObligationIdentity` and `StateFrameIdentity` collapse into one
@@ -610,9 +615,10 @@ spec, from the same lowered claim, and `record.rs` joins identity and artifact a
 1. It is the spelling site for every harness it renders: the proof attribute, `kani::any`,
    `kani::assume`, `kani::cover!`, `#[cfg(kani)]`, the `mod` wrapper, `use super::*;` and the
    generated-runtime ABI text the spec cannot say in a typed field (`Init::UnlimitedMeter`).
-   At 4b that covers the ported scalar family only; the other families, `v1_bundle.rs`, the
-   corpus and collection still spell their own templates, so L-3 (render.rs is the only site for
-   all seven spellings) is not yet true and lands after 4f, 4g and 4h, as L-3 says. After the
+   At 4b that covered the ported scalar family only. Steps 4f and 4h subsequently removed the
+   V1 bundle and moved collection rendering here. The frame and corpus still spell their own
+   templates, so L-3 (render.rs is the only site for all seven spellings) remains open until
+   frame rendering is ported and 4g retires the corpus. After the
    port `scalar.rs` spells none of them.
 2. It places the cover. The body is the header, the oracle source, the module wrapper, the
    attribute, then the `body` statements in spec order, then the cover as the last statement of
@@ -762,7 +768,7 @@ Where the runner, report parser and witness decode sit. One module reads Kani's 
 | Report parse | `kani/output/report.rs` | the JSON file, typed |
 | Playback extraction | `kani/output/playback.rs` | the printed block, as a payload; Kani's report carries no concrete playback |
 | Run classification and vacuity | `kani/classify.rs` | the typed report and `Option<CounterexamplePlayback>` extracted by `kani/output/playback.rs`; step 5 removed the console-text input |
-| Witness decode | `replay/witness.rs` | `decode_falsification` and the V2 clause entry take typed playback entries from `kani/output/playback.rs`; public replay entries in `function`, `state_clause` and `frame` still take transcript text and call the output parser before decoding (L-6 residual below) |
+| Witness decode | `replay/witness.rs` | `decode_falsification` and the V2 clause entry take typed playback entries from `kani/output/playback.rs`; state-clause decoding also takes typed `Playback`, while public replay entries in `function` and `frame` retain transcript text (L-6 residual below) |
 | FR-029 map: `KaniRunOutcome` to a terminal value | `kani/terminal.rs` | typed run outcome only |
 | C-09 map: IR's `KaniOutcome` with the replay outcome to `TerminalValue` | `kani/terminal.rs`, a public entry | typed outcome and the replay-outcome type it defines; total over the pair (step 5) |
 | Pairing the two inputs | the driver, outside this crate | runs the replay and calls the C-09 entry with both |
@@ -782,7 +788,7 @@ entries against persisted argument bindings and builds `qsl_replay::WitnessValue
 playback-parser implementation, even while several callers invoke them.
 The step 5 end state remains one report parse per Kani process and one
 `parse_assertion_playback` call per replay. The classifier's counterexample selection
-is separate. The planned state-clause L-6 slice adds
+is separate. The state-clause L-6 slice added
 `kani/classify.rs::parse_state_clause_falsification` as the production entry that
 checks for `KaniRunOutcome::Falsified` before parsing. It returns a typed
 `StateClausePlaybackError::NotFalsified` for other outcomes; the old
@@ -817,8 +823,8 @@ V1 boundary as a design goal. IR deletes its own
 `BoundPackage` after CG stops naming it (IR's layout AD, pending; relayed, not read here). The AD
 records only the work order the ruling allows, because the code still has V1 readers:
 
-- Kani side: step 4f deletes the deprecated V1 arm and bundle now. The V2 contract-family
-  input remains step 4c work, and any unsupported former V1 consumer is recorded as a gap
+- Kani side: step 4f deleted the deprecated V1 arm and bundle. The V2 contract-family
+  input remains partly open, and any unsupported former V1 consumer is recorded as a gap
   against its own requirement instead of kept alive through a compatibility path.
 - Oracle, strategy and evidence side: `harness`, `strategy/bound`, `evidence/bound_coverage`,
   `oracle/bound_v1.rs` and `oracle/boolean_v1.rs` read V1. FR-008 to FR-013 and NFR-004 now carry
@@ -930,12 +936,10 @@ requirement is authored.
   pass when it lands.
 - L-3. `#[kani::proof]`, `#[kani::proof_for_contract]`, `kani::requires`, `kani::ensures`,
   `kani::any`, `kani::assume` and `kani::cover!` occur in string literals of non-test source in
-  `kani/generate/render.rs` only. Test: a literal scan that ignores comments. It lands after 4f, 4g and
-  4h. Until then the interim exceptions are the V1 arm and `generate_kani_bundle` (their own
-  templates until 4f, in `kani/generate/v1_bundle.rs`), the corpus template (until 4g, in
-  `kani/generate/corpus/bounded_kani_corpus.rs`) and the collection template (until 4h, in
-  `kani/generate/collection.rs`); the scan lists them by file and each entry is
-  removed with its step.
+  `kani/generate/render.rs` only. Test: a literal scan that ignores comments. Steps 4f and 4h
+  removed the V1 and collection exceptions. The frame template in `kani/generate/frame.rs`
+  remains until its renderer is ported, and the corpus template in
+  `kani/generate/corpus/bounded_kani_corpus.rs` remains until 4g. L-3 remains open for both.
 - L-4. A `HarnessSpec` has exactly one cover (FR-015-AC-7; decision H-3), and `render.rs` places every cover after all
   assumptions, the subject call and every assertion, as the last statement. Test: the constructor's refusal, and a real-Kani test that a
   harness with an unsatisfiable assumption does not classify `Verified`.
@@ -943,8 +947,8 @@ requirement is authored.
   `left + right + 1` mutant is `Falsified` with `amount_current = 999`, and the unmutated control
   proves with every cover satisfied. Test: quire-integration's exemplar tests (4 of 4), real Kani,
   run against CG's branch by each step's PR as a local run with a `[patch]` of CG into
-  quire-integration, with the transcript in the PR (as step 2 requires for PR 210); a CG-side copy
-  only if the facade allows. Immediate V1 retirement may leave L-5 unmet until the QSL-owned
+  quire-integration, with the transcript in the PR (as step 2 requires for PR 210); a distinct
+  CG-side control only if the facade allows it without copying fixtures. Immediate V1 retirement may leave L-5 unmet until the QSL-owned
   exemplar migration and passing V2 run. L-5 is retained as an open obligation, not a deletion gate.
 - L-6. Kani output is read in `kani/output/` only, and the classifier, the terminal maps and the
   witness decode take typed values. Test: a grep for Kani's banner, check and playback wording
@@ -954,9 +958,9 @@ requirement is authored.
   `kani/output/playback.rs`; witness decoding still compares the resulting typed
   `RenderedValue`. The output reader supplies `CounterexamplePlayback` for classification and
   typed entries for witness decoding. Public or replay-facing entries in
-  `replay/function.rs`, `replay/state_clause.rs` and `replay/frame.rs` still accept
-  transcript text and call the output parser before decoding. The planned state-clause
-  L-6 slice makes its entry take parsed `Playback` from `kani/output/playback.rs`
+  `replay/function.rs` and `replay/frame.rs` still accept transcript text and call the output
+  parser before decoding. The state-clause L-6 slice makes its decode entry take parsed
+  `Playback` from `kani/output/playback.rs`
   through `kani/classify.rs::parse_state_clause_falsification` after that helper's
   falsified-run check and bounded parse. It retains harness identity,
   selected clause, generated postcondition assertion, property and state-field draw-order
@@ -983,12 +987,9 @@ requirement is authored.
   and schema spelling are defined in `core/profile.rs` once.
 - L-12. `BoundPackage` and `BoundClause` are named nowhere in `kani/`, `routed/` or `replay/`, and
   after the last V1 reader is replaced nowhere. Until step 4f the interim exceptions, listed by
-  file, are the V1 arm: `kani/generate/outcome.rs` (`ObligationItem::BoundClause` holds a
-  `&BoundPackage`), `negotiate.rs` (including its test fixture) and `clause.rs`; and
-  `routed/capability.rs` (`KaniForm::V1BoundClause` holds a `BoundClause`, with its
-  `KaniFormName::V1BoundClause` identity and V1 clause preflight). Step 4f removes these V1
-  paths and their V1-only tests immediately; the L-12
-  end-state remains absolute.
+  file, were the V1 arm in `kani/generate/{outcome,negotiate,clause}.rs` and the V1 clause
+  form and preflight in `routed/capability.rs`. Step 4f removed these paths and their V1-only
+  tests; the L-12 end-state remains absolute.
 
 ### Migration order
 
@@ -1078,7 +1079,7 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
    on the code PR. The public API, claim/refusal outcomes and emitted artifacts remain equivalent;
    this step introduces no old-path forwarding module or other compatibility layer. L-8 lands
    with the last typed-node-access PR.
-4. **The one generator.** Step 4f, the deprecated V1 retirement, proceeds now and is independent
+4. **The one generator.** Step 4f, the deprecated V1 retirement, has landed and is independent
    of 4a to 4e. Those steps remain the work needed to back the V2 requirements and controls.
    - 4a: confirm the regression requirement (L-5) on the supported V2 path after the QSL-owned
      exemplar migration. A CG-side control is added only if the `qsl-replay` facade offers a way
@@ -1165,13 +1166,14 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
      public generator (IR-598, FR-015-AC-109 to AC-111); step 4b (IR-858) gates every slice. The
      arithmetic slice deletes the `Arithmetic` arm and `definedness_arithmetic.rs`; V2 does not
      serve divide or remainder (div settles `Unsupported(OperationNotRendered)`, rem stays a
-     refused identity) until IR-854, which also owns `mod`. The collection slice, gated also on
-     step 4h, deletes the `Collection` arm and `bounded_collections.rs`. The graph slice, gated
+     refused identity) until IR-854, which also owns `mod`. The collection slice can proceed
+     after completed step 4h, and deletes the `Collection` arm and `bounded_collections.rs` only
+     when its own symbolic replacement and control obligations pass. The graph slice, gated
      on IR-805, deletes the `Graph` arm, `finite_reference_graphs.rs`, the classifier, the corpus
      replay (`replay_counterexample` on the corpus case, `compile_corpus_qsl_package` and their
      identity helpers in `replay/function.rs`, with their only caller) and the whole public
      corpus API with the generation-time `KaniOutcome`. It removes the corpus's calls to
-     `validate_dependencies`. After 4f deletes `v1_bundle.rs`, any remaining
+     `validate_dependencies`. With step 4f having deleted `v1_bundle.rs`, any remaining
      `census_validation.rs` item stays only for a live corpus caller; step 4g or the V2 census
      input removes each item when its last caller leaves. Until a family's slice lands, that
      family's corpus arm stays as it is,
@@ -1187,11 +1189,12 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
      cannot replace it. The admitted symbolic cases render through `HarnessSpec` and `render.rs`
      under the cover rule; a case with no symbolic input does not render a proof. Generation
      returns no proof verdict (FR-015-AC-95); the installed backend supplies one under FR-017.
-     L-3 lands after 4f, 4g and 4h. IR-347 moved the Kani family lowerings
+     L-3 remains open until frame rendering is ported and 4g retires the corpus; steps 4f and
+     4h have landed. IR-347 moved the Kani family lowerings
      into CG; IR removal follows this consumer change. FR-015-AC-109 has retired CG's
      arithmetic lowerer, so the current CG lowerer set is collection and graph. The collection and graph
      corpus arms, replay and shared auxiliaries remain; this does not complete step 4g.
-   - 4h: the collection family. `kani/generate/collection.rs` lowers an admitted model-field
+   - 4h (landed in PR #588): the collection family. `kani/generate/collection.rs` lowers an admitted model-field
      collection claim to a `HarnessSpec` and `render.rs` renders it under the cover rule, so the
      file no longer emits `#[kani::proof]`, `kani::any`, `kani::assume` or `kani::cover!` itself.
      It keeps its typed domain and its refusals. The collection proof template is now in
@@ -1381,13 +1384,13 @@ tables; each table states the count it covers, and the per-destination rows add 
   stay with the decode half, because they exercise `decode_falsification`; the one that calls
   `read_block` and reads the `check_text` of a `Playback` does so through the `pub(crate)` the scan
   half gains, which points downward.
-- **D-2. `kani.rs`.** `kani/abi.rs` holds only what `abi` is named for: binding roles, primitive
+- **D-2. `kani.rs` (historical step-2f allocation).** `kani/abi.rs` holds only what `abi` is named for: binding roles, primitive
   types, integer bounds, `KaniSolver`, `i64_literal`, `adapter_options` and `readable_component`.
   `KaniSubjectBinding` is not an `abi` item: only the V1 bundle uses it (as a field of
   `ProofDependencyGraph` and in the bundle's ABI), so it goes with the bundle. The bundle is
-  retired at 4f but is still live (`tests/it/kani_generation.rs` drives it, and the planner records
-  that QSL's V1 control runs through it; relayed), so it needs a home that exists and that 4f
-  deletes whole: `kani/generate/v1_bundle.rs`, a file with an INTERIM header that says so.
+  retired at 4f. Before that deletion, `tests/it/kani_generation.rs` drove the bundle and
+  QSL's V1 control used it. Step 2f placed it in `kani/generate/v1_bundle.rs`, a file that
+  step 4f deleted whole.
   `validate_dependencies` must outlive 4f while the corpus calls it, and it returns
   `KaniDiagnostic`, so `KaniDiagnostic`, `KaniErrorCode` and its required validation helpers
   stay in `kani/generate/census_validation.rs`. Step 4f deletes any helper and error variant
@@ -1490,14 +1493,11 @@ Each is a place where the target of this AD is not yet true, stated so that no s
 | Exception | Where | Removed by |
 | --- | --- | --- |
 | Public function replay entries and their internal helpers take transcript text, then call the output parser before typed decoding | `replay/function.rs`, `replay_counterexample`, `BoundedCorpusCase::replay_counterexample`, `replay_counterexample_through`, `replay_harness_counterexample` and `replay_harness_counterexample_through` | IR-348 step 5 completion: pass typed `Playback` at the public entries and through their helpers |
-| State-clause replay entry re-parses `KaniRunOutcome::Falsified` text before typed decoding | `replay/state_clause.rs`, `StateClauseReplayInputs::decode_falsification` | IR-348 step 5 state-clause slice: `kani/classify.rs::parse_state_clause_falsification` checks falsification and delegates bounded parsing to `kani/output/playback.rs`; the method takes parsed `Playback` and retains minimum-bound, harness, clause, property, assertion and field-order checks |
 | The public frame replay input carries transcript text, which `FrameReplay::new` passes to the parser through `decoded_state` | `replay/frame.rs`, `FrameReplayInputs::playback`, `FrameReplay::new` and `decoded_state` | IR-348 step 5 completion: pass typed `Playback` at `FrameReplayInputs::playback` and through its helpers |
-| The V1 bundle generator, still live | `kani/generate/v1_bundle.rs` | step 4f deletes the file |
 | `validate_dependencies`, the V1 error type it returns and `deterministic_json` | `kani/generate/census_validation.rs` | 4g or the V2 census input for the first two; step 1a for `deterministic_json` |
-| The shared V1 clause lowering and the V1 arm (`ObligationItem::BoundClause` in `outcome.rs`, `classify_clause` in `negotiate.rs`) | `kani/generate/clause.rs`, `outcome.rs`, `negotiate.rs` | step 4f deletes V1-only lowering and the V1 arm; step 4c adds the separate V2 lowering |
-| The public V1 clause form (`KaniForm::V1BoundClause`), its `KaniFormName` identity and V1 clause preflight | `routed/capability.rs` | step 4f removes them immediately; step 4e's V2 route and tests remain separate work |
 | The persisted-record helpers | `kani/generate/record.rs` | not scheduled; `artifact` by step 1a |
-| Each family renders its own template; the corpus keeps its own, with its cover after the assertion (FR-015-AC-55) | `scalar.rs`, `precondition.rs`, `contract.rs`, `frame.rs`, `collection.rs`, `corpus/bounded_kani_corpus.rs` | 4b, 4c, 4d; 4h for collection; 4g for the corpus |
+| The frame family still renders its own template | `kani/generate/frame.rs` | step 4d ports frame rendering to `HarnessSpec` and `render.rs` |
+| The corpus keeps its own template, with its cover after the assertion (FR-015-AC-55) | `kani/generate/corpus/bounded_kani_corpus.rs` | step 4g retires the corpus template; step 4h already moved collection rendering to `render.rs` |
 | The remaining collection and graph finite lowerers | `kani/generate/lower/{bounded_collections,finite_reference_graphs}.rs` | IR-347 replaced the step-2f forwarders with CG-owned lowerings and request/result types; IR removes its former exports afterwards. FR-015-AC-109 has retired arithmetic; collection and graph remain until FR-015-AC-110 and FR-015-AC-111. |
 | `generate_state_frame_obligations` is a second public entry beside `negotiate_kani_obligations` | `kani/generate/frame.rs` | step 4d |
 
@@ -1738,8 +1738,8 @@ what it could against the code; the checks are stated.
 | `RUNTIME_REVISION` | Deleted, not spelled once. Checked: the constant is read by the three emitters' manifest templates (a `rev = "..."` on the runtime dependency) and by tests (failure messages and `manifest.contains`). Nothing else decides on it: no code compares it with the runtime CG itself builds against, and CG's own `Cargo.toml` names the runtime by branch with the lockfile recording the commit. The emitted manifest needs a runtime source, not a pin, so the template names it the way `Cargo.toml` does. The cost is that an emitted crate follows the runtime branch as CG does. I did not build an emitted crate to confirm. | IR planner, IR-344; QSL concurs; repository CLAUDE.md |
 | PR 210 | Lands before the directory moves, only after this AD is approved, and with a local `make kani` transcript from its head. A precondition of migration step 2. | IR planner, IR-344 |
 | V2 strategy criteria | FR-008 to FR-013 and NFR-004 over `CheckedPackageV2` are IR-364, IR team, ordered before step 6; the FR-002 and FR-004 V2 criteria are IR-815, also ordered before step 6; FR-005 is outside the IR-364 chain; its V2 input follows the open interface-001 direction and its FR-002 dependency follows IR-815. | IR planner, IR-344, IR-364 |
-| Public entry and external consumers | Step 4f deletes `generate_kani_bundle` now. Step 4e supplies the supported V2 public entry later, and a QSL-owned follow-up moves QSL's quire-integration exemplars onto it. Each other former consumer is inventoried and routed to its repository owner; no compatibility entry remains in CG. | IR-348 immediate-deletion ruling |
-| Package source for tests | After QSL-353 the corpus builds packages through QSL's facade (`call_site(...).package`, or source plus `qsl_replay`), and the arithmetic control (step 4a) is quire-integration's existing test, with a CG-side copy only if the facade allows. CG copies no QSL fixture and no QSL-emitted package file. | QSL review of this PR |
+| Public entry and external consumers | Step 4f deleted `generate_kani_bundle`. Step 4e supplies the supported V2 public entry, and a QSL-owned follow-up moves QSL's quire-integration exemplars onto it. Each other former consumer is inventoried and routed to its repository owner; no compatibility entry remains in CG. | IR-348 immediate-deletion ruling |
+| Package source for tests | After QSL-353 the corpus builds packages through QSL's facade (`call_site(...).package`, or source plus `qsl_replay`), and the arithmetic control (step 4a) is quire-integration's existing test, with a distinct CG-side control only if the facade allows it without copying fixtures. CG copies no QSL fixture and no QSL-emitted package file. | QSL review of this PR |
 | Terminal map dependency | Step 5's reader and the C-09 map (`kani/terminal.rs`) depend on QSL's `Inconclusive(cause)` types, merged in 02530e7 (QSL has ruled, relayed on IR-465, vacuity stays `Proved{0}`, no `NonZero`; the tool pin is gone, #551), and on the terminal value also taking the replay settlement; the FR-029 map and the IR-outcome map (FR-030, `DeclineCode::Std001`, QSL #634) are built. | QSL review of this PR |
 | `ContentDigest` and the canonical encoding | CG depends on `quire-canonical` directly (`branch = "main"`, no `qsl-replay` re-export). `ContentDigest` is a CG type over its digest, with no `ByteDigest` wrapper except where a QSL API requires one. The obligation preimage is encoded by `quire-canonical` (RFC 8785), and `core::canonical` is the one place that calls it; the `serde_json` `deterministic_json` copies are deleted. QSL still pins it by tag, so step 1a waits on CG's lock resolving it to one entry. Cites AD-003, which is merged and not edited here. | QSL; relayed by the IR planner |
 
