@@ -402,6 +402,18 @@ fn generate_routed_with_integer_policy(
                         else {
                             continue;
                         };
+                        let needs_view = match operation.identity() {
+                            Some("quire.op.state.clause" | "quire.op.record.project") => true,
+                            Some(identity) => {
+                                crate::oracle::scalar::derive::needs_authenticated_operation_view(
+                                    identity,
+                                )
+                            }
+                            None => false,
+                        };
+                        if !needs_view {
+                            continue;
+                        }
                         operation.mode().map_err(|_| {
                             RoutedGenerationError::UnauthenticatedOperationView {
                                 request_index: item.request_index,

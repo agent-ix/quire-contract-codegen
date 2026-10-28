@@ -75,6 +75,36 @@ pub(super) enum Family {
     QuantityComparison(ComparisonOperator),
 }
 
+/// Whether this scalar family reads an authenticated operation mode, law or member target.
+pub(crate) fn needs_authenticated_operation_view(identity: &str) -> bool {
+    match family_of_identity(identity) {
+        Some(
+            Family::IntegerDivision
+            | Family::IeeeArithmetic(..)
+            | Family::IeeeToFloat32
+            | Family::QuantityConversion,
+        ) => true,
+        Some(Family::DecimalArithmetic(operator)) => operator != DecimalOperator::Negate,
+        Some(
+            Family::Boolean(..)
+            | Family::Equality(..)
+            | Family::IntegerArithmetic(..)
+            | Family::IntegerModulo
+            | Family::RationalArithmetic(..)
+            | Family::RationalDivision
+            | Family::Ordering(..)
+            | Family::IeeeComparison(..)
+            | Family::IeeeToFloat64
+            | Family::NumericConvert
+            | Family::TextComparison(..)
+            | Family::EnumComparison(..)
+            | Family::QuantityArithmetic(..)
+            | Family::QuantityComparison(..),
+        )
+        | None => false,
+    }
+}
+
 /// The inverse of [`super::lower::catalogued_operation`] over identities. Identities outside the derivable set,
 /// which is every identity this match does not name, are `None`.
 pub(super) fn family_of_identity(identity: &str) -> Option<Family> {
