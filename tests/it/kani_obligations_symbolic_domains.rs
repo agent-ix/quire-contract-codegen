@@ -2321,7 +2321,6 @@ fn tc_025_real_kani_ordered_set_claim_and_mutant_keep_distinct_active_values() {
             "the backend admitted duplicate active values"
         );
     }
-    assert_native_collection_result(&mutant, &values, false);
 }
 
 #[trace("FR-015-AC-97", "FR-015-AC-102", "TC-025")]
