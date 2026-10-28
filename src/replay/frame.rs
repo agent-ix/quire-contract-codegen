@@ -64,7 +64,7 @@ pub struct FrameReplayInputs<'a> {
     pub harness: StateFrameIdentity,
     /// The bounded parse of the falsified run's complete retained backend output.
     pub playback: Playback<'a>,
-    /// The caller's requested decode bounds, narrowed by the proving run's bounds.
+    /// The caller's requested decode bounds; replay narrows them by the proving run's bounds.
     pub requested_decode_limits: WitnessDecodeLimits,
 }
 

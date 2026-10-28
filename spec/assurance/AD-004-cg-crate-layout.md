@@ -813,8 +813,8 @@ caller-supplied limits. Existing function replay test callers parse the complete
 under finite byte and value limits before passing `Playback` to the typed entry, retaining
 `source_len` for replay's independent byte check. The CG function replay boundary is complete.
 IR-1106 owns the later production intake in quire-driver, which currently stops at generation;
-that external integration is not evidence of a CG production caller today. Frame replay retains
-the frame replay boundary also takes typed `Playback`, parsed once by its caller from the complete
+that external integration is not evidence of a CG production caller today. The frame replay
+boundary also takes typed `Playback`, parsed once by its caller from the complete
 retained output under the component-wise minimum of requested and proving-run limits. Frame replay
 rechecks both limits before decoding. The removal of IR's witness-accessor re-parse (IR-277) is on IR's
 side: CG imports no IR witness type already (AD-001), so nothing in CG depends on those
