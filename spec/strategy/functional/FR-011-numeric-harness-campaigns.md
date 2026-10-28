@@ -56,8 +56,7 @@ until specified.
   occurrence. QSpec's V2 `AnchorName` wire domain admits every nonempty string; the checked point
   retains that domain without converting through the legacy `ExecutionPoint<AnchorName>` model
   type, whose identifier validation remains at its own boundary. QSL owns `ClauseBinding`; the
-  CG's current V2 strategy API has no selected-claim entry, and the caller
-  supplies no separate point. The QSL driver supplies the FR-331 bound item for that selected
+  caller supplies no separate point. The QSL driver supplies the FR-331 bound item for that selected
   `claim`. A process-provider FR-331 frame carries `request.package_id`, which its reader checks
   against the frame's canonical package bytes; CG compares that id with its separately admitted
   `CheckedPackageV2`. An in-process linked provider has no FR-331 package frame or independent
@@ -88,12 +87,12 @@ until specified.
 
 ## Behavior
 
-- When a V2 selected-claim request enters CG, the generator shall pass its complete claim key to
+- When the IR-1072 V2 selected-claim entry is called, that entry shall pass its complete claim key to
   `CheckedPackageV2::clause_execution_point(&clause_id, (&claim_owner_node_id,
   &claim_occurrence))` and retain the selected checked point only for that key. If Contract IR
-  refuses the lookup, then the generator shall preserve its refusal code and selected identities in
-  the distinct typed V2 selection diagnostic without publishing an artifact. The generator shall
-  not widen the V1 `StrategyDiagnostic` or infer the owner from the occurrence.
+  refuses this entry's lookup, then this entry shall preserve its refusal code and selected
+  identities in a distinct typed V2 selection diagnostic without publishing an artifact. This
+  entry shall not widen the V1 `StrategyDiagnostic` or infer the owner from the occurrence.
 - The runner shall map an oracle result to a runtime verdict by the selected checked clause's kind
   (the clause kind IR's comparison accessor returns for the selected clause):
   - for a `Precondition` clause, `true` to `Passed` and `false` to `RejectedPrecondition`;
