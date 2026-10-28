@@ -1129,8 +1129,7 @@ fn identity_fixture(kind: ObligationKind, clause: &str, line: u32) -> KaniObliga
     }
 }
 
-/// A Kani playback transcript for `harness` carrying the two argument values in persisted
-/// order (`amount_current`, `balance_pre`).
+/// Parses a complete synthetic transcript for typed replay tests that exercise decode bounds.
 fn typed_playback(transcript: &str) -> Playback<'_> {
     parse_assertion_playback(
         transcript,
@@ -1142,6 +1141,8 @@ fn typed_playback(transcript: &str) -> Playback<'_> {
     .expect("the complete assertion playback parses")
 }
 
+/// A Kani playback transcript for `harness` carrying the two argument values in persisted
+/// order (`amount_current`, `balance_pre`).
 fn playback(harness: &KaniObligationIdentity, amount: i64, balance: i64) -> String {
     let values = [amount, balance]
         .map(|value| {
