@@ -46,6 +46,60 @@ struct Claim {
     subject: String,
     expectation: String,
     mutation: Mutation,
+    #[serde(default)]
+    hold: Option<ClaimHold>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ClaimHold {
+    reason: String,
+    expiry: String,
+    follow_up: String,
+}
+
+const RETIRED_V1_CLAIM: &str = "kani_fr_003_4_proof_boolean_transition_module";
+const RETIRED_V1_REASON: &str =
+    "V1 deleted by owner ruling 2026-10-27; no genuine V2 named independent expectation/control exists yet";
+const RETIRED_V1_EXPIRY: &str =
+    "until the V2 named independent expectation + real positive/falsifying control exists";
+
+fn validate_claim_holds(declaration: &Declaration) -> usize {
+    let mut held = 0;
+    for claim in &declaration.modules {
+        if let Some(hold) = &claim.hold {
+            assert_eq!(
+                claim.name, RETIRED_V1_CLAIM,
+                "only retired V1 claim may be held"
+            );
+            assert_eq!(hold.reason, RETIRED_V1_REASON);
+            assert_eq!(hold.expiry, RETIRED_V1_EXPIRY);
+            assert_eq!(hold.follow_up, "IR-1047");
+            println!(
+                "kani-claims: held={} reason={} expiry={} follow_up={}",
+                claim.name, hold.reason, hold.expiry, hold.follow_up
+            );
+            held += 1;
+        }
+    }
+    assert!(held <= 1, "only one retired V1 claim may be held");
+    held
+}
+
+#[test]
+fn retired_v1_claim_is_visible_as_a_single_bounded_hold() {
+    let declaration: Declaration = serde_json::from_slice(
+        &fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join(DECLARATION)).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(validate_claim_holds(&declaration), 1);
+    assert_eq!(
+        declaration.modules.len(),
+        1,
+        "no active claim may be skipped"
+    );
+    let generated = &crate::kani_generation::guard_sources()[0].1;
+    assert!(!module_extents(generated).contains_key(RETIRED_V1_CLAIM));
 }
 
 #[derive(Debug, Deserialize)]
@@ -156,6 +210,12 @@ fn claim_census(
         return Err(format!("removed claimed module(s): {}", removed.join(", ")));
     }
     for claim in &declaration.modules {
+        if claim.hold.is_some() {
+            if compiled.contains(&claim.name) || extents.contains_key(&claim.name) {
+                return Err(format!("held V1 module is still generated: {}", claim.name));
+            }
+            continue;
+        }
         if !compiled.contains(&claim.name) {
             return Err(format!("absent compiled module: {}", claim.name));
         }
@@ -457,6 +517,19 @@ fn real_kani_claims_have_discharge_and_falsifying_mutations() {
         &fs::read(root.join(DECLARATION)).expect("checked-in module claims"),
     )
     .expect("module claim declaration must parse");
+    let held = validate_claim_holds(&declaration);
+    assert!(
+        !declaration.modules.is_empty(),
+        "claim declaration must retain its held row"
+    );
+    if held == declaration.modules.len() {
+        let generated = &crate::kani_generation::guard_sources()[0].1;
+        let modules = module_extents(generated);
+        claim_census(&declaration, &base_names(), &BTreeSet::new(), &modules, &[])
+            .unwrap_or_else(|error| panic!("{error}"));
+        println!("kani-claims: active=0 held={held}");
+        return;
+    }
     let target = root.join("target-codex-backends");
     let directory = target.join("ir19-claim-crate");
     fs::create_dir_all(directory.join("src")).expect("scratch source directory");
@@ -484,6 +557,9 @@ fn real_kani_claims_have_discharge_and_falsifying_mutations() {
     .expect("Kani check-cfg declaration");
     let mut originals = Vec::new();
     for (index, claim) in declaration.modules.iter().enumerate() {
+        if claim.hold.is_some() {
+            continue;
+        }
         let original_report = directory.join(format!("original-{index}-report.json"));
         let (output, bytes) = run_kani(&directory, &target, &original_report, &claim.harness);
         assert!(output.status.success(), "{}", output_text(&output));
@@ -683,6 +759,7 @@ fn a_success_in_one_module_does_not_discharge_an_unreachable_neighbor() {
                     from: String::new(),
                     to: String::new(),
                 },
+                hold: None,
             })
             .collect(),
         helper_mutations: BTreeMap::new(),
@@ -753,6 +830,7 @@ fn empty_removed_and_absent_compiled_claims_fail() {
             from: String::new(),
             to: String::new(),
         },
+        hold: None,
     };
     let mut declaration = Declaration {
         modules: Vec::new(),
@@ -908,6 +986,7 @@ fn real_kani_two_module_check_attribution() {
                     from: String::new(),
                     to: String::new(),
                 },
+                hold: None,
             })
             .collect(),
         helper_mutations: BTreeMap::new(),

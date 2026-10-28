@@ -1,19 +1,15 @@
-//! INTERIM: census validation and the V1 bundle's error type it returns.
-//! The bounded-Kani corpus calls them. This file survives the deletion of `v1_bundle.rs` at
-//! step 4f; step 4g, or the V2 census input, deletes `validate_dependencies` and the error
-//! type (AD-004).
+//! Dependency census validation for bounded Kani corpus cases.
 
 use std::collections::BTreeSet;
 
-use quire_contract_model::SourceSpan;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    core::diagnostic::{GenerationErrorCode, GenerationTerminalState},
+    core::diagnostic::GenerationTerminalState,
     kani::census::{ProofDependencyKind, ProofDependencyRequest, ProofDependencyState},
 };
 
-/// Stable reason a Kani bundle could not be generated.
+/// Stable reason a bounded Kani corpus case could not be generated.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum KaniErrorCode {
@@ -21,18 +17,6 @@ pub enum KaniErrorCode {
     InvalidIdentity,
     /// A dependency kind/state/path combination is invalid.
     InvalidDependency,
-    /// The first slice cannot bind the supplied clause dependencies to `fn(bool, bool) -> bool`.
-    UnsupportedBinding,
-    /// A Boolean clause could not be lowered without approximation.
-    ClauseGenerationFailed,
-    /// The explicit unwind value is zero or exceeds the first-slice bound.
-    InvalidUnwind,
-    /// Generated Rust did not parse.
-    InvalidGeneratedSyntax,
-    /// A deterministic graph could not be serialized.
-    SerializationFailed,
-    /// The generated source exceeds the bounded artifact size.
-    ResourceLimitExceeded,
 }
 
 impl KaniErrorCode {
@@ -40,15 +24,9 @@ impl KaniErrorCode {
     #[must_use]
     pub const fn terminal_state(self) -> GenerationTerminalState {
         match self {
-            Self::InvalidIdentity | Self::InvalidDependency | Self::InvalidUnwind => {
+            Self::InvalidIdentity | Self::InvalidDependency => {
                 GenerationTerminalState::InvalidInput
             }
-            Self::UnsupportedBinding | Self::ResourceLimitExceeded => {
-                GenerationTerminalState::Unsupported
-            }
-            Self::ClauseGenerationFailed
-            | Self::InvalidGeneratedSyntax
-            | Self::SerializationFailed => GenerationTerminalState::Inconclusive,
         }
     }
 }
@@ -61,13 +39,8 @@ pub struct KaniDiagnostic {
     pub code: KaniErrorCode,
     /// Interface-001 terminal state.
     pub terminal_state: GenerationTerminalState,
-    /// Preserved Boolean-lowering code, when the failure originated in an oracle clause.
-    pub generation_code: Option<GenerationErrorCode>,
     /// Stable path to the rejected request element.
     pub path: String,
-    /// Exact IR-owned locus when clause lowering identified one.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source_span: Option<SourceSpan>,
     /// Human-readable detail not used as machine identity.
     pub message: String,
 }
@@ -77,7 +50,7 @@ pub struct KaniDiagnostic {
 /// against), and its kind/state/path combination is one of the three closed shapes (`Required`,
 /// `Assumed`, `Stubbed`).
 ///
-/// Shared by [`generate_kani_bundle`](super::v1_bundle::generate_kani_bundle)'s request validation and the bounded-Kani corpus's
+/// Used by the bounded-Kani corpus's
 /// declared-census validation, so there is exactly one definition of what a valid
 /// proof-dependency census looks like rather than two that can drift apart.
 pub(crate) fn validate_dependencies(
@@ -176,9 +149,7 @@ pub(super) fn single_diagnostic(
     vec![KaniDiagnostic {
         code,
         terminal_state: code.terminal_state(),
-        generation_code: None,
         path: path.to_owned(),
-        source_span: None,
         message: message.to_owned(),
     }]
 }

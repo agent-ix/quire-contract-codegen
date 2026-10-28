@@ -409,7 +409,6 @@ const MODULE_FILES: &[&str] = &[
     "kani/generate/census_validation.rs",
     "kani/generate/clause.rs",
     "kani/generate/collection.rs",
-    "kani/generate/contract.rs",
     "kani/generate/corpus/bounded_kani_corpus.rs",
     "kani/generate/frame.rs",
     "kani/generate/lower/bounded_collections.rs",
@@ -417,10 +416,8 @@ const MODULE_FILES: &[&str] = &[
     "kani/generate/lower/finite_reference_graphs.rs",
     "kani/generate/negotiate.rs",
     "kani/generate/outcome.rs",
-    "kani/generate/precondition.rs",
     "kani/generate/record.rs",
     "kani/generate/scalar.rs",
-    "kani/generate/v1_bundle.rs",
     "kani/output/diagnostics.rs",
     "kani/output/playback.rs",
     "kani/output/report.rs",
@@ -1044,7 +1041,6 @@ fn generate_exact_imports(importer: &str) -> Option<&'static [&'static str]> {
 }
 
 /// The order of the files of `kani/generate/`, earliest first; a file imports only earlier names.
-/// `precondition` and `contract` share a rank, so neither imports the other.
 fn generate_rank(name: &str) -> Option<u8> {
     match name {
         "outcome" => Some(0),
@@ -1052,11 +1048,9 @@ fn generate_rank(name: &str) -> Option<u8> {
         "census_validation" => Some(2),
         "scalar" | "collection" => Some(3),
         "clause" => Some(4),
-        "precondition" | "contract" => Some(5),
         "frame" => Some(6),
         "lower" => Some(7),
         "corpus" => Some(8),
-        "v1_bundle" => Some(9),
         "negotiate" => Some(10),
         _ => None,
     }

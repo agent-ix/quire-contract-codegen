@@ -33,7 +33,7 @@ use std::{
     time::Duration,
 };
 
-use crate::scratch_crate::{runtime_dependency, write_manifest, TemporaryDirectory};
+use crate::scratch_crate::{write_manifest, TemporaryDirectory};
 use ix_trace_rs::trace;
 use package::{
     application, bounded, code_id, corpus_package, golden_items, id, integer_add, key, op,
@@ -46,337 +46,22 @@ use quire_contract_codegen::{
     routed_contract_lowering_profile, run_terminal_value, ClaimDisposition, ClaimMap,
     ExactScalarClaim, ExactScalarItem, ExactScalarOperation, ExactScalarRefusal,
     InvalidObligationItem, KaniExecutionRefusal, KaniExecutionRequest, KaniFailurePhase,
-    KaniInconclusiveReason, KaniInstallation, KaniObligationError, KaniObligationHarness,
-    KaniObligationOutcome, KaniObligationRequest, KaniRunOutcome, KaniScalarNativeRequest,
-    KaniScalarObligationHarness, KaniSolver, KaniTool, KaniToolError, ObligationDisposition,
-    ObligationItem, ObligationKind, ObligationRecord, ObligationSubject, OperationProvenance,
-    UnsupportedObligation, UpstreamBlocker, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
+    KaniInconclusiveReason, KaniInstallation, KaniObligationError, KaniObligationOutcome,
+    KaniObligationRequest, KaniRunOutcome, KaniScalarNativeRequest, KaniScalarObligationHarness,
+    KaniSolver, KaniTool, KaniToolError, ObligationDisposition, ObligationItem, ObligationKind,
+    ObligationRecord, ObligationSubject, OperationProvenance, UnsupportedObligation,
+    UpstreamBlocker, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
 };
 use quire_contract_model::{
-    BoundPackage, CheckedNodeId, CheckedPackageReadLimits, CheckedPackageV2, ClauseId, ClauseKind,
-    ClauseRef, ContractDependencies, ContractPackageReadResult, ContractPackageV1,
-    ContractPackageWireV1, DiagnosticCode, RequirementRef, EXECUTABLE_PROJECTION_FORMAT,
+    CheckedNodeId, CheckedPackageReadLimits, CheckedPackageV2, ContractDependencies,
+    ContractPackageReadResult, ContractPackageV1, ContractPackageWireV1,
 };
-use serde_json::{json, Value};
-
-const PACKAGE: &str = "test/kani-obligations";
-const PRECONDITION: &str = "amount-within-balance";
-const POSTCONDITION: &str = "balance-never-grows";
-const INVARIANT: &str = "balance-nonnegative";
-const DEFINEDNESS: &str = "doubled-amount-fits";
-const ASSERTION: &str = "amount-nonnegative";
+use serde_json::json;
 
 /// Budget for the kani lane's real `cargo-kani` runs. Generous because CBMC is memory- and
 /// time-heavy on these small obligations; this is a ceiling against a genuine hang, not a
 /// performance target.
 pub(crate) const REAL_KANI_TIMEOUT: Duration = Duration::from_secs(600);
-#[trace("FR-028-AC-1")]
-#[test]
-fn changing_either_request_ceiling_changes_the_generated_proof_identity() {
-    let package = bound_package(1000);
-    let clause = clause(PRECONDITION);
-    let items = [ObligationItem::BoundClause {
-        package: &package,
-        clause: &clause,
-    }];
-    let mut requested = request(&items, "crate::withdraw");
-    let original = emitted(negotiate_kani_obligations(&requested).unwrap())
-        .1
-        .remove(0);
-    requested.ceilings.memory_bytes =
-        std::num::NonZeroU64::new(requested.ceilings.memory_bytes.get() / 2).unwrap();
-    let memory_changed = emitted(negotiate_kani_obligations(&requested).unwrap())
-        .1
-        .remove(0);
-    assert_ne!(original.identity, memory_changed.identity);
-    assert_ne!(original.record.contents, memory_changed.record.contents);
-    assert_eq!(memory_changed.identity.ceilings, requested.ceilings);
-    requested.ceilings = original.identity.ceilings;
-    requested.ceilings.wall_clock /= 2;
-    let wall_changed = emitted(negotiate_kani_obligations(&requested).unwrap())
-        .1
-        .remove(0);
-    assert_ne!(original.identity, wall_changed.identity);
-    assert_ne!(original.record.contents, wall_changed.record.contents);
-    assert_eq!(wall_changed.identity.ceilings, requested.ceilings);
-}
-
-// ---- V1 fixture --------------------------------------------------------------
-
-fn span(line: u64) -> Value {
-    let source = json!({"document":"kani-obligations", "revision":1});
-    json!({"start":{"source":source,"line":line,"column":1,"byte_offset":line - 1},
-        "end":{"source":source,"line":line,"column":2,"byte_offset":line}})
-}
-
-fn int(minimum: i64, maximum: i64) -> Value {
-    json!({"kind":"integer","domain":"signed","minimum":minimum.to_string(),"maximum":maximum.to_string(),"overflow":"reject"})
-}
-
-fn owner() -> Value {
-    json!({"package":PACKAGE,"requirement":"FR-200","revision":1})
-}
-
-fn read(name: &str, observation: &str, line: u64) -> Value {
-    json!({"node":"value_reference","name":name,"observation":observation,"source":span(line)})
-}
-
-fn identity(kind: &str, name: &str, observation: &str) -> Value {
-    json!({"node":"reference","identity":{"requirement":owner(),"kind":kind,"observation":observation,"path":[name]}})
-}
-
-struct ClauseFixture {
-    id: &'static str,
-    kind: &'static str,
-    anchor: Value,
-    line: u64,
-    references: Vec<Value>,
-    values: Vec<Value>,
-    expression: Value,
-}
-
-fn amount(line: u64) -> Value {
-    json!({"name":"amount","kind":"input","value_type":int(0, 1000),"source":span(line)})
-}
-
-fn balance(line: u64, maximum: i64) -> Value {
-    json!({"name":"balance","kind":"state","value_type":int(0, maximum),"source":span(line)})
-}
-
-fn clauses(balance_maximum_in_invariant: i64) -> Vec<ClauseFixture> {
-    let pre = json!({"kind":"pre","operation":"withdraw"});
-    vec![
-        ClauseFixture {
-            id: PRECONDITION,
-            kind: "precondition",
-            anchor: pre.clone(),
-            line: 10,
-            references: vec![
-                identity("input", "amount", "current"),
-                identity("state", "balance", "current"),
-            ],
-            values: vec![amount(11), balance(12, 1000)],
-            expression: json!({"node":"compare","operator":"less_equal",
-                "left":read("amount", "current", 13),"right":read("balance", "current", 14),
-                "source":span(11)}),
-        },
-        ClauseFixture {
-            id: POSTCONDITION,
-            kind: "postcondition",
-            anchor: json!({"kind":"post","operation":"withdraw"}),
-            line: 20,
-            references: vec![
-                identity("state", "balance", "post"),
-                identity("state", "balance", "pre"),
-            ],
-            values: vec![balance(21, 1000)],
-            expression: json!({"node":"compare","operator":"less_equal",
-                "left":read("balance", "post", 22),"right":read("balance", "pre", 23),
-                "source":span(21)}),
-        },
-        ClauseFixture {
-            id: INVARIANT,
-            kind: "invariant",
-            anchor: json!({"kind":"handler","name":"withdraw"}),
-            line: 30,
-            references: vec![identity("state", "balance", "current")],
-            values: vec![balance(31, balance_maximum_in_invariant)],
-            expression: json!({"node":"compare","operator":"greater_equal",
-                "left":read("balance", "current", 32),
-                "right":{"node":"integer_literal","value":"0","value_type":int(0, balance_maximum_in_invariant),"source":span(33)},
-                "source":span(31)}),
-        },
-        ClauseFixture {
-            id: DEFINEDNESS,
-            kind: "precondition",
-            anchor: json!({"kind":"pre","operation":"deposit"}),
-            line: 40,
-            references: vec![identity("input", "amount", "current")],
-            values: vec![amount(41)],
-            // `amount != 0 && 1000 / amount <= 1000`: the division carries a guarded
-            // non-zero-divisor obligation.
-            expression: json!({"node":"boolean","operator":"short_circuit_and",
-                "left":{"node":"compare","operator":"not_equal","left":read("amount", "current", 42),
-                    "right":{"node":"integer_literal","value":"0","value_type":int(0, 1000),"source":span(43)},
-                    "source":span(42)},
-                "right":{"node":"compare","operator":"less_equal",
-                    "left":{"node":"numeric","operator":"divide",
-                        "left":{"node":"integer_literal","value":"1000","value_type":int(0, 1000),"source":span(44)},
-                        "right":read("amount", "current", 45),"source":span(44)},
-                    "right":{"node":"integer_literal","value":"1000","value_type":int(0, 1000),"source":span(46)},
-                    "source":span(44)},
-                "source":span(41)}),
-        },
-        ClauseFixture {
-            id: ASSERTION,
-            kind: "assertion",
-            anchor: json!({"kind":"pre","operation":"audit"}),
-            line: 50,
-            references: vec![identity("input", "amount", "current")],
-            values: vec![amount(51)],
-            expression: json!({"node":"compare","operator":"greater_equal",
-                "left":read("amount", "current", 52),
-                "right":{"node":"integer_literal","value":"0","value_type":int(0, 1000),"source":span(53)},
-                "source":span(51)}),
-        },
-    ]
-}
-
-const TRANSFER_SMALL: &str = "transfer-at-most-five";
-const TRANSFER_LARGE: &str = "transfer-at-least-ten";
-const TRANSFER_IMPOSSIBLE: &str = "transfer-balance-negative";
-const REFUND_CAPPED: &str = "refund-within-fee";
-const REFUND_NONNEGATIVE: &str = "refund-balance-nonnegative";
-
-fn literal(value: i64, line: u64) -> Value {
-    json!({"node":"integer_literal","value":value.to_string(),"value_type":int(0, 1000),"source":span(line)})
-}
-
-fn compare(operator: &str, left: Value, right: Value, line: u64) -> Value {
-    json!({"node":"compare","operator":operator,"left":left,"right":right,"source":span(line)})
-}
-
-/// `transfer`: two preconditions, each satisfiable in `0..=1000` but not together, and a
-/// postcondition no result satisfies. `refund`: a postcondition reading input `fee` that the
-/// invariant on the same operation does not read; `refund_invariant_maximum` sets the invariant's
-/// balance type so the two can disagree on a shared slot.
-fn operation_group_clauses(refund_invariant_maximum: i64) -> Vec<ClauseFixture> {
-    let transfer = json!({"kind":"pre","operation":"transfer"});
-    let fee = json!({"name":"fee","kind":"input","value_type":int(0, 1000),"source":span(91)});
-    vec![
-        ClauseFixture {
-            id: TRANSFER_SMALL,
-            kind: "precondition",
-            anchor: transfer.clone(),
-            line: 60,
-            references: vec![identity("input", "amount", "current")],
-            values: vec![amount(61)],
-            expression: compare(
-                "less_equal",
-                read("amount", "current", 62),
-                literal(5, 63),
-                61,
-            ),
-        },
-        ClauseFixture {
-            id: TRANSFER_LARGE,
-            kind: "precondition",
-            anchor: transfer,
-            line: 70,
-            references: vec![identity("input", "amount", "current")],
-            values: vec![amount(71)],
-            expression: compare(
-                "greater_equal",
-                read("amount", "current", 72),
-                literal(10, 73),
-                71,
-            ),
-        },
-        ClauseFixture {
-            id: TRANSFER_IMPOSSIBLE,
-            kind: "postcondition",
-            anchor: json!({"kind":"post","operation":"transfer"}),
-            line: 80,
-            references: vec![identity("state", "balance", "post")],
-            values: vec![balance(81, 1000)],
-            expression: compare("less", read("balance", "post", 82), literal(0, 83), 81),
-        },
-        ClauseFixture {
-            id: REFUND_CAPPED,
-            kind: "postcondition",
-            anchor: json!({"kind":"post","operation":"refund"}),
-            line: 90,
-            references: vec![
-                identity("state", "balance", "post"),
-                identity("input", "fee", "current"),
-            ],
-            values: vec![balance(92, 1000), fee],
-            expression: compare(
-                "less_equal",
-                read("balance", "post", 93),
-                read("fee", "current", 94),
-                91,
-            ),
-        },
-        ClauseFixture {
-            id: REFUND_NONNEGATIVE,
-            kind: "invariant",
-            anchor: json!({"kind":"handler","name":"refund"}),
-            line: 100,
-            references: vec![identity("state", "balance", "current")],
-            values: vec![balance(101, refund_invariant_maximum)],
-            expression: json!({"node":"compare","operator":"greater_equal",
-                "left":read("balance", "current", 102),
-                "right":{"node":"integer_literal","value":"0","value_type":int(0, refund_invariant_maximum),"source":span(103)},
-                "source":span(101)}),
-        },
-    ]
-}
-
-fn operation_group_package(refund_invariant_maximum: i64) -> BoundPackage {
-    let mut fixtures = clauses(1000);
-    fixtures.extend(operation_group_clauses(refund_invariant_maximum));
-    BoundPackage::from_json_bytes(&serde_json::to_vec(&projection_of(&fixtures)).unwrap())
-        .unwrap_or_else(|diagnostics| panic!("fixture projection must bind: {diagnostics:?}"))
-}
-
-fn projection(balance_maximum_in_invariant: i64) -> Value {
-    projection_of(&clauses(balance_maximum_in_invariant))
-}
-
-fn projection_of(fixtures: &[ClauseFixture]) -> Value {
-    let package_clauses = fixtures
-        .iter()
-        .map(|clause| {
-            let body = match clause.references.as_slice() {
-                [single] => single.clone(),
-                many => json!({"node":"composite","children":many}),
-            };
-            json!({"id":clause.id,"kind":clause.kind,"anchor":clause.anchor,
-                "source":span(clause.line),"body":body})
-        })
-        .collect::<Vec<_>>();
-    let bindings = fixtures
-        .iter()
-        .map(|clause| {
-            json!({"clause":{"requirement":owner(),"clause":clause.id},
-                "expression":{"owner":owner(),"types":[],"values":clause.values,"functions":[],
-                    "expression":clause.expression,"expected_type":{"kind":"boolean"},
-                    "execution_point":clause.anchor,"clause_root":true}})
-        })
-        .collect::<Vec<_>>();
-    json!({
-        "format":EXECUTABLE_PROJECTION_FORMAT,
-        "package":{"id":PACKAGE,"schema_version":{"major":1,"minor":1},
-            "source":{"document":"kani-obligations","revision":1},
-            "requirements":[{"id":"FR-200","revision":1,"source":span(1),"clauses":package_clauses}]},
-        "bindings":bindings
-    })
-}
-
-pub(crate) fn bound_package(balance_maximum_in_invariant: i64) -> BoundPackage {
-    BoundPackage::from_json_bytes(
-        &serde_json::to_vec(&projection(balance_maximum_in_invariant)).unwrap(),
-    )
-    .unwrap_or_else(|diagnostics| panic!("fixture projection must bind: {diagnostics:?}"))
-}
-
-pub(crate) fn ir295_definedness_clause() -> quire_contract_model::BoundClause {
-    bound_package(1000)
-        .clauses()
-        .iter()
-        .find(|clause| clause.identity().clause().as_str() == DEFINEDNESS)
-        .expect("IR-295 fixture contains the definedness clause")
-        .clone()
-}
-
-fn clause(id: &str) -> ClauseRef {
-    ClauseRef::new(
-        RequirementRef::parse(PACKAGE, "FR-200", 1).unwrap(),
-        ClauseId::new(id).unwrap(),
-    )
-}
-
 fn request<'a>(
     items: &'a [ObligationItem<'a>],
     subject_path: &'a str,
@@ -386,15 +71,6 @@ fn request<'a>(
         items,
         subject_path,
         unwind: 4,
-    }
-}
-
-fn emitted(outcome: KaniObligationOutcome) -> (Vec<ObligationRecord>, Vec<KaniObligationHarness>) {
-    match outcome {
-        KaniObligationOutcome::Emitted {
-            records, harnesses, ..
-        } => (records, harnesses),
-        KaniObligationOutcome::Rejected { records } => panic!("unexpected rejection: {records:#?}"),
     }
 }
 
@@ -418,44 +94,8 @@ fn unsupported(record: &ObligationRecord) -> &UnsupportedObligation {
     }
 }
 
-pub(crate) fn supported_contract_harnesses(
-    package: &BoundPackage,
-    subject: &str,
-) -> Vec<KaniObligationHarness> {
-    let refs = [
-        clause(PRECONDITION),
-        clause(POSTCONDITION),
-        clause(INVARIANT),
-    ];
-    let items = refs
-        .iter()
-        .map(|clause| ObligationItem::BoundClause { package, clause })
-        .collect::<Vec<_>>();
-    let (records, harnesses) =
-        emitted(negotiate_kani_obligations(&request(&items, subject)).unwrap());
-    assert!(records
-        .iter()
-        .all(|record| matches!(record.disposition, ObligationDisposition::Supported { .. })));
-    harnesses
-}
-
-/// The precondition, V1 contract (postcondition and invariant) and scalar harness sources, for
-/// the cover-last guard (FR-015-AC-58).
+/// The admitted scalar harness source for the cover-last guard.
 pub(crate) fn guard_sources() -> Vec<(&'static str, String)> {
-    let mut sources = supported_contract_harnesses(&bound_package(1000), "crate::withdraw")
-        .into_iter()
-        .map(|harness| {
-            let family = match harness.identity.kind {
-                ObligationKind::Precondition => "precondition",
-                ObligationKind::Postcondition => "v1 contract postcondition",
-                ObligationKind::Invariant => "v1 contract invariant",
-                // The clause renderer never emits a frame harness; one here has a label no
-                // family lists, so the guard's family-set check fails on it.
-                ObligationKind::Frame => "unexpected frame harness",
-            };
-            (family, harness.rust.contents)
-        })
-        .collect::<Vec<_>>();
     let (scalar, claim_map, ids) = scalar_package();
     let node = ids.resolve(&code_id(1001));
     let admitted = admitted_scalar_claims(&scalar, &claim_map);
@@ -468,12 +108,10 @@ pub(crate) fn guard_sources() -> Vec<(&'static str, String)> {
     }];
     let (_, scalar_harnesses) =
         emitted_scalar(negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap());
-    sources.extend(
-        scalar_harnesses
-            .into_iter()
-            .map(|harness| ("scalar", harness.rust.contents)),
-    );
-    sources
+    scalar_harnesses
+        .into_iter()
+        .map(|harness| ("scalar", harness.rust.contents))
+        .collect()
 }
 
 // ---- V2 fixture --------------------------------------------------------------
@@ -901,172 +539,13 @@ fn scalar_records(
             result_selection: &quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
         })
         .collect::<Vec<_>>();
-    let (records, harnesses) =
-        emitted(negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap());
-    assert!(harnesses.is_empty(), "no V2 item may emit a harness");
-    records
+    negotiate_kani_obligations(&request(&items, "crate::subject"))
+        .unwrap()
+        .records()
+        .to_vec()
 }
 
 // ---- default lane ------------------------------------------------------------
-
-/// Each precondition, postcondition and invariant clause is its own obligation, harness and
-/// proof, with its clause, source span and assumed preconditions recorded.
-/// Upstream: agent-ix/quire-contract-ir FR-036-AC-3, TC-045
-#[trace(
-    "FR-015-AC-1",
-    "FR-015-AC-7",
-    "FR-015-AC-8",
-    "TC-025",
-    "TC-001",
-    "NFR-002-AC-1",
-    "NFR-002-AC-2"
-)]
-#[test]
-fn tc_025_each_clause_lowers_to_a_separate_harness_with_exact_correspondence() {
-    let package = bound_package(1000);
-    let harnesses = supported_contract_harnesses(&package, "crate::withdraw");
-    assert_eq!(harnesses.len(), 3);
-    let expected = [
-        (PRECONDITION, ObligationKind::Precondition, 10, 0),
-        (POSTCONDITION, ObligationKind::Postcondition, 20, 1),
-        (INVARIANT, ObligationKind::Invariant, 30, 2),
-    ];
-    for (harness, (id, kind, line, requires)) in harnesses.iter().zip(expected) {
-        let identity = &harness.identity;
-        assert_eq!(identity.kind, kind);
-        assert_eq!(identity.clause, clause(id));
-        assert_eq!(identity.source_span.start().line(), line);
-        assert_eq!(identity.oracles[0].clause, clause(id));
-        let source = &harness.rust.contents;
-        let clause_header = format!("FR-200@1/{id}");
-        crate::generated_headers::assert_header(&harness.rust.path, source, &[&clause_header]);
-        for oracle in &identity.oracles {
-            crate::generated_headers::assert_header(
-                &harness.rust.path,
-                source,
-                &[&format!("FR-200@1/{}", oracle.clause.clause().as_str())],
-            );
-        }
-        assert_eq!(source.matches("#[kani::requires(").count(), requires);
-        let is_precondition = kind == ObligationKind::Precondition;
-        assert_eq!(
-            source.matches("#[kani::proof]").count(),
-            usize::from(is_precondition)
-        );
-        assert_eq!(
-            source.matches("#[kani::proof_for_contract(").count(),
-            usize::from(!is_precondition)
-        );
-        assert_eq!(
-            source.matches("#[kani::ensures(").count(),
-            usize::from(!is_precondition)
-        );
-        // Every harness ends with exactly one non-vacuity cover.
-        assert_eq!(source.matches("kani::cover!(").count(), 1);
-        if !is_precondition {
-            let call = source.find("let _ = ").unwrap();
-            let cover = source.find("kani::cover!(true, ").unwrap();
-            assert!(cover > call, "the cover follows the contract call");
-        }
-        assert_eq!(identity.subject_path.is_some(), !is_precondition);
-    }
-    // The contract harnesses assume exactly the precondition sharing their anchor, and no
-    // harness embeds any other obligation's oracle.
-    let precondition_symbol = &harnesses[0].identity.oracles[0].symbol;
-    for harness in &harnesses[1..] {
-        let oracles = &harness.identity.oracles;
-        assert_eq!(oracles.len(), 2);
-        assert_eq!(oracles[1].clause, clause(PRECONDITION));
-        assert_eq!(oracles[1].kind, ObligationKind::Precondition);
-        assert!(harness.rust.contents.contains(&format!(
-            "#[kani::requires({precondition_symbol}(amount_current, balance_pre))]"
-        )));
-    }
-    for (index, harness) in harnesses.iter().enumerate() {
-        for (other_index, other) in harnesses.iter().enumerate() {
-            let other_symbol = &other.identity.oracles[0].symbol;
-            let embeds = harness.rust.contents.contains(other_symbol.as_str());
-            assert_eq!(
-                embeds,
-                other_index == index || other_index == 0,
-                "{index} embeds {other_index}"
-            );
-        }
-    }
-
-    // Without its precondition a postcondition is refused rather than proved under fewer
-    // assumptions than the contract states.
-    let post = clause(POSTCONDITION);
-    let items = [ObligationItem::BoundClause {
-        package: &package,
-        clause: &post,
-    }];
-    let (records, harnesses) =
-        emitted(negotiate_kani_obligations(&request(&items, "crate::withdraw")).unwrap());
-    assert!(harnesses.is_empty());
-    assert_eq!(records[0].kind, Some(ObligationKind::Postcondition));
-    assert_eq!(
-        unsupported(&records[0]),
-        &UnsupportedObligation::PreconditionNotNegotiated {
-            precondition: clause(PRECONDITION)
-        }
-    );
-    assert_eq!(
-        records[0].subject,
-        ObligationSubject::BoundClause {
-            clause: post,
-            source_span: Some(
-                package
-                    .clauses()
-                    .iter()
-                    .find(|candidate| candidate.identity() == &clause(POSTCONDITION))
-                    .unwrap()
-                    .source()
-                    .clone()
-            ),
-        }
-    );
-}
-
-/// The precondition harness's non-vacuity cover argument is the `precondition_holds` binding,
-/// and that binding is itself the precondition oracle applied to the harness's own symbolic
-/// arguments — not a literal. A regression to `kani::cover!(true, ...)`, or to a
-/// `precondition_holds` that is not derived from the oracle call, makes this fail: the cover
-/// would then be trivially reachable regardless of whether the precondition is satisfiable.
-#[trace("FR-015-AC-7", "TC-025")]
-#[test]
-fn tc_025_precondition_cover_argument_is_derived_from_the_precondition_expression() {
-    let package = bound_package(1000);
-    let harnesses = supported_contract_harnesses(&package, "crate::withdraw");
-    let precondition = &harnesses[0];
-    assert_eq!(precondition.identity.kind, ObligationKind::Precondition);
-    let source = &precondition.rust.contents;
-    let symbol = &precondition.identity.oracles[0].symbol;
-
-    // The cover's argument names the `precondition_holds` binding, never a constant.
-    assert!(
-        source.contains("kani::cover!(precondition_holds, "),
-        "cover must be gated on the precondition_holds binding: {source}"
-    );
-    assert!(
-        !source.contains("kani::cover!(true, "),
-        "cover must not be trivially reachable: {source}"
-    );
-
-    // `precondition_holds` is bound to the precondition oracle applied to the harness's
-    // symbolic arguments, not to a constant. This pins the identifier order rather than
-    // merely asserting the oracle symbol occurs somewhere in the source.
-    let expected_binding =
-        format!("let precondition_holds = {symbol}(amount_current, balance_pre);");
-    assert!(
-        source.contains(&expected_binding),
-        "expected {expected_binding:?} in {source}"
-    );
-    assert!(
-        !source.contains("let precondition_holds = true;"),
-        "precondition_holds must not be a hardcoded literal: {source}"
-    );
-}
 
 /// Symbolic ranges are the IR's inclusive domains, and every flag is part of the harness
 /// identity.
@@ -1074,97 +553,6 @@ fn tc_025_precondition_cover_argument_is_derived_from_the_precondition_expressio
 #[trace("FR-015-AC-2", "FR-015-AC-9", "FR-015-AC-10", "FR-015-AC-11", "TC-025")]
 #[test]
 fn tc_025_symbolic_bounds_equal_ir_domains_and_every_option_is_identity() {
-    let package = bound_package(1000);
-    let harnesses = supported_contract_harnesses(&package, "crate::withdraw");
-    let postcondition = &harnesses[1];
-    let identity = &postcondition.identity;
-    let bounds = identity
-        .arguments
-        .iter()
-        .chain(&identity.results)
-        .map(|binding| {
-            let bounds = binding.integer_bounds.as_ref().unwrap();
-            (binding.identifier.as_str(), bounds.minimum, bounds.maximum)
-        })
-        .collect::<Vec<_>>();
-    assert_eq!(
-        bounds,
-        [
-            ("amount_current", 0, 1000),
-            ("balance_pre", 0, 1000),
-            ("balance_post", 0, 1000)
-        ]
-    );
-    let source = &postcondition.rust.contents;
-    assert!(source.contains("kani::assume(amount_current >= 0_i64 && amount_current <= 1000_i64);"));
-    assert!(source.contains("kani::assume(balance_pre >= 0_i64 && balance_pre <= 1000_i64);"));
-    assert!(source.contains("|post_state: &i64| (*post_state >= 0_i64 && *post_state <= 1000_i64)"));
-    // The unwind bound reaches the backend through the option vector alone; no harness source
-    // states a bound of its own, so the identity is the only place it can be read from.
-    for harness in &harnesses {
-        assert!(!harness.rust.contents.contains("kani::unwind"));
-    }
-    assert_eq!(identity.solver, KaniSolver::Cadical);
-    assert_eq!(identity.unwind, 4);
-    let exact = format!("{}::{}", identity.module_symbol, identity.harness_symbol);
-    // The complete ordered option vector, not merely a set of substrings present somewhere in
-    // it: order, length and completeness are all part of FR-015-AC-9, so a truncated or
-    // reordered vector must fail here even though every flag it kept would still pass a
-    // membership check.
-    let expected_options: Vec<String> = [
-        "-Z",
-        "function-contracts",
-        "-Z",
-        "concrete-playback",
-        "--harness",
-        exact.as_str(),
-        "--exact",
-        "--unwind",
-        "4",
-        "--solver",
-        "cadical",
-        "--output-format",
-        "regular",
-        "--concrete-playback",
-        "print",
-    ]
-    .into_iter()
-    .map(str::to_owned)
-    .collect();
-    assert_eq!(identity.options, expected_options);
-    // A stub is an assumption this obligation path does not admit, so no option enables one.
-    assert!(
-        !identity
-            .options
-            .iter()
-            .any(|option| option.contains("stub")),
-        "{:?}",
-        identity.options
-    );
-
-    let refs = [clause(PRECONDITION), clause(POSTCONDITION)];
-
-    // The unwind bound and the subject change the identity.
-    let seen = [postcondition.identity.clone()];
-    let items = refs
-        .iter()
-        .map(|clause| ObligationItem::BoundClause {
-            package: &package,
-            clause,
-        })
-        .collect::<Vec<_>>();
-    let mut unwound = request(&items, "crate::withdraw");
-    unwound.unwind = 5;
-    let (_, other) = emitted(negotiate_kani_obligations(&unwound).unwrap());
-    assert!(!seen.contains(&other[1].identity));
-    let (_, other) = emitted(negotiate_kani_obligations(&request(&items, "crate::other")).unwrap());
-    assert!(!seen.contains(&other[1].identity));
-    // Regeneration is byte-identical.
-    assert_eq!(
-        supported_contract_harnesses(&package, "crate::withdraw"),
-        harnesses
-    );
-
     // A V2 claim's domain is read from its IR bound, inclusive at both ends. Node 1001 is
     // `quire.op.integer.add`, IR-confirmed and renderable, so it reaches a real Kani harness --
     // not a typed refusal. Both its operands are references to the corpus's `value` node whose
@@ -1189,6 +577,18 @@ fn tc_025_symbolic_bounds_equal_ir_domains_and_every_option_is_identity() {
     assert_eq!(scalar_harnesses.len(), 1);
     let identity = &scalar_harnesses[0].identity;
     assert_eq!(identity.operation_identity, "quire.op.integer.add");
+    assert_eq!(identity.solver, KaniSolver::Cadical);
+    assert_eq!(identity.unwind, 4);
+    assert_eq!(
+        identity.ceilings,
+        request(&items, "crate::subject").ceilings
+    );
+    assert!(identity.options.iter().any(|option| option == "--exact"));
+    assert!(identity.options.iter().any(|option| option == "--unwind"));
+    assert!(!scalar_harnesses[0].rust.contents.contains("kani::unwind"));
+    let repeated =
+        emitted_scalar(negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap()).1;
+    assert_eq!(repeated, scalar_harnesses);
     assert_eq!(
         identity
             .arguments
@@ -1371,7 +771,7 @@ fn tc_025_every_rendered_operation_states_its_own_native_relation() {
 /// Unbounded, non-finite, model-dependent, frame and definedness-bearing items are typed
 /// refusals with no harness. These generation-time classifications (`ObligationDisposition`,
 /// `UnsupportedObligation`) are never available to `execute_kani_obligation`, which requires a
-/// `KaniObligationHarness`: an item this test refuses never produces one, so there is no way to
+/// a generated harness: an item this test refuses never produces one, so there is no way to
 /// report the refusal as an execution outcome (`KaniRunOutcome`) instead of what it is.
 /// Upstream: agent-ix/quire-contract-ir FR-036-AC-2, TC-045
 #[trace("FR-015-AC-3", "FR-017-CON-2", "TC-025", "TC-027")]
@@ -1445,30 +845,6 @@ fn tc_025_unbounded_non_finite_and_blocked_items_are_refused_without_harnesses()
         &records[3].subject,
         ObligationSubject::CheckedNode { node_id, source_map } if node_id == &ids.resolve(&code_id(FRAME)) && !source_map.is_empty()
     ));
-
-    let package = bound_package(1000);
-    let refs = [clause(DEFINEDNESS), clause(ASSERTION)];
-    let items = refs
-        .iter()
-        .map(|clause| ObligationItem::BoundClause {
-            package: &package,
-            clause,
-        })
-        .collect::<Vec<_>>();
-    let (records, harnesses) =
-        emitted(negotiate_kani_obligations(&request(&items, "crate::deposit")).unwrap());
-    assert!(harnesses.is_empty());
-    assert!(matches!(
-        unsupported(&records[0]),
-        UnsupportedObligation::DefinednessNotEncoded { obligations } if *obligations > 0
-    ));
-    assert_eq!(records[1].kind, None);
-    assert_eq!(
-        unsupported(&records[1]),
-        &UnsupportedObligation::ClauseKindNotObligation {
-            kind: ClauseKind::Assertion
-        }
-    );
 }
 
 /// A source-authored node can have several distinct occurrences. The indexed lookup must keep
@@ -1502,8 +878,10 @@ fn tc_025_scalar_source_lookup_preserves_multiple_occurrences_per_node() {
             result_selection: &quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
         })
         .collect::<Vec<_>>();
-    let (records, _) =
-        emitted(negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap());
+    let records = negotiate_kani_obligations(&request(&items, "crate::subject"))
+        .unwrap()
+        .records()
+        .to_vec();
     assert_eq!(records.len(), nodes.len());
     for (record, node_id) in records.iter().zip(&nodes) {
         let expected = admitted
@@ -1560,7 +938,6 @@ fn tc_025_a_quantity_conversion_claim_is_unrendered_with_no_harness() {
         .collect::<Vec<_>>();
     let KaniObligationOutcome::Emitted {
         records,
-        harnesses,
         scalar_harnesses,
         state_frame_harnesses,
         collection_harnesses,
@@ -1570,7 +947,6 @@ fn tc_025_a_quantity_conversion_claim_is_unrendered_with_no_harness() {
         panic!("a refused claim settles per item");
     };
     // The whole artifact set is empty: no harness of any family is emitted for the obligations.
-    assert!(harnesses.is_empty(), "V1 harnesses");
     assert!(scalar_harnesses.is_empty(), "scalar harnesses");
     assert!(state_frame_harnesses.is_empty(), "state-frame harnesses");
     assert!(collection_harnesses.is_empty(), "collection harnesses");
@@ -1675,17 +1051,12 @@ fn tc_025_a_present_node_with_an_unrecognized_kind_is_refused_rather_than_silent
     let outcome = negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap();
     let KaniObligationOutcome::Emitted {
         records,
-        harnesses,
         scalar_harnesses,
         ..
     } = outcome
     else {
         panic!("unexpected rejection");
     };
-    assert!(
-        harnesses.is_empty(),
-        "an unrecognized node kind must emit no V1 harness"
-    );
     assert!(
         scalar_harnesses.is_empty(),
         "an unrecognized node kind must emit no harness"
@@ -1812,227 +1183,6 @@ fn tc_025_a_claim_naming_a_node_absent_from_the_graph_is_refused_not_silently_su
             reason: InvalidObligationItem::UnknownNode
         }
     );
-}
-
-/// The only assumptions are the IR bounds of symbolic arguments; nothing constrains results,
-/// and clause predicates appear only as the contract's own requires and ensures.
-#[trace("FR-015-AC-4", "TC-025")]
-#[test]
-fn tc_025_assumptions_constrain_only_arguments_to_their_ir_bounds() {
-    let package = bound_package(1000);
-    for harness in supported_contract_harnesses(&package, "crate::withdraw") {
-        let identity = &harness.identity;
-        let assumptions = harness
-            .rust
-            .contents
-            .lines()
-            .map(str::trim)
-            .filter(|line| line.contains("kani::assume"))
-            .collect::<Vec<_>>();
-        let expected = identity
-            .arguments
-            .iter()
-            .map(|binding| {
-                let bounds = binding.integer_bounds.as_ref().unwrap();
-                format!(
-                    "kani::assume({id} >= {}_i64 && {id} <= {}_i64);",
-                    bounds.minimum,
-                    bounds.maximum,
-                    id = binding.identifier
-                )
-            })
-            .collect::<Vec<_>>();
-        assert_eq!(assumptions, expected, "{}", harness.rust.contents);
-        for result in &identity.results {
-            assert!(!assumptions
-                .iter()
-                .any(|line| line.contains(&result.identifier)));
-        }
-        let requires = harness
-            .rust
-            .contents
-            .lines()
-            .map(str::trim)
-            .filter(|line| line.starts_with("#[kani::requires("))
-            .count();
-        let expected_requires = match identity.kind {
-            ObligationKind::Precondition => 0,
-            ObligationKind::Postcondition => identity.oracles.len() - 1,
-            ObligationKind::Invariant => identity.oracles.len(),
-            ObligationKind::Frame => unreachable!("no frame harness"),
-        };
-        assert_eq!(requires, expected_requires);
-    }
-}
-
-/// Preconditions that each hold but cannot hold together are all assumed by the contract
-/// harness, which therefore ends with a cover reachable only when every `requires` and argument
-/// bound holds at once. Whether it is satisfied is decided by Kani (the kani lane reports this
-/// harness `CoverUnsatisfied`); here the harness must carry the cover after the call and embed
-/// both preconditions, so nothing about it can be reported verified without that cover.
-/// Upstream: agent-ix/quire-contract-ir FR-036-AC-2, TC-045
-#[trace("FR-015-AC-4", "FR-015-AC-5", "FR-015-AC-7", "FR-015-AC-8", "TC-025")]
-#[test]
-fn tc_025_jointly_unsatisfiable_preconditions_leave_a_cover_that_decides_vacuity() {
-    let package = operation_group_package(1000);
-    let harness = transfer_harness(&package);
-    let source = &harness.rust.contents;
-    let requires = source
-        .lines()
-        .map(str::trim)
-        .filter(|line| line.starts_with("#[kani::requires("))
-        .collect::<Vec<_>>();
-    assert_eq!(requires.len(), 2, "{source}");
-    let assumed = harness.identity.oracles[1..]
-        .iter()
-        .map(|oracle| oracle.clause.clone())
-        .collect::<Vec<_>>();
-    // In the package's canonical clause order.
-    assert_eq!(assumed, [clause(TRANSFER_LARGE), clause(TRANSFER_SMALL)]);
-    let body = &source[source.find("#[kani::proof_for_contract(").unwrap()..];
-    let call = body.find("let _ = ").unwrap();
-    let cover = body
-        .find("kani::cover!(true, \"contract requires and IR bounds are jointly satisfiable\");")
-        .unwrap();
-    assert!(call < cover, "{body}");
-}
-
-fn transfer_harness(package: &BoundPackage) -> KaniObligationHarness {
-    let refs = [
-        clause(TRANSFER_SMALL),
-        clause(TRANSFER_LARGE),
-        clause(TRANSFER_IMPOSSIBLE),
-    ];
-    let items = refs
-        .iter()
-        .map(|clause| ObligationItem::BoundClause { package, clause })
-        .collect::<Vec<_>>();
-    let (records, mut harnesses) =
-        emitted(negotiate_kani_obligations(&request(&items, "crate::transfer")).unwrap());
-    assert!(records
-        .iter()
-        .all(|record| matches!(record.disposition, ObligationDisposition::Supported { .. })));
-    harnesses.remove(2)
-}
-
-/// Contract obligations on one operation share one subject signature, the union of their
-/// slots, even when one reads an input the other does not; a union that gives one slot two
-/// bounds refuses every obligation in the group with a typed reason and no harness.
-#[trace("FR-015-AC-1", "TC-025")]
-#[test]
-fn tc_025_contract_harnesses_on_one_operation_share_one_subject_signature() {
-    let package = operation_group_package(1000);
-    let refs = [clause(REFUND_CAPPED), clause(REFUND_NONNEGATIVE)];
-    let items = refs
-        .iter()
-        .map(|clause| ObligationItem::BoundClause {
-            package: &package,
-            clause,
-        })
-        .collect::<Vec<_>>();
-    let (_, harnesses) =
-        emitted(negotiate_kani_obligations(&request(&items, "crate::refund")).unwrap());
-    assert_eq!(harnesses.len(), 2);
-    let signature = |harness: &KaniObligationHarness| {
-        (
-            harness
-                .identity
-                .arguments
-                .iter()
-                .map(|binding| binding.identifier.clone())
-                .collect::<Vec<_>>(),
-            harness
-                .identity
-                .results
-                .iter()
-                .map(|binding| binding.identifier.clone())
-                .collect::<Vec<_>>(),
-        )
-    };
-    let expected = (
-        vec!["balance_pre".to_owned(), "fee_current".to_owned()],
-        vec!["balance_post".to_owned()],
-    );
-    assert_eq!(signature(&harnesses[0]), expected);
-    assert_eq!(signature(&harnesses[1]), expected);
-    for harness in &harnesses {
-        assert!(harness
-            .rust
-            .contents
-            .contains("crate::refund(balance_pre, fee_current)"));
-    }
-    // Alone, the postcondition's signature would omit the invariant's pre-state argument.
-    let alone = [ObligationItem::BoundClause {
-        package: &package,
-        clause: &refs[0],
-    }];
-    let (_, harnesses) =
-        emitted(negotiate_kani_obligations(&request(&alone, "crate::refund")).unwrap());
-    assert_eq!(
-        signature(&harnesses[0]),
-        (
-            vec!["fee_current".to_owned()],
-            vec!["balance_post".to_owned()]
-        )
-    );
-
-    // The invariant binds `balance` to 0..=999 and the postcondition to 0..=1000: each alone is
-    // supported, together they are refused.
-    let conflicting = operation_group_package(999);
-    let items = refs
-        .iter()
-        .map(|clause| ObligationItem::BoundClause {
-            package: &conflicting,
-            clause,
-        })
-        .collect::<Vec<_>>();
-    let (records, harnesses) =
-        emitted(negotiate_kani_obligations(&request(&items, "crate::refund")).unwrap());
-    assert!(harnesses.is_empty());
-    for record in &records {
-        assert_eq!(
-            unsupported(record),
-            &UnsupportedObligation::SubjectSignatureConflict {
-                operation: "refund".to_owned(),
-                identifier: "balance_post".to_owned(),
-            }
-        );
-    }
-    for clause in &refs {
-        let alone = [ObligationItem::BoundClause {
-            package: &conflicting,
-            clause,
-        }];
-        let (_, harnesses) =
-            emitted(negotiate_kani_obligations(&request(&alone, "crate::refund")).unwrap());
-        assert_eq!(harnesses.len(), 1);
-    }
-}
-
-/// A bound whose lower limit exceeds its upper limit is refused, not emitted as an empty proof.
-/// Upstream: agent-ix/quire-contract-ir FR-036-AC-2, TC-045
-#[trace("FR-015-AC-5", "TC-025")]
-#[test]
-fn tc_025_unsatisfiable_bounds_are_refused() {
-    let (scalar, claim_map, ids) = scalar_package();
-    let records = scalar_records(&scalar, &claim_map, &ids, &[UNSATISFIABLE]);
-    assert_eq!(
-        unsupported(&records[0]),
-        &UnsupportedObligation::UnsatisfiableBound {
-            bound: ids.resolve(&package::id(&Bound::Integer(5, -5).key())),
-            form: "integer_range".to_owned(),
-            lower: "5".to_owned(),
-            upper: "-5".to_owned(),
-        }
-    );
-    // V1 integer types cannot carry an inverted range: IR refuses the projection itself.
-    let valid = serde_json::to_vec(&projection(1000)).unwrap();
-    BoundPackage::from_json_bytes(&valid).expect("valid projection must bind");
-    let inverted = serde_json::to_vec(&projection(-1)).unwrap();
-    let diagnostics = BoundPackage::from_json_bytes(&inverted).unwrap_err();
-    assert_eq!(diagnostics.len(), 1);
-    assert_eq!(diagnostics[0].code, DiagnosticCode::InvalidNumericBounds);
-    assert_eq!(diagnostics[0].path, "type.integer.bounds");
 }
 
 /// Every V2 scalar claim FR-014 generates has an IR-confirmed operation. The four
@@ -2207,60 +1357,46 @@ fn tc_025_a_caller_declared_operation_is_refused_with_no_harness() {
 
 /// One invalid item rejects the request after every item is accounted, and exposes no bytes.
 /// The whole-request refusals below (`KaniObligationError`) are generation-time classifications
-/// too: a rejected `negotiate_kani_obligations` call returns no `KaniObligationHarness` at all,
+/// too: a rejected `negotiate_kani_obligations` call returns no harness at all,
 /// so `execute_kani_obligation` has nothing to run and nothing to misreport as an execution
 /// outcome in place of the refusal it actually is.
 /// Upstream: agent-ix/quire-contract-ir FR-036-AC-4, TC-045
 #[trace("FR-015-AC-12", "FR-017-CON-2", "TC-025", "TC-027")]
 #[test]
 fn tc_025_every_item_is_accounted_before_any_harness_is_exposed() {
-    let package = bound_package(1000);
-    let other_package = bound_package(999);
     let (scalar, claim_map, ids) = scalar_package();
     let admitted = admitted_scalar_claims(&scalar, &claim_map);
-    let refs = [
-        clause(PRECONDITION),
-        clause(POSTCONDITION),
-        clause("no-such-clause"),
-        clause(DEFINEDNESS),
-    ];
+    let supported = ids.resolve(&code_id(1001));
     let missing = code_id(MISSING);
     let unbounded = ids.resolve(&code_id(UNBOUNDED));
     let items = [
-        ObligationItem::BoundClause {
-            package: &package,
-            clause: &refs[0],
+        ObligationItem::ScalarClaim {
+            package: &admitted,
+            claim_map: &claim_map,
+            node_id: &supported,
+            claim_index: claim_index(&claim_map, &supported),
+            result_selection: &ContractDriverResultSelection::NotApplicable,
         },
-        ObligationItem::BoundClause {
-            package: &package,
-            clause: &refs[1],
-        },
-        ObligationItem::BoundClause {
-            package: &package,
-            clause: &refs[0],
-        },
-        ObligationItem::BoundClause {
-            package: &package,
-            clause: &refs[2],
-        },
-        ObligationItem::BoundClause {
-            package: &other_package,
-            clause: &refs[3],
+        ObligationItem::ScalarClaim {
+            package: &admitted,
+            claim_map: &claim_map,
+            node_id: &supported,
+            claim_index: claim_index(&claim_map, &supported),
+            result_selection: &ContractDriverResultSelection::NotApplicable,
         },
         ObligationItem::ScalarClaim {
             package: &admitted,
             claim_map: &claim_map,
             node_id: &missing,
-            // Deliberately outside the map: this item tests UnknownNode.
             claim_index: claim_map.items.len(),
-            result_selection: &quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
+            result_selection: &ContractDriverResultSelection::NotApplicable,
         },
         ObligationItem::ScalarClaim {
             package: &admitted,
             claim_map: &claim_map,
             node_id: &unbounded,
             claim_index: claim_index(&claim_map, &unbounded),
-            result_selection: &quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
+            result_selection: &ContractDriverResultSelection::NotApplicable,
         },
     ];
     let outcome = negotiate_kani_obligations(&request(&items, "crate::withdraw")).unwrap();
@@ -2279,23 +1415,20 @@ fn tc_025_every_item_is_accounted_before_any_harness_is_exposed() {
         records[0].disposition,
         ObligationDisposition::Supported { .. }
     ));
-    assert!(matches!(
-        records[1].disposition,
-        ObligationDisposition::Supported { .. }
-    ));
-    let invalid = |index: usize| match &records[index].disposition {
-        ObligationDisposition::InvalidRequest { reason } => reason.clone(),
-        other => panic!("{index}: {other:?}"),
-    };
     assert_eq!(
-        invalid(2),
-        InvalidObligationItem::DuplicateItem { first_index: 0 }
+        records[1].disposition,
+        ObligationDisposition::InvalidRequest {
+            reason: InvalidObligationItem::DuplicateItem { first_index: 0 }
+        }
     );
-    assert_eq!(invalid(3), InvalidObligationItem::UnknownClause);
-    assert_eq!(invalid(4), InvalidObligationItem::MixedBoundPackages);
-    assert_eq!(invalid(5), InvalidObligationItem::UnknownNode);
+    assert_eq!(
+        records[2].disposition,
+        ObligationDisposition::InvalidRequest {
+            reason: InvalidObligationItem::UnknownNode
+        }
+    );
     assert!(matches!(
-        records[6].disposition,
+        records[3].disposition,
         ObligationDisposition::RequiresBound { .. }
     ));
 
@@ -2381,9 +1514,8 @@ fn tc_025_every_item_is_accounted_before_any_harness_is_exposed() {
 #[test]
 fn tc_027_a_missing_launcher_is_refused_before_anything_runs() {
     let cancel = quire_exact::Cancel::new();
-    let package = bound_package(1000);
-    let harness = supported_contract_harnesses(&package, "crate::withdraw").remove(1);
-    let scratch = write_crate(&harness, HEALTHY_SUBJECT);
+    let (harness, manifest) = routed_scalar_increment();
+    let scratch = write_scalar_crate("missing-launcher", &manifest, &harness.rust.contents);
     let directory = &scratch.path;
     let installation = KaniInstallation::new(directory.join("cargo-kani"));
     let refusal = execute_kani_obligation(&KaniExecutionRequest {
@@ -2413,10 +1545,9 @@ fn tc_027_non_executable_launchers_are_refused_before_anything_runs() {
     let cancel = quire_exact::Cancel::new();
     use std::os::unix::fs::PermissionsExt;
 
-    let package = bound_package(1000);
-    let harness = supported_contract_harnesses(&package, "crate::withdraw").remove(1);
+    let (harness, manifest) = routed_scalar_increment();
     for directory_launcher in [false, true] {
-        let scratch = write_crate(&harness, HEALTHY_SUBJECT);
+        let scratch = write_scalar_crate("bad-launcher", &manifest, &harness.rust.contents);
         let directory = &scratch.path;
         let launcher = directory.join("cargo-kani");
         if directory_launcher {
@@ -2452,70 +1583,8 @@ fn tc_027_non_executable_launchers_are_refused_before_anything_runs() {
 
 // ---- kani lane ---------------------------------------------------------------
 
-const HEALTHY_SUBJECT: &str = "/// Withdraws `amount` from `balance`.\n#[must_use]\npub fn withdraw(amount_current: i64, balance_pre: i64) -> i64 {\n    balance_pre - amount_current\n}\n";
-const SEEDED_FAILING_SUBJECT: &str = "/// Seeded defect: credits instead of debiting.\n#[must_use]\npub fn withdraw(amount_current: i64, balance_pre: i64) -> i64 {\n    balance_pre + amount_current\n}\n";
-const VACUOUS_SUBJECT: &str = "/// Returns a balance no postcondition result satisfies.\n#[must_use]\npub fn transfer(amount_current: i64) -> i64 {\n    amount_current\n}\n";
-
-pub(crate) fn write_crate(harness: &KaniObligationHarness, subject: &str) -> TemporaryDirectory {
-    let scratch = TemporaryDirectory::new("quire-kani-obligations-crate");
-    let directory = &scratch.path;
-    fs::write(
-        directory.join("src/lib.rs"),
-        format!(
-            "//! Generated obligation check crate.\n\n{}\n{subject}",
-            harness.rust.contents
-        ),
-    )
-    .unwrap();
-    write_manifest(
-        directory,
-        &format!(
-            "[package]\nname = \"generated-kani-obligation\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
-            runtime_dependency(&["exact"])
-        ),
-    );
-    fs::write(
-        directory.join("build.rs"),
-        "fn main() { println!(\"cargo:rustc-check-cfg=cfg(kani)\"); }\n",
-    )
-    .unwrap();
-    scratch
-}
-
-fn run(
-    installation: &KaniInstallation,
-    harness: &KaniObligationHarness,
-    subject: &str,
-    evidence_directory: &Path,
-    label: &str,
-) -> quire_contract_codegen::KaniExecutionEvidence {
-    let cancel = quire_exact::Cancel::new();
-    let scratch = write_crate(harness, subject);
-    let crate_directory = &scratch.path;
-    let evidence = execute_kani_obligation(&KaniExecutionRequest {
-        cancel: &cancel,
-        installation,
-        harness: harness.into(),
-        crate_directory,
-        target_directory: &PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kani-obligations"),
-        home_directory: None,
-    })
-    .unwrap_or_else(|refusal| panic!("{label}: {refusal}"));
-    fs::write(
-        evidence_directory.join(format!("{label}.json")),
-        serde_json::to_string_pretty(&evidence).unwrap(),
-    )
-    .unwrap();
-    fs::write(
-        evidence_directory.join(format!("{label}.harness.rs")),
-        &harness.rust.contents,
-    )
-    .unwrap();
-    evidence
-}
-
-/// One item that does not compile: it reads a name nothing defines. It follows the healthy
-/// subject, so the subject the harness calls resolves and this is the only compile error.
+/// One item that does not compile: it reads a name nothing defines. The V2 scalar subject
+/// resolves, so this is the only compile error.
 const BROKEN_ITEM: &str = "pub fn broken() -> i64 {\n    undefined_name\n}\n";
 
 /// A launcher that exits 1 with a usage error on stderr, exports no report and prints nothing on
@@ -2555,9 +1624,8 @@ fn write_script_launcher(path: &Path, body: &str) {
 #[test]
 fn tc_043_the_terminal_value_of_no_verdict_evidence_ignores_its_diagnostics() {
     let cancel = quire_exact::Cancel::new();
-    let package = bound_package(1000);
-    let harness = supported_contract_harnesses(&package, "crate::withdraw").remove(1);
-    let scratch = write_crate(&harness, HEALTHY_SUBJECT);
+    let (harness, manifest) = routed_scalar_increment();
+    let scratch = write_scalar_crate("no-verdict", &manifest, &harness.rust.contents);
     let directory = &scratch.path;
     let launcher = directory.join("cargo-kani");
     write_failing_launcher(&launcher);
@@ -2604,10 +1672,9 @@ fn tc_043_the_terminal_value_of_no_verdict_evidence_ignores_its_diagnostics() {
 fn tc_027_real_kani_non_compiling_crate_is_no_verdict_with_phase_compile() {
     let cancel = quire_exact::Cancel::new();
     let installation = KaniInstallation::discover().expect("cargo-kani is installed");
-    let package = bound_package(1000);
-    let harness = supported_contract_harnesses(&package, "crate::withdraw").remove(1);
-    let subject = format!("{HEALTHY_SUBJECT}\n{BROKEN_ITEM}");
-    let scratch = write_crate(&harness, &subject);
+    let (harness, manifest) = routed_scalar_increment();
+    let source = format!("{}\n{BROKEN_ITEM}", harness.rust.contents);
+    let scratch = write_scalar_crate("non-compiling", &manifest, &source);
     let crate_directory = &scratch.path;
     let target = crate_directory.join("target");
     let evidence = execute_kani_obligation(&KaniExecutionRequest {
@@ -2646,9 +1713,9 @@ fn tc_027_real_kani_non_compiling_crate_is_no_verdict_with_phase_compile() {
     );
     for text in [&record.stdout.text, &record.stderr.text] {
         assert!(
-            !text.contains("cannot find function `withdraw`")
-                && !text.contains("cannot find function withdraw"),
-            "the healthy subject resolves, so the only error is the broken item: {text}"
+            !text.contains("cannot find function `subject`")
+                && !text.contains("cannot find function subject"),
+            "the scalar subject resolves, so the only error is the broken item: {text}"
         );
     }
     assert!(
@@ -2683,9 +1750,8 @@ fn tc_027_real_kani_non_compiling_crate_is_no_verdict_with_phase_compile() {
 #[test]
 fn cbmc_failure_terminal_value_reads_the_retained_cause() {
     let cancel = quire_exact::Cancel::new();
-    let package = bound_package(1000);
-    let harness = supported_contract_harnesses(&package, "crate::withdraw").remove(1);
-    let scratch = write_crate(&harness, HEALTHY_SUBJECT);
+    let (harness, manifest) = routed_scalar_increment();
+    let scratch = write_scalar_crate("cbmc-failure", &manifest, &harness.rust.contents);
     let directory = &scratch.path;
     fs::create_dir_all(directory.join("target")).unwrap();
     for (status, expected) in [
@@ -2753,9 +1819,8 @@ fn cbmc_failure_terminal_value_reads_the_retained_cause() {
 fn tc_027_real_kani_unknown_cbmc_option_keeps_exit_code_64_as_the_failure_cause() {
     let cancel = quire_exact::Cancel::new();
     let installation = KaniInstallation::discover().expect("cargo-kani is installed");
-    let package = bound_package(1000);
-    let harness = supported_contract_harnesses(&package, "crate::withdraw").remove(1);
-    let scratch = write_crate(&harness, HEALTHY_SUBJECT);
+    let (harness, manifest) = routed_scalar_increment();
+    let scratch = write_scalar_crate("unknown-cbmc-option", &manifest, &harness.rust.contents);
     let crate_directory = &scratch.path;
     let manifest = crate_directory.join("Cargo.toml");
     let mut text = fs::read_to_string(&manifest).unwrap();
@@ -2803,149 +1868,9 @@ fn tc_027_real_kani_unknown_cbmc_option_keeps_exit_code_64_as_the_failure_cause(
     );
 }
 
-/// Real Kani runs: the precondition, postcondition and invariant of a healthy subject verify
-/// separately, a seeded defect is falsified with a concrete counterexample, jointly unsatisfiable
-/// requires are reported vacuous rather than verified, and a real run given a budget it cannot
-/// meet is reported timed out rather than left to block or misreported as `NoVerdict`.
-#[trace(
-    "FR-015-AC-1",
-    "FR-015-AC-4",
-    "TC-025",
-    "FR-017-AC-4",
-    "FR-017-AC-5",
-    "FR-017-AC-6",
-    "FR-017-AC-7",
-    "FR-017-CON-1",
-    "FR-017-CON-2",
-    "TC-027"
-)]
-#[test]
-#[ignore = "kani lane: run serially through `make kani`"]
-fn tc_025_real_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defect() {
-    let cancel = quire_exact::Cancel::new();
-    let installation = KaniInstallation::discover().expect("cargo-kani is installed");
-    let evidence_directory =
-        PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kani-obligation-evidence");
-    fs::create_dir_all(&evidence_directory).unwrap();
-    let package = bound_package(1000);
-    let harnesses = supported_contract_harnesses(&package, "crate::withdraw");
-
-    for (harness, label) in harnesses
-        .iter()
-        .zip(["precondition", "postcondition", "invariant"])
-    {
-        let evidence = run(
-            &installation,
-            harness,
-            HEALTHY_SUBJECT,
-            &evidence_directory,
-            &format!("verified-{label}"),
-        );
-        assert_eq!(evidence.outcome, KaniRunOutcome::Verified, "{label}");
-        assert_eq!(evidence.exit_code, Some(0));
-        assert_eq!(
-            evidence.arguments[1..=harness.identity.options.len()],
-            harness.identity.options[..]
-        );
-    }
-
-    let evidence = run(
-        &installation,
-        &harnesses[1],
-        SEEDED_FAILING_SUBJECT,
-        &evidence_directory,
-        "falsified-postcondition",
-    );
-    let KaniRunOutcome::Falsified { counterexample } = &evidence.outcome else {
-        panic!("the seeded defect must be falsified: {evidence:?}");
-    };
-    assert!(counterexample.contains("kani::concrete_playback_run"));
-    assert!(counterexample.contains(harnesses[1].identity.harness_symbol.as_str()));
-    assert_ne!(evidence.exit_code, Some(0));
-
-    // Jointly unsatisfiable requires with a postcondition no result satisfies: every check
-    // passes vacuously, and the cover after the contract call reports it.
-    let group = operation_group_package(1000);
-    let vacuous = transfer_harness(&group);
-    let evidence = run(
-        &installation,
-        &vacuous,
-        VACUOUS_SUBJECT,
-        &evidence_directory,
-        "vacuous-postcondition",
-    );
-    assert_eq!(
-        evidence.outcome,
-        KaniRunOutcome::CoverUnsatisfied {
-            satisfied: 0,
-            total: 1
-        },
-        "jointly unsatisfiable requires must never verify"
-    );
-
-    // A budget a real run cannot meet is the typed timed-out inconclusive result, not
-    // `NoVerdict` and not success: this harness has never been built before in this crate
-    // directory, so 1ms cannot possibly be enough even to compile it, let alone run CBMC. The
-    // proof that the run was actually killed, rather than merely misclassified after being
-    // allowed to run to completion, is the mutation test against
-    // `run_launcher_with_timeout`'s deadline check in `src/kani/run/launch.rs`: disabling that
-    // check turns this same assertion red, because the run then completes for real and
-    // verifies. This call's own wall-clock elapsed time is not that proof — a real run that
-    // happened to finish quickly would satisfy an elapsed-time bound too — so none is asserted
-    // here.
-    let mut harness = harnesses[0].clone();
-    harness.identity.ceilings.wall_clock = Duration::from_millis(1);
-    let harness = &harness;
-    let scratch = write_crate(harness, HEALTHY_SUBJECT);
-    let crate_directory = &scratch.path;
-    let evidence = execute_kani_obligation(&KaniExecutionRequest {
-        cancel: &cancel,
-        installation: &installation,
-        harness: harness.into(),
-        crate_directory,
-        target_directory: &crate_directory.join("target"),
-        home_directory: None,
-    })
-    .unwrap_or_else(|refusal| {
-        panic!("a run that started must not surface as a refusal: {refusal}")
-    });
-    assert_eq!(
-        evidence.outcome,
-        KaniRunOutcome::Inconclusive {
-            reason: KaniInconclusiveReason::TimedOut
-        }
-    );
-    assert_eq!(evidence.exit_code, None);
-    drop(scratch);
-
-    // Evidence about a harness the crate does not contain is evidence about nothing.
-    let harness = supported_contract_harnesses(&package, "crate::withdraw").remove(1);
-    let scratch = write_crate(&harness, HEALTHY_SUBJECT);
-    let crate_directory = &scratch.path;
-    fs::write(
-        crate_directory.join("src/lib.rs"),
-        format!("//! Generated obligation check crate.\n\n{HEALTHY_SUBJECT}"),
-    )
-    .unwrap();
-    let refusal = execute_kani_obligation(&KaniExecutionRequest {
-        cancel: &cancel,
-        installation: &installation,
-        harness: (&harness).into(),
-        crate_directory,
-        target_directory: &crate_directory.join("target"),
-        home_directory: None,
-    })
-    .unwrap_err();
-    assert!(matches!(
-        refusal,
-        KaniExecutionRefusal::HarnessNotInCrate { .. }
-    ));
-    assert!(!crate_directory.join("target").exists(), "nothing ran");
-}
-
 /// The routed scalar harness for `x + 1` over `Int[0, 9]`, and the oracle crate's `Cargo.toml`, both
 /// exactly as `generate_routed` returns them: the inputs the driver assembles a run from.
-fn routed_scalar_increment() -> (
+pub(crate) fn routed_scalar_increment() -> (
     KaniScalarObligationHarness,
     quire_contract_codegen::Artifact,
 ) {
@@ -3173,22 +2098,15 @@ fn write_scalar_crate(
     scratch
 }
 
-/// A routed scalar harness carries the same non-vacuity cover shape a contract harness does, so
-/// a run classifies identically: every cover satisfied is verified, an unsatisfied one is
-/// cover-unsatisfied, and success text with no cover summary is inconclusive.
-#[trace("FR-017-AC-4", "FR-017-AC-11", "TC-027")]
+/// A routed scalar harness carries a non-vacuity cover. A run with every cover satisfied is
+/// verified; one with an unsatisfied cover is cover-unsatisfied. A success text with no cover
+/// summary is inconclusive.
+#[trace("FR-017-AC-4", "FR-017-AC-11", "FR-017-CON-1", "TC-027")]
 #[test]
 fn tc_027_a_routed_scalar_harness_run_classifies_like_a_contract_harness() {
     let (scalar, _manifest) = routed_scalar_increment();
-    let package = bound_package(1000);
-    let contract = supported_contract_harnesses(&package, "crate::withdraw").remove(1);
     let covers = |source: &str| source.matches("kani::cover!(").count();
     assert_eq!(covers(&scalar.rust.contents), 1, "one non-vacuity cover");
-    assert_eq!(
-        covers(&contract.rust.contents),
-        1,
-        "the contract kind's shape"
-    );
     let total = covers(&scalar.rust.contents);
     let report = |checks: Vec<serde_json::Value>| {
         serde_json::to_vec(&serde_json::json!({
@@ -3235,7 +2153,7 @@ fn tc_027_a_routed_scalar_harness_run_classifies_like_a_contract_harness() {
 
 /// Runs `library` (a routed scalar harness's source, possibly mutated) through the execution
 /// module in the crate the driver assembles, under the real Kani backend and the lane budget.
-fn run_scalar_under_real_kani(
+pub(crate) fn run_scalar_under_real_kani(
     name: &str,
     harness: &KaniScalarObligationHarness,
     manifest: &quire_contract_codegen::Artifact,
@@ -3256,14 +2174,7 @@ fn run_scalar_under_real_kani(
     evidence
 }
 
-/// The routed `x + 1` over `Int[0, 9]` harness runs through the execution module in the crate the
-/// driver assembles (`Cargo.toml` from `oracle_artifacts`, the harness source as `src/lib.rs`)
-/// under the real Kani backend and is verified; its evidence carries the scalar identity. A
-/// crate whose `src/lib.rs` lacks the harness is refused with no run.
-#[trace("FR-017-AC-7", "FR-017-AC-11", "TC-027")]
-#[test]
-#[ignore = "kani lane: run serially through `make kani`"]
-fn tc_027_a_routed_scalar_harness_verifies() {
+pub(crate) fn verify_routed_scalar_harness_real_kani() {
     let cancel = quire_exact::Cancel::new();
     let (harness, manifest) = routed_scalar_increment();
     let evidence = run_scalar_under_real_kani("scalar-real", &harness, &manifest);
@@ -3271,10 +2182,21 @@ fn tc_027_a_routed_scalar_harness_verifies() {
     assert_eq!(evidence.kind, None);
     assert_eq!(evidence.harness_path, harness.rust.path);
     assert_eq!(
+        evidence.launcher_path,
+        KaniInstallation::discover()
+            .unwrap()
+            .launcher
+            .display()
+            .to_string()
+    );
+    assert_eq!(evidence.arguments.len(), harness.identity.options.len() + 1);
+    assert_eq!(
         evidence.arguments[1..=harness.identity.options.len()],
         harness.identity.options[..]
     );
     assert_eq!(evidence.unwind, harness.identity.unwind);
+    assert_eq!(evidence.solver, harness.identity.solver);
+    assert_eq!(evidence.exit_code, Some(0));
 
     let installation = KaniInstallation::discover().expect("cargo-kani is installed");
     let scratch = write_scalar_crate("scalar-real-missing", &manifest, "//! empty\n");

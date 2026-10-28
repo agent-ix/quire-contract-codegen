@@ -20,18 +20,11 @@ use ix_trace_rs::trace;
 
 /// Every family the inspection drives, with the one source file that emits it. A file in this
 /// table is a file the scan allows to spell a proof attribute.
-const FAMILIES: [(&str, &str); 11] = [
-    ("precondition", "kani/generate/precondition.rs"),
-    ("v1 contract postcondition", "kani/generate/contract.rs"),
-    ("v1 contract invariant", "kani/generate/contract.rs"),
+const FAMILIES: [(&str, &str); 7] = [
     ("scalar", "kani/generate/render.rs"),
+    ("v2 precondition", "kani/generate/render.rs"),
     ("state clause", "kani/generate/frame.rs"),
     ("frame effect", "kani/generate/frame.rs"),
-    ("v1 bundle", "kani/generate/v1_bundle.rs"),
-    (
-        "v1 bundle with an assumed and a stubbed dependency",
-        "kani/generate/v1_bundle.rs",
-    ),
     (
         "corpus graph",
         "kani/generate/corpus/bounded_kani_corpus.rs",
@@ -140,7 +133,6 @@ fn emitted() -> Vec<(&'static str, String)> {
     [
         crate::kani_obligations::guard_sources(),
         crate::kani_obligations_state_frame::guard_sources(),
-        crate::kani_generation::guard_sources(),
         crate::bounded_kani_corpus::guard_sources(),
         crate::kani_obligations_symbolic_domains::guard_sources(),
     ]
@@ -151,7 +143,6 @@ fn emitted() -> Vec<(&'static str, String)> {
 #[trace(
     "FR-015-AC-7",
     "FR-015-AC-53",
-    "FR-015-AC-54",
     "FR-015-AC-55",
     "FR-015-AC-58",
     "FR-015-AC-116",
@@ -191,12 +182,9 @@ fn tc_025_the_cover_inspection_rejects_a_misplaced_duplicated_or_missing_cover()
 /// The proof-attribute templates each driven file holds, as `proof_spellings` counts them. A
 /// driven file with more spellings than this has a template no entry point above drives; raise
 /// the count only together with a driver and a family in `FAMILIES`.
-const PROOF_TEMPLATES: [(&str, usize); 6] = [
-    ("kani/generate/precondition.rs", 1),
-    ("kani/generate/contract.rs", 1),
+const PROOF_TEMPLATES: [(&str, usize); 3] = [
     ("kani/generate/render.rs", 2),
     ("kani/generate/frame.rs", 2),
-    ("kani/generate/v1_bundle.rs", 1),
     ("kani/generate/corpus/bounded_kani_corpus.rs", 1),
 ];
 

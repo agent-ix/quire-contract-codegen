@@ -157,23 +157,32 @@ failure is reported.
 
 ## Status
 
+FR-016-AC-1 through AC-5 and AC-21 through AC-23 retain default-suite evidence through a
+direct test-only `KaniObligationIdentity` fixture and the surviving replay and identity APIs.
+That fixture is an input to those APIs, not a replacement V1 generator or a proof claim.
+FR-016-AC-9 and AC-10 retain their default native replay tests, but the
+`skeleton_spine.rs` installed-prover E7-E9 control was removed with the V1 `BoundClause` generator.
+That installed path is Open and partially backed until IR-1047 supplies a genuine V2 generated
+harness and real-Kani counterexample control. The original AC text and verification methods
+remain unchanged.
+
 FR-016-AC-8 remains Open and partially backed after the 2026-10-27 IR-348 retirement ruling.
 The positional decoder and typed non-argument refusal tests in `src/replay/witness.rs` survive.
 The V2 `state_clause_kani_playback_adapter_refuses_wrong_evidence` test in
 `tests/it/kani_obligations_state_clause_replay.rs` also survives: it checks a generated
 state-frame postcondition's persisted draw order against playback and refuses mismatched
 assertion evidence. It does not compare emitted symbolic argument order with persisted bindings
-or execute the assertion in real Kani. The only emission-order and real-Kani persisted-schema controls in
-`tests/it/kani_argument_order.rs` and `tests/it/kani_witness_join.rs` use the retiring V1
-`BoundClause` producer. A genuine V2 producer must supply persisted argument bindings and
+or execute the assertion in real Kani. The former emission-order and real-Kani persisted-schema
+controls in `tests/it/kani_argument_order.rs` and `tests/it/kani_witness_join.rs` used the retired
+V1 `BoundClause` producer and were removed. A genuine V2 producer must supply persisted argument bindings and
 emitted symbolic arguments for corresponding order, naming and real-Kani decode evidence.
 The original AC-8 wording and verification method above remain unchanged.
 
-FR-016-AC-25 remains Planned/Open under IR-604. In `tests/it/kani_stdout_capture.rs`, the
-ignored `tc_026_installed_kani_falsification_is_bound_to_process_stdout` uses a V1 `BoundClause`
+FR-016-AC-25 remains Planned/Open under IR-604. The removed
+`tc_026_installed_kani_falsification_is_bound_to_process_stdout` used a V1 `BoundClause`
 harness. It compared the retained counterexample byte-for-byte with the first eligible assertion
 playback in independently captured stdout, excluding cover blocks, and rejected a valid
-post-classification substitute. That genuine V1 evidence retires with its producer and gives no
+post-classification substitute. That V1 evidence retired with its producer and gives no
 credit to a surviving harness. The observing-launcher helper and the other three AC-25-tagged
 tests have no V1 dependency and survive. IR-604 still owes the same independent stdout binding
 and substitution control on a surviving generated harness. The original AC-25 wording and

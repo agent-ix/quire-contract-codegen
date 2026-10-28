@@ -1,14 +1,12 @@
 //! The one Kani generator: the request and result vocabulary, the negotiation entry and the
 //! family lowerers.
 
-// Census validation; interim, see the file header.
+// Dependency census validation shared with bounded corpus generation.
 pub(crate) mod census_validation;
-// The V1 clause lowering the precondition and contract families share.
+// Admitted V2 clause lowering.
 pub(crate) mod clause;
 // Bounded collection claims over admitted V2 model fields.
 pub(crate) mod collection;
-// The contract family.
-pub(crate) mod contract;
 // The bounded-Kani corpus family.
 pub(crate) mod corpus;
 // The state-frame family.
@@ -20,16 +18,12 @@ pub(crate) mod lower;
 pub(crate) mod negotiate;
 // The request and result vocabulary every family speaks.
 pub(crate) mod outcome;
-// The precondition family.
-pub(crate) mod precondition;
 // The validated harness path and the persisted per-harness record.
 pub(crate) mod record;
 #[cfg(test)]
 mod role_parity_tests;
 // The scalar family.
 pub(crate) mod scalar;
-// The V1 bundle generator; interim, see the file header.
-pub(crate) mod v1_bundle;
 
 // Validated private descriptions and their pure renderer.
 mod render;
