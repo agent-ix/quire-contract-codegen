@@ -108,12 +108,15 @@ back the new capacity-refusal or feasible-unique obligations.
 Change one selected field bound, claim, subject and unwind separately to check
 identity changes; repeat equal inputs for byte identity. Compare recorded
 identity domains and complete ordered options with generated source and FR-017
-run evidence, including actual Kani, Rust and solver versions. The collection-family tests exist and are tagged
+run evidence. Assert that the evidence argument vector contains exactly the
+`kani` subcommand, the harness identity's options in order and the report-export
+flags in order, and that its solver kind and unwind equal the identity's. The
+collection-family tests exist and are tagged
 (IR-268, CG #396 fe20ecc); the Kani-lane run is `Verified` (94 SUCCESS) with the
 mutant `Falsified` (93 SUCCESS and 1 FAILURE), per IR-268's close-out at PR head f43adca.
-The graph family stays planned (IR-805). The FR-017 run-evidence version check is
-planned (`KaniExecutionEvidence` has no Kani, Rust or solver version field), and the
-representational-ceiling and malformed-declaration refusals have no tagged test. FR-015-AC-96 (uniqueness) and FR-015-AC-99 (symbolic-draw, cover and no-`Vec<i128>` clauses) are backed only by tests tagged for other ACs, so they are partial. The finite-input
+The graph family stays planned (IR-805). The AC-100 run-evidence ordered-option
+comparison remains planned; `KaniExecutionEvidence` already carries the
+complete argument vector, solver kind and unwind. The representational-ceiling and malformed-declaration refusals have no tagged test. FR-015-AC-96 (uniqueness) and FR-015-AC-99 (symbolic-draw, cover and no-`Vec<i128>` clauses) are backed only by tests tagged for other ACs, so they are partial. The finite-input
 corpus's Boolean and generation-time outcome do not satisfy these controls.
 
 For the graph family (IR-805), author a QSL unit whose model has an object
