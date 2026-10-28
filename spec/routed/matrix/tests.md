@@ -24,6 +24,7 @@ type: TestMatrix
 | FR-022 | FR-022-AC-1 | Analysis | 🚧 Planned |
 | FR-022 | FR-022-AC-26 through FR-022-AC-28 | TC-033 | 🚧 Planned (IR-304): QSL per-occurrence records are available; CG typed record intake, guarded proof conditions and missing-record refusal await code |
 | FR-022 | FR-022-AC-29 | TC-033 | ✅ Covered; tagged tests assert typed excluded driver-index refusal and valid bound routes at indexes 0 and 2 |
+| FR-022 | FR-022-AC-30 | TC-033 | 🚧 Planned (IR-1079); public plain-read view-dependent routes refuse the whole call with `UnauthenticatedOperationView`; source-authenticated and view-independent controls retain their results. |
 | FR-019 | FR-019-AC-1 (process arm), FR-019-AC-11 through FR-019-AC-13, FR-019-AC-16 through FR-019-AC-23 | TC-046 | 🚧 Planned; QSpec requires `ProofBound.kind`, while admitted-descriptor rows await QSL-654's producer and admit-side `invalid-domains` enforcement |
 | FR-022 | FR-022-AC-17 through FR-022-AC-19 | TC-046 | 🚧 Planned |
 | FR-022 | FR-022-AC-20 | Analysis | 🚧 Planned |
