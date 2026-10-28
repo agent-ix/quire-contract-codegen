@@ -77,19 +77,19 @@ operations:
     inputs: [KaniProfile, requested constructs, source id]
     output: CapabilityEntry list | KaniOutcome
     semantics: classifies one request through the public bounded Kani profile with no reverse Contract IR dependency; a malformed request is a typed refusal, not a disposition
-  # IR-621 direct error signatures below are planned; success and refusal semantics stay live.
+  # IR-621 direct error signatures below apply only while each operation remains public; FR-015-AC-110 retires collection and FR-015-AC-111 retires graph and corpus.
   - name: prepare_bounded_collection_query
-    status: live finite-input auxiliary under FR-015-AC-88 and AC-89; deleted by the collection slice (FR-015-AC-110)
+    status: live finite-input auxiliary under FR-015-AC-88 and AC-89; FR-015-AC-123 direct-result obligation ends when the collection slice deletes this operation (FR-015-AC-110)
     inputs: [KaniProfile, DispatchIndex, ValidatedFiniteInput, CollectionQuery]
     output: Result<CollectionLowering, KaniOutcome>
     semantics: CG-owned bounded collection-query lowering; bound exhaustion and profile or dispatch refusal stay IR typed non-Boolean outcomes with no partial artifact
   - name: prepare_finite_graph_reaches
-    status: live finite-input auxiliary under FR-015-AC-86 and AC-87; deleted by the graph slice (FR-015-AC-111)
+    status: live finite-input auxiliary under FR-015-AC-86 and AC-87; FR-015-AC-123 direct-result obligation ends when the graph slice deletes this operation (FR-015-AC-111)
     inputs: [KaniProfile, DispatchIndex, ValidatedFiniteInput, GraphRequest]
     output: Result<GraphLowering, KaniOutcome>
     semantics: CG-owned positive-length finite reference-graph reachability over IR-validated objects and references, with sorted depth-first expansion and a bound before each new identity; malformed or exhausted requests stay IR typed non-Boolean outcomes
   - name: generate_bounded_kani_corpus_case
-    status: live interim four-artifact corpus under FR-015-AC-51 to AC-58 and AC-90 to AC-94; native replay of corpus cases is dropped by the final slice (FR-015-AC-111), not planned; AD-004 step 4g retires the arms per family (arithmetic FR-015-AC-109, collection FR-015-AC-110, the latter also after step 4h) and the graph slice FR-015-AC-111 removes this public entry, the BoundedCorpus types, the corpus replay and its generation-time KaniOutcome, each slice only after IR-858 (step 4b) and after the one V2 generator serves that family's QSL-emitted, IR-admitted cases under FR-015-AC-95 to AC-102, the graph slice also after IR-805's typed graph population prerequisite
+    status: live interim four-artifact corpus under FR-015-AC-51 to AC-58 and AC-90 to AC-94; native replay of corpus cases is dropped by the final slice (FR-015-AC-111), not planned; AD-004 step 4g retires the arms per family (arithmetic FR-015-AC-109, collection FR-015-AC-110, the latter also after step 4h) and the graph slice FR-015-AC-111 removes this public entry (ending its FR-015-AC-123 direct-result obligation), the BoundedCorpus types, the corpus replay and its generation-time KaniOutcome, each slice only after IR-858 (step 4b) and after the one V2 generator serves that family's QSL-emitted, IR-admitted cases under FR-015-AC-95 to AC-102, the graph slice also after IR-805's typed graph population prerequisite
     inputs: [KaniProfile, DispatchIndex, ValidatedFiniteInput, BoundedCorpusRequest, proof dependency census, shared EmittedCorpusIdentities]
     output: Result<BoundedCorpusCase, KaniOutcome>
     error_surface: planned IR-621 retirement of public FamilyLoweringError and BoundedCorpusError, their OutcomeConstruction variants, and replacement aliases or wrappers; terminal cancellation pairing is unchanged
@@ -417,8 +417,10 @@ open_design_gates:
 The interface's features in declaration order: every operation the contract above declares, one row each.
 
 IR-598 / FR-015-AC-109 retired the finite-input checked-arithmetic auxiliary and
-its request/result types. The collection and graph auxiliaries and corpus API
-remain public until their separately gated retirement slices.
+its request/result types. The collection auxiliary remains public until FR-015-AC-110;
+the graph auxiliary and corpus API remain public until FR-015-AC-111.
+FR-015-AC-123's direct-result obligation applies to each operation only while
+it exists; retirement creates no replacement alias or wrapper.
 
 | Feature | Kind |
 |---|---|

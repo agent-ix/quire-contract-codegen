@@ -1656,7 +1656,8 @@ assigned to that one file. The names are the full item list.
   `tc_023_census_reports_every_construct_including_ones_after_an_early_refusal`,
   `tc_023_missing_construct_is_rejected_with_kani_capability_missing`.
 - `bounded_collections.rs` to `kani/generate/lower/bounded_collections.rs` (1 production, 2
-  tests). Production: `prepare_bounded_collection_query`. Tests: `fixture`,
+  tests; historical step-2f inventory, live only until FR-015-AC-110).
+  Production: `prepare_bounded_collection_query`. Tests: `fixture`,
   `tc_023_collection_order_duplicates_and_bounds_remain_exact`.
 - At step 2f, `definedness_arithmetic.rs` moved to
   `kani/generate/lower/definedness_arithmetic.rs` (1 production, 2 tests); FR-015-AC-109 later
@@ -1664,7 +1665,8 @@ assigned to that one file. The names are the full item list.
   `tc_023_division_by_zero_remains_a_typed_refusal`,
   `tc_023_checked_domain_admits_exact_values_and_refuses_outside_results`.
 - `finite_reference_graphs.rs` to `kani/generate/lower/finite_reference_graphs.rs` (1 production,
-  no tests). Production: `prepare_finite_graph_reaches`.
+  no tests; historical step-2f inventory, live only until FR-015-AC-111).
+  Production: `prepare_finite_graph_reaches`.
 - `kani_census.rs` to `kani/census.rs` (8 items): `ProofDependencyKind`, `ProofDependencyState`,
   `ProofReadiness`, `ProofDependencyRequest`, `ProofDependencyEdge`, `normalize_dependencies`,
   `dependency_readiness`, `dependency_site`.
