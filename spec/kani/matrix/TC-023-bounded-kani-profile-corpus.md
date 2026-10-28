@@ -26,16 +26,25 @@ A trace tag alone does not establish installed-backend proof evidence.
 
 ## Test Procedure
 
-IR-621 direct-error procedure: from an external consumer test, explicitly
-assign each public collection, graph and corpus operation's result to
-`Result<CollectionLowering, KaniOutcome>`, `Result<GraphLowering, KaniOutcome>`
-and `Result<BoundedCorpusCase, KaniOutcome>` respectively. Exercise each retained
+IR-621 direct-error procedure under FR-015-AC-123: from an external consumer
+test, explicitly assign the collection operation's result to
+`Result<CollectionLowering, KaniOutcome>` until FR-015-AC-110; assign the graph
+and corpus operations' results to `Result<GraphLowering, KaniOutcome>` and
+`Result<BoundedCorpusCase, KaniOutcome>` until FR-015-AC-111. From AC-110 until
+AC-111, retain the AC-123-tagged external consumer control
+`public_family_and_corpus_results_have_direct_ir_errors_and_unchanged_successes`
+with a Graph-request corpus case; its graph and corpus direct-result types and
+graph success/refusal checks remain active after the Collection variant retires.
+Exercise each retained
 family's actual profile/dispatch refusal, graph malformed-input and expansion-bound
 refusals, collection bound exhaustion, and the corpus identity/dependency/serialization
 failure controls. Assert the original exact kind and typed code, source identity,
 selected profile/bound context, `boolean_claim() == None`, and absence of partial
 artifacts or premature identity claims. Keep successful family outputs and corpus
-artifacts/identities unchanged. Inspect that these consumer paths call the matching
+artifacts/identities unchanged while each family remains. After FR-015-AC-110,
+inspect that the collection operation and its public request/result types have no
+exported replacement alias or wrapper; after FR-015-AC-111, apply the same check
+to graph and corpus. Inspect that retained consumer paths call the matching
 infallible IR constructor and that the retired public error names have no exported
 type, alias or replacement wrapper. Replace the manufactured Boolean-kind
 `OutcomeConstruction` wrapper test with these reachable public consumer controls;
