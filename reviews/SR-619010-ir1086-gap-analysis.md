@@ -32,3 +32,13 @@ CONDITIONAL until a direct test sets the proving-run bound below parse limits an
 ## Coverage
 
 Plan completion: not assessed. Scoped PR diff only. Quoin matrix computed; semantic review of the changed acceptance behavior was included in this assigned review.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The test now sets run.decode_limits below admitted parse limits separately for bytes and values; the helper parses under admitted and FrameReplay::new refuses both already-parsed over-run cases. |
+
+## Current verdict
+
+PASS on the exact fix head 1c7c93426c46f678d2c5e558e9f107ec8328e7e3; no open findings in this method.

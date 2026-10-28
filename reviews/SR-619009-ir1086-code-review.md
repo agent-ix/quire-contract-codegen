@@ -26,3 +26,13 @@ Independent review of CG #622 at 5bd6d62df149057dac0a3ef99a048deaf80aa018. The t
 ## Verdict
 
 CONDITIONAL on the API documentation correction. No source behavior defect found. Opus CLI review independently identified the documentation issue. The three wider frame-module failures are before this replay boundary: two package-admission MissingDeclaration errors and one existing node-identity assertion; the failing statements are unchanged from the base commit. The final aggregate gate and installed Kani are owned by the code lead.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The field doc now identifies raw requested limits and says replay narrows by the proving-run bounds. |
+
+## Current verdict
+
+PASS on the exact fix head 1c7c93426c46f678d2c5e558e9f107ec8328e7e3; no open findings in this method.
