@@ -151,7 +151,7 @@ use quire_contract_model::{
     CheckedSemanticNodeV2, CheckedSourceMapEntry, CheckedTerm, CompleteLoweringProfileV2,
     CompleteLoweringRecordV2, ContractDependencies, ContractFeatureRecordV1,
     ContractPackageReadResult, ContractPackageV1, ContractPackageWireV1, ContractReachedClosureV1,
-    LiteralKind, TemporalForm,
+    ContractUnsupportedSourceKindError, LiteralKind, TemporalForm,
 };
 use quire_contract_runtime::exact as rt;
 use quire_exact::{self as exact, Outcome, Refusal};
@@ -2393,11 +2393,11 @@ fn check_position(
 /// distinguish a formula or fairness request from a temporal clause.
 fn authenticated_direct_temporal_refusal(
     package: &ContractPackageV1,
-    position: usize,
+    accounting_index: usize,
     item: &PackageItem<'_>,
 ) -> Option<ExactFunctionRefusal> {
     if !matches!(
-        package.unsupported_source_kind_at(position),
+        package.unsupported_source_kind_at(accounting_index),
         Ok(Some(CheckedNodeKind::Temporal(
             TemporalForm::Formula | TemporalForm::Fairness
         )))
@@ -2420,6 +2420,74 @@ fn authenticated_direct_temporal_refusal(
         unsupported_node_id: unsupported_node_id.clone(),
         node_tag: CheckedNodeTag::from_wire(node_tag.as_ref())
             .map_or("unknown", CheckedNodeTag::as_wire),
+    })
+}
+
+/// A temporal tag on an unsupported record cannot distinguish a direct temporal
+/// root from a clause when the V1 reader did not retain its V2 source kind.
+fn unauthenticated_temporal_root(
+    package: &ContractPackageV1,
+    accounting_index: usize,
+    item: &PackageItem<'_>,
+) -> bool {
+    matches!(
+        item,
+        PackageItem::Refused {
+            record: ContractFeatureRecordV1::Unsupported { node_tag, .. },
+            ..
+        } if node_tag.as_ref() == "temporal"
+    ) && matches!(
+        package.unsupported_source_kind_at(accounting_index),
+        Err(ContractUnsupportedSourceKindError::NotAdmitted)
+    )
+}
+
+/// Check the distinct call item before a declaration-body root can trigger
+/// AC-41. The body is otherwise refused in Stage 1, so it has no survivor entry.
+fn valid_call_item_for_temporal_body(
+    item: &ExactFunctionItem,
+    admitted: &PackageItem<'_>,
+    declaration: &ExactFunctionDeclaration,
+    source_index: &FunctionSourceIndex<'_>,
+    package_refusal: &Option<String>,
+) -> bool {
+    let PackageItem::Lowered { closure, .. } = admitted else {
+        return false;
+    };
+    let graph = &source_index.graph;
+    let node = closure.root;
+    if &*node.semantic_form != "call"
+        || item.argument_node_ids.len() != declaration.parameters.len()
+        || package_refusal.is_some()
+    {
+        return false;
+    }
+    if graph.operator(&node.node_id) == Some(ApplicationOperator::Call) {
+        let Some(source_function_id) =
+            source_index.source_function_node_id(&declaration.name, &declaration.node_id)
+        else {
+            return false;
+        };
+        let Some(term) = graph.term(&node.node_id) else {
+            return false;
+        };
+        if !source_call_matches(term, graph, source_function_id, &item.argument_node_ids) {
+            return false;
+        }
+    }
+    item.argument_node_ids.iter().all(|argument_id| {
+        let Some(argument) = graph.node(argument_id) else {
+            return false;
+        };
+        let Some(type_node) = graph.node(&argument.semantic_type) else {
+            return false;
+        };
+        let type_node_id = if type_node.node_tag.as_ref() == "bounded_domain" {
+            &type_node.semantic_type
+        } else {
+            &argument.semantic_type
+        };
+        resolve_operand_type(graph, type_node_id).is_ok()
     })
 }
 
@@ -2736,9 +2804,9 @@ fn validate_signature(
 /// Generate function-application oracles for `items`, over the declared
 /// functions in `functions`, from an admitted package.
 ///
-/// Fails as a whole only with `SourceTooLarge`, `ClaimMapSerialization` or
-/// `LocationMapSerialization`; every per-item problem is a refusal in the
-/// claim map.
+/// Fails as a whole for invalid package correspondence, unauthenticated
+/// requested temporal-root kind, or artifact generation failure. Other
+/// per-item problems are refusals in the claim map.
 pub fn generate_exact_function_oracles(
     package: &ContractPackageV1,
     requested: &[ContractRequestPosition],
@@ -2802,6 +2870,9 @@ pub fn generate_exact_function_oracles(
         let admitted = accounting
             .at(position, &declaration.node_id)
             .map_err(OracleGenerationError::PackageRequest)?;
+        let accounting_index = accounting
+            .accounting_index(position)
+            .map_err(OracleGenerationError::PackageRequest)?;
         let result = (|| -> Result<Stage1Shape<'_>, ExactFunctionRefusal> {
             if names.shares_node_id(&declaration.node_id) {
                 return Err(ExactFunctionRefusal::DuplicateDeclaringNode {
@@ -2824,7 +2895,7 @@ pub fn generate_exact_function_oracles(
                 });
             }
             if let Some(refusal) =
-                authenticated_direct_temporal_refusal(package, position, &admitted)
+                authenticated_direct_temporal_refusal(package, accounting_index, &admitted)
             {
                 return Err(refusal);
             }
@@ -2845,6 +2916,25 @@ pub fn generate_exact_function_oracles(
         })();
         shapes.push(result);
     }
+
+    let unauthenticated_bodies: BTreeMap<&CheckedNodeId, usize> = ordered_functions
+        .iter()
+        .zip(&shapes)
+        .filter_map(|(declaration, shape)| {
+            let position = function_position_by_id[&declaration.node_id];
+            let accounting_index = accounting.accounting_index(position).ok()?;
+            let admitted = accounting.at(position, &declaration.node_id).ok()?;
+            (matches!(
+                shape,
+                Err(ExactFunctionRefusal::BlockedOnUpstream {
+                    node_tag: "temporal",
+                    issue: UpstreamBlocker::QuireSpecLanguage121,
+                    ..
+                })
+            ) && unauthenticated_temporal_root(package, accounting_index, &admitted))
+            .then_some((&declaration.node_id, position))
+        })
+        .collect();
 
     let mut resolved: BTreeMap<&CheckedNodeId, Result<(), ExactFunctionRefusal>> = BTreeMap::new();
     for _ in 0..=ordered_functions.len() {
@@ -3011,14 +3101,16 @@ pub fn generate_exact_function_oracles(
 
     let mut source = SourceBuilder::default();
     let mut claims = Vec::with_capacity(by_key.len());
+    let mut unauthenticated_root: Option<(usize, CheckedNodeId)> = None;
     // Generated claims as (claim position, readable stem, key, declaration), rendered once
     // every generated function is named.
     let mut pending = Vec::new();
     for (key, (position, item)) in by_key {
         let duplicate = counts.get(&key).copied().unwrap_or(0) > 1;
+        let duplicate_node = names.duplicate_node_refusal(&item.function);
         // An item naming a refused duplicate-node function carries that
         // refusal even when it was also requested more than once (AC-22).
-        let result = if let Some(refusal) = names.duplicate_node_refusal(&item.function) {
+        let result = if let Some(refusal) = duplicate_node {
             ClaimDisposition::Refused { refusal }
         } else if duplicate {
             ClaimDisposition::Refused {
@@ -3038,8 +3130,53 @@ pub fn generate_exact_function_oracles(
             let admitted = accounting
                 .at(position, &item.call_node_id)
                 .map_err(OracleGenerationError::PackageRequest)?;
+            let accounting_index = accounting
+                .accounting_index(position)
+                .map_err(OracleGenerationError::PackageRequest)?;
+            let capability_refused = names
+                .unique_node_id(&item.function)
+                .and_then(|function_node_id| {
+                    ordered_functions
+                        .iter()
+                        .find(|declaration| &declaration.node_id == function_node_id)
+                })
+                .is_some_and(|declaration| !declaration.capability_requirements.is_empty());
+            let direct_candidate = !capability_refused
+                && unauthenticated_temporal_root(package, accounting_index, &admitted);
+            let body_candidate = if let Ok(function_node_id) = names.resolve(&item.function) {
+                unauthenticated_bodies
+                    .get(function_node_id)
+                    .and_then(|&body_position| {
+                        let declaration = ordered_functions
+                            .iter()
+                            .find(|declaration| &declaration.node_id == function_node_id)?;
+                        valid_call_item_for_temporal_body(
+                            item,
+                            &admitted,
+                            declaration,
+                            &source_index,
+                            &package_refusal,
+                        )
+                        .then_some((body_position, declaration.node_id.clone()))
+                    })
+            } else {
+                None
+            };
+            let candidate = if direct_candidate {
+                Some((position, item.call_node_id.clone()))
+            } else {
+                body_candidate
+            };
+            if let Some(candidate) = candidate {
+                if unauthenticated_root
+                    .as_ref()
+                    .is_none_or(|current| candidate < *current)
+                {
+                    unauthenticated_root = Some(candidate);
+                }
+            }
             if let Some(refusal) =
-                authenticated_direct_temporal_refusal(package, position, &admitted)
+                authenticated_direct_temporal_refusal(package, accounting_index, &admitted)
             {
                 ClaimDisposition::Refused { refusal }
             } else {
@@ -3063,6 +3200,12 @@ pub fn generate_exact_function_oracles(
         claims.push(ExactFunctionClaim {
             node_id: item.call_node_id.clone(),
             result,
+        });
+    }
+    if let Some((request_index, node_id)) = unauthenticated_root {
+        return Err(OracleGenerationError::UnauthenticatedRequestedRootKind {
+            request_index,
+            node_id,
         });
     }
     // Each function is named by the function it applies; items applying one function are
