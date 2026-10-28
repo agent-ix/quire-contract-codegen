@@ -105,6 +105,19 @@ FR-015-AC-101 checks, not one disjunctive control. The current
 control establishes only the present unsupported-form behavior; it does not
 back the new capacity-refusal or feasible-unique obligations.
 
+For AC-101's selected-field boundary, ask QSL to bind a missing selected model
+field and check its typed source-located refusal before it emits a package.
+Separately submit a malformed selected projection to Contract IR strict
+admission and check its typed located refusal before it admits a claim. Neither
+case produces a CG item or harness. Inspect CG's admitted-claim resolution
+and test its defensive helper invariant: if the checked selected declaration
+or field cannot be resolved, it returns `FieldNotAdmitted`, which negotiation
+maps to `unsupported` without a harness; resolution must not select a
+same-named field from another declaration. The helper control does not claim
+an authentic malformed selected projection can pass strict admission. Add a
+public admitted-claim negative control only if one can reach this branch
+through strict admission without bypassing its validation.
+
 Change one selected field bound, claim, subject and unwind separately to check
 identity changes; repeat equal inputs for byte identity. Compare recorded
 identity domains and complete ordered options with generated source and FR-017
@@ -116,7 +129,7 @@ collection-family tests exist and are tagged
 mutant `Falsified` (93 SUCCESS and 1 FAILURE), per IR-268's close-out at PR head f43adca.
 The graph family stays planned (IR-805). The AC-100 run-evidence ordered-option
 comparison remains planned; `KaniExecutionEvidence` already carries the
-complete argument vector, solver kind and unwind. The representational-ceiling and malformed-declaration refusals have no tagged test. FR-015-AC-96 (uniqueness) and FR-015-AC-99 (symbolic-draw, cover and no-`Vec<i128>` clauses) are backed only by tests tagged for other ACs, so they are partial. The finite-input
+complete argument vector, solver kind and unwind. The representational-ceiling and selected-field boundary refusals have no tagged test. FR-015-AC-96 (uniqueness) and FR-015-AC-99 (symbolic-draw, cover and no-`Vec<i128>` clauses) are backed only by tests tagged for other ACs, so they are partial. The finite-input
 corpus's Boolean and generation-time outcome do not satisfy these controls.
 
 For the graph family (IR-805), author a QSL unit whose model has an object
