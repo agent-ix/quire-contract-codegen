@@ -52,6 +52,7 @@ serde_json = "1.0.151"
 syn = { version = "=2.0.119", features = ["full", "visit"] }
 
 [dev-dependencies]
+quire-contract-model = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-ir", branch = "main", features = ["test-support"] }
 proc-macro2 = { version = "1.0.107", features = ["span-locations"] }
 jsonschema = { version = "=0.17.1", default-features = false, features = ["draft202012"] }
 proptest = { version = "=1.5.0", default-features = false, features = ["std"] }
