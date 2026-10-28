@@ -92,3 +92,30 @@ playback text decodes through the one decoder" is context: it stays true if the 
 parse, but it reads more cleanly if aligned. Suggested fix: restate the Inputs frame bullet and
 interface-001's `FrameReplay::new` inputs to the parsed playback in this PR, or have AC-30 cite
 the Inputs list "other than the playback".
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | low | The fix marks AC-30 `PLANNED (IR-1086)` and Current state says only "FR-024-AC-30's typed frame intake" remains planned, but AC-30 also requires the emitted-package harness without `Twin::aligned` (FR-024-AC-32, IR-624), and TC-035's narrative still plans AC-30 under IR-624 | spec/replay/functional/FR-024-counterexample-envelope-intake.md:483; spec/replay/functional/FR-024-counterexample-envelope-intake.md:525; spec/replay/matrix/TC-035-counterexample-envelope-intake.md:337-339 |
+| FND-004 | low | The FR-024 Inputs frame bullet now lists the requested decode limits among inputs "the caller supplies as `FrameReplayInputs` does today", but `FrameReplayInputs` carries no requested limits at this head (`FrameReplay::new` decodes under `run.decode_limits` only) | spec/replay/functional/FR-024-counterexample-envelope-intake.md:178-184; src/replay/frame.rs:559-579 |
+
+FND-003. Neither the AC row nor Current state is wrong about IR-1086, but each names one owner
+for a criterion with two pending parts. A reader taking Current state at face value would expect
+AC-30 met once IR-1086 lands, while the emitted-package harness is still IR-624 work. Suggested
+fix: mark the row `PLANNED (IR-1086, IR-624)` and drop "typed frame intake" from the Current state
+sentence, or say both parts there.
+
+FND-004. The parenthetical "typed intake planned in IR-1086" signals the change, but "does today"
+now asserts something false of one listed member. Suggested fix: "which the caller supplies as
+`FrameReplayInputs`" without "does today", or name the requested limits as IR-1086 work.
+
+## Dispositions
+
+Disposition pass 1 at exact head 2ea5e10663fa0ca7164b02f8a1381e80ca150ddc (fix commit
+2ea5e106 over fda70b9f).
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | AC-30 now carries `PLANNED (IR-1086).`; Current state no longer claims AC-30 met (range is AC-11 and AC-13 to AC-29, with AC-12 and AC-30 planned), and the IR-459 bullet says IR-1086 replaces the text input. Carving out AC-12 (IR-965) agrees with TC-035 step 10 and tests.md; it is not a narrowing. Residual owner attribution is new FND-003. |
+| FND-002 | fixed | The FR-024 Inputs frame bullet and interface-001 `FrameReplay::new` inputs now name parsed `Playback` from the falsified outcome's complete counterexample text plus requested decode limits; no input still names playback text. interface-001 semantics add the minimum-limit recheck. Residual "does today" wording is new FND-004. |

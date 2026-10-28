@@ -97,3 +97,15 @@ count on a supplied `Playback`, as the state-clause method must. IR-1086's own a
 amended does not oblige either. This is the one place the amendment can weaken the effective
 guarantee. Suggested fix: state the effective limits and that `FrameReplay::new` re-enforces
 them on the supplied playback, or cite the AC that does.
+
+## Dispositions
+
+Disposition pass 1 at exact head 2ea5e10663fa0ca7164b02f8a1381e80ca150ddc (fix commit
+2ea5e106 over fda70b9f). Checked against the fix diff and the code at that head:
+`WitnessDecodeLimits` has `bytes` and `values`, `Playback` carries `source_len`, and the
+state-clause method already takes the component-wise minimum the restated AC-30 names.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | AC-30 and TC-035 step 27 now name "the falsified outcome's complete counterexample text", matching the state-clause slice; the full console capture reading is gone. |
+| FND-002 | fixed | AC-30 now states the component-wise minimum of requested limits and `run.decode_limits`, and requires `FrameReplay::new` to recompute it and refuse a supplied `Playback` whose `source_len` or value count exceeds it; TC-035 step and expected result 27 add the wider-parse refusal case. |
