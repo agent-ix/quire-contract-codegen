@@ -1,16 +1,14 @@
 //! Exact complete-V1 function-application oracle generation from one admitted
 //! ContractPackage V1 (FR-021, FR-039).
 //!
-//! A requested item names one declared function (assembled, with its sibling
-//! declarations, into one `quire_contract_runtime::exact::PackageDeclarations`)
-//! and one checked `call` expression node applying it. This generator lowers
-//! every declared function's body into a `Body` closure
-//! (`Fn(&Frame, &[Value]) -> Outcome<Value>`), admits the assembled package
-//! through `PackageDeclarations::check(CheckMode::Linked, limits)`, and emits
-//! one oracle function per requested item that applies the named function
-//! through `CheckedPackage::call`. It never interprets an expression tree
-//! itself outside of what it lowers into Rust, and never charges a resource
-//! independently of the runtime's `function.call` accounting.
+//! A requested item names one declared function and one admitted `call`
+//! expression applying it. The generator classifies each function body from
+//! Contract IR, resolves its QSL callable identity from the same checked
+//! graph, and emits a Rust body factory. Each generated oracle reacquires the
+//! checked closure through `qsl-replay`, selects the function by its owner and
+//! wire node identity, registers the generated body, and applies it through
+//! `quire-eval`. The QSL application session owns the call charge and
+//! refusal ordering; this module does not implement a second evaluator.
 //!
 //! ## Scope of the function-body vocabulary (V1)
 //!
@@ -18,8 +16,8 @@
 //! scalar expression (FR-014's forms), a `binary` equality expression
 //! (FR-018's forms), or a nested `call` expression (this requirement's own
 //! form). This generator's nested-`call` support is complete: any declared
-//! function may call any other declared function in the same request, bounded
-//! by the runtime's own `MAX_CALL_DEPTH`, never re-derived here. Its scalar
+//! function may call another declared function in the same request through a
+//! QSL-selected call site and the `quire-eval` child scheduler. Its scalar
 //! and composite-equality support is a deliberately scoped subset, not the
 //! full FR-014/FR-018 operator matrix:
 //!
@@ -32,23 +30,17 @@
 //!   unbounded `Integer` operands only -- not the full record/tuple/
 //!   collection declaration closure FR-018 itself reconstructs.
 //!
-//! This is a real, working, honestly-scoped generator: every acceptance
-//! criterion's *structural* behavior (refusal typing and ordering, depth
-//! bounding, charge ordering, the claim map, the origin half of the static
-//! location map, byte-determinism, `CheckMode::Linked`-only admission) is
-//! implemented in full. What is scoped down is the *operator vocabulary* a
-//! scalar or equality function body may use, not the correctness of any
-//! behavior this requirement specifies. A function whose body needs an
-//! operator outside this vocabulary is refused as
+//! The classifier has a bounded operator vocabulary. Its claim and location
+//! maps remain deterministic over the admitted request. A function whose body
+//! needs an operator outside this vocabulary is refused as
 //! [`ExactFunctionRefusal::UnsupportedOperator`], never silently
 //! miscompiled -- and nor is a function whose declared signature (parameter
 //! count, or a parameter/result operand kind) disagrees with what its own
 //! body kind requires: that is refused as
 //! [`ExactFunctionRefusal::SignatureMismatch`], checked once every
 //! parameter and result type is resolved, before the function can ever
-//! reach the assembled package. The location map's `path` half is a
-//! narrower story than "implemented in full" -- see "Location tagging"
-//! below.
+//! reach generated application. The location map retains a static V1
+//! description; the QSL session supplies dynamic application locations.
 //!
 //! Reused types, not reimplemented: this module imports
 //! [`crate::oracle::operator_catalog::IntegerOperator`] and
@@ -66,9 +58,8 @@
 //! disagreeing with its own body kind
 //! ([`ExactFunctionRefusal::SignatureMismatch`]), a name shared with
 //! another declared function in the same request
-//! ([`ExactFunctionRefusal::AmbiguousFunctionName`], caught here, before
-//! admission, rather than left to the runtime's own
-//! `CheckCause::AmbiguousName`), a `reference` composite operand
+//! ([`ExactFunctionRefusal::AmbiguousFunctionName`], caught before
+//! application), a `reference` composite operand
 //! ([`UpstreamBlocker::QuireSpecLanguage120`]), a
 //! model/relation/state/temporal/protocol node
 //! ([`UpstreamBlocker::QuireSpecLanguage120`]/[`UpstreamBlocker::QuireSpecLanguage121`]),
@@ -87,51 +78,25 @@
 //! id: they would collapse into one entry and cross claims and oracle
 //! symbols. Refusing every such declaration up front is what prevents
 //! that, so no node id reaching those maps is held by more than one
-//! survivor (see "Location tagging" below). Every function
-//! that survives this stage is then assembled into one `PackageDeclarations`
-//! and admitted once through `PackageDeclarations::check(CheckMode::Linked,
-//! CheckingLimits::default())`; a refusal at *this* stage is reported on
-//! every item naming a surviving function, because they are now one
-//! admitted-or-not package.
+//! survivor. A surviving function is rendered from its admitted callable
+//! identity. If that identity cannot be resolved uniquely, its requested
+//! items receive a typed refusal rather than a generated oracle.
 //!
-//! ## Location tagging (AC-15/AC-16/AC-17): static half only, and `path` is
-//! scoped-empty
+//! ## Location tagging
 //!
-//! Every function body this generator emits reaches exactly one runtime call
-//! point at its own root (its one scalar operator, its one equality
-//! evaluation, or its one nested `Frame::call`) -- a direct consequence of
-//! the scoped body vocabulary above, where a function's body *is* one
-//! classified node, not an arbitrarily deep expression tree. The location
-//! map therefore records one entry per function: `Location { origin:
-//! Origin::Body { function, index }, path: vec![] }`. This is a real,
-//! honest limit of this V1, not a bug: FR-021's Outputs describe `path` as
-//! "the child-index path from \[the\] function's root to the sub-expression"
-//! for a body that may nest sub-expressions below its root, but this
-//! generator's own body vocabulary never has one -- every emitted body's
-//! one call point *is* its root -- so `path` can never be non-empty by
-//! construction under this V1's scoped grammar, and would need the body
-//! vocabulary to grow arbitrarily deep expression trees before it ever
-//! could. AC-15's structural check confirms exactly that -- `origin` matches
-//! the request's own function ordering and `path` is always `[]` -- and
-//! AC-17's runtime cross-check (reading `Origin::Body` off a real
-//! `CheckRefusal`) confirms `origin` again, independently. Both are
-//! implemented and tested; the `path`-is-non-empty case is not implemented,
-//! is not reachable from this V1's body vocabulary, and `spec/oracle/matrix/tests.md`
-//! records AC-15 accordingly rather than as fully covered. The dynamic half
-//! -- `Evaluation.location`/`.losses` becoming non-empty at a specific call
-//! -- is Out of Scope per FR-021 itself: the runtime's `Body` return
-//! type is `Outcome<Value>`, structurally incapable of carrying one, and
-//! this generator does not attempt it (AC-16: those two fields are simply
-//! discarded by every emitted oracle).
+//! The static V1 location map records the admitted body's source order and one
+//! root call point per classified body. Its path is empty for this one-node
+//! body vocabulary. Generated oracles return the QSL application's full
+//! `quire-eval::Evaluation` without reading its dynamic `location` or
+//! `losses` fields and make no claim that either is populated.
 //!
-//! ## AC-18 (QSL authority agreement): outside CG's boundary
-//!
-//! No test in this module's suite claims agreement against a QSL authority: this repository
-//! depends only on `qsl-replay`'s public API (QSL arch-lint T12-A), and that agreement is owned
-//! by quire-integration IR-842 (FR-014-AC-47). AC-2's two legs (generated oracle, direct runtime
-//! call) are implemented and tested in full.
+//! TC-031 checks parity with a separately assembled FR-485 session application
+//! of the same admitted source, as AC-2 requires. It makes no QSL value-authority
+//! agreement claim; quire-integration IR-842 owns that cross-repository boundary.
 
 use crate::core::artifact::{Artifact, MAX_ARTIFACT_BYTES, MAX_GENERATED_SOURCE_BYTES};
+mod owner_path;
+mod owner_render;
 use crate::core::contract_package::{
     routed_contract_lowering_profile, ContractDriverResultSelection, ContractRequestPosition,
     PackageItem, PackageItems, PackageRequestError,
@@ -139,12 +104,17 @@ use crate::core::contract_package::{
 use crate::core::ir::checked_term::aggregate_members;
 use crate::core::ir::frame::application_identity;
 use crate::core::naming::{bounded_readable_component, unique_names};
-use crate::core::profile::oracle_crate_manifest;
+use crate::core::profile::function_oracle_crate_manifest;
 use crate::oracle::checked_graph::{CheckedGraph, GraphBody};
 use crate::oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
 use crate::oracle::equality::EqualityOperatorKind;
 use crate::oracle::operator_catalog::IntegerOperator;
 use crate::oracle::{classify_lowering_failure, direct_unsupported_form, LoweringFailure};
+pub use owner_path::{
+    apply_checked_function, checked_function_wire_id, checked_package_digest,
+    select_checked_callable, selected_nested_call_site, CheckedFunctionError,
+    CheckedFunctionSource,
+};
 use quire_contract_model::{
     ApplicationOperator, CheckedNodeId, CheckedNodeTag, CheckedPackageIncomplete,
     CheckedPackageReadLimits, CheckedPackageRefusal, CheckedPackageV2, CheckedSemanticId,
@@ -153,9 +123,6 @@ use quire_contract_model::{
     ContractPackageReadResult, ContractPackageV1, ContractPackageWireV1, ContractReachedClosureV1,
     LiteralKind,
 };
-use quire_contract_runtime::exact as rt;
-use quire_exact::{self as exact, Outcome, Refusal};
-use quire_semantic_value::declaration as sv;
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -1229,18 +1196,10 @@ pub struct ExactFunctionDeclaration {
     ///
     /// Unlike `capability_requirements`, this request type carries no field
     /// at all for the underlying `IeeeItemRequirement`/`IntegerDivisionConsumer`
-    /// lists themselves: every emitted `rt::FunctionDeclaration`'s own
-    /// `ieee_requirements`/`integer_division_consumers` are hardcoded
-    /// `Vec::new()` placeholders (`generate_exact_function_oracles`'s
-    /// `declared_functions` and `render_function_declaration`), never
-    /// populated from a caller-supplied value. This means AC-6's coverage is
-    /// necessarily narrower than it reads: with capability negotiation
-    /// always refusing by construction (no backend registered) and these
-    /// two lists never non-empty by construction (no field carries them),
-    /// no test in this suite can exercise anything but the
-    /// always-`unsupported`, always-empty-requirements branch. Wiring these
-    /// two lists through from the request is separate, larger scope, not
-    /// attempted here.
+    /// lists themselves. This request refuses any non-empty named capability
+    /// before application because no backend is registered. The checked QSL
+    /// graph and application facade own the corresponding runtime
+    /// requirements; this request cannot invent or discharge them.
     pub capability_requirements: Vec<String>,
 }
 
@@ -1422,14 +1381,42 @@ pub enum ExactFunctionRefusal {
         /// Its family or form.
         node_tag: &'static str,
     },
-    /// `PackageDeclarations::check` refused the assembled package every
-    /// surviving function belongs to.
-    PackageRefused {
-        /// The applied function's assigned index in the assembled package,
-        /// when known.
-        function_index: Option<usize>,
-        /// A rendering of the runtime's own `CheckCause`.
-        cause: String,
+    /// The retained checked closure or selected callable disagrees with the IR-admitted identity.
+    OwnerIdentityMismatch,
+    /// QSL did not issue a callable selection.
+    FacadeLookup {
+        /// Stable CG cause code, mapped exhaustively from QSL's typed refusal.
+        cause_code: &'static str,
+        /// The original typed refusal rendered for diagnostics.
+        detail: String,
+    },
+    /// QSL did not issue a checked nested-call location for the selected body.
+    NestedCallSite {
+        /// Stable CG cause code, preserving the typed source or facade refusal.
+        cause_code: &'static str,
+        /// The original typed refusal rendered for diagnostics.
+        detail: String,
+    },
+    /// The leaf refused generated-body registration.
+    RegistrationNotAccepted {
+        /// Stable CG cause code, mapped exhaustively from the leaf admission result.
+        cause_code: &'static str,
+        /// The original typed result rendered for diagnostics.
+        detail: String,
+    },
+    /// The selection did not belong to the registry's acquisition.
+    SelectionRefused {
+        /// Stable CG cause code, mapped exhaustively from QSL's typed refusal.
+        cause_code: &'static str,
+        /// The original typed refusal rendered for diagnostics.
+        detail: String,
+    },
+    /// Begin refused before any generated body or application charge.
+    ApplicationBeginRefused {
+        /// Stable CG cause code, mapped exhaustively from QSL's typed refusal.
+        cause_code: &'static str,
+        /// The original typed refusal rendered for diagnostics.
+        detail: String,
     },
 }
 
@@ -1437,10 +1424,8 @@ pub enum ExactFunctionRefusal {
 // Claim map and location map
 // ---------------------------------------------------------------------------
 
-/// A serializable mirror of `quire_contract_runtime::exact::Origin`. Field
-/// and variant names and order equal the runtime's own type verbatim (the
-/// shape is ported; the runtime never populates a non-empty `path`, and
-/// only `Body` is ever recorded here).
+/// Static V1 body origin. Claim records use request order; location records
+/// use admitted body source order. QSL owns dynamic application locations.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum RecordedOrigin {
@@ -1453,14 +1438,14 @@ pub enum RecordedOrigin {
     },
 }
 
-/// A serializable mirror of `quire_contract_runtime::exact::Location`.
+/// Static V1 location recorded for a classified function body.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct RecordedLocation {
     /// The origin.
     pub origin: RecordedOrigin,
     /// The child-index path from the origin. Always empty in this
     /// generator's V1: every emitted function body reaches exactly one
-    /// runtime call point, at its own root (see module doc).
+    /// classified call point, at its own root (see module doc).
     pub path: Vec<usize>,
 }
 
@@ -1497,6 +1482,8 @@ pub struct GeneratedExactFunctionClaim {
     pub contract_package_identity: CheckedSemanticId,
     /// Exact requested node key.
     pub node_id: CheckedNodeId,
+    /// Actual declaring V2 function node, distinct from the body-root key.
+    pub function_node_id: CheckedNodeId,
     /// Package id.
     pub package_id: CheckedSemanticId,
     /// Semantic type key of the `call` expression node.
@@ -1511,8 +1498,8 @@ pub struct GeneratedExactFunctionClaim {
     pub dependencies: Vec<CheckedNodeId>,
     /// The applied function's name.
     pub function: String,
-    /// The applied function's `Origin::Body { function, index }`, equal to
-    /// the request's own declared-function ordering (AC-3).
+    /// The applied function's `Origin::Body { function, index }`, indexed in
+    /// canonical body-root node order among surviving declarations (AC-3).
     pub function_origin: RecordedOrigin,
     /// Reconstructed declaration closure keys. Always empty in this V1: no
     /// requested item's supported operand types reach a composite
@@ -1690,6 +1677,72 @@ fn source_call_matches<'a>(
                 .is_some_and(|expected_id| actual_id == expected_id)
         })
     }) && expected.next().is_none()
+}
+
+/// Resolve the source function's parameter nodes in declared order. The
+/// generated body takes positional arguments, so every body reference must
+/// use this exact sequence before it can be rendered.
+fn source_parameter_ids<'a>(
+    graph: &impl NodeLookup<'a>,
+    function_node_id: &CheckedNodeId,
+) -> Option<Vec<CheckedNodeId>> {
+    let parameters = graph
+        .get_term(function_node_id)
+        .and_then(|term| binding_value(term, "parameters"))
+        .and_then(aggregate_members)?;
+    parameters
+        .iter()
+        .map(|term| reference_in_graph(term, graph).cloned())
+        .collect()
+}
+
+fn source_argument_refs_match<'a>(
+    graph: &impl NodeLookup<'a>,
+    function_node_id: &CheckedNodeId,
+    arguments: &[CheckedTerm],
+) -> bool {
+    let Some(parameters) = source_parameter_ids(graph, function_node_id) else {
+        return false;
+    };
+    arguments.len() == parameters.len()
+        && arguments
+            .iter()
+            .zip(&parameters)
+            .all(|(argument, parameter)| reference_in_graph(argument, graph) == Some(parameter))
+}
+
+fn source_nested_body_matches<Body: GraphBody>(
+    index: &FunctionSourceIndex<'_, Body>,
+    caller_name: &str,
+    caller_body: &CheckedNodeId,
+    callee_name: &str,
+    callee_body: &CheckedNodeId,
+) -> bool {
+    let Some(caller) = index.source_function_node_id(caller_name, caller_body) else {
+        return false;
+    };
+    let Some(callee) = index.source_function_node_id(callee_name, callee_body) else {
+        return false;
+    };
+    let Some(body) = index.graph.term(caller_body) else {
+        return false;
+    };
+    let CheckedTerm::Application {
+        operator: ApplicationOperator::Call,
+        arguments,
+        ..
+    } = body
+    else {
+        return false;
+    };
+    application_identity(body) == Some("quire.op.function.call")
+        && arguments
+            .first()
+            .and_then(|term| reference_in_graph(term, &index.graph))
+            == Some(callee)
+        && arguments
+            .get(1..)
+            .is_some_and(|arguments| source_argument_refs_match(&index.graph, caller, arguments))
 }
 
 struct FunctionSourceIndex<'a, Body: GraphBody = serde_json::Value> {
@@ -2291,32 +2344,12 @@ enum OperandKind {
     Integer,
 }
 
-impl OperandKind {
-    fn to_value_type(self) -> exact::ValueType {
-        match self {
-            Self::Boolean => exact::ValueType::Boolean,
-            Self::Integer => exact::ValueType::Integer,
-        }
-    }
-
-    fn render(self) -> &'static str {
-        match self {
-            Self::Boolean => "exact::ValueType::Boolean",
-            Self::Integer => "exact::ValueType::Integer",
-        }
-    }
-}
-
 /// A declared function that survived Stage 1 classification, ready to enter
-/// the assembled package: its declaration and its fully-resolved parameter
-/// and result operand kinds (Stage 1 already validated these once; this
-/// struct is what both admission-time assembly and source rendering read,
-/// so the two can never disagree about a function's own type).
+/// the checked-closure renderer with the body shape that Stage 1 validated.
 struct ClassifiedFunction<'r> {
     declaration: &'r ExactFunctionDeclaration,
     body: ClassifiedBody<'r>,
-    parameter_kinds: Vec<OperandKind>,
-    result_kind: OperandKind,
+    body_node_id: CheckedNodeId,
 }
 
 /// What Stage 1 resolved for one function that passed its own checks: the classified body and
@@ -2324,8 +2357,7 @@ struct ClassifiedFunction<'r> {
 /// them a second time.
 struct Stage1Shape<'r> {
     body: ClassifiedBody<'r>,
-    parameter_kinds: Vec<OperandKind>,
-    result_kind: OperandKind,
+    body_node_id: CheckedNodeId,
 }
 
 /// The binary integer operators a scalar function body can apply: the
@@ -2584,6 +2616,7 @@ fn classify_body_shape<'r, Body>(
     node: &CheckedSemanticNodeV2<Body>,
     body: Option<&CheckedTerm>,
     declaration: &'r ExactFunctionDeclaration,
+    parameter_kinds: &[OperandKind],
 ) -> Result<ClassifiedBody<'r>, ExactFunctionRefusal> {
     match &declaration.body {
         ExactFunctionBody::Scalar { operator } => {
@@ -2623,6 +2656,24 @@ fn classify_body_shape<'r, Body>(
                 .and_then(application_arguments)
                 .filter(|arguments| arguments.len() == 2)
                 .ok_or(ExactFunctionRefusal::BodyMismatch)?;
+            let expected_identity = match (parameter_kinds, operator) {
+                ([OperandKind::Integer, OperandKind::Integer], EqualityOperatorKind::Equal) => {
+                    "quire.op.integer.eq"
+                }
+                ([OperandKind::Integer, OperandKind::Integer], EqualityOperatorKind::NotEqual) => {
+                    "quire.op.integer.ne"
+                }
+                ([OperandKind::Boolean, OperandKind::Boolean], EqualityOperatorKind::Equal) => {
+                    "quire.op.boolean.eq"
+                }
+                ([OperandKind::Boolean, OperandKind::Boolean], EqualityOperatorKind::NotEqual) => {
+                    "quire.op.boolean.ne"
+                }
+                _ => return Err(ExactFunctionRefusal::BodyMismatch),
+            };
+            if body.and_then(application_identity) != Some(expected_identity) {
+                return Err(ExactFunctionRefusal::BodyMismatch);
+            }
             let _ = arguments;
             Ok(ClassifiedBody::Equality(*operator))
         }
@@ -2788,18 +2839,39 @@ pub fn generate_exact_function_oracles(
                 });
             }
             let (closure, _) = admitted_binary_body(admitted, graph)?;
-            let body =
-                classify_body_shape(closure.root, graph.term(&closure.root.node_id), declaration)?;
             let mut parameter_kinds = Vec::with_capacity(declaration.parameters.len());
             for parameter in &declaration.parameters {
                 parameter_kinds.push(resolve_operand_type(graph, &parameter.type_node_id)?);
             }
             let result_kind = resolve_operand_type(graph, &declaration.result_type)?;
             validate_signature(declaration, &parameter_kinds, result_kind)?;
+            let body = classify_body_shape(
+                closure.root,
+                graph.term(&closure.root.node_id),
+                declaration,
+                &parameter_kinds,
+            )?;
+            // A classified expression root is not authority to register a
+            // function. Retain only bodies bound by one admitted source
+            // function declaration; otherwise no concrete claim or location
+            // entry may be emitted for it.
+            if !matches!(declaration.body, ExactFunctionBody::Call { .. }) {
+                let function_node_id = source_index
+                    .source_function_node_id(&declaration.name, &declaration.node_id)
+                    .ok_or(ExactFunctionRefusal::BodyMismatch)?;
+                if !graph
+                    .term(&closure.root.node_id)
+                    .and_then(application_arguments)
+                    .is_some_and(|arguments| {
+                        source_argument_refs_match(graph, function_node_id, arguments)
+                    })
+                {
+                    return Err(ExactFunctionRefusal::BodyMismatch);
+                }
+            }
             Ok(Stage1Shape {
                 body,
-                parameter_kinds,
-                result_kind,
+                body_node_id: closure.root.node_id.clone(),
             })
         })();
         shapes.push(result);
@@ -2819,7 +2891,17 @@ pub fn generate_exact_function_oracles(
                         callee: callee.clone(),
                     })),
                     Some(callee_node_id) => match resolved.get(callee_node_id) {
-                        Some(Ok(())) => Some(Ok(())),
+                        Some(Ok(())) => Some(
+                            source_nested_body_matches(
+                                &source_index,
+                                &declaration.name,
+                                &declaration.node_id,
+                                callee,
+                                callee_node_id,
+                            )
+                            .then_some(())
+                            .ok_or(ExactFunctionRefusal::BodyMismatch),
+                        ),
                         Some(Err(_)) => Some(Err(ExactFunctionRefusal::UnknownCallee {
                             callee: callee.clone(),
                         })),
@@ -2864,8 +2946,7 @@ pub fn generate_exact_function_oracles(
         classified.push(ClassifiedFunction {
             declaration,
             body: shape.body,
-            parameter_kinds: shape.parameter_kinds,
-            result_kind: shape.result_kind,
+            body_node_id: shape.body_node_id,
         });
     }
     let survivors: Vec<&ExactFunctionDeclaration> = classified
@@ -2873,58 +2954,65 @@ pub fn generate_exact_function_oracles(
         .map(|function| function.declaration)
         .collect();
 
-    let declared_functions: Vec<rt::FunctionDeclaration> = classified
-        .iter()
-        .map(|function| rt::FunctionDeclaration {
-            name: function.declaration.name.clone(),
-            parameters: function
-                .declaration
-                .parameters
-                .iter()
-                .zip(&function.parameter_kinds)
-                .map(|(parameter, kind)| (parameter.name.clone(), kind.to_value_type()))
-                .collect(),
-            result: function.result_kind.to_value_type(),
-            ieee_requirements: Vec::new(),
-            integer_division_consumers: Vec::new(),
-            measure_discharged: true,
-            body: Box::new(|_frame, _args| {
-                Outcome::Refused(Refusal::CheckedInvariant {
-                    cause: quire_exact::CheckedInvariantCause::GeneratedBodyPlaceholderInvoked,
-                })
-            }),
+    // A location origin follows the admitted source's function order, which
+    // is what the checked QSL call site records. Omitting or refusing another
+    // function in the request cannot renumber this source location.
+    let source_order = |node_id: &CheckedNodeId| {
+        package
+            .wire()
+            .source_map
+            .nodes
+            .iter()
+            .find(|entry| &entry.node_id == node_id)
+            .and_then(|entry| {
+                entry
+                    .occurrences
+                    .iter()
+                    .flat_map(|occurrence| &occurrence.regions)
+                    .map(|region| (&region.source, region.start))
+                    .min()
+            })
+    };
+    let mut bodies_by_source = source_index
+        .graph
+        .nodes()
+        .filter(|node| &*node.node_tag == "function" && &*node.semantic_form == "pure_function")
+        .filter_map(|node| {
+            let body = source_index
+                .graph
+                .term(&node.node_id)
+                .and_then(|term| binding_value(term, "body"))
+                .and_then(|term| reference_in_graph(term, &source_index.graph))?;
+            Some((
+                source_order(&node.node_id).or_else(|| source_order(body)),
+                &node.node_id,
+                body,
+            ))
         })
+        .collect::<Vec<_>>();
+    bodies_by_source.sort();
+    let location_index: BTreeMap<&CheckedNodeId, usize> = bodies_by_source
+        .into_iter()
+        .enumerate()
+        .map(|(index, (_, _, body))| (body, index))
         .collect();
-
     let survivor_index: BTreeMap<&CheckedNodeId, (usize, &ExactFunctionDeclaration)> = classified
         .iter()
         .enumerate()
-        .map(|(index, function)| (&function.declaration.node_id, (index, function.declaration)))
+        .map(|(index, function)| {
+            let declaration = function.declaration;
+            (&declaration.node_id, (index, declaration))
+        })
+        .collect();
+    let classified_by_id: BTreeMap<&CheckedNodeId, &ClassifiedFunction<'_>> = classified
+        .iter()
+        .map(|function| (&function.declaration.node_id, function))
         .collect();
 
-    let package_check = rt::PackageDeclarations {
-        types: sv::TypeEnvironment::default(),
-        functions: declared_functions,
-    }
-    .check(rt::CheckMode::Linked, rt::CheckingLimits::default());
-
-    let package_refusal: Option<String> = match &package_check {
-        Ok(_) => None,
-        Err(refusals) => Some(
-            refusals
-                .iter()
-                .map(|refusal| format!("{:?}", refusal.cause))
-                .collect::<Vec<_>>()
-                .join("; "),
-        ),
-    };
-
-    // Location map: one entry per surviving function, whether or not the
-    // package itself later admits -- this is a static, generation-time fact
-    // about the request, independent of admission (AC-15).
+    // Static location records describe the admitted IR graph, independently of a later QSL run.
     let mut location_map = Vec::with_capacity(survivors.len());
     for declaration in &survivors {
-        let index = survivor_index[&declaration.node_id].0;
+        let index = location_index[&declaration.node_id];
         let call_point = match &declaration.body {
             ExactFunctionBody::Scalar { .. } => CallPointKind::ScalarOperator,
             ExactFunctionBody::CompositeEquality { .. } => CallPointKind::EqualityEvaluation,
@@ -2996,7 +3084,6 @@ pub fn generate_exact_function_oracles(
                 &names,
                 &resolved,
                 &survivor_index,
-                &package_refusal,
                 (package, &source_index),
                 item,
                 admitted,
@@ -3022,9 +3109,21 @@ pub fn generate_exact_function_oracles(
             .collect(),
     );
     for ((claim, _, _, declaration), symbol) in pending.into_iter().zip(symbols) {
-        source.item(&symbol, declaration);
-        if let ClaimDisposition::Generated(generated) = &mut claims[claim].result {
-            generated.oracle_symbol = format!("oracle_{symbol}");
+        let rendered = classified_by_id
+            .get(&declaration.node_id)
+            .copied()
+            .ok_or(ExactFunctionRefusal::BodyMismatch)
+            .and_then(|function| {
+                owner_render::classified_item(&source_index, &names, &symbol, function)
+            });
+        match rendered {
+            Ok(item_source) => {
+                source.item(&item_source);
+                if let ClaimDisposition::Generated(generated) = &mut claims[claim].result {
+                    generated.oracle_symbol = format!("oracle_{symbol}");
+                }
+            }
+            Err(refusal) => claims[claim].result = ClaimDisposition::Refused { refusal },
         }
     }
 
@@ -3045,7 +3144,7 @@ pub fn generate_exact_function_oracles(
         )
         .collect::<Vec<_>>();
     let lib = crate::core::provenance::with_rust_header(
-        source.finish(&classified),
+        source.finish(),
         subjects.iter().map(String::as_str),
     );
     if lib.len() > MAX_GENERATED_SOURCE_BYTES {
@@ -3071,7 +3170,7 @@ pub fn generate_exact_function_oracles(
         artifacts: vec![
             Artifact::new(
                 "Cargo.toml",
-                oracle_crate_manifest(EXACT_FUNCTION_CRATE_NAME),
+                function_oracle_crate_manifest(EXACT_FUNCTION_CRATE_NAME),
             ),
             Artifact::new("src/lib.rs", lib),
             Artifact::new("claim-map.json", map_text),
@@ -3181,7 +3280,6 @@ fn item_disposition<'a>(
     names: &FunctionNames<'_>,
     resolved: &BTreeMap<&CheckedNodeId, Result<(), ExactFunctionRefusal>>,
     survivor_index: &BTreeMap<&CheckedNodeId, (usize, &'a ExactFunctionDeclaration)>,
-    package_refusal: &Option<String>,
     source: (&ContractPackageV1, &FunctionSourceIndex<'_>),
     item: &ExactFunctionItem,
     admitted: PackageItem<'_>,
@@ -3225,20 +3323,21 @@ fn item_disposition<'a>(
             found: item.argument_node_ids.len(),
         });
     }
-    if graph.operator(&node.node_id) == Some(ApplicationOperator::Call) {
-        let source_function_id = source_index
-            .source_function_node_id(&declaration.name, &declaration.node_id)
-            .ok_or(ExactFunctionRefusal::BodyMismatch)?;
-        if !source_call_matches(
-            graph
-                .term(&node.node_id)
-                .ok_or(ExactFunctionRefusal::BodyMismatch)?,
-            graph,
-            source_function_id,
-            &item.argument_node_ids,
-        ) {
-            return Err(ExactFunctionRefusal::BodyMismatch);
-        }
+    if graph.operator(&node.node_id) != Some(ApplicationOperator::Call) {
+        return Err(ExactFunctionRefusal::BodyMismatch);
+    }
+    let source_function_id = source_index
+        .source_function_node_id(&declaration.name, &declaration.node_id)
+        .ok_or(ExactFunctionRefusal::BodyMismatch)?;
+    if !source_call_matches(
+        graph
+            .term(&node.node_id)
+            .ok_or(ExactFunctionRefusal::BodyMismatch)?,
+        graph,
+        source_function_id,
+        &item.argument_node_ids,
+    ) {
+        return Err(ExactFunctionRefusal::BodyMismatch);
     }
     for argument_id in &item.argument_node_ids {
         let argument = graph
@@ -3256,12 +3355,6 @@ fn item_disposition<'a>(
         };
         resolve_operand_type(graph, type_node_id)?;
     }
-    if let Some(cause) = package_refusal {
-        return Err(ExactFunctionRefusal::PackageRefused {
-            function_index: Some(index),
-            cause: cause.clone(),
-        });
-    }
     // The readable stem: the applied function's name. The caller settles the final name.
     let stem = format!("call_{}", bounded_readable_component(&declaration.name));
     Ok((
@@ -3270,6 +3363,7 @@ fn item_disposition<'a>(
             oracle_symbol: String::new(),
             contract_package_identity: package.identity().clone(),
             node_id: item.call_node_id.clone(),
+            function_node_id: source_function_id.clone(),
             package_id: package.wire().package.source.package_id.clone(),
             semantic_type: node.semantic_type.clone(),
             source_map: occurrences.to_vec(),
@@ -3342,147 +3436,18 @@ impl ItemKey {
 // Rendering
 // ---------------------------------------------------------------------------
 
-const SOURCE_HEADER: &str = "\
-// @generated by quire-contract-codegen function-application oracles. Do not edit.
-//
-// `checked_package()` assembles this package's `PackageDeclarations` and
-// admits it through `PackageDeclarations::check(CheckMode::Linked, ..)`,
-// returning `Result<CheckedPackage, Vec<CheckRefusal>>` unchanged -- the
-// same admission this generator already ran once at generation time.
-// Every oracle function below calls `CheckedPackage::call` with an
-// already-checked package and returns its `Outcome<Value>` unchanged; it
-// never reads `Evaluation.location` or `.losses`, since the runtime
-// never populates either field. No charge amount and no literal `Outcome`/
-// `Value` constant standing in for an evaluated result appears in this source:
-// the runtime owns function-call charges, while `quire-exact` owns scalar
-// arithmetic charges and outcomes within function bodies.
-
-use quire_contract_runtime::exact as rt;
-use quire_semantic_value::declaration as sv;
-use quire_exact as exact;
-";
-
 #[derive(Default)]
 struct SourceBuilder {
     functions: String,
 }
 
 impl SourceBuilder {
-    fn item(&mut self, symbol: &str, declaration: &ExactFunctionDeclaration) {
-        self.functions.push_str(&format!(
-            "\n/// Applies `{}`.\n\
-             pub fn oracle_{symbol}(\n    \
-             package: &rt::CheckedPackage,\n    \
-             arguments: Vec<exact::Value>,\n    \
-             objects: &quire_semantic_value::object_closure::ObjectClosure,\n    \
-             meter: &mut exact::Meter,\n\
-             ) -> Result<exact::Outcome<exact::Value>, rt::InputRefusal> {{\n    \
-             package\n        \
-             .call({:?}, arguments, objects, meter)\n        \
-             .map(|evaluation| evaluation.outcome)\n}}\n",
-            declaration.name, declaration.name
-        ));
+    fn item(&mut self, rendered: &str) {
+        self.functions.push_str(rendered);
     }
 
-    /// Render `checked_package()` from every surviving function's own
-    /// classified shape (declaration plus resolved operand kinds), in
-    /// assembled order.
-    fn finish(self, classified: &[ClassifiedFunction<'_>]) -> String {
-        let mut declarations = String::new();
-        for function in classified {
-            declarations.push_str(&render_function_declaration(function));
-        }
-        let mut source = SOURCE_HEADER.to_owned();
-        source.push_str(&format!(
-            "\npub fn checked_package() -> Result<rt::CheckedPackage, Vec<rt::CheckRefusal>> {{\n    \
-             let types = sv::TypeEnvironment::default();\n    \
-             let functions = vec![{declarations}];\n    \
-             rt::PackageDeclarations {{ types, functions }}.check(rt::CheckMode::Linked, rt::CheckingLimits::default())\n}}\n"
-        ));
-        source.push_str(&self.functions);
-        source
-    }
-}
-
-/// Render one `rt::FunctionDeclaration` literal, using the classified
-/// function's own resolved parameter/result kinds -- never a placeholder,
-/// so a `Boolean` and an `Integer` parameter can never render identically.
-fn render_function_declaration(function: &ClassifiedFunction<'_>) -> String {
-    let parameters: String = function
-        .declaration
-        .parameters
-        .iter()
-        .zip(&function.parameter_kinds)
-        .map(|(parameter, kind)| format!("({:?}.to_owned(), {}), ", parameter.name, kind.render()))
-        .collect();
-    let body = render_body(&function.body);
-    format!(
-        "rt::FunctionDeclaration {{\n        \
-         name: {:?}.to_owned(),\n        \
-         parameters: vec![{parameters}],\n        \
-         result: {},\n        \
-         ieee_requirements: Vec::new(),\n        \
-         integer_division_consumers: Vec::new(),\n        \
-         measure_discharged: true,\n        \
-         body: Box::new({body}),\n    \
-         }},\n    ",
-        function.declaration.name,
-        function.result_kind.render(),
-    )
-}
-
-fn render_body(body: &ClassifiedBody<'_>) -> String {
-    match body {
-        ClassifiedBody::Scalar(operator) => {
-            let variant = operator.variant();
-            format!(
-                "|frame: &rt::Frame, args: &[exact::Value]| -> exact::Outcome<exact::Value> {{\n        \
-                 let [exact::Value::Integer(left), exact::Value::Integer(right)] = args else {{\n            \
-                 return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedArgumentShapeMismatch }});\n        }};\n        \
-                 let evaluated = frame.meter(|meter| exact::evaluate_integer_arithmetic(exact::IntegerArithmetic::{variant}(left, right), None, meter));\n        \
-                 match evaluated {{\n            \
-                 Ok(exact::Outcome::Completed(value)) => exact::Outcome::Completed(exact::Value::Integer(value)),\n            \
-                 Ok(exact::Outcome::Undefined(undefined)) => exact::Outcome::Undefined(undefined),\n            \
-                 Ok(exact::Outcome::Refused(refusal)) => exact::Outcome::Refused(refusal),\n            \
-                 Ok(exact::Outcome::Incomplete(incomplete)) => exact::Outcome::Incomplete(incomplete),\n            \
-                 Err(refusal) => exact::Outcome::Refused(refusal),\n            \
-                 }}\n    }}"
-            )
-        }
-        ClassifiedBody::Equality(operator) => {
-            let path = match operator {
-                EqualityOperatorKind::Equal => "sv::EqualityOperator::Equal",
-                EqualityOperatorKind::NotEqual => "sv::EqualityOperator::NotEqual",
-            };
-            format!(
-                "|frame: &rt::Frame, args: &[exact::Value]| -> exact::Outcome<exact::Value> {{\n        \
-                 let [left, right] = args else {{\n            \
-                 return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedArgumentShapeMismatch }});\n        }};\n        \
-                 let operand_type = match left {{\n            \
-                 exact::Value::Boolean(_) => exact::ValueType::Boolean,\n            \
-                 exact::Value::Integer(_) => exact::ValueType::Integer,\n            \
-                 _ => return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedOperandKindUnsupported }}),\n        \
-                 }};\n        \
-                 let environment = sv::TypeEnvironment::default();\n        \
-                 let checked = match environment.check_equality({path}, sv::EqualityOperand::typed(operand_type.clone()), sv::EqualityOperand::typed(operand_type), &quire_semantic_value::enumeration::EnumMemberIndex::default()) {{\n            \
-                 Ok(checked) => checked,\n            \
-                 Err(error) => return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedEqualityCheckRejected {{ cause: error.cause }} }}),\n        \
-                 }};\n        \
-                 match frame.meter(|meter| checked.evaluate(&environment, left, right, meter)) {{\n            \
-                 Ok(exact::Outcome::Completed(value)) => exact::Outcome::Completed(exact::Value::Boolean(value)),\n            \
-                 Ok(exact::Outcome::Undefined(undefined)) => exact::Outcome::Undefined(undefined),\n            \
-                 Ok(exact::Outcome::Refused(refusal)) => exact::Outcome::Refused(refusal),\n            \
-                 Ok(exact::Outcome::Incomplete(incomplete)) => exact::Outcome::Incomplete(incomplete),\n            \
-                 Err(refusal) => exact::Outcome::Refused(refusal),\n            \
-                 }}\n    }}"
-            )
-        }
-        ClassifiedBody::Call(callee) => {
-            format!(
-                "|frame: &rt::Frame, args: &[exact::Value]| -> exact::Outcome<exact::Value> {{\n        \
-                 frame.call({callee:?}, args)\n    }}"
-            )
-        }
+    fn finish(self) -> String {
+        format!("{}{}", owner_render::HEADER, self.functions)
     }
 }
 
@@ -3749,6 +3714,25 @@ mod tests {
             index.source_function_node_id("same", &body.node_id),
             Some(&first.node_id)
         );
+        let declaration = ExactFunctionDeclaration {
+            node_id: body.node_id.clone(),
+            name: "same".to_owned(),
+            parameters: Vec::new(),
+            result_type: body.node_id.clone(),
+            body: ExactFunctionBody::Scalar {
+                operator: IntegerOperator::Add,
+            },
+            capability_requirements: Vec::new(),
+        };
+        for shape in [
+            owner_render::DirectBody::Scalar(BinaryIntegerOperator::Add),
+            owner_render::DirectBody::Equality(EqualityOperatorKind::Equal),
+        ] {
+            let emitted = owner_render::checked_item(&index, "same", &declaration, shape)
+                .expect("unique callable declaration");
+            assert!(emitted.contains(first.node_id.digest.as_ref()));
+            assert!(!emitted.contains(body.node_id.digest.as_ref()));
+        }
         assert_eq!(index.source_function_node_id("Same", &body.node_id), None);
         let duplicate = function(22, &body.node_id);
         let nodes = [&body, &other, &first, &same_name_other_body, &duplicate];
@@ -3898,6 +3882,7 @@ mod tests {
             oracle_symbol: "oracle_f".to_owned(),
             contract_package_identity: identity.clone(),
             node_id: node_id.clone(),
+            function_node_id: node_id.clone(),
             package_id: identity.clone(),
             semantic_type: node_id.clone(),
             source_map: Vec::new(),
@@ -3917,6 +3902,7 @@ mod tests {
             serde_json::json!(identity)
         );
         assert_eq!(value["node_id"], serde_json::json!(node_id));
+        assert_eq!(value["function_node_id"], serde_json::json!(node_id));
         assert!(value.get("ir_id").is_none());
         for key in ["claims", "bounds", "dependencies"] {
             assert_eq!(value[key], serde_json::json!([]), "{key}");

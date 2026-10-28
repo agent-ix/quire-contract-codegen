@@ -523,7 +523,7 @@ fn lowering_refusal(record: CompleteLoweringRecordV2) -> Option<StateFrameLoweri
         } => Some(StateFrameLoweringRefusal::InvalidBody {
             node_id,
             body_node_id,
-            refusal,
+            refusal: Box::new(refusal),
         }),
         CompleteLoweringRecordV2::BodyIncomplete {
             node_id,

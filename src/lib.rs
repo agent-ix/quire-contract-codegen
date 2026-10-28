@@ -94,10 +94,12 @@ pub use oracle::equality::{
 };
 
 pub use oracle::function::{
+    apply_checked_function, checked_function_wire_id, checked_package_digest,
     generate_exact_function_oracles, generate_function_schedules,
-    generate_function_schedules_with_limits, CallPointKind, ExactFunctionBody, ExactFunctionClaim,
-    ExactFunctionDeclaration, ExactFunctionItem, ExactFunctionOracles, ExactFunctionRefusal,
-    FunctionParameter, FunctionScheduleClaim, FunctionScheduleDeclaration,
+    generate_function_schedules_with_limits, select_checked_callable, selected_nested_call_site,
+    CallPointKind, CheckedFunctionError, CheckedFunctionSource, ExactFunctionBody,
+    ExactFunctionClaim, ExactFunctionDeclaration, ExactFunctionItem, ExactFunctionOracles,
+    ExactFunctionRefusal, FunctionParameter, FunctionScheduleClaim, FunctionScheduleDeclaration,
     FunctionScheduleDisposition, FunctionScheduleGeneration, FunctionScheduleItem,
     FunctionScheduleLimits, FunctionScheduleParameter, GeneratedExactFunctionClaim,
     LocationMapEntry, RecordedLocation, RecordedOrigin, RefusedFunctionBody, ScheduledFunctionBody,

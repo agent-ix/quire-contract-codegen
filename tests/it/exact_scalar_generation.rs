@@ -764,6 +764,13 @@ fn tc_024_refused_items_are_typed_emit_no_code_and_leave_siblings_unchanged() {
         unsupported_node_id: resolve(code),
         node_tag: tag,
     };
+    // The protocol clause reaches its run control and finish obligation.
+    // IR reports the first unsupported node in admitted node-id order.
+    let first_protocol = [PROTOCOL, PROTOCOL_RUN, PROTOCOL_FINISH]
+        .into_iter()
+        .map(&resolve)
+        .min()
+        .expect("the protocol closure has three admitted nodes");
     let expected = [
         (COMPOSITE, unsupported(COMPOSITE, "composite_type")),
         (
@@ -792,7 +799,13 @@ fn tc_024_refused_items_are_typed_emit_no_code_and_leave_siblings_unchanged() {
         ),
         (STATE, unsupported(STATE, "state")),
         (TEMPORAL, unsupported(TEMPORAL, "temporal")),
-        (PROTOCOL, unsupported(PROTOCOL, "protocol")),
+        (
+            PROTOCOL,
+            ExactScalarRefusal::Unsupported {
+                unsupported_node_id: first_protocol,
+                node_tag: "protocol",
+            },
+        ),
         (MISSING, ExactScalarRefusal::InvalidInput),
         (
             V_BOOLEAN,

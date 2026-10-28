@@ -692,6 +692,19 @@ impl PackageBuilder {
         body: Value,
         dependencies: &[String],
     ) -> &mut Self {
+        self.application_code_with_name(code, tag, form, semantic_type, body, dependencies, None)
+    }
+
+    fn application_code_with_name(
+        &mut self,
+        code: u32,
+        tag: &str,
+        form: &str,
+        semantic_type: &str,
+        body: Value,
+        dependencies: &[String],
+        declaration: Option<&[&str]>,
+    ) -> &mut Self {
         let label = code.to_string();
         self.node_with_label(
             &key(code),
@@ -706,6 +719,9 @@ impl PackageBuilder {
             .as_array_mut()
             .expect("fixture nodes");
         let node = nodes.last_mut().expect("application node just appended");
+        if let Some(declaration) = declaration {
+            node["declaration"] = json!({"qualified_name": declaration});
+        }
         let draft: CheckedSemanticNodeV2 =
             serde_json::from_value(node.clone()).expect("complete application draft");
         let candidate = derive_application_node_id(
@@ -723,6 +739,28 @@ impl PackageBuilder {
             .expect("application source map just appended")["node_id"] = node_ref(&digest);
         register_code(code, digest);
         self
+    }
+
+    /// Build a protocol application with its source declaration path in the
+    /// node preimage. The clause, run control, and finish obligation form one
+    /// admitted closure for the scalar generator's unsupported-family check.
+    fn protocol_application(
+        &mut self,
+        code: u32,
+        form: &str,
+        declaration: &[&str],
+        body: Value,
+    ) -> &mut Self {
+        let dependencies = reference_targets(&body);
+        self.application_code_with_name(
+            code,
+            "protocol",
+            form,
+            &key(T_BOOLEAN),
+            body,
+            &dependencies,
+            Some(declaration),
+        )
     }
 
     /// A `value`/`literal` node with `operand(form)`'s own content, at a
@@ -1409,6 +1447,12 @@ pub const RELATION: u32 = 2004;
 pub const STATE: u32 = 2005;
 pub const TEMPORAL: u32 = 2006;
 pub const PROTOCOL: u32 = 2007;
+const PROTOCOL_OVER: u32 = 2050;
+const PROTOCOL_CLOSING: u32 = 2051;
+/// Root sequence of the admitted protocol closure.
+pub const PROTOCOL_RUN: u32 = 2052;
+/// Finish obligation of the admitted protocol closure.
+pub const PROTOCOL_FINISH: u32 = 2053;
 /// A `claim`-tagged node wired only as an extra dependency of
 /// `LITERAL_OPERAND` (issue #100 / FR-014-AC-5): it is never itself
 /// requested, so it never gets its own oracle -- its sole purpose is to
@@ -2568,6 +2612,98 @@ pub fn missing_rounding_package() -> PackageBuilder {
     builder
 }
 
+/// One minimal FR-464 protocol closure in the same admitted package as the
+/// scalar survivors. CG must refuse its clause as an unsupported family while
+/// leaving those survivors unchanged (FR-014-AC-7).
+fn add_protocol_fixture(builder: &mut PackageBuilder) {
+    let boolean = key(T_BOOLEAN);
+    let profile = artifact_ref("quire.protocol.finite-global/v1");
+    builder.select_profile("protocol_profile", profile.clone());
+    let operation = |operator: &str| {
+        op_full(
+            "quire.op.protocol.control",
+            vec![law("protocol_profile", profile.clone())],
+            None,
+            Some(json!({"kind": "profile_operator", "operator": operator})),
+        )
+    };
+    builder.code(
+        PROTOCOL_OVER,
+        "value",
+        "parameter",
+        &boolean,
+        parameter_body("over", 0),
+    );
+    builder.code(
+        PROTOCOL_CLOSING,
+        "value",
+        "parameter",
+        &boolean,
+        parameter_body("closed", 1),
+    );
+    builder.protocol_application(
+        PROTOCOL_RUN,
+        "control",
+        &["Scalar", "Flow", "run", "Main"],
+        application(
+            "protocol_control",
+            operation("sequence"),
+            &boolean,
+            vec![member("children", aggregate())],
+        ),
+    );
+    builder.protocol_application(
+        PROTOCOL_FINISH,
+        "obligation",
+        &["Scalar", "Flow", "finish", "Closed"],
+        application(
+            "protocol_control",
+            operation("finish"),
+            &boolean,
+            vec![
+                member("binder", reference(&code_id(PROTOCOL_CLOSING).digest)),
+                member(
+                    "constraint",
+                    json!({
+                        "term": "literal",
+                        "type": node_ref(&boolean),
+                        "value_kind": "boolean",
+                        "value": true,
+                    }),
+                ),
+            ],
+        ),
+    );
+    builder.protocol_application(
+        PROTOCOL,
+        "protocol_clause",
+        &["Scalar", "Flow"],
+        application(
+            "protocol_control",
+            operation("protocol"),
+            &boolean,
+            vec![
+                member("over", reference(&key(PROTOCOL_OVER))),
+                member(
+                    "activation",
+                    json!({"term": "aggregate", "members": [member("kind", literal("text", "origin"))]}),
+                ),
+                member("captures", aggregate()),
+                member("roles", aggregate()),
+                member("relationships", aggregate()),
+                member("channels", aggregate()),
+                member("queues", aggregate()),
+                member("requirements", aggregate()),
+                member("compensations", aggregate()),
+                member("terminal", aggregate()),
+                member("scheduling", aggregate()),
+                member("run", reference(&code_id(PROTOCOL_RUN).digest)),
+                member("finish", reference(&code_id(PROTOCOL_FINISH).digest)),
+            ],
+        ),
+    );
+}
+
 /// The complete package: types, values, the corpus, and refused nodes.
 fn corpus_package_with_expression_operand() -> PackageBuilder {
     let mut builder = PackageBuilder::default();
@@ -2906,15 +3042,8 @@ fn corpus_package_with_expression_operand() -> PackageBuilder {
     );
     builder
         .code(COMPOSITE, "composite_type", "record", &boolean, aggregate())
-        // `FUNCTION`/`TEMPORAL`/`PROTOCOL` are non-`expression`-tagged
-        // nodes CG refuses on tag alone -- see `refused_items` below -- but
-        // each still carries an `application` body, so IR-216 validates it
-        // like any other application node. Their bodies are simplified to
-        // a minimal catalogued `boolean.not` application (unrelated to
-        // what each node tag actually denotes) rather than kept as
-        // 0-argument placeholders: the catalog has no 0-operand identity
-        // for any operator, so a 0-argument application could never be
-        // made catalog-conformant at all.
+        // `FUNCTION` is a non-expression family CG refuses on tag alone.
+        // Its body remains a catalogued application for IR admission.
         .application_code(
             FUNCTION,
             "function",
@@ -2965,19 +3094,8 @@ fn corpus_package_with_expression_operand() -> PackageBuilder {
                 ],
             ),
             &[key(TEMPORAL_PARAMETER), clause_formula.clone()],
-        )
-        .application_code(
-            PROTOCOL,
-            "protocol",
-            "protocol_clause",
-            &boolean,
-            application(
-                "unary",
-                op("quire.op.boolean.not"),
-                &boolean,
-                vec![literal("boolean", "true")],
-            ),
         );
+    add_protocol_fixture(&mut builder);
     // Each anchor is dedicated to its own fixture's exact bound set (see
     // `dedicated_operand`'s doc): `key(V_INTEGER)` directly would union
     // these bounds onto every other expression that still references the

@@ -10,7 +10,7 @@ use qsl_replay::{
     compile_package, parity_obligation, DependencyInput, DigestDomain, DigestRecord, Domain,
     DomainKey, DomainKind, EqualityOperator, FiniteBound, InconclusiveCause, Integer,
     OperandIdentity, ParityBoundRefusal, ProofBound, Refinement, ReplayLimits, ReplayRefusal,
-    ReplayRequest, ReplaySource, ScalarIdentityMismatch, ScalarLimits, SourceIdentity, StageLimits,
+    ReplayRequest, ScalarIdentityMismatch, ScalarLimits, SourceIdentity, StageLimits,
     SuppliedLibrary, TerminalValue, VerifiedShadow, VerifiedShadowResult, WireNodeId,
 };
 use quire_contract_codegen::{
@@ -742,12 +742,15 @@ fn tc_035_original_composite_request_requires_its_own_packet() {
     let readback = ReplayRequest::decode(request.wire().clone(), ReplayLimits::default())
         .expect("the packet-backed request has a typed QSL readback");
     assert_eq!(
-        readback.replay_target().occurrence_key(),
+        readback
+            .replay_target()
+            .expect("composite packet has a replay target")
+            .occurrence_key(),
         packet.occurrence_key.as_ref()
     );
 
     let mut wrong_arm = packet.clone();
-    wrong_arm.source = Some(ReplaySource::Witness(
+    wrong_arm.source = Some(qsl_replay::EnvelopeSource::Witness(
         qsl_replay::Witness::parse("<<<assertion|h|c|>>>").expect("valid fixture witness"),
     ));
     assert!(matches!(
@@ -932,7 +935,10 @@ fn tc_035_original_composite_packets_bind_distinct_real_occurrences() {
         let readback = ReplayRequest::decode(request.wire().clone(), ReplayLimits::default())
             .expect("QSL reads the packet-backed occurrence");
         assert_eq!(
-            readback.replay_target().occurrence_key(),
+            readback
+                .replay_target()
+                .expect("composite packet has a replay target")
+                .occurrence_key(),
             packet.occurrence_key.as_ref()
         );
     }

@@ -571,7 +571,7 @@ pub enum StateFrameLoweringRefusal {
         body_node_id: CheckedNodeId,
         /// The term validator's refusal.
         #[serde(skip)]
-        refusal: CheckedPackageRefusal,
+        refusal: Box<CheckedPackageRefusal>,
     },
     /// A reachable node body stopped at a validation limit.
     BodyIncomplete {
@@ -1081,7 +1081,7 @@ mod tests {
                 not_lowered(StateFrameLoweringRefusal::InvalidBody {
                     node_id: node(1),
                     body_node_id: node(4),
-                    refusal: refusal_detail,
+                    refusal: Box::new(refusal_detail),
                 }),
             ),
             same(

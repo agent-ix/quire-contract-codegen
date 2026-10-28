@@ -2450,11 +2450,11 @@ mod tests {
         value
     }
 
-    fn fixture_binding_name_mut(term: &mut CheckedTerm) -> &mut Box<str> {
+    fn fixture_set_binding_name(term: &mut CheckedTerm, value: &str) {
         let CheckedTerm::Binding { name, .. } = term else {
             panic!("fixture binding")
         };
-        name
+        *name = value.into();
     }
 
     fn fixture_reference_mut(term: &mut CheckedTerm) -> &mut CheckedNodeId {
@@ -2787,7 +2787,7 @@ mod tests {
     fn duplicate_member_private_defense_retains_exact_cause_and_healthy_sibling() {
         let mut nodes = recursive_shape_nodes();
         let members = fixture_members_mut(&mut nodes[0]);
-        *fixture_binding_name_mut(&mut members[0]) = "x".into();
+        fixture_set_binding_name(&mut members[0], "x");
         let duplicate = members[0].clone();
         members.push(duplicate);
         let list = EqualityOperandDescriptor::typed(recursive_node_id('a'));
@@ -4032,7 +4032,7 @@ fn deep_matches_shallow() {
             };
             match mutation {
                 "remove" => optional.clear(),
-                "rename" => *fixture_binding_name_mut(&mut optional[0]) = "maybe".into(),
+                "rename" => fixture_set_binding_name(&mut optional[0], "maybe"),
                 "second" => {
                     let duplicate = optional[0].clone();
                     optional.push(duplicate);
