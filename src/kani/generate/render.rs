@@ -312,7 +312,7 @@ fn render_collection(
                      let item = {item_name}[index as usize];\n\
                      {predicate}\n\
                  }});\n\
-                 assert!(claim, \"the symbolic sequence satisfies the selected QSL {quantifier} body\");\n\
+                 assert!(claim, \"the symbolic collection satisfies the selected QSL {quantifier} body\");\n\
                  kani::cover!({}, \"{}\");\n\
              }}\n\
          }}\n",

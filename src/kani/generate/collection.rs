@@ -60,7 +60,7 @@ pub(crate) struct CollectionFieldDomain {
     pub(crate) kind: CollectionKindIdentity,
     /// Domain of every element.
     pub(crate) element: CollectionElementDomain,
-    /// Exact element type node reached through the admitted sequence type.
+    /// Exact element type node reached through the admitted collection type.
     pub(crate) element_type: CheckedNodeId,
     /// Exact QSL quantifier operation.
     pub(crate) quantifier_operation: String,
