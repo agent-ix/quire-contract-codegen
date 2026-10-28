@@ -43,11 +43,12 @@ steps 4c and 4d). The remaining V2 contract-family behavior, including invariant
 rendering and installed-backend controls, remains planned under its own criteria.
 FR-015-AC-1 to FR-015-AC-37 and their surviving obligations remain unchanged.
 
-Implemented (IR-464): FR-015-AC-7 requires a cover in every generated harness. The V1
-bundle generator (`generate_kani_bundle`) and the bounded Kani corpus generator once emitted
-a harness with none, so a run of either could not classify `Verified` (FR-017-AC-4); both
-now end their harness with one. FR-015-AC-53 to FR-015-AC-58 state what each of the seven
-kinds' covers witnesses and guard against an emitted harness without one.
+Implemented (IR-464): FR-015-AC-7 requires a cover in every generated harness. The retired
+V1 bundle generator and the still-live bounded Kani corpus generator once emitted a harness
+with none, so a run of either could not classify `Verified` (FR-017-AC-4); the corpus
+now ends its harness with one. FR-015-AC-53 to FR-015-AC-58 retain the original seven-kind
+cover obligations and the guard against an emitted harness without one. The V1 bundle and
+contract kinds have retired; the surviving V2 kinds still require their own evidence.
 
 Planned (IR-264, IR-241): composite equality over records and tuples is the first family whose
 production harness cannot verify within any ceiling this crate has measured (FR-028, Rationale), so
@@ -62,13 +63,12 @@ Rationale (IR-464): a corpus case draws no symbolic input and assumes nothing, s
 no precondition for a cover to witness and no assumption that could make its cover
 unsatisfiable. Its cover shows only that the harness runs to its end past its assertion,
 which is what FR-017 needs to read the run as `Verified` rather than as a run with no
-cover summary; no vacuous corpus run exists to classify. The generator has no single
-emission seam today: seven templates in six files each format harness source, and
-`HarnessSpec` (AD-004 step 4b) does not exist in `src/`. A constructor that refuses an
-empty cover list cannot be built over those templates in this change, and AD-004
-sequences the corpus behind QSL-353, so the guard of FR-015-AC-58 is an inspection of
-emitted text. When a family renders through `HarnessSpec`, its constructor refusal
-(AD-004 L-4) joins the inspection and does not replace it.
+cover summary; no vacuous corpus run exists to classify. `HarnessSpec` and the shared
+renderer now serve scalar, V2 parameter-precondition cover and symbolic collection;
+the corpus still has its own template. FR-015-AC-58's emitted-text inspection
+continues to cover the surviving families, and the `HarnessSpec` constructor's
+refusal of an empty cover list (AD-004 L-4) adds a generation-time guard for families
+using it. Neither guard alone establishes an installed-Kani verdict.
 
 Current interim ownership (IR-329): the bounded-profile classifier, the two
 retained finite-input semantic-family lowerers (collection and graph) and the
@@ -91,8 +91,10 @@ clause claim. The corpus emits oracle, strategy, Kani harness and proof graph
 from one admitted case; it does not retain a replay packet or claim a native
 replay result. ADR-001 Q1 and Q3 remain the target: FR-015 is the one Kani
 generation requirement and `CheckedPackageV2` is its one input model. AD-004
-steps 4c through 4g retire the V1 bundle, V1 clause arm and hand-built corpus
-path only after their V2 replacements serve the required families. Step 4g is
+step 4f has retired the V1 bundle and V1-only clause arm immediately (CG #601).
+The V2 clause census input is implemented for supported claims (AC-44/45), while
+full V2 clause proof controls remain open. Step 4g retires the hand-built corpus
+path per family after the stated replacement gates. Step 4g is
 staged per family with no compatibility wrapper (IR-598): each slice deletes
 its family's arm, lowerer and tests once V2 serves the family, and every slice
 is gated on IR-858 (step 4b). Until the final slice deletes the hand-built
