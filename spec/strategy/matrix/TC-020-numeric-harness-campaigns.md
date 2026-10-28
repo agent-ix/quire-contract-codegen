@@ -76,9 +76,10 @@ exact rates.
     occurrence and a different accepted point. Supply each complete typed key in turn: checked
     clause id, claim owner node id, and that clause's authentic occurrence. Compare each selected
     point with its own accepted point and the other clause's different point. For one selection,
-    replace only the occurrence with the other clause's claim while retaining the correct owner;
-    then restore the occurrence and replace only the owner with the other clause's node id. Inspect
-    both typed V2 diagnostics, their retained identities and Contract IR refusals, and artifact
+    replace only the occurrence with a wrong-role occurrence, then with a `claim` occurrence whose
+    ordinal is absent from that clause, retaining the correct owner in both cases. Restore the
+    authentic occurrence and replace only the owner with the other clause's node id. Inspect all
+    three typed V2 diagnostics, their retained identities and Contract IR refusals, and artifact
     output. Inspect the entry signature for a second owner field and the V1 `BoundPackage` entry
     and `StrategyDiagnostic` for changes.
 
@@ -122,7 +123,7 @@ exact rates.
   verdict/report mutation without normalizing malformed or noncanonical text; canonical text and typed identity agree
   (FR-011-AC-11).
 - Step 12 selects each matching claim's exact `ExecutionPoint`, never the other clause's different
-  point. Both the swapped occurrence and wrong owner return distinct typed V2 diagnostics retaining
-  `CheckedExecutionPointRefusal::MissingClaimOccurrence`, each supplied clause, owner and occurrence,
-  and no artifact. The request has no second caller-supplied owner;
+  point. The wrong role, absent ordinal, and wrong owner each return a distinct typed V2 diagnostic
+  retaining `CheckedExecutionPointRefusal::MissingClaimOccurrence`, the supplied clause, owner and
+  occurrence, and no artifact. The request has no second caller-supplied owner;
   the V1 entry and diagnostic remain unchanged (FR-011-AC-13).
