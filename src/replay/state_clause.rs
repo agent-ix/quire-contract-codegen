@@ -41,18 +41,17 @@ use crate::{
     core::ir::clause::ClauseGraphView,
     kani::{
         abi::{KaniBindingRole, KaniPrimitiveType},
-        classify::KaniRunOutcome,
         generate::{
             frame::{field_range, postcondition_check_text, ClauseShape},
             outcome::{BoundNotResolvedCause, StateFrameRefusal},
         },
         identity::{ObligationBinding, StateFrameIdentity, StateFrameProperty},
-        output::playback::parse_assertion_playback,
+        output::playback::{Playback, WitnessDecodeLimits},
         terminal::ReplaySettlement,
     },
     replay::{
         function::{render_witness, DependencyLockError, ProvidedDocument, ReplayInputs},
-        witness::{decode_playback, DecodeFailure, WitnessDecodeLimits},
+        witness::{decode_playback, DecodeFailure},
     },
 };
 
@@ -251,8 +250,6 @@ impl fmt::Display for StateClauseHarnessMember {
 /// Why a state-clause replay produced no result.
 #[derive(Debug)]
 pub enum StateClauseReplayError {
-    /// The proving run did not falsify an assertion with concrete playback.
-    NotFalsified,
     /// The supplied harness is not an operation-contract postcondition harness.
     NotPostconditionHarness,
     /// The harness and the selected replay inputs name different obligations or field order.
@@ -324,7 +321,6 @@ pub enum StateClauseReplayError {
 impl fmt::Display for StateClauseReplayError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::NotFalsified => f.write_str("the Kani run was not falsified"),
             Self::NotPostconditionHarness => f.write_str("the harness is not a postcondition"),
             Self::HarnessMismatch { member } => write!(f, "the harness's {member} differs"),
             Self::PlaybackAlreadySupplied => f.write_str("playback values were already supplied"),
@@ -382,8 +378,7 @@ impl std::error::Error for StateClauseReplayError {}
 impl<'a> From<&'a StateClauseReplayError> for ReplaySettlement<'a> {
     fn from(error: &'a StateClauseReplayError) -> Self {
         match error {
-            StateClauseReplayError::NotFalsified
-            | StateClauseReplayError::NotPostconditionHarness
+            StateClauseReplayError::NotPostconditionHarness
             | StateClauseReplayError::HarnessMismatch { .. }
             | StateClauseReplayError::PlaybackAlreadySupplied
             | StateClauseReplayError::Decode(_)
@@ -442,8 +437,8 @@ pub struct StateClauseReplay {
 }
 
 impl StateClauseReplayInputs<'_> {
-    /// Decodes the falsified operation-contract harness's playback into this input's symbolic pre
-    /// state. `playback` must be empty; the caller obtains the
+    /// Decodes a parsed falsified operation-contract harness playback into this input's symbolic
+    /// pre state. `self.playback` must be empty; the caller obtains the
     /// native post state independently and then passes this input to [`StateClauseReplay::new`].
     /// The effective decode bound is the smaller of `limits` and `run.decode_limits` for each
     /// dimension, so neither supplied bound can widen the other.
@@ -455,15 +450,12 @@ impl StateClauseReplayInputs<'_> {
     pub fn decode_falsification(
         &mut self,
         harness: &StateFrameIdentity,
-        outcome: &KaniRunOutcome,
+        playback: &Playback<'_>,
         limits: WitnessDecodeLimits,
     ) -> Result<(), StateClauseReplayError> {
         let limits = WitnessDecodeLimits {
             bytes: limits.bytes.min(self.run.decode_limits.bytes),
             values: limits.values.min(self.run.decode_limits.values),
-        };
-        let KaniRunOutcome::Falsified { counterexample } = outcome else {
-            return Err(StateClauseReplayError::NotFalsified);
         };
         if !self.playback.is_empty() {
             return Err(StateClauseReplayError::PlaybackAlreadySupplied);
@@ -531,25 +523,17 @@ impl StateClauseReplayInputs<'_> {
                 dependencies: Vec::new(),
             })
             .collect::<Vec<_>>();
-        let parsed = parse_assertion_playback(
-            counterexample,
-            harness.harness_symbol.as_str(),
-            harness.module_symbol.as_str(),
-            limits.bytes,
-            limits.values,
-        )
-        .map_err(|refusal| StateClauseReplayError::Decode(refusal.into()))?;
         let decoded = decode_playback(
             harness.harness_symbol.as_str(),
             harness.module_symbol.as_str(),
             &bindings,
-            &parsed,
+            playback,
             limits,
         )
         .map_err(StateClauseReplayError::Decode)?;
         let expected =
             postcondition_check_text(&harness.scope.operation, field, *comparison, *left_is_pre);
-        if !parsed.matches_generated_postcondition(&expected) {
+        if !playback.matches_generated_postcondition(&expected) {
             return Err(StateClauseReplayError::AssertionMismatch);
         }
         self.playback = decoded

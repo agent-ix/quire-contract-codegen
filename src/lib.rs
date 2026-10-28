@@ -150,7 +150,8 @@ pub use kani::census::{
     ProofExecutionState, ProofReadiness,
 };
 pub use kani::classify::{
-    classify_kani_run, ClassifiedRun, KaniInconclusiveReason, KaniRunOutcome,
+    classify_kani_run, parse_state_clause_falsification, ClassifiedRun, KaniInconclusiveReason,
+    KaniRunOutcome, StateClausePlaybackError,
 };
 pub use kani::generate::census_validation::{KaniDiagnostic, KaniErrorCode};
 pub use kani::output::diagnostics::{
@@ -245,7 +246,7 @@ pub use kani::identity::{
 };
 pub use kani::output::playback::{
     parse_assertion_playback, select_counterexample, CounterexamplePlayback, Playback,
-    PlaybackRefusal, PlaybackRefusalCode,
+    PlaybackRefusal, PlaybackRefusalCode, WitnessDecodeLimits,
 };
 pub use publication::publish::{write_bundle_atomic, PublishedBundleIdentity};
 pub use replay::composite::{
@@ -272,9 +273,7 @@ pub use replay::state_clause::{
     StateClauseModelFieldsCause, StateClauseReplay, StateClauseReplayError,
     StateClauseReplayInputs, StateObjectAddress,
 };
-pub use replay::witness::{
-    decode_falsification, decode_v2_clause_falsification, DecodeFailure, WitnessDecodeLimits,
-};
+pub use replay::witness::{decode_falsification, decode_v2_clause_falsification, DecodeFailure};
 pub use strategy::campaign::{
     generate_enum_strategy, generate_i64_strategy, EnumStrategyCampaign, EnumStrategyRequest,
     StrategyCampaign, StrategyConstraint, StrategyDiagnostic, StrategyErrorCode, StrategyRequest,

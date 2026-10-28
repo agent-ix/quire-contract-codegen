@@ -7,7 +7,10 @@ use serde::Serialize;
 use crate::kani::{
     identity::ObligationKind,
     output::{
-        playback::CounterexamplePlayback,
+        playback::{
+            parse_assertion_playback, CounterexamplePlayback, Playback, PlaybackRefusal,
+            WitnessDecodeLimits,
+        },
         report::{
             KaniCheckResult, KaniHarnessReport, KaniHarnessStatus, KaniMemberReport,
             KaniReportRefusal,
@@ -81,6 +84,41 @@ pub enum KaniRunOutcome {
         /// Why.
         reason: KaniInconclusiveReason,
     },
+}
+
+/// Why a state-clause run has no parsed falsifying playback.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum StateClausePlaybackError {
+    /// The run did not falsify a property.
+    NotFalsified,
+    /// The Kani output reader refused the retained playback.
+    Refused(PlaybackRefusal),
+}
+
+/// Selects a falsified run and reads its playback under both caller and run bounds.
+///
+/// # Errors
+///
+/// Returns [`StateClausePlaybackError::NotFalsified`] for any other outcome or a typed
+/// [`StateClausePlaybackError::Refused`] when the output reader rejects the playback.
+pub fn parse_state_clause_falsification<'a>(
+    outcome: &'a KaniRunOutcome,
+    harness_symbol: &str,
+    module_symbol: &str,
+    requested: WitnessDecodeLimits,
+    run: WitnessDecodeLimits,
+) -> Result<Playback<'a>, StateClausePlaybackError> {
+    let KaniRunOutcome::Falsified { counterexample } = outcome else {
+        return Err(StateClausePlaybackError::NotFalsified);
+    };
+    parse_assertion_playback(
+        counterexample,
+        harness_symbol,
+        module_symbol,
+        requested.bytes.min(run.bytes),
+        requested.values.min(run.values),
+    )
+    .map_err(StateClausePlaybackError::Refused)
 }
 
 /// A classified run: the outcome and the check count it was classified from.
