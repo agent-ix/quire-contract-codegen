@@ -782,17 +782,27 @@ entries against persisted argument bindings and builds `qsl_replay::WitnessValue
 playback-parser implementation, even while several callers invoke them.
 The step 5 end state remains one report parse per Kani process and one
 `parse_assertion_playback` call per replay. The classifier's counterexample selection
-is separate. The planned state-clause L-6 slice checks for `KaniRunOutcome::Falsified`
-before parsing and keeps `StateClauseReplayError::NotFalsified` for the other outcomes.
-It passes the falsified outcome's complete counterexample text to
-`kani/output/playback.rs`'s `parse_assertion_playback` exactly once, with the smaller
-of caller and run byte and value limits in each dimension. That parser refuses
+is separate. The planned state-clause L-6 slice adds
+`kani/classify.rs::parse_state_clause_falsification` as the production entry that
+checks for `KaniRunOutcome::Falsified` before parsing. It returns a typed
+`StateClausePlaybackError::NotFalsified` for other outcomes; the old
+`StateClauseReplayError::NotFalsified` becomes unreachable and is retired with this
+signature change. For a falsification,
+the helper computes the smaller caller and run byte and value limits in each
+dimension, then passes the complete counterexample text and those bounds to
+`kani/output/playback.rs::parse_assertion_playback` exactly once. The parser refuses
 multiple assertion blocks and records `source_len` for the complete text; neither
 `select_counterexample` nor a shortened block substitutes for it. Its parsed
 `Playback` then reaches `StateClauseReplayInputs::decode_falsification`, which
 checks the playback's module and harness path against `StateFrameIdentity` through
-the shared decoder and does not inspect the run outcome or parse transcript text.
-The existing non-falsified-run test moves to the pre-parse caller boundary;
+the shared decoder and recomputes the caller/run minimum for its own post-parse
+checks; it does not inspect the run outcome or parse transcript text. The one
+`WitnessDecodeLimits` type moves to `kani/output/playback.rs`, retaining its crate-root
+re-export, so `classify` can import it without `kani` importing `replay`. The output
+reader still imports neither `classify` nor `replay`, preserving the dependency order.
+TC-026 covers the helper's pre-parse byte/value refusals and the decoder's
+post-parse identity and limit checks. The existing non-falsified-run test moves
+to the helper's pre-parse boundary;
 function and frame replay retain their separate L-6 residuals below.
 The removal of IR's witness-accessor re-parse (IR-277) is
 on IR's side: CG imports no IR witness type already (AD-001), so nothing in CG depends on those
@@ -947,7 +957,8 @@ requirement is authored.
   `replay/function.rs`, `replay/state_clause.rs` and `replay/frame.rs` still accept
   transcript text and call the output parser before decoding. The planned state-clause
   L-6 slice makes its entry take parsed `Playback` from `kani/output/playback.rs`
-  after the caller's falsified-run check and bounded parse. It retains harness identity,
+  through `kani/classify.rs::parse_state_clause_falsification` after that helper's
+  falsified-run check and bounded parse. It retains harness identity,
   selected clause, generated postcondition assertion, property and state-field draw-order
   checks before binding values. L-6 remains partial until each entry takes parsed playback
   at its boundary, as itemized under Interim exceptions.
@@ -1479,7 +1490,7 @@ Each is a place where the target of this AD is not yet true, stated so that no s
 | Exception | Where | Removed by |
 | --- | --- | --- |
 | Public function replay entries and their internal helpers take transcript text, then call the output parser before typed decoding | `replay/function.rs`, `replay_counterexample`, `BoundedCorpusCase::replay_counterexample`, `replay_counterexample_through`, `replay_harness_counterexample` and `replay_harness_counterexample_through` | IR-348 step 5 completion: pass typed `Playback` at the public entries and through their helpers |
-| State-clause replay entry re-parses `KaniRunOutcome::Falsified` text before typed decoding | `replay/state_clause.rs`, `StateClauseReplayInputs::decode_falsification` | IR-348 step 5 state-clause slice: caller checks falsification, retains `NotFalsified` for other outcomes and passes complete falsified counterexample text to `parse_assertion_playback` with the minimum caller/run byte and value limits; the method takes parsed `Playback` and retains harness, clause, property, assertion and field-order checks |
+| State-clause replay entry re-parses `KaniRunOutcome::Falsified` text before typed decoding | `replay/state_clause.rs`, `StateClauseReplayInputs::decode_falsification` | IR-348 step 5 state-clause slice: `kani/classify.rs::parse_state_clause_falsification` checks falsification and delegates bounded parsing to `kani/output/playback.rs`; the method takes parsed `Playback` and retains minimum-bound, harness, clause, property, assertion and field-order checks |
 | The public frame replay input carries transcript text, which `FrameReplay::new` passes to the parser through `decoded_state` | `replay/frame.rs`, `FrameReplayInputs::playback`, `FrameReplay::new` and `decoded_state` | IR-348 step 5 completion: pass typed `Playback` at `FrameReplayInputs::playback` and through its helpers |
 | The V1 bundle generator, still live | `kani/generate/v1_bundle.rs` | step 4f deletes the file |
 | `validate_dependencies`, the V1 error type it returns and `deterministic_json` | `kani/generate/census_validation.rs` | 4g or the V2 census input for the first two; step 1a for `deterministic_json` |
