@@ -62,3 +62,7 @@ The subsequent diff `794a921d..e9ee57ac` changes only `src/oracle/scalar/derive.
 ### Disposition round 3
 
 Reviewed `e9ee57ac..6e868001`, distinguishing merged main spec changes from this PR diff. The selected division fixture now uses `read_with_source`; the plain copy refuses with `UnauthenticatedOperationView { request_index: 0, node_id }`. The mixed route includes a plain integer positive and two permutations of division and conversion, each naming index 1. Quantity positive generation and the existing renderer settlement remain asserted. The merged #620 spec and the amended IR-1079 AC-3 define this one observable exception. I did not rerun a full gate or Kani; the code lead owns the final-head gate.
+
+### Final config review
+
+At CG #608 head `1a50accc47b7509858e1ef77db586afcd58ebd54`, the only change after the review-clear code head `1a01fb1b` is one `deny.toml` license exception for the exact crate name `quire-checked` and `AGPL-3.0-or-later`. `Cargo.lock` resolves `quire-checked` 0.1.0 from first-party `agent-ix/quire-eval` revision `5406acf3e95092bf64775e14e2b1b4df8d33a9ba`. That revision's workspace manifest declares `license = "AGPL-3.0-or-later"`, and `crates/quire-checked/Cargo.toml` inherits `license.workspace = true`. The exception matches the existing per-crate first-party AGPL policy; it does not change the global permissive allow list, source allow list, bans, or advisory controls. No new finding. The code lead owns the final-head gate.
