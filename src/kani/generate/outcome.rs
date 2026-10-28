@@ -445,7 +445,7 @@ pub enum CollectionUnsupportedReason {
     HarnessSymbolCollision,
     /// The selected projection did not resolve in admitted model fields.
     FieldNotAdmitted,
-    /// The field is not a bounded ordered sequence of Boolean or bounded integer elements.
+    /// The field is not a supported bounded ordered collection of Boolean or bounded integer elements.
     UnsupportedFieldType,
     /// The element interval has no values.
     UnsatisfiableElementDomain,
