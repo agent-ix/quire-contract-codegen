@@ -373,7 +373,8 @@ Text-admission identity rather than claiming a checked node or contract role.
   the process exit code, the outcome and the count of checks the report lists as holding. The generator shall make the argument vector
   hold the `kani` subcommand, the harness identity's option vector unchanged and the
   report-export flags, in that order and nothing else, so the evidence cannot claim an
-  invocation the harness did not specify.
+  invocation the harness did not specify. The evidence retains the invoked
+  solver kind and unwind; it has no Kani, Rust or solver version fields.
 - The generator shall read Kani's output in exactly one place, `src/kani/output/` (`report.rs` for the exported report, which it returns as a
   typed report, and `playback.rs` for the console's playback block, a payload), and shall classify every run from that report's fields and never from
   console text. The verdict, the check and cover counts and the unwinding failures come from
