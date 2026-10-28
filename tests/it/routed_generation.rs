@@ -211,12 +211,13 @@ fn admitted_routing_input_with_limits(
         }
     }
     let lowered = checked.lower(&roots, &routed_contract_lowering_profile());
-    let package = match ContractPackageWireV1::read(
+    let package = match ContractPackageWireV1::read_with_source(
         lowered.package.canonical_bytes().expect("FR-330 bytes"),
         read_limits,
         &ContractDependencies::new(),
+        checked,
     ) {
-        ContractPackageReadResult::Admitted(package) => *package,
+        Ok(ContractPackageReadResult::Admitted(package)) => *package,
         other => panic!("Contract IR must admit its routed package: {other:?}"),
     };
     AdmittedRoutingInput { package, positions }
