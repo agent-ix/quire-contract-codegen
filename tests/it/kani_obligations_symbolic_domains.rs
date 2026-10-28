@@ -1544,6 +1544,76 @@ fn collection_run_evidence_preserves_every_ordered_identity_option() {
     assert_eq!(evidence.exit_code, Some(1));
 }
 
+fn ordered_set_document() -> Value {
+    let mut document = model_document();
+    let node = document["types"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|ty| ty.get("identity").and_then(Value::as_str) == Some(NODE_ID))
+        .unwrap();
+    let items = node["fields"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|field| field.get("name").and_then(Value::as_str) == Some("items"))
+        .unwrap();
+    items["multiplicity"]["unique"] = json!(true);
+    document
+}
+
+#[trace("FR-015-AC-96", "TC-025")]
+#[test]
+fn feasible_ordered_set_emits_symbolic_ordered_unique_slots() {
+    let fixture = emitted_from_document_and_body(
+        ordered_set_document(),
+        "forall(item in deref(input).items: item >= 0)",
+    );
+    let harness = collection_harness(&fixture, "quire.op.collection.forall");
+    assert_eq!(
+        harness.identity.collection_kind,
+        CollectionKindIdentity::OrderedSet
+    );
+    assert_eq!(
+        (
+            harness.identity.minimum_length,
+            harness.identity.maximum_length
+        ),
+        (0, 3)
+    );
+    assert_eq!(
+        harness.identity.element,
+        CollectionElementIdentity::Integer {
+            minimum: 0,
+            maximum: 3,
+        }
+    );
+    let source = &harness.rust.contents;
+    assert!(source.contains("let selected_items_len: i64 = kani::any();"));
+    assert!(source.contains("let selected_items: [i64; 3] = kani::any();"));
+    assert!(source.contains("selected_items_len >= 0 && selected_items_len <= 3"));
+    assert!(source.contains("item >= 0 && item <= 3"));
+    assert!(source.contains("for prior in 0..index"));
+    assert!(source.contains("kani::assume(item != selected_items[prior as usize]);"));
+    assert!(source.contains("selected_items[index as usize]"));
+    assert!(source.contains("(0..selected_items_len).all(|index|"));
+
+    let sequence = emitted_from_document_and_body(
+        model_document(),
+        "forall(item in deref(input).items: item >= 0)",
+    );
+    let sequence_harness = collection_harness(&sequence, "quire.op.collection.forall");
+    assert_eq!(
+        sequence_harness.identity.collection_kind,
+        CollectionKindIdentity::Sequence
+    );
+    assert_ne!(harness.identity, sequence_harness.identity);
+    assert!(!sequence_harness
+        .rust
+        .contents
+        .contains("for prior in 0..index"));
+}
+
 #[trace("FR-015-AC-97", "FR-015-AC-102", "TC-025")]
 #[test]
 fn ordered_set_shape_is_refused_without_erasing_its_uniqueness_semantics() {
@@ -1561,6 +1631,13 @@ fn ordered_set_shape_is_refused_without_erasing_its_uniqueness_semantics() {
         .find(|field| field.get("name").and_then(Value::as_str) == Some("items"))
         .unwrap();
     items["multiplicity"]["unique"] = json!(true);
+    let element = document["types"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|ty| ty.get("identity").and_then(Value::as_str) == Some(SMALL_ID))
+        .unwrap();
+    element["constraints"][1]["operands"]["value"] = json!("1");
     let fixture =
         emitted_from_document_and_body(document, "forall(item in deref(input).items: item >= 0)");
     assert!(matches!(
@@ -2161,6 +2238,53 @@ fn tc_025_real_kani_collection_claim_verifies_and_mutated_claim_falsifies() {
     assert!(values.iter().any(|value| *value < 1));
     assert_native_collection_result(&mutated, &values, false);
     assert_ne!(mutated_evidence.exit_code, Some(0));
+}
+
+#[trace("FR-015-AC-96", "TC-025")]
+#[test]
+#[ignore = "kani lane: run serially through make kani-gate"]
+fn tc_025_real_kani_ordered_set_claim_and_mutant_keep_distinct_active_values() {
+    let installation = KaniInstallation::discover().expect("cargo-kani is installed");
+    let mut document = ordered_set_document();
+    let node = document["types"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|ty| ty.get("identity").and_then(Value::as_str) == Some(NODE_ID))
+        .unwrap();
+    let items = node["fields"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|field| field.get("name").and_then(Value::as_str) == Some("items"))
+        .unwrap();
+    items["multiplicity"]["lower"] = json!(2);
+    let healthy = emitted_from_document_and_body(
+        document.clone(),
+        "forall(item in deref(input).items: item >= 0)",
+    );
+    let healthy_harness = collection_harness(&healthy, "quire.op.collection.forall");
+    assert_eq!(
+        run_collection_kani(&installation, &healthy_harness, "ordered-set-healthy").outcome,
+        KaniRunOutcome::Verified
+    );
+    let mutant =
+        emitted_from_document_and_body(document, "forall(item in deref(input).items: item >= 1)");
+    let mutant_harness = collection_harness(&mutant, "quire.op.collection.forall");
+    let evidence = run_collection_kani(&installation, &mutant_harness, "ordered-set-mutant");
+    let KaniRunOutcome::Falsified { counterexample } = evidence.outcome else {
+        panic!("the ordered-set mutant must falsify: {evidence:?}");
+    };
+    let values = collection_playback_values(&counterexample);
+    assert!((2..=3).contains(&values.len()));
+    assert!(values.contains(&0));
+    for (index, value) in values.iter().enumerate() {
+        assert!(
+            !values[..index].contains(value),
+            "the backend admitted duplicate active values"
+        );
+    }
+    assert_native_collection_result(&mutant, &values, false);
 }
 
 #[trace("FR-015-AC-97", "FR-015-AC-102", "TC-025")]

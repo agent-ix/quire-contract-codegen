@@ -4,7 +4,7 @@ use super::outcome::{UnsupportedObligation, MAX_OBLIGATION_UNWIND};
 use crate::{
     core::identity::HarnessPath,
     kani::abi::{adapter_options, KaniPrimitiveType, KaniSolver},
-    kani::identity::CollectionPredicateIdentity,
+    kani::identity::{CollectionKindIdentity, CollectionPredicateIdentity},
 };
 use std::collections::BTreeSet;
 use syn::{
@@ -268,6 +268,7 @@ pub(super) struct CollectionSpec {
     pub(super) minimum_length: i64,
     pub(super) maximum_length: i64,
     pub(super) array_len: usize,
+    pub(super) kind: CollectionKindIdentity,
     pub(super) element: CollectionElement,
     pub(super) quantifier: CollectionQuantifier,
     pub(super) predicate: CollectionPredicateIdentity,
@@ -687,6 +688,7 @@ mod tests {
             minimum_length: 0,
             maximum_length: 3,
             array_len: 3,
+            kind: CollectionKindIdentity::Sequence,
             element: CollectionElement::Integer {
                 minimum: 0,
                 maximum: 3,

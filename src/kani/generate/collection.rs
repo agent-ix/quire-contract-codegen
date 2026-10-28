@@ -39,7 +39,7 @@ pub(crate) enum CollectionElementDomain {
     Integer { minimum: i128, maximum: i128 },
 }
 
-/// The admitted selected model field and its inclusive sequence bounds.
+/// The admitted selected model field and its inclusive collection bounds.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct CollectionFieldDomain {
     /// Selected function whose body contains the quantifier.
@@ -56,6 +56,8 @@ pub(crate) struct CollectionFieldDomain {
     pub(crate) minimum_length: u64,
     /// Inclusive collection cardinality bounds.
     pub(crate) maximum_length: u64,
+    /// Authored ordering and uniqueness rule.
+    pub(crate) kind: CollectionKindIdentity,
     /// Domain of every element.
     pub(crate) element: CollectionElementDomain,
     /// Exact element type node reached through the admitted sequence type.
@@ -77,7 +79,7 @@ pub(crate) enum CollectionDomainRefusal {
     RequiresBound { unbounded_type: CheckedNodeId },
     /// The exact declaration/member pair does not resolve in the retained model field table.
     FieldNotAdmitted,
-    /// The retained field form is not an ordered sequence with supported primitive elements.
+    /// The retained field form has no supported symbolic layout.
     UnsupportedFieldType,
     /// The checked range has no inhabitants.
     UnsatisfiableElementDomain,
@@ -304,6 +306,7 @@ pub(super) fn render_collection(
             &field.field_name,
             minimum_length,
             maximum_length,
+            field.kind,
         ),
         (
             &element_domain,
@@ -340,7 +343,7 @@ pub(super) fn render_collection(
         projection_id: field.projection.clone(),
         declaration_id: field.declaration.clone(),
         field_name: field.field_name.clone(),
-        collection_kind: CollectionKindIdentity::Sequence,
+        collection_kind: field.kind,
         minimum_length,
         maximum_length,
         element: element_domain,
@@ -363,6 +366,7 @@ pub(super) fn render_collection(
             minimum_length,
             maximum_length,
             array_len,
+            kind: field.kind,
             element,
             quantifier,
             predicate: field.predicate.clone(),
@@ -538,12 +542,17 @@ fn resolve_collection_field(
     let fields = package.model_object_fields(&declaration);
     let field = declared_field(fields.as_ref(), |fields| fields.field(&field_name))?;
     let Some(CheckedMemberType::Collection {
-        kind: CheckedCollectionKind::Sequence,
+        kind,
         element,
         bounds,
     }) = field.member_type()
     else {
         return Err(CollectionDomainRefusal::UnsupportedFieldType);
+    };
+    let kind = match kind {
+        CheckedCollectionKind::Sequence => CollectionKindIdentity::Sequence,
+        CheckedCollectionKind::OrderedSet => CollectionKindIdentity::OrderedSet,
+        _ => return Err(CollectionDomainRefusal::UnsupportedFieldType),
     };
     let element_type = sequence_element_type(graph, collection)?;
     let element = match element.as_ref() {
@@ -575,6 +584,11 @@ fn resolve_collection_field(
     if minimum_length > maximum_length {
         return Err(CollectionDomainRefusal::UnsupportedFieldType);
     }
+    if kind == CollectionKindIdentity::OrderedSet
+        && !unique_domain_can_hold(element, *maximum_length)
+    {
+        return Err(CollectionDomainRefusal::UnsupportedFieldType);
+    }
     let Some(CheckedTerm::Binding {
         name: binder_name,
         value: predicate_value,
@@ -603,12 +617,23 @@ fn resolve_collection_field(
         projection: collection.node_id.clone(),
         minimum_length: *minimum_length,
         maximum_length: *maximum_length,
+        kind,
         element,
         element_type,
         quantifier_operation,
         predicate,
         predicate_id,
     })
+}
+
+fn unique_domain_can_hold(element: CollectionElementDomain, maximum_length: u64) -> bool {
+    match element {
+        CollectionElementDomain::Boolean => maximum_length <= 2,
+        CollectionElementDomain::Integer { minimum, maximum } => maximum
+            .checked_sub(minimum)
+            .and_then(|span| span.checked_add(1))
+            .is_none_or(|capacity| i128::from(maximum_length) <= capacity),
+    }
 }
 
 /// The operation identity of a `binary` expression predicate. Any other form, a quantity
@@ -955,9 +980,30 @@ fn term_target(term: &CheckedTerm) -> Option<CheckedNodeId> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use ix_trace_rs::trace;
     use quire_contract_model::ApplicationOperator;
     use std::{cell::Cell, cmp::Ordering, rc::Rc};
+
+    #[trace("FR-015-AC-96", "TC-025")]
+    #[test]
+    fn unique_capacity_uses_the_complete_domain_without_integer_overflow() {
+        assert!(unique_domain_can_hold(CollectionElementDomain::Boolean, 2));
+        assert!(!unique_domain_can_hold(CollectionElementDomain::Boolean, 3));
+        let two = CollectionElementDomain::Integer {
+            minimum: -1,
+            maximum: 0,
+        };
+        assert!(unique_domain_can_hold(two, 2));
+        assert!(!unique_domain_can_hold(two, 3));
+        assert!(unique_domain_can_hold(
+            CollectionElementDomain::Integer {
+                minimum: i128::MIN,
+                maximum: i128::MAX,
+            },
+            u64::MAX,
+        ));
+    }
 
     #[derive(Clone)]
     struct CountedKey {
@@ -1117,6 +1163,7 @@ mod tests {
                 projection: node("projection"),
                 minimum_length: 0,
                 maximum_length: 3,
+                kind: CollectionKindIdentity::Sequence,
                 element: CollectionElementDomain::Integer {
                     minimum: 0,
                     maximum: 9,
@@ -1173,7 +1220,7 @@ mod tests {
             "the path is deterministic"
         );
         type Change = fn(&mut LoweredCollectionClaim);
-        let claim_changes: [(&str, Change); 13] = [
+        let claim_changes: [(&str, Change); 14] = [
             ("package digest", |c| c.package_digest = "package-b".into()),
             ("function", |c| c.field.function = node("other-function")),
             ("quantifier", |c| {
@@ -1188,6 +1235,9 @@ mod tests {
             }),
             ("minimum length", |c| c.field.minimum_length = 1),
             ("maximum length", |c| c.field.maximum_length = 4),
+            ("collection kind", |c| {
+                c.field.kind = CollectionKindIdentity::OrderedSet
+            }),
             ("element domain", |c| {
                 c.field.element = CollectionElementDomain::Integer {
                     minimum: 0,
