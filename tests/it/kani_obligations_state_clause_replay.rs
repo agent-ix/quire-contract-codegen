@@ -19,10 +19,10 @@ use qsl_replay::{
     Verdict, WireNodeId, WitnessEnvelope, WitnessPacket, WitnessRefusal, WitnessSettlement,
 };
 use quire_contract_codegen::{
-    run_terminal_value, DocumentLabel, KaniRunOutcome, OperationDeclaration,
-    StateClauseHarnessMember, StateClauseModelFieldsCause, StateClauseReplay,
-    StateClauseReplayError, StateClauseReplayInputs, StateComparison, StateFrameProperty,
-    StateObjectAddress,
+    parse_state_clause_falsification, run_terminal_value, DocumentLabel, KaniRunOutcome,
+    OperationDeclaration, StateClauseHarnessMember, StateClauseModelFieldsCause,
+    StateClausePlaybackError, StateClauseReplay, StateClauseReplayError, StateClauseReplayInputs,
+    StateComparison, StateFrameIdentity, StateFrameProperty, StateObjectAddress,
 };
 use quire_semantic_value::catalog::Category;
 use serde_json::{json, Value};
@@ -39,6 +39,41 @@ use ix_trace_rs::trace;
 const BALANCE: &str = "BalanceNeverDrops";
 /// The second postcondition clause on `deposit`: `audit` never drops.
 const AUDIT: &str = "AuditNeverDrops";
+
+trait DecodeStateClauseRun {
+    fn decode_falsification_from_run(
+        &mut self,
+        harness: &StateFrameIdentity,
+        outcome: &KaniRunOutcome,
+        limits: quire_contract_codegen::WitnessDecodeLimits,
+    ) -> Result<(), StateClauseReplayError>;
+}
+
+impl DecodeStateClauseRun for StateClauseReplayInputs<'_> {
+    fn decode_falsification_from_run(
+        &mut self,
+        harness: &StateFrameIdentity,
+        outcome: &KaniRunOutcome,
+        limits: quire_contract_codegen::WitnessDecodeLimits,
+    ) -> Result<(), StateClauseReplayError> {
+        let playback = parse_state_clause_falsification(
+            outcome,
+            harness.harness_symbol.as_str(),
+            harness.module_symbol.as_str(),
+            limits,
+            self.run.decode_limits,
+        )
+        .map_err(|error| match error {
+            StateClausePlaybackError::Refused(refusal) => {
+                StateClauseReplayError::Decode(refusal.into())
+            }
+            StateClausePlaybackError::NotFalsified => {
+                panic!("the test helper requires a falsified run")
+            }
+        })?;
+        self.decode_falsification(harness, &playback, limits)
+    }
+}
 
 #[trace("TC-026", "FR-016-AC-6")]
 #[test]
@@ -70,7 +105,7 @@ fn tc_026_state_clause_decode_refuses_poisoned_suffixes_at_both_bounds() {
     };
     inputs.run.decode_limits = limits;
     inputs
-        .decode_falsification(
+        .decode_falsification_from_run(
             harness,
             &KaniRunOutcome::Falsified {
                 counterexample: transcript.clone(),
@@ -107,7 +142,7 @@ fn tc_026_state_clause_decode_refuses_poisoned_suffixes_at_both_bounds() {
             inputs.playback.clear();
             inputs.run.decode_limits = field_limit;
             let error = inputs
-                .decode_falsification(
+                .decode_falsification_from_run(
                     harness,
                     &KaniRunOutcome::Falsified {
                         counterexample: poisoned.clone(),
@@ -122,7 +157,7 @@ fn tc_026_state_clause_decode_refuses_poisoned_suffixes_at_both_bounds() {
         inputs.playback.clear();
         inputs.run.decode_limits = wider;
         let error = inputs
-            .decode_falsification(
+            .decode_falsification_from_run(
                 harness,
                 &KaniRunOutcome::Falsified {
                     counterexample: poisoned,
@@ -184,7 +219,7 @@ fn state_clause_kani_playback_adapter_refuses_wrong_evidence() {
         let mut inputs = twin.state_clause_inputs(&package, &clause, BALANCE, (0, 0), (4, 7));
         inputs.playback.clear();
         assert!(matches!(
-            inputs.decode_falsification(
+            inputs.decode_falsification_from_run(
                 harness,
                 &KaniRunOutcome::Falsified {
                     counterexample: spoof,
@@ -197,7 +232,7 @@ fn state_clause_kani_playback_adapter_refuses_wrong_evidence() {
     let mut inputs = twin.state_clause_inputs(&package, &clause, BALANCE, (0, 0), (4, 7));
     inputs.playback.clear();
     inputs
-        .decode_falsification(
+        .decode_falsification_from_run(
             harness,
             &KaniRunOutcome::Falsified {
                 counterexample: good.clone(),
@@ -241,7 +276,7 @@ fn state_clause_kani_playback_adapter_refuses_wrong_evidence() {
         (comment, "kani_witness_comment_mismatch"),
     ] {
         let error = empty()
-            .decode_falsification(
+            .decode_falsification_from_run(
                 harness,
                 &KaniRunOutcome::Falsified {
                     counterexample: text,
@@ -252,15 +287,17 @@ fn state_clause_kani_playback_adapter_refuses_wrong_evidence() {
         assert!(matches!(error, StateClauseReplayError::Decode(cause) if cause.code == code));
     }
     assert!(matches!(
-        empty().decode_falsification(
-            harness,
+        parse_state_clause_falsification(
             &KaniRunOutcome::Verified,
-            crate::unbounded_decode_limits()
+            harness.harness_symbol.as_str(),
+            harness.module_symbol.as_str(),
+            crate::unbounded_decode_limits(),
+            crate::unbounded_decode_limits(),
         ),
-        Err(StateClauseReplayError::NotFalsified)
+        Err(StateClausePlaybackError::NotFalsified)
     ));
     assert!(matches!(
-        empty().decode_falsification(
+        empty().decode_falsification_from_run(
             &generated.frame.identity,
             &KaniRunOutcome::Falsified {
                 counterexample: good.clone(),
@@ -296,7 +333,7 @@ fn state_clause_kani_playback_adapter_refuses_wrong_evidence() {
             left_is_pre,
         };
         assert!(matches!(
-            empty().decode_falsification(
+            empty().decode_falsification_from_run(
                 &tampered,
                 &KaniRunOutcome::Falsified {
                     counterexample: playback_text(
@@ -315,7 +352,7 @@ fn state_clause_kani_playback_adapter_refuses_wrong_evidence() {
     let mut wrong_scope = harness.clone();
     wrong_scope.scope.operation = "withdraw".to_owned();
     assert!(matches!(
-        empty().decode_falsification(
+        empty().decode_falsification_from_run(
             &wrong_scope,
             &KaniRunOutcome::Falsified {
                 counterexample: good.clone(),
@@ -327,7 +364,7 @@ fn state_clause_kani_playback_adapter_refuses_wrong_evidence() {
         })
     ));
     assert!(matches!(
-        empty().decode_falsification(
+        empty().decode_falsification_from_run(
             harness,
             &KaniRunOutcome::Falsified {
                 counterexample: playback_text(harness, "unrelated assertion", &[5, 7]),
@@ -341,7 +378,7 @@ fn state_clause_kani_playback_adapter_refuses_wrong_evidence() {
     let mut repeated_inputs = empty();
     repeated_inputs.state_fields = repeated.state_fields.clone();
     assert!(matches!(
-        repeated_inputs.decode_falsification(&repeated, &KaniRunOutcome::Falsified {
+        repeated_inputs.decode_falsification_from_run(&repeated, &KaniRunOutcome::Falsified {
             counterexample: playback_text(&repeated, &kani_check, &[5, 7]),
         }, crate::unbounded_decode_limits()),
         Err(StateClauseReplayError::Decode(cause))
@@ -349,7 +386,7 @@ fn state_clause_kani_playback_adapter_refuses_wrong_evidence() {
     ));
     let mut outside = empty();
     outside
-        .decode_falsification(
+        .decode_falsification_from_run(
             harness,
             &KaniRunOutcome::Falsified {
                 counterexample: playback_text(harness, &kani_check, &[-1, 7]),
@@ -1253,7 +1290,7 @@ fn tc_035_real_kani_state_clause_counterexample_replays_through_qsl() {
     let mut inputs = twin.state_clause_inputs(&package, &clause, BALANCE, (0, 0), (0, 0));
     inputs.playback.clear();
     inputs
-        .decode_falsification(
+        .decode_falsification_from_run(
             &generated.postcondition.identity,
             &outcome,
             crate::unbounded_decode_limits(),
@@ -1315,7 +1352,7 @@ fn tc_035_real_kani_state_clause_counterexample_replays_through_qsl() {
         ),
     };
     assert!(matches!(
-        wrong_harness.decode_falsification(
+        wrong_harness.decode_falsification_from_run(
             &generated.postcondition.identity,
             &wrong,
             crate::unbounded_decode_limits()
@@ -1328,7 +1365,7 @@ fn tc_035_real_kani_state_clause_counterexample_replays_through_qsl() {
         counterexample: counterexample.replacen("vec![", "vec![not-a-byte, ", 2),
     };
     assert!(matches!(
-        malformed.decode_falsification(
+        malformed.decode_falsification_from_run(
             &generated.postcondition.identity,
             &malformed_run,
             crate::unbounded_decode_limits()
@@ -1366,7 +1403,7 @@ fn tc_040_real_kani_out_of_range_debit_replays_as_refuted() {
     let mut inputs = twin.state_clause_inputs(&package, &clause, BALANCE, (0, 0), (0, 0));
     inputs.playback.clear();
     inputs
-        .decode_falsification(
+        .decode_falsification_from_run(
             &generated.postcondition.identity,
             outcome,
             crate::unbounded_decode_limits(),

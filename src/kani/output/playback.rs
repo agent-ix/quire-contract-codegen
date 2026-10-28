@@ -14,6 +14,19 @@ const PLAYBACK_FENCE: &str = "```";
 const PLAYBACK_ENTRY_POINT: &str = "kani::concrete_playback_run";
 const PLAYBACK_COVER_MARKER: &str = "/// Check for `cover`";
 
+/// Caller-supplied bounds for reading and decoding a retained Kani witness.
+///
+/// ```compile_fail
+/// let _ = quire_contract_codegen::WitnessDecodeLimits::default();
+/// ```
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct WitnessDecodeLimits {
+    /// Maximum transcript bytes accepted before parsing.
+    pub bytes: usize,
+    /// Maximum concrete values read from the selected playback.
+    pub values: usize,
+}
+
 /// One fenced concrete-playback block Kani printed, with the `module::harness` path it is headed
 /// for ("Concrete playback unit test for `<harness>`:").
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

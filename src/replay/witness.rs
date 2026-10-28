@@ -37,7 +37,7 @@ use qsl_replay::WitnessValue;
 use crate::kani::{
     abi::{KaniBindingRole, KaniPrimitiveType},
     identity::{KaniV2ClauseObligationHarness, ObligationBinding},
-    output::playback::{Playback, PlaybackRefusal},
+    output::playback::{Playback, PlaybackRefusal, WitnessDecodeLimits},
 };
 
 /// Why a persisted argument schema could not type a Kani playback.
@@ -69,21 +69,6 @@ impl From<PlaybackRefusal> for DecodeFailure {
             context: refusal.context,
         }
     }
-}
-
-/// Caller supplied bounds for decoding a retained Kani witness.
-///
-/// These bounds must be supplied explicitly (FR-016-AC-6, TC-026):
-///
-/// ```compile_fail
-/// let _ = quire_contract_codegen::WitnessDecodeLimits::default();
-/// ```
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct WitnessDecodeLimits {
-    /// Maximum transcript bytes accepted before parsing.
-    pub bytes: usize,
-    /// Maximum concrete values read from the selected playback.
-    pub values: usize,
 }
 
 #[cfg(test)]
@@ -402,7 +387,7 @@ mod tests {
     fn witness_decode_bounds_have_no_default() {
         for (source, declaration, name) in [
             (
-                include_str!("witness.rs"),
+                include_str!("../kani/output/playback.rs"),
                 "pub struct WitnessDecodeLimits {",
                 "WitnessDecodeLimits",
             ),
