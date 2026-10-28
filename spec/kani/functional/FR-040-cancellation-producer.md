@@ -108,4 +108,4 @@ outcome received from outside CG as an executed `KaniRunOutcome`.
 ## Dependencies
 
 - **Upstream**: [FR-017](./FR-017-kani-execution-evidence.md), [FR-028](./FR-028-bounded-proof-ceilings.md), Contract IR `ix://agent-ix/quire-contract-ir/FR-030`.
-- **Verification**: [TC-055](../matrix/TC-055-cancellation-producer.md) is planned; no implementation or passing test is claimed here.
+- **Verification**: [TC-055](../matrix/TC-055-cancellation-producer.md) has tagged producer, competition, batch and terminal-map controls for AC-1 to AC-7 (IR-701, CG #383). This status does not assert a new real-Kani run on this spec head.

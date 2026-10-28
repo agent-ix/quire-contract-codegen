@@ -87,9 +87,9 @@ scalar proof qualification are distinct, both still required.
 | Production ContractPackage consumption | [FR-039](core/functional/FR-039-contract-package-consumption.md) one admitted FR-330 package for negotiation and generation | [TC-053](core/matrix/TC-053-contract-package-consumption.md) planned production integration checks |
 | Caller Text admission | [FR-035](oracle/functional/FR-035-caller-text-admission.md) proposed generated admission oracle and bounded proof; [FR-017](kani/functional/FR-017-kani-execution-evidence.md) planned caller-harness execution evidence | [TC-050](oracle/matrix/TC-050-caller-text-admission.md) planned runtime and real-Kani checks |
 | Boolean oracle integer arithmetic and comparison | FR-031 | TC-044 |
-| Kani obligations and execution | FR-015 generation, FR-017 execution, FR-025 subject ABI, FR-028 bounds and ceilings, [FR-034](kani/functional/FR-034-caller-death-ownership.md) planned original-caller lifecycle ownership, [FR-040](kani/functional/FR-040-cancellation-producer.md) planned caller cancellation producer | TC-025, TC-027, TC-036, TC-039, [TC-049](kani/matrix/TC-049-caller-death-ownership.md) planned production guardian verification, [TC-055](kani/matrix/TC-055-cancellation-producer.md) planned cancellation path |
+| Kani obligations and execution | FR-015 generation, FR-017 execution, FR-025 subject ABI, FR-028 bounds and ceilings, [FR-034](kani/functional/FR-034-caller-death-ownership.md) planned original-caller lifecycle ownership, [FR-040](kani/functional/FR-040-cancellation-producer.md) live caller cancellation producer | TC-025, TC-027, TC-036, TC-039, [TC-049](kani/matrix/TC-049-caller-death-ownership.md) planned production guardian verification, [TC-055](kani/matrix/TC-055-cancellation-producer.md) tagged cancellation path |
 | Finite rational function predicates | [FR-046](kani/functional/FR-046-rational-function-predicate-harnesses.md) planned whole-function proof and canonical finite encoding | [TC-060](kani/matrix/TC-060-rational-function-predicate-harnesses.md) planned generated-proof and replay controls |
-| Real-Kani lane gating | NFR-006 and [FR-041](kani/functional/FR-041-claimed-module-proof-gate.md) planned additional V2 implication claim discharge; historical FR-003@4 claim held pending same-claim V2 source (FR-041-AC-10) | TC-045 and [TC-056](kani/matrix/TC-056-claimed-module-proof-gate.md) planned proof-claim controls |
+| Real-Kani lane gating | NFR-006 and [FR-041](kani/functional/FR-041-claimed-module-proof-gate.md) live claim-gate controls (AC-1 to AC-5) and planned V2 implication discharge (AC-6 to AC-9); historical FR-003@4 claim held pending same-claim V2 source (FR-041-AC-10) | TC-045 and [TC-056](kani/matrix/TC-056-claimed-module-proof-gate.md) live claim-gate controls and planned V2 claim controls |
 | Typed obligation inventories, criterion-keyed candidate tuples and separate producer facts | [FR-036](evidence/functional/FR-036-source-obligation-census.md) | [TC-051](evidence/matrix/TC-051-source-obligation-census.md) planned; Gated on IR-759 |
 | Backend adapter (routed) | FR-026 adapter trait and registration | TC-037 |
 | HP-2 SMT induction producer | [FR-045](routed/functional/FR-045-hyper-smt-induction-map.md) CG solver-run evidence and outcome handoff over QSL-owned hyper queries | [TC-059](routed/matrix/TC-059-hyper-smt-induction-map.md) planned |
@@ -123,31 +123,47 @@ are in `assurance/`, decision records in `decisions/`, and every SpecReview in t
 | Replay | `spec/replay/` | Witness decoding and native replay of Kani counterexamples, and their submission in QSL's counterexample envelope | `replay::witness`, `replay::function`, `replay::frame`, `kani::output::playback` | AD-001, AD-002, AD-003, ADR-001 | Contract codegen lane |
 | Evidence | `spec/evidence/` | Vacuity and unexecuted-flow evidence; planned complete source-obligation census and separate producer facts | `vacuity`, `bound_coverage`; planned source census export | AD-001, AD-003, [AD-005](assurance/AD-005-source-obligation-producer.md) | Contract codegen lane |
 
-The current Kani module and public-surface ownership map is:
+The current Kani module and public-surface ownership map, measured against the
+source tree and crate-root re-exports, is:
 
 | Current source or public operation | Normative owner | State |
 | --- | --- | --- |
-| `kani/generate/{negotiate,outcome,scalar,precondition,contract,frame}` and `negotiate_kani_obligations` | FR-015; FR-025 for argument/subject ABI | V2 scalar, precondition, postcondition and state/frame items are live; V2 invariant remains unrendered (IR-266). IR-348 deletes the V1-only clause arm and renderers immediately under AD-004 step 4f. |
-| `kani/generate/{record,spec,render}` | FR-015; FR-025 for the recorded harness identity and ABI | The shared record is used by collection; validated `HarnessSpec` and the shared renderer are live for scalar, the V2 parameter-precondition cover, and symbolic collection under AD-004 step 4h. |
-| `kani/generate/collection` | FR-015 symbolic collection criteria | Collection lowering supplies a validated collection `HarnessSpec`; `render.rs` owns its proof template. FR-015-AC-96/99 remain partial. |
-| `kani/generate/clause/v2` | FR-015 V2 parameter-precondition and postcondition harnesses | V2 precondition and postcondition paths are live; invariant still refuses (IR-266), and the QSL-authored clause/mutation control remains open (IR-917). Step 4f retains this V2 child while deleting V1-only `clause.rs` contents. |
-| V2 clause claim and proof census | FR-015-AC-38 to FR-015-AC-49 | PLANNED (IR-489, AD-004 steps 4c and 4d); the V1 deletion under IR-348 does not discharge these criteria. |
-| `kani/generate/{clause,v1_bundle}` and `generate_kani_bundle` | FR-015 historical V1 bundle criteria; FR-025 ABI | Live on the measured pre-deletion source base, but IR-348 retires the V1 bundle, clause arm, V1-only readers and public operation immediately at AD-004 step 4f, independent of V2 census or exemplar completion. No compatibility entry remains. |
-| `kani/generate/census_validation` and `kani/generate/corpus/mod.rs` | FR-015 interim census and bounded-corpus criteria | V1 validation helpers remain until their last callers retire under AD-004 steps 4f/4g or the V2 census input replaces them; the corpus module entry retires with the final graph/API slice FR-015-AC-111. |
-| `kani/generate/lower/{bounded_kani_profile,finite_reference_graphs,bounded_collections}` and their three public classifier/lowering operations | FR-015-AC-82 to AC-89 | Arithmetic auxiliary retired by AC-109; remaining live finite-input auxiliaries retire per slice: `bounded_collections` at AC-110, `finite_reference_graphs`, `bounded_kani_profile` and `lower/mod.rs` at AC-111. |
-| `kani/generate/corpus/bounded_kani_corpus` and `generate_bounded_kani_corpus_case` | FR-015-AC-51 to AC-58 and AC-90 to AC-95 and AC-109 to AC-111 | Live graph/collection finite-input corpus; arithmetic retired at AC-109, with collection AC-110 and graph/the whole API AC-111 still pending under AD-004 step 4g (end state AC-95), each slice gated on IR-858, and the graph slice on IR-805; its generated-case classification ends with the last slice, and its replay is dropped with the final slice (AC-111), not planned. |
-| `kani/{abi,census,identity}` | FR-015 proof census and identity; FR-025 symbolic argument and subject ABI | Live support vocabulary; composite leaf ABI remains planned. |
-| `kani/{run,output,classify}` and the execution operations | FR-017, with FR-028 proof ceilings and NFR-006's real-Kani lane | Live run and report processing. |
-| `kani/terminal` | FR-029 and FR-030 | Live terminal maps; the backend adapter trait remains planned. |
-| `kani/generate/role_parity_tests` | FR-014-AC-38 and FR-015-AC-60/68 | Test-only role parity controls. AD-004 does not separately place this test module. |
-| `kani/test_support` | FR-015 and FR-017 criteria of the tests that use these shared helpers | Test-only fixtures shared across generation, run, output, and classification tests. |
-| `kani/mod.rs` and `kani/{generate,run,output}/mod.rs` | The normative owners of their child modules above | Module declarations and test-only helpers; no separate generation or run API. `kani/generate/lower/mod.rs` is owned by the finite-input auxiliary row above. |
-| `replay/{witness,function,frame,state_clause}` and Kani playback scanning in `kani/output/playback` | FR-016 witness decode/native replay and FR-024 QSL envelope intake | Live function/frame paths; common typed intake remains planned. Corpus replay is live until FR-015-AC-111 drops it. |
+| `kani/generate/{negotiate,outcome,scalar,frame}`; `negotiate_kani_obligations`, `negotiate_kani_native_obligations`, `generate_state_frame_obligations`, and the public request/result types | FR-015; FR-025 for argument/subject ABI | Live V2 scalar, clause, collection and state/frame dispatch. V2 invariant rendering and full contract-family controls remain planned (IR-266, IR-489, IR-917). |
+| `kani/generate/{record,spec,render}` and `kani/generate/collection` | FR-015; FR-025 for recorded harness identity and ABI | Validated private `HarnessSpec` and shared renderer are live for scalar, V2 parameter-precondition cover and symbolic collection after CG #588. Collection AC-96/99 remain partial; the renderer is not proof of their installed-backend controls. |
+| `kani/generate/clause.rs` and `kani/generate/clause/v2.rs` | FR-015 V2 clause criteria, including AC-38 to AC-49 | `clause.rs` is now only the V2 module declaration. Supported V2 parameter precondition and postcondition paths exist. AC-44/45 census validation and persisted readiness are implemented and tagged; AC-38 to AC-43, AC-46, AC-48/49 and full AC-47 remain planned or partial. Invariant still refuses (IR-266); QSL-authored clause mutation control remains open (IR-917). |
+| `kani/generate/census_validation.rs`, `kani/census.rs` and their public diagnostic/dependency types | FR-015-AC-22/25/44/45 for V2 census; FR-015 bounded-corpus criteria | The V2 clause path uses typed census requests from `kani/census.rs`. `census_validation.rs` remains for the live corpus and exposes `KaniDiagnostic`/`KaniErrorCode`; it no longer supports a V1 bundle. Its remaining helpers retire with their last corpus callers under AD-004 step 4g. |
+| `kani/generate/corpus/{mod.rs,bounded_kani_corpus.rs}`; `generate_bounded_kani_corpus_case` and its public request/result types | FR-015-AC-51 to AC-58, AC-90 to AC-95 and AC-109 to AC-111 | Live graph/collection finite-input corpus. Arithmetic retired at AC-109; collection AC-110 and graph/final API AC-111 remain planned, gated as those criteria state. Corpus replay persists until AC-111. |
+| `kani/generate/lower/{mod.rs,bounded_kani_profile.rs,finite_reference_graphs.rs,bounded_collections.rs}`; `classify_bounded_kani_profile`, `prepare_finite_graph_reaches`, `prepare_bounded_collection_query` and public types | FR-015-AC-82 to AC-89 and AC-109 to AC-111 | Remaining finite-input auxiliaries are live. The collection lowerer retires at AC-110; graph/profile lowerers and module entry retire at AC-111. |
+| `kani/{abi,identity}.rs` and the public Kani ABI, identity and harness types | FR-015 proof identity; FR-025 generated subject ABI; FR-028 ceilings | Live support vocabulary. Composite leaf ABI remains planned. |
+| `kani/run/{execute,harness,launch,memory,namespace,owners,process,report_file,scalar,tool,mod.rs}` and the public execution, native scalar, process, tool and memory operations/types | FR-017 execution/evidence; FR-028 ceilings; FR-034 caller-death ownership; FR-040 cancellation producer; NFR-006 lane | Live bounded run and report handling. FR-040 caller cancellation is live through `KaniExecutionRequest.cancel`, bounded launcher observation and typed cancellation results (IR-701, CG #383). FR-034 original-caller guardian remains planned; existing launch ownership does not complete it. |
+| `kani/output/{diagnostics,playback,report,mod.rs}`, `kani/classify.rs` and the public parse/classification/report types | FR-017 output and verdict classification; FR-016 playback decode; FR-024 state-clause replay intake through `parse_state_clause_falsification` | Live output processing, playback extraction and the public FR-024 parser added by CG #605. |
+| `kani/terminal.rs` and public terminal-map operations | FR-029 and FR-030 | Live terminal maps; the backend adapter trait remains planned under FR-026. |
+| `kani/generate/role_parity_tests.rs` and `kani/test_support.rs` | FR-014-AC-38 and FR-015-AC-60/68; FR-015/FR-017 tests using shared helpers | Test-only role parity and fixture helpers. |
+| `kani/mod.rs` and `kani/generate/mod.rs` | The child-module owners above | Module declarations and test-only helpers; no separate generation API. |
+| `replay/{witness,function,frame,state_clause}` and Kani playback scanning in `kani/output/playback.rs` | FR-016 witness decode/native replay and FR-024 QSL envelope intake | Live function/frame paths; common typed intake remains planned. Corpus replay remains live until FR-015-AC-111. |
 
+The reverse inventory is: FR-015 owns generation, census, corpus and proof identity;
+FR-025 owns the generated binding/subject ABI; FR-017 owns execution and run
+classification; FR-028 and NFR-006 constrain ceilings and the real-Kani lane;
+FR-029/030 own terminal mapping; FR-016/024 own playback and envelope intake,
+including FR-024's public parser in `kani/classify.rs`. FR-040's cancellation producer
+is live in `kani/run/execute.rs` and `kani/run/launch.rs`, with tagged tests for
+AC-1 to AC-7. FR-041's claim-gate controls for AC-1 to AC-5 are live in
+`scripts/cg_gates.rs` and `scripts/kani_claims.json`, with tagged tests in
+`tests/it/kani_generation_claims.rs` and `tests/it/kani_gate.rs`; its V2 claim
+and historical hold discharge (AC-6 to AC-10) remain planned. FR-034 and
+FR-046 retain planned obligations without a completed implementation claim here.
+FR-015's V2 contract/invariant, composite and graph obligations remain planned
+or partial where their individual criteria say so.
+The computed matrix supplies trace-tag status, not a proof verdict: a tagged
+criterion can still have a partial or planned installed-backend obligation.
+
+The V1 bundle file, V1-only clause arm and `generate_kani_bundle` public operation
+were deleted by CG #601; they have no current module or public owner to assign.
 FR-003, FR-007 and FR-023 have no active CG requirement artifacts or generator
 ownership. Their historical mentions do not supersede ADR-001's accepted FR-015
-and `CheckedPackageV2` decisions. This map records the current implementation;
-it does not mark V1 retirement or the full IR-329 reconciliation complete.
+and `CheckedPackageV2` decisions. This inventory records the current implementation
+and leaves the planned obligations intact.
 
 Two recorded exceptions to the layout convention, both to be settled at the layout AD (IR-344):
 
