@@ -2072,6 +2072,58 @@ fn tc_026_frame_replay_refuses_poisoned_suffixes_at_both_decode_bounds() {
     }
 }
 
+#[trace("TC-035", "FR-024-AC-30")]
+#[test]
+fn tc_035_frame_replay_rechecks_parsed_playback_bounds() {
+    let twin = Twin::new();
+    let harness = frame_harness(&twin);
+    let invocation = twin.invocation("account", (5, 0), (6, 1));
+    let run = run_of(&harness, [5, 0]);
+    let admitted = quire_contract_codegen::WitnessDecodeLimits {
+        bytes: run.playback.len(),
+        values: 2,
+    };
+    twin.try_frame_replay_with_parse_limits(
+        "deposit",
+        &invocation,
+        "account",
+        "audit",
+        &run,
+        admitted,
+        admitted,
+    )
+    .expect("complete parsed playback is admitted at both limits");
+    for (requested, code) in [
+        (
+            quire_contract_codegen::WitnessDecodeLimits {
+                bytes: admitted.bytes - 1,
+                values: admitted.values,
+            },
+            "cg_witness_decode_bytes_limit",
+        ),
+        (
+            quire_contract_codegen::WitnessDecodeLimits {
+                bytes: admitted.bytes,
+                values: admitted.values - 1,
+            },
+            "cg_witness_decode_values_limit",
+        ),
+    ] {
+        let error = twin
+            .try_frame_replay_with_parse_limits(
+                "deposit",
+                &invocation,
+                "account",
+                "audit",
+                &run,
+                requested,
+                admitted,
+            )
+            .expect_err("replay must refuse a playback parsed under wider limits");
+        assert!(matches!(error, FrameReplayError::Decode(cause) if cause.code == code));
+    }
+}
+
 /// The forbidden-write run at the pre state `(balance, audit) = (5, 0)`.
 fn forbidden_run(twin: &Twin) -> Run {
     run_of(&frame_harness(twin), [5, 0])
@@ -5233,7 +5285,8 @@ fn tc_025_real_kani_proves_allowed_and_forbidden_frame_effects_and_a_mutated_fra
 }
 
 /// The forbidden frame counterexample Kani finds is executed natively, then replayed through
-/// `FrameReplay::new` and `replay` from its harness's identity and its real playback text alone:
+/// `FrameReplay::new` and `replay` from its harness's identity and the bounded parse of its
+/// complete retained playback text:
 /// no obligation identity and no transcript are supplied, the decoded pre state is tied to the
 /// invocation of the native run, and QSL reproduces the violation on the written field.
 #[trace(

@@ -987,11 +987,27 @@ impl Twin {
         run: &Run,
         limits: quire_contract_codegen::WitnessDecodeLimits,
     ) -> Result<FrameReplay, FrameReplayError> {
+        self.try_frame_replay_with_parse_limits(
+            operation, invocation, account, field, run, limits, limits,
+        )
+    }
+
+    /// The parse limits are separately selectable to verify replay's own bound check.
+    pub fn try_frame_replay_with_parse_limits(
+        &self,
+        operation: &str,
+        invocation: &Invocation,
+        account: &str,
+        field: &str,
+        run: &Run,
+        limits: quire_contract_codegen::WitnessDecodeLimits,
+        parse_limits: quire_contract_codegen::WitnessDecodeLimits,
+    ) -> Result<FrameReplay, FrameReplayError> {
         let mut inputs = self.run();
         inputs.decode_limits = frame_decode_limits();
         let effective_limits = quire_contract_codegen::WitnessDecodeLimits {
-            bytes: limits.bytes.min(inputs.decode_limits.bytes),
-            values: limits.values.min(inputs.decode_limits.values),
+            bytes: parse_limits.bytes.min(inputs.decode_limits.bytes),
+            values: parse_limits.values.min(inputs.decode_limits.values),
         };
         let playback = parse_assertion_playback(
             &run.playback,

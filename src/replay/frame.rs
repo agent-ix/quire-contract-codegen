@@ -541,6 +541,7 @@ impl FrameReplay {
     /// The harness's property must be a frame over exactly its state fields, its scope must name
     /// the operation requested, its playback must decode against its state fields, and every
     /// decoded value must lie in its field's declared range, all before the unit is compiled. The
+    /// parsed playback must fit both the requested bounds and the proving run's bounds; the
     /// call site's anchor and frame must then be the harness's, and the pre snapshot the
     /// invocation names must hold the decoded values. The obligation identity and the witness
     /// transcript are built here from the call site, the harness and the decoded playback.
