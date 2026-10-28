@@ -39,6 +39,17 @@ own row, including whole-envelope refusal for a repeated backend identity.
 
 ## Test Procedure
 
+For FR-014-AC-55, use a plain strict V1 read containing a represented
+quantity-conversion operation. A routed request that reaches its unauthenticated
+member or mode view returns the whole-call
+`UnauthenticatedOperationView { request_index, node_id }` before capability
+settlement, oracle or harness output; it does not produce the Quantity scalar
+row's `OperationNotRendered` result. The same canonical bytes admitted with
+the matching V2 source through IR's authenticated handoff reach that row and
+settle as `OperationNotRendered`, with the conversion credited by its exact
+oracle. A view-independent plain-read integer route retains its existing
+settlement. TC-024 covers the division-law and mixed-request controls.
+
 For FR-019-AC-53, use one admitted package with bound driver items at driver
 indexes 0 and 2 around an excluded accounting-only position at index 1. Give
 the excluded position `lowered` accounting for a Kani-supported form, and put
@@ -390,7 +401,7 @@ reduce AC-25's scope.
 | IEEE-float scalar `expression` claim, IR-confirmed generated claim | Planned (IR-269) | IEEE-float scalar operation forms. | `OperationNotRendered` (`classify_claim` maps `ScalarLoweringRefusal::NoRenderer`). |
 | Text scalar `expression` claim, IR-confirmed generated claim | Planned (IR-269) | Text scalar operation forms. | `OperationNotRendered` (`classify_claim` maps `ScalarLoweringRefusal::NoRenderer`). |
 | Enum scalar `expression` claim, IR-confirmed generated claim | Planned (IR-269) | Enum scalar operation forms. | `OperationNotRendered` (`classify_claim` maps `ScalarLoweringRefusal::NoRenderer`). |
-| Quantity scalar `expression` claim, IR-confirmed generated claim, including identity `quire.op.quantity.convert` | Planned (IR-269) | Quantity scalar operation forms; the conversion's settlement is FR-014-AC-51. | `OperationNotRendered` (`classify_claim` maps `ScalarLoweringRefusal::NoRenderer`). |
+| Quantity scalar `expression` claim, IR-confirmed generated claim, including identity `quire.op.quantity.convert`, read through source-authenticated V1 handoff | Planned (IR-269) | Quantity scalar operation forms; the conversion's settlement is FR-014-AC-51. | `OperationNotRendered` (`classify_claim` maps `ScalarLoweringRefusal::NoRenderer`). |
 | Record/tuple equality claim with a derivable IR-confirmed operation and bounded shadow shape | Planned (IR-264, IR-241) | FR-015-AC-69 through AC-76. | `OperationNotRendered` (`classify_claim` maps `ScalarLoweringRefusal::NoRenderer` for the non-integer renderer). |
 | Record/tuple equality claim whose derivation returns `ExactScalarRefusal::NoDerivableClaim` | Planned (IR-264, IR-241) | Refusal subpath for composite equality. | `NoDerivableClaim` (`classify_claim`). |
 | Integer scalar function application with FR-015-AC-37's operation/result contract | Implemented | FR-015-AC-37. | — |

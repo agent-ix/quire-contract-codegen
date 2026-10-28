@@ -37,6 +37,17 @@ the FR-015 generator returns for the same items.
 
 ## Test Procedure
 
+For FR-022-AC-30, pass a canonical plain reader-admitted V1 package containing
+one view-independent integer operation and view-dependent division and
+quantity-conversion operations to `generate_routed`. The integer-only request
+retains its existing result. Each view-dependent request returns the whole-call
+typed `UnauthenticatedOperationView { request_index, node_id }` before output;
+the mixed request names its first view-dependent routed item. Repeat against
+the matching V2 source's authenticated V1 handoff and check that division uses
+its admitted law profile and conversion produces its exact oracle while its
+Kani capability settles as `OperationNotRendered`. TC-024 and TC-030 own the
+oracle and capability details.
+
 For FR-022-AC-29, use an admitted package with bound driver items at indexes
 0 and 2 and an excluded accounting-only position at index 1. Construct a
 routed item through the public descriptor constructor with index 1 and the

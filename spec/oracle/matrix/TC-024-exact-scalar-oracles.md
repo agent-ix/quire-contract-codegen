@@ -75,8 +75,8 @@ byte-deterministic, and agree with direct runtime execution. Agreement with the 
    direct QSV comparison; assert its id and exact magnitude, and inspect the
    generated handoff for absence of identity recomputation or an added
    post-charge identity refusal (FR-014-AC-48). Request the same nodes under caller-declared
-   descriptors, through `generate_routed` and through Kani obligation
-   negotiation, and check capability settlement reports `OperationNotRendered`
+   descriptors, through `generate_routed` with source-authenticated V1
+   admission and through Kani obligation negotiation, and check capability settlement reports `OperationNotRendered`
    (Planned, IR-269) with no harness emitted (FR-014-AC-51). Check that the
    function-application generator and the function schedules refuse a
    conversion body as `UnsupportedOperator` (generator) and
@@ -109,6 +109,19 @@ byte-deterministic, and agree with direct runtime execution. Agreement with the 
    Contract IR rejects each attempted text-operand `numeric.convert` node.
    None contributes a generated function, a derived descriptor or runtime
    agreement evidence for caller admission.
+   For FR-014-AC-55, run public routed generation on a plain strict V1 read
+   with represented quantity conversion and integer division operations. Each
+   view-dependent request returns the whole-call
+   `UnauthenticatedOperationView { request_index, node_id }` naming the first
+   such request, before oracle, settlement or harness output. Include a
+   supported view-independent integer route as a successful plain-read control.
+   Supply the matching reader-admitted V2 source through IR's authenticated V1
+   handoff and repeat: conversion derives its exact oracle and settles as
+   `OperationNotRendered`, and division selects its admitted law profile. A
+   mixed plain-read request containing both a view-independent integer route
+   and a view-dependent operation returns the same whole-call refusal, with no
+   partial output; reversing request order identifies the other first
+   view-dependent request when both need views.
 7. Generate and derive an integer add over two parameters typed by distinct
    `integer_range` domains `[0, 9]` and `[10, 20]` with its result typed by
    `[0, 29]`, and read the claim's checked bounds; refuse the descriptor over

@@ -36,6 +36,13 @@ For the production FR-330 boundary,
 the one admitted `ContractPackage` authoritative for this arm's item meaning,
 accounting and source correspondence. No checked-graph decision or fallback
 is part of this routed entry point.
+When a routed operation needs its admitted mode, law definitions or member
+target, the package shall come through Contract IR's source-authenticated V1
+read (FR-035-AC-25/26). A plain strict V1 read remains valid input for a
+view-independent route. If a request reaches an operation view whose accessor
+returns `NotAdmitted`, `generate_routed` returns the whole-call typed
+`RoutedGenerationError::UnauthenticatedOperationView { request_index, node_id }`
+for the first such item in request order, before any output (FR-014-AC-55).
 
 On that package path, FR-039's exact driver-position accounting and selected
 application/conversion pair are checked before FR-014 claim generation or
@@ -136,8 +143,9 @@ output belong to IR-629; they do not change this crate boundary.
 ## Inputs
 
 - The admitted IR `ContractPackageV1`, by reference, from the strict FR-330
-  reader. This generator does not re-check the package identity the driver
-  expected; that is the IR reader's.
+  reader, with source-authenticated operation views for any route requiring
+  mode, law-definition or member-target facts. This generator does not re-check
+  the package identity the driver expected; that is the IR reader's.
 - The complete `ContractRequestPosition` lowering sequence, one entry per
   admitted accounting record. A bound driver item is the `DriverItem` position
   defined in FR-039; it carries the original node key and
@@ -362,6 +370,7 @@ output belong to IR-629; they do not change this crate boundary.
 | FR-022-AC-27 | For `if p then x + 1 else x + 1`, each occurrence's generated scalar claim is conditional on its own QSL path guard: the same guard occurrence with `holds=true` for the then item and `holds=false` for the else item. CG preserves the full outermost-first guard sequence and uses it when forming the proof obligation; a result under `p=false` cannot prove the then claim and one under `p=true` cannot prove the else claim. An empty path condition remains unguarded. | Test (TC-033) |
 | FR-022-AC-28 | If a routed scalar item's occurrence has no entry in the supplied requirement records, its key's node disagrees with the authenticated application selection, or the keyed record disagrees with the item's result bound, direct conversion occurrence or ordered path condition, CG returns a typed refusal identifying the request index and occurrence before emitting an oracle, harness or obligation identity for that request; it does not use another record with the same node or reconstruct missing values from the IR graph or source text. | Test (TC-033) |
 | FR-022-AC-29 | Given an admitted package whose complete lowering sequence has bound driver items at indexes 0 and 2 and an excluded accounting-only position at index 1, a routed item with `request_index` 1 and the excluded position's exact `node_id` refuses the whole call as `ExcludedDriverIndex { request_index: 1, node_id }` before any generation arm, oracle or harness. The same routed backend and descriptor at indexes 0 and 2 remain valid controls, and CG never substitutes an envelope position or the next bound item's selection for index 1. | Test (TC-033) |
+| FR-022-AC-30 | For a plain reader-admitted V1 package, a routed item requiring an operation mode, law-definition or member-target view whose accessor returns `NotAdmitted` makes `generate_routed` refuse the whole call as `UnauthenticatedOperationView { request_index, node_id }`, identifying the first such routed item in request order, with no oracle, settlement or harness output. A view-independent integer route over the plain read retains its existing result. The same view-dependent route over the matching source-authenticated V1 package retains its ordinary generated oracle and capability disposition (FR-014-AC-55), including integer division's admitted law profile and quantity conversion's exact oracle and `OperationNotRendered` settlement. | Test (TC-033) |
 
 ## Dependencies
 
