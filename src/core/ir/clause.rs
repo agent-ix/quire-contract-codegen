@@ -268,7 +268,7 @@ impl Reader<'_, '_> {
         if reference(subject)? != &self.self_id {
             return None;
         }
-        let fields = self.package.model_object_fields(&declaration).ok()?;
+        let fields = self.package.model_object_fields(declaration).ok()?;
         let field = fields.field(name)?;
         let Some(CheckedMemberType::IntRange { lower, upper }) = field.member_type() else {
             return None;
