@@ -112,16 +112,19 @@ byte-deterministic, and agree with direct runtime execution. Agreement with the 
    For FR-014-AC-55, run public routed generation on a plain strict V1 read
    with represented quantity conversion and integer division operations. Each
    view-dependent request returns the whole-call
-   `UnauthenticatedOperationView { request_index, node_id }` naming the first
-   such request, before oracle, settlement or harness output. Include a
+   `UnauthenticatedOperationView { request_index, node_id }` naming the lowest
+   view-dependent `request_index`, before oracle, settlement or harness output. Include a
    supported view-independent integer route as a successful plain-read control.
    Supply the matching reader-admitted V2 source through IR's authenticated V1
    handoff and repeat: conversion derives its exact oracle and settles as
    `OperationNotRendered`, and division selects its admitted law profile. A
    mixed plain-read request containing both a view-independent integer route
    and a view-dependent operation returns the same whole-call refusal, with no
-   partial output; reversing request order identifies the other first
-   view-dependent request when both need views.
+   partial output; permuting the routed-item slice preserves the same refusal
+   and `request_index`, while changing the driver indexes changes which
+   view-dependent request is first. Verify V2-only `derive_exact_scalar_items`
+   separately on the admitted checked package; routed V1 behavior does not
+   change that API's input type.
 7. Generate and derive an integer add over two parameters typed by distinct
    `integer_range` domains `[0, 9]` and `[10, 20]` with its result typed by
    `[0, 29]`, and read the claim's checked bounds; refuse the descriptor over
