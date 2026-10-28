@@ -27,3 +27,14 @@ Base review of the AD-004 L-6 edits in CG #622 at 5bd6d62df149057dac0a3ef99a048d
 ## Verdict
 
 CONDITIONAL until the two documentation inconsistencies are fixed. The changed AD file passes structural Quire validation per the coder's focused evidence; that gate cannot detect these semantic defects.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | AD-004 now says the frame replay boundary also takes typed Playback, a coherent statement. |
+| FND-002 | fixed | FR-024 Current state now says IR-1086 typed intake is implemented and the IR-624 QSL-emitted harness remains planned. |
+
+## Current verdict
+
+PASS on the exact fix head 1c7c93426c46f678d2c5e558e9f107ec8328e7e3; no open findings in this method.
