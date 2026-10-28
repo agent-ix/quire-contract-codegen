@@ -84,3 +84,25 @@ scope:
 - {id: AD-004#planner-decisions, path: spec/assurance/AD-004-cg-crate-layout.md, role: examined, excerpt: "Public entry and external consumers | Step 4f deleted generate_kani_bundle. Step 4e supplies the supported V2 public entry"}
 - {id: AD-004#step-4d, path: spec/assurance/AD-004-cg-crate-layout.md, role: context_only, excerpt: "4d: the V2 census input (FR-015-AC-22/25/44/45) is implemented by IR-1044 ... The frame family is ported separately, with generate_state_frame_obligations becoming an ObligationItem arm."}
 ```
+
+## Disposition (round 2, exact head e9ace48ebd8317a9532b84d8ff6521fbb68ce9b7)
+
+Reviewer re-check of FND-001 to FND-005 at exact head `e9ace48ebd8317a9532b84d8ff6521fbb68ce9b7`
+(on `origin/main` `66a818b863a9b984fc646da4a0779ae9ba3d63f5`), against fresh source and against
+the Linear child ticket IR-1084. Posted to IR-348 as comment `977dbc8d-0da4-4179-81a9-1958291563d8`,
+a reply under `b4f81b8b-9c90-4b3d-9942-441651f302dc`. The readback matched byte-for-byte apart from
+the single trailing newline that Linear strips. Verdict: **CHANGES REQUESTED, four fixed and one open.**
+
+| ID | Disposition | Evidence |
+| --- | --- | --- |
+| FND-001 | open (partial) | Fixed: interim census_validation row (1495), target tree (239-241), module-map row 314, D-2 (1397-1399), item-map row 1516 and the step-4f text (1133). Still stale: interim row 1496 (`record.rs`, "not scheduled; `artifact` by step 1a"). D-3 (1426-1430) also still places `artifact` in `record.rs` as a current item. On origin/main `record.rs` defines only `harness_path` and `record`, and `src/` has no `fn artifact(`. |
+| FND-002 | fixed | Lines 226, 620, 939, 1191 and 1497 name IR-1084 as the frame renderer port, separate from 4d's V2 census. IR-1084 exists (Backlog), has a structured blocked-by link to IR-1079, and records that its L-6 links follow once those tickets exist. |
+| FND-003 | fixed | Line 437 lists `outcome`, `scalar`, `collection`, `clause` and `frame`, which matches the `negotiate.rs` use block on origin/main. |
+| FND-004 | fixed | Lines 733, 1119, 1701 and 1735 are past tense. Dropping "Independent acceptance is pending" is accurate because IR-1044 is Done, and the remaining V2 obligations stay open. |
+| FND-005 | fixed | Step 4b (1091-1092) waits on IR-1084 and 4g. Non-blocking nit: "the frame IR-1084 frame renderer port" repeats "frame". |
+
+No regression and no AC narrowing. `git diff --name-only origin/main...e9ace48e` lists only AD-004
+and the three committed SR artifacts. L-3 and L-5 stay open, and the L-12 end-state is unchanged.
+`make spec` exits 0. `quire validate --scope .` on AD-004 and the SR files exits 0 (quire 0.36.2,
+engine 0.50.2); its only warnings are the pre-existing FR-017/FR-014 EARS warnings. No Cargo, Kani
+or full gate was run, because this is a spec-only PR.

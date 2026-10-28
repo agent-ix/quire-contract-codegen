@@ -1088,7 +1088,7 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
      its criteria are FR-015-AC-112 to FR-015-AC-117 with TC-025 steps 42 to 47. Scope: `spec.rs`,
      `render.rs`, the scalar port, the differential test that proves it byte-identical (P-2, P-3) and the
      rename of `render_scalar` (surface listed in P-1). It does not touch the precondition, contract, frame,
-     collection, corpus or V1 templates, and it leaves L-3 unlanded (L-3 also needs the frame
+     collection, corpus or V1 templates, and it leaves L-3 unlanded (L-3 also needs the
      IR-1084 frame renderer port and 4g after completed 4f and 4h); after 4b the FR-015-AC-58 guard's list of
      driven files loses `scalar.rs` and gains `render.rs`.
    - 4c: the V2 contract arm. IR-489 authored its FR-015 input spec; IR-948 delivered V2
@@ -1424,10 +1424,11 @@ tables; each table states the count it covers, and the per-destination rows add 
   lowering takes `BoundClause`, so the shared V1 lowering is its own interim file. Step 4f
   deletes its V1-only contents and the V1 `precondition.rs` and `contract.rs` renderers, then
   step 4c supplies separate V2 lowering and rendering through `HarnessSpec`. The three items
-  that `render_scalar` and `render` both call (`harness_path`, `record` and
-  `artifact`) are in `record.rs`, below both files: in `negotiate.rs` they would be imported by
+  that `render_scalar` and `render` called at step 2f (`harness_path`, `record` and
+  `artifact`) were placed in `record.rs`, below both files: in `negotiate.rs` they would be imported by
   `scalar.rs` against the order, and in `scalar.rs` they would be a helper of one family that the
-  other's dispatch borrows. `record.rs` holds today's items only; later steps may move them.
+  other's dispatch borrows. PR #356 deleted the `artifact` wrapper; current `record.rs` defines
+  `harness_path` and `record`, and no `fn artifact(` remains in `src/`.
   `generate/mod.rs` holds declarations only.
 - **D-4. `kani_execution.rs`.** Classification is `kani/classify.rs` (`KaniInconclusiveReason`,
   `KaniRunOutcome`, `ClassifiedRun`, `classify_kani_run`, `classify_report`, `classify_success`,
@@ -1493,7 +1494,6 @@ Each is a place where the target of this AD is not yet true, stated so that no s
 | Public function replay entries and their internal helpers take transcript text, then call the output parser before typed decoding | `replay/function.rs`, `replay_counterexample`, `BoundedCorpusCase::replay_counterexample`, `replay_counterexample_through`, `replay_harness_counterexample` and `replay_harness_counterexample_through` | IR-348 step 5 completion: pass typed `Playback` at the public entries and through their helpers |
 | The public frame replay input carries transcript text, which `FrameReplay::new` passes to the parser through `decoded_state` | `replay/frame.rs`, `FrameReplayInputs::playback`, `FrameReplay::new` and `decoded_state` | IR-348 step 5 completion: pass typed `Playback` at `FrameReplayInputs::playback` and through its helpers |
 | `validate_dependencies` and the diagnostic type it returns | `kani/generate/census_validation.rs` | 4g or the V2 census input; `deterministic_json` was already deleted by PR #356 |
-| The persisted-record helpers | `kani/generate/record.rs` | not scheduled; `artifact` by step 1a |
 | The frame family still renders its own template | `kani/generate/frame.rs` | IR-1084 ports frame rendering to `HarnessSpec` and `render.rs` after CG #608 / IR-1079 and the remaining function/frame L-6 slices; separate from step 4d's V2 census work |
 | The corpus keeps its own template, with its cover after the assertion (FR-015-AC-55) | `kani/generate/corpus/bounded_kani_corpus.rs` | step 4g retires the corpus template; step 4h already moved collection rendering to `render.rs` |
 | The remaining collection and graph finite lowerers | `kani/generate/lower/{bounded_collections,finite_reference_graphs}.rs` | IR-347 replaced the step-2f forwarders with CG-owned lowerings and request/result types; IR removes its former exports afterwards. FR-015-AC-109 has retired arithmetic; collection and graph remain until FR-015-AC-110 and FR-015-AC-111. |
@@ -1530,7 +1530,7 @@ Rows add to 6 + 3 + 3 + 1 + 3 + 1 + 4 + 1 + 16 = 38.
 | `classify`, `classify_clause`, `classify_node`, `refuse_unknown_node_kind`, `classify_claim` | 5 | `kani/generate/negotiate.rs` | unchanged | private; the classifiers map an item to an `Outcome` (rule 2). `classify_clause` is the V1 arm |
 | `assign_names`, `named_oracle_source`, `reject_duplicates_and_mixtures`, `anchor_operation`, `resolve_assumptions`, `SubjectGroup`, `unify_subject_signatures` | 7 | `kani/generate/negotiate.rs` | unchanged | private; passes over every item of the request |
 | `kind_name`, `render` | 2 | `kani/generate/negotiate.rs` | unchanged | private; `render` is the clause renderer's dispatch (rule 2); `kind_name` has `render` as its one caller |
-| `harness_path`, `record`, `artifact` | 3 | `kani/generate/record.rs` | pub(super) | `render_scalar` and `render` call them |
+| `harness_path`, `record`, `artifact` | 3 | `kani/generate/record.rs` | pub(super) | Historical step-2f allocation; PR #356 later deleted `artifact`, while `harness_path` and `record` remain. |
 | `LoweredClause`, `ClauseOracle`, `Symbols` | 3 | `kani/generate/clause.rs` | pub(super), fields pub(super), except `ClauseOracle.parameters`, which stays private | the lowered V1 form; `negotiate`, `precondition` and `contract` read the fields |
 | `Parameter` | 1 | `kani/generate/clause.rs` | unchanged | private; only `abi` and `call`, in `clause.rs`, read it, so a private field of private type compiles |
 | `obligation_kind`, `lower_clause`, `clause_stem`, `symbols`, `contract_contexts`, `abi`, `call`, `symbolic_arguments` | 8 | `kani/generate/clause.rs` | pub(super) | called from `negotiate`, `precondition` and `contract` |

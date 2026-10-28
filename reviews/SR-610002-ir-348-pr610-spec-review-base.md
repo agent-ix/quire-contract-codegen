@@ -33,3 +33,11 @@ selection only and carries no finding of its own.
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | low | No findings (placeholder) | - |
+
+## Disposition (round 2, exact head e9ace48ebd8317a9532b84d8ff6521fbb68ce9b7)
+
+This artifact carries no finding of its own. The round-2 dispositions of SR-610003 FND-001 to
+FND-005 are recorded in SR-610003: four are fixed, and FND-001 is open (partial; the `artifact`
+helper is still described as live in `record.rs` at AD-004 lines 1426-1430 and 1496). The PR diff
+against `origin/main` is still AD-004 plus the committed SR artifacts. It contains no Rust, Cargo,
+script or test change. No Cargo, Kani or full gate was run.
