@@ -1406,12 +1406,11 @@ fn tc_035_public_function_domain_boundaries_stop_before_replay() {
     }
 }
 
-/// Each class of malformed transcript is a decode evidence failure carrying the decoder's own
-/// cause code: no playback block, a playback block with too few values for the schema, and one
-/// whose value has the wrong byte width.
+/// The output reader refuses a missing block before replay; typed playback with the wrong arity
+/// or byte width remains a decode evidence failure carrying the decoder's own cause code.
 #[trace("FR-016-AC-1", "TC-026")]
 #[test]
-fn tc_026_each_malformed_counterexample_class_is_a_decode_evidence_failure() {
+fn tc_026_malformed_counterexamples_stop_at_output_or_decode() {
     let harness = spine_identity();
     let package = compile_native_twin(&native_source(VIOLATING_TWIN), FUNCTION);
     let one_value = playback(&harness, 1, 5).replacen(

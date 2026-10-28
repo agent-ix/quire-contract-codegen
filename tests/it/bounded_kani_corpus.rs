@@ -523,8 +523,8 @@ fn tc_023_real_corpus_playback_replays_through_its_qsl_source() {
     }
 }
 
-/// The public corpus replay entry point receives both limits and refuses before reading a
-/// poisoned second assertion or first concrete value.
+/// The caller parses the complete captured text; the public corpus replay entry rechecks its
+/// source length and value count before native execution, even if parsing used wider bounds.
 #[trace("TC-026", "FR-016-AC-6")]
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
