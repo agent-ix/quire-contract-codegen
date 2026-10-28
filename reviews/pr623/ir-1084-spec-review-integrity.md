@@ -34,3 +34,14 @@ CONDITIONAL. Two medium documentation inconsistencies should be fixed in this PR
 ## Analysis
 
 The first conflict is introduced by changing H-3's heading from the singular `HarnessSpec::new` to plural family-specific constructors without qualifying the statement-only bullets. `new_frame` accepts frame assertion messages containing braces because `render_frame` escapes them with Rust's debug formatting; the statement constructor's H-2 message restriction does not describe that behavior. The second is a direct conflict between unchanged R-1 point 3 and the new `render_frame` arm; it is not a request to move Kani syntax back to `frame.rs`. The repair is an accurate architecture account of the reviewed implementation. No source or fixture copy, new version pin, or acceptance-criterion change is needed.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | At `bafb278796927f3a5ed69f45f9308b79d7de7d68`, H-3 explicitly assigns items 2-4 and the statement part of item 6 to `HarnessShape::Statements`, documents how collection and frame each hold one cover, and specifies frame assertion-message escaping and the literal-true frame cover. The stale 4d future tense is gone. |
+| FND-002 | fixed | The same fix identifies the three explicit renderer shapes, states that `render_frame` owns its frame-only template, and updates the ported-family paragraph to list the frame's provenance header, validated paths, fields, ranges, operator and messages as data. The single Kani spelling and cover-placement site remains `render.rs`. |
+
+## Disposition evidence
+
+Inspected only `081d9aad28de2b4d5b4e6d9e24dc35e32e58bbd4..bafb278796927f3a5ed69f45f9308b79d7de7d68` in a detached review worktree. The diff changes AD-004 and commits the four prior review artifacts unchanged; no code or tests changed. No aggregate build or test gate was run in this disposition pass.
