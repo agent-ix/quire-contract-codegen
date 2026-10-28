@@ -276,11 +276,19 @@ required dependency or target path.
     V1, then read the same bytes both with `read_with_source` and with plain
     strict `read`. The authenticated package preserves the direct `Unsupported`
     and clause QSL-121 outcomes above. For the plain-read package, assert
-    `UnauthenticatedRequestedRootKind { request_index, node_id }` naming the
-    lowest affected request index and its requested root under both item
-    permutations, before any claim map or artifact. A plain-read request with
-    no root-kind-dependent item keeps its existing result. Do not derive the
-    root kind from the first reachable `node_tag` or represented terms.
+    that an eligible selected `Unsupported` accounting record with
+    `node_tag: "temporal"` and requested-root-kind view `NotAdmitted` triggers
+    `UnauthenticatedRequestedRootKind { request_index, node_id }` before any
+    claim map or artifact. For a direct item assert its call-item driver request
+    index and call root. Separately bind a valid call item to a declaration
+    whose body is such a temporal-tag unsupported root, and assert the body's
+    declaration driver request index and body root, not the distinct call item's
+    index/root. Combine a direct item and a declared body with different
+    driver request indices, permute both input slices, and assert the lowest
+    eligible driver request index wins. Existing duplicate, capability and item
+    precedence still run first. A plain-read request without an eligible
+    temporal-tag `Unsupported` record keeps its existing result. Do not derive
+    the root kind from the first reachable tag or represented terms.
 14. Public admitted chain (FR-021-AC-34; PLANNED IR-768). Build one authentic
     `CheckedPackageV2` with 129 distinct function declarations, each with two
     bound Integer parameters. Give 128 functions separate admitted `expression`/
@@ -325,6 +333,8 @@ Source-authenticated direct formula, fairness and case requests have one typed u
 per affected call item, retaining the call request's identity separately from
 the causative node. They add no schedule or location and do not alter the
 healthy function's bytes; the temporal-clause control keeps its QSL-121
-blocker. Plain-read V1 requests needing the temporal requested-root kind
-refuse the whole call with the requested index and root id before output;
-view-independent plain-read requests retain their prior result.
+blocker. Plain-read V1 requests with an eligible temporal-tag `Unsupported`
+record and unavailable requested-root kind refuse the whole call with the
+lowest eligible driver request index and that record's requested root id before
+output; direct items and declaration bodies report their own driver request loci.
+Other plain-read requests retain their prior result.
