@@ -109,12 +109,14 @@ For AC-101's selected-field boundary, ask QSL to bind a missing selected model
 field and check its typed source-located refusal before it emits a package.
 Separately submit a malformed selected projection to Contract IR strict
 admission and check its typed located refusal before it admits a claim. Neither
-case produces a CG item or harness. For an admitted collection claim whose
-checked selected declaration or field cannot be resolved, check CG's
-`unsupported` / `FieldNotAdmitted` disposition and absence of a harness;
-resolution must not select a same-named field from another declaration. A
-private CG helper test alone does not establish that an invalid selected
-projection can pass strict admission.
+case produces a CG item or harness. Inspect CG's admitted-claim resolution
+and test its defensive helper invariant: if the checked selected declaration
+or field cannot be resolved, it returns `FieldNotAdmitted`, which negotiation
+maps to `unsupported` without a harness; resolution must not select a
+same-named field from another declaration. The helper control does not claim
+an authentic malformed selected projection can pass strict admission. Add a
+public admitted-claim negative control only if one can reach this branch
+through strict admission without bypassing its validation.
 
 Change one selected field bound, claim, subject and unwind separately to check
 identity changes; repeat equal inputs for byte identity. Compare recorded
