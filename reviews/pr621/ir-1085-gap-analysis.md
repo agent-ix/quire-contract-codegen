@@ -27,3 +27,15 @@ Ticket: IR-1085. The computed Quoin matrix tags all examined FR-016 criteria. Th
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | medium | No production function caller performs the required bounded parse of complete retained playback: the changed function and corpus callers are tests and their `typed_playback` helpers pass `usize::MAX`; replay's later bound check is sound but does not prove AC1's pre-parse bounded intake. | tests/it/skeleton_spine.rs:1134; tests/it/bounded_kani_corpus.rs:31; src/replay/function.rs:1290 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | still-open | At c04c77ef, AD-004 and interface-001 explicitly preserve the production caller integration as an L-6 residual. quire-driver main c0b2f312 has no `parse_assertion_playback` or `replay_counterexample` caller in src/drive.rs, src/upstream.rs, or src/. IR-1085 AC1 still requires a bounded parse of the complete retained counterexample at the caller boundary. |
+
+### Round 2
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | rejected | The original finding incorrectly made a production quire-driver caller a condition of the CG boundary. IR-1085 AC1 requires the CG replay entries to receive typed `Playback` and their callers to parse bounded, complete retained text. At 6d83f3c1, the function and corpus test callers parse once with finite byte/value limits, including the two in-crate callers (`src/replay/function.rs:1779` and `src/kani/generate/corpus/bounded_kani_corpus.rs:925`); the replay entries independently recheck limits. AD-004 truthfully states that quire-driver production intake is separate IR-1106 and does not claim it exists. |
