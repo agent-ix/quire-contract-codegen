@@ -22,10 +22,10 @@ use std::{collections::BTreeMap, fmt};
 
 use qsl_replay::{
     call_site, replay_frame, CallSiteRefusal, ClaimedChange, DigestDomain, DigestRecord,
-    DocumentRef, EmptyQualifiedName, FrameCounterexample, FrameReplayResult, MalformedTranscript,
-    OperationName, OperationSite, ReplayLimits, ReplayRefusal, ReplayRequest, ReplayRequestWire,
-    ReplaySource, ReplayTargetMembers, RequestTargetWire, WireNodeId, WitnessEnvelope,
-    WitnessPacket, WitnessRefusal, WitnessValue,
+    DocumentRef, EmptyQualifiedName, EnvelopeSource, FrameCounterexample, FrameReplayResult,
+    MalformedTranscript, OperationName, OperationSite, ReplayLimits, ReplayRefusal, ReplayRequest,
+    ReplayRequestWire, ReplaySource, ReplayTargetMembers, RequestTargetWire, WireNodeId,
+    WitnessEnvelope, WitnessPacket, WitnessRefusal, WitnessValue,
 };
 use serde::Deserialize;
 
@@ -655,7 +655,7 @@ impl FrameReplay {
             declared_domains: Some(Vec::new()),
             backend: Some(wire.backend.clone()),
             trace_position: Some(None),
-            source: Some(ReplaySource::Witness(witness)),
+            source: Some(EnvelopeSource::Witness(witness)),
             family_payload: Some(payload),
         };
         Ok(Self {

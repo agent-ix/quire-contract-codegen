@@ -13,11 +13,11 @@ use qsl_replay::{
     compile_admitted, parity_obligation, settle_verified_shadow, AdmittedCompilation,
     AdmittedContext, AdmittedRefusal, BoundEntries, ByteDigest, CompositeEvidence,
     CompositeIdentity, CompositeParityClaim, DependencyInput, DigestDomain, DigestRecord, Domain,
-    DomainKey, EqualityOperator, Identifier, IdentityEncodeError, NoPayload, OccurrenceKey,
-    OperandIdentity, Origin, ParityArgument, ParityPreimage, ProofBound, QualifiedName,
-    ReplayRequest, ReplayRequestRefusal, ReplayRequestWire, ReplaySource, ReplayTarget,
-    ReplayTargetMembers, RequestTargetWire, Role, VerifiedShadow, VerifiedShadowReport, WireNodeId,
-    WitnessEnvelope, WitnessPacket, WitnessRefusal,
+    DomainKey, EnvelopeSource, EqualityOperator, Identifier, IdentityEncodeError, NoPayload,
+    OccurrenceKey, OperandIdentity, Origin, ParityArgument, ParityPreimage, ProofBound,
+    QualifiedName, ReplayRequest, ReplayRequestRefusal, ReplayRequestWire, ReplaySource,
+    ReplayTarget, ReplayTargetMembers, RequestTargetWire, Role, VerifiedShadow,
+    VerifiedShadowReport, WireNodeId, WitnessEnvelope, WitnessPacket, WitnessRefusal,
 };
 use quire_contract_model::{
     CheckedCompositeOperandDomain, CheckedCompositeOperandError, CheckedCompositeOperands,
@@ -400,7 +400,7 @@ impl OriginalCompositeEqContext {
             declared_domains: Some(self.inputs.declared_domains.clone()),
             backend: Some(PARITY_PRODUCER.to_owned()),
             trace_position: Some(None),
-            source: Some(ReplaySource::Input(Vec::new())),
+            source: Some(EnvelopeSource::Input(Vec::new())),
             family_payload: Some(NoPayload),
         })
     }
@@ -475,7 +475,7 @@ impl OriginalCompositeEqContext {
                 CompositePacketMember::Backend,
             ));
         }
-        if !matches!(envelope.source(), ReplaySource::Input(_)) {
+        if !matches!(envelope.source(), EnvelopeSource::Input(_)) {
             return Err(CompositeBuildError::PacketMismatch(
                 CompositePacketMember::SourceArm,
             ));
@@ -493,7 +493,7 @@ impl OriginalCompositeEqContext {
         let mut wire = self.inputs.wire(
             envelope.package_id(),
             RequestTargetWire::function(name.clone(), envelope.occurrence_key().clone()),
-            envelope.source().clone(),
+            envelope.source().clone().into(),
             *envelope.obligation_identity().as_bytes(),
             &[],
         );

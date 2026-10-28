@@ -1770,6 +1770,7 @@ mod ir988_source_function_tests {
         let metadata = CheckedSemanticNodeV2 {
             node_id: id(value),
             owner: None,
+            owner_model: None,
             schema_version: "quire.checked-semantic-graph/v2".into(),
             node_tag: if name.is_some() {
                 "function"
@@ -2888,7 +2889,7 @@ pub fn generate_exact_function_oracles(
             ieee_requirements: Vec::new(),
             integer_division_consumers: Vec::new(),
             measure_discharged: true,
-            body: Box::new(|_frame, _args| {
+            body: Box::new(|_args| {
                 Outcome::Refused(Refusal::CheckedInvariant {
                     cause: quire_exact::CheckedInvariantCause::GeneratedBodyPlaceholderInvoked,
                 })
@@ -3504,6 +3505,7 @@ mod tests {
             };
             CheckedSemanticNodeV2 {
                 node_id: id.clone(),
+                owner_model: None,
                 schema_version: "quire.checked-semantic-graph/v2".into(),
                 node_tag: "expression".into(),
                 semantic_form: "binary".into(),
@@ -3623,6 +3625,7 @@ mod tests {
         crate::oracle::checked_graph::fixture::Node::new(
             CheckedSemanticNodeV2 {
                 node_id: id.clone(),
+                owner_model: None,
                 schema_version: "quire.checked-semantic-graph/v2".into(),
                 node_tag: tag.into(),
                 semantic_form: form.into(),

@@ -249,6 +249,8 @@ pub enum IllTypedCauseKind {
     DistinctUnits,
     /// `IllTypedCause::MalformedDecimalType`.
     MalformedDecimalType,
+    /// `IllTypedCause::MalformedBoundedQuantityType`.
+    MalformedBoundedQuantityType,
     /// `IllTypedCause::DistinctIeeeWidths`.
     DistinctIeeeWidths,
     /// `IllTypedCause::IeeeWithExactOperand`.
@@ -275,6 +277,7 @@ impl TryFrom<IllTypedCause> for IllTypedCauseKind {
             IllTypedCause::AffineUnitArithmetic => Self::AffineUnitArithmetic,
             IllTypedCause::DistinctUnits => Self::DistinctUnits,
             IllTypedCause::MalformedDecimalType => Self::MalformedDecimalType,
+            IllTypedCause::MalformedBoundedQuantityType => Self::MalformedBoundedQuantityType,
             IllTypedCause::DistinctIeeeWidths => Self::DistinctIeeeWidths,
             IllTypedCause::IeeeWithExactOperand => Self::IeeeWithExactOperand,
             IllTypedCause::IeeeToNonRationalExact => Self::IeeeToNonRationalExact,

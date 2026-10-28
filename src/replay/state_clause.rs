@@ -420,7 +420,9 @@ impl<'a> From<&'a StateClauseReplayResult> for ReplaySettlement<'a> {
             }
             // The envelope is on the witness arm, so the result is: an input-arm result is not
             // one this adapter asked for.
-            ReplayResult::Input(_) => Self::CgDefect,
+            ReplayResult::Input(_)
+            | ReplayResult::ObservedTemporal(_)
+            | ReplayResult::ModelGraph(_) => Self::CgDefect,
         }
     }
 }
@@ -699,7 +701,7 @@ impl StateClauseReplay {
             declared_domains: Some(domains),
             backend: Some(wire.backend.clone()),
             trace_position: Some(None),
-            source: Some(ReplaySource::Witness(witness)),
+            source: Some(qsl_replay::EnvelopeSource::Witness(witness)),
             family_payload: Some(payload),
         };
         Ok(Self {

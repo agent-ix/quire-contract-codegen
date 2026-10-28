@@ -869,13 +869,17 @@ pub(crate) fn field_range(
         Some(
             CheckedMemberType::Boolean
             | CheckedMemberType::Integer
+            | CheckedMemberType::Float32
+            | CheckedMemberType::Float64
             | CheckedMemberType::String
+            | CheckedMemberType::TextBounds { .. }
             | CheckedMemberType::Uuid
             | CheckedMemberType::Timestamp
             | CheckedMemberType::Clock
             | CheckedMemberType::Quantity(_)
             | CheckedMemberType::Reference(_)
             | CheckedMemberType::Record(_)
+            | CheckedMemberType::Tuple(_)
             | CheckedMemberType::Variant(_)
             | CheckedMemberType::Option(_)
             | CheckedMemberType::Collection { .. },

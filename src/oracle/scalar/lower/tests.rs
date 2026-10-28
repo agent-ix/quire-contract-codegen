@@ -59,6 +59,7 @@ fn inference_node(
         CheckedSemanticNodeV2 {
             node_id: id,
             owner: None,
+            owner_model: None,
             schema_version: "quire.checked-semantic-graph/v2".into(),
             node_tag: tag.into(),
             semantic_form: form.into(),
