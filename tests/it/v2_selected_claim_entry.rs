@@ -25,8 +25,12 @@ fn v2_selected_claim_entry_keeps_point_and_exact_refusal_key() {
     let (second_package, transfer_clause) = twin.emitted_package("TransferBalanceNeverDrops");
     assert_eq!(package.package_id(), second_package.package_id());
 
-    let deposit = package.node(&deposit_clause).expect("deposit clause in package");
-    let transfer = package.node(&transfer_clause).expect("transfer clause in package");
+    let deposit = package
+        .node(&deposit_clause)
+        .expect("deposit clause in package");
+    let transfer = package
+        .node(&transfer_clause)
+        .expect("transfer clause in package");
     let deposit_claim = deposit
         .occurrences
         .iter()
