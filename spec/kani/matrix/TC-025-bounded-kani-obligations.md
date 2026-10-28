@@ -68,6 +68,23 @@ body, malformed or absent selected declaration, and an over-ceiling domain.
 Check typed `requires_bound` versus `unsupported`, no emitted harness for each
 refusal, and one disposition per item in a mixed request.
 
+For FR-015-AC-96 (IR-1091, pending owner decision), use admitted unique Boolean
+and bounded `IntRange` fields whose finite endpoints fit the harness ABI. Check
+that the exact distinct-value capacities are `2` for Boolean and the inclusive
+integer interval size for `IntRange`. A unique maximum equal to capacity
+retains both cardinality endpoints and all distinct-value/order assumptions;
+a maximum one above capacity settles `unsupported` with
+`UniqueElementCapacityExceeded` naming the capacity and declared maximum,
+with no harness or proof credit even when the minimum is at most capacity;
+it is not an invalid-model or invalid-package result. Also set the minimum above capacity and require the same typed refusal, not a
+shortened maximum or a vacuous proof. Keep a comparable non-unique field
+eligible for its full declared maximum. Separately exercise an endpoint that
+cannot fit the harness ABI or a resource ceiling and retain FR-015-AC-101's
+existing representational/resource refusal instead of the capacity reason.
+The current `ordered_set_shape_is_refused_without_erasing_its_uniqueness_semantics`
+control establishes only the present unsupported-form behavior; it does not
+back the new capacity-refusal or feasible-unique obligations.
+
 Change one selected field bound, claim, subject and unwind separately to check
 identity changes; repeat equal inputs for byte identity. Compare recorded
 identity domains and complete ordered options with generated source and FR-017
