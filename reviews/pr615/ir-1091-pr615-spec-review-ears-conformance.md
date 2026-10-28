@@ -58,3 +58,11 @@ Round 1, exact fix head 00c799c99c82626ab55109d7e6750baaba5f4d73 (fix delta 18eb
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-002 | low | The fix introduced a new quire grammar warning on FR-015-AC-96 (line 846): `[ac:non-canonical-shape] criterion is given-when-then-shaped`. It was absent at 18ebb99e and is present at 00c799c9. A probe copy confirms the trigger is the new phrase "When the declared cardinality maximum then exceeds capacity": rewording it as "If the declared cardinality maximum exceeds capacity" clears the warning. Validation still exits 0. | spec/kani/functional/FR-015-bounded-kani-obligations.md:846 |
+
+## Dispositions (round 2)
+
+Round 2, exact fix head 7225ce8223a0e217496e716bb0b0714d3c131833 (fix delta 00c799c9..7225ce82; merge-base with main 92ebb4e2). The spec delta is one word-level edit in FR-015-AC-96 ("When the declared cardinality maximum then exceeds capacity" became "If the declared cardinality maximum exceeds capacity"). The preceding sentence still makes the capacity reason apply only after the earlier checks pass, so the meaning is unchanged. `quire validate --scope . "spec/**/*.md"` exits 0 with no FR-015 line-846 or TC-025 diagnostic, and the `make spec` globs (spec, plan, reviews) also exit 0. The committed reviews/pr615 copies are byte-identical to the round-1 artifacts; this round-2 section must also be copied before merge. No regression and no new finding. The PR remains a draft for the owner ruling; AC-96 is not complete.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-002 | fixed | AC-96 line 846 now reads "If the declared cardinality maximum exceeds capacity"; the `ac:non-canonical-shape` warning no longer appears. |
