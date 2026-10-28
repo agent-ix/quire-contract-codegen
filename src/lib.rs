@@ -51,15 +51,15 @@ pub use strategy::bound::census::{
 pub use strategy::bound::generation::{
     generate_bound_strategy, BoundStrategyPopulation, BoundStrategyRequest,
 };
-pub use strategy::v2_selected_claim::{
-    select_v2_claim_execution_point, V2SelectedClaimDiagnostic, V2SelectedClaimKey,
-};
 pub use strategy::bound::population::{
     render_population, side_values, Interval, PartnerRule, Population, PopulationRequest,
     PopulationSide, RenderedPopulation, SideValues, ValueSet, EXPECTATION_FIELD,
 };
 pub use strategy::bound::relation::{
     ComparisonOperator, Domain, OperandPosition, Partner, Relation,
+};
+pub use strategy::v2_selected_claim::{
+    select_v2_claim_execution_point, V2SelectedClaimDiagnostic, V2SelectedClaimKey,
 };
 
 pub use kani::generate::corpus::bounded_kani_corpus::{
