@@ -546,9 +546,22 @@ FR-024-AC-11 to FR-024-AC-30 are met:
   the ordinary `Refuted` terminal (FR-029-AC-18, IR-460).
 - The state-clause adapter in `src/replay/state_clause.rs` decodes a falsified postcondition
   harness's Kani playback into the named `i64` pre-state values that
-  `StateClauseReplayInputs::playback` takes. It derives the ordered bindings from the harness's
-  state fields and checks the selected clause and generated assertion before replay. The real-Kani
-  test drives this production path.
+  `StateClauseReplayInputs::playback` takes. The remaining AD-004 step 5 L-6 boundary change
+  adds `kani/classify.rs::parse_state_clause_falsification` as the production entry. It checks
+  `KaniRunOutcome::Falsified` before parsing, returns its typed `NotFalsified` error for other
+  outcomes, and retires the now-unreachable replay error variant of that name. It passes the
+  full falsified counterexample text to `parse_assertion_playback` in
+  `kani/output/playback.rs`. The parser receives the smaller requested and run byte and value
+  limits before reading the text, preserving its multiple-assertion refusal and full-text
+  `source_len`. Its parsed `Playback` reaches `StateClauseReplayInputs::decode_falsification`
+  without a second parse. The public method recomputes those effective limits from its requested
+  limits and `run.decode_limits`, even if supplied a `Playback` parsed under wider bounds. It
+  derives ordered bindings from the harness's state fields
+  and retains its playback-path versus harness-identity, selected-clause, postcondition-property,
+  generated-assertion and field-order checks before populating the symbolic pre state. The
+  non-falsified-run test moves to the classifier helper's pre-parse boundary, and TC-026 covers
+  both the helper's pre-parse limits and the method's post-parse checks; the real-Kani test drives this path;
+  FR-024's acceptance criteria and replay settlement are unchanged.
 - The frame path's own hand-built invocation document and encoder remain in
   `tests/state_frame_support/native_twin.rs`; its `result` member is now `null`, as the twin's
   operations declare no result.
