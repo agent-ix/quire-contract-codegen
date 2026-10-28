@@ -1195,8 +1195,16 @@ fn tc_026_function_replay_refuses_poisoned_suffixes_at_both_decode_bounds() {
             .expect("the retained proof identity binds the twin")
     };
     let package = make_package(limits);
+    let parsed = parse_assertion_playback(
+        &transcript,
+        harness.harness_symbol.as_str(),
+        harness.module_symbol.as_str(),
+        limits.bytes,
+        limits.values,
+    )
+    .expect("the complete captured playback fits the proving-run bounds");
     assert_eq!(
-        replay_counterexample(&harness, &typed_playback(&transcript), &package).expect("at bounds"),
+        replay_counterexample(&harness, &parsed, &package).expect("at bounds"),
         ReplayVerdict::Reproduced
     );
     let mut separate = inputs(&source, Vec::new());
@@ -1241,6 +1249,17 @@ fn tc_026_function_replay_refuses_poisoned_suffixes_at_both_decode_bounds() {
             "cg_witness_decode_values_limit",
         ),
     ] {
+        let bounded_parse = parse_assertion_playback(
+            &poisoned,
+            harness.harness_symbol.as_str(),
+            harness.module_symbol.as_str(),
+            limits.bytes,
+            limits.values,
+        );
+        assert!(
+            bounded_parse.is_err(),
+            "the output reader must enforce {code}"
+        );
         let package = make_package(limits);
         let verdict = replay_counterexample(&harness, &typed_playback(&poisoned), &package)
             .expect("over-bound evidence yields a verdict");
@@ -1284,6 +1303,19 @@ fn tc_026_function_replay_refuses_poisoned_suffixes_at_both_decode_bounds() {
             );
         }
     }
+    let duplicated = format!("{transcript}{transcript}");
+    let refused = parse_assertion_playback(
+        &duplicated,
+        harness.harness_symbol.as_str(),
+        harness.module_symbol.as_str(),
+        duplicated.len(),
+        limits.values,
+    )
+    .expect_err("two assertion blocks cannot become typed playback");
+    assert_eq!(
+        refused.code.as_str(),
+        "kani_witness_multiple_assertions_refused"
+    );
 }
 
 /// An executor fault crosses the public counterexample replay path as the same typed refusal.
