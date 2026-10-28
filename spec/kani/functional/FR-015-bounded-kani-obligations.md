@@ -123,11 +123,12 @@ that retirement implemented.
 
 Partly implemented (IR-268, collection half; CG #396 fe20ecc): FR-015-AC-97 is
 implemented and -102 is implemented for the collection family. FR-015-AC-96, -99,
--100 and -101 are partial: -96 (uniqueness clause), -99 (symbolic-draw,
-cover-after-assertions and no-`Vec<i128>` clauses) and -101 (representational-ceiling
-and malformed-declaration clauses) have no test carrying that AC's tag for the clause,
-and -100 lacks an AC-100-tagged comparison of the complete ordered option vector with FR-017 run evidence. Graph clauses stay PLANNED
-under IR-805. They specify bounded collection claims in the V2 Kani item path. A claim
+-100 and -101 remain partial: -96 has no tagged feasible uniqueness control,
+-99 still needs installed-Kani evidence on the current renderer, -100 has a tagged
+collection launcher control for the complete ordered option vector but its graph
+clause remains planned, and -101 has tagged representational-ceiling generator
+controls but lacks source-located QSL missing-field and Contract IR malformed-projection
+evidence. Graph clauses stay PLANNED under IR-805. They specify bounded collection claims in the V2 Kani item path. A claim
 is an admitted QSL V2 clause/function body whose collection operation reads a
 selected bounded model collection field. QSL expresses collection properties
 as ordinary clauses or function bodies using `forall` or `exists`; the emitted
