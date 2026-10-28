@@ -557,28 +557,18 @@ fn tc_017_bound_admission_uses_the_public_clause_and_domain() {
         oracle_error.source_span.as_ref()
     );
 
-    // The guarded division discharges its non-zero-divisor obligation, yet the oracle refuses the
-    // division with its own code until the IR-601 ruling (FR-031-AC-18), so the strategy slice
-    // sees the oracle's refusal and reports it as `UnsupportedClause` carrying the oracle's code
-    // and span, not the `UnsupportedRelation` it gave a clause whose oracle generated.
+    // The guarded division discharges its non-zero-divisor obligation and generates a native
+    // oracle. The strategy still cannot classify the non-scalar relation it receives.
     let obligation = decode(&obligation_value);
-    let oracle_error = match generate_bound_oracles(&obligation).unwrap_err() {
-        BoundGenerationError::Clause {
-            identity,
-            mut diagnostics,
-        } => {
-            assert_eq!(identity, amount_clause);
-            assert_eq!(diagnostics.len(), 1);
-            diagnostics.remove(0)
-        }
-        other => panic!("expected clause refusal, got {other:?}"),
+    let division_oracles = match generate_bound_oracles(&obligation).unwrap() {
+        quire_contract_codegen::BoundOracleGeneration::Generated(generated) => generated,
+        other => panic!("expected generated division oracle, got {other:?}"),
     };
-    assert_eq!(
-        oracle_error.code,
-        quire_contract_codegen::GenerationErrorCode::UnsupportedIntegerDivision,
-        "{oracle_error:?}"
-    );
-    assert!(oracle_error.message.contains("IR-601"));
+    assert!(division_oracles.clauses()[0]
+        .bundle()
+        .rust
+        .contents
+        .contains("rt::divide("));
     let error = generate_bound_strategy(&BoundStrategyRequest {
         package: &obligation,
         clause: &amount_clause,
@@ -590,16 +580,12 @@ fn tc_017_bound_admission_uses_the_public_clause_and_domain() {
     .unwrap_err();
     assert_eq!(
         error.code,
-        StrategyErrorCode::UnsupportedClause,
+        StrategyErrorCode::UnsupportedRelation,
         "{error:?}"
     );
-    assert_eq!(error.generation_code, Some(oracle_error.code));
+    assert_eq!(error.generation_code, None);
     assert_eq!(error.terminal_state, GenerationTerminalState::Unsupported);
     assert_eq!(error.clause.as_deref(), Some(&amount_clause));
-    assert_eq!(
-        error.source_span.as_deref(),
-        oracle_error.source_span.as_ref()
-    );
     // An arithmetic-free oracle is still a plain `bool` function over the declared domain.
     let amount_oracles = match generate_bound_oracles(&decode(&amount_value)).unwrap() {
         quire_contract_codegen::BoundOracleGeneration::Generated(generated) => generated,

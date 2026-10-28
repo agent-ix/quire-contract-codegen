@@ -463,6 +463,54 @@ fn z3_z4() -> Built {
     }
 }
 
+/// A guarded full-domain division used for the independent truncating-law grid.
+fn division_grid(operator: NumericOperator) -> Built {
+    let clause = Clause::new(-10, 10, OverflowPolicy::Reject);
+    let environment = clause.environment(&["x", "y"], &[]);
+    let nonzero = clause.compare(
+        ComparisonOperator::NotEqual,
+        clause.variable("y"),
+        clause.literal(0),
+    );
+    let node = clause.numeric(operator, clause.variable("x"), clause.variable("y"));
+    let node_span = node.source().clone();
+    let relation = clause.compare(ComparisonOperator::LessEqual, node, clause.literal(-4));
+    Built {
+        environment,
+        expression: clause.and(nonzero, relation),
+        node: node_span,
+    }
+}
+
+/// R-1 and R-2 ensure the unselected member is never domain-checked.
+fn member_only_reproduction(operator: NumericOperator) -> Built {
+    let (minimum, maximum) = if operator == NumericOperator::Divide {
+        (1, 10)
+    } else {
+        (-10, 5)
+    };
+    let clause = Clause::new(minimum, maximum, OverflowPolicy::Reject);
+    let environment = clause.environment(&["x", "y"], &[]);
+    let left = if operator == NumericOperator::Divide {
+        clause.literal(10)
+    } else {
+        clause.variable("x")
+    };
+    let right = if operator == NumericOperator::Divide {
+        clause.variable("y")
+    } else {
+        clause.literal(-1)
+    };
+    let node = clause.numeric(operator, left, right);
+    let node_span = node.source().clone();
+    let relation = clause.compare(ComparisonOperator::LessEqual, node, clause.literal(maximum));
+    Built {
+        environment,
+        expression: relation,
+        node: node_span,
+    }
+}
+
 /// S-1 to S-4: a divide or remainder over a `saturate` type.
 fn saturate_division(operator: NumericOperator, guarded: bool) -> Built {
     let (minimum, maximum) = if guarded {
@@ -999,7 +1047,7 @@ fn tc_044_saturating_arithmetic_is_refused_at_its_node() {
         assert!(
             refusal
                 .message
-                .contains("saturating integer operation in Contract Runtime"),
+                .contains("saturating integer operation in the exact kernel"),
             "{}",
             refusal.message
         );
@@ -1048,13 +1096,9 @@ fn tc_044_the_refusal_locus_is_the_first_unsupported_node_in_preorder() {
     assert_ne!(negation_span, negation_span_first);
 }
 
-/// Every construction FR-031-AC-18 names: O-3, O-5, Z-1 to Z-4 and S-1 to S-4.
-fn division_constructions() -> Vec<(&'static str, Built)> {
+/// The four saturating division constructions of TC-044 step 11.
+fn saturating_division_constructions() -> Vec<(&'static str, Built)> {
     vec![
-        ("O-3", o3_o5(NumericOperator::Divide)),
-        ("O-5", o3_o5(NumericOperator::Remainder)),
-        ("Z-1/Z-2", z1_z2()),
-        ("Z-3/Z-4", z3_z4()),
         ("S-1", saturate_division(NumericOperator::Divide, false)),
         ("S-2", saturate_division(NumericOperator::Remainder, false)),
         ("S-3", saturate_division(NumericOperator::Divide, true)),
@@ -1062,17 +1106,15 @@ fn division_constructions() -> Vec<(&'static str, Built)> {
     ]
 }
 
-/// FR-031-AC-18, native consumer: a divide or remainder over a `reject` or a `saturate` type is
-/// refused with `UnsupportedIntegerDivision` at its node, naming IR-601, terminal state
-/// `unsupported`, with no artifact. On the tree before the change each generated.
+/// FR-031-AC-18: saturating division is refused at its own node with the typed code.
 #[trace("TC-044", "FR-031-AC-18")]
 #[test]
-fn tc_044_divide_and_remainder_are_refused_by_the_native_oracle() {
-    for (case, built) in division_constructions() {
+fn tc_044_saturating_divide_and_remainder_are_refused_by_the_native_oracle() {
+    for (case, built) in saturating_division_constructions() {
         let refusal = built.refusal();
         assert_eq!(
             refusal.code,
-            GenerationErrorCode::UnsupportedIntegerDivision,
+            GenerationErrorCode::UnsupportedSaturatingArithmetic,
             "{case}"
         );
         assert_eq!(
@@ -1082,12 +1124,271 @@ fn tc_044_divide_and_remainder_are_refused_by_the_native_oracle() {
         );
         assert_eq!(refusal.source_span.as_ref(), Some(&built.node), "{case}");
         assert!(
-            refusal.message.contains("IR-601"),
+            refusal.message.contains("saturating integer operation"),
             "{case}: {}",
             refusal.message
         );
         assert!(built.generate().is_err(), "{case}");
     }
+}
+
+/// The source selects one exact division member and bounds only that member.
+#[trace("TC-044", "FR-031-AC-2", "FR-031-AC-22")]
+#[test]
+fn tc_044_native_division_uses_one_exact_member_and_domain() {
+    for (built, member, interval) in [
+        (
+            member_only_reproduction(NumericOperator::Divide),
+            "Quotient",
+            "bound(1_i64, 10_i64)",
+        ),
+        (
+            member_only_reproduction(NumericOperator::Remainder),
+            "Remainder",
+            "bound(-10_i64, 5_i64)",
+        ),
+    ] {
+        let source = built.source();
+        let scanned = scan(&source);
+        assert_no_raw_arithmetic(&source);
+        assert_eq!(scanned.calls_to("rt::divide"), 1, "{source}");
+        assert_eq!(scanned.calls_to("rt::modulo"), 0, "{source}");
+        for forbidden in ["div_euclid", "rem_euclid"] {
+            assert!(
+                scanned
+                    .methods
+                    .iter()
+                    .all(|method| method.as_str() != forbidden),
+                "no {forbidden} method in the native oracle: {source}"
+            );
+        }
+        assert!(
+            source.contains("rt::DivisionProfile::Truncating"),
+            "{source}"
+        );
+        assert!(
+            source.contains(&format!("rt::DivisionMember::{member}")),
+            "{source}"
+        );
+        assert!(source.contains(interval), "{source}");
+        assert!(
+            source.contains("rt::IntegerDomain::Bounded(interval)"),
+            "{source}"
+        );
+        assert!(source.contains("use quire_exact as rt;"), "{source}");
+        assert!(signature(&source).ends_with("meter: &mut rt::Meter) -> rt::Outcome<bool> {"));
+        assert!(
+            !source.contains("quire_contract_runtime::exact"),
+            "{source}"
+        );
+        assert!(
+            !source.contains("quire_contract_runtime::operators"),
+            "{source}"
+        );
+        assert!(!source.contains("evaluate_boolean"), "{source}");
+    }
+}
+
+/// Zero, overflow and compound-divisor paths run in generated Rust without a panic.
+#[trace(
+    "TC-044",
+    "FR-031-AC-6",
+    "FR-031-AC-16",
+    "FR-031-AC-22",
+    "FR-031-AC-26"
+)]
+#[test]
+fn tc_044_native_division_zero_and_minimum_vectors() {
+    let cases = [
+        ("z1", z1_z2(), "5", "0", "zero"),
+        ("z2", z1_z2(), "0", "0", "zero"),
+        ("z3", z3_z4(), "5", "-11", "zero"),
+        ("z4", z3_z4(), "0", "-11", "zero"),
+        (
+            "o3",
+            o3_o5(NumericOperator::Divide),
+            "i64::MIN",
+            "-1",
+            "quotient",
+        ),
+        (
+            "o5",
+            o3_o5(NumericOperator::Remainder),
+            "i64::MIN",
+            "-1",
+            "true",
+        ),
+    ];
+    let mut modules = Vec::new();
+    let mut checks = String::new();
+    for (index, (label, built, x, y, expected)) in cases.into_iter().enumerate() {
+        let source = built.source();
+        let module = module_of(index, "division_vector");
+        let invocation = call(
+            &format!("crate::{module}"),
+            &source,
+            &[("x_current", x), ("y_current", y)],
+            "&mut meter()",
+        );
+        let assertion = match expected {
+            "zero" => "assert_eq!(outcome, rt::Outcome::Undefined(rt::Undefined::DivisionByZero));",
+            "quotient" => "match outcome { rt::Outcome::Refused(reason @ rt::Refusal::DivisionOutOfDomain { member: rt::DivisionMember::Quotient, .. }) => { assert_eq!(reason.code(), Some(\"division_out_of_domain\")); assert_eq!(reason.cause(), Some(\"quotient-outside-domain\")); if let rt::Refusal::DivisionOutOfDomain { domain, .. } = &reason { assert_eq!(domain.lower(), &rt::Integer::from(-5_i64)); assert_eq!(domain.upper(), &rt::Integer::from(5_i64)); } }, other => panic!(\"{other:?}\") }",
+            _ => "assert_eq!(outcome, rt::Outcome::Completed(true));",
+        };
+        writeln!(
+            checks,
+            "#[test]\nfn {label}() {{ let outcome = {invocation}; {assertion} }}"
+        )
+        .unwrap();
+        modules.push((module, source));
+    }
+    run_crate("division-vectors", &modules, &checks);
+}
+
+/// Compare generated outcomes with plain i128 selected-member arithmetic, including both
+/// member-only reproductions and the negative quotient that separates truncation from floor.
+#[trace("TC-044", "FR-031-AC-17")]
+#[test]
+fn tc_044_native_division_matches_independent_member_model() {
+    let mut modules = Vec::new();
+    let mut checks = String::new();
+    for (index, operator) in [NumericOperator::Divide, NumericOperator::Remainder]
+        .into_iter()
+        .enumerate()
+    {
+        let source = division_grid(operator).source();
+        let module = module_of(index, "division_grid");
+        let operation = if operator == NumericOperator::Divide {
+            "/"
+        } else {
+            "%"
+        };
+        let invocation = call(
+            &format!("crate::{module}"),
+            &source,
+            &[("x_current", "x"), ("y_current", "y")],
+            "&mut meter()",
+        );
+        writeln!(checks, "#[test]\nfn grid_{index}() {{
+            let values: &[i64] = &[-12, -10, -7, -1, 0, 1, 2, 5, 10, 12];
+            for &x in values {{ for &y in values {{
+                let outcome = {invocation};
+                let expected = if y == 0 {{ rt::Outcome::Completed(false) }} else {{
+                    let member = i128::from(x) {operation} i128::from(y);
+                    if !(-10..=10).contains(&member) {{
+                        rt::Outcome::Refused(rt::Refusal::DivisionOutOfDomain {{
+                            domain: Box::new(rt::IntegerInterval::new(rt::Integer::from(-10_i64), rt::Integer::from(10_i64)).unwrap()),
+                            member: rt::DivisionMember::{},
+                        }})
+                    }} else {{ rt::Outcome::Completed(member <= -4) }}
+                }};
+                assert_eq!(outcome, expected, \"x={{x}}, y={{y}}\");
+            }} }}
+        }}", if operator == NumericOperator::Divide { "Quotient" } else { "Remainder" }).unwrap();
+        modules.push((module, source));
+    }
+    for (index, (operator, x, y)) in [
+        (NumericOperator::Divide, "0", "5"),
+        (NumericOperator::Remainder, "-10", "0"),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let source = member_only_reproduction(operator).source();
+        let module = module_of(index, "member_only");
+        let invocation = call(
+            &format!("crate::{module}"),
+            &source,
+            &[("x_current", x), ("y_current", y)],
+            "&mut meter()",
+        );
+        let (dividend, divisor, minimum, maximum) = if operator == NumericOperator::Divide {
+            ("10", "5", "1", "10")
+        } else {
+            ("-10", "-1", "-10", "5")
+        };
+        let selected = if operator == NumericOperator::Divide {
+            "quotient"
+        } else {
+            "remainder"
+        };
+        let rejected = if operator == NumericOperator::Divide {
+            "remainder"
+        } else {
+            "quotient"
+        };
+        writeln!(
+            checks,
+            "#[test]\nfn reproduction_{index}() {{
+            let dividend = {dividend}_i128;
+            let divisor = {divisor}_i128;
+            let quotient = dividend / divisor;
+            let remainder = dividend % divisor;
+            assert!(({minimum}..={maximum}).contains(&{selected}));
+            assert!(!({minimum}..={maximum}).contains(&{rejected}));
+            assert_eq!({invocation}, rt::Outcome::Completed({selected} <= {maximum}));
+        }}"
+        )
+        .unwrap();
+        modules.push((module, source));
+    }
+    let source = member_only_reproduction(NumericOperator::Divide).source();
+    let module = module_of(2, "member_only");
+    let invocation = call(
+        &format!("crate::{module}"),
+        &source,
+        &[("x_current", "0"), ("y_current", "y")],
+        "&mut meter()",
+    );
+    writeln!(checks, "#[test]\nfn divide_member_zero_and_edges() {{
+        for y in [-2_i64, -1, 0, 1, 2, 5, 10, 12] {{
+            let expected = if y == 0 {{ rt::Outcome::Undefined(rt::Undefined::DivisionByZero) }} else {{
+                let quotient = 10_i128 / i128::from(y);
+                if (1..=10).contains(&quotient) {{ rt::Outcome::Completed(quotient <= 10) }}
+                else {{ rt::Outcome::Refused(rt::Refusal::DivisionOutOfDomain {{
+                    domain: Box::new(rt::IntegerInterval::new(rt::Integer::from(1_i64), rt::Integer::from(10_i64)).unwrap()),
+                    member: rt::DivisionMember::Quotient,
+                }}) }}
+            }};
+            assert_eq!({invocation}, expected, \"y={{y}}\");
+        }}
+    }}").unwrap();
+    modules.push((module, source));
+    run_crate("division-model", &modules, &checks);
+}
+
+/// The mixed add/remainder clause retains its completed connective after both integer results;
+/// denial of that final point leaves the integer and ordering result charges intact.
+#[trace("TC-044", "FR-031-AC-22", "FR-031-AC-26")]
+#[test]
+fn tc_044_mixed_division_connective_retain_denial_is_typed() {
+    let source = z3_z4().source();
+    let module = module_of(0, "division_retain");
+    let completed = call(
+        &format!("crate::{module}"),
+        &source,
+        &[("x_current", "5"), ("y_current", "-10")],
+        "&mut meter()",
+    );
+    let denied = call(
+        &format!("crate::{module}"),
+        &source,
+        &[("x_current", "5"), ("y_current", "-10")],
+        "&mut limited",
+    );
+    let checks = format!(
+        "#[test]\nfn completed_and_denied() {{
+            assert_eq!({completed}, rt::Outcome::Completed(true));
+            let mut limited = rt::Meter::new(rt::ScalarLimits {{ result_units: 3, ..UNLIMITED }});
+            match {denied} {{
+                rt::Outcome::Incomplete(stop) => assert_eq!(stop.charge_point, rt::ChargePoint::BooleanResultRetain),
+                other => panic!(\"expected denied Boolean retain, got {{other:?}}\"),
+            }}
+            assert_eq!(limited.consumed(rt::LimitKind::ResultUnits), 3);
+            assert_eq!(limited.admitted_charges().iter().filter(|charge| charge.point == rt::ChargePoint::BooleanResultRetain).count(), 0);
+        }}"
+    );
+    run_crate("division-retain", &[(module, source)], &checks);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1830,7 +2131,7 @@ fn tc_044_boolean_sinks_refuse_arithmetic() {
         ),
         (
             o3_o5(NumericOperator::Divide),
-            GenerationErrorCode::UnsupportedIntegerDivision,
+            GenerationErrorCode::UnsupportedExpression,
         ),
     ] {
         let precondition =
@@ -1905,6 +2206,6 @@ fn tc_044_boolean_sinks_refuse_arithmetic() {
     assert_eq!(refusal.code, StrategyErrorCode::UnsupportedClause);
     assert_eq!(
         refusal.generation_code,
-        Some(GenerationErrorCode::UnsupportedIntegerDivision)
+        Some(GenerationErrorCode::UnsupportedSaturatingArithmetic)
     );
 }

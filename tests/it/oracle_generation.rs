@@ -1415,11 +1415,10 @@ fn tc_003_dependency_normalization_is_injective_and_artifact_names_are_bounded()
     }
 }
 
-/// TC-003, and TC-044 (FR-031-AC-18): a division whose divisor and range IR discharged is still
-/// refused, because the oracle takes no raw `/`.
-#[trace("TC-044", "FR-031-AC-18")]
+/// A division whose divisor and range IR discharged uses the exact member operation.
+#[trace("TC-044", "FR-031-AC-2")]
 #[test]
-fn tc_023_native_proven_division_is_refused_until_the_ir_601_ruling() {
+fn tc_044_native_proven_division_uses_exact_member() {
     let integer = IntegerType::new(IntegerDomain::Signed, -10, 10, OverflowPolicy::Reject).unwrap();
     let environment = DeclarationEnvironment::new(
         requirement(),
@@ -1479,22 +1478,18 @@ fn tc_023_native_proven_division_is_refused_until_the_ir_601_ruling() {
         .unwrap();
     assert!(!typed.obligations().is_empty());
     let clause = ClauseId::new("guarded-division").unwrap();
-    // IR discharged the divisor and the range, yet the division is refused: the oracle takes no
-    // raw `/`, and the runtime division it would call is held on the IR-601 ruling (FR-031).
-    let refusal = generate_boolean_oracle(&OracleRequest {
+    // IR discharged the divisor and range; the native oracle calls the exact member operation.
+    let generated = generate_boolean_oracle(&OracleRequest {
         requirement: environment.owner(),
         clause: &clause,
         expression: &typed,
     })
-    .expect_err("a guarded division is refused until the IR-601 ruling")
-    .remove(0);
-    assert_eq!(
-        refusal.code,
-        GenerationErrorCode::UnsupportedIntegerDivision
-    );
-    assert_eq!(refusal.terminal_state, GenerationTerminalState::Unsupported);
-    assert_eq!(refusal.source_span.as_ref(), Some(&span(53, 55)));
-    assert!(refusal.message.contains("IR-601"), "{}", refusal.message);
+    .expect("a guarded division generates");
+    assert!(generated.rust.contents.contains("rt::divide("));
+    assert!(generated
+        .rust
+        .contents
+        .contains("rt::DivisionMember::Quotient"));
 }
 
 #[trace("TC-001")]

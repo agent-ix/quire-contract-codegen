@@ -72,6 +72,7 @@ struct RenderedExpression {
 struct Helpers {
     bound: bool,
     equality: bool,
+    boolean_retain: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -744,10 +745,8 @@ fn unsupported_node(
 
 /// Why an arithmetic node cannot be rendered for `shape`, or `None` when it can (FR-031).
 ///
-/// Divide and remainder are refused under both overflow policies and for every consumer until
-/// the IR-601 ruling. Add, subtract and multiply over a `saturate` integer type are refused for
-/// every consumer, because the runtime has no saturating operation and clamping inline would be a
-/// second implementation of the rule. A consumer that needs a plain `bool` refuses the rest.
+/// All arithmetic over a `saturate` integer type is refused because the kernel has no
+/// saturating operation. A consumer that needs a plain `bool` refuses `reject` arithmetic.
 fn arithmetic_refusal(
     request: &OracleRequest<'_>,
     expression: &Expression,
@@ -755,29 +754,17 @@ fn arithmetic_refusal(
     value_type: &ValueType,
     shape: OracleShape,
 ) -> Option<Vec<GenerationDiagnostic>> {
-    let (operation, is_division) = match operator {
-        NumericOperator::Add => ("add", false),
-        NumericOperator::Subtract => ("subtract", false),
-        NumericOperator::Multiply => ("multiply", false),
-        NumericOperator::Divide => ("divide", true),
-        NumericOperator::Remainder => ("remainder", true),
+    let operation = match operator {
+        NumericOperator::Add => "add",
+        NumericOperator::Subtract => "subtract",
+        NumericOperator::Multiply => "multiply",
+        NumericOperator::Divide => "divide",
+        NumericOperator::Remainder => "remainder",
     };
     let ValueType::Integer { value } = value_type else {
         // A node that is not integer-typed is refused by the grammar checks.
         return None;
     };
-    if is_division {
-        return Some(expression_diagnostic(
-            request,
-            GenerationErrorCode::UnsupportedIntegerDivision,
-            "expression.node",
-            format!(
-                "integer {operation} is refused until IR-601 rules which division semantics a V1 \
-                 oracle takes and which runtime operation provides them; no raw `/` or `%` is emitted"
-            ),
-            expression.source(),
-        ));
-    }
     match value.overflow() {
         OverflowPolicy::Saturate => Some(expression_diagnostic(
             request,
@@ -785,7 +772,7 @@ fn arithmetic_refusal(
             "expression.node",
             format!(
                 "integer {operation} over a `saturate` integer type needs a saturating integer \
-                 operation in Contract Runtime, which the runtime does not define; the generator \
+                 operation in the exact kernel, which it does not define; the generator \
                  does not restate saturation inline"
             ),
             expression.source(),
@@ -806,6 +793,9 @@ fn arithmetic_refusal(
 /// always present; the others are emitted only when the body calls them.
 fn native_helper_lines(helpers: Helpers) -> Vec<String> {
     let mut source = String::from(NATIVE_CARRY_HELPER);
+    if helpers.boolean_retain {
+        source.push_str(NATIVE_BOOLEAN_RETAIN_HELPER);
+    }
     if helpers.bound {
         source.push_str(NATIVE_BOUND_HELPER);
     }
@@ -825,7 +815,9 @@ fn carry<T, U>(outcome: rt::Outcome<T>) -> Result<T, rt::Outcome<U>> {
         rt::Outcome::Incomplete(record) => Err(rt::Outcome::Incomplete(record)),
     }
 }
+";
 
+const NATIVE_BOOLEAN_RETAIN_HELPER: &str = "
 /// Retains one completed connective result, or returns the exact denied charge.
 fn completed_boolean(value: bool, meter: &mut rt::Meter) -> rt::Outcome<bool> {
     match rt::retain_boolean(value, meter) {
@@ -1073,6 +1065,9 @@ impl<'a> Renderer<'a> {
             expression.kind(),
             ExpressionKind::BooleanNot { .. } | ExpressionKind::Boolean { .. }
         );
+        if connective {
+            self.helpers.boolean_retain = true;
+        }
         if !connective && !self.holds_arithmetic() {
             self.emit("rt::Outcome::Completed(")?;
             self.plain_node(expression)?;
@@ -1243,18 +1238,6 @@ impl<'a> Renderer<'a> {
             integer_literal_source(interval.minimum()),
             integer_literal_source(interval.maximum())
         );
-        let variant = match operator {
-            NumericOperator::Add => "Add",
-            NumericOperator::Subtract => "Subtract",
-            NumericOperator::Multiply => "Multiply",
-            NumericOperator::Divide | NumericOperator::Remainder => {
-                return Err(unsupported_node(
-                    self.request,
-                    expression,
-                    "integer divide and remainder are refused",
-                ));
-            }
-        };
         self.helpers.bound = true;
         self.emit("match carry(")?;
         self.outcome_integer(left)?;
@@ -1266,12 +1249,33 @@ impl<'a> Renderer<'a> {
         self.emit("Err(stop) => stop,")?;
         self.emit(&format!("Ok(right_value) => match {bound} {{"))?;
         self.emit("Err(stop) => stop,")?;
-        self.emit("Ok(interval) => rt::evaluate_integer_arithmetic(")?;
-        self.emit(&format!(
-            "rt::IntegerArithmetic::{variant}(&left_value, &right_value),"
-        ))?;
-        self.emit("Some(&interval),")?;
-        self.emit("meter,")?;
+        let arithmetic_variant = match operator {
+            NumericOperator::Add => Some("Add"),
+            NumericOperator::Subtract => Some("Subtract"),
+            NumericOperator::Multiply => Some("Multiply"),
+            NumericOperator::Divide | NumericOperator::Remainder => None,
+        };
+        match arithmetic_variant {
+            None => {
+                let member = if *operator == NumericOperator::Divide {
+                    "Quotient"
+                } else {
+                    "Remainder"
+                };
+                self.emit("Ok(interval) => rt::divide(")?;
+                self.emit("rt::DivisionProfile::Truncating,")?;
+                self.emit(&format!("rt::DivisionMember::{member},"))?;
+                self.emit("&left_value, &right_value,")?;
+                self.emit("&rt::IntegerDomain::Bounded(interval), meter,")?;
+            }
+            Some(variant) => {
+                self.emit("Ok(interval) => rt::evaluate_integer_arithmetic(")?;
+                self.emit(&format!(
+                    "rt::IntegerArithmetic::{variant}(&left_value, &right_value),"
+                ))?;
+                self.emit("Some(&interval), meter,")?;
+            }
+        }
         self.emit("),")?;
         self.emit("},")?;
         self.emit("},")?;
