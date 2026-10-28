@@ -2250,10 +2250,13 @@ fn tc_033_quantity_conversion_has_an_oracle_and_no_harness() {
         let (record, harness) = kani_parts(&generated.items[0].output);
         assert!(harness.is_none(), "no harness is emitted");
         let claim_map = generated.claim_map.as_ref().expect("claim map");
-        assert!(claim_map
-            .items
-            .iter()
-            .all(|claim| matches!(claim.result, ClaimDisposition::Generated(_))));
+        assert!(
+            claim_map
+                .items
+                .iter()
+                .all(|claim| matches!(claim.result, ClaimDisposition::Generated(_))),
+            "quantity conversion must generate every claim: {claim_map:?}"
+        );
         let oracle_artifacts = generated.oracle_artifacts.as_ref().expect("oracle crate");
         let oracle_source = oracle_artifacts
             .iter()
