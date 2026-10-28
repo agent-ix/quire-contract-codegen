@@ -38,7 +38,7 @@ fn operation_identity(body: &CheckedTerm) -> Option<&str> {
     let CheckedTerm::Application { operation, .. } = body else {
         return None;
     };
-    operation.get("identity")?.as_str()
+    operation.identity()
 }
 
 fn harness(

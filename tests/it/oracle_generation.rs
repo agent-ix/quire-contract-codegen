@@ -41,13 +41,13 @@ fn requirement() -> RequirementRef {
 
 fn pre() -> ExecutionPoint {
     ExecutionPoint::Pre {
-        operation: AnchorName::new("generate").unwrap(),
+        operation: AnchorName::new("generate").unwrap().into(),
     }
 }
 
 fn handler() -> ExecutionPoint {
     ExecutionPoint::Handler {
-        name: AnchorName::new("generate").unwrap(),
+        name: AnchorName::new("generate").unwrap().into(),
     }
 }
 

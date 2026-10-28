@@ -52,7 +52,7 @@ fn requirement() -> RequirementRef {
 
 fn handler() -> ExecutionPoint {
     ExecutionPoint::Handler {
-        name: AnchorName::new("generate").unwrap(),
+        name: AnchorName::new("generate").unwrap().into(),
     }
 }
 

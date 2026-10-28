@@ -71,7 +71,7 @@ fn operation_identity(node: &CheckedSemanticNodeV2) -> Option<&str> {
     let CheckedTerm::Application { operation, .. } = &node.body else {
         return None;
     };
-    operation.get("identity")?.as_str()
+    operation.identity()
 }
 
 fn assert_generated(

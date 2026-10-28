@@ -2043,10 +2043,9 @@ fn tc_024_corpus_reader_admits_anonymous_integer_ranges() {
         panic!("admitted conversion is an application");
     };
     assert_eq!(body_type, &result_type);
-    assert_eq!(
-        operation["mode"],
-        json!({"kind": "rounding", "value": "nearest-away"})
-    );
+    let mode = operation.mode().expect("admitted rounding mode");
+    assert_eq!(mode.kind, quire_contract_model::OperationModeKind::Rounding);
+    assert_eq!(mode.value, "nearest-away");
 }
 
 #[trace("FR-014-AC-9", "TC-024")]
@@ -3842,9 +3841,10 @@ fn quantity_conversion_derives_and_preserves_target_provenance() {
         let CheckedTerm::Application { operation, .. } = &node.body else {
             panic!("quantity conversion is an application");
         };
-        let target: quire_contract_model::CheckedNodeId =
-            serde_json::from_value(operation["member"]["declaration"].clone()).expect("target");
-        assert_eq!(generated.quantity_conversion_target.as_ref(), Some(&target));
+        let target = operation
+            .member_declaration()
+            .expect("admitted conversion target");
+        assert_eq!(generated.quantity_conversion_target.as_ref(), Some(target));
         assert_eq!(
             serde_json::to_value(generated).unwrap()["quantity_conversion_target"],
             serde_json::to_value(target).unwrap()
