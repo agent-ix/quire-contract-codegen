@@ -109,7 +109,8 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
 26. Read the frame envelope's `declared_domains` and the source of `src/replay/frame.rs`.
 27. With the installed backend (`make kani`), replay the real playback of the falsified frame
     harness of a subject that writes a forbidden field, supplying the harness's identity, the
-    playback text and the Inputs list, but no obligation identity and no transcript.
+    parsed playback produced from the complete retained backend output by the bounded Kani
+    output reader and the Inputs list, but no obligation identity and no transcript.
 28. Submit equal parameter-bound values from two test backend adapters through the same common intake,
     with distinct backend identities and native transcript formats. Inspect the typed assignments,
     opaque obligation identity, declared domains, source/provenance and replay packet members at
