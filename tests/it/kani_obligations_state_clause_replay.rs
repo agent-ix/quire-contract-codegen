@@ -115,6 +115,44 @@ fn tc_026_state_clause_decode_refuses_poisoned_suffixes_at_both_bounds() {
         .expect("at both bounds");
     assert_eq!(inputs.playback.len(), 2);
 
+    // A caller can hand the typed decoder a playback parsed under wider bounds. It must still
+    // enforce both the requested limit and the run's own limit without relying on the parser.
+    let parsed = quire_contract_codegen::parse_assertion_playback(
+        &transcript,
+        harness.harness_symbol.as_str(),
+        harness.module_symbol.as_str(),
+        usize::MAX,
+        usize::MAX,
+    )
+    .expect("the output reader accepts the complete playback");
+    for (field_limit, parameter_limit, code) in [
+        (
+            quire_contract_codegen::WitnessDecodeLimits {
+                bytes: transcript.len() - 1,
+                values: 2,
+            },
+            crate::unbounded_decode_limits(),
+            "cg_witness_decode_bytes_limit",
+        ),
+        (
+            crate::unbounded_decode_limits(),
+            quire_contract_codegen::WitnessDecodeLimits {
+                bytes: usize::MAX,
+                values: 1,
+            },
+            "cg_witness_decode_values_limit",
+        ),
+    ] {
+        let mut inputs =
+            twin.state_clause_inputs(&fixture.package, &fixture.clause, BALANCE, (0, 0), (4, 7));
+        inputs.playback.clear();
+        inputs.run.decode_limits = field_limit;
+        let error = inputs
+            .decode_falsification(harness, &parsed, parameter_limit)
+            .expect_err("the typed decoder enforces its own effective limits");
+        assert!(matches!(error, StateClauseReplayError::Decode(cause) if cause.code == code));
+    }
+
     for (poisoned, limits, code) in [
         (
             format!("{transcript}{transcript}"),
