@@ -1780,8 +1780,8 @@ mod tests {
                 &transcript,
                 "function-replay-test",
                 "domain",
-                usize::MAX,
-                usize::MAX,
+                transcript.len(),
+                2,
             )
             .expect("complete playback parses");
             let result =

@@ -926,8 +926,8 @@ mod tests {
             &transcript,
             case.harness_symbol.as_str(),
             "corpus",
-            usize::MAX,
-            usize::MAX,
+            transcript.len(),
+            0,
         )
         .unwrap();
         assert!(case
