@@ -741,9 +741,7 @@ pub(crate) mod tests {
     #[test]
     fn tc_023_retired_collection_corpus_leaves_only_the_graph_request() {
         let request = reach("source", "a", "b", "next", 2);
-        let graph = match request {
-            BoundedCorpusRequest::Graph(graph) => graph,
-        };
+        let BoundedCorpusRequest::Graph(graph) = request;
         let case = emit(
             &fixture(),
             BoundedCorpusRequest::Graph(graph),
