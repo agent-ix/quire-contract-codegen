@@ -109,7 +109,11 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
 26. Read the frame envelope's `declared_domains` and the source of `src/replay/frame.rs`.
 27. With the installed backend (`make kani`), replay the real playback of the falsified frame
     harness of a subject that writes a forbidden field, supplying the harness's identity, the
-    playback text and the Inputs list, but no obligation identity and no transcript.
+    parsed playback produced from the falsified outcome's complete counterexample text by the
+    bounded Kani output reader and the Inputs list, but no obligation identity and no transcript.
+    Parse with byte and value limits no wider than the component-wise minimum of the requested
+    limits and `run.decode_limits`; submit playback parsed under wider limits and verify
+    `FrameReplay::new` refuses it when `source_len` or value count exceeds that minimum.
 28. Submit equal parameter-bound values from two test backend adapters through the same common intake,
     with distinct backend identities and native transcript formats. Inspect the typed assignments,
     opaque obligation identity, declared domains, source/provenance and replay packet members at
@@ -240,7 +244,8 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
 26. `declared_domains` is empty, the source builds no `DeclaredDomain` or `DomainKey`, and the
     header names QSL-345 once (FR-024-AC-29).
 27. The forbidden-write playback settles a reproduced violation naming the written field
-    (FR-024-AC-30).
+    (FR-024-AC-30). A parsed playback whose `source_len` or value count exceeds the effective
+    bound returns a typed decode refusal before QSL replay.
 28. Over the QSL-emitted twin package, check `balance` and unread `audit` against
     `model_object_fields(&object_id)` and replay them in the order of input `state_fields`;
     endpoints of their 0 to 1000 ranges admit, one outside refuses `OutOfDomain`, a missing
