@@ -43,3 +43,7 @@ AC-101: the capacity check uses the full admitted element domain and refuses rat
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-004 | low | Native OrderedSet replay through `SnapshotValue::collection(CollectionKind::OrderedSet, ...)` runs only inside `#[ignore]` Kani-lane tests. Default `cargo test` never reaches the QSL-814 snapshot path, so a QSL regression there shows up only on `make kani-gate`. The healthy [0, 1] native check needs no Kani and could join `native_collection_replay_evaluates_the_authored_healthy_and_mutated_functions`. | tests/it/kani_obligations_symbolic_domains.rs:2249 |
+
+## Capacity follow-up review
+
+Reviewed exact head `03f5d74afe349ea8a7c95f0c673118a75ce746de`, commits `efd0bd8d..03f5d74a`. CLEAN: no new findings. AC-96's newly merged capacity clause is covered by tagged authentic QSL→IR controls for IntRange max equal to capacity, IntRange max above capacity, and Boolean minimum above capacity, plus a tagged independent wide-arithmetic property test and full-i64 interval unit test. The shared assertion checks one `Unsupported` item, exact `UniqueElementCapacityExceeded { capacity, declared_maximum }`, and no collection harness. Existing feasible OrderedSet controls still cover unique active slots and preserved order; no AC was narrowed. Installed-backend proof remains explicitly PARTIAL in the spec status.

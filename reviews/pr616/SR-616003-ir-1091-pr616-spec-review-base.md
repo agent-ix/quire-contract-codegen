@@ -54,3 +54,7 @@ Read for context only: FR-015-AC-97, -99, -101 and IR-1091's held over-capacity 
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-004 | low | The rewritten FR-015 status paragraph says "-101's representational-ceiling and malformed-declaration clauses lack tagged generator-level controls". But the representational-ceiling clause is backed by `domain_representability_failures_keep_the_typed_reason` and `rendering_refuses_an_unrepresentable_element_domain_without_a_harness`, both tagged FR-015-AC-101 in src/kani/generate/collection.rs, as the AC-101 row itself states. This drift predates the PR (tests.md:39/:113 carry the same claim) and is outside IR-1091's ordered-set scope, but this round restated it in edited text. | spec/kani/functional/FR-015-bounded-kani-obligations.md:129 |
+
+## Capacity follow-up review
+
+Reviewed exact head `03f5d74afe349ea8a7c95f0c673118a75ce746de`, commits `efd0bd8d..03f5d74a`, against merged CG #615 AC-96 wording. CLEAN: no new findings. The normative AC-96 row includes the full-i64 inclusive capacity rule, the `u64` refusal invariant, refusal precedence, typed reason/no harness, and unchanged feasible endpoint obligations. The added status text correctly names tagged Boolean/IntRange controls while keeping installed-backend proof pending and AC-96 PARTIAL. TC-025 repeats that status without claiming complete proof. Scoped `quire validate` passed. No additional analysis lens applies to these status changes beyond base/integrity consistency already reviewed for this PR.
