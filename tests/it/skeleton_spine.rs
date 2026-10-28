@@ -89,8 +89,8 @@ fn locked(identity: &str, bytes: &[u8]) -> LockedSource {
     }
 }
 
-/// The proving run's lock for the native twin `source`: unlimited stand-in limits, because no
-/// proving run carries limits.
+/// The native twin's test lock: finite playback limits and unlimited accounting stand-ins,
+/// because this direct identity fixture has no installed proving run.
 fn inputs(source: &str, dependencies: Vec<DependencyLock>) -> ReplayInputs {
     ReplayInputs {
         decode_limits: FUNCTION_PLAYBACK_LIMITS,
