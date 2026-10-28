@@ -554,7 +554,7 @@ fn resolve_collection_field(
         CheckedCollectionKind::OrderedSet => CollectionKindIdentity::OrderedSet,
         _ => return Err(CollectionDomainRefusal::UnsupportedFieldType),
     };
-    let element_type = sequence_element_type(graph, collection)?;
+    let element_type = collection_element_type(graph, collection, kind)?;
     let element = match element.as_ref() {
         CheckedMemberType::Boolean => CollectionElementDomain::Boolean,
         CheckedMemberType::IntRange { lower, upper } if lower <= upper => {
@@ -721,23 +721,28 @@ fn resolve_predicate(
     }
 }
 
-fn sequence_element_type(
+fn collection_element_type(
     graph: &CollectionNodeIndex<'_>,
     collection: &CheckedSemanticNodeV2,
+    kind: CollectionKindIdentity,
 ) -> Result<CheckedNodeId, CollectionDomainRefusal> {
+    let expected_form = match kind {
+        CollectionKindIdentity::Sequence => "sequence",
+        CollectionKindIdentity::OrderedSet => "ordered_set",
+    };
     let type_node = graph
         .node(&collection.semantic_type)
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
-    let sequence = match type_node.semantic_form.as_ref() {
+    let collection_type = match type_node.semantic_form.as_ref() {
         "collection_bounds" => graph
             .node(&type_node.semantic_type)
-            .filter(|node| node.semantic_form.as_ref() == "sequence"),
-        "sequence" => Some(type_node),
+            .filter(|node| node.semantic_form.as_ref() == expected_form),
+        form if form == expected_form => Some(type_node),
         _ => None,
     }
     .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
     let members = graph
-        .term(sequence)
+        .term(collection_type)
         .and_then(aggregate_members)
         .filter(|members| members.len() == 1)
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;

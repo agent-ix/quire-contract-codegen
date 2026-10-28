@@ -326,10 +326,14 @@ fn collection_harness_with_ceilings(
     else {
         panic!("the source-authored collection claim has a supported disposition");
     };
-    assert!(matches!(
-        records[0].disposition,
-        ObligationDisposition::Supported { .. }
-    ));
+    assert!(
+        matches!(
+            records[0].disposition,
+            ObligationDisposition::Supported { .. }
+        ),
+        "collection disposition: {:#?}",
+        records[0]
+    );
     collection_harnesses.into_iter().next().unwrap()
 }
 
