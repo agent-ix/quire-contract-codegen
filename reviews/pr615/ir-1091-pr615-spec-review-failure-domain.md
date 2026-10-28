@@ -54,3 +54,13 @@ Checked these failure domains against AC-96's new text and current code:
 
 Purity and determinism are unaffected: the refusal emits no artifact and the
 AC-100 identity is untouched.
+
+## Dispositions
+
+Round 1, exact fix head 00c799c99c82626ab55109d7e6750baaba5f4d73 (fix delta 18ebb99e..00c799c9; merge-base with main 92ebb4e2). Checked against the fix diff and the current spec/code context; `quire validate --scope . "spec/**/*.md"` exits 0. The PR remains a draft for the owner decision; AC-96 is not complete.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | AC-96 now states that FR-015-AC-101 representational, unwind and memory refusals precede the capacity reason in their existing order. This matches `render_collection` (src/kani/generate/collection.rs:239-285), and TC-025:94-103 requires `UnwindBelowCollectionBound` and `SymbolicDomainExceedsMemoryCeiling` for the paired cases. |
+| FND-002 | fixed | The rule now requires a nonempty domain and gives `UnsatisfiableElementDomain` precedence; TC-025:96-99 adds an empty `IntRange` with positive maximum as its own case. |
+| FND-003 | fixed | AC-96 now requires overflow-free, non-saturating comparison wide enough for the 2^64-value full interval and explains why a reported capacity fits u64; TC-025:84-92 covers the full `i64::MIN..=i64::MAX` interval. |

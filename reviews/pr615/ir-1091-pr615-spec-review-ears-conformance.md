@@ -44,3 +44,17 @@ Examined the added clauses of FR-015-AC-96 (line 846) and the TC-025
 paragraph (lines 71-86) for trigger, subject and response form. The FR-015
 statement is unchanged and `quire validate` raised no EARS warning for
 FR-015 or TC-025.
+
+## Dispositions
+
+Round 1, exact fix head 00c799c99c82626ab55109d7e6750baaba5f4d73 (fix delta 18ebb99e..00c799c9; merge-base with main 92ebb4e2). Checked against the fix diff and the current spec/code context; `quire validate --scope . "spec/**/*.md"` exits 0. The PR remains a draft for the owner decision; AC-96 is not complete.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The row now gives an explicit per-branch evidence status (existing path PARTIAL; feasible-unique clause with no AC-96-tagged test; capacity branch PLANNED) and states that a trace tag for the existing path does not back the planned branch. That removes the ambiguity about which behaviour a tag backs. There is no false completion claim. Keeping one row rather than a separate AC is a structuring choice and is no longer a defect. |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-002 | low | The fix introduced a new quire grammar warning on FR-015-AC-96 (line 846): `[ac:non-canonical-shape] criterion is given-when-then-shaped`. It was absent at 18ebb99e and is present at 00c799c9. A probe copy confirms the trigger is the new phrase "When the declared cardinality maximum then exceeds capacity": rewording it as "If the declared cardinality maximum exceeds capacity" clears the warning. Validation still exits 0. | spec/kani/functional/FR-015-bounded-kani-obligations.md:846 |

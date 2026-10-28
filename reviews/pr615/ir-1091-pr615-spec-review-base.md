@@ -87,3 +87,12 @@ Methods run: spec-review/base, ears-conformance (SR-615002), failure-domain
 (SR-615003) and evidence (SR-615004). Code-review, rust-review and
 gap-analysis were not run: the diff is spec-only and the brief limited the
 lens set. No Cargo, Kani or test gate was run.
+
+## Dispositions
+
+Round 1, exact fix head 00c799c99c82626ab55109d7e6750baaba5f4d73 (fix delta 18ebb99e..00c799c9; merge-base with main 92ebb4e2). Checked against the fix diff and the current spec/code context; `quire validate --scope . "spec/**/*.md"` exits 0. The PR remains a draft for the owner decision; AC-96 is not complete.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Line 846 now reads "PARTIAL (IR-268, CG #396)" with no SHA; `fe20ecc` no longer occurs in the AC-96 row. It remains in the unedited AC-97 and AC-99 to AC-102 rows, which are outside this PR's edited row, per the scoped fix. |
+| FND-002 | fixed | AC-96 now restricts the rule to a supported collection form and states that the FR-015-AC-97 unsupported-form refusal takes precedence; TC-025:94-101 requires `UnsupportedFieldType` for an unsupported form paired with max above capacity. |

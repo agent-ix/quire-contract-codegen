@@ -53,3 +53,12 @@ and the TC-025 lines 71-86. Context: the advise output for FR-015-AC-96, and
 the existing fixtures `items` (SmallInt [0,3], max 3) and `flags`
 (Boolean, max 2) in `tests/it/kani_obligations_symbolic_domains.rs:69-176`,
 which give ready-made feasible and equality cases.
+
+## Dispositions
+
+Round 1, exact fix head 00c799c99c82626ab55109d7e6750baaba5f4d73 (fix delta 18ebb99e..00c799c9; merge-base with main 92ebb4e2). Checked against the fix diff and the current spec/code context; `quire validate --scope . "spec/**/*.md"` exits 0. The PR remains a draft for the owner decision; AC-96 is not complete.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | TC-025 now requires separate representability, unwind and memory controls, each paired with a unique max above capacity, plus unsupported-form and empty-domain cases, each with its exact typed reason and no harness. |
+| FND-002 | fixed | TC-025 now requires a property with a widened-integer oracle covering a single value, negative endpoints, below/equal/above capacity and the full-width interval, matching the quoin advise property-based recommendation. |
