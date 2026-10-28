@@ -3,15 +3,15 @@
 
 //! Scalar descriptor derivation controls.
 
-use super::super::lower::tests::{app_term, node_id, v2_node};
+use super::super::lower::tests::{node_id, v2_node};
 use super::super::lower::{catalogued_operation, operation_confirmed};
 use super::super::*;
 use super::*;
 use crate::oracle::checked_graph::fixture::Node as FixtureNode;
 use ix_trace_rs::trace;
 use quire_contract_model::{
-    CheckedApplicationOperation, CheckedApplicationOperationFixture, CheckedArtifactRef,
-    CompleteContractNodeV2, OperationModeKind,
+    ApplicationOperator, CheckedApplicationOperation, CheckedApplicationOperationFixture,
+    CheckedArtifactRef, CompleteContractNodeV2, OperationModeKind,
 };
 use quire_exact::{TextProfile, TextType};
 use std::collections::BTreeMap;
@@ -318,13 +318,12 @@ fn tc_024_derivation_checks_the_graph_and_the_lowering_before_the_identity() {
 fn quantity_conversion_confirmation_requires_identity_and_exact_mode() {
     for identity in [QUANTITY_CONVERT_IDENTITY, "quire.op.quantity.add"] {
         for mode in ["exact", "nearest-even"] {
-            let (_, node) = application_node(fixture_application(
-                CheckedApplicationOperationFixture {
+            let (_, node) =
+                application_node(fixture_application(CheckedApplicationOperationFixture {
                     identity: Some(identity.into()),
                     mode: Some((OperationModeKind::Rounding, mode.into())),
                     ..Default::default()
-                },
-            ));
+                }));
             let graph: Graph<'_> = [(&node.node_id, &node)].into_iter().collect();
             assert_eq!(
                 operation_confirmed(
@@ -346,14 +345,13 @@ fn quantity_conversion_rejects_scalar_targets_after_mode() {
     for form in ["decimal", "integer", "compound_unit"] {
         let target = v2_node('b', "scalar_type", form, 'b', None);
         for mode in ["exact", "nearest-even", "toward-zero"] {
-            let (id, node) = application_node(fixture_application(
-                CheckedApplicationOperationFixture {
+            let (id, node) =
+                application_node(fixture_application(CheckedApplicationOperationFixture {
                     identity: Some(QUANTITY_CONVERT_IDENTITY.into()),
                     mode: Some((OperationModeKind::Rounding, mode.into())),
                     member_declaration: Some(target.node_id.clone()),
                     ..Default::default()
-                },
-            ));
+                }));
             let graph: Graph<'_> = [(&id, &node), (&target.node_id, &target)]
                 .into_iter()
                 .collect();
@@ -463,13 +461,12 @@ fn tc_024_derivation_reads_the_division_profile_from_the_laws_and_nowhere_else()
 #[test]
 fn tc_024_derivation_requires_the_mode_to_agree_with_the_bound_rounding() {
     let derivation_of = |mode: Option<(OperationModeKind, &str)>| {
-        let (id, node) = application_node(fixture_application(
-            CheckedApplicationOperationFixture {
+        let (id, node) =
+            application_node(fixture_application(CheckedApplicationOperationFixture {
                 identity: Some("quire.op.decimal.add".into()),
                 mode: mode.map(|(kind, value)| (kind, value.into())),
                 ..Default::default()
-            },
-        ));
+            }));
         let graph: Graph<'_> = [(&id, &node)].into_iter().collect();
         let lowered = lowered_node(&node);
         Derivation {
