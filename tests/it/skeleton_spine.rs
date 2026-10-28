@@ -1427,9 +1427,12 @@ fn tc_026_malformed_counterexamples_stop_at_output_or_decode() {
         usize::MAX,
         usize::MAX,
     );
-    assert!(
-        missing.is_err(),
-        "missing playback must stop at the output reader"
+    assert_eq!(
+        missing
+            .expect_err("missing playback must stop at the output reader")
+            .code
+            .as_str(),
+        "kani_witness_harness_missing"
     );
     for (transcript, code) in [
         (one_value, "kani_witness_arity_mismatch"),
