@@ -17,7 +17,7 @@
 
 use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
 
-use quire_contract_model::{CheckedNodeId, CheckedSemanticId, ContractPackageV1};
+use quire_contract_model::{CheckedNodeId, CheckedSemanticId, CheckedTerm, ContractPackageV1};
 
 use crate::{
     core::artifact::Artifact,
@@ -194,6 +194,13 @@ pub struct RoutedGeneration {
 /// A whole-call refusal; nothing is generated.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum RoutedGenerationError {
+    /// A Kani claim needs an operation view that was not authenticated against its V2 source.
+    UnauthenticatedOperationView {
+        /// The routed driver's request index.
+        request_index: usize,
+        /// Exact represented operation node without an admitted view.
+        node_id: CheckedNodeId,
+    },
     /// A routed item names an accounting-only driver position.
     ExcludedDriverIndex {
         /// Original driver request index.
@@ -386,7 +393,25 @@ fn generate_routed_with_integer_policy(
             .map_err(RoutedGenerationError::Package)?;
         admitted_by_index.insert(item.request_index, admitted.accounting());
         match admitted {
-            PackageItem::Lowered { .. } => lowered.push(item),
+            PackageItem::Lowered { closure, .. } => {
+                if item.kind == BackendKind::Kani {
+                    for reached in &closure.nodes {
+                        let node_id = &reached.node.node_id;
+                        let Some(CheckedTerm::Application { operation, .. }) =
+                            package.term(node_id)
+                        else {
+                            continue;
+                        };
+                        operation.mode().map_err(|_| {
+                            RoutedGenerationError::UnauthenticatedOperationView {
+                                request_index: item.request_index,
+                                node_id: node_id.clone(),
+                            }
+                        })?;
+                    }
+                }
+                lowered.push(item);
+            }
             PackageItem::Refused { .. } => items.push(ArmItemOutput {
                 request_index: item.request_index,
                 backend: item.backend.clone(),

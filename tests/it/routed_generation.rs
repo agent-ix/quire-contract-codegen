@@ -2279,6 +2279,52 @@ fn tc_033_quantity_conversion_has_an_oracle_and_no_harness() {
     }
 }
 
+/// A plain V1 read has the same wire and accounting but lacks authenticated operation views.
+#[trace("FR-014-AC-51", "FR-022-AC-11", "TC-033")]
+#[test]
+fn tc_033_quantity_conversion_requires_authenticated_operation_views() {
+    let derived = derived();
+    let node_id = derived
+        .quantity_conversions
+        .first()
+        .expect("genuine quantity conversion");
+    let routed = [route(0, node_id)];
+    let input = admitted_routing_input(&derived.package, &routed);
+    let roots = input
+        .positions
+        .iter()
+        .map(|position| position.node_id().clone())
+        .collect::<Vec<_>>();
+    let lowered = derived
+        .package
+        .lower(&roots, &routed_contract_lowering_profile());
+    let plain = match ContractPackageWireV1::read(
+        lowered.package.canonical_bytes().expect("FR-330 bytes"),
+        CheckedPackageReadLimits::bounded(),
+        &ContractDependencies::new(),
+    ) {
+        ContractPackageReadResult::Admitted(package) => package,
+        other => panic!("plain V1 package must admit: {other:?}"),
+    };
+    let contexts = kani_context("crate::subject", 1);
+    let authenticated = generate_routed(&input.package, &input.positions, &routed, &contexts)
+        .expect("source-backed package generates the quantity claim");
+    assert!(authenticated
+        .claim_map
+        .as_ref()
+        .expect("quantity claim map")
+        .items
+        .iter()
+        .all(|claim| matches!(claim.result, ClaimDisposition::Generated(_))));
+    assert!(matches!(
+        generate_routed(&plain, &input.positions, &routed, &contexts),
+        Err(RoutedGenerationError::UnauthenticatedOperationView {
+            request_index: 0,
+            ..
+        })
+    ));
+}
+
 /// `RoutedGeneration.claim_map` holds the four generated package claims and the
 /// `NoDerivableClaim` underivable node, in node-id order; it is `None`
 /// with nothing routed.
