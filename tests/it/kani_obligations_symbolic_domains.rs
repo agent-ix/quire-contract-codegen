@@ -1454,7 +1454,7 @@ fn collection_identity_tracks_domains_claim_subject_and_unwind() {
 }
 
 #[trace("FR-015-AC-100", "TC-025")]
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 #[test]
 fn collection_run_evidence_preserves_every_ordered_identity_option() {
     use std::os::unix::fs::PermissionsExt;
