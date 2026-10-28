@@ -2248,6 +2248,12 @@ fn native_collection_replay_evaluates_the_authored_healthy_and_mutated_functions
     );
     assert_native_collection_result(&healthy, &[1, 2], CollectionKind::Sequence, true);
     assert_native_collection_result(&mutated, &[0], CollectionKind::Sequence, false);
+
+    let ordered_set = emitted_from_document_and_body(
+        ordered_set_document(),
+        "forall(item in deref(input).items: item >= 0)",
+    );
+    assert_native_collection_result(&ordered_set, &[0, 1], CollectionKind::OrderedSet, true);
 }
 
 #[trace("FR-015-AC-99", "TC-025")]
