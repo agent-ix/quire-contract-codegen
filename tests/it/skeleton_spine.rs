@@ -1509,7 +1509,7 @@ fn tc_026_the_replay_verdict_is_decided_by_the_exact_witness_values() {
     }
     // The independent reader agrees with the synthetic transcript's own values.
     assert_eq!(
-        printed_values(&typed_playback(&playback(&harness, 1, 5))),
+        printed_values(&playback(&harness, 1, 5)),
         (vec![1, 5], vec![1, 5])
     );
 }
