@@ -95,6 +95,7 @@ mod terminal_map;
 mod v2_clause_integer_literal_agreement;
 mod v2_clause_integer_literals;
 mod v2_llvm_coverage;
+mod v2_selected_claim_entry;
 mod vacuity_primitives;
 
 mod checked_term_consumers;

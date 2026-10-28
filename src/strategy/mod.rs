@@ -12,3 +12,5 @@ pub(crate) mod campaign;
 // Tri-state harness generation; V1 input.
 // Implements: FR-002
 pub(crate) mod harness;
+// Implements: FR-011-AC-13
+pub(crate) mod v2_selected_claim;
