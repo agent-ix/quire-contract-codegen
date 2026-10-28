@@ -28,3 +28,15 @@ Independent spec-review/base at exact PR head fc390cdc8dcd9910222a0ead0c161421da
 ## Verdict
 
 PASS. The version-field deletion is confined to the conflicting evidence clause. Collection and graph identity obligations remain, and the ordered-option comparison remains explicitly planned. FR-017 evidence and TC-025 use the same solver/unwind/argument vocabulary. Quire validation passed; the EARS warnings are on unchanged lines. This is a technical review of the draft and does not supply the direct owner ruling required to release its hold.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-002 | medium | TestMatrix retained two stale claims that AC-100 required Kani, Rust and solver version fields after the AC removed that obligation | spec/kani/matrix/tests.md:39,113 |
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-002 | fixed | Head ed79fba8 changes both TestMatrix rows to say that ordered-option comparison remains planned and the evidence already records the complete arguments, solver kind and unwind. Neither row still claims a version-field obligation. |
