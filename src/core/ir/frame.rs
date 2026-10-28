@@ -92,7 +92,7 @@ pub(crate) fn application_identity(body: &CheckedTerm) -> Option<&str> {
     let CheckedTerm::Application { operation, .. } = body else {
         return None;
     };
-    operation.get("identity")?.as_str()
+    operation.identity()
 }
 
 /// The clause kind carried by a checked state-clause application.

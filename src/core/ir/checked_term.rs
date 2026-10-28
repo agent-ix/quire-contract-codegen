@@ -32,9 +32,7 @@ pub(crate) fn application<'a>(
             operation,
             arguments,
             ..
-        } if *actual == operator && operation.get("identity")?.as_str()? == identity => {
-            Some(arguments)
-        }
+        } if *actual == operator && operation.identity()? == identity => Some(arguments),
         _ => None,
     }
 }

@@ -635,8 +635,7 @@ fn binary_predicate_operation<'a>(
         return Err(CollectionDomainRefusal::UnsupportedShape);
     };
     operation
-        .get("identity")
-        .and_then(Value::as_str)
+        .identity()
         .ok_or(CollectionDomainRefusal::UnsupportedShape)
 }
 
@@ -952,7 +951,7 @@ fn operation_identity<'a>(
     let CheckedTerm::Application { operation, .. } = graph.term(node)? else {
         return None;
     };
-    operation.get("identity")?.as_str()
+    operation.identity()
 }
 
 fn term_target(term: &CheckedTerm) -> Option<CheckedNodeId> {

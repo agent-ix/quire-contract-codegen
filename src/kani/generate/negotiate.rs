@@ -1487,8 +1487,7 @@ mod tests {
                 matches!(
                     &node.body,
                     CheckedTerm::Application { operation, .. }
-                        if operation.get("identity")
-                            == Some(&json!("quire.op.collection.forall"))
+                        if operation.identity() == Some("quire.op.collection.forall")
                 )
             })
             .map(|node| node.node_id.clone())

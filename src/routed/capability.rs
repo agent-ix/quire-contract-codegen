@@ -613,7 +613,7 @@ fn scalar_family_from_item(item: crate::oracle::scalar::ExactScalarItem) -> Kani
 fn checked_operation<'a>(
     package: &'a quire_contract_model::CheckedPackageV2,
     node_id: &CheckedNodeId,
-) -> Option<&'a serde_json::Value> {
+) -> Option<&'a quire_contract_model::CheckedApplicationOperation> {
     match package.term(node_id)? {
         CheckedTerm::Application { operation, .. } => Some(operation),
         _ => None,
@@ -624,9 +624,7 @@ fn checked_operation_identity<'a>(
     package: &'a quire_contract_model::CheckedPackageV2,
     node_id: &CheckedNodeId,
 ) -> Option<&'a str> {
-    checked_operation(package, node_id)?
-        .get("identity")?
-        .as_str()
+    checked_operation(package, node_id)?.identity()
 }
 
 fn checked_state_clause_role<'a>(
@@ -732,11 +730,7 @@ fn checked_function_call_matches(
     else {
         return false;
     };
-    if operation
-        .get("identity")
-        .and_then(serde_json::Value::as_str)
-        != Some("quire.op.function.call")
-    {
+    if operation.identity() != Some("quire.op.function.call") {
         return false;
     }
     if arguments.len() != argument_node_ids.len() + 1 || parameters.len() != argument_node_ids.len()

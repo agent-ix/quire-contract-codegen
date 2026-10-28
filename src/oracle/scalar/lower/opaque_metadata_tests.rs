@@ -166,14 +166,11 @@ fn opaque_operation_member_does_not_add_a_consumer_to_true_narrowing() {
     assert_eq!(entry["mode"], Value::Null);
     assert_eq!(entry["leaves"], Value::Null);
     // Retain the published member record's actual shape, changing its target.
-    let mut member = original
-        .graph()
-        .nodes
+    let mut member = wire["semantic_graph"]["nodes"]
+        .as_array()
+        .unwrap()
         .iter()
-        .filter_map(|n| match &n.body {
-            CheckedTerm::Application { operation, .. } => operation.get("member"),
-            _ => None,
-        })
+        .filter_map(|node| node["body"]["operation"].get("member"))
         .find(|m| m["kind"] == entry["member"])
         .unwrap()
         .clone();
@@ -223,7 +220,7 @@ fn opaque_operation_member_does_not_add_a_consumer_to_true_narrowing() {
     let CheckedTerm::Application { operation, .. } = &opaque_node.body else {
         panic!("admitted opaque node is an application");
     };
-    assert!(operation["member"].is_null());
+    assert!(serde_json::to_value(operation).unwrap()["member"].is_null());
     let node = wire["semantic_graph"]["nodes"]
         .as_array_mut()
         .unwrap()
@@ -294,7 +291,7 @@ fn opaque_operation_member_does_not_add_a_consumer_to_true_narrowing() {
         panic!("opaque metadata not retained")
     };
     assert_eq!(
-        operation["member"],
+        serde_json::to_value(operation).unwrap()["member"],
         json!({"term":"reference", "target":target.node_id})
     );
     // Positive discriminator: a real argument reference, unlike metadata,
@@ -338,7 +335,7 @@ fn opaque_operation_member_does_not_add_a_consumer_to_true_narrowing() {
     };
     assert!(matches!(&arguments[0], CheckedTerm::Reference {target: id} if id == &target.node_id));
     assert_eq!(
-        operation["member"],
+        serde_json::to_value(operation).unwrap()["member"],
         json!({"term":"reference", "target":target.node_id})
     );
 }

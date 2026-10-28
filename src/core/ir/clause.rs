@@ -201,7 +201,7 @@ impl Reader<'_, '_> {
                 arguments: args,
                 ..
             } => {
-                let identity = operation.get("identity")?.as_str()?;
+                let identity = operation.identity()?;
                 match identity {
                     "quire.op.state.pre" if args.len() == 1 => {
                         let read = self.term_body(&args[0])?;
@@ -213,7 +213,7 @@ impl Reader<'_, '_> {
                         else {
                             return None;
                         };
-                        if operation.get("identity")?.as_str()? != "quire.op.record.project" {
+                        if operation.identity()? != "quire.op.record.project" {
                             return None;
                         }
                         let [deref] = arguments.as_slice() else {
