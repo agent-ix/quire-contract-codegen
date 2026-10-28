@@ -30,7 +30,12 @@ IR-621 direct-error procedure under FR-015-AC-123: from an external consumer
 test, explicitly assign the collection operation's result to
 `Result<CollectionLowering, KaniOutcome>` until FR-015-AC-110; assign the graph
 and corpus operations' results to `Result<GraphLowering, KaniOutcome>` and
-`Result<BoundedCorpusCase, KaniOutcome>` until FR-015-AC-111. Exercise each retained
+`Result<BoundedCorpusCase, KaniOutcome>` until FR-015-AC-111. From AC-110 until
+AC-111, retain the AC-123-tagged external consumer control
+`public_family_and_corpus_results_have_direct_ir_errors_and_unchanged_successes`
+with a Graph-request corpus case; its graph and corpus direct-result types and
+graph success/refusal checks remain active after the Collection variant retires.
+Exercise each retained
 family's actual profile/dispatch refusal, graph malformed-input and expansion-bound
 refusals, collection bound exhaustion, and the corpus identity/dependency/serialization
 failure controls. Assert the original exact kind and typed code, source identity,
