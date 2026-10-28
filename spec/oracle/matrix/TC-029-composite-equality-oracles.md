@@ -41,7 +41,9 @@ the enum-only owner facade does not excuse dropping it.
    with distinct text profiles, distinct enum declarations, incompatible
    dimensions, distinct units, no common type, a `convert<T>` outside the table,
    a record with a `float64` field nested inside a `sequence`, a `reference`
-   composite form, model, relation, function, `call`, state, temporal and
+   composite whose target is a record value type rather than a permitted model
+   declaration, a valid-target reference equality with an ineligible operand,
+   model, relation, function, `call`, state, temporal and
    protocol nodes, both recursion-rule cycles, an
    unlowered node, a non-`binary` form, a descriptor disagreeing with its
    operand types, one node id repeated under one descriptor, and a request that
@@ -79,7 +81,21 @@ the enum-only owner facade does not excuse dropping it.
    from the generated source, that its siblings are unchanged, and that the
    three upstream blockers (quire-spec-language#120, quire-contract-runtime#34,
    quire-spec-language#121) are distinct values rather than one reason. Assert
-   the generated source contains no `unwrap`, `expect`, panicking index or
+   the invalid-target reference composite in its own package is refused at
+   Contract IR's strict reader as `InvalidPackage/InvalidDerivedShape` at its
+   reference type node id; assert the valid-target reference equality with an
+   ineligible operand in a second package is refused there as
+   `IllTyped/OperatorIneligible` at the offending argument. Neither refused
+   package enters CG. In a separate admitted package, retain the reference-bearing
+   record whose reference targets a permitted model object type, and retain its
+   unchanged healthy sibling. These controls follow Contract IR's
+   `CompositeTypeForm::Reference` target check in
+   `crates/quire-contract-model/src/checked_package/v2/derived_keys.rs`,
+   `check_conforming_reference` in
+   `crates/quire-contract-model/src/checked_package/v2/operations.rs`, and
+   `ModelRefusal::ineligible` in
+   `crates/quire-contract-model/src/checked_package/v2/model_members.rs`.
+   Assert the generated source contains no `unwrap`, `expect`, panicking index or
    charge or pair-count literal, and that the crate manifest declares
    `publish = false` and the runtime dependency (git source, `branch = "main"`, no pinned `rev`)
    with the `exact` feature only for Runtime residue; direct exact/QSV and
@@ -550,6 +566,14 @@ Direct formula, fairness and case requests have one typed unsupported claim
 apiece, with request identity distinct from IR's causative node when they
 differ. No refused item contributes source, and the healthy sibling is
 unchanged; the temporal-clause control remains blocked on QSL-121.
+
+The invalid-target reference composite's package is refused by the strict
+reader as `InvalidPackage/InvalidDerivedShape` at its reference type node id.
+The separate valid-target ineligible reference equality package is refused
+there as `IllTyped/OperatorIneligible` at the offending argument. Neither
+becomes a CG blocker. The independent admitted package retains its
+reference-bearing record, whose reference targets a permitted model object
+type, and its unchanged healthy sibling.
 
 Every admitted shape and schedule is generated; every refused item is absent
 from the source and carries its own typed reason; bytes are identical across
