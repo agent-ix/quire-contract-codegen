@@ -2229,6 +2229,24 @@ fn kani_selected_division_preserves_exact_renderer_refusal() {
     )
     .expect("admitted route keeps a per-item refusal");
     assert!(generated.rejected.is_empty());
+    let claim = generated
+        .claim_map
+        .as_ref()
+        .expect("division claim map")
+        .items
+        .iter()
+        .find(|claim| claim.node_id == *node_id)
+        .expect("selected division claim");
+    assert_eq!(
+        claim.operation.provenance,
+        quire_contract_codegen::OperationProvenance::IrConfirmed
+    );
+    let quire_contract_codegen::ClaimDisposition::Generated(oracle) = &claim.result else {
+        panic!("source-backed division must generate its oracle: {claim:?}");
+    };
+    assert!(oracle
+        .oracle_source
+        .contains("rt::DivisionProfile::Truncating"));
     let quire_contract_codegen::KindOutput::Kani { record, harness } = &generated.items[0].output
     else {
         panic!("selected division must reach the Kani arm")

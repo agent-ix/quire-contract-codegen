@@ -2325,6 +2325,32 @@ fn tc_033_quantity_conversion_requires_authenticated_operation_views() {
         .items
         .iter()
         .all(|claim| matches!(claim.result, ClaimDisposition::Generated(_))));
+    let claim = authenticated
+        .claim_map
+        .as_ref()
+        .expect("quantity claim map")
+        .items
+        .iter()
+        .find(|claim| claim.node_id == *node_id)
+        .expect("routed quantity claim");
+    assert_eq!(
+        claim.operation.provenance,
+        quire_contract_codegen::OperationProvenance::IrConfirmed
+    );
+    let ClaimDisposition::Generated(oracle) = &claim.result else {
+        panic!("source-backed quantity conversion must generate: {claim:?}");
+    };
+    let Some(CheckedTerm::Application { operation, .. }) = input.package.term(node_id) else {
+        panic!("source-backed V1 retains the quantity operation");
+    };
+    let target = operation
+        .member_declaration()
+        .expect("authenticated member view")
+        .expect("quantity target declaration");
+    assert_eq!(oracle.quantity_conversion_target.as_ref(), Some(target));
+    assert!(oracle.oracle_source.contains(
+        "quantity_owner::convert_quantity(operand, unit.unit(), &quantity_owner::QuantityTarget::Exact, meter)"
+    ));
     assert!(matches!(
         generate_routed(&plain, &input.positions, &routed, &contexts),
         Err(RoutedGenerationError::UnauthenticatedOperationView {
