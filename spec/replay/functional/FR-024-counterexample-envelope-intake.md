@@ -546,9 +546,14 @@ FR-024-AC-11 to FR-024-AC-30 are met:
   the ordinary `Refuted` terminal (FR-029-AC-18, IR-460).
 - The state-clause adapter in `src/replay/state_clause.rs` decodes a falsified postcondition
   harness's Kani playback into the named `i64` pre-state values that
-  `StateClauseReplayInputs::playback` takes. It derives the ordered bindings from the harness's
-  state fields and checks the selected clause and generated assertion before replay. The real-Kani
-  test drives this production path.
+  `StateClauseReplayInputs::playback` takes. The remaining AD-004 step 5 L-6 boundary change
+  makes `kani/output/playback.rs` supply its already-parsed `Playback` to
+  `StateClauseReplayInputs::decode_falsification`, rather than having that method read the
+  `KaniRunOutcome` text and parse it again. The method derives ordered bindings from the harness's
+  state fields, uses the smaller caller and run decode limits in each dimension, and retains its
+  harness, selected-clause, postcondition-property, generated-assertion and field-order checks
+  before populating the symbolic pre state. The real-Kani test drives this production path;
+  FR-024's acceptance criteria and replay settlement are unchanged.
 - The frame path's own hand-built invocation document and encoder remain in
   `tests/state_frame_support/native_twin.rs`; its `result` member is now `null`, as the twin's
   operations declare no result.
