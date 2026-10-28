@@ -5,7 +5,7 @@
 
 use quire_contract_model::{CheckedNodeId, CheckedNodeKind, CheckedTerm, LiteralKind, StateForm};
 
-use super::checked_term::{aggregate_members, bound_members, literal, node_id, reference};
+use super::checked_term::{aggregate_members, bound_members, literal, reference};
 use super::clause::ClauseGraphView;
 
 /// A graph node's checked shape, independent of its body representation.
@@ -100,7 +100,7 @@ pub(crate) fn clause_kind(body: &CheckedTerm) -> Option<&str> {
     let CheckedTerm::Application { operation, .. } = body else {
         return None;
     };
-    operation.get("member")?.get("clause")?.as_str()
+    Some(operation.state_clause_kind()?.as_wire())
 }
 
 /// The selected field declaration and name of a record projection.
@@ -108,14 +108,8 @@ pub(crate) fn projected_field(body: &CheckedTerm) -> Option<(CheckedNodeId, &str
     let CheckedTerm::Application { operation, .. } = body else {
         return None;
     };
-    let member = operation.get("member")?;
-    if member.get("kind")?.as_str()? != "field" {
-        return None;
-    }
-    Some((
-        node_id(member.get("declaration")?)?,
-        member.get("name")?.as_str()?,
-    ))
+    let (declaration, name) = operation.projection_field()?;
+    Some((declaration.clone(), name))
 }
 
 /// The ordered node ids in a state-clause parameter aggregate.

@@ -8,7 +8,6 @@ use quire_contract_model::{
     CheckedCollectionKind, CheckedMemberType, CheckedNodeId, CheckedNodeTag, CheckedPackageV2,
     CheckedSemanticNodeV2, CheckedTerm, LiteralKind,
 };
-use serde_json::Value;
 use std::{borrow::Borrow, collections::BTreeMap};
 
 use crate::{
@@ -529,20 +528,11 @@ fn resolve_collection_field(
     else {
         return Err(CollectionDomainRefusal::UnsupportedShape);
     };
-    let field_name = operation
-        .get("member")
-        .filter(|member| member.get("kind").and_then(Value::as_str) == Some("field"))
-        .and_then(|member| member.get("name"))
-        .and_then(Value::as_str)
-        .ok_or(CollectionDomainRefusal::UnsupportedShape)?
-        .to_owned();
-    let declaration_digest = operation
-        .get("member")
-        .and_then(|member| member.get("declaration"))
-        .and_then(|declaration| declaration.get("digest"))
-        .and_then(Value::as_str)
+    let (field_declaration, field_name) = operation
+        .projection_field()
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
-    let declaration = admitted_declaration(graph, declaration_digest)?;
+    let field_name = field_name.to_owned();
+    let declaration = admitted_declaration(graph, &field_declaration.digest)?;
     verify_function_receiver(graph, function, collection, &declaration)?;
     let fields = package.model_object_fields(&declaration);
     let field = declared_field(fields.as_ref(), |fields| fields.field(&field_name))?;

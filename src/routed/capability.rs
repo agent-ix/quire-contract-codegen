@@ -631,10 +631,11 @@ fn checked_state_clause_role<'a>(
     package: &'a quire_contract_model::CheckedPackageV2,
     node_id: &CheckedNodeId,
 ) -> Option<&'a str> {
-    checked_operation(package, node_id)?
-        .get("member")?
-        .get("clause")?
-        .as_str()
+    Some(
+        checked_operation(package, node_id)?
+            .state_clause_kind()?
+            .as_wire(),
+    )
 }
 
 fn checked_node_family<'a>(

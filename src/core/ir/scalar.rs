@@ -3,12 +3,13 @@
 
 //! Typed scalar access to admitted application operations and node shape.
 
-use quire_contract_model::{CheckedNodeId, CheckedTerm};
+use quire_contract_model::{
+    CheckedApplicationOperation, CheckedNodeId, CheckedTerm, OperationModeKind,
+};
 
-use super::checked_term::node_id;
 use super::frame::application_identity;
 
-fn operation(term: Option<&CheckedTerm>) -> Option<&serde_json::Value> {
+fn operation(term: Option<&CheckedTerm>) -> Option<&CheckedApplicationOperation> {
     match term? {
         CheckedTerm::Application { operation, .. } => Some(operation),
         _ => None,
@@ -22,23 +23,17 @@ pub(crate) fn identity(term: Option<&CheckedTerm>) -> Option<&str> {
 
 /// The value of an operation mode with the requested kind.
 pub(crate) fn mode<'a>(term: Option<&'a CheckedTerm>, kind: &str) -> Option<&'a str> {
-    let mode = operation(term)?.get("mode")?;
-    (mode.get("kind")?.as_str()? == kind).then(|| mode.get("value")?.as_str())?
+    let mode = operation(term)?.mode()?;
+    (mode.kind == OperationModeKind::from_wire(kind)?).then_some(mode.value)
 }
 
 /// Whether an operation names the selected law definition.
 pub(crate) fn has_law(term: Option<&CheckedTerm>, identity: &str) -> bool {
     operation(term)
-        .and_then(|operation| operation.get("laws"))
-        .and_then(serde_json::Value::as_array)
+        .map(CheckedApplicationOperation::law_definitions)
         .into_iter()
         .flatten()
-        .any(|law| {
-            law.get("definition")
-                .and_then(|definition| definition.get("identity"))
-                .and_then(serde_json::Value::as_str)
-                == Some(identity)
-        })
+        .any(|definition| definition.identity.as_ref() == identity)
 }
 
 /// The declaration named by a quantity conversion operation.
@@ -47,8 +42,8 @@ pub(crate) fn quantity_conversion_target(
     conversion_identity: &str,
 ) -> Option<CheckedNodeId> {
     let operation = operation(term)?;
-    (operation.get("identity")?.as_str()? == conversion_identity)
-        .then(|| node_id(operation.get("member")?.get("declaration")?))?
+    (operation.identity()? == conversion_identity)
+        .then(|| operation.member_declaration().cloned())?
 }
 
 #[cfg(test)]

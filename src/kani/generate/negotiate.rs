@@ -598,14 +598,17 @@ fn classify_v2_clause<'a>(
     let kind = package
         .term(clause)
         .and_then(|term| match term {
-            CheckedTerm::Application { operation, .. } => operation.get("member"),
+            CheckedTerm::Application { operation, .. } => operation.state_clause_kind(),
             _ => None,
         })
-        .and_then(|member| member.get("clause")?.as_str())
-        .and_then(|name| match name {
-            "precondition" => Some(ObligationKind::Precondition),
-            "postcondition" => Some(ObligationKind::Postcondition),
-            "invariant" => Some(ObligationKind::Invariant),
+        .and_then(|kind| match kind {
+            quire_contract_model::StateClauseKind::Precondition => {
+                Some(ObligationKind::Precondition)
+            }
+            quire_contract_model::StateClauseKind::Postcondition => {
+                Some(ObligationKind::Postcondition)
+            }
+            quire_contract_model::StateClauseKind::Invariant => Some(ObligationKind::Invariant),
             _ => None,
         });
     let mut outcome = match graph_node {
