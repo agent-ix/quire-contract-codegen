@@ -518,12 +518,13 @@ fn selected_scalar_form(package: CheckedPackageV2, node_id: CheckedNodeId) -> Ka
         roots.push(conversion.clone());
     }
     let lowered = package.lower(&roots, &routed_contract_lowering_profile());
-    let contract = match ContractPackageWireV1::read(
+    let contract = match ContractPackageWireV1::read_with_source(
         lowered.package.canonical_bytes().expect("FR-330 bytes"),
         CheckedPackageReadLimits::bounded(),
         &ContractDependencies::new(),
+        &package,
     ) {
-        ContractPackageReadResult::Admitted(contract) => contract,
+        Ok(ContractPackageReadResult::Admitted(contract)) => contract,
         other => panic!("scalar selection package must admit: {other:?}"),
     };
     KaniForm::V2ScalarClaim {
