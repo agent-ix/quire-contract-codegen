@@ -63,3 +63,10 @@ scope:
 - {id: FR-040, path: spec/kani/functional/FR-040-cancellation-producer.md, role: context_only, excerpt: "Verification: TC-055 is planned; no implementation or passing test is claimed here."}
 - {id: FR-024, path: spec/replay/functional/FR-024-counterexample-envelope-intake.md, role: context_only, excerpt: "The remaining AD-004 step 5 L-6 boundary change adds kani/classify.rs::parse_state_clause_falsification as the production entry."}
 ```
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1 at head bc3bc4c0439f2bc5f1f9489b5da2560c6691c6f1: spec/spec.md map row, run row and reverse inventory now state FR-040 live (KaniExecutionRequest.cancel at src/kani/run/execute.rs:59; AC-1 to AC-7 tagged in execute.rs and tests/it/terminal_map.rs:101); FR-040 Verification and TC-055 Status corrected to match. |
+| FND-002 | fixed | Round 1 at head bc3bc4c0439f2bc5f1f9489b5da2560c6691c6f1: kani/classify.rs row names FR-024 state-clause replay intake through parse_state_clause_falsification (src/kani/classify.rs:104); reverse inventory places FR-024's public parser in kani/classify.rs. |

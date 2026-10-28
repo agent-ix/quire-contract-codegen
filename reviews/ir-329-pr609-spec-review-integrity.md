@@ -40,3 +40,10 @@ scope:
 - {id: FR-015, path: spec/kani/functional/FR-015-bounded-kani-obligations.md, role: examined, excerpt: "FR-015-AC-53 to FR-015-AC-58 retain the original seven-kind cover obligations and the guard against an emitted harness without one. The V1 bundle and contract kinds have retired; the surviving V2 kinds still require their own evidence."}
 - {id: FR-041, path: spec/kani/functional/FR-041-claimed-module-proof-gate.md, role: context_only, excerpt: "A stubbed executor, predetermined outcome or build-only run produces no qualifying module evidence and cannot pass the gate."}
 ```
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1 at head bc3bc4c0439f2bc5f1f9489b5da2560c6691c6f1: reverse inventory and real-Kani row split FR-041 into live AC-1 to AC-5 (scripts/cg_gates.rs, scripts/kani_claims.json, tests/it/kani_generation_claims.rs, tests/it/kani_gate.rs) and planned AC-6 to AC-10, matching the tagged set and FR-041's PLANNED sections. |
+| FND-002 | fixed | Round 1 at head bc3bc4c0439f2bc5f1f9489b5da2560c6691c6f1: FR-015 paragraph now states AC-53/58 open for surviving kinds, AC-54/56 retired, AC-55/57 retain corpus obligations, matching AC rows 803-808. |
