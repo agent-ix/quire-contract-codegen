@@ -33,7 +33,7 @@ use crate::{
     kani::{
         abi::{KaniBindingRole, KaniPrimitiveType},
         identity::{ObligationBinding, StateFrameIdentity, StateFrameProperty, StateUnrangedField},
-        output::playback::{parse_assertion_playback, WitnessDecodeLimits},
+        output::playback::{Playback, WitnessDecodeLimits},
         terminal::ReplaySettlement,
     },
     replay::{
@@ -45,9 +45,9 @@ use crate::{
 };
 
 /// Everything one frame replay needs beyond the proved unit. It names no obligation identity and
-/// no witness transcript: both are built from the harness and its playback.
+/// no witness transcript: both are built from the harness and its parsed playback.
 #[derive(Clone, Debug)]
-pub struct FrameReplayInputs {
+pub struct FrameReplayInputs<'a> {
     /// The proving run's lock. A frame replay selects by the operation, so no function is named.
     pub run: ReplayInputs,
     /// The domain package documents the unit's `model` declarations select.
@@ -62,8 +62,10 @@ pub struct FrameReplayInputs {
     pub change: ClaimedChange,
     /// The identity of the falsified frame harness, as the generator persisted it.
     pub harness: StateFrameIdentity,
-    /// The falsified run's concrete-playback text, as the backend printed it.
-    pub playback: String,
+    /// The bounded parse of the falsified run's complete retained backend output.
+    pub playback: Playback<'a>,
+    /// The caller's requested decode bounds, narrowed by the proving run's bounds.
+    pub requested_decode_limits: WitnessDecodeLimits,
 }
 
 /// The member of the harness's scope that is not the one the replay names.
@@ -339,7 +341,7 @@ fn field_set_matches(harness: &StateFrameIdentity) -> Result<(), FrameReplayErro
 /// decoded and not range-checked.
 fn decoded_state(
     harness: &StateFrameIdentity,
-    playback: &str,
+    playback: &Playback<'_>,
     limits: WitnessDecodeLimits,
 ) -> Result<(String, Vec<(String, i64)>), FrameReplayError> {
     let bindings = harness
@@ -353,19 +355,11 @@ fn decoded_state(
             dependencies: Vec::new(),
         })
         .collect::<Vec<_>>();
-    let parsed = parse_assertion_playback(
-        playback,
-        harness.harness_symbol.as_str(),
-        harness.module_symbol.as_str(),
-        limits.bytes,
-        limits.values,
-    )
-    .map_err(|refusal| FrameReplayError::Decode(refusal.into()))?;
     let decoded = decode_playback(
         harness.harness_symbol.as_str(),
         harness.module_symbol.as_str(),
         &bindings,
-        &parsed,
+        playback,
         limits,
     )
     .map_err(FrameReplayError::Decode)?;
@@ -556,7 +550,7 @@ impl FrameReplay {
     /// [`FrameReplayError`] when a check above fails, the lock's dependencies are not admitted,
     /// QSL does not compile the unit or find the operation's frame, or the witness transcript is
     /// not admitted.
-    pub fn new(inputs: FrameReplayInputs) -> Result<Self, FrameReplayError> {
+    pub fn new(inputs: FrameReplayInputs<'_>) -> Result<Self, FrameReplayError> {
         let FrameReplayInputs {
             run,
             packages,
@@ -566,6 +560,7 @@ impl FrameReplay {
             change,
             harness,
             playback,
+            requested_decode_limits,
         } = inputs;
         let kind = frame_kind(&harness.property).ok_or(FrameReplayError::NotAFrame)?;
         field_set_matches(&harness)?;
@@ -576,7 +571,11 @@ impl FrameReplay {
                 named: operation.operation.as_str().to_owned(),
             });
         }
-        let (check_text, values) = decoded_state(&harness, &playback, run.decode_limits)?;
+        let limits = WitnessDecodeLimits {
+            bytes: requested_decode_limits.bytes.min(run.decode_limits.bytes),
+            values: requested_decode_limits.values.min(run.decode_limits.values),
+        };
+        let (check_text, values) = decoded_state(&harness, &playback, limits)?;
         let (run, dependencies) = run.admit().map_err(FrameReplayError::Dependencies)?;
         let replay_limits = run.replay_limits;
         let located = call_site(

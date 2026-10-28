@@ -19,9 +19,9 @@ use qsl_replay::{
     SourceIdentity, WitnessEnvelope, DEFAULT_REPLAY_INPUT_BYTES,
 };
 use quire_contract_codegen::{
-    DependencyLock, DocumentLabel, FrameReplay, FrameReplayError, FrameReplayInputs, LockedSource,
-    ProvidedDocument, ReplayInputs, StateClauseReplayInputs, StateFrameIdentity,
-    StateObjectAddress,
+    parse_assertion_playback, DependencyLock, DocumentLabel, FrameReplay, FrameReplayError,
+    FrameReplayInputs, LockedSource, ProvidedDocument, ReplayInputs, StateClauseReplayInputs,
+    StateFrameIdentity, StateObjectAddress,
 };
 use quire_contract_model::{
     CheckedNodeId, CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2,
@@ -45,6 +45,13 @@ const fn unbounded_decode_limits() -> quire_contract_codegen::WitnessDecodeLimit
     quire_contract_codegen::WitnessDecodeLimits {
         bytes: usize::MAX,
         values: usize::MAX,
+    }
+}
+
+const fn frame_decode_limits() -> quire_contract_codegen::WitnessDecodeLimits {
+    quire_contract_codegen::WitnessDecodeLimits {
+        bytes: 1_048_576,
+        values: 1024,
     }
 }
 
@@ -966,7 +973,7 @@ impl Twin {
             account,
             field,
             run,
-            unbounded_decode_limits(),
+            frame_decode_limits(),
         )
     }
 
@@ -981,7 +988,19 @@ impl Twin {
         limits: quire_contract_codegen::WitnessDecodeLimits,
     ) -> Result<FrameReplay, FrameReplayError> {
         let mut inputs = self.run();
-        inputs.decode_limits = limits;
+        inputs.decode_limits = frame_decode_limits();
+        let effective_limits = quire_contract_codegen::WitnessDecodeLimits {
+            bytes: limits.bytes.min(inputs.decode_limits.bytes),
+            values: limits.values.min(inputs.decode_limits.values),
+        };
+        let playback = parse_assertion_playback(
+            &run.playback,
+            run.harness.harness_symbol.as_str(),
+            run.harness.module_symbol.as_str(),
+            effective_limits.bytes,
+            effective_limits.values,
+        )
+        .map_err(|refusal| FrameReplayError::Decode(refusal.into()))?;
         FrameReplay::new(FrameReplayInputs {
             run: inputs,
             packages: self.packages(),
@@ -1000,7 +1019,8 @@ impl Twin {
                 field: field.to_owned(),
             },
             harness: run.harness.clone(),
-            playback: run.playback.clone(),
+            playback,
+            requested_decode_limits: limits,
         })
     }
 
