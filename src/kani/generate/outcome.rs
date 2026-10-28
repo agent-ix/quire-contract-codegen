@@ -449,6 +449,13 @@ pub enum CollectionUnsupportedReason {
     UnsupportedFieldType,
     /// The element interval has no values.
     UnsatisfiableElementDomain,
+    /// A unique field's declared maximum exceeds its finite distinct-value capacity.
+    UniqueElementCapacityExceeded {
+        /// Number of distinct values in the admitted element domain.
+        capacity: u64,
+        /// Authored maximum collection cardinality.
+        declared_maximum: u64,
+    },
     /// A checked endpoint cannot be represented by the runner's current i64 witness ABI.
     DomainNotRepresentableInI64,
     /// A checked cardinality cannot be represented by the target Rust array ABI.

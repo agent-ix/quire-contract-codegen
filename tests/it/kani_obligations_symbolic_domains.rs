@@ -1663,8 +1663,40 @@ fn boolean_ordered_set_keeps_both_values_and_distinct_active_slots() {
     assert!(source.contains("let item = selected_flags[index as usize];"));
 }
 
+#[trace("FR-015-AC-96", "TC-025")]
 #[test]
-fn ordered_set_over_capacity_keeps_the_existing_typed_refusal_without_a_harness() {
+fn integer_ordered_set_at_distinct_capacity_keeps_its_declared_maximum() {
+    let mut document = ordered_set_document();
+    let node = document["types"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|ty| ty.get("identity").and_then(Value::as_str) == Some(NODE_ID))
+        .unwrap();
+    let items = node["fields"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|field| field.get("name").and_then(Value::as_str) == Some("items"))
+        .unwrap();
+    items["multiplicity"]["upper"] = json!(4);
+    let fixture =
+        emitted_from_document_and_body(document, "forall(item in deref(input).items: item >= 0)");
+    let harness = collection_harness(&fixture, "quire.op.collection.forall");
+    assert_eq!(harness.identity.maximum_length, 4);
+    assert!(harness
+        .rust
+        .contents
+        .contains("let selected_items: [i64; 4] = kani::any();"));
+    assert!(harness
+        .rust
+        .contents
+        .contains("kani::assume(item != selected_items[prior as usize]);"));
+}
+
+#[trace("FR-015-AC-96", "TC-025")]
+#[test]
+fn ordered_set_over_capacity_names_the_exact_capacity_without_a_harness() {
     let mut document = model_document();
     let node = document["types"]
         .as_array_mut()
@@ -1686,10 +1718,53 @@ fn ordered_set_over_capacity_keeps_the_existing_typed_refusal_without_a_harness(
         .find(|ty| ty.get("identity").and_then(Value::as_str) == Some(SMALL_ID))
         .unwrap();
     element["constraints"][1]["operands"]["value"] = json!("1");
-    let fixture =
-        emitted_from_document_and_body(document, "forall(item in deref(input).items: item >= 0)");
+    assert_ordered_set_capacity_refusal(
+        document,
+        "items",
+        "forall(item in deref(input).items: item >= 0)",
+        2,
+        3,
+    );
+}
+
+#[trace("FR-015-AC-96", "TC-025")]
+#[test]
+fn boolean_ordered_set_minimum_above_capacity_is_refused() {
+    let mut document = model_document();
+    let node = document["types"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|ty| ty.get("identity").and_then(Value::as_str) == Some(NODE_ID))
+        .unwrap();
+    let flags = node["fields"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|field| field.get("name").and_then(Value::as_str) == Some("flags"))
+        .unwrap();
+    flags["multiplicity"]["unique"] = json!(true);
+    flags["multiplicity"]["lower"] = json!(3);
+    flags["multiplicity"]["upper"] = json!(3);
+    assert_ordered_set_capacity_refusal(
+        document,
+        "flags",
+        "forall(flag in deref(input).flags: flag != false)",
+        2,
+        3,
+    );
+}
+
+fn assert_ordered_set_capacity_refusal(
+    document: Value,
+    field_name: &str,
+    body: &str,
+    capacity: u64,
+    declared_maximum: u64,
+) {
+    let fixture = emitted_from_document_and_body(document, body);
     assert!(matches!(
-        fixture.fields.field("items").unwrap().member_type(),
+        fixture.fields.field(field_name).unwrap().member_type(),
         Some(CheckedMemberType::Collection {
             kind: quire_contract_model::CheckedCollectionKind::OrderedSet,
             ..
@@ -1727,21 +1802,25 @@ fn ordered_set_over_capacity_keeps_the_existing_typed_refusal_without_a_harness(
             Duration::from_secs(600),
         ),
         items: std::slice::from_ref(&item),
-        subject_path: "crate::ordered_set",
+        subject_path: "crate::ordered_set_capacity",
         unwind: 8,
     })
     .unwrap()
     else {
         panic!("the unsupported collection shape settles per item");
     };
+    assert_eq!(records.len(), 1);
     assert!(matches!(
-        records[0].disposition,
+        &records[0].disposition,
         ObligationDisposition::Unsupported {
             reason: UnsupportedObligation::CollectionClaimNotRendered {
-                reason: quire_contract_codegen::CollectionUnsupportedReason::UnsupportedFieldType,
+                reason: quire_contract_codegen::CollectionUnsupportedReason::UniqueElementCapacityExceeded {
+                    capacity: actual_capacity,
+                    declared_maximum: actual_maximum,
+                },
                 ..
             }
-        }
+        } if *actual_capacity == capacity && *actual_maximum == declared_maximum
     ));
     assert!(collection_harnesses.is_empty());
 }

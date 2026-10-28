@@ -285,6 +285,17 @@ pub(super) fn render_collection(
             },
         });
     }
+    if field.kind == CollectionKindIdentity::OrderedSet {
+        if let Some(capacity) = unique_capacity_exceeded(element, field.maximum_length) {
+            return Err(UnsupportedObligation::CollectionClaimNotRendered {
+                node_id: field.quantifier.clone(),
+                reason: CollectionUnsupportedReason::UniqueElementCapacityExceeded {
+                    capacity,
+                    declared_maximum: field.maximum_length,
+                },
+            });
+        }
+    }
     let quantifier = match field.quantifier_operation.as_str() {
         "quire.op.collection.forall" => CollectionQuantifier::ForAll,
         "quire.op.collection.exists" => CollectionQuantifier::Exists,
@@ -424,6 +435,23 @@ pub(super) fn render_collection(
         return Err(UnsupportedObligation::RenderFailed);
     }
     Ok(harness)
+}
+
+fn unique_element_capacity(element: CollectionElement) -> u128 {
+    match element {
+        CollectionElement::Boolean => 2,
+        CollectionElement::Integer { minimum, maximum } => {
+            // Renderable i64 endpoints have a nonempty span of at most 2^64 values.
+            u128::try_from(i128::from(maximum) - i128::from(minimum) + 1)
+                .expect("admitted IntRange has nonempty representable endpoints")
+        }
+    }
+}
+
+fn unique_capacity_exceeded(element: CollectionElement, declared_maximum: u64) -> Option<u64> {
+    let capacity = unique_element_capacity(element);
+    (u128::from(declared_maximum) > capacity)
+        .then(|| u64::try_from(capacity).expect("refused capacity is below a u64 maximum"))
 }
 
 fn collection_i64(value: i128, node_id: &CheckedNodeId) -> Result<i64, UnsupportedObligation> {
@@ -586,11 +614,6 @@ fn resolve_collection_field(
     if minimum_length > maximum_length {
         return Err(CollectionDomainRefusal::UnsupportedFieldType);
     }
-    if kind == CollectionKindIdentity::OrderedSet
-        && !unique_domain_can_hold(element, *maximum_length)
-    {
-        return Err(CollectionDomainRefusal::UnsupportedFieldType);
-    }
     let Some(CheckedTerm::Binding {
         name: binder_name,
         value: predicate_value,
@@ -626,16 +649,6 @@ fn resolve_collection_field(
         predicate,
         predicate_id,
     })
-}
-
-fn unique_domain_can_hold(element: CollectionElementDomain, maximum_length: u64) -> bool {
-    match element {
-        CollectionElementDomain::Boolean => maximum_length <= 2,
-        CollectionElementDomain::Integer { minimum, maximum } => maximum
-            .checked_sub(minimum)
-            .and_then(|span| span.checked_add(1))
-            .is_none_or(|capacity| i128::from(maximum_length) <= capacity),
-    }
 }
 
 /// The operation identity of a `binary` expression predicate. Any other form, a quantity
@@ -989,26 +1002,85 @@ mod tests {
     use super::*;
 
     use ix_trace_rs::trace;
+    use proptest::{prelude::*, prop_assert_eq, proptest};
     use quire_contract_model::ApplicationOperator;
     use std::{cell::Cell, cmp::Ordering, rc::Rc};
 
+    proptest! {
+        #[test]
+        #[trace("FR-015-AC-96", "TC-025")]
+        fn unique_capacity_matches_independent_wide_oracle(
+            first in any::<i64>(), second in any::<i64>(), declared_maximum in any::<u64>()
+        ) {
+            let minimum = first.min(second);
+            let maximum = first.max(second);
+            let capacity = unique_element_capacity(CollectionElement::Integer { minimum, maximum });
+            let ordered_minimum = u128::from((minimum as u64) ^ (1u64 << 63));
+            let ordered_maximum = u128::from((maximum as u64) ^ (1u64 << 63));
+            let expected = ordered_maximum - ordered_minimum + 1;
+            prop_assert_eq!(capacity, expected);
+            prop_assert_eq!(
+                unique_capacity_exceeded(CollectionElement::Integer { minimum, maximum }, declared_maximum),
+                (u128::from(declared_maximum) > expected).then(|| u64::try_from(expected).unwrap())
+            );
+        }
+    }
+
     #[trace("FR-015-AC-96", "TC-025")]
     #[test]
-    fn unique_capacity_uses_the_complete_domain_without_integer_overflow() {
-        assert!(unique_domain_can_hold(CollectionElementDomain::Boolean, 2));
-        assert!(!unique_domain_can_hold(CollectionElementDomain::Boolean, 3));
-        let two = CollectionElementDomain::Integer {
-            minimum: -1,
-            maximum: 0,
+    fn unique_capacity_includes_the_full_i64_interval() {
+        assert_eq!(unique_element_capacity(CollectionElement::Boolean), 2);
+        assert_eq!(
+            unique_element_capacity(CollectionElement::Integer {
+                minimum: i64::MIN,
+                maximum: i64::MAX,
+            }),
+            1u128 << 64
+        );
+    }
+
+    #[trace("FR-015-AC-96", "FR-015-AC-101", "TC-025")]
+    #[test]
+    fn capacity_refusal_follows_existing_representation_unwind_and_memory_refusals() {
+        let mut claim = base_claim();
+        claim.field.kind = CollectionKindIdentity::OrderedSet;
+        claim.field.element = CollectionElementDomain::Integer {
+            minimum: 0,
+            maximum: 1,
         };
-        assert!(unique_domain_can_hold(two, 2));
-        assert!(!unique_domain_can_hold(two, 3));
-        assert!(unique_domain_can_hold(
-            CollectionElementDomain::Integer {
-                minimum: i128::MIN,
-                maximum: i128::MAX,
+        let request = |unwind, memory_bytes| KaniObligationRequest {
+            ceilings: crate::kani::identity::ProofCeilings {
+                memory_bytes: std::num::NonZeroU64::new(memory_bytes).unwrap(),
+                wall_clock: std::time::Duration::from_secs(60),
             },
-            u64::MAX,
+            items: &[],
+            subject_path: "crate::capacity_precedence",
+            unwind,
+        };
+        assert!(matches!(
+            render_collection(&request(2, 1 << 20), &claim),
+            Err(UnsupportedObligation::CollectionClaimNotRendered {
+                reason: CollectionUnsupportedReason::UnwindBelowCollectionBound { .. },
+                ..
+            })
+        ));
+        assert!(matches!(
+            render_collection(&request(8, 16), &claim),
+            Err(UnsupportedObligation::CollectionClaimNotRendered {
+                reason: CollectionUnsupportedReason::SymbolicDomainExceedsMemoryCeiling { .. },
+                ..
+            })
+        ));
+        claim.field.element = CollectionElementDomain::Integer {
+            minimum: 0,
+            maximum: i128::from(i64::MAX) + 1,
+        };
+        assert!(matches!(
+            render_collection(&request(8, 1 << 20), &claim),
+            Err(UnsupportedObligation::CollectionClaimNotRendered {
+                reason: CollectionUnsupportedReason::DomainNotRepresentableInI64,
+                ..
+            })
         ));
     }
 
