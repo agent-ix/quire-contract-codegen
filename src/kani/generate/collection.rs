@@ -552,7 +552,9 @@ fn resolve_collection_field(
     let kind = match kind {
         CheckedCollectionKind::Sequence => CollectionKindIdentity::Sequence,
         CheckedCollectionKind::OrderedSet => CollectionKindIdentity::OrderedSet,
-        _ => return Err(CollectionDomainRefusal::UnsupportedFieldType),
+        CheckedCollectionKind::Set | CheckedCollectionKind::Bag => {
+            return Err(CollectionDomainRefusal::UnsupportedFieldType);
+        }
     };
     let element_type = collection_element_type(graph, collection, kind)?;
     let element = match element.as_ref() {

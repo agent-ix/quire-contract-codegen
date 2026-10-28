@@ -9,7 +9,10 @@ use super::{
 };
 use crate::{
     core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES},
-    kani::abi::{i64_literal, KaniPrimitiveType},
+    kani::{
+        abi::{i64_literal, KaniPrimitiveType},
+        identity::CollectionKindIdentity,
+    },
 };
 
 fn line(source: &mut String, text: &str) {
@@ -278,8 +281,8 @@ fn render_collection(
     let maximum_length = collection.maximum_length;
     let array_len = collection.array_len;
     let uniqueness_assumption = match collection.kind {
-        crate::kani::identity::CollectionKindIdentity::Sequence => String::new(),
-        crate::kani::identity::CollectionKindIdentity::OrderedSet => format!(
+        CollectionKindIdentity::Sequence => String::new(),
+        CollectionKindIdentity::OrderedSet => format!(
             "                for prior in 0..index {{\n\
                      kani::assume(item != {item_name}[prior as usize]);\n\
                      }}\n"
