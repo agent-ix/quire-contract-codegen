@@ -1,7 +1,9 @@
 //! Public V2 strategy selection of an admitted state-clause claim.
 
 use ix_trace_rs::trace;
-use quire_contract_codegen::{select_v2_claim_execution_point, V2SelectedClaimKey};
+use quire_contract_codegen::{
+    select_v2_claim_execution_point, V2SelectedClaimKey, V2SelectedClaimRequest,
+};
 use quire_contract_model::{
     CheckedExecutionPointRefusal, CheckedOccurrence, CheckedOccurrenceRole, ExecutionPoint,
     ExecutionPointName,
@@ -48,23 +50,23 @@ fn v2_selected_claim_entry_keeps_point_and_exact_refusal_key() {
         .find(|occurrence| occurrence.role == CheckedOccurrenceRole::Claim)
         .expect("authentic transfer claim");
 
-    let deposit_point = select_v2_claim_execution_point(
-        &package,
-        V2SelectedClaimKey {
+    let deposit_point = select_v2_claim_execution_point(V2SelectedClaimRequest {
+        package: &package,
+        key: V2SelectedClaimKey {
             clause: &deposit_clause,
             claim_owner: &deposit_clause,
             occurrence: deposit_claim,
         },
-    )
+    })
     .expect("authentic deposit claim selects its point");
-    let transfer_point = select_v2_claim_execution_point(
-        &package,
-        V2SelectedClaimKey {
+    let transfer_point = select_v2_claim_execution_point(V2SelectedClaimRequest {
+        package: &package,
+        key: V2SelectedClaimKey {
             clause: &transfer_clause,
             claim_owner: &transfer_clause,
             occurrence: transfer_claim,
         },
-    )
+    })
     .expect("authentic transfer claim selects its point");
     assert_eq!(
         deposit_point,
@@ -93,14 +95,14 @@ fn v2_selected_claim_entry_keeps_point_and_exact_refusal_key() {
         (&deposit_clause, &absent_ordinal),
         (&transfer_clause, deposit_claim),
     ] {
-        let diagnostic = select_v2_claim_execution_point(
-            &package,
-            V2SelectedClaimKey {
+        let diagnostic = select_v2_claim_execution_point(V2SelectedClaimRequest {
+            package: &package,
+            key: V2SelectedClaimKey {
                 clause: &deposit_clause,
                 claim_owner: owner,
                 occurrence,
             },
-        )
+        })
         .expect_err("changed key must refuse without an artifact");
         assert_eq!(
             diagnostic.refusal.code,

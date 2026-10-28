@@ -18,6 +18,15 @@ pub struct V2SelectedClaimKey<'a> {
     pub occurrence: &'a CheckedOccurrence,
 }
 
+/// Input for selecting one claim from an already admitted V2 package.
+#[derive(Clone, Copy, Debug)]
+pub struct V2SelectedClaimRequest<'a> {
+    /// The checked package admitted by Contract IR.
+    pub package: &'a CheckedPackageV2,
+    /// The complete selected-claim identity.
+    pub key: V2SelectedClaimKey<'a>,
+}
+
 /// A V2 strategy selection refusal, retaining IR's exact typed cause and key.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct V2SelectedClaimDiagnostic {
@@ -31,10 +40,13 @@ pub struct V2SelectedClaimDiagnostic {
 /// admitted package's clause-context accessor.
 // Implements: FR-011-AC-13
 pub fn select_v2_claim_execution_point(
-    package: &CheckedPackageV2,
-    key: V2SelectedClaimKey<'_>,
+    request: V2SelectedClaimRequest<'_>,
 ) -> Result<ExecutionPoint, V2SelectedClaimDiagnostic> {
-    package
-        .clause_execution_point(key.clause, (key.claim_owner, key.occurrence))
+    request
+        .package
+        .clause_execution_point(
+            request.key.clause,
+            (request.key.claim_owner, request.key.occurrence),
+        )
         .map_err(|refusal| V2SelectedClaimDiagnostic { refusal })
 }

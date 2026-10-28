@@ -60,6 +60,7 @@ pub use strategy::bound::relation::{
 };
 pub use strategy::v2_selected_claim::{
     select_v2_claim_execution_point, V2SelectedClaimDiagnostic, V2SelectedClaimKey,
+    V2SelectedClaimRequest,
 };
 
 pub use kani::generate::corpus::bounded_kani_corpus::{
