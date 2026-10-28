@@ -72,13 +72,15 @@ exact rates.
     truncate it, uppercase hex, or add a leading-zero count. Compare against the exact typed pair
     and inspect any artifact, verdict, or report mutation.
 12. Independently of runner generation, call the public V2 selected-claim entry with one admitted
-    package containing two authentic `claim` occurrences of the same checked clause with distinct
-    accepted points. Supply each complete typed key in turn: checked clause id, claim owner node id,
-    and that claim's authentic occurrence. Compare each selected point with its own accepted point
-    and the other claim's different point. Keep clause and occurrence fixed but change only the
-    key's owner node id; inspect the typed V2 diagnostic, its retained identities and Contract IR
-    refusal, and artifact output. Inspect the entry signature for a second owner field and the V1
-    `BoundPackage` entry and `StrategyDiagnostic` for changes.
+    package containing two distinct checked state clauses, each with an authentic `claim`
+    occurrence and a different accepted point. Supply each complete typed key in turn: checked
+    clause id, claim owner node id, and that clause's authentic occurrence. Compare each selected
+    point with its own accepted point and the other clause's different point. For one selection,
+    replace only the occurrence with the other clause's claim while retaining the correct owner;
+    then restore the occurrence and replace only the owner with the other clause's node id. Inspect
+    both typed V2 diagnostics, their retained identities and Contract IR refusals, and artifact
+    output. Inspect the entry signature for a second owner field and the V1 `BoundPackage` entry
+    and `StrategyDiagnostic` for changes.
 
 ## Expected Results
 
@@ -119,8 +121,8 @@ exact rates.
 - Step 11 returns `StrategyErrorCode::InvalidIdentityRendering` before bundle publication or
   verdict/report mutation without normalizing malformed or noncanonical text; canonical text and typed identity agree
   (FR-011-AC-11).
-- Step 12 selects each matching claim's exact checked point, never the competing authentic claim's
-  different point. The wrong owner returns a distinct
-  typed V2 diagnostic retaining `CheckedExecutionPointRefusal::MissingClaimOccurrence`, the supplied
-  clause, owner and occurrence, and no artifact. The request has no second caller-supplied owner;
+- Step 12 selects each matching claim's exact `ExecutionPoint`, never the other clause's different
+  point. Both the swapped occurrence and wrong owner return distinct typed V2 diagnostics retaining
+  `CheckedExecutionPointRefusal::MissingClaimOccurrence`, each supplied clause, owner and occurrence,
+  and no artifact. The request has no second caller-supplied owner;
   the V1 entry and diagnostic remain unchanged (FR-011-AC-13).

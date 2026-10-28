@@ -52,10 +52,10 @@ until specified.
 - Planned (IR-1013, FR-058): one admitted `CheckedPackageV2`, the selected checked clause id, and
   that clause's authentic `claim` `CheckedOccurrence`. Together they select one accepted QSL
   `ClauseBinding.execution_point`; Contract IR's typed accessor returns its owned
-  `CheckedExecutionPoint` (variant and exact nonempty point name) for that package, clause, and
-  occurrence. QSpec's V2 `AnchorName` wire domain admits every nonempty string; the checked point
-  retains that domain without converting through the legacy `ExecutionPoint<AnchorName>` model
-  type, whose identifier validation remains at its own boundary. QSL owns `ClauseBinding`; the
+  `ExecutionPoint` with an `ExecutionPointName` (variant and exact nonempty point name) for that
+  package, clause, and occurrence. QSpec's V2 point-name wire domain admits every nonempty string;
+  `ExecutionPointName` preserves that domain, while authored `AnchorName` identifier validation
+  remains at its own boundary. QSL owns `ClauseBinding`; the
   caller supplies no separate point. The QSL driver supplies the FR-331 bound item for that selected
   `claim`. A process-provider FR-331 frame carries `request.package_id`, which its reader checks
   against the frame's canonical package bytes; CG compares that id with its separately admitted
@@ -138,11 +138,11 @@ until specified.
   then the generator shall return `StrategyErrorCode::ExecutionPointMismatch` and no artifact before
   publication.
 - The generator shall not derive an execution point from clause kind.
-- The generator shall render the accessor's checked point into the runtime string injectively as
+- The generator shall render the accessor's `ExecutionPoint` into the runtime string injectively as
   `<variant>:<utf8-byte-length>:<point-name>`, where variant is exactly `initialization`,
   `handler`, `pre`, or `post` and the length counts the exact nonempty point name's UTF-8 bytes.
   CG shall preserve every admitted name byte, including names that are not identifiers.
-- CG shall not convert through the legacy model point type or add a fallback point.
+- CG shall use the returned `ExecutionPoint` without adding a fallback point.
 - The runner shall construct each verdict through the runtime `construct_verdict` operation
   (quire-contract-runtime interface-001) with the selected driver-bound FR-331 claim's complete
   occurrence key as requirement identity, the same admitted
