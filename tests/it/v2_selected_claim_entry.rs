@@ -26,10 +26,16 @@ fn v2_selected_claim_entry_keeps_point_and_exact_refusal_key() {
     assert_eq!(package.package_id(), second_package.package_id());
 
     let deposit = package
-        .node(&deposit_clause)
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| node.node_id == deposit_clause)
         .expect("deposit clause in package");
     let transfer = package
-        .node(&transfer_clause)
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| node.node_id == transfer_clause)
         .expect("transfer clause in package");
     let deposit_claim = deposit
         .occurrences
