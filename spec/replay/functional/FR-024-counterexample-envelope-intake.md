@@ -547,12 +547,15 @@ FR-024-AC-11 to FR-024-AC-30 are met:
 - The state-clause adapter in `src/replay/state_clause.rs` decodes a falsified postcondition
   harness's Kani playback into the named `i64` pre-state values that
   `StateClauseReplayInputs::playback` takes. The remaining AD-004 step 5 L-6 boundary change
-  makes `kani/output/playback.rs` supply its already-parsed `Playback` to
-  `StateClauseReplayInputs::decode_falsification`, rather than having that method read the
-  `KaniRunOutcome` text and parse it again. The method derives ordered bindings from the harness's
-  state fields, uses the smaller caller and run decode limits in each dimension, and retains its
-  harness, selected-clause, postcondition-property, generated-assertion and field-order checks
-  before populating the symbolic pre state. The real-Kani test drives this production path;
+  checks `KaniRunOutcome::Falsified` before parsing, keeps `NotFalsified` for other outcomes,
+  and passes the full falsified counterexample text to `parse_assertion_playback` in
+  `kani/output/playback.rs`. The parser receives the smaller caller and run byte and value
+  limits before reading the text, preserving its multiple-assertion refusal and full-text
+  `source_len`. Its parsed `Playback` reaches `StateClauseReplayInputs::decode_falsification`
+  without a second parse. That method derives ordered bindings from the harness's state fields
+  and retains its playback-path versus harness-identity, selected-clause, postcondition-property,
+  generated-assertion and field-order checks before populating the symbolic pre state. The
+  non-falsified-run test moves to the pre-parse boundary; the real-Kani test drives this path;
   FR-024's acceptance criteria and replay settlement are unchanged.
 - The frame path's own hand-built invocation document and encoder remain in
   `tests/state_frame_support/native_twin.rs`; its `result` member is now `null`, as the twin's
