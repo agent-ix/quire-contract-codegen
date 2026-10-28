@@ -137,9 +137,25 @@ fn tc_026_state_clause_decode_refuses_poisoned_suffixes_at_both_bounds() {
         (
             crate::unbounded_decode_limits(),
             quire_contract_codegen::WitnessDecodeLimits {
+                bytes: transcript.len() - 1,
+                values: 2,
+            },
+            "cg_witness_decode_bytes_limit",
+        ),
+        (
+            crate::unbounded_decode_limits(),
+            quire_contract_codegen::WitnessDecodeLimits {
                 bytes: usize::MAX,
                 values: 1,
             },
+            "cg_witness_decode_values_limit",
+        ),
+        (
+            quire_contract_codegen::WitnessDecodeLimits {
+                bytes: usize::MAX,
+                values: 1,
+            },
+            crate::unbounded_decode_limits(),
             "cg_witness_decode_values_limit",
         ),
     ] {
