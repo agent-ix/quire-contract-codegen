@@ -28,3 +28,9 @@ Examined AD-004 L-6, interface-001 parse_state_clause_falsification and StateCla
 For FND-001, the added table has a run byte limit paired with unbounded requested bytes, and requested value limit paired with unbounded run values. A decoder changed to use only the run byte limit and only the requested value limit would pass both cases, despite interface-001 requiring the per-dimension minimum. This is a test sufficiency finding; no production defect was identified.
 
 Focused checks supplied by coder: state-clause integration 15 passed, 2 Kani-lane ignored; playback unit 4 passed; witness unit 15 passed; clippy completed. No full gate was run by reviewer.
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | Fix head 18a0b72ada24bd13e2b81d1800a4d1ded568d897 adds requested-byte and run-value refusal cases to the same direct typed-decoder test. The four cases now constrain each minimum operand in each dimension; no new defect appears in the fix diff. |
