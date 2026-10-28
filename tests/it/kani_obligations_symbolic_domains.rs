@@ -929,6 +929,7 @@ fn qsl_emits_and_ir_admits_the_authored_collection_and_reference_shapes() {
 
 #[trace(
     "FR-015-AC-96",
+    "FR-015-AC-99",
     "FR-015-AC-100",
     "TC-025",
     "TC-001",
@@ -1123,6 +1124,16 @@ fn negotiation_renders_the_selected_sequence_claims_deterministically() {
         assert!(harness
             .rust
             .contents
+            .contains("let selected_items_len: i64 = kani::any();"));
+        assert!(harness
+            .rust
+            .contents
+            .contains("let selected_items: [i64; 3] = kani::any();"));
+        assert!(!harness.rust.contents.contains("Vec<"));
+        assert!(!harness.rust.contents.contains("vec!["));
+        assert!(harness
+            .rust
+            .contents
             .contains(if operation.ends_with("forall") {
                 ".all("
             } else {
@@ -1132,6 +1143,10 @@ fn negotiation_renders_the_selected_sequence_claims_deterministically() {
             harness.rust.contents.find("assert!(claim").unwrap()
                 < harness.rust.contents.find("kani::cover!").unwrap()
         );
+        assert_eq!(harness.rust.contents.matches("kani::cover!(").count(), 1);
+        let lines: Vec<_> = harness.rust.contents.lines().map(str::trim).collect();
+        assert!(lines[lines.len() - 3].starts_with("kani::cover!("));
+        assert_eq!(&lines[lines.len() - 2..], &["}", "}"]);
         assert!(harness
             .rust
             .contents
@@ -1313,7 +1328,7 @@ fn boolean_sequence_uses_symbolic_slots_for_both_boolean_values() {
     assert!(harness.rust.contents.contains("index as usize"));
 }
 
-#[trace("FR-015-AC-96", "FR-015-AC-100", "TC-025")]
+#[trace("FR-015-AC-96", "FR-015-AC-99", "FR-015-AC-100", "TC-025")]
 #[test]
 fn nonzero_sequence_bounds_are_inclusive_in_the_symbolic_domain() {
     let mut document = model_document();

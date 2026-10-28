@@ -98,7 +98,6 @@ Each generated artifact is a path and its contents. The documents under
 | Schema | Describes |
 | --- | --- |
 | `generated-rust-oracle-v1.schema.json`, `oracle-source-map-v1.schema.json` | Generated oracle Rust and its source map. |
-| `generated-rust-kani-v2.schema.json`, `kani-proof-graph-v2.schema.json` | Generated Kani Rust and its proof graph. |
 | `kani-corpus-proof-graph-v1.schema.json` | The bounded Kani corpus proof graph. |
 | `bound-coverage-observations-v1.schema.json` | Bound coverage observations. |
 
