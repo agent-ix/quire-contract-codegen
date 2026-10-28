@@ -3442,8 +3442,8 @@ fn render_body(body: &ClassifiedBody<'_>) -> String {
         ClassifiedBody::Scalar(operator) => {
             let variant = operator.variant();
             format!(
-                "|frame: &rt::Frame, args: &[exact::Value]| -> exact::Outcome<exact::Value> {{\n        \
-                 let [exact::Value::Integer(left), exact::Value::Integer(right)] = args else {{\n            \
+                "|args: Vec<exact::Value>| {{ Box::new(move |frame: &rt::Frame<'_, '_>, _completed: Option<exact::Value>| {{ rt::BodyStep::Return((|| -> exact::Outcome<exact::Value> {{\n        \
+                 let [exact::Value::Integer(left), exact::Value::Integer(right)] = args.as_slice() else {{\n            \
                  return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedArgumentShapeMismatch }});\n        }};\n        \
                  let evaluated = frame.meter(|meter| exact::evaluate_integer_arithmetic(exact::IntegerArithmetic::{variant}(left, right), None, meter));\n        \
                  match evaluated {{\n            \
@@ -3452,7 +3452,7 @@ fn render_body(body: &ClassifiedBody<'_>) -> String {
                  Ok(exact::Outcome::Refused(refusal)) => exact::Outcome::Refused(refusal),\n            \
                  Ok(exact::Outcome::Incomplete(incomplete)) => exact::Outcome::Incomplete(incomplete),\n            \
                  Err(refusal) => exact::Outcome::Refused(refusal),\n            \
-                 }}\n    }}"
+                 }}\n    }})()) }}) }}"
             )
         }
         ClassifiedBody::Equality(operator) => {
@@ -3461,8 +3461,8 @@ fn render_body(body: &ClassifiedBody<'_>) -> String {
                 EqualityOperatorKind::NotEqual => "sv::EqualityOperator::NotEqual",
             };
             format!(
-                "|frame: &rt::Frame, args: &[exact::Value]| -> exact::Outcome<exact::Value> {{\n        \
-                 let [left, right] = args else {{\n            \
+                "|args: Vec<exact::Value>| {{ Box::new(move |frame: &rt::Frame<'_, '_>, _completed: Option<exact::Value>| {{ rt::BodyStep::Return((|| -> exact::Outcome<exact::Value> {{\n        \
+                 let [left, right] = args.as_slice() else {{\n            \
                  return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedArgumentShapeMismatch }});\n        }};\n        \
                  let operand_type = match left {{\n            \
                  exact::Value::Boolean(_) => exact::ValueType::Boolean,\n            \
@@ -3480,13 +3480,20 @@ fn render_body(body: &ClassifiedBody<'_>) -> String {
                  Ok(exact::Outcome::Refused(refusal)) => exact::Outcome::Refused(refusal),\n            \
                  Ok(exact::Outcome::Incomplete(incomplete)) => exact::Outcome::Incomplete(incomplete),\n            \
                  Err(refusal) => exact::Outcome::Refused(refusal),\n            \
-                 }}\n    }}"
+                 }}\n    }})()) }}) }}"
             )
         }
         ClassifiedBody::Call(callee) => {
             format!(
-                "|frame: &rt::Frame, args: &[exact::Value]| -> exact::Outcome<exact::Value> {{\n        \
-                 frame.call({callee:?}, args)\n    }}"
+                "|args: Vec<exact::Value>| {{ let mut pending = Some(args); Box::new(move |_frame: &rt::Frame<'_, '_>, completed: Option<exact::Value>| {{\n        \
+                 if let Some(arguments) = pending.take() {{\n            \
+                 rt::BodyStep::Call {{ function: {callee:?}.to_owned(), arguments }}\n        \
+                 }} else {{\n            \
+                 rt::BodyStep::Return(match completed {{\n                \
+                 Some(value) => exact::Outcome::Completed(value),\n                \
+                 None => exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedUnexpectedOutcome }}),\n            \
+                 }})\n        \
+                 }}\n    }}) }}"
             )
         }
     }

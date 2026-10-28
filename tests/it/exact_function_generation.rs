@@ -2195,7 +2195,6 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
     use serde_json::{json, Value};
     use std::{fs, path::PathBuf};
 
-    const MODEL_NODE: u32 = 992_001;
     const FAIRNESS_NODE: u32 = 992_002;
     const FUNCTION_BODY: u32 = 992_003;
     const HEALTHY_CALL: u32 = 992_004;
@@ -2259,6 +2258,19 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
         .as_str()
         .unwrap()
         .to_owned();
+    let model_placeholder = nodes
+        .iter()
+        .find(|node| {
+            node["node_tag"] == "model"
+                && node["semantic_form"] == "object_type"
+                && node["owner"]["kind"] == "model"
+                && node["owner"]["identity"] == "acme/orders"
+                && node["owner"]["node"] == "ix://acme/orders/Order"
+        })
+        .expect("published model-owned object type")["node_id"]["digest"]
+        .as_str()
+        .expect("model node digest")
+        .to_owned();
 
     let infinite_trace =
         json!({"authority":"agent-ix", "identity":"quire.temporal.infinite-trace/v1"});
@@ -2288,8 +2300,6 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
     }
 
     let mut builder = PackageBuilder::from_wire(wire);
-    builder.model_owned_object_type(MODEL_NODE, "acme/orders", "ix://acme/orders/Order");
-    let model_placeholder = key(MODEL_NODE);
     let parameter_placeholder = key(992_005);
     builder.node(
         &parameter_placeholder,
@@ -2452,16 +2462,19 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
         .iter()
         .find(|claim| claim.node_id == fairness_id)
         .expect("direct fairness claim retains requested identity");
-    assert!(matches!(
-        &direct.result,
-        ClaimDisposition::Refused {
-        refusal: ExactFunctionRefusal::BlockedOnUpstream {
-            unsupported_node_id,
-            node_tag: "temporal",
-            issue: UpstreamBlocker::QuireSpecLanguage121,
-        }
-        } if unsupported_node_id == &fairness_id
-    ));
+    assert!(
+        matches!(
+            &direct.result,
+            ClaimDisposition::Refused {
+            refusal: ExactFunctionRefusal::Unsupported {
+                unsupported_node_id,
+                node_tag: "temporal",
+            }
+            } if unsupported_node_id == &fairness_id
+        ),
+        "direct result: {:?}",
+        direct.result
+    );
     let generated = combined
         .claim_map
         .items
