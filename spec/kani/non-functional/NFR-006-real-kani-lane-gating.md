@@ -104,13 +104,14 @@ modules `tests/exact_scalar_support/package.rs` and `tests/state_frame_support/*
 which `include!`s `tests/checked_package_support/base.rs` and `#[path]`-includes
 `tests/checked_package_support/rekey.rs`. The rule is by file, not by test: a lane
 file's `include_str!` of `tests/state_frame_support/subject.rs` compiles the subject into the real-Kani
-crate, and its `include_str!`s of the Kani schemas (`schemas/kani-proof-graph-v2.schema.json`,
-`schemas/generated-rust-kani-v2.schema.json`, `schemas/kani-corpus-proof-graph-v1.schema.json`)
-feed lane tests (`numeric_state_bindings_are_normalized_bounded_and_schema_valid` reads two) and
-default tests of the same files. The set therefore holds the Kani schemas, though no schema goes
-through Kani; the three oracle and coverage schemas are out because no lane file includes them
-(measured at this revision: these are all the include targets of the lane files beyond the
-`#[path]` modules listed). `src/core/**` is
+crate, and `tests/it/bounded_kani_corpus.rs` includes
+`schemas/kani-corpus-proof-graph-v1.schema.json` for its corpus proof-graph controls. The set
+therefore holds that surviving Kani schema, though no schema goes through Kani. The retired
+`schemas/kani-proof-graph-v2.schema.json` and
+`schemas/generated-rust-kani-v2.schema.json` paths remain `required`-classified by
+`make kani-scope` if reintroduced, as NFR-006-AC-1 requires. The oracle and coverage schemas
+are out because no lane file includes them (measured at this revision: these are all the include
+targets of the lane files beyond the `#[path]` modules listed). `src/core/**` is
 in the set because harness names and identity come from it. `src/strategy/**` and `src/evidence/**`
 are out because no module of `src/kani`, `src/oracle`, `src/routed`, `src/replay`, `src/core` or
 `src/publication` imports them and no lane test calls their entry points (measured by search at

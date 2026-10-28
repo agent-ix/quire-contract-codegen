@@ -4,6 +4,7 @@ use super::outcome::{UnsupportedObligation, MAX_OBLIGATION_UNWIND};
 use crate::{
     core::identity::HarnessPath,
     kani::abi::{adapter_options, KaniPrimitiveType, KaniSolver},
+    kani::identity::CollectionPredicateIdentity,
 };
 use std::collections::BTreeSet;
 use syn::{
@@ -238,17 +239,75 @@ pub(super) struct Cover {
     pub(super) message: String,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub(super) enum CollectionQuantifier {
+    ForAll,
+    Exists,
+}
+
+impl CollectionQuantifier {
+    pub(super) fn name(self) -> &'static str {
+        match self {
+            Self::ForAll => "forall",
+            Self::Exists => "exists",
+        }
+    }
+    pub(super) fn iterator_method(self) -> &'static str {
+        match self {
+            Self::ForAll => "all",
+            Self::Exists => "any",
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(super) struct CollectionSpec {
+    pub(super) field_name: String,
+    pub(super) item_name: String,
+    pub(super) length_name: String,
+    pub(super) minimum_length: i64,
+    pub(super) maximum_length: i64,
+    pub(super) array_len: usize,
+    pub(super) element: CollectionElement,
+    pub(super) quantifier: CollectionQuantifier,
+    pub(super) predicate: CollectionPredicateIdentity,
+}
+impl CollectionSpec {
+    pub(super) fn predicate_expression(&self) -> String {
+        match &self.predicate {
+            CollectionPredicateIdentity::IntegerGreaterOrEqual { threshold } => {
+                format!("item >= {threshold}")
+            }
+            CollectionPredicateIdentity::IntegerEqual { value } => format!("item == {value}"),
+            CollectionPredicateIdentity::BooleanNotEqual { value } => format!("item != {value}"),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(super) enum CollectionElement {
+    Boolean,
+    Integer { minimum: i64, maximum: i64 },
+}
+
 #[derive(Clone, Debug)]
 pub(super) struct HarnessSpec {
-    label: String,
     path: HarnessPath,
-    oracle_source: String,
-    proof: ProofKind,
-    body: Vec<Statement>,
+    shape: HarnessShape,
     cover: Cover,
     unwind: u32,
     solver: KaniSolver,
     options: Vec<String>,
+}
+#[derive(Clone, Debug)]
+pub(super) enum HarnessShape {
+    Statements {
+        label: String,
+        oracle_source: String,
+        proof: ProofKind,
+        body: Vec<Statement>,
+    },
+    Collection(CollectionSpec),
 }
 fn identifier_identity(identifier: &syn::Ident) -> String {
     identifier.unraw().to_string()
@@ -403,31 +462,65 @@ impl HarnessSpec {
         }
         let options = adapter_options(&path.to_string(), unwind, solver, false);
         Ok(Self {
-            label,
             path,
-            oracle_source,
-            proof,
-            body,
+            shape: HarnessShape::Statements {
+                label,
+                oracle_source,
+                proof,
+                body,
+            },
             cover,
             unwind,
             solver,
             options,
         })
     }
-    pub(super) fn label(&self) -> &str {
-        &self.label
+    pub(super) fn new_collection(
+        path: HarnessPath,
+        collection: CollectionSpec,
+        unwind: u32,
+        solver: KaniSolver,
+    ) -> Result<Self, HarnessSpecError> {
+        let item_identity = identifier(&collection.item_name)?;
+        let length_identity = identifier(&collection.length_name)?;
+        if item_identity == length_identity
+            || collection.minimum_length < 0
+            || collection.minimum_length > collection.maximum_length
+            || collection.array_len
+                != usize::try_from(collection.maximum_length)
+                    .map_err(|_| HarnessSpecError::InvalidDomain)?
+            || matches!(collection.element, CollectionElement::Integer { minimum, maximum } if minimum > maximum)
+        {
+            return Err(HarnessSpecError::InvalidDomain);
+        }
+        if !(1..=MAX_OBLIGATION_UNWIND).contains(&unwind) {
+            return Err(HarnessSpecError::InvalidUnwind(unwind));
+        }
+        let options = adapter_options(&path.to_string(), unwind, solver, false);
+        let cover = Cover {
+            condition: ExprText::new(format!(
+                "{} == {} || {} == {}",
+                collection.length_name,
+                collection.minimum_length,
+                collection.length_name,
+                collection.maximum_length
+            ))?,
+            message: "a selected field cardinality endpoint is reachable".to_owned(),
+        };
+        Ok(Self {
+            path,
+            shape: HarnessShape::Collection(collection),
+            cover,
+            unwind,
+            solver,
+            options,
+        })
+    }
+    pub(super) fn shape(&self) -> &HarnessShape {
+        &self.shape
     }
     pub(super) fn path(&self) -> &HarnessPath {
         &self.path
-    }
-    pub(super) fn oracle_source(&self) -> &str {
-        &self.oracle_source
-    }
-    pub(super) fn proof(&self) -> ProofKind {
-        self.proof
-    }
-    pub(super) fn body(&self) -> &[Statement] {
-        &self.body
     }
     pub(super) fn cover(&self) -> &Cover {
         &self.cover
@@ -502,6 +595,111 @@ mod tests {
     }
     fn error(body: Vec<Statement>, covers: Vec<Cover>, unwind: u32) -> HarnessSpecError {
         construct(body, covers, unwind).unwrap_err()
+    }
+
+    #[trace("FR-015-AC-99", "TC-025")]
+    #[test]
+    fn collection_constructor_refuses_invalid_domains_and_bindings() {
+        let path = HarnessPath {
+            module: ModuleSymbol::try_from("collection_control").unwrap(),
+            harness: HarnessSymbol::try_from("check").unwrap(),
+        };
+        let valid = CollectionSpec {
+            field_name: "items".into(),
+            item_name: "selected_items".into(),
+            length_name: "selected_items_len".into(),
+            minimum_length: 0,
+            maximum_length: 3,
+            array_len: 3,
+            element: CollectionElement::Integer {
+                minimum: 0,
+                maximum: 3,
+            },
+            quantifier: CollectionQuantifier::ForAll,
+            predicate: CollectionPredicateIdentity::IntegerGreaterOrEqual { threshold: 0 },
+        };
+        let check = |collection, unwind| {
+            HarnessSpec::new_collection(path.clone(), collection, unwind, KaniSolver::Cadical)
+        };
+        assert!(check(valid.clone(), 4).is_ok());
+        assert!(matches!(
+            check(
+                CollectionSpec {
+                    length_name: valid.item_name.clone(),
+                    ..valid.clone()
+                },
+                4
+            ),
+            Err(HarnessSpecError::InvalidDomain)
+        ));
+        assert!(matches!(
+            check(
+                CollectionSpec {
+                    item_name: "r#selected_items".into(),
+                    length_name: "selected_items".into(),
+                    ..valid.clone()
+                },
+                4
+            ),
+            Err(HarnessSpecError::InvalidDomain)
+        ));
+        assert!(matches!(
+            check(
+                CollectionSpec {
+                    minimum_length: 4,
+                    ..valid.clone()
+                },
+                4
+            ),
+            Err(HarnessSpecError::InvalidDomain)
+        ));
+        assert!(matches!(
+            check(
+                CollectionSpec {
+                    minimum_length: -1,
+                    ..valid.clone()
+                },
+                4
+            ),
+            Err(HarnessSpecError::InvalidDomain)
+        ));
+        assert!(matches!(
+            check(
+                CollectionSpec {
+                    array_len: 2,
+                    ..valid.clone()
+                },
+                4
+            ),
+            Err(HarnessSpecError::InvalidDomain)
+        ));
+        assert!(matches!(
+            check(
+                CollectionSpec {
+                    element: CollectionElement::Integer {
+                        minimum: 4,
+                        maximum: 3
+                    },
+                    ..valid.clone()
+                },
+                4
+            ),
+            Err(HarnessSpecError::InvalidDomain)
+        ));
+        assert!(matches!(
+            check(valid.clone(), 0),
+            Err(HarnessSpecError::InvalidUnwind(0))
+        ));
+        assert!(matches!(
+            check(
+                CollectionSpec {
+                    item_name: "not valid".into(),
+                    ..valid
+                },
+                4
+            ),
+            Err(HarnessSpecError::InvalidIdentifier(_))
+        ));
     }
 
     #[trace("FR-015-AC-112", "TC-025")]

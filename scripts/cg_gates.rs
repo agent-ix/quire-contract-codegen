@@ -337,71 +337,6 @@ fn claim_count_line(active: usize, held: usize) -> String {
     format!("kani-gate: claims active={active} held={held}")
 }
 
-#[cfg(test)]
-mod claim_hold_tests {
-    use super::*;
-    use serde_json::json;
-
-    fn held(name: &str) -> serde_json::Value {
-        json!({
-            "name": name,
-            "hold": {
-                "reason": "V1 deleted by owner ruling 2026-10-27; no genuine V2 named independent expectation/control exists yet",
-                "expiry": "until the V2 named independent expectation + real positive/falsifying control exists",
-                "follow_up": "IR-1047"
-            }
-        })
-    }
-
-    #[test]
-    fn sole_retired_claim_hold_is_reported_without_proof_credit() {
-        let base = BTreeSet::from(["kani_fr_003_4_proof_boolean_transition_module".to_owned()]);
-        let (active, lines) = validate_claim_rows(
-            &[held("kani_fr_003_4_proof_boolean_transition_module")],
-            &base,
-        )
-        .expect("the reviewed hold is admitted");
-        assert_eq!(active, 0);
-        assert_eq!(lines.len(), 1);
-        assert_eq!(
-            claim_count_line(active, lines.len()),
-            "kani-gate: claims active=0 held=1"
-        );
-        assert_eq!(
-            lines[0],
-            "kani-gate: held=kani_fr_003_4_proof_boolean_transition_module reason=V1 deleted by owner ruling 2026-10-27; no genuine V2 named independent expectation/control exists yet expiry=until the V2 named independent expectation + real positive/falsifying control exists follow_up=IR-1047"
-        );
-    }
-
-    #[test]
-    fn unauthorized_or_incomplete_holds_and_removed_base_rows_fail() {
-        let name = "kani_fr_003_4_proof_boolean_transition_module";
-        let base = BTreeSet::from([name.to_owned()]);
-        let valid = held(name);
-        let other = held("another_module");
-        assert!(validate_claim_rows(&[other], &BTreeSet::new())
-            .unwrap_err()
-            .contains("unauthorized claim hold"));
-        let mut no_reason = valid.clone();
-        no_reason["hold"].as_object_mut().unwrap().remove("reason");
-        assert!(validate_claim_rows(&[no_reason], &base)
-            .unwrap_err()
-            .contains("no reason"));
-        let mut no_expiry = valid.clone();
-        no_expiry["hold"].as_object_mut().unwrap().remove("expiry");
-        assert!(validate_claim_rows(&[no_expiry], &base)
-            .unwrap_err()
-            .contains("no expiry"));
-        assert!(validate_claim_rows(&[valid.clone(), valid.clone()], &base)
-            .unwrap_err()
-            .contains("duplicate claimed module"));
-        let removed_base = BTreeSet::from([name.to_owned(), "former_active_module".to_owned()]);
-        assert!(validate_claim_rows(&[valid], &removed_base)
-            .unwrap_err()
-            .contains("removed claimed module(s): former_active_module"));
-    }
-}
-
 fn passed_count(output: &str) -> Option<usize> {
     let lines: Vec<_> = output
         .lines()
@@ -658,4 +593,69 @@ fn qspec_selftest() -> Result<(), String> {
     }
     println!("qspec preflight selftest passed");
     Ok(())
+}
+
+#[cfg(test)]
+mod claim_hold_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn held(name: &str) -> serde_json::Value {
+        json!({
+            "name": name,
+            "hold": {
+                "reason": "V1 deleted by owner ruling 2026-10-27; no genuine V2 named independent expectation/control exists yet",
+                "expiry": "until the V2 named independent expectation + real positive/falsifying control exists",
+                "follow_up": "IR-1047"
+            }
+        })
+    }
+
+    #[test]
+    fn sole_retired_claim_hold_is_reported_without_proof_credit() {
+        let base = BTreeSet::from(["kani_fr_003_4_proof_boolean_transition_module".to_owned()]);
+        let (active, lines) = validate_claim_rows(
+            &[held("kani_fr_003_4_proof_boolean_transition_module")],
+            &base,
+        )
+        .expect("the reviewed hold is admitted");
+        assert_eq!(active, 0);
+        assert_eq!(lines.len(), 1);
+        assert_eq!(
+            claim_count_line(active, lines.len()),
+            "kani-gate: claims active=0 held=1"
+        );
+        assert_eq!(
+            lines[0],
+            "kani-gate: held=kani_fr_003_4_proof_boolean_transition_module reason=V1 deleted by owner ruling 2026-10-27; no genuine V2 named independent expectation/control exists yet expiry=until the V2 named independent expectation + real positive/falsifying control exists follow_up=IR-1047"
+        );
+    }
+
+    #[test]
+    fn unauthorized_or_incomplete_holds_and_removed_base_rows_fail() {
+        let name = "kani_fr_003_4_proof_boolean_transition_module";
+        let base = BTreeSet::from([name.to_owned()]);
+        let valid = held(name);
+        let other = held("another_module");
+        assert!(validate_claim_rows(&[other], &BTreeSet::new())
+            .unwrap_err()
+            .contains("unauthorized claim hold"));
+        let mut no_reason = valid.clone();
+        no_reason["hold"].as_object_mut().unwrap().remove("reason");
+        assert!(validate_claim_rows(&[no_reason], &base)
+            .unwrap_err()
+            .contains("no reason"));
+        let mut no_expiry = valid.clone();
+        no_expiry["hold"].as_object_mut().unwrap().remove("expiry");
+        assert!(validate_claim_rows(&[no_expiry], &base)
+            .unwrap_err()
+            .contains("no expiry"));
+        assert!(validate_claim_rows(&[valid.clone(), valid.clone()], &base)
+            .unwrap_err()
+            .contains("duplicate claimed module"));
+        let removed_base = BTreeSet::from([name.to_owned(), "former_active_module".to_owned()]);
+        assert!(validate_claim_rows(&[valid], &removed_base)
+            .unwrap_err()
+            .contains("removed claimed module(s): former_active_module"));
+    }
 }
