@@ -48,7 +48,7 @@ const fn unbounded_decode_limits() -> quire_contract_codegen::WitnessDecodeLimit
     }
 }
 
-const fn frame_decode_limits() -> quire_contract_codegen::WitnessDecodeLimits {
+pub(crate) const fn frame_decode_limits() -> quire_contract_codegen::WitnessDecodeLimits {
     quire_contract_codegen::WitnessDecodeLimits {
         bytes: 1_048_576,
         values: 1024,
@@ -278,6 +278,8 @@ pub struct Run {
     pub harness: StateFrameIdentity,
     /// The concrete-playback text.
     pub playback: String,
+    /// The proving run's witness decode limits.
+    pub decode_limits: quire_contract_codegen::WitnessDecodeLimits,
 }
 
 /// The playback block Kani prints for `harness`'s falsified assertion `check`, binding one `i64`
@@ -987,8 +989,18 @@ impl Twin {
         run: &Run,
         limits: quire_contract_codegen::WitnessDecodeLimits,
     ) -> Result<FrameReplay, FrameReplayError> {
+        let effective_limits = quire_contract_codegen::WitnessDecodeLimits {
+            bytes: limits.bytes.min(run.decode_limits.bytes),
+            values: limits.values.min(run.decode_limits.values),
+        };
         self.try_frame_replay_with_parse_limits(
-            operation, invocation, account, field, run, limits, limits,
+            operation,
+            invocation,
+            account,
+            field,
+            run,
+            limits,
+            effective_limits,
         )
     }
 
@@ -1004,17 +1016,13 @@ impl Twin {
         parse_limits: quire_contract_codegen::WitnessDecodeLimits,
     ) -> Result<FrameReplay, FrameReplayError> {
         let mut inputs = self.run();
-        inputs.decode_limits = frame_decode_limits();
-        let effective_limits = quire_contract_codegen::WitnessDecodeLimits {
-            bytes: parse_limits.bytes.min(inputs.decode_limits.bytes),
-            values: parse_limits.values.min(inputs.decode_limits.values),
-        };
+        inputs.decode_limits = run.decode_limits;
         let playback = parse_assertion_playback(
             &run.playback,
             run.harness.harness_symbol.as_str(),
             run.harness.module_symbol.as_str(),
-            effective_limits.bytes,
-            effective_limits.values,
+            parse_limits.bytes,
+            parse_limits.values,
         )
         .map_err(|refusal| FrameReplayError::Decode(refusal.into()))?;
         FrameReplay::new(FrameReplayInputs {

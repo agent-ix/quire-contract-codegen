@@ -2001,6 +2001,7 @@ fn run_of(harness: &StateFrameIdentity, values: [i64; 2]) -> Run {
     Run {
         playback: playback_text(harness, FORBIDDEN_CHECK, &values),
         harness: harness.clone(),
+        decode_limits: native_twin::frame_decode_limits(),
     }
 }
 
@@ -2119,6 +2120,38 @@ fn tc_035_frame_replay_rechecks_parsed_playback_bounds() {
             admitted,
         ) {
             Ok(_) => panic!("replay must refuse a playback parsed under wider limits"),
+            Err(error) => error,
+        };
+        assert!(matches!(error, FrameReplayError::Decode(cause) if cause.code == code));
+    }
+    for (run_limits, code) in [
+        (
+            quire_contract_codegen::WitnessDecodeLimits {
+                bytes: admitted.bytes - 1,
+                values: admitted.values,
+            },
+            "cg_witness_decode_bytes_limit",
+        ),
+        (
+            quire_contract_codegen::WitnessDecodeLimits {
+                bytes: admitted.bytes,
+                values: admitted.values - 1,
+            },
+            "cg_witness_decode_values_limit",
+        ),
+    ] {
+        let mut narrow_run = run.clone();
+        narrow_run.decode_limits = run_limits;
+        let error = match twin.try_frame_replay_with_parse_limits(
+            "deposit",
+            &invocation,
+            "account",
+            "audit",
+            &narrow_run,
+            admitted,
+            admitted,
+        ) {
+            Ok(_) => panic!("replay must refuse a playback parsed above the proving-run limit"),
             Err(error) => error,
         };
         assert!(matches!(error, FrameReplayError::Decode(cause) if cause.code == code));
@@ -4596,16 +4629,19 @@ fn tc_035_a_playback_that_does_not_decode_is_refused_before_the_call_site() {
     let other_harness = Run {
         playback: playback_text(&sibling, FORBIDDEN_CHECK, &[5, 0]),
         harness: harness.clone(),
+        decode_limits: good.decode_limits,
     };
     let short = Run {
         playback: playback_text(&harness, FORBIDDEN_CHECK, &[5]),
         harness: harness.clone(),
+        decode_limits: good.decode_limits,
     };
     let wrong_width = Run {
         playback: good
             .playback
             .replacen("vec![5, 0, 0, 0, 0, 0, 0, 0]", "vec![5, 0, 0, 0]", 1),
         harness: harness.clone(),
+        decode_limits: good.decode_limits,
     };
     assert_ne!(wrong_width.playback, good.playback);
     for (run, code) in [
@@ -5327,6 +5363,7 @@ fn tc_035_real_kani_frame_counterexample_replays_through_qsl() {
     let run = Run {
         harness: forbidden.frame.identity,
         playback: counterexample,
+        decode_limits: native_twin::frame_decode_limits(),
     };
     let result = twin
         .frame_replay(&invocation, "account", "audit", &run)

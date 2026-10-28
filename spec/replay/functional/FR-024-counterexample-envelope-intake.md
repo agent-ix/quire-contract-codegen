@@ -522,8 +522,8 @@ FR-024-AC-8 remain planned. FR-024-AC-5 and FR-024-AC-9 are retired (IR-890);
 their IDs are not reused.
 FR-024-AC-10 has a source-scan test over `src/`;
 FR-024-AC-11 and FR-024-AC-13 to FR-024-AC-29 have implemented slices described below.
-FR-024-AC-12 remains planned under IR-965. FR-024-AC-30 remains planned for typed frame intake
-under IR-1086 and the QSL-emitted harness without `Twin::aligned` under IR-624:
+FR-024-AC-12 remains planned under IR-965. FR-024-AC-30's typed frame intake is implemented under
+IR-1086; its QSL-emitted harness without `Twin::aligned` remains planned under IR-624:
 
 - `src/replay/witness.rs` decodes the playback into `qsl_replay::WitnessValue` and imports no
   Contract IR witness type.
