@@ -1503,7 +1503,7 @@ Each is a place where the target of this AD is not yet true, stated so that no s
 | Exception | Where | Removed by |
 | --- | --- | --- |
 | `validate_dependencies` and the diagnostic type it returns | `kani/generate/census_validation.rs` | 4g or the V2 census input; `deterministic_json` was already deleted by PR #356 |
-| The frame family still renders its own template | `kani/generate/frame.rs` | IR-1084 ports frame rendering to `HarnessSpec` and `render.rs` after CG #608 / IR-1079 and the remaining frame L-6 slice; separate from step 4d's V2 census work |
+| The frame family still renders its own template | `kani/generate/frame.rs` | IR-1084 ports frame rendering to `HarnessSpec` and `render.rs` after CG #608 / IR-1079 and the completed frame L-6 slice; separate from step 4d's V2 census work |
 | The corpus keeps its own template, with its cover after the assertion (FR-015-AC-55) | `kani/generate/corpus/bounded_kani_corpus.rs` | step 4g retires the corpus template; step 4h already moved collection rendering to `render.rs` |
 | The remaining collection and graph finite lowerers | `kani/generate/lower/{bounded_collections,finite_reference_graphs}.rs` | IR-347 replaced the step-2f forwarders with CG-owned lowerings and request/result types; IR removes its former exports afterwards. FR-015-AC-109 has retired arithmetic; collection and graph remain until FR-015-AC-110 and FR-015-AC-111. |
 | `generate_state_frame_obligations` is a second public entry beside `negotiate_kani_obligations` | `kani/generate/frame.rs` | step 4d |
