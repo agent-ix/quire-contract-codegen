@@ -21,8 +21,10 @@ immediately to the replay facade; playback is run evidence, not a persisted
 case artifact. Current
 source tests carry `TC-023` trace tags. FR-015-AC-94 retains graph/collection canonical-identity controls.
 FR-015-AC-109 is traced by the admitted division refusal and routed remainder
-refusal tests. FR-015-AC-95 and FR-015-AC-110 to FR-015-AC-111 remain planned.
-A trace tag alone does not establish installed-backend proof evidence.
+refusal tests. This AC-110 slice deletes the collection corpus arm and lowerer,
+with its exact-head real-Kani evidence pending. FR-015-AC-95 and FR-015-AC-111
+remain planned while the graph corpus path and public corpus API remain. A trace
+tag alone does not establish installed-backend proof evidence.
 
 ## Test Procedure
 
@@ -187,9 +189,9 @@ authentic QSL-emitted AC-103 inputs, real healthy Add/Add-to-Subtract mutant and
 routed healthy/bound-violation controls remain; this does not claim dedicated
 real Subtract/Multiply/Negate mutants.
 
-IR-598 and IR-348 remain open. Collection retirement (AC-110) waits for released
-step 4h and actual AC-99 controls. Graph/final retirement (AC-111) also waits for
-AC-110 and IR-805/QSL-820. Held steps 4c–4f, 5 and 6 and the separately gated
+IR-598 and IR-348 remain open. This slice removes the collection corpus path
+under AC-110; exact-head AC-99 installed-Kani evidence remains pending. Graph/final
+retirement (AC-111) also waits for AC-110 acceptance and IR-805/QSL-820. Held steps 4c–4f, 5 and 6 and the separately gated
 IR-854 division/modulo replacement remain unchanged.
 
 IR-621 direct-error adoption is implemented. The external consumer tests assign
