@@ -2287,6 +2287,7 @@ fn tc_033_quantity_conversion_has_an_oracle_and_no_harness() {
     "FR-014-AC-55",
     "FR-022-AC-11",
     "FR-022-AC-30",
+    "TC-024",
     "TC-033"
 )]
 #[test]
