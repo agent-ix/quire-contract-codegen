@@ -76,3 +76,31 @@ Context, not findings against this diff:
    (`spec/kani/functional/FR-015-bounded-kani-obligations.md:713`) says a `reference`
    composite is "`unsupported`, blocked on quire-spec-language#120, as FR-018-AC-7 states".
    FR-018-AC-7 states a reader-stage control, not that blocker.
+
+## Dispositions
+
+Round 1. Fix delta af01bb065bb530b6e5fb7663465d4eecb7f11d4c..560219800788e03a792b56f107822811e54be095,
+reviewed at frozen head 560219800788e03a792b56f107822811e54be095. GitHub PR head matches. The PR
+is still a draft.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | FR-018 prose and TC-029 step now cite symbols, not line numbers: the `CompositeTypeForm::Reference` target check in `derived_keys.rs`, `check_conforming_reference` in `operations.rs`, and `ModelRefusal::ineligible` in `model_members.rs`. All three resolve at IR main 250fc959 (`derived_keys.rs:650`, `operations.rs:2855`, `model_members.rs:152`). |
+| FND-002 | fixed | TC-029 now puts each reader control in its own package. One refused package holds the record-target reference (`InvalidDerivedShape`). A second holds the valid-target ineligible equality (`IllTyped/OperatorIneligible`). The reference-bearing record lives in a separate admitted package and targets a permitted model object type, beside an unchanged healthy sibling. The step and the expected result agree. |
+| FND-003 | fixed | AC-7 now lists all five permitted targets: model object type, process, state machine, systems interface and relationship. That matches IR's `Model(ObjectType\|Process\|StateMachine\|SystemsInterface) \| Relation(Relationship)`. The FR prose now says "permitted model or relationship declaration kinds". |
+
+I checked the delta for regressions and found none:
+
+- The causes and loci are unchanged and still match IR.
+- AC-7 keeps its reader-stage clause, the requested-key, node-tag and source-occurrence
+  accounting, the independent admitted sibling for Unsupported roots, and the
+  `call`/quire-contract-runtime#34 clause word for word.
+- The FR-018 failure-mode row is unchanged.
+- The admitted package's "permitted model object type" target is a TC witness choice. It does
+  not narrow the AC.
+- The committed `reviews/SR-612001-ir-1089-spec-review-base.md` is the reviewer artifact,
+  with two stray trailing tool-markup lines removed. Those lines were the reviewer's
+  authoring error.
+- `quire validate` passes on both spec files and on the committed SR.
+
+Round-1 verdict: review-clear. Every finding is fixed.
