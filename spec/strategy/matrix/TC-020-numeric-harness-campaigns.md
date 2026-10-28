@@ -71,6 +71,17 @@ exact rates.
 11. At each generated identity text comparison boundary, corrupt one `qocc2_` or `qpkg2_` field,
     truncate it, uppercase hex, or add a leading-zero count. Compare against the exact typed pair
     and inspect any artifact, verdict, or report mutation.
+12. Independently of runner generation, call the public V2 selected-claim entry with one admitted
+    package containing two distinct checked state clauses, each with an authentic `claim`
+    occurrence and a different accepted point. Supply each complete typed key in turn: checked
+    clause id, claim owner node id, and that clause's authentic occurrence. Compare each selected
+    point with its own accepted point and the other clause's different point. For one selection,
+    replace only the occurrence with a wrong-role occurrence, then with a `claim` occurrence whose
+    ordinal is absent from that clause, retaining the correct owner in both cases. Restore the
+    authentic occurrence and replace only the owner with the other clause's node id. Inspect all
+    three typed V2 diagnostics, their retained identities and Contract IR refusals, and artifact
+    output. Inspect the entry signature for a second owner field and the V1 `BoundPackage` entry
+    and `StrategyDiagnostic` for changes.
 
 ## Expected Results
 
@@ -111,3 +122,8 @@ exact rates.
 - Step 11 returns `StrategyErrorCode::InvalidIdentityRendering` before bundle publication or
   verdict/report mutation without normalizing malformed or noncanonical text; canonical text and typed identity agree
   (FR-011-AC-11).
+- Step 12 selects each matching claim's exact `ExecutionPoint`, never the other clause's different
+  point. The wrong role, absent ordinal, and wrong owner each return a distinct typed V2 diagnostic
+  retaining `CheckedExecutionPointRefusal::MissingClaimOccurrence`, the supplied clause, owner and
+  occurrence, and no artifact. The request has no second caller-supplied owner;
+  the V1 entry and diagnostic remain unchanged (FR-011-AC-13).
