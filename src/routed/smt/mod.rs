@@ -410,3 +410,5 @@ pub fn classify_pair<Product: Eq, Item: Eq, Instance: Eq, Kind: Eq>(
 
 #[cfg(test)]
 mod pair_tests;
+
+pub mod refinement;
