@@ -60,14 +60,11 @@ fn v2_numeric_bundle_keeps_selected_identity_and_runs_both_modes() {
         .find(|artifact| artifact.path.ends_with(".json"))
         .expect("generated map");
     let parsed: serde_json::Value = serde_json::from_str(&map.contents).expect("source map JSON");
-    assert_eq!(
-        parsed["identity"]["clause"]["digest"],
-        clause.digest.as_ref()
-    );
+    assert_eq!(parsed["identity"]["clause"]["digest"], &*clause.digest);
     assert_eq!(parsed["identity"]["occurrence"]["role"], "claim");
     assert_eq!(
         parsed["identity"]["packageId"]["digest"],
-        package.package_id().digest.as_ref()
+        &*package.package_id().digest
     );
     assert_eq!(
         parsed["identity"]["requirement"],
@@ -136,7 +133,13 @@ fn v2_numeric_bundle_admits_all_six_authored_comparisons() {
         let generated = generate_v2_numeric_strategy(&request(&package, &clause, &claim))
             .expect("the selected V2 claim produces a complete bundle");
         assert_eq!(generated.artifacts.artifacts().len(), 2);
-        let source = &generated.artifacts.artifacts()[0].contents;
+        let source = &generated
+            .artifacts
+            .artifacts()
+            .iter()
+            .find(|artifact| artifact.path.ends_with(".rs"))
+            .expect("generated runner source")
+            .contents;
         assert!(source.contains(&format!("primary {emitted} other")));
         assert!(!generated.census.in_domain().is_empty());
     }
@@ -178,6 +181,15 @@ fn v2_numeric_refusals_keep_first_typed_cause() {
     assert_eq!(diagnostic.occurrence, wrong_role);
     assert!(diagnostic.comparison.is_some());
 
+    let wrong_ordinal = CheckedOccurrence {
+        role: CheckedOccurrenceRole::Claim,
+        ordinal: claim.ordinal + 1,
+    };
+    let diagnostic = generate_v2_numeric_strategy(&request(&package, &clause, &wrong_ordinal))
+        .expect_err("unowned claim ordinal");
+    assert_eq!(diagnostic.code, V2NumericErrorCode::MissingClaimOccurrence);
+    assert_eq!(diagnostic.occurrence, wrong_ordinal);
+
     let (foreign_package, _, _) = admitted("self.balance > pre(self.balance)");
     let mut mismatched_owner = request(&package, &clause, &claim);
     mismatched_owner.process_package_id = Some(foreign_package.package_id());
@@ -187,6 +199,19 @@ fn v2_numeric_refusals_keep_first_typed_cause() {
     assert!(diagnostic.comparison.is_none());
     assert!(diagnostic.point.is_none());
     assert_eq!(diagnostic.path, "request.package_id");
+
+    let overlapping = V2NumericRequest {
+        key: V2SelectedClaimKey {
+            clause: &clause,
+            claim_owner: &clause,
+            occurrence: &wrong_role,
+        },
+        process_package_id: Some(foreign_package.package_id()),
+        ..request(&package, &clause, &claim)
+    };
+    let diagnostic = generate_v2_numeric_strategy(&overlapping)
+        .expect_err("comparison refusal precedes request owner mismatch");
+    assert_eq!(diagnostic.code, V2NumericErrorCode::MissingClaimOccurrence);
     assert!(generate_v2_numeric_strategy(&request(&package, &clause, &claim)).is_ok());
 
     let (other_package, absent_clause, _) = admitted("self.balance < pre(self.balance)");

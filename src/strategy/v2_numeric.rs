@@ -718,7 +718,7 @@ mod tests {
     use quire_contract_model::{CheckedOccurrenceRole, CheckedPackageV2};
 
     use super::{
-        generate_with_control, RenderControl, V2NumericErrorCode, V2NumericPolicy,
+        generate_with_control, native_twin, RenderControl, V2NumericErrorCode, V2NumericPolicy,
         V2NumericRequest, V2SelectedClaimKey,
     };
     use crate::strategy::bound::population::Population;
