@@ -759,7 +759,7 @@ fn tc_029_authoritative_qspec_recursive_items_generate_through_reader() {
         .arg("-C")
         .arg(repo)
         .arg("show")
-        .arg(format!("origin/main:{FIXTURE}"))
+        .arg(format!("HEAD:{FIXTURE}"))
         .output()
         .expect("read authoritative QSpec fixture");
     assert!(
