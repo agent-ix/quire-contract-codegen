@@ -13,9 +13,12 @@ relationships:
 Planned production controls for
 [FR-047](../functional/FR-047-v2-function-proof-producer.md).
 Use one genuinely admitted checked V2 source and its original request, not a
-test-constructed `KaniObligationIdentity`, V1 claim, scalar conversion or
+test-constructed `KaniObligationIdentity` or `V2FunctionProofIdentity`, V1 claim, scalar conversion or
 hand-built replay package. The independent assertion playback comes from the
 installed backend's complete captured transcript.
+The current QSL FR-485 facade is available; CG's concrete FR-021 consumer is
+still Planned under IR-595. The V2 identity/binding API and imported-owner
+function-site selector are Planned; current V1 replay APIs do not back them.
 
 ## Test Procedure
 
@@ -31,7 +34,7 @@ installed backend's complete captured transcript.
    the same producer, and require `Falsified`. Independently retain the first
    eligible assertion playback from complete stdout. Check its bytes against
    the runner's retained counterexample, decode only in-domain values and
-   replay through the typed function entry with that mutant's source and
+   replay through the planned V2 typed function entry with that mutant's source and
    identity. A synthetic outcome, a test-built harness or a mutated assertion
    is insufficient (AC-1, AC-5).
 3. Place two distinct claim occurrences on one selected node. Verify two
@@ -46,10 +49,14 @@ installed backend's complete captured transcript.
    selection, declaration, occurrence, request index, obligation kind,
    parameter identity and bound, generated artifact and proof ceiling. Require
    a named refusal or distinct admitted identity; do not substitute a new
-   caller-built identity. Build `ReplayPackage` from the retained original
-   `ReplayInputs`, bind with `with_kani_identity`, and check that only the
-   matching package/identity reaches typed replay (AC-4, AC-5).
-6. Test byte and physical value-count ceilings at the smaller of caller and
+   caller-built identity. Feed the retained original `ReplayInputs` and
+   `V2FunctionProofIdentity` to `bind_v2_function_replay`; check that only its
+   matching `BoundV2FunctionReplay` reaches typed replay. For a function
+   declared by a dependency, select its actual declaring package/function
+   occurrence through QSL's planned imported-function site API and compare
+   the original dependency lock; report the branch Planned until that API
+   exists, without substituting the unit-only `call_site` (AC-4, AC-5).
+6. Use FR-016-AC-6's required public decode bounds in the V2 entry. Test byte and physical value-count ceilings at the smaller of caller and
    capture limits and one unit over each, with a poisoned trailing entry to
    show that the decoder stops at the limit. Test a missing, extra and
    out-of-domain value independently; none may settle as a reproduced
@@ -70,3 +77,5 @@ selection failure is typed and leaves healthy sibling output unchanged.
 
 PLANNED under IR-1121. No current-V2 function Kani producer exists on CG main;
 the direct test-only function identity fixture does not back these criteria.
+CG's concrete FR-021 oracle (IR-595) and QSL's imported-function site
+selection remain prerequisites for the respective controls.
