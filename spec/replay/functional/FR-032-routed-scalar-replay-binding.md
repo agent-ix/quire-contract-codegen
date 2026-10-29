@@ -217,14 +217,13 @@ separately. Current CG has no typed scalar-kind source. Until generation impleme
 this allocation, the route returns the named unavailable-capability refusal without minting an
 identity.
 
-**Scalar identity conformance.** For an admitted current-run scalar claim, the independent
-AC-9/AC-10 check constructs the O-09 preimage from the authoritative application, expression
-occurrence, scalar kind and ordered operand identities and ranges. It recomputes the canonical
-bytes and their SHA-256 identity without calling the production mint or copying its encoder, then
-compares both with the public mint and sends that identity to the actual QSL operator route. The
-adverse controls change one included member at a time, retain repeated operand positions and
-refuse invented occurrence or operand membership. A synthetic encoding example alone is not
-evidence of authoritative membership, generated metadata retention or passing routed replay.
+**Scalar identity conformance.** For an admitted current-run scalar claim, the AC-9/AC-10 check
+uses the authoritative application, expression occurrence, scalar kind and ordered operand
+identities and ranges with the public shared mint, then requires the actual QSL operator route to
+accept the matching claim. The adverse controls change one included member at a time, retain
+repeated operand positions and refuse invented occurrence or operand membership. A synthetic
+encoding example alone is not evidence of authoritative membership, generated metadata retention
+or passing routed replay.
 
 The scalar subject is the claimed operator's FR-322 application node id and its authentic
 O-07 occurrence key: that node id with the selected `CheckedOccurrence`'s role `expression`

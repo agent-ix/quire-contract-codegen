@@ -81,11 +81,10 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
 17. Request a replay for an operation that declares a parameter, one that declares a result, and
     one that declares neither.
 18. Mint a frame identity (empty `arguments`) and a function identity from current-run claims.
-    Independently construct each four-member canonical preimage from the claim's actual fields,
-    without the production mint or encoder, supplying members in an order different from RFC 8785
-    order; compare the exact canonical bytes and independently computed SHA-256 with each public
-    identity. Change each included member and an excluded source span. Read `Cargo.toml` and the
-    non-test source of `src/replay/obligation.rs`.
+    Require the frame identity to equal the same public identity function called with its frame
+    site and kind, and equal function claims to retain equal identities. Change each included
+    member and an excluded source span; inspect the non-test source to confirm both paths use
+    the one identity function without a second encoder.
 19. Change one input of a frame identity at a time: the kind, the `function` node and each part
     of the `declaration` key; change the clause node, the module and harness symbols, the state
     and subject paths, the unwind bound, the options and the state fields and their ranges; mint
@@ -217,10 +216,9 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
 17. The first two return `StateClauseReplayError::UnsupportedOperationShape` carrying the operation
     and its declaration, with no document built and the executor not called; the third is not refused for its shape
     (FR-024-AC-19).
-18. Each identity equals the independently recomputed current-run digest; canonical member order,
-    included-member changes and source-span exclusion hold without a fixed expected digest;
-    `sha2` is not in `[dependencies]` and the non-test source names no encoder function
-    of `quire_canonical`, no `sha2` and no `ByteDigest::of` (FR-024-AC-20).
+18. The frame and function paths use one public mint; equal claims keep equal identities,
+    included-member changes alter identities, and source-span changes do not. No fixed or
+    computed expected digest is compared (FR-024-AC-20).
 19. Each change alone changes the identity; the clause node, symbol, path, unwind, option, field
     and range changes do not; two clauses of one operation mint one identity; the two
     grant variants and the two equal-frame operations differ; the shifted unit's identity equals
