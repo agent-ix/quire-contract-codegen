@@ -99,6 +99,8 @@ pub enum V2NumericErrorCode {
     MissingExecutionPoint,
     /// The requested population has no valuation on its side.
     EmptyPopulation,
+    /// The selected campaign cannot satisfy its required population shape.
+    UnsupportedCampaignConstraint,
     /// Process request package identity disagrees with the admitted package.
     OwnerIdentityMismatch,
     /// The selected point changed during rendering.
@@ -211,6 +213,9 @@ fn map_population(
 ) -> V2NumericDiagnostic {
     let code = match population.code {
         StrategyErrorCode::EmptyPopulation => V2NumericErrorCode::EmptyPopulation,
+        StrategyErrorCode::UnsupportedCampaignConstraint => {
+            V2NumericErrorCode::UnsupportedCampaignConstraint
+        }
         StrategyErrorCode::InvalidGeneratedSyntax => V2NumericErrorCode::InvalidGeneratedSyntax,
         StrategyErrorCode::ResourceLimitExceeded => V2NumericErrorCode::ResourceLimitExceeded,
         StrategyErrorCode::InvalidRange
@@ -218,7 +223,6 @@ fn map_population(
         | StrategyErrorCode::CorrelationOverflow
         | StrategyErrorCode::InvalidStrategyIdentity
         | StrategyErrorCode::InvalidEnumIdentity
-        | StrategyErrorCode::UnsupportedCampaignConstraint
         | StrategyErrorCode::UnknownClause
         | StrategyErrorCode::UnsupportedClause
         | StrategyErrorCode::UnsupportedClauseKind
@@ -733,7 +737,10 @@ mod tests {
     fn renderer_mutants_refuse_before_any_artifact_exists() {
         let (package, clause) = fixture();
         let claim = package
-            .node(&clause)
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.node_id == clause)
             .unwrap()
             .occurrences
             .iter()
