@@ -997,26 +997,17 @@ const RENDERED_OPERATIONS: [&str; 4] = [
 /// accounted with a null `kind` and a `Supported` disposition if it ever reaches one. The real
 /// generator already refuses the other `state`-tagged nodes before that point -- `STATE` lands on
 /// `NoFiniteEncoding`, while `FRAME` reaches its framed model's upstream blocker -- so this
-/// drives the gap directly: `transition`
-/// is a real, admitted `state` form distinct from `frame` (`quire-contract-ir`'s own
-/// `CheckedNodeTag::State::forms()`), and its claim-map entry is hand-appended as `Generated`,
-/// the shape `generate_exact_scalar_oracles` would never itself produce for a non-`expression`
-/// node, to simulate what a future widening of that gate -- or a claim map assembled by another
-/// caller -- could hand this function.
+/// drives the gap directly: the admitted `state/snapshot` node's claim is replaced with a
+/// `Generated` claim, a shape the scalar generator would never itself produce for a
+/// non-`expression` node. This simulates a future widening of that gate or a caller-assembled
+/// claim map without inventing a malformed state body.
 #[trace("FR-015-AC-14", "TC-025")]
 #[test]
 fn tc_025_a_present_node_with_an_unrecognized_kind_is_refused_rather_than_silently_supported() {
-    const UNRECOGNIZED_STATE_FORM: u32 = 3003;
-    let mut builder = corpus_package();
-    builder.code(
-        UNRECOGNIZED_STATE_FORM,
-        "state",
-        "transition",
-        &key(T_BOOLEAN),
-        json!({"term": "aggregate", "members": []}),
-    );
-    let (package, ids) = builder.admit_resolved();
-    let node_id = ids.resolve(&code_id(UNRECOGNIZED_STATE_FORM));
+    // The corpus's admitted snapshot is a real non-expression kind. A
+    // transition would require its own closed body, unrelated to this guard.
+    let (package, ids) = corpus_package().admit_resolved();
+    let node_id = ids.resolve(&code_id(STATE));
 
     let oracles = generate_exact_scalar_oracles(&package, &package::golden_items_for(&package))
         .expect("claim map");
@@ -1034,11 +1025,16 @@ fn tc_025_a_present_node_with_an_unrecognized_kind_is_refused_rather_than_silent
         })
         .expect("the corpus renders at least one integer-arithmetic claim");
     let mut claim_map = oracles.claim_map;
-    claim_map.items.push(ExactScalarClaim {
+    let existing = claim_map
+        .items
+        .iter_mut()
+        .find(|claim| claim.node_id == node_id)
+        .expect("the admitted snapshot has a scalar claim");
+    *existing = ExactScalarClaim {
         node_id: node_id.clone(),
         operation,
         result: ClaimDisposition::Generated(generated),
-    });
+    };
 
     let admitted = admitted_scalar_claims(&package, &claim_map);
     let items = [ObligationItem::ScalarClaim {
@@ -1067,7 +1063,7 @@ fn tc_025_a_present_node_with_an_unrecognized_kind_is_refused_rather_than_silent
         &UnsupportedObligation::UnknownNodeKind {
             node_id: node_id.clone(),
             node_tag: "state".to_owned(),
-            semantic_form: "transition".to_owned(),
+            semantic_form: "snapshot".to_owned(),
         }
     );
 }

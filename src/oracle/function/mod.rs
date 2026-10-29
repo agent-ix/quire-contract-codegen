@@ -3661,7 +3661,7 @@ mod tests {
     /// closure. That item refusal precedes a declaration's Stage 1 body result.
     #[trace("FR-021-AC-41", "TC-031")]
     #[test]
-    fn selected_imported_call_is_ineligible_for_temporal_body_guard() {
+    fn selected_imported_call_is_ineligible_for_temporal_body_guard() -> Result<(), String> {
         use qsl_replay::{
             compile_package, DependencyInput, ReplayLimits, SourceIdentity, StageLimits,
             SuppliedLibrary,
@@ -3691,7 +3691,7 @@ mod tests {
             &evidence,
         ) {
             CheckedPackageV2ReadResult::Admitted(package) => *package,
-            other => panic!("library admits: {other:?}"),
+            other => return Err(format!("library admits: {other:?}")),
         };
         let source = "language \"ix:native\" edition \"1-draft\";\n\
             profile v = \"quire.value.complete/v1\";\n\
@@ -3726,7 +3726,7 @@ mod tests {
             &evidence,
         ) {
             CheckedPackageV2ReadResult::Admitted(package) => *package,
-            other => panic!("selected program admits: {other:?}"),
+            other => return Err(format!("selected program admits: {other:?}")),
         };
         let call_id = checked
             .graph()
@@ -3764,7 +3764,7 @@ mod tests {
             &contract_dependencies,
         ) {
             ContractPackageReadResult::Admitted(package) => *package,
-            other => panic!("selected V1 call admits: {other:?}"),
+            other => return Err(format!("selected V1 call admits: {other:?}")),
         };
         let requests = [ContractRequestPosition::DriverItem {
             node_id: call_id.clone(),
@@ -3773,7 +3773,7 @@ mod tests {
         let accounting = PackageItems::new(&admitted, &requests).expect("exact real request");
         let item = accounting.at(0, &call_id).expect("selected call closure");
         let PackageItem::Lowered { closure, .. } = &item else {
-            panic!("selected call must lower");
+            return Err("selected call must lower".to_owned());
         };
         assert!(!closure.selected_references.is_empty());
         assert_eq!(closure.root.semantic_form.as_ref(), "call");
@@ -3783,6 +3783,7 @@ mod tests {
             admitted_binary_body(item, &graph),
             Err(ExactFunctionRefusal::SelectedDependencyUnsupported { .. })
         ));
+        Ok(())
     }
 
     #[trace("TC-030")]
