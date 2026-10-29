@@ -728,8 +728,7 @@ mod tests {
     use crate::strategy::bound::population::Population;
 
     fn fixture() -> (CheckedPackageV2, quire_contract_model::CheckedNodeId) {
-        native_twin::Twin::with_balance_condition("self.balance >= pre(self.balance)")
-            .emitted_package("BalanceNeverDrops")
+        native_twin::Twin::new().emitted_package("BalanceNeverDrops")
     }
 
     /// Trace: TC-020
