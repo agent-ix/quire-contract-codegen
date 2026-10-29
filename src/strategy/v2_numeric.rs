@@ -663,14 +663,13 @@ pub fn run_v2_numeric_population(
     let report = report.into_inner();
     if let Some(error) = failure.into_inner() {{
         let summary = v2_numeric_summary(report);
-        if summary.discarded > {maximum_discarded} {{
-            return Err(V2NumericCampaignError::AboveDiscardCeiling {{ summary }});
-        }}
         return Err(match error {{
-            V2NumericCampaignError::ConformanceMismatch {{ primary, partner, expected, observed, .. }} =>
-                V2NumericCampaignError::ConformanceMismatch {{ summary, primary, partner, expected, observed }},
             V2NumericCampaignError::IdentityMismatch {{ .. }} =>
                 V2NumericCampaignError::IdentityMismatch {{ summary }},
+            _ if summary.discarded > {maximum_discarded} =>
+                V2NumericCampaignError::AboveDiscardCeiling {{ summary }},
+            V2NumericCampaignError::ConformanceMismatch {{ primary, partner, expected, observed, .. }} =>
+                V2NumericCampaignError::ConformanceMismatch {{ summary, primary, partner, expected, observed }},
             V2NumericCampaignError::InvalidCaseShape {{ .. }} =>
                 V2NumericCampaignError::InvalidCaseShape {{ summary }},
             other => other,
@@ -731,7 +730,7 @@ mod tests {
         native_twin::Twin::new().emitted_package("BalanceNeverDrops")
     }
 
-    /// Trace: TC-020
+    /// Trace: TC-020, FR-011-AC-17
     #[test]
     fn renderer_mutants_refuse_before_any_artifact_exists() {
         let (package, clause) = fixture();

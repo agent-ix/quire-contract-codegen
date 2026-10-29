@@ -34,7 +34,7 @@ fn request<'a>(
 }
 
 /// One QSL-authored selected claim yields one complete source/map bundle and executable runners.
-#[trace("TC-020")]
+#[trace("TC-020", "FR-011-AC-16", "FR-011-AC-17")]
 #[test]
 fn v2_numeric_bundle_keeps_selected_identity_and_runs_both_modes() {
     let (package, clause, claim) = admitted("self.balance >= pre(self.balance)");
@@ -185,6 +185,35 @@ fn population_and_census() {
     assert_eq!(census.discard_rate(), Some((0, 10)));
 }
 
+#[test]
+fn identity_mismatch_precedes_a_prior_discard_ceiling() {
+    use v2_numeric_campaign_generated as generated;
+    let mut report = quire_contract_runtime::CampaignReport::new(
+        quire_contract_runtime::ContractIdentity::new(
+            quire_contract_runtime::RequirementId::new("WRONG"),
+            quire_contract_runtime::RevisionId::new("WRONG"),
+        ),
+    );
+    report.record_discard();
+    let config = proptest::test_runner::Config {
+        cases: 1, max_global_rejects: 0, failure_persistence: None,
+        ..proptest::test_runner::Config::default()
+    };
+    let mut runner = proptest::test_runner::TestRunner::new_with_rng(
+        config,
+        proptest::test_runner::TestRng::deterministic_rng(
+            proptest::test_runner::RngAlgorithm::ChaCha,
+        ),
+    );
+    let error = generated::run_v2_numeric_population(&mut runner, &mut report)
+        .expect_err("wrong report identity takes precedence");
+    assert!(matches!(error,
+        generated::V2NumericCampaignError::IdentityMismatch { summary }
+            if summary.attempted == 1 && summary.discarded == 1
+                && summary.accepted == 0 && summary.rejected == 0
+    ));
+}
+
 "#;
     fs::write(scratch.path.join("src/lib.rs"), &source.contents).expect("generated source");
     fs::create_dir_all(scratch.path.join("tests")).expect("scratch tests");
@@ -252,7 +281,7 @@ fn oracle_negation_is_a_typed_conformance_failure() {
 }
 
 /// Every closed direct operator is emitted through the same selected V2 entry.
-#[trace("TC-020")]
+#[trace("TC-020", "FR-011-AC-16")]
 #[test]
 fn v2_numeric_bundle_admits_all_six_authored_comparisons() {
     for (operator, emitted) in [
@@ -280,7 +309,7 @@ fn v2_numeric_bundle_admits_all_six_authored_comparisons() {
     }
 }
 /// Refused selections never yield a source, map, or campaign result.
-#[trace("TC-020")]
+#[trace("TC-020", "FR-011-AC-17")]
 #[test]
 fn v2_numeric_refusals_keep_first_typed_cause() {
     let (package, clause, claim) = admitted("self.balance >= pre(self.balance)");
