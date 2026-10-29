@@ -58,6 +58,8 @@ pub struct RefinementRun<Item, Subjects> {
 impl<Item, Subjects> RefinementRun<Item, Subjects> {
     /// Bind a bounded solver invocation to its selected subjects.
     ///
+    /// Only a completed `Unsat` from the selected cvc5 proof-dump mode may carry a proof.
+    /// Malformed proof framing changes the refinement record's status to `MalformedResponse`.
     pub fn from_execution(
         subjects: Subjects,
         execution: SolverExecution<(), Item, (), RefinementRole>,
@@ -261,10 +263,10 @@ fn validate_records<'a, Item: Eq, Subjects: Eq>(
 fn cvc5_proof_dump_selected(arguments: &[std::ffi::OsString]) -> bool {
     arguments
         .iter()
-        .any(|argument| argument == OsStr::new("--dump-proofs"))
+        .any(|argument| argument.as_os_str() == OsStr::new("--dump-proofs"))
         && arguments
             .iter()
-            .any(|argument| argument == OsStr::new("--proof-format-mode=alethe"))
+            .any(|argument| argument.as_os_str() == OsStr::new("--proof-format-mode=alethe"))
 }
 
 fn serialize_verified_fields<Item, Subjects>(
