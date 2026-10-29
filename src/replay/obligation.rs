@@ -380,8 +380,9 @@ mod tests {
     fn tc_026_admitted_function_site_has_exact_four_preencoding_members() {
         let source = "language \"ix:native\" edition \"1-draft\";\n\
             profile v = \"quire.value.complete/v1\";\n\
-            function ordered using v(z: Boolean, a: Int[0, 9]): Boolean pure { z or a <= 9 }\n";
-        let selection = QualifiedName::new(vec![Identifier::new("ordered").unwrap()]).unwrap();
+            function identity_probe using v(z: Boolean, a: Int[0, 9]): Boolean pure { z or a <= 9 }\n";
+        let selection =
+            QualifiedName::new(vec![Identifier::new("identity_probe").unwrap()]).unwrap();
         let site = call_site(
             SourceIdentity::new("agent-ix", "test:obligation-seam", "git", "r1"),
             "test:obligation-seam",
