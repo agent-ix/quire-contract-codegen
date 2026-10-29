@@ -86,6 +86,12 @@ fn distinct_pointed_invariants_render_distinct_verdict_points_and_identities() {
             },
             "handler:4:tock",
         ),
+        (
+            ExecutionPoint::Handler {
+                name: point_name("tïck"),
+            },
+            "handler:5:tïck",
+        ),
     ];
     let mut results = Vec::new();
     for (point, expected) in inputs {
@@ -168,7 +174,10 @@ fn two_authentic_claims_of_one_pointed_node_share_the_point() {
         ("BalanceSecond", point),
     ]);
     assert_eq!(clauses.len(), 2);
-    assert_eq!(clauses[0], clauses[1], "equal bodies and points share one node");
+    assert_eq!(
+        clauses[0], clauses[1],
+        "equal bodies and points share one node"
+    );
     let node = package
         .graph()
         .nodes
@@ -180,7 +189,11 @@ fn two_authentic_claims_of_one_pointed_node_share_the_point() {
         .iter()
         .filter(|occurrence| occurrence.role == CheckedOccurrenceRole::Claim)
         .collect::<Vec<_>>();
-    assert_eq!(claims.len(), 2, "both source claims must survive deduplication");
+    assert_eq!(
+        claims.len(),
+        2,
+        "both source claims must survive deduplication"
+    );
     assert_ne!(claims[0], claims[1]);
     let generated = claims
         .iter()
@@ -191,7 +204,10 @@ fn two_authentic_claims_of_one_pointed_node_share_the_point() {
         .collect::<Vec<_>>();
     assert_eq!(generated[0].identity.execution_point, "post:7:deposit");
     assert_eq!(generated[1].identity.execution_point, "post:7:deposit");
-    assert_ne!(generated[0].identity.occurrence, generated[1].identity.occurrence);
+    assert_ne!(
+        generated[0].identity.occurrence,
+        generated[1].identity.occurrence
+    );
 }
 
 /// Changed claim members and an unpointed sibling all refuse before artifact publication.
