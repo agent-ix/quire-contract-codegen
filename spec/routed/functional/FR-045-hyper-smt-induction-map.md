@@ -209,9 +209,9 @@ validated handoff contains only the fields FR-314's adapter needs.
 PARTIAL (IR-974). CG's bounded single-query solver execution and associated
 base/step evidence classifier exist in `src/routed/smt/`; QSL exports the
 hyper query encoder and outcome types, but their CG integration remains
-planned. The refinement Base/Step record collection and validation are
-partial after CG #630; deterministic FR-314 handoff and TC-059 steps 5-8
-remain open on IR-1120. CG owns the cvc5 response framing and its end-to-end
-proof extraction, including the distinction between an empty outer list and
-status-only output. CG SHALL pass the exact extracted interior bytes through
-the QSL reader before claiming AC-5 or TC-059 step 6 covered.
+planned. The refinement Base/Step record collection, validation, cvc5 proof
+framing, and deterministic FR-314 handoff are partial after CG #630 and the
+subsequent IR-1120 implementation. Live canonical source-row permutation and
+cvc5 output through the QSL reader remain open in TC-059 steps 5-8. CG SHALL
+pass the exact extracted interior bytes through the QSL reader before claiming
+AC-5 or TC-059 step 6 covered.
