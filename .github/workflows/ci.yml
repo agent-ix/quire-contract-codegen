@@ -17,12 +17,9 @@ jobs:
           path: quire-specification
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@1.98.1
+        uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-
-      - name: Install MSRV
-        uses: dtolnay/rust-toolchain@1.98.1
 
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
@@ -38,8 +35,8 @@ jobs:
         env:
           QSPEC_DIR: ${{ github.workspace }}/quire-specification
 
-      - name: Rust 1.98.1 compatibility
-        run: cargo +1.98.1 check --locked --all-targets --message-format=json
+      - name: Minimum supported Rust version
+        run: make msrv
 
       - name: Validate specification
         run: |

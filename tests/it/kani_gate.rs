@@ -172,6 +172,7 @@ fi
         command.env("FAKE_HEAD_COUNT", self.root.join("head-count"));
         command.env("FAKE_TREE_COUNT", self.root.join("tree-count"));
         command.current_dir(&self.root);
+        let toolchain = format!("+{}", env!("CARGO_PKG_RUST_VERSION"));
         command.args([
             self.root
                 .join("lane.lock")
@@ -179,7 +180,7 @@ fi
                 .expect("UTF-8 scratch path"),
             "--",
             cargo,
-            "+1.98.1",
+            toolchain.as_str(),
             "test",
             "--locked",
             "--test",
