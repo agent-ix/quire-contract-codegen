@@ -278,7 +278,7 @@ pub(crate) fn frame_identity(
 #[cfg(test)]
 mod tests {
     use ix_trace_rs::trace;
-    use qsl_replay::{Origin, Role};
+    use qsl_replay::{call_site, DependencyInput, Origin, QualifiedName, Role, SourceIdentity};
 
     use super::*;
 
@@ -373,28 +373,64 @@ mod tests {
         assert_ne!(identity(7, 7, kind, &extreme), identity(7, 7, kind, &near));
     }
 
-    /// The object passed to the sole encoder has the four allocated members and preserves
-    /// identifier order even when parameter node order is different.
-    #[trace("FR-024-AC-20", "TC-035")]
+    /// QSL admits the function and reports parameters in declared `z, a` order. The object
+    /// passed to the sole encoder carries its exact site members and sorts arguments by name.
+    #[trace("FR-016-AC-21", "FR-024-AC-20", "TC-026", "TC-035")]
     #[test]
-    fn tc_035_preimage_has_exact_four_members_before_encoding() {
-        let hex = |byte: u8| format!("{byte:02x}").repeat(32);
-        let arguments = [
-            argument("b", 1, ArgumentDomain::Boolean),
-            argument("a", 9, range("0", "9")),
-        ];
-        let declaration = declaration(node(7));
-        let preimage =
-            obligation_preimage(node(7), &declaration, ObligationKind::Frame, &arguments);
+    fn tc_026_admitted_function_site_has_exact_four_preencoding_members() {
+        let source = "language \"ix:native\" edition \"1-draft\";\n\
+            profile v = \"quire.value.complete/v1\";\n\
+            function ordered using v(z: Boolean, a: Int[0, 9]): Boolean pure { z or a <= 9 }\n";
+        let selection = QualifiedName::new(vec![Identifier::new("ordered").unwrap()]).unwrap();
+        let site = call_site(
+            SourceIdentity::new("agent-ix", "test:obligation-seam", "git", "r1"),
+            "test:obligation-seam",
+            source.as_bytes(),
+            [],
+            &DependencyInput::default(),
+            &selection,
+        )
+        .expect("QSL admits the fixture")
+        .site;
+        assert_eq!(
+            site.parameters
+                .iter()
+                .map(|(name, _)| name.as_str())
+                .collect::<Vec<_>>(),
+            ["z", "a"]
+        );
+        let arguments = site
+            .parameters
+            .iter()
+            .map(|(name, parameter)| ContractArgument {
+                identifier: name.as_str().to_owned(),
+                parameter: *parameter,
+                domain: match name.as_str() {
+                    "z" => ArgumentDomain::Boolean,
+                    "a" => range("0", "9"),
+                    other => panic!("unexpected parameter {other}"),
+                },
+            })
+            .collect::<Vec<_>>();
+        let preimage = obligation_preimage(
+            site.function,
+            &site.declaration,
+            ObligationKind::Postcondition,
+            &arguments,
+        );
         assert_eq!(
             serde_json::to_value(&preimage).unwrap(),
             serde_json::json!({
-                "function": hex(7),
-                "declaration": {"node": hex(7), "role": "declaration", "ordinal": 0},
-                "kind": "frame",
+                "function": site.function.to_string(),
+                "declaration": {
+                    "node": site.declaration.node().to_string(),
+                    "role": site.declaration.origin().role().to_string(),
+                    "ordinal": site.declaration.origin().ordinal(),
+                },
+                "kind": "postcondition",
                 "arguments": [
-                    {"domain": {"type": "integerRange", "minimum": "0", "maximum": "9"}, "parameter": hex(9)},
-                    {"domain": {"type": "boolean"}, "parameter": hex(1)},
+                    {"domain": {"type": "integerRange", "minimum": "0", "maximum": "9"}, "parameter": site.parameters[1].1.to_string()},
+                    {"domain": {"type": "boolean"}, "parameter": site.parameters[0].1.to_string()},
                 ],
             })
         );

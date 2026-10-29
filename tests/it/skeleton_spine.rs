@@ -737,6 +737,15 @@ fn identity_unit(preface: &str) -> String {
     )
 }
 
+/// The selected function declares parameters opposite to their ascending identifier order.
+fn reverse_declared_identity_unit() -> String {
+    format!(
+        "language \"ix:native\" edition \"1-draft\";\n{PROFILE}\
+         function {FUNCTION} using v(balance_pre: Int[0, 1000], amount_current: Int[0, 1000]): \
+         Boolean pure {{ balance_pre - amount_current <= balance_pre }}\n"
+    )
+}
+
 /// The identity of `function` in `source` for the harness `identity`.
 fn identity_of(
     source: &str,
@@ -768,7 +777,15 @@ fn site_of(source: &str, function: &str) -> qsl_replay::FunctionSite {
 #[test]
 fn tc_026_the_request_slot_carries_the_selected_obligation_identity() {
     let harness = spine_identity();
-    let source = identity_unit("");
+    let source = reverse_declared_identity_unit();
+    assert_eq!(
+        site_of(&source, FUNCTION)
+            .parameters
+            .iter()
+            .map(|(name, _)| name.as_str())
+            .collect::<Vec<_>>(),
+        ["balance_pre", "amount_current"]
+    );
     let package = compile_native_twin(&source, FUNCTION);
     let packet = package
         .backend_witness_packet(
@@ -790,7 +807,7 @@ fn tc_026_the_request_slot_carries_the_selected_obligation_identity() {
 #[test]
 fn tc_026_replay_counterexample_sends_the_selected_obligation_identity() {
     let harness = spine_identity();
-    let source = identity_unit("");
+    let source = reverse_declared_identity_unit();
     let package = compile_native_twin(&source, FUNCTION);
     let mut sent = Vec::new();
     replay_counterexample_through(
