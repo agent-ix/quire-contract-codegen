@@ -20,7 +20,11 @@ fn admitted(
     quire_contract_model::CheckedNodeId,
     CheckedOccurrence,
 ) {
-    let twin = Twin::with_balance_condition(condition);
+    let twin = if condition == "self.balance >= pre(self.balance)" {
+        Twin::new()
+    } else {
+        Twin::with_balance_condition(condition)
+    };
     let (package, clause) = twin.emitted_package("BalanceNeverDrops");
     let claim = package
         .graph()
