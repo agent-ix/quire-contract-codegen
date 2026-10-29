@@ -2601,12 +2601,12 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
     // slices may be permuted without changing the lowest eligible position.
     let mut temporal_function = function.clone();
     temporal_function.node_id = fairness_id.clone();
+    temporal_function.name = "temporal_body".into();
     let declared_item = ExactFunctionItem {
         function: temporal_function.name.clone(),
         ..healthy_item.clone()
     };
     let body_position = position(&fairness_id);
-    let direct_position = position(&clause_id);
     let authenticated_body = generate_exact_function_oracles(
         &contract,
         &requests,
@@ -2639,41 +2639,65 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
             node_id: fairness_id.clone(),
         })
     );
-    for functions in [
-        [temporal_function.clone(), function.clone()],
-        [function.clone(), temporal_function.clone()],
+    let mut later_arity_refusal = declared_item.clone();
+    later_arity_refusal.argument_node_ids.pop();
+    assert_eq!(
+        generate_exact_function_oracles(
+            &plain,
+            &requests,
+            &[body_position],
+            std::slice::from_ref(&temporal_function),
+            &[position(&call_id)],
+            std::slice::from_ref(&later_arity_refusal),
+        ),
+        Err(OracleGenerationError::UnauthenticatedRequestedRootKind {
+            request_index: body_position,
+            node_id: fairness_id.clone(),
+        })
+    );
+    for (first, second) in [
+        (fairness_id.clone(), clause_id.clone()),
+        (clause_id.clone(), fairness_id.clone()),
     ] {
-        for items in [
-            [clause_item.clone(), declared_item.clone()],
-            [declared_item.clone(), clause_item.clone()],
+        let ordered_roots = [first.clone(), second, body_id.clone(), call_id.clone()];
+        let ordered_requests = driver_positions(&ordered_roots);
+        let ordered_contract = admitted_function_contract(&package, &ordered_roots);
+        let ordered_plain = plain_read_function_contract(&ordered_contract);
+        let ordered_position = |id: &quire_contract_model::CheckedNodeId| {
+            ordered_roots.iter().position(|root| root == id).unwrap()
+        };
+        for functions in [
+            [temporal_function.clone(), function.clone()],
+            [function.clone(), temporal_function.clone()],
         ] {
-            let function_positions = functions
-                .iter()
-                .map(|function| position(&function.node_id))
-                .collect::<Vec<_>>();
-            let item_positions = items
-                .iter()
-                .map(|item| position(&item.call_node_id))
-                .collect::<Vec<_>>();
-            let result = generate_exact_function_oracles(
-                &plain,
-                &requests,
-                &function_positions,
-                &functions,
-                &item_positions,
-                &items,
-            );
-            assert_eq!(
-                result,
-                Err(OracleGenerationError::UnauthenticatedRequestedRootKind {
-                    request_index: body_position.min(direct_position),
-                    node_id: if body_position < direct_position {
-                        fairness_id.clone()
-                    } else {
-                        clause_id.clone()
-                    },
-                })
-            );
+            for items in [
+                [clause_item.clone(), declared_item.clone()],
+                [declared_item.clone(), clause_item.clone()],
+            ] {
+                let function_positions = functions
+                    .iter()
+                    .map(|function| ordered_position(&function.node_id))
+                    .collect::<Vec<_>>();
+                let item_positions = items
+                    .iter()
+                    .map(|item| ordered_position(&item.call_node_id))
+                    .collect::<Vec<_>>();
+                let result = generate_exact_function_oracles(
+                    &ordered_plain,
+                    &ordered_requests,
+                    &function_positions,
+                    &functions,
+                    &item_positions,
+                    &items,
+                );
+                assert_eq!(
+                    result,
+                    Err(OracleGenerationError::UnauthenticatedRequestedRootKind {
+                        request_index: 0,
+                        node_id: first.clone(),
+                    })
+                );
+            }
         }
     }
     let generated = combined

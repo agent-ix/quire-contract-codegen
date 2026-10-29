@@ -2442,53 +2442,14 @@ fn unauthenticated_temporal_root(
     )
 }
 
-/// Check the distinct call item before a declaration-body root can trigger
-/// AC-41. The body is otherwise refused in Stage 1, so it has no survivor entry.
-fn valid_call_item_for_temporal_body(
-    item: &ExactFunctionItem,
-    admitted: &PackageItem<'_>,
-    declaration: &ExactFunctionDeclaration,
-    source_index: &FunctionSourceIndex<'_>,
-    package_refusal: &Option<String>,
-) -> bool {
+/// Whether a distinct call item reaches its declaration's Stage 1 body result
+/// before later arity, source-binding, argument-type or package checks.
+fn item_reaches_temporal_body(admitted: &PackageItem<'_>, graph: &Graph<'_>) -> bool {
     let PackageItem::Lowered { closure, .. } = admitted else {
         return false;
     };
-    let graph = &source_index.graph;
-    let node = closure.root;
-    if &*node.semantic_form != "call"
-        || item.argument_node_ids.len() != declaration.parameters.len()
-        || package_refusal.is_some()
-    {
-        return false;
-    }
-    if graph.operator(&node.node_id) == Some(ApplicationOperator::Call) {
-        let Some(source_function_id) =
-            source_index.source_function_node_id(&declaration.name, &declaration.node_id)
-        else {
-            return false;
-        };
-        let Some(term) = graph.term(&node.node_id) else {
-            return false;
-        };
-        if !source_call_matches(term, graph, source_function_id, &item.argument_node_ids) {
-            return false;
-        }
-    }
-    item.argument_node_ids.iter().all(|argument_id| {
-        let Some(argument) = graph.node(argument_id) else {
-            return false;
-        };
-        let Some(type_node) = graph.node(&argument.semantic_type) else {
-            return false;
-        };
-        let type_node_id = if type_node.node_tag.as_ref() == "bounded_domain" {
-            &type_node.semantic_type
-        } else {
-            &argument.semantic_type
-        };
-        resolve_operand_type(graph, type_node_id).is_ok()
-    })
+    check_lowered_binary_body(closure, graph).is_ok()
+        && closure.root.semantic_form.as_ref() == "call"
 }
 
 fn admitted_binary_body<'a>(
@@ -2533,6 +2494,15 @@ fn admitted_binary_body<'a>(
             ..
         } => (closure, occurrences),
     };
+    check_lowered_binary_body(&closure, graph)?;
+    Ok((closure, occurrences))
+}
+
+/// Checks shared by the normal item path and AC-41's pre-resolved-body guard.
+fn check_lowered_binary_body(
+    closure: &ContractReachedClosureV1<'_>,
+    graph: &Graph<'_>,
+) -> Result<(), ExactFunctionRefusal> {
     if !closure.selected_references.is_empty() {
         return Err(ExactFunctionRefusal::SelectedDependencyUnsupported {
             references: closure
@@ -2558,7 +2528,7 @@ fn admitted_binary_body<'a>(
             |tag| unsupported_family(&closure.root.node_id, tag),
         ));
     }
-    Ok((closure, occurrences))
+    Ok(())
 }
 
 fn lowering_profile() -> CompleteLoweringProfileV2 {
@@ -3147,17 +3117,8 @@ pub fn generate_exact_function_oracles(
                 unauthenticated_bodies
                     .get(function_node_id)
                     .and_then(|&body_position| {
-                        let declaration = ordered_functions
-                            .iter()
-                            .find(|declaration| &declaration.node_id == function_node_id)?;
-                        valid_call_item_for_temporal_body(
-                            item,
-                            &admitted,
-                            declaration,
-                            &source_index,
-                            &package_refusal,
-                        )
-                        .then_some((body_position, declaration.node_id.clone()))
+                        item_reaches_temporal_body(&admitted, graph)
+                            .then_some((body_position, function_node_id.clone()))
                     })
             } else {
                 None
@@ -3695,6 +3656,134 @@ mod tests {
     use crate::oracle::failed_records::{failed_record, unrecognised_kinds};
     use ix_trace_rs::trace;
     use quire_contract_model::CheckedPackageLimit;
+
+    /// A real imported call carries selected references in its admitted V1
+    /// closure. That item refusal precedes a declaration's Stage 1 body result.
+    #[trace("FR-021-AC-41", "TC-031")]
+    #[test]
+    fn selected_imported_call_is_ineligible_for_temporal_body_guard() {
+        use qsl_replay::{
+            compile_package, DependencyInput, ReplayLimits, SourceIdentity, StageLimits,
+            SuppliedLibrary,
+        };
+        use quire_contract_model::{
+            CheckedPackageEvidence, CheckedPackageV2ReadResult, ContractDependencyInput,
+        };
+
+        let library_source = "language \"ix:native\" edition \"1-draft\";\n\
+            profile v = \"quire.value.complete/v1\";\n\
+            function f using v(a: Int[0, 9]): Boolean pure { a < 5 }\n";
+        let library_compiled = compile_package(
+            SourceIdentity::new("test", "selected-library", "git", "fixture"),
+            "selected-library.native",
+            library_source.as_bytes(),
+            [],
+            &DependencyInput::default(),
+            StageLimits::default(),
+            ReplayLimits::default(),
+        )
+        .expect("source-backed library compiles");
+        let mut evidence = CheckedPackageEvidence::new();
+        evidence.support_feature("quire.value.complete/v1");
+        let library = match CheckedPackageV2::read(
+            library_compiled.bytes(),
+            CheckedPackageReadLimits::bounded(),
+            &evidence,
+        ) {
+            CheckedPackageV2ReadResult::Admitted(package) => *package,
+            other => panic!("library admits: {other:?}"),
+        };
+        let source = "language \"ix:native\" edition \"1-draft\";\n\
+            profile v = \"quire.value.complete/v1\";\n\
+            import \"test/selected-library\" as g;\n\
+            function p using v(a: Int[0, 9]): Boolean pure { g::f(a) }\n";
+        let dependencies = DependencyInput::new([SuppliedLibrary {
+            identity: "test/selected-library".into(),
+            source: SourceIdentity::new("test", "selected-library", "git", "fixture"),
+            path: "selected-library.native".into(),
+            bytes: library_source.as_bytes().to_vec(),
+        }])
+        .expect("one selected library");
+        let compiled = compile_package(
+            SourceIdentity::new("test", "selected-program", "git", "fixture"),
+            "selected-program.native",
+            source.as_bytes(),
+            [],
+            &dependencies,
+            StageLimits::default(),
+            ReplayLimits::default(),
+        )
+        .expect("imported call compiles");
+        evidence
+            .insert_dependency_package(
+                "test/selected-library",
+                std::sync::Arc::new(library.clone()),
+            )
+            .expect("retain selected library");
+        let checked = match CheckedPackageV2::read(
+            compiled.bytes(),
+            CheckedPackageReadLimits::bounded(),
+            &evidence,
+        ) {
+            CheckedPackageV2ReadResult::Admitted(package) => *package,
+            other => panic!("selected program admits: {other:?}"),
+        };
+        let call_id = checked
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| {
+                node.node_tag.as_ref() == "expression"
+                    && node.semantic_form.as_ref() == "call"
+                    && matches!(
+                        &node.body,
+                        CheckedTerm::Application {
+                            operator: ApplicationOperator::Call,
+                            ..
+                        }
+                    )
+            })
+            .expect("source-backed imported call root")
+            .node_id
+            .clone();
+        let lowered = checked.lower(
+            std::slice::from_ref(&call_id),
+            &routed_contract_lowering_profile(),
+        );
+        let mut contract_dependencies = ContractDependencies::new();
+        contract_dependencies.insert(
+            "test/selected-library",
+            ContractDependencyInput {
+                identity: "test/selected-library",
+                package: &library,
+            },
+        );
+        let admitted = match ContractPackageWireV1::read(
+            lowered.package.canonical_bytes().expect("real V1 bytes"),
+            CheckedPackageReadLimits::bounded(),
+            &contract_dependencies,
+        ) {
+            ContractPackageReadResult::Admitted(package) => *package,
+            other => panic!("selected V1 call admits: {other:?}"),
+        };
+        let requests = [ContractRequestPosition::DriverItem {
+            node_id: call_id.clone(),
+            result_selection: ContractDriverResultSelection::NotApplicable,
+        }];
+        let accounting = PackageItems::new(&admitted, &requests).expect("exact real request");
+        let item = accounting.at(0, &call_id).expect("selected call closure");
+        let PackageItem::Lowered { closure, .. } = &item else {
+            panic!("selected call must lower");
+        };
+        assert!(!closure.selected_references.is_empty());
+        assert_eq!(closure.root.semantic_form.as_ref(), "call");
+        let graph = super::Graph::new(&admitted);
+        assert!(!item_reaches_temporal_body(&item, &graph));
+        assert!(matches!(
+            admitted_binary_body(item, &graph),
+            Err(ExactFunctionRefusal::SelectedDependencyUnsupported { .. })
+        ));
+    }
 
     #[trace("TC-030")]
     #[test]
