@@ -31,7 +31,8 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 #[path = "../checked_package_support/rekey.rs"]
-#[allow(dead_code)] // This shared fixture helper also serves other test modules.
+// The native twin is included by several test modules that also use this fixture helper.
+#[allow(dead_code, clippy::duplicate_mod)]
 mod rekey;
 
 const AUTHORITY: &str = "agent-ix";
