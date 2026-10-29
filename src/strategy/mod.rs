@@ -14,5 +14,7 @@ pub(crate) mod campaign;
 pub(crate) mod harness;
 // Typed V2 direct-comparison admission; independent of V1 bound projections.
 pub(crate) mod v2_comparison;
+// V2 constructive population and complete deterministic census.
+pub(crate) mod v2_population;
 // Implements: FR-011-AC-13
 pub(crate) mod v2_selected_claim;

@@ -62,6 +62,9 @@ pub use strategy::v2_comparison::{
     admit_v2_integer_comparison, V2ComparisonAdmission, V2ComparisonDiagnostic,
     V2ComparisonRefusal, V2IntegerOracle,
 };
+pub use strategy::v2_population::{
+    prepare_v2_numeric_population, V2NumericPopulation, V2PopulationDiagnostic,
+};
 pub use strategy::v2_selected_claim::{
     select_v2_claim_execution_point, V2SelectedClaimDiagnostic, V2SelectedClaimKey,
     V2SelectedClaimRequest,

@@ -528,6 +528,26 @@ pub struct RenderedPopulation {
 pub fn render_population(
     request: &PopulationRequest<'_>,
 ) -> Result<RenderedPopulation, StrategyDiagnostic> {
+    render_population_named(request, PopulationNaming::Bound)
+}
+
+/// Render the same constructive core under V2 names, without a bound-package input.
+pub(crate) fn render_v2_population(
+    request: &PopulationRequest<'_>,
+) -> Result<RenderedPopulation, StrategyDiagnostic> {
+    render_population_named(request, PopulationNaming::V2)
+}
+
+#[derive(Clone, Copy)]
+enum PopulationNaming {
+    Bound,
+    V2,
+}
+
+fn render_population_named(
+    request: &PopulationRequest<'_>,
+    naming: PopulationNaming,
+) -> Result<RenderedPopulation, StrategyDiagnostic> {
     validate_identifiers(request)?;
     let values = |side| side_values(&request.relation, request.domain, side);
     // Every requested side is computed, and refused when empty, before any source is rendered.
@@ -548,12 +568,19 @@ pub fn render_population(
 
     // One population is rendered per generated file, so its population name alone is unique there.
     let population_name = request.population.name();
+    let (type_prefix, function_prefix, description) = match naming {
+        PopulationNaming::Bound => ("Bound", "bound", "bound"),
+        PopulationNaming::V2 => ("V2", "v2", "V2"),
+    };
     let names = Names {
-        case_type: format!("BoundCase{population_name}"),
-        expectation_type: format!("BoundExpectation{population_name}"),
+        case_type: format!("{type_prefix}Case{population_name}"),
+        expectation_type: format!("{type_prefix}Expectation{population_name}"),
         identifiers: request.read_identifiers,
     };
-    let strategy_function = format!("bound_population_{}", request.population.component());
+    let strategy_function = format!(
+        "{function_prefix}_population_{}",
+        request.population.component()
+    );
     let relation = relation_text(
         &request.relation,
         request.read_identifiers[0],
@@ -609,7 +636,7 @@ pub fn render_population(
     let expectation_type = &names.expectation_type;
     let source = format!(
         "#![deny(missing_docs)]\n\
-//! Generated bound numeric population artifact.\n\
+//! Generated {description} numeric population artifact.\n\
 // Relation: {relation}; Domain: {domain}; Population: {population}\n\
 \n\
 /// Value the relation's generated oracle returns for one case.\n\

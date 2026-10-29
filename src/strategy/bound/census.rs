@@ -317,6 +317,18 @@ pub fn render_boundary_constants(
     render(census, names, Some(population))
 }
 
+/// Render every tagged in-domain case, even when only one relation side exists.
+///
+/// A V2 numeric census is complete regardless of whether the optional `Boundary`
+/// sampling population can be admitted. The existing boundary renderer still
+/// requires both tags for that sampling mode.
+pub(crate) fn render_v2_census_constants(
+    census: &BoundaryCensus,
+    names: CensusNames<'_>,
+) -> Result<String, StrategyDiagnostic> {
+    render(census, names, Some(census.in_domain()))
+}
+
 fn render(
     census: &BoundaryCensus,
     names: CensusNames<'_>,

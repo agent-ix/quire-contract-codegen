@@ -14,7 +14,7 @@ use quire_contract_model::{
 
 use super::{kani_obligations_state_frame::native_twin::Twin, scratch_crate};
 
-fn admitted(
+pub(super) fn admitted(
     condition: &str,
 ) -> (
     quire_contract_model::CheckedPackageV2,
