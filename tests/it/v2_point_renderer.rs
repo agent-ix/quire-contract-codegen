@@ -2,7 +2,7 @@
 
 use ix_trace_rs::trace;
 use quire_contract_codegen::{
-    generate_v2_numeric_strategy, Population, V2NumericErrorCode, V2NumericPolicy,
+    generate_v2_numeric_strategy, Population, V2NumericBundle, V2NumericErrorCode, V2NumericPolicy,
     V2NumericRequest, V2SelectedClaimKey,
 };
 use quire_contract_model::{
@@ -62,6 +62,16 @@ fn point_name(name: &str) -> ExecutionPointName {
     ExecutionPointName::new(name).expect("authored point name")
 }
 
+fn generated_source(bundle: &V2NumericBundle) -> &str {
+    &bundle
+        .artifacts
+        .artifacts()
+        .iter()
+        .find(|artifact| artifact.path.ends_with(".rs"))
+        .expect("generated runner source")
+        .contents
+}
+
 /// The point, including its variant and name, comes from the selected QSL clause.
 #[trace("TC-020", "FR-011-AC-14", "FR-004-AC-26")]
 #[test]
@@ -103,8 +113,9 @@ fn distinct_pointed_invariants_render_distinct_verdict_points_and_identities() {
             Ok(point)
         );
         assert_eq!(generated.identity.execution_point, expected);
-        let source = &generated.artifacts.artifacts()[0].contents;
+        let source = generated_source(&generated);
         assert!(source.contains(&format!("ExecutionPoint::new({expected:?})")));
+        assert!(source.contains("V2_NUMERIC_IDENTITY, V2_NUMERIC_POINT, &observations"));
         assert_eq!(generated.identity.clause, clause);
         assert_eq!(generated.identity.package_id, *package.package_id());
         results.push((
@@ -148,9 +159,9 @@ fn pre_and_post_claims_render_their_accepted_operation_points() {
         let generated = generate_v2_numeric_strategy(&request(&package, &clause, &occurrence))
             .expect("selected operation clause generates a numeric runner");
         assert_eq!(generated.identity.execution_point, expected);
-        assert!(generated.artifacts.artifacts()[0]
-            .contents
-            .contains(&format!("ExecutionPoint::new({expected:?})")));
+        assert!(
+            generated_source(&generated).contains(&format!("ExecutionPoint::new({expected:?})"))
+        );
     }
 }
 
