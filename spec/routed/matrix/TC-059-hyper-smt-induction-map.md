@@ -54,11 +54,16 @@ do not claim coverage by the existing HP-2 pair tests.
    Observe the selected solver's stdin for every invocation.
    Assert one typed `Base` and seven typed `Step` records for rows 0 through
    6, with distinct attempts and matching refinement, subjects, role, row
-   and exact query bytes. Reverse the source order of two distinct step rows
-   whose source order differs from their canonical array order, recompile,
-   and assert the canonical `steps` array, each row's FR-315 query bytes and
-   CG's row associations remain equal. A record relabelled by its new source
-   position must instead refuse association. Repeat with a zero-step
+   and exact query bytes. Permute the source step rows without changing their
+   contents and recompile. Select a permutation for which at least one named
+   row has a source position different from its canonical `steps` ordinal
+   after recompilation; confirm those two positions before testing the record.
+   Assert the canonical `steps` array, each row's FR-315 query bytes and CG's
+   role/row bindings remain equal across the two compilations; each new solver
+   invocation still has its own attempt identity. Assert that the correctly
+   labelled record of the selected row passes association validation. In an
+   otherwise valid collection, relabel only that selected record with its source
+   position and assert typed refusal and no handoff. Repeat with a zero-step
    refinement and assert that only `Base` is required. Change one query byte
    and exchange a base and step role, then assert no handoff (FR-045-AC-4).
 6. Return completed `Unsat` and distinct Alethe proof byte strings for the
