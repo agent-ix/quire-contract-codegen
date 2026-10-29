@@ -26,8 +26,8 @@ relationships:
   `tests/state_frame_support/**`, `schemas/kani-*.schema.json`,
   `schemas/generated-rust-kani-*.schema.json`, `Cargo.toml` and
   `Cargo.lock`.
-- The `make kani-scope` target shall read the paths a change touches against the merge base with
-  `origin/main`, with rename detection off so that a renamed file reports its old and its new path.
+- The `make kani-scope` target shall classify changed paths supplied for the candidate. For a
+  rename, the caller shall supply both the old and new paths.
 - When any changed path is in the Kani-touching set, `make kani-scope` shall print `required` and the
   matching paths.
 - When no changed path is in the Kani-touching set, `make kani-scope` shall print `not required`.
@@ -38,31 +38,19 @@ relationships:
 - The `make kani-gate` target shall exit non-zero unless the lane's tests all passed, the number that
   ran equals the number the lane's filters list for `--ignored`, and that number is greater than zero.
 - The `make kani-gate` target shall include [FR-041](../functional/FR-041-claimed-module-proof-gate.md)'s
-  claimed-module census and real mutation controls in its one required lane, and shall exit
-  non-zero if any claimed module or shared helper fails that requirement. The controls shall not
-  be satisfied by a second optional target or by a stored verdict from an earlier run.
-- For the one IR-348 operator-held V1 module claim row in `scripts/kani_claims.json`, the one
-  required lane shall print separate `kani-gate:` lines naming that row's identity, reason,
-  expiry and held count; the existing `kani-gate: result=... ran=... expected=... elapsed=...
-  kani=... tree=...` line shall retain its exact fields and order. The held count is separate
-  from `ran` and `expected`. The lane shall never report that row as proved or its controls
-  as passed. The lane shall run every non-held selected control and exit non-zero if any such
-  control fails, is missing or is skipped. A hold on another claim, a missing reason or expiry,
-  or omission of the held row from the reviewed declaration shall fail the gate. This hold is
-  limited to the V1 source and expires "until the V2 named independent expectation + real
-  positive/falsifying control exists" for that FR-003@4 claim under IR-1047;
-  a different V2 implication claim cannot meet its expiry. This does not remove
-  FR-041 or NFR-006-AC-19.
+  current-build claimed-module census and real mutation controls in its one required lane, and
+  the target shall exit non-zero if any claimed module or shared helper fails that
+  requirement. Optional targets and stored verdicts shall not satisfy the controls. This obligation
+  remains Open until there is a genuine current-build claim source.
+- The real-Kani lane shall include genuine current-build module claim and mutation
+  controls when they exist. A retired fixed inventory or saved result grants no proof credit.
 - The `make kani-gate` target shall print one run-result line of the form `kani-gate:
   result=<passed|failed> ran=<n> expected=<n> elapsed=<s>s kani=<version> tree=<clean|dirty>`,
   with `kani` the version the launcher reports. The line describes the run; it is not a
   transferable approval or a substitute for running the gate on the candidate under review.
-- The `make kani-gate` target shall read the tree state and the head commit before the build and read
-  them again after the run, and shall print `result=failed` and exit non-zero if either read differs.
-- When `origin/main` has changed a Kani-touching path since the candidate's merge base and the
-  candidate does not contain current `origin/main`, `make kani-gate` shall refuse before the lane
-  runs and name the changed paths. It shall permit unrelated main movement.
-- If the working tree is dirty, then `make kani-gate` shall print `tree=dirty` and exit non-zero.
+- The `make kani-gate` target shall inspect the working tree before the build and after the run.
+  If either inspection finds a dirty tree, it shall print `tree=dirty`, never report a pass,
+  and exit non-zero. It shall not read or compare a Git revision for this check.
 - If the `cargo-kani` launcher is absent, then `make kani-gate` shall run no test, print `kani-gate:
   not run: launcher absent` and exit non-zero.
 - When a change touches a path in the Kani-touching set, the author shall run the actual full
@@ -72,8 +60,6 @@ relationships:
 - When the current Kani-touching candidate is ready to merge, the merger shall run the actual
   full `make kani-gate` on that clean, stable candidate. A copied pull-request status line does
   not satisfy this obligation.
-- When `make kani-gate` reports stale Kani-reaching main changes, the merger shall update the
-  candidate from current `origin/main` and rerun the full gate on the updated clean candidate.
 - If a required lane cannot run or fails, the pull request shall remain unmerged. It cannot be
   described as verified by the real-Kani lane or waived by a written reason.
 - When `make kani-scope` prints `not required`, no real-Kani run is required for that change.
@@ -110,12 +96,11 @@ therefore holds that surviving Kani schema, though no schema goes through Kani. 
 `schemas/kani-proof-graph-v2.schema.json` and
 `schemas/generated-rust-kani-v2.schema.json` paths remain `required`-classified by
 `make kani-scope` if reintroduced, as NFR-006-AC-1 requires. The oracle and coverage schemas
-are out because no lane file includes them (measured at this revision: these are all the include
-targets of the lane files beyond the `#[path]` modules listed). `src/core/**` is
+are out because no lane file includes them (these are the include targets
+of the lane files beyond the `#[path]` modules listed). `src/core/**` is
 in the set because harness names and identity come from it. `src/strategy/**` and `src/evidence/**`
 are out because no module of `src/kani`, `src/oracle`, `src/routed`, `src/replay`, `src/core` or
-`src/publication` imports them and no lane test calls their entry points (measured by search at
-this revision). A later change that makes the lane reach them extends the set.
+`src/publication` imports them and no lane test calls their entry points (as currently declared). A later change that makes the lane reach them extends the set.
 
 ## Rationale
 
@@ -164,10 +149,8 @@ and push agents to skip `make ci`.
 **What the run result is.** The gate prints its own counts, version and clean-tree status so the
 operator can inspect the completed process and its exit status. A copied line in a pull request or
 release ticket is not evidence that the current candidate was tested. The author runs the lane before
-opening a Kani-touching pull request; the merger runs it again on the current candidate and checks
-whether source reachable by the lane changed on `origin/main` since the candidate's merge base. If it
-did, the gate refuses until those changes are incorporated. Internal before/after commit reads
-detect a candidate that moves during a run; no commit identifier must be published or compared by hand.
+opening a Kani-touching pull request; the merger runs it again on the current candidate. The
+clean-tree check is local to each run. The run result grants no later candidate proof credit.
 The `ran`/`expected` check makes a filter that matches nothing, which libtest reports as success,
 read as `failed`.
 
@@ -190,37 +173,32 @@ decision (Open decisions); until the owner rules, the answer is no.
 |----|----------|--------------|
 | NFR-006-AC-1 | `make kani-scope` prints `required` and the path for each of `src/kani/generate/negotiate.rs`, `src/oracle/boolean_v1.rs`, `src/routed/generate.rs`, `src/replay/witness.rs`, `src/core/identity.rs`, `src/publication/mod.rs`, `tests/it/kani_batching.rs`, `tests/it/skeleton_spine.rs`, `tests/it/bounded_kani_corpus.rs`, `tests/it/kani_obligations_state_frame.rs`, `tests/it/scratch_crate.rs`, `tests/exact_scalar_support/package.rs`, `tests/checked_package_support/base.rs`, `tests/checked_package_support/rekey.rs`, `tests/state_frame_support/model.rs`, `schemas/kani-proof-graph-v2.schema.json`, `schemas/generated-rust-kani-v2.schema.json`, `Cargo.toml` and `Cargo.lock`, each fed alone. | Test (TC-045) |
 | NFR-006-AC-2 | `make kani-scope` prints `not required` for each of `spec/kani/functional/FR-017-kani-execution-evidence.md`, `reviews/REV-018-bound-coverage-observations.md`, `src/strategy/mod.rs`, `src/evidence/mod.rs`, `Makefile` and `.github/workflows/ci.yml`, each fed alone. | Test (TC-045) |
-| NFR-006-AC-3 | A rename of `src/kani/old.rs` to `src/strategy/new.rs`, and a rename of `src/strategy/old.rs` to `src/kani/new.rs`, each print `required`. | Test (TC-045) |
+| NFR-006-AC-3 | Given both old and new paths for a rename from `src/kani/old.rs` to `src/strategy/new.rs`, or from `src/strategy/old.rs` to `src/kani/new.rs`, `make kani-scope` prints `required` for each. | Test (TC-045) |
 | NFR-006-AC-4 | OPEN during IR-348 migration: the `kani_generation` filter remains and must select V2 tests after V1-only tests retire. Original criterion retained: `make -n kani` and `make -n kani-gate` expand to the same `cargo test` command line, and that line holds each of the six filters `kani_obligations`, `skeleton_spine`, `kani_witness_join`, `bounded_kani_corpus`, `kani_generation` and `kani_batching`. | Test (TC-045) |
 | NFR-006-AC-5 | `make kani-gate` starts the lane's `cargo test` once with `--test-threads=1`, holds the lock named by `KANI_LOCK` while it runs, and does not start it while another process holds that lock. | Test (TC-045) |
 | NFR-006-AC-6 | `make kani-gate` exits non-zero and prints `result=failed` when the lane's filters list zero tests, when fewer tests run than are listed, and when any test fails; it exits zero and prints `result=passed` only when every listed test ran and passed and the count is above zero. | Test (TC-045) |
-| NFR-006-AC-7 | The passing run-result line has the fields `result`, `ran`, `expected`, `elapsed`, `kani`, `tree` in that order, with `ran` equal to `expected`, a non-empty `kani` equal to the version the launcher reports, and `tree=clean`; it has no commit token. A run whose launcher reports no version prints `result=failed`. | Test (TC-045) |
-| NFR-006-AC-8 | When the tree state or the head commit read after the run differs from the one read before the build, `make kani-gate` prints `result=failed` and exits non-zero. | Test (TC-045) |
-| NFR-006-AC-9 | With a dirty working tree `make kani-gate` prints `tree=dirty`, never `result=passed`, and exits non-zero. | Test (TC-045) |
+| NFR-006-AC-7 | The passing run-result line has the fields `result`, `ran`, `expected`, `elapsed`, `kani`, `tree` in that order, with `ran` equal to `expected`, a non-empty `kani` equal to the version the launcher reports, and `tree=clean`. A run whose launcher reports no version prints `result=failed`. | Test (TC-045) |
+| NFR-006-AC-8 | When the tree is clean before the build but dirty after the run, `make kani-gate` prints `tree=dirty`, never `result=passed`, and exits non-zero without reading or comparing a Git revision. | Test (TC-045) |
+| NFR-006-AC-9 | With a dirty working tree before the build, `make kani-gate` prints `tree=dirty`, never `result=passed`, and exits non-zero. | Test (TC-045) |
 | NFR-006-AC-10 | With no `cargo-kani` launcher `make kani-gate` starts no test, prints `kani-gate: not run: launcher absent` and exits non-zero. | Test (TC-045) |
 | NFR-006-AC-11 | The tests marked `#[ignore = "kani lane: ..."]` in `tests/it` are exactly the `#[ignore]`d tests of `tests/it` whose path holds one of the `make kani` filters. | Test (TC-045) |
 | NFR-006-AC-12 | `make -n ci` expands to no `kani` or `kani-gate` command. | Test (TC-045) |
-| NFR-006-AC-13 | For a Kani-touching pull request, the author runs the full gate on its clean, stable candidate before opening it, and the merger runs it again on the clean, stable current candidate before merge; both actual processes exit successfully with all expected tests run. A copied body line alone cannot satisfy either run. | Inspection |
-| NFR-006-AC-14 | Given Kani-reaching paths changed on `origin/main` since the candidate's merge base and main absent from the candidate, `make kani-gate` refuses before running tests and names those paths. Given only non-touching main changes, it may run. The merger updates a stale candidate from current main and the full gate passes on the updated clean candidate before merge. | Test (TC-045) and Inspection |
+| NFR-006-AC-13 | For a Kani-touching pull request, the author runs the full gate on its clean candidate before opening it, and the merger runs it again on the clean current candidate before merge; both actual processes exit successfully with all expected tests run. A copied body line alone cannot satisfy either run. | Inspection |
 | NFR-006-AC-15 | A Kani-touching pull request whose required lane did not run or failed remains unmerged and does not claim real-Kani verification; a written explanation does not waive the gate. | Inspection |
 | NFR-006-AC-16 | A pull request whose scope is `not required` has no mandatory real-Kani run under this requirement. | Inspection |
-| NFR-006-AC-17 | Before a version tag is pushed, the full gate actually passes on the clean, stable candidate to be tagged; a copied release-ticket line cannot substitute for that run. | Inspection |
+| NFR-006-AC-17 | Before a version tag is pushed, the full gate actually passes on the clean candidate to be tagged; a copied release-ticket line cannot substitute for that run. | Inspection |
 | NFR-006-AC-18 | Every `include!`, `include_str!`, `include_bytes!` and `#[path]` target named in a file of `tests/it` that holds a lane test, and in each file those name in turn, matches a pattern of the Kani-touching set. | Test (TC-045) |
-| NFR-006-AC-19 | On a clean current candidate, `make kani-gate` runs FR-041's module census and real mutation controls in its one required lane, and a failure of any claim or shared-helper control makes the gate exit non-zero. An optional mutation target or saved earlier result cannot substitute. | Test |
+| NFR-006-AC-19 | On a clean current candidate, `make kani-gate` runs FR-041's current-build module census and real mutation controls in its one required lane, and a failure of any claim or shared-helper control makes the gate exit non-zero. An optional mutation target, retired fixed inventory or saved earlier result cannot substitute. Open until a genuine current-build claim source exists. | Test |
 
-NFR-006-AC-19 remains Open during IR-348 V1 retirement. Only the V1-sourced claim row is HELD
-under the reason "V1 deleted by owner ruling 2026-10-27; no genuine V2 named independent
-expectation/control exists yet" and the expiry "until the V2 named independent expectation +
-real positive/falsifying control exists". The lane continues to run FR-041's claim
-census and real mutation controls for non-held rows. The retired V1 claim source is absent;
-`kani_generation::guard_sources()[0]` selects a V2 scalar harness but supplies no FR-041
-module proof. IR-1047 specifies an additional, separately named V2 implication scalar
-module with independent subject and expectation roots; that proof cannot discharge the
-historical FR-003@4 row or expire its hold. The same-claim V2 source and retained-row update
-are PLANNED under IR-1049 and FR-041-AC-10. Dropping the historical claim or removing the
-gate cannot satisfy AC-19. While the only current claim is held, zero module proofs and
-mutations are discharged. IR-348 implements the bounded hold and its reporting; no V2
-replacement or current-run proof is identified here. IR-1047 Acceptance 4 remains unmet.
+NFR-006-AC-8 retains the post-run dirty-tree refusal without a Git revision comparison.
+NFR-006-AC-14 is retired under IR-1105 because it compared Git revisions.
+No equivalent revision or digest gate replaces AC-14. The actual current-candidate Kani runs remain required.
+
+NFR-006-AC-19 remains Open. IR-1105 retires the frozen V1 claim inventory and
+its hold; neither provides module proof credit. The original FR-003@4 transition
+and a distinct V2 implication claim each require genuine current-build module
+claims and installed-Kani positive and falsifying controls. IR-1047 Acceptance 4
+remains unmet.
 
 ## Open decisions
 
@@ -239,7 +217,7 @@ replacement or current-run proof is identified here. IR-1047 Acceptance 4 remain
 
 TC-045 drives the two targets with stand-in launcher and `cargo` executables, a fixture list of changed
 paths, a temporary lock path and a source walk of the `#[ignore]`d tests. The pull-request and
-release criteria inspect the actual gate processes, candidate and main-path freshness.
+release criteria inspect the actual gate processes and clean candidate.
 
 ## Dependencies
 
