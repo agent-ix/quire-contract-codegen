@@ -24,7 +24,7 @@ use quire_semantic_value::catalog::Category;
 use crate::{
     kani::generate::corpus::bounded_kani_corpus::BoundedCorpusCase,
     kani::identity::KaniObligationIdentity,
-    kani::output::playback::{parse_assertion_playback, WitnessDecodeLimits},
+    kani::output::playback::{Playback, WitnessDecodeLimits},
     kani::terminal::ReplaySettlement,
     replay::{
         obligation::{contract_arguments, function_contract_identity, ObligationIdentityError},
@@ -979,13 +979,15 @@ pub enum BoundedCorpusReplayError {
 }
 
 impl BoundedCorpusCase {
-    /// Replays actual Kani counterexample playback against this case's retained QSL package.
+    /// Replays bounded, parsed Kani counterexample playback against this case's retained QSL package.
     ///
+    /// The caller parses the complete captured text through [`crate::parse_assertion_playback`].
     /// The package is compiled from the generated unit and imported dependency source each time;
-    /// the harness identity is then tied to QSL's selected function site.
+    /// the harness identity is then tied to QSL's selected function site. The replay checks the
+    /// parsed source length and value count against `limits` before native execution.
     pub fn replay_counterexample(
         &self,
-        transcript: &str,
+        playback: &Playback<'_>,
         limits: WitnessDecodeLimits,
     ) -> Result<ReplayVerdict, BoundedCorpusReplayError> {
         let package =
@@ -996,7 +998,7 @@ impl BoundedCorpusCase {
         let identity = package
             .harness_identity(None, self.harness_symbol.clone(), Vec::new())
             .map_err(|error| BoundedCorpusReplayError::Replay(SpineReplayError::Identity(error)))?;
-        replay_harness_counterexample(&identity, transcript, &package)
+        replay_harness_counterexample(&identity, playback, &package)
             .map_err(BoundedCorpusReplayError::Replay)
     }
 
@@ -1034,7 +1036,7 @@ impl BoundedCorpusCase {
     #[cfg(test)]
     pub(crate) fn replay_rejects_other_case_package(
         &self,
-        transcript: &str,
+        playback: &Playback<'_>,
         other: &Self,
     ) -> Result<bool, BoundedCorpusReplayError> {
         let package = compile_corpus_qsl_package(self, unbounded_decode_limits())
@@ -1044,7 +1046,7 @@ impl BoundedCorpusCase {
             .map_err(|error| BoundedCorpusReplayError::Replay(SpineReplayError::Identity(error)))?;
         let other = compile_corpus_qsl_package(other, unbounded_decode_limits())
             .map_err(BoundedCorpusReplayError::Package)?;
-        replay_harness_counterexample(&identity, transcript, &other)
+        replay_harness_counterexample(&identity, playback, &other)
             .map(|verdict| {
                 verdict == ReplayVerdict::EvidenceFailure(EvidenceFailureCause::PackageIdentity)
             })
@@ -1054,7 +1056,7 @@ impl BoundedCorpusCase {
     #[cfg(test)]
     pub(crate) fn replay_rejects_wrong_harness(
         &self,
-        transcript: &str,
+        playback: &Playback<'_>,
     ) -> Result<bool, BoundedCorpusReplayError> {
         let package = compile_corpus_qsl_package(self, unbounded_decode_limits())
             .map_err(BoundedCorpusReplayError::Package)?;
@@ -1064,7 +1066,7 @@ impl BoundedCorpusCase {
         let identity = package
             .harness_identity(None, harness, Vec::new())
             .map_err(|error| BoundedCorpusReplayError::Replay(SpineReplayError::Identity(error)))?;
-        replay_harness_counterexample(&identity, transcript, &package)
+        replay_harness_counterexample(&identity, playback, &package)
             .map(|verdict| {
                 matches!(
                     verdict,
@@ -1155,7 +1157,7 @@ fn compile_corpus_qsl_package(
 /// establish the same typed violation.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum EvidenceFailureCause {
-    /// The transcript did not decode against the obligation's schema or names another harness.
+    /// The parsed playback did not decode against the obligation's schema or names another harness.
     Decode(DecodeFailure),
     /// A decoded value lies outside its argument's declared domain.
     Domain {
@@ -1275,9 +1277,11 @@ impl<'a> From<&'a ReplayVerdict> for ReplaySettlement<'a> {
     }
 }
 
-/// Decodes `transcript` against `identity`, checks every value against its declared domain,
+/// Decodes `playback` against `identity`, checks every value against its declared domain,
 /// replays it natively through `package` and reports the verdict. The package must first retain
-/// this exact proving-run identity with [`ReplayPackage::with_kani_identity`].
+/// this exact proving-run identity with [`ReplayPackage::with_kani_identity`]. The caller parses
+/// the complete captured text through [`crate::parse_assertion_playback`]; replay rechecks the
+/// parsed source length and value count against the package's proving-run limits.
 ///
 /// # Errors
 ///
@@ -1285,10 +1289,10 @@ impl<'a> From<&'a ReplayVerdict> for ReplaySettlement<'a> {
 /// those are not verdicts on the evidence.
 pub fn replay_counterexample(
     identity: &KaniObligationIdentity,
-    transcript: &str,
+    playback: &Playback<'_>,
     package: &ReplayPackage,
 ) -> Result<ReplayVerdict, SpineReplayError> {
-    replay_counterexample_through(identity, transcript, package, |wire| {
+    replay_counterexample_through(identity, playback, package, |wire| {
         replay(wire, package.inputs.replay_limits)
     })
 }
@@ -1302,10 +1306,10 @@ pub fn replay_counterexample(
 /// [`SpineReplayError`] when the playback cannot be decoded or QSL refuses the replay request.
 pub(crate) fn replay_harness_counterexample(
     identity: &ReplayHarnessIdentity,
-    transcript: &str,
+    playback: &Playback<'_>,
     package: &ReplayPackage,
 ) -> Result<ReplayVerdict, SpineReplayError> {
-    replay_harness_counterexample_through(identity, transcript, package, |wire| {
+    replay_harness_counterexample_through(identity, playback, package, |wire| {
         replay(wire, package.inputs.replay_limits)
     })
 }
@@ -1314,7 +1318,7 @@ pub(crate) fn replay_harness_counterexample(
 /// request QSL receives in focused tests.
 pub(crate) fn replay_harness_counterexample_through(
     identity: &ReplayHarnessIdentity,
-    transcript: &str,
+    playback: &Playback<'_>,
     package: &ReplayPackage,
     mut execute: impl FnMut(ReplayRequestWire) -> Result<ReplayResult, ReplayRefusal>,
 ) -> Result<ReplayVerdict, SpineReplayError> {
@@ -1327,25 +1331,11 @@ pub(crate) fn replay_harness_counterexample_through(
         .module_symbol
         .as_ref()
         .map_or("", crate::core::identity::ModuleSymbol::as_str);
-    let parsed = match parse_assertion_playback(
-        transcript,
-        identity.harness_symbol.as_str(),
-        module,
-        package.inputs.decode_limits.bytes,
-        package.inputs.decode_limits.values,
-    ) {
-        Ok(parsed) => parsed,
-        Err(cause) => {
-            return Ok(ReplayVerdict::EvidenceFailure(
-                EvidenceFailureCause::Decode(cause.into()),
-            ))
-        }
-    };
     let decoded = match decode_playback(
         identity.harness_symbol.as_str(),
         module,
         &identity.arguments,
-        &parsed,
+        playback,
         package.inputs.decode_limits,
     ) {
         Ok(decoded) => decoded,
@@ -1404,7 +1394,7 @@ pub(crate) fn replay_harness_counterexample_through(
 /// As [`replay_counterexample`].
 pub fn replay_counterexample_through(
     identity: &KaniObligationIdentity,
-    transcript: &str,
+    playback: &Playback<'_>,
     package: &ReplayPackage,
     mut execute: impl FnMut(ReplayRequestWire) -> Result<ReplayResult, ReplayRefusal>,
 ) -> Result<ReplayVerdict, SpineReplayError> {
@@ -1412,21 +1402,11 @@ pub fn replay_counterexample_through(
     if !package.matches_kani_identity(identity) {
         return failure(EvidenceFailureCause::PackageIdentity);
     }
-    let parsed = match parse_assertion_playback(
-        transcript,
-        identity.harness_symbol.as_str(),
-        identity.module_symbol.as_str(),
-        package.inputs.decode_limits.bytes,
-        package.inputs.decode_limits.values,
-    ) {
-        Ok(parsed) => parsed,
-        Err(cause) => return failure(EvidenceFailureCause::Decode(cause.into())),
-    };
     let values = match decode_falsification(
         identity.harness_symbol.as_str(),
         identity.module_symbol.as_str(),
         &identity.arguments,
-        &parsed,
+        playback,
         package.inputs.decode_limits,
     ) {
         Ok(values) => values,
@@ -1493,6 +1473,8 @@ fn verdict_of(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::kani::generate::corpus::bounded_kani_corpus::tests::false_cases;
+    use crate::kani::output::playback::parse_assertion_playback;
     use crate::kani::{
         abi::{KaniBindingRole, KaniIntegerBounds, KaniPrimitiveType},
         identity::ObligationBinding,
@@ -1507,6 +1489,37 @@ mod tests {
     const UNIT: &str = "language \"ix:native\" edition \"1-draft\";\n\
         profile v = \"quire.value.complete/v1\";\n\
         function f using v(a: Int[0, 9], b: Int[0, 9]): Boolean pure { a <= b }\n";
+
+    /// A source-bound typed identity rejects a different case package and a transcript naming
+    /// another harness before any replay verdict is produced.
+    #[trace("TC-023")]
+    #[test]
+    fn tc_023_source_replay_rejects_wrong_package_and_harness() {
+        let cases = false_cases();
+        let case = &cases[0];
+        let transcript = format!(
+            "/// Test generated for harness `{}`\n\
+             /// Check for `assertion`: \"synthetic assertion\"\n\
+             #[test]\n\
+             fn kani_concrete_playback_synthetic() {{\n\
+                 let concrete_vals: Vec<Vec<u8>> = vec![];\n\
+                 kani::concrete_playback_run(concrete_vals, synthetic);\n\
+             }}\n",
+            case.harness_symbol.as_str()
+        );
+        let parsed = parse_assertion_playback(
+            &transcript,
+            case.harness_symbol.as_str(),
+            "corpus",
+            transcript.len(),
+            0,
+        )
+        .unwrap();
+        assert!(case
+            .replay_rejects_other_case_package(&parsed, &cases[1])
+            .unwrap());
+        assert!(case.replay_rejects_wrong_harness(&parsed).unwrap());
+    }
 
     fn unlimited() -> ScalarLimits {
         let max = u64::MAX;
@@ -1794,15 +1807,20 @@ mod tests {
             ("b", 0, 10, true),
         ] {
             let mut calls = 0;
-            let result = replay_harness_counterexample_through(
-                &identity,
-                &playback(a, b),
-                &package,
-                |wire| {
+            let transcript = playback(a, b);
+            let parsed = parse_assertion_playback(
+                &transcript,
+                "function-replay-test",
+                "domain",
+                transcript.len(),
+                2,
+            )
+            .expect("complete playback parses");
+            let result =
+                replay_harness_counterexample_through(&identity, &parsed, &package, |wire| {
                     calls += 1;
                     replay(wire, package.inputs.replay_limits)
-                },
-            );
+                });
             if expected_domain_failure {
                 assert_eq!(calls, 0, "{argument}={a},{b} must stop before replay");
                 assert_eq!(

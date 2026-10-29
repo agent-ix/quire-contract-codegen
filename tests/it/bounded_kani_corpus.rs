@@ -13,11 +13,12 @@ use crate::scratch_crate::TemporaryDirectory;
 use ix_trace_rs::trace;
 use jsonschema::{Draft, JSONSchema};
 use quire_contract_codegen::{
-    classify_kani_run, generate_bounded_kani_corpus_case, prepare_bounded_collection_query,
-    prepare_finite_graph_reaches, select_counterexample, BoundedCorpusCase, BoundedCorpusRequest,
-    CollectionLowering, CollectionQuery, CorpusProofDependencyGraph, EmittedCorpusIdentities,
-    GraphLowering, GraphRequest, KaniInconclusiveReason, KaniRunOutcome, ProofDependencyKind,
-    ProofDependencyRequest, ProofDependencyState, ProofReadiness, QueryKind, ReplayVerdict,
+    classify_kani_run, generate_bounded_kani_corpus_case, parse_assertion_playback,
+    prepare_bounded_collection_query, prepare_finite_graph_reaches, select_counterexample,
+    BoundedCorpusCase, BoundedCorpusRequest, CollectionLowering, CollectionQuery,
+    CorpusProofDependencyGraph, EmittedCorpusIdentities, GraphLowering, GraphRequest,
+    KaniInconclusiveReason, KaniRunOutcome, Playback, ProofDependencyKind, ProofDependencyRequest,
+    ProofDependencyState, ProofReadiness, QueryKind, ReplayVerdict, WitnessDecodeLimits,
     CORPUS_PROOF_GRAPH_SCHEMA,
 };
 use quire_contract_ir::kani::{
@@ -27,6 +28,17 @@ use quire_contract_ir::kani::{
 };
 
 use quire_contract_model::{std001_code, Std001Code};
+
+fn typed_playback(transcript: &str, limits: WitnessDecodeLimits) -> Playback<'_> {
+    parse_assertion_playback(
+        transcript,
+        "corpus-replay-test",
+        "corpus",
+        limits.bytes,
+        limits.values,
+    )
+    .expect("the complete assertion playback parses")
+}
 
 /// A generated case can carry only an expectation; it has no run-authenticated
 /// Kani outcome that the public terminal mapper could certify before Kani runs.
@@ -497,23 +509,21 @@ fn tc_023_real_corpus_playback_replays_through_its_qsl_source() {
         (collection, "corpus_case_collection"),
     ] {
         let playback = falsification_playback(classify_corpus(&case, harness_filter));
+        let limits = WitnessDecodeLimits {
+            bytes: playback.len(),
+            values: 0,
+        };
+        let parsed = typed_playback(&playback, limits);
         assert_eq!(
-            case.replay_counterexample(
-                &playback,
-                quire_contract_codegen::WitnessDecodeLimits {
-                    bytes: playback.len(),
-                    values: 0
-                }
-            )
-            .unwrap(),
+            case.replay_counterexample(&parsed, limits).unwrap(),
             ReplayVerdict::Reproduced,
             "{harness_filter} counterexample should replay through its source"
         );
     }
 }
 
-/// The public corpus replay entry point receives both limits and refuses before reading a
-/// poisoned second assertion or first concrete value.
+/// The caller parses the complete captured text; the public corpus replay entry rechecks its
+/// source length and value count before native execution, even if parsing used wider bounds.
 #[trace("TC-026", "FR-016-AC-6")]
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
@@ -535,26 +545,36 @@ fn tc_026_corpus_replay_refuses_poisoned_suffixes_at_both_decode_bounds() {
     )
     .unwrap();
     let playback = falsification_playback(classify_corpus(&case, "corpus_case_collection"));
+    let limits = WitnessDecodeLimits {
+        bytes: playback.len(),
+        values: 0,
+    };
+    let parsed = typed_playback(&playback, limits);
     assert_eq!(
-        case.replay_counterexample(
-            &playback,
-            quire_contract_codegen::WitnessDecodeLimits {
-                bytes: playback.len(),
-                values: 0
-            },
-        )
-        .unwrap(),
+        case.replay_counterexample(&parsed, limits).unwrap(),
         ReplayVerdict::Reproduced,
     );
-    let poisoned = format!("{playback}{playback}");
-    let verdict = case
-        .replay_counterexample(
+    let poisoned = format!("{playback}\ntrailing captured output");
+    let wider_bytes = WitnessDecodeLimits {
+        bytes: poisoned.len(),
+        values: 0,
+    };
+    let parsed = typed_playback(&poisoned, wider_bytes);
+    assert_eq!(
+        parse_assertion_playback(
             &poisoned,
-            quire_contract_codegen::WitnessDecodeLimits {
-                bytes: playback.len(),
-                values: 0,
-            },
+            "corpus-replay-test",
+            "corpus",
+            limits.bytes,
+            limits.values
         )
+        .expect_err("complete retained text exceeds the caller byte ceiling")
+        .code
+        .as_str(),
+        "cg_witness_decode_bytes_limit"
+    );
+    let verdict = case
+        .replay_counterexample(&parsed, limits)
         .expect("over-bound evidence yields a verdict");
     assert!(matches!(
         verdict,
@@ -562,32 +582,38 @@ fn tc_026_corpus_replay_refuses_poisoned_suffixes_at_both_decode_bounds() {
         if cause.code == "cg_witness_decode_bytes_limit"
     ));
     let control = case
-        .replay_counterexample(
-            &poisoned,
-            quire_contract_codegen::WitnessDecodeLimits {
-                bytes: poisoned.len(),
-                values: 0,
-            },
-        )
-        .expect("duplicate assertion yields a decode verdict");
-    assert!(matches!(
-        control,
-        ReplayVerdict::EvidenceFailure(quire_contract_codegen::EvidenceFailureCause::Decode(ref cause))
-        if cause.code == "kani_witness_multiple_assertions_refused"
-    ));
+        .replay_counterexample(&parsed, wider_bytes)
+        .expect("the complete source fits the byte bound");
+    assert_eq!(control, ReplayVerdict::Reproduced);
     let poisoned_value = playback.replace(
         "let concrete_vals: Vec<Vec<u8>> = vec![\n    ];",
-        "let concrete_vals: Vec<Vec<u8>> = vec![\n        // 0\n        vec![not_a_byte],\n    ];",
+        "let concrete_vals: Vec<Vec<u8>> = vec![\n        // 0\n        vec![0, 0, 0, 0, 0, 0, 0, 0],\n    ];",
     );
     assert_ne!(poisoned_value, playback);
-    let verdict = case
-        .replay_counterexample(
+    let zero_values = WitnessDecodeLimits {
+        bytes: poisoned_value.len(),
+        values: 0,
+    };
+    let one_value = WitnessDecodeLimits {
+        bytes: poisoned_value.len(),
+        values: 1,
+    };
+    let parsed = typed_playback(&poisoned_value, one_value);
+    assert_eq!(
+        parse_assertion_playback(
             &poisoned_value,
-            quire_contract_codegen::WitnessDecodeLimits {
-                bytes: poisoned_value.len(),
-                values: 0,
-            },
+            "corpus-replay-test",
+            "corpus",
+            zero_values.bytes,
+            zero_values.values,
         )
+        .expect_err("complete retained text exceeds the caller value ceiling")
+        .code
+        .as_str(),
+        "cg_witness_decode_values_limit"
+    );
+    let verdict = case
+        .replay_counterexample(&parsed, zero_values)
         .expect("over-bound value yields a verdict");
     assert!(matches!(
         verdict,
@@ -595,18 +621,12 @@ fn tc_026_corpus_replay_refuses_poisoned_suffixes_at_both_decode_bounds() {
         if cause.code == "cg_witness_decode_values_limit"
     ));
     let control = case
-        .replay_counterexample(
-            &poisoned_value,
-            quire_contract_codegen::WitnessDecodeLimits {
-                bytes: poisoned_value.len(),
-                values: 1,
-            },
-        )
-        .expect("invalid byte yields a decode verdict");
+        .replay_counterexample(&parsed, one_value)
+        .expect("extra value yields a decode verdict");
     assert!(matches!(
         control,
         ReplayVerdict::EvidenceFailure(quire_contract_codegen::EvidenceFailureCause::Decode(ref cause))
-        if cause.code == "kani_witness_byte_invalid"
+        if cause.code == "kani_witness_arity_mismatch"
     ));
 }
 
