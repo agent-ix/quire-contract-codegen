@@ -13,8 +13,6 @@
 #[allow(clippy::duplicate_mod)]
 #[path = "../exact_scalar_support/package.rs"]
 pub(crate) mod package;
-#[path = "kani_scalar_native_digest.rs"]
-mod scalar_native_digest;
 #[path = "kani_scalar_native_fixture.rs"]
 mod scalar_native_fixture;
 use crate::common::proof_ceilings::proof_ceilings_with_wall_clock;
@@ -24,7 +22,6 @@ use quire_contract_codegen::{
     ContractRequestPosition, GenerationContexts, KaniGenerationContext, KindOutput, ProviderOrigin,
     RoutedGenerationItem,
 };
-use scalar_native_digest::independent_digest;
 use scalar_native_fixture::{routed_native_scalar_with_artifacts, routed_scalar_with_artifacts};
 
 use std::{
@@ -2278,13 +2275,8 @@ fn tc_027_attested_scalar_receipt_binds_real_proof_and_native_result() {
     assert_eq!(constrained_receipt.scalar_limits(), &constrained_limits);
     assert_retained_scalar_content(&constrained_receipt, &harness, &artifacts);
     assert_eq!(
-        receipt.proof_content_digest(),
-        constrained_receipt.proof_content_digest()
-    );
-    assert_eq!(
-        receipt.proof_content_identity(),
-        constrained_receipt.proof_content_identity(),
-        "native request limits do not change the staged proof content"
+        receipt.staged_entries(),
+        constrained_receipt.staged_entries()
     );
     let Outcome::Incomplete(incomplete) = constrained_receipt.native_outcome() else {
         panic!("zero result_units must stop integer result retention");
@@ -2374,13 +2366,8 @@ fn tc_027_attested_scalar_subtraction_receipts_bind_both_operand_orders() {
     assert_retained_scalar_content(&left_first_receipt, &harness, &artifacts);
     assert_retained_scalar_content(&right_first_receipt, &harness, &artifacts);
     assert_eq!(
-        left_first_receipt.proof_content_digest(),
-        right_first_receipt.proof_content_digest()
-    );
-    assert_eq!(
-        left_first_receipt.proof_content_identity(),
-        right_first_receipt.proof_content_identity(),
-        "request operands are retained in each receipt but are not staged proof content"
+        left_first_receipt.staged_entries(),
+        right_first_receipt.staged_entries()
     );
     assert!(
         matches!(left_first_receipt.native_outcome(), Outcome::Completed(value) if value.to_string() == "3")
@@ -2414,31 +2401,6 @@ fn assert_retained_scalar_content(
             "src/oracle-artifacts-lib.rs"
         ]
     );
-    let expected = independent_digest(entries);
-    for index in 0..entries.len() {
-        for mutation in 0..5 {
-            let mut changed = entries.to_vec();
-            match mutation {
-                0 => {
-                    changed.remove(index);
-                }
-                1 => changed[index].0.push('x'),
-                2 => changed.swap(index, (index + 1) % entries.len()),
-                3 => changed.insert(index, changed[index].clone()),
-                4 => changed[index].1[0] ^= 1,
-                _ => unreachable!(),
-            }
-            assert_ne!(
-                independent_digest(&changed),
-                expected,
-                "member {index}, mutation {mutation}"
-            );
-        }
-    }
-    let digest: &qsl_replay::DigestRecord = receipt.proof_content_digest();
-    assert_eq!(digest.domain().as_str(), "sha256-jcs");
-    assert_eq!(digest.as_bytes(), &expected);
-    assert_eq!(receipt.proof_content_identity().as_bytes(), &expected);
     for artifact in artifacts {
         let path = if artifact.path == "src/lib.rs" {
             "src/oracle-artifacts-lib.rs"

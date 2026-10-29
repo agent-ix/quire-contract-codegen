@@ -171,8 +171,7 @@ pub use kani::run::launch::CaptureStream;
 pub use kani::run::scalar::{
     execute_kani_scalar_native, KaniScalarNativeError, KaniScalarNativeErrorClass,
     KaniScalarNativeReceipt, KaniScalarNativeRequest, NativeMeterObservation, ScalarOracleStopKind,
-    ScalarProofContentIdentity, SCALAR_NATIVE_CODE_ARTIFACT_PACKAGE,
-    SCALAR_NATIVE_CODE_DEPENDENCY_LOCK, SCALAR_NATIVE_CODE_IDENTITY_ENCODE,
+    SCALAR_NATIVE_CODE_ARTIFACT_PACKAGE, SCALAR_NATIVE_CODE_DEPENDENCY_LOCK,
     SCALAR_NATIVE_CODE_INVALID_REQUEST, SCALAR_NATIVE_CODE_KANI_EXECUTION,
     SCALAR_NATIVE_CODE_NATIVE_LAUNCH, SCALAR_NATIVE_CODE_NATIVE_RESULT,
     SCALAR_NATIVE_CODE_ORACLE_STOP, SCALAR_NATIVE_CODE_PROOF_NOT_VERIFIED,
@@ -287,6 +286,3 @@ pub use kani::identity::{ProofCeilings, SymbolicArgumentBounds, SymbolicBounds};
 
 /// The actual tree memory mechanism and observations recorded by bounded backend runs.
 pub use kani::run::memory::{MemoryMechanism, MemoryObservation};
-
-/// QSL-owned canonical observation digest record.
-pub use qsl_replay::DigestRecord;

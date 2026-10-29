@@ -197,8 +197,6 @@ impl<T> No for &Probe<T> {
 }
 
 // Shared with the integration binary; this oracle never calls production canonicalization.
-#[path = "../../tests/it/kani_scalar_native_digest.rs"]
-pub(crate) mod scalar_native_digest;
 
 /// Literal source and identity for runner-only host checks; no generator is invoked.
 pub(crate) fn scalar_source_fixture(

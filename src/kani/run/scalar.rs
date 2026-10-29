@@ -7,19 +7,15 @@ use std::{
     time::Instant,
 };
 
-use qsl_replay::{DigestDomain, DigestRecord};
-use quire_canonical::{FixedShape, Limits};
 use quire_exact::Cancel;
 use quire_exact::{
     ChargePoint, Incomplete, Integer, IntegerInterval, LimitKind, Outcome, Refusal, ScalarLimits,
     Undefined,
 };
-use serde::Serialize;
 
 use crate::{
     core::{
         artifact::{Artifact, ArtifactBundle, PublicationDiagnostic},
-        canonical::{content_digest_with_limits, DigestError},
         profile::{oracle_crate_manifest, scalar_observer_manifest},
     },
     kani::{
@@ -41,7 +37,6 @@ use crate::{
 };
 
 static NEXT_SNAPSHOT: AtomicU64 = AtomicU64::new(0);
-const SCALAR_PROOF_SCHEMA: &str = "agent-ix/cg-kani-scalar-proof-content/v3";
 const LOCKED_DEPENDENCIES: [(&str, &str); 2] = [
     (
         "quire-contract-runtime",
@@ -50,21 +45,9 @@ const LOCKED_DEPENDENCIES: [(&str, &str); 2] = [
     ("quire-exact", "https://github.com/agent-ix/quire-exact"),
 ];
 
-#[derive(Serialize, FixedShape)]
-struct CanonicalArtifact {
-    path: String,
-    contents: String,
-}
-
-#[derive(Serialize, FixedShape)]
-struct ScalarProofPreimage {
-    schema: String,
-    artifacts: Vec<CanonicalArtifact>,
-}
-
 /// Input retained by a caller that already admitted the routed scalar occurrence.
 ///
-/// A digest and crate path deliberately are not inputs: the runner owns both.
+/// The runner owns the private crate path and retains the staged bytes.
 pub struct KaniScalarNativeRequest<'a> {
     /// Caller cancellation.
     pub cancel: &'a Cancel,
@@ -82,25 +65,11 @@ pub struct KaniScalarNativeRequest<'a> {
     pub target_directory: &'a Path,
 }
 
-/// A measured identity of the exact staged package, harness, adapter and dependency lock.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ScalarProofContentIdentity([u8; 32]);
-
-impl ScalarProofContentIdentity {
-    /// SHA-256 bytes of the RFC 8785 canonical staged package preimage.
-    #[must_use]
-    pub const fn as_bytes(&self) -> &[u8; 32] {
-        &self.0
-    }
-}
-
 /// The opaque result of proving and natively invoking one staged scalar artifact.
-///
-/// ```
-/// use quire_contract_codegen::{DigestRecord, KaniScalarNativeReceipt};
-/// fn same_type(receipt: &KaniScalarNativeReceipt) -> &qsl_replay::DigestRecord {
-///     let record: &DigestRecord = receipt.proof_content_digest();
-///     record
+/// ```compile_fail,E0599
+/// use quire_contract_codegen::KaniScalarNativeReceipt;
+/// fn no_digest(receipt: &KaniScalarNativeReceipt) {
+///     let _ = receipt.proof_content_digest();
 /// }
 /// ```
 /// ```compile_fail
@@ -125,8 +94,6 @@ impl ScalarProofContentIdentity {
 /// ```
 #[derive(Debug)]
 pub struct KaniScalarNativeReceipt {
-    identity: ScalarProofContentIdentity,
-    digest: DigestRecord,
     entries: Vec<(String, Vec<u8>)>,
     cleanup_diagnostic: Option<String>,
     harness_identity: crate::kani::identity::ScalarObligationIdentity,
@@ -166,28 +133,16 @@ impl NativeMeterObservation {
 }
 
 impl KaniScalarNativeReceipt {
-    /// QSL observation digest minted from the measured proof-content identity.
-    #[must_use]
-    pub const fn proof_content_digest(&self) -> &DigestRecord {
-        &self.digest
-    }
-
     /// Exact owned staged inputs in ascending UTF-8 path order.
     #[must_use]
     pub fn staged_entries(&self) -> &[(String, Vec<u8>)] {
         &self.entries
     }
 
-    /// Snapshot removal failure, if any; excluded from proof identity.
+    /// Snapshot removal failure, if any.
     #[must_use]
     pub fn cleanup_diagnostic(&self) -> Option<&str> {
         self.cleanup_diagnostic.as_deref()
-    }
-
-    /// Measured identity over exact staged package and harness bytes.
-    #[must_use]
-    pub const fn proof_content_identity(&self) -> &ScalarProofContentIdentity {
-        &self.identity
     }
 
     /// Scalar claim whose generated harness ran.
@@ -241,7 +196,6 @@ impl KaniScalarNativeReceipt {
 ///     SCALAR_NATIVE_CODE_DEPENDENCY_LOCK,
 ///     SCALAR_NATIVE_CODE_NATIVE_RESULT,
 ///     SCALAR_NATIVE_CODE_SNAPSHOT_CHANGED,
-///     SCALAR_NATIVE_CODE_IDENTITY_ENCODE,
 /// };
 /// let codes = [
 ///     SCALAR_NATIVE_CODE_INVALID_REQUEST,
@@ -254,9 +208,8 @@ impl KaniScalarNativeReceipt {
 ///     SCALAR_NATIVE_CODE_DEPENDENCY_LOCK,
 ///     SCALAR_NATIVE_CODE_NATIVE_RESULT,
 ///     SCALAR_NATIVE_CODE_SNAPSHOT_CHANGED,
-///     SCALAR_NATIVE_CODE_IDENTITY_ENCODE,
 /// ];
-/// assert_eq!(codes.into_iter().collect::<std::collections::BTreeSet<_>>().len(), 11);
+/// assert_eq!(codes.into_iter().collect::<std::collections::BTreeSet<_>>().len(), 10);
 /// ```
 ///
 /// Downstream consumers must leave room for future error variants:
@@ -266,8 +219,7 @@ impl KaniScalarNativeReceipt {
 ///     match error {
 ///         E::InvalidRequest(_) | E::ArtifactPackage(_) | E::Snapshot(_) | E::Kani(_)
 ///         | E::ProofNotVerified(_) | E::OracleStop(_) | E::NativeLaunch(_)
-///         | E::DependencyLock { .. } | E::NativeResult(_) | E::SnapshotChanged
-///         | E::IdentityEncode(_) => (),
+///         | E::DependencyLock { .. } | E::NativeResult(_) | E::SnapshotChanged => (),
 ///     }
 /// }
 /// ```
@@ -306,8 +258,6 @@ pub enum KaniScalarNativeError {
     NativeResult(String),
     /// Staged bytes changed during either child execution.
     SnapshotChanged,
-    /// Canonical proof-content encoding failed within its bound.
-    IdentityEncode(DigestError),
 }
 
 /// Stable scalar-native `invalid_request` error code.
@@ -330,8 +280,6 @@ pub const SCALAR_NATIVE_CODE_DEPENDENCY_LOCK: &str = "dependency_lock";
 pub const SCALAR_NATIVE_CODE_NATIVE_RESULT: &str = "native_result";
 /// Stable scalar-native `snapshot_changed` error code.
 pub const SCALAR_NATIVE_CODE_SNAPSHOT_CHANGED: &str = "snapshot_changed";
-/// Stable scalar-native `identity_encode` error code.
-pub const SCALAR_NATIVE_CODE_IDENTITY_ENCODE: &str = "identity_encode";
 
 /// Closed consumer classification of scalar-native completion failures.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -357,7 +305,6 @@ impl KaniScalarNativeError {
             Self::DependencyLock { .. } => SCALAR_NATIVE_CODE_DEPENDENCY_LOCK,
             Self::NativeResult(_) => SCALAR_NATIVE_CODE_NATIVE_RESULT,
             Self::SnapshotChanged => SCALAR_NATIVE_CODE_SNAPSHOT_CHANGED,
-            Self::IdentityEncode(_) => SCALAR_NATIVE_CODE_IDENTITY_ENCODE,
         }
     }
 
@@ -373,8 +320,7 @@ impl KaniScalarNativeError {
             | Self::NativeLaunch(_)
             | Self::DependencyLock { .. }
             | Self::NativeResult(_)
-            | Self::SnapshotChanged
-            | Self::IdentityEncode(_) => EnvironmentFault,
+            | Self::SnapshotChanged => EnvironmentFault,
             Self::Kani(refusal) => match refusal {
                 KaniExecutionRefusal::HarnessNotInCrate { .. }
                 | KaniExecutionRefusal::HarnessProvenanceMismatch { .. }
@@ -474,7 +420,6 @@ pub(crate) fn execute_with_cleanup(
     let entries = capture_entries(&package, snapshot.path())?;
     seal_snapshot(snapshot.path())?;
     ensure_snapshot_matches(snapshot.path(), &entries)?;
-    let identity = identity_from_entries(&entries, Limits::new(256 * 1024 * 1024))?;
     let proof_target = request.target_directory.join("kani-scalar-proof");
     let evidence = execute_kani_obligation_readonly(
         &KaniExecutionRequest {
@@ -502,10 +447,8 @@ pub(crate) fn execute_with_cleanup(
         .err()
         .map(|error| format!("private snapshot removal failed: {error}"));
     Ok(KaniScalarNativeReceipt {
-        digest: DigestRecord::mint(DigestDomain::Sha256Jcs, *identity.as_bytes()),
         entries,
         cleanup_diagnostic,
-        identity,
         harness_identity: request.harness.identity.clone(),
         operands: request.operands.to_vec(),
         scalar_limits: request.scalar_limits,
@@ -776,48 +719,6 @@ fn capture_entries(
     }
     ensure_snapshot_matches(root, &entries)?;
     Ok(entries)
-}
-
-fn identity_from_entries(
-    entries: &[(String, Vec<u8>)],
-    limits: Limits,
-) -> Result<ScalarProofContentIdentity, KaniScalarNativeError> {
-    let artifacts = entries
-        .iter()
-        .map(|(path, bytes)| {
-            let contents = String::from_utf8(bytes.clone()).map_err(|error| {
-                KaniScalarNativeError::Snapshot(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    error,
-                ))
-            })?;
-            Ok(CanonicalArtifact {
-                path: path.clone(),
-                contents,
-            })
-        })
-        .collect::<Result<Vec<_>, KaniScalarNativeError>>()?;
-    canonical_identity_with_limits(artifacts, limits)
-}
-
-#[cfg(test)]
-fn canonical_identity(
-    artifacts: Vec<CanonicalArtifact>,
-) -> Result<ScalarProofContentIdentity, KaniScalarNativeError> {
-    canonical_identity_with_limits(artifacts, Limits::new(256 * 1024 * 1024))
-}
-
-fn canonical_identity_with_limits(
-    artifacts: Vec<CanonicalArtifact>,
-    limits: Limits,
-) -> Result<ScalarProofContentIdentity, KaniScalarNativeError> {
-    let preimage = ScalarProofPreimage {
-        schema: SCALAR_PROOF_SCHEMA.to_owned(),
-        artifacts,
-    };
-    let digest = content_digest_with_limits(&preimage, limits)
-        .map_err(KaniScalarNativeError::IdentityEncode)?;
-    Ok(ScalarProofContentIdentity(digest))
 }
 
 fn limits_array(limits: ScalarLimits) -> [u64; 10] {
@@ -1396,7 +1297,14 @@ fn ensure_snapshot_matches(
     expected: &[(String, Vec<u8>)],
 ) -> Result<(), KaniScalarNativeError> {
     for (path, contents) in expected {
-        if fs::read(root.join(path)).map_err(KaniScalarNativeError::Snapshot)? != *contents {
+        let actual = fs::read(root.join(path)).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::NotFound {
+                KaniScalarNativeError::SnapshotChanged
+            } else {
+                KaniScalarNativeError::Snapshot(error)
+            }
+        })?;
+        if actual != *contents {
             return Err(KaniScalarNativeError::SnapshotChanged);
         }
     }
@@ -1460,11 +1368,6 @@ pub(crate) fn qualify_staged_native_for_test(request: &KaniScalarNativeRequest<'
     verify_staged_locks(root).unwrap();
     let entries = capture_entries(&staged, root).unwrap();
     assert_eq!(entries.len(), 10);
-    let identity = identity_from_entries(&entries, Limits::new(256 * 1024 * 1024)).unwrap();
-    assert_eq!(
-        *identity.as_bytes(),
-        crate::kani::test_support::scalar_native_digest::independent_digest(&entries)
-    );
     for artifact in request.oracle_artifacts {
         let retained = if artifact.path == "src/lib.rs" {
             "src/oracle-artifacts-lib.rs"
@@ -1616,7 +1519,6 @@ pub(crate) fn qualify_staged_native_for_test(request: &KaniScalarNativeRequest<'
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::kani::test_support::scalar_native_digest::independent_digest;
     use ix_trace_rs::trace;
     use std::process::Command;
 
@@ -1854,7 +1756,7 @@ mod tests {
 
     #[trace("FR-017-AC-28")]
     #[test]
-    fn tc_027_changed_staged_bytes_and_unexpected_files_refuse_identity() {
+    fn tc_027_changed_staged_bytes_and_unexpected_files_refuse_snapshot() {
         let root = crate::core::test_support::discover_scratch("scalar-snapshot-control");
         fs::write(root.join("source.rs"), b"original").unwrap();
         let expected = vec![("source.rs".to_owned(), b"original".to_vec())];
@@ -1873,23 +1775,51 @@ mod tests {
         fs::remove_dir_all(root).unwrap();
     }
 
-    #[trace("FR-017-AC-29")]
+    #[trace("FR-017-AC-29", "FR-017-AC-46", "FR-017-AC-48")]
     #[test]
-    fn tc_027_scalar_proof_content_identity_tracks_staged_bytes_only() {
-        let make_artifact = || CanonicalArtifact {
-            path: "src/lib.rs".into(),
-            contents: "pub fn oracle() {}".into(),
-        };
-        let baseline = canonical_identity(vec![make_artifact()]).unwrap();
-        let same_staged_bytes = canonical_identity(vec![make_artifact()]).unwrap();
-        let changed_bytes = canonical_identity(vec![CanonicalArtifact {
-            path: "src/lib.rs".into(),
-            contents: "pub fn changed_oracle() {}".into(),
-        }])
-        .unwrap();
-        assert_eq!(baseline, same_staged_bytes);
-        assert_ne!(baseline, changed_bytes);
+    fn every_retained_staged_path_and_byte_is_checked_without_a_digest() {
+        let snapshot = PrivateSnapshot::create().unwrap();
+        let entries = literal_entries();
+        for (name, bytes) in &entries {
+            write_private(&snapshot.path().join(name), bytes).unwrap();
+        }
+        ensure_snapshot_matches(snapshot.path(), &entries).unwrap();
+        for (name, bytes) in &entries {
+            let original = snapshot.path().join(name);
+            fs::remove_file(&original).unwrap();
+            assert!(matches!(
+                ensure_snapshot_matches(snapshot.path(), &entries),
+                Err(KaniScalarNativeError::SnapshotChanged)
+            ));
+            fs::write(&original, bytes).unwrap();
+
+            let mut changed = bytes.clone();
+            changed[0] ^= 1;
+            fs::write(&original, changed).unwrap();
+            assert!(matches!(
+                ensure_snapshot_matches(snapshot.path(), &entries),
+                Err(KaniScalarNativeError::SnapshotChanged)
+            ));
+            fs::write(&original, bytes).unwrap();
+
+            let renamed = original.with_extension("renamed");
+            fs::rename(&original, &renamed).unwrap();
+            assert!(matches!(
+                ensure_snapshot_matches(snapshot.path(), &entries),
+                Err(KaniScalarNativeError::SnapshotChanged)
+            ));
+            fs::rename(&renamed, &original).unwrap();
+
+            fs::copy(&original, &renamed).unwrap();
+            assert!(matches!(
+                ensure_snapshot_matches(snapshot.path(), &entries),
+                Err(KaniScalarNativeError::SnapshotChanged)
+            ));
+            fs::remove_file(&renamed).unwrap();
+            ensure_snapshot_matches(snapshot.path(), &entries).unwrap();
+        }
     }
+
     fn unequal_limits() -> ScalarLimits {
         ScalarLimits {
             integer_bits: 101,
@@ -1998,72 +1928,6 @@ mod tests {
         .collect()
     }
 
-    #[trace("FR-017-AC-43", "FR-017-AC-45", "FR-017-AC-46", "FR-017-AC-49")]
-    #[test]
-    fn literal_ten_entry_jcs_golden_and_mutation_controls() {
-        use sha2::{Digest, Sha256};
-        const GOLDEN: &str = concat!(
-            "{\"artifacts\":[",
-            "{\"contents\":\"lock\\n\",\"path\":\"Cargo.lock\"},",
-            "{\"contents\":\"manifest\",\"path\":\"Cargo.toml\"},",
-            "{\"contents\":\"{}\",\"path\":\"claim-map.json\"},",
-            "{\"contents\":\"record\",\"path\":\"kani-obligations/m.json\"},",
-            "{\"contents\":\"observer-lock\\n\",\"path\":\"observer/Cargo.lock\"},",
-            "{\"contents\":\"observer-manifest\",\"path\":\"observer/Cargo.toml\"},",
-            "{\"contents\":\"source-map\",\"path\":\"source-maps/lib.json\"},",
-            "{\"contents\":\"adapter\",\"path\":\"src/bin/ir791_native.rs\"},",
-            "{\"contents\":\"harness\",\"path\":\"src/lib.rs\"},",
-            "{\"contents\":\"oracle\",\"path\":\"src/oracle-artifacts-lib.rs\"}",
-            "],\"schema\":\"agent-ix/cg-kani-scalar-proof-content/v3\"}"
-        );
-        let entries = literal_entries();
-        let identity = identity_from_entries(&entries, Limits::new(256 * 1024 * 1024)).unwrap();
-        let golden: [u8; 32] = Sha256::digest(GOLDEN.as_bytes()).into();
-        assert_eq!(
-            (
-                SCALAR_PROOF_SCHEMA,
-                golden
-                    .iter()
-                    .map(|byte| format!("{byte:02x}"))
-                    .collect::<String>()
-            ),
-            (
-                "agent-ix/cg-kani-scalar-proof-content/v3",
-                "68a4416d5e11d9cd244a8fb9d7ffbca3890597c32d25bc915a01b271a2da79df".to_owned()
-            )
-        );
-        assert_eq!(*identity.as_bytes(), golden);
-        assert_eq!(golden, independent_digest(&entries));
-        let record = DigestRecord::mint(DigestDomain::Sha256Jcs, *identity.as_bytes());
-        assert_eq!(record.domain().as_str(), "sha256-jcs");
-        assert_eq!(record.as_bytes(), identity.as_bytes());
-        for index in 0..entries.len() {
-            for mutation in 0..5 {
-                let mut changed = entries.clone();
-                match mutation {
-                    0 => {
-                        changed.remove(index);
-                    }
-                    1 => changed[index].0.push('x'),
-                    2 => changed.swap(index, (index + 1) % entries.len()),
-                    3 => changed.insert(index, changed[index].clone()),
-                    4 => changed[index].1[0] ^= 1,
-                    _ => unreachable!(),
-                }
-                let independent = independent_digest(&changed);
-                assert_ne!(independent, golden, "mutation {mutation} member {index}");
-                let measured =
-                    identity_from_entries(&changed, Limits::new(256 * 1024 * 1024)).unwrap();
-                assert_eq!(*measured.as_bytes(), independent);
-                assert_ne!(measured, identity);
-            }
-        }
-        let error = identity_from_entries(&entries, Limits::new(0)).unwrap_err();
-        assert!(matches!(error, KaniScalarNativeError::IdentityEncode(_)));
-        assert_eq!(error.code(), "identity_encode");
-        assert_eq!(error.class(), KaniScalarNativeErrorClass::EnvironmentFault);
-    }
-
     #[trace("FR-017-AC-46", "FR-017-AC-48")]
     #[test]
     fn owned_measurement_survives_explicit_cleanup_and_reports_invalid_utf8() {
@@ -2087,7 +1951,6 @@ mod tests {
             .collect::<Vec<_>>();
         let captured = capture_entries(&supplied, snapshot.path()).unwrap();
         assert_eq!(captured, entries);
-        let digest = independent_digest(&captured);
         seal_snapshot(snapshot.path()).unwrap();
         let failure = snapshot
             .cleanup_with(|_| Err(std::io::Error::other("forced removal failure")))
@@ -2095,13 +1958,11 @@ mod tests {
         assert!(!failure.to_string().is_empty());
         assert!(snapshot.path().exists());
         assert_eq!(captured, entries);
-        assert_eq!(independent_digest(&captured), digest);
         snapshot.cleanup().unwrap();
         assert!(
             !snapshot.path().exists(),
             "cleanup finishes before data is observed"
         );
-        assert_eq!(independent_digest(&captured), digest);
         for path in [
             "Cargo.lock",
             "observer/Cargo.lock",
@@ -2248,7 +2109,6 @@ mod tests {
             E::DependencyLock { .. } => ("dependency_lock", F),
             E::NativeResult(_) => ("native_result", F),
             E::SnapshotChanged => ("snapshot_changed", F),
-            E::IdentityEncode(_) => ("identity_encode", F),
         }
     }
 
@@ -2341,7 +2201,6 @@ mod tests {
             },
             E::NativeResult("table".into()),
             E::SnapshotChanged,
-            identity_from_entries(&literal_entries(), Limits::new(0)).unwrap_err(),
         ];
         let mut codes = std::collections::BTreeSet::new();
         for error in errors {
@@ -2350,7 +2209,7 @@ mod tests {
             assert_eq!(error.class(), class);
             assert!(codes.insert(error.code()), "duplicate code {code}");
         }
-        assert_eq!(codes.len(), 11);
+        assert_eq!(codes.len(), 10);
     }
 
     #[trace("FR-017-AC-42", "FR-017-AC-44")]
@@ -2657,9 +2516,7 @@ mod tests {
         ensure_snapshot_matches(snapshot.path(), &entries).unwrap();
         seal_snapshot(snapshot.path()).unwrap();
         ensure_snapshot_matches(snapshot.path(), &entries).unwrap();
-        let digest = independent_digest(&entries);
         snapshot.cleanup().unwrap();
-        assert_eq!(independent_digest(&entries), digest);
         assert!(!snapshot.path().exists());
     }
 
