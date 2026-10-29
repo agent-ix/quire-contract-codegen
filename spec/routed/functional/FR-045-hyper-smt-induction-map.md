@@ -9,6 +9,10 @@ relationships:
     type: depends_on
   - target: ix://agent-ix/quire-spec-language/FR-182
     type: references
+  - target: ix://agent-ix/quire-spec-language/FR-314
+    type: depends_on
+  - target: ix://agent-ix/quire-specification/FR-375
+    type: references
 ---
 # FR-045: Run QSL-encoded HP-2 induction queries and map solver outcomes
 
@@ -92,6 +96,62 @@ base `Sat` is not a terminal violation without QSL product-path replay.
 QSL FR-127 and FR-182 own terminal settlement and QSL-908 owns certificate
 rows. This contract sets no default Kani or SMT memory ceiling.
 
+### Refinement SMT run records
+
+For a QSpec FR-375 refinement with `N` step rows, CG SHALL identify the
+FR-315 `Initial` query as `Base` and each FR-315 `Step { row: r }` query as
+`Step { row: r }`, where `r` is the zero-based position in the recompiled
+refinement's canonically ordered `steps` array, for every `r` in `0..N`.
+The row index does not use the source text's row order. CG SHALL retain one
+typed `Base` run record and one typed `Step { row: r }` run record per row,
+including when `N = 0`. These records carry the refinement item and concrete
+and abstract subject association, the invocation's distinct attempt identity,
+the exact FR-315 canonical query bytes submitted to the solver, the solver
+status and process evidence, and a separate optional field for the exact
+Alethe proof bytes emitted by that invocation. Query bytes are never inferred
+from proof output, and proof bytes are never inserted into or substituted for
+the query field. A present empty proof remains present and empty.
+
+CG SHALL validate the complete record collection against the selected
+refinement before producing the certificate handoff: exactly one `Base`,
+exactly one `Step { row: r }` for each `r` in `0..N`, no row outside that
+range, and no duplicate role or row. CG SHALL compare each record's item,
+subjects, kind, row, attempt and query bytes with the expected invocation and
+FR-315 output. A missing, duplicate, out-of-range, stale or swapped record,
+including a `Base` record in a step position or a step record in the base
+position, SHALL yield a typed association or shape refusal and no certificate
+handoff. A record with an absent query field or absent proof field SHALL yield
+a typed missing-field refusal and no certificate handoff. A query that FR-315
+refuses to encode SHALL retain that refusal and yield no invented query or
+certificate handoff. A non-`Unsat` or incomplete solver response SHALL remain
+run evidence and yield no proof-bearing handoff.
+
+For a complete validated collection, CG SHALL serialize the QSL adapter's
+input deterministically as an ordered sequence: `Base` first, followed by
+`Step { row: 0 }` through `Step { row: N-1 }`. Each serialized entry SHALL
+carry a role tag (`Base` or `Step` with its zero-based `row`), a query field
+containing the exact FR-315 canonical bytes, and a separate proof field
+containing the exact Alethe bytes; byte fields are length-delimited so
+arbitrary content, including zero bytes, survives unchanged. Two validated
+collections with identical typed fields SHALL serialize to byte-identical
+sequences regardless of input record order. The QSL FR-314 adapter consumes
+this sequence to form `RefinementSmtCertificate { format: Alethe, base,
+steps }`; CG SHALL NOT assert that the certificate verifies or settle the
+refinement's terminal result.
+
+The handoff's byte format SHALL be a little-endian unsigned 64-bit record
+count, followed by exactly that many entries in the order above. Each entry
+SHALL be a one-byte role tag (`0` for `Base`, `1` for `Step`); a `Step` tag
+SHALL be followed by its zero-based row as a little-endian unsigned 64-bit
+integer. Each entry then SHALL carry the query byte length as a little-endian
+unsigned 64-bit integer and that many raw query bytes, followed by the proof
+byte length in the same encoding and that many raw proof bytes. The count
+includes `Base`. CG SHALL refuse serialization if a count, row or byte length
+cannot be represented, and a consumer SHALL reject a truncated stream,
+unknown tag, mismatched count or trailing bytes. The item, subjects, attempts,
+solver status and process evidence remain in CG's typed source records; the
+validated handoff contains only the fields FR-314's adapter needs.
+
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
@@ -99,22 +159,26 @@ rows. This contract sets no default Kani or SMT memory ceiling.
 | FR-045-AC-1 | For an admitted HP-2 safety clause and `k = 1`, CG requests QSL's base and step queries using FR-315's clause, ordered subjects, instance and Meter shape, submits each canonical byte sequence unchanged to the selected solver, and retains the product, item, instance, depth, kind and exact bytes in each query record. Matching `Unsat`/`Unsat` records are eligible for QSL-owned `Inductive { depth: 1 }`; QSL FR-182-AC-7, rather than CG, settles that outcome as `proved`, `decisive-witness`, `Uncertified`. | Test (TC-059) |
 | FR-045-AC-2 | A base `Sat` response remains only a candidate for QSL reconstruction and replay; base `Unsat` with step `Sat` is not induction; solver `Unknown`, QSL encoding refusal, resource stop, missing or malformed response, process failure and a response paired with another product, item, instance, depth, kind or query bytes remain distinct typed non-proof evidence. A resource stop is handed to FR-182 V-7 as incomplete. Every branch retains its available identities and depth, and no CG branch claims terminal refutation or certification. | Test (TC-059) |
 | FR-045-AC-3 | CG invokes the selected solver executable directly, one process per QSL query, with exact query bytes on stdin and finite per-query input-byte, wall-clock, memory and captured-output limits; it retains the executable, arguments, limits, completion, status, captured output and any emitted model/proof bytes in a CG-owned run record. An input-byte excess refuses before spawn, a missing executable gives `MissingTool`, and a reached limit gives `Stopped` with that limit; none becomes `Unsat` or a QSL outcome. Separate attempt and query identities prevent a stale or swapped response from satisfying the other query. | Test (TC-059) |
+| FR-045-AC-4 | For a refinement with seven step rows, CG retains one `Base` and exactly seven typed `Step { row }` records numbered 0 through 6 from the recompiled, canonically ordered `steps` array, even when records arrive out of order or the source rows were written in another order. Each record binds the refinement item, subjects, distinct invocation attempt, role and row, and exact FR-315 `Initial` or `Step { row }` query bytes sent on stdin; changing a query byte or exchanging the base and a step role refuses the handoff. With zero step rows, the complete shape has only `Base`. | Test (TC-059) |
+| FR-045-AC-5 | Given seven completed `Unsat` step records and one completed `Unsat` base record with present Alethe proofs, CG emits one deterministic handoff sequence in `Base`, `Step { row: 0 }` through `Step { row: 6 }` order for either input permutation. Every entry has separate length-delimited query and proof byte fields equal to the original FR-315 query and emitted Alethe proof, including a present empty proof. Repeating serialization of the same typed fields gives identical bytes; changing a proof byte changes only that entry's proof field. The QSL adapter can construct `RefinementSmtCertificate` without reinterpreting or rewriting either byte field. | Test (TC-059) |
+| FR-045-AC-6 | Starting from AC-5's collection, removing `Base`, removing row 3, duplicating `Base` or row 3, or adding row 7 yields a typed shape refusal and no certificate handoff. Replacing row 3 with a record from another item, subject or attempt, or swapping row 3's record with row 4's while retaining the old row labels, yields a typed association refusal and no handoff. | Test (TC-059) |
+| FR-045-AC-7 | Starting from AC-5's collection, making row 3's query or proof field absent yields a typed missing-field refusal and no handoff; making the proof present but empty preserves the empty bytes in the handoff. An FR-315 refusal, a `Sat` or `Unknown` answer, a missing or malformed response, a failed solver invocation or a reached limit remains typed non-proof evidence and produces no proof-bearing handoff. | Test (TC-059) |
 
 ## Dependencies
 
 - QSL FR-176 owns the self-composition product and its `μ_U` semantics.
-- QSL-661 must first implement FR-315's single-subject SMT encoder and its
-  public query vocabulary; QSL-1010 must then implement `encode_hyper_query`
-  before CG can run the full producer. Current QSL source has neither
-  exported encoder. FR-315's clause/subjects/instance/Meter signature is
-  authoritative. CG does not introduce a temporary hyper-product encoder
-  or fallback.
-- QSL FR-127, FR-182 and QSL-991 own outcome types and terminal mapping;
-  QSL-908 owns certificate settlement. A CG run record is execution evidence.
+- QSL FR-315 exports `encode_hyper_query` and the refinement `Initial` and
+  `Step { row }` query contract. Its clause/subjects/instance/Meter signature
+  is authoritative for HP-2. CG does not introduce a hyper-product encoder.
+- QSL FR-127 and FR-182 own outcome types and terminal mapping; FR-314 and
+  QSL-908 own refinement certificate assembly and checking. A CG run record
+  is execution evidence.
 
 ## Status
 
-PLANNED (IR-974). No HP-2 SMT producer or QSL hyper query encoder exists
-in the current source tree. CG-owned solver-run evidence and refusal logic
-can be built first; the QSL query call and outcome handoff wait on their
-owning APIs.
+PARTIAL (IR-974). CG's bounded single-query solver execution and associated
+base/step evidence classifier exist in `src/routed/smt/`; QSL exports the
+hyper query encoder and outcome types, but their CG integration remains
+planned. The refinement Base/Step record
+collection, validation and deterministic FR-314 handoff are PLANNED
+(IR-1120), with no implementation or tagged tests yet.

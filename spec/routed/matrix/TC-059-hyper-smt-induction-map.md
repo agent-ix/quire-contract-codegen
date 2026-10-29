@@ -14,6 +14,9 @@ Verify CG's solver invocation, exact query association, bounded capture and
 typed non-success over QSL-owned canonical HP-2 queries. QSL owns the query
 encoder, method outcome and terminal settlement; this test does not build a
 second encoder or claim CG execution alone proves a hyperproperty.
+Also verify CG's typed refinement Base and Step run-record handoff to the
+QSL FR-314 certificate adapter. The refinement procedures are planned and
+do not claim coverage by the existing HP-2 pair tests.
 
 ## Test Procedure
 
@@ -45,6 +48,45 @@ second encoder or claim CG execution alone proves a hyperproperty.
    any emitted model/proof bytes. Neither refusal is `Unsat`; the reached
    resource limit is handed to QSL FR-182 V-7 as incomplete
    (FR-045-AC-2, AC-3).
+5. Using a recompiled refinement with seven step rows, take row `r` from
+   QSpec FR-375's canonically ordered `steps` array, not from source row
+   position. Obtain `Initial` and each `Step { row: r }` query from FR-315.
+   Observe the selected solver's stdin for every invocation.
+   Assert one typed `Base` and seven typed `Step` records for rows 0 through
+   6, with distinct attempts and matching refinement, subjects, role, row
+   and exact query bytes. Permute the source step rows without changing their
+   contents and recompile. Select a permutation for which at least one named
+   row has a source position different from its canonical `steps` ordinal
+   after recompilation; confirm those two positions before testing the record.
+   Assert the canonical `steps` array, each row's FR-315 query bytes and CG's
+   role/row bindings remain equal across the two compilations; each new solver
+   invocation still has its own attempt identity. Assert that the correctly
+   labelled record of the selected row passes association validation. In an
+   otherwise valid collection, relabel only that selected record with its source
+   position and assert typed refusal and no handoff. Repeat with a zero-step
+   refinement and assert that only `Base` is required. Change one query byte
+   and exchange a base and step role, then assert no handoff (FR-045-AC-4).
+6. Return completed `Unsat` and distinct Alethe proof byte strings for the
+   base and every step row. Supply records in two different orders. Decode
+   the serialized handoff and assert both byte streams are identical and
+   contain `Base` followed by rows 0 through 6, with the exact query and
+   proof bytes in separate length-delimited fields. Repeat the serialization;
+   make one proof present but empty, then change only one proof byte, and
+   assert byte preservation and field isolation. Feed the handoff to the QSL
+   adapter and assert it can form the FR-314 certificate in row order;
+   QSL's TC-893 owns certificate checking and settlement (FR-045-AC-5).
+7. From step 6's valid collection, remove `Base`, remove row 3, duplicate
+   `Base`, duplicate row 3, and add row 7, one mutation at a time. Assert
+   typed shape refusal and no serialized certificate handoff each time.
+   Substitute a row-3 record from another item, subject or attempt; swap
+   rows 3 and 4 while preserving their old labels. Assert typed association
+   refusal and no handoff (FR-045-AC-6).
+8. Remove the query field and then the proof field of row 3, one at a time;
+   assert typed missing-field refusal and no handoff. Keep the proof field
+   present but empty and assert handoff preserves it. Separately exercise an
+   FR-315 query refusal and `Sat`, `Unknown`, absent response, malformed
+   response, process failure and reached-limit solver results. Assert typed
+   non-proof evidence and no proof-bearing handoff (FR-045-AC-7).
 
 ## Expected Results
 
@@ -52,3 +94,7 @@ Only two completed, correctly associated `Unsat` records make QSL induction
 eligible. Every other response, encoding refusal, missing tool or reached
 limit remains typed non-proof evidence with the available identities and
 depth. CG does not mint QSL outcome types, certificates or terminal records.
+For refinement, only a complete set of correctly associated completed `Unsat`
+records with present query and proof fields yields the deterministic QSL
+adapter handoff. Refusal cases retain their distinct typed reasons. A present
+empty proof reaches QSL unchanged for its checker to judge.
