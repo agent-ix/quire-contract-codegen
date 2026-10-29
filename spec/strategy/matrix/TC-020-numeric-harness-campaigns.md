@@ -88,6 +88,23 @@ exact rates.
     output. Inspect the entry signature for a second owner field and the V1 `BoundPackage` entry
     and `StrategyDiagnostic` for changes.
 
+13. After IR-1072 selection, request the V2 numeric strategy from an admitted checked package
+    for each of the six direct integer comparisons. Inspect complete source, map, census and runner
+    output, and execute a small constructive population and census through the selected V2 oracle.
+    Independently compare package, clause, owner and occurrence fields in the request, comparison,
+    map and runner. Inspect the production call graph for V1 bound strategy generation, package or
+    clause references and adapters.
+14. Through a controlled prepublication seam, inject each FR-011-AC-17 defect separately and
+    overlapping pairs in the specified precedence order. Observe the typed cause, selected key,
+    structural locus when reached, artifact count and whether a campaign began. Keep a second
+    valid selected claim as a control. Mutate only the rendered execution point after accepting
+    a checked point.
+15. Run the accepted V2 runner once. Offer its exact selected claim, package identity, generated
+    source/map and campaign result to FR-004's same-invocation binding seam. Separately offer
+    published bytes alone, a copied result detached from its run, and a refused selection beside
+    a successful sibling. Inspect qualification, measured coverage and proof credit; do not treat
+    an unqualified V2 LLVM observation as a producer receipt.
+
 ## Expected Results
 
 - `VersionUnchanged` records `Holds` as `Passed` and `Violated` as `FailedPostcondition`; the
@@ -134,3 +151,12 @@ exact rates.
   retaining `CheckedExecutionPointRefusal::MissingClaimOccurrence`, the supplied clause, owner and
   occurrence, and no artifact. The request has no second caller-supplied owner;
   the V1 entry and diagnostic remain unchanged (FR-011-AC-13).
+
+- Step 13 publishes one complete V2 bundle per admitted selected claim with matching identities,
+  executes both V2 numeric campaign modes and has no V1 strategy path (FR-011-AC-16).
+- Step 14 returns the first typed defect with no partial artifact or campaign for every refused
+  selection; the valid sibling remains complete (FR-011-AC-17).
+- Step 15 keeps producer, result and generated artifacts associated only inside the live
+  invocation. Published bytes, detached results and refused selections grant no authenticated
+  campaign, measured coverage or proof credit; FR-004 live binding remains necessary
+  (FR-011-AC-18).
