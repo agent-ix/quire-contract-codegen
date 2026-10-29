@@ -449,7 +449,7 @@ mod proof_tests {
 
     use super::{captured_alethe_proof, parse_solver_status, SolverStatus};
 
-    #[trace("TC-059", "FR-045-AC-5", "FR-045-AC-7")]
+    #[trace("TC-059")]
     #[test]
     fn completed_unsat_stdout_keeps_exact_proof_tail() {
         let response = b"success\nunsat\n(assume a0 true)\n(step s0 (cl) :rule resolution)\n";
