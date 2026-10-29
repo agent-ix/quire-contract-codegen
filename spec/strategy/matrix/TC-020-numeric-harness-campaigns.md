@@ -92,8 +92,9 @@ exact rates.
     for each of the six direct integer comparisons. Inspect complete source, map, census and runner
     output, and execute a small constructive population and census through the selected V2 oracle.
     Independently compare package, clause, owner and occurrence fields in the request, comparison,
-    map and runner. Inspect the production call graph for V1 bound strategy generation, package or
-    clause references and adapters.
+    map and runner. Inspect the production call graph for V1 `BoundPackage`, V1 `ClauseRef`,
+    `generate_bound_strategy` calls and V1-to-V2 adapters while confirming the V2 checked clause
+    key remains present.
 14. Through a controlled prepublication seam, inject each FR-011-AC-17 defect separately and
     overlapping pairs in the specified precedence order. Observe the typed cause, selected key,
     structural locus when reached, artifact count and whether a campaign began. Keep a second
