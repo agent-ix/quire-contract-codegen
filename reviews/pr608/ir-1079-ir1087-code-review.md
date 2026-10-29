@@ -118,3 +118,7 @@ The behavior review is clean; FND-006 needs a same-PR documentation correction a
 ### Disposition round 10
 
 Reviewed only `ff3e2f5d..939b550f`. The corrected comment distinguishes the QSL-emitted starting graph from the IR-rederived identities of the selected-model override. The no-override source-backed identity claim remains accurate and untouched. The change is comment-only and `git diff --check` passes. No aggregate gate was run by this reviewer.
+
+### Final Clippy allowance delta
+
+Reviewed only `4da3a2a4..95e125e5`. The diff adds `clippy::duplicate_mod` to the existing `dead_code` allowance on the `#[path = "../checked_package_support/rekey.rs"]` module in `tests/state_frame_support/native_twin.rs`. That file is test support, and the same shared helper is included by `tests/it/v2_clause_integer_literals.rs` with the same scoped allowance. No production module, test assertion, acceptance criterion, or CI configuration changed. Exact-head `cargo clippy --locked --all-targets -- -D warnings`, fmt, and diff checks passed as reported; the code lead owns the aggregate gate. No new finding.
