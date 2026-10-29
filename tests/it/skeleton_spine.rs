@@ -98,6 +98,7 @@ fn inputs(source: &str, dependencies: Vec<DependencyLock>) -> ReplayInputs {
         dependencies,
         accounting_limits: UNLIMITED,
         stage_limits: BTreeMap::from([("s1.input_bytes".to_owned(), DEFAULT_REPLAY_INPUT_BYTES)]),
+        supplied_limits: None,
         declared_domains: Vec::new(),
         replay_limits: ReplayLimits::default(),
     }

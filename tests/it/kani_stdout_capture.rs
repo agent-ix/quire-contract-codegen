@@ -71,7 +71,77 @@ mod tests {
     use super::*;
     use crate::scratch_crate::TemporaryDirectory;
     use ix_trace_rs::trace;
-    use std::process::Command;
+
+    use qsl_replay::{ReplayLimits, ScalarLimits, WitnessValue, DEFAULT_REPLAY_INPUT_BYTES};
+    use quire_contract_codegen::{
+        decode_falsification, execute_kani_obligation, replay_counterexample, KaniExecutionRequest,
+        KaniObligationIdentity, KaniRunOutcome, LockedSource, ReplayInputs, ReplayPackage,
+        ReplayVerdict,
+    };
+    use std::{collections::BTreeMap, process::Command};
+
+    fn synthetic_playback(harness: &str, amount: i64, balance: i64) -> String {
+        let values = [amount, balance]
+            .map(|value| {
+                let bytes = value.to_le_bytes().map(|byte| byte.to_string()).join(", ");
+                format!("        // {value}\n        vec![{bytes}],\n")
+            })
+            .concat();
+        format!(
+            "/// Test generated for harness `{harness}`\n\
+             /// Check for `assertion`: \"synthetic assertion\"\n\
+             #[test]\n\
+             fn kani_concrete_playback_synthetic() {{\n\
+                 let concrete_vals: Vec<Vec<u8>> = vec![\n{values}    ];\n\
+                 kani::concrete_playback_run(concrete_vals, synthetic);\n\
+             }}\n"
+        )
+    }
+
+    fn native_twin(identity: &KaniObligationIdentity) -> ReplayPackage {
+        let source = "language \"ix:native\" edition \"1-draft\";\n\
+                      profile v = \"quire.value.complete/v1\";\n\
+                      function balance_never_grows using v(amount_current: Int[0, 1000], \
+                      balance_pre: Int[0, 1000]): Boolean pure { balance_pre + amount_current \
+                      <= balance_pre }\n";
+        let limits = ScalarLimits {
+            integer_bits: u64::MAX,
+            decimal_digits: u64::MAX,
+            scale_expansion: u64::MAX,
+            text_input_bytes: u64::MAX,
+            text_scalars: u64::MAX,
+            normalized_scalars: u64::MAX,
+            unit_edges: u64::MAX,
+            value_occurrences: u64::MAX,
+            work_units: u64::MAX,
+            result_units: u64::MAX,
+        };
+        ReplayPackage::new(
+            ReplayInputs {
+                decode_limits: crate::unbounded_decode_limits(),
+                source: LockedSource {
+                    authority: "agent-ix".to_owned(),
+                    identity: "test:kani-stdout-binding".to_owned(),
+                    namespace: "git".to_owned(),
+                    revision: "r1".to_owned(),
+                    bytes: source.as_bytes().to_vec(),
+                },
+                dependencies: Vec::new(),
+                accounting_limits: limits,
+                stage_limits: BTreeMap::from([(
+                    "s1.input_bytes".to_owned(),
+                    DEFAULT_REPLAY_INPUT_BYTES,
+                )]),
+                supplied_limits: None,
+                declared_domains: Vec::new(),
+                replay_limits: ReplayLimits::default(),
+            },
+            "balance_never_grows",
+        )
+        .expect("native twin compiles")
+        .with_kani_identity(identity)
+        .expect("the retained proof identity binds the twin")
+    }
 
     /// The observer passes through the launcher's stdout and exit status while retaining its
     /// own byte-identical copy, including a nonzero exit as Kani uses for falsification.
