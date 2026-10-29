@@ -44,7 +44,7 @@ pub struct RefinementRun<Item, Subjects> {
     pub attempt: NonZeroU64,
     /// Exact canonical bytes sent on stdin; absence is an incomplete record.
     pub query_bytes: Option<Vec<u8>>,
-    /// Exact emitted Alethe bytes, independently captured; absence is not an empty proof.
+    /// Candidate Alethe bytes supplied separately from the query; not yet authenticated.
     pub proof_bytes: Option<Vec<u8>>,
     /// Interpreted solver response or typed non-success.
     pub status: SolverStatus,
@@ -53,14 +53,12 @@ pub struct RefinementRun<Item, Subjects> {
 }
 
 impl<Item, Subjects> RefinementRun<Item, Subjects> {
-    /// Bind a completed bounded solver invocation to the selected subjects and proof capture.
+    /// Bind a bounded solver invocation to its selected subjects.
     ///
-    /// The caller extracts proof bytes from the solver's documented output channel. CG does
-    /// not infer Alethe bytes from a query or rewrite the supplied proof.
+    /// No Alethe extraction convention is available yet, so proof bytes remain absent.
     pub fn from_execution(
         subjects: Subjects,
         execution: SolverExecution<(), Item, (), RefinementRole>,
-        proof_bytes: Option<Vec<u8>>,
     ) -> Self {
         let super::SolverExecution { query, process } = execution;
         let super::QueryRun {
@@ -74,7 +72,7 @@ impl<Item, Subjects> RefinementRun<Item, Subjects> {
             role: selection.kind,
             attempt,
             query_bytes: Some(selection.query_bytes),
-            proof_bytes,
+            proof_bytes: None,
             status,
             process,
         }
@@ -94,26 +92,37 @@ pub enum RefinementHandoffError {
     NonProof(SolverStatus),
     /// A count, row or byte length cannot fit the specified unsigned 64-bit encoding.
     LengthOverflow,
+    /// CG cannot authenticate candidate proof bytes against the solver's captured output.
+    ProofProvenanceUnavailable,
 }
 
-/// Validate records and serialize only the fields QSL FR-314's adapter needs.
+/// Validate run records and refuse proof-bearing handoff until proof capture is specified.
 ///
 /// Expected entries must come from the recompiled refinement and FR-315 output, indexed by
-/// canonical step position. Input record order does not affect the serialized sequence.
+/// canonical step position. A valid record set currently has no authenticated proof channel.
 pub fn refinement_handoff<Item: Eq, Subjects: Eq>(
     step_count: usize,
     expected: &[RefinementExpected<Item, Subjects>],
     records: &[RefinementRun<Item, Subjects>],
 ) -> Result<Vec<u8>, RefinementHandoffError> {
+    validate_records(step_count, expected, records)?;
+    Err(RefinementHandoffError::ProofProvenanceUnavailable)
+}
+
+fn validate_records<'a, Item: Eq, Subjects: Eq>(
+    step_count: usize,
+    expected: &'a [RefinementExpected<Item, Subjects>],
+    records: &'a [RefinementRun<Item, Subjects>],
+) -> Result<Vec<&'a RefinementRun<Item, Subjects>>, RefinementHandoffError> {
     let count = step_count
         .checked_add(1)
         .ok_or(RefinementHandoffError::LengthOverflow)?;
-    let count_wire = u64::try_from(count).map_err(|_| RefinementHandoffError::LengthOverflow)?;
-    let mut ordered = vec![None; count];
-    let mut selected = vec![None; count];
     if expected.len() != count || records.len() != count {
         return Err(RefinementHandoffError::Shape);
     }
+    u64::try_from(count).map_err(|_| RefinementHandoffError::LengthOverflow)?;
+    let mut ordered = vec![None; count];
+    let mut selected = vec![None; count];
     for entry in expected {
         let slot = role_slot(entry.role, step_count)?;
         if selected[slot].replace(entry).is_some() {
@@ -130,8 +139,7 @@ pub fn refinement_handoff<Item: Eq, Subjects: Eq>(
             return Err(RefinementHandoffError::Shape);
         }
     }
-    let mut bytes = Vec::new();
-    bytes.extend_from_slice(&count_wire.to_le_bytes());
+    let mut validated = Vec::with_capacity(count);
     for (expected, record) in selected.into_iter().zip(ordered) {
         let (Some(expected), Some(record)) = (expected, record) else {
             return Err(RefinementHandoffError::Shape);
@@ -163,6 +171,22 @@ pub fn refinement_handoff<Item: Eq, Subjects: Eq>(
                 SolverStatus::ProcessFailed,
             ));
         }
+        for field in [query, proof] {
+            u64::try_from(field.len()).map_err(|_| RefinementHandoffError::LengthOverflow)?;
+        }
+        validated.push(record);
+    }
+    Ok(validated)
+}
+
+#[cfg(test)]
+fn serialize_unverified_fields<Item, Subjects>(
+    records: &[&RefinementRun<Item, Subjects>],
+) -> Result<Vec<u8>, RefinementHandoffError> {
+    let count = u64::try_from(records.len()).map_err(|_| RefinementHandoffError::LengthOverflow)?;
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(&count.to_le_bytes());
+    for record in records {
         match record.role {
             RefinementRole::Base => bytes.push(0),
             RefinementRole::Step { row } => {
@@ -171,7 +195,10 @@ pub fn refinement_handoff<Item: Eq, Subjects: Eq>(
                 bytes.extend_from_slice(&row.to_le_bytes());
             }
         }
-        for field in [query, proof] {
+        for field in [
+            record.query_bytes.as_deref().expect("validated query"),
+            record.proof_bytes.as_deref().expect("validated proof"),
+        ] {
             let length =
                 u64::try_from(field.len()).map_err(|_| RefinementHandoffError::LengthOverflow)?;
             bytes.extend_from_slice(&length.to_le_bytes());
@@ -194,6 +221,7 @@ fn role_slot(role: RefinementRole, step_count: usize) -> Result<usize, Refinemen
 #[cfg(test)]
 mod tests {
     use std::{
+        ffi::OsString,
         num::{NonZeroU64, NonZeroUsize},
         time::Duration,
     };
@@ -202,8 +230,8 @@ mod tests {
     use quire_exact::Cancel;
 
     use super::{
-        refinement_handoff, RefinementExpected, RefinementHandoffError, RefinementRole,
-        RefinementRun,
+        refinement_handoff, serialize_unverified_fields, validate_records, RefinementExpected,
+        RefinementHandoffError, RefinementRole, RefinementRun,
     };
     use crate::{
         kani::run::process::ProcessLimits,
@@ -214,8 +242,9 @@ mod tests {
     type Expected = RefinementExpected<&'static str, [&'static str; 2]>;
 
     fn run(role: RefinementRole, proof: &[u8]) -> (Expected, Run) {
-        let mut query = b"unsat\n".to_vec();
-        query.extend_from_slice(proof);
+        let query = format!("canonical query for {role:?}\n").into_bytes();
+        let proof_text = std::str::from_utf8(proof).expect("ASCII test proof");
+        let script = format!("cat >/dev/null; printf 'unsat\\n{proof_text}'");
         let execution = run_solver_query(
             QuerySelection {
                 product: (),
@@ -225,8 +254,8 @@ mod tests {
                 kind: role,
                 query_bytes: query.clone(),
             },
-            "/usr/bin/cat".into(),
-            vec![],
+            "/bin/sh".into(),
+            vec![OsString::from("-c"), OsString::from(script)],
             ProcessLimits {
                 input_bytes: NonZeroUsize::new(1024).expect("limit"),
                 wall_clock: Duration::from_secs(5),
@@ -236,9 +265,11 @@ mod tests {
             Cancel::new(),
         )
         .expect("direct bounded solver invocation");
+        let mut response = b"unsat\n".to_vec();
+        response.extend_from_slice(proof);
         assert_eq!(
             execution.process().stdout.as_deref(),
-            Some(query.as_slice())
+            Some(response.as_slice())
         );
         let attempt = execution.query().association.attempt();
         let emitted = execution
@@ -250,7 +281,8 @@ mod tests {
             .expect("test solver response");
         assert_eq!(emitted, proof);
         let proof_bytes = emitted.to_vec();
-        let record = Run::from_execution(["concrete", "abstract"], execution, Some(proof_bytes));
+        let mut record = Run::from_execution(["concrete", "abstract"], execution);
+        record.proof_bytes = Some(proof_bytes);
         (
             Expected {
                 item: "refinement-a",
@@ -294,20 +326,23 @@ mod tests {
         value
     }
 
+    fn format_fields(expected: &[Expected], records: &[Run]) -> Vec<u8> {
+        let validated = validate_records(expected.len() - 1, expected, records).expect("fields");
+        serialize_unverified_fields(&validated).expect("format")
+    }
+
     #[trace("TC-059", "FR-045-AC-4", "FR-045-AC-5")]
     #[test]
     fn canonical_roles_and_exact_fields_are_order_independent() {
         let (expected, mut records) = collection();
-        let first = refinement_handoff(7, &expected, &records).expect("valid handoff");
+        assert_eq!(
+            refinement_handoff(7, &expected, &records),
+            Err(RefinementHandoffError::ProofProvenanceUnavailable)
+        );
+        let first = format_fields(&expected, &records);
         records.reverse();
-        assert_eq!(
-            refinement_handoff(7, &expected, &records),
-            Ok(first.clone())
-        );
-        assert_eq!(
-            refinement_handoff(7, &expected, &records),
-            Ok(first.clone())
-        );
+        assert_eq!(format_fields(&expected, &records), first);
+        assert_eq!(format_fields(&expected, &records), first);
         let mut cursor = 0;
         assert_eq!(number(&first, &mut cursor), 8);
         for (index, selection) in expected.iter().enumerate() {
@@ -322,10 +357,10 @@ mod tests {
         }
         assert_eq!(cursor, first.len());
         records[4].proof_bytes = Some(Vec::new());
-        let empty = refinement_handoff(7, &expected, &records).expect("empty proof is present");
+        let empty = format_fields(&expected, &records);
         assert_ne!(empty, first);
         records[4].proof_bytes = Some(b"(stEp)".to_vec());
-        let changed = refinement_handoff(7, &expected, &records).expect("changed proof");
+        let changed = format_fields(&expected, &records);
         assert_eq!(changed.len(), first.len());
         assert_eq!(
             first
@@ -339,7 +374,15 @@ mod tests {
             let (entry, record) = run(RefinementRole::Base, b"(base)");
             (vec![entry], vec![record])
         };
-        assert!(refinement_handoff(0, &zero_expected, &zero_records).is_ok());
+        assert_eq!(
+            refinement_handoff(0, &zero_expected, &zero_records),
+            Err(RefinementHandoffError::ProofProvenanceUnavailable)
+        );
+        let mut cursor = 0;
+        assert_eq!(
+            number(&format_fields(&zero_expected, &zero_records), &mut cursor),
+            1
+        );
     }
 
     #[trace("TC-059", "FR-045-AC-4", "FR-045-AC-6", "FR-045-AC-7")]
@@ -434,6 +477,21 @@ mod tests {
         records.push(run(RefinementRole::Step { row: 3 }, b"(step)").1);
         assert_eq!(
             refinement_handoff(7, &expected, &records),
+            Err(RefinementHandoffError::Shape)
+        );
+    }
+
+    #[trace("TC-059", "FR-045-AC-5", "FR-045-AC-7")]
+    #[test]
+    fn caller_supplied_proof_cannot_be_handed_off_as_emitted_proof() {
+        let (expected, mut records) = collection();
+        records[4].proof_bytes = Some(b"(fake)".to_vec());
+        assert_eq!(
+            refinement_handoff(7, &expected, &records),
+            Err(RefinementHandoffError::ProofProvenanceUnavailable)
+        );
+        assert_eq!(
+            refinement_handoff(usize::MAX - 1, &expected, &records),
             Err(RefinementHandoffError::Shape)
         );
     }
