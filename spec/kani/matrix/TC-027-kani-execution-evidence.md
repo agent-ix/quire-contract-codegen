@@ -192,9 +192,11 @@ both observer dev crates use their owning source spellings. Compile the required
 production library/proof targets, independently freshly resolve and compile the observer example,
 and remove its dev feature in a negative control that must fail to compile. Do not use a copied
 parent lock or cached resolution in place of the fresh resolver regression. Independently assert
-both literal `quire-contract-runtime` and `quire-exact` names and repository identities in each
-lock against the build's authoritative lock; do not derive both expectations from the renderer's
-list. Report a fresh dependency-resolution failure as a failure, without a downgrade or pin.
+both literal `quire-contract-runtime` and `quire-exact` names and authoritative repository sources
+in each staged lock, and compare each owning package's resolved source identity between the two
+freshly resolved locks; do not derive both package expectations from the renderer's list or read
+codegen's build lock for an expected revision. Report a fresh dependency-resolution or cross-lock
+consistency failure as a failure, without a downgrade or forced build revision.
 
 Run the actual bounded native command with `--manifest-path observer/Cargo.toml --example
 ir791_native` from the sealed root and its target outside that root. Verify actual nonzero ordered
@@ -420,9 +422,9 @@ driver has no defined typed outcome for a mismatch, its owner must specify and p
 before implementation. No driver adversarial coverage is claimed here.
 
 Scalar native error discriminant (FR-017-AC-41 to AC-44): build one `KaniScalarNativeError` of each
-of the twelve variants, the nested `Kani` error once for each `KaniExecutionRefusal` variant, and
+of the eleven variants, the nested `Kani` error once for each `KaniExecutionRefusal` variant, and
 `ProofNotVerified` once for each evidence outcome.
-(1) Assert `code()` of each equals its table code, that the twelve codes are pairwise distinct, that
+(1) Assert `code()` of each equals its table code, that the eleven codes are pairwise distinct, that
 `Kani` gives `kani_execution` for every nested refusal, and that the type, the class enum and the
 code constants are reachable at the crate root. (2) Assert `class()` of each variant, of each nested
 `Kani` refusal, and of `ProofNotVerified` for `Falsified`, `CoverUnsatisfied`, each inconclusive
@@ -430,9 +432,11 @@ reason, `Cancelled`, `Verified` (an internal inconsistency, requiring `Environme
 the FR-017 table. Produce real errors by the runner for a request mismatch, an oracle stop and a falsified proof, and require `CompletionRefusal`;
 produce a real single run cancelled by its retained source and a real single run stopped by its
 wall-clock timeout (launcher stand-ins), each `ProofNotVerified`, and require `EnvironmentFault`
-with the evidence outcome unchanged; construct `DependencyLock` through an in-crate seam only (it is unreachable from a canonical request, whose manifest must equal the canonical one, and a lock update that writes no matching revision or an unreadable lock is its host fault) and require `EnvironmentFault`; inject a changed staged byte, a native launch failure,
-malformed helper output and an embedded lock with no runtime revision, and require
-`EnvironmentFault` (the last as `codegen_lock`). (3) Force the canonical identity encode to fail (a
+with the evidence outcome unchanged; through an in-crate seam make one staged lock unreadable,
+omit an owning package, change its repository source or give the two staged locks different
+owning package source identities, and require `DependencyLock` / `EnvironmentFault` and no receipt;
+inject a changed staged byte, a native launch failure and malformed helper output, and require
+`EnvironmentFault`. (3) Force the canonical identity encode to fail (a
 content limit of zero in a test seam) and require `IdentityEncode`, `identity_encode`,
 `EnvironmentFault`, and not `NativeResult`; feed malformed helper output and require
 `native_result`. (4) Keep a frozen list of all variants and codes and of the mapping to class: one class for a fixed
