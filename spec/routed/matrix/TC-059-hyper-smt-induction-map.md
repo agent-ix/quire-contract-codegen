@@ -76,9 +76,11 @@ do not claim coverage by the existing HP-2 pair tests.
    the serialized handoff and assert both byte streams are identical and
    contain `Base` followed by rows 0 through 6, with the exact query and
    proof bytes in separate length-delimited fields. Repeat the serialization;
-   make one proof present but empty through an explicit presence-bearing
-   producer frame, then change only one proof byte, and assert byte
-   preservation and field isolation. Feed the handoff to the QSL
+   make one proof present but empty, then change only one proof byte, and
+   assert byte preservation and field isolation. The present-empty case
+   remains open on IR-1120 until CG has an authenticated source that
+   distinguishes it from absent proof; the cvc5 proof-dump mode alone is
+   insufficient. Feed the handoff to the QSL
    adapter and assert it can form the FR-314 certificate in row order;
    QSL's TC-893 owns certificate checking and settlement (FR-045-AC-5).
 7. From step 6's valid collection, remove `Base`, remove row 3, duplicate
