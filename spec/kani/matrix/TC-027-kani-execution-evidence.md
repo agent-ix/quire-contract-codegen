@@ -432,9 +432,10 @@ reason, `Cancelled`, `Verified` (an internal inconsistency, requiring `Environme
 the FR-017 table. Produce real errors by the runner for a request mismatch, an oracle stop and a falsified proof, and require `CompletionRefusal`;
 produce a real single run cancelled by its retained source and a real single run stopped by its
 wall-clock timeout (launcher stand-ins), each `ProofNotVerified`, and require `EnvironmentFault`
-with the evidence outcome unchanged; through an in-crate seam make one staged lock unreadable,
-omit an owning package, change its repository source or give the two staged locks different
-owning package source identities, and require `DependencyLock` / `EnvironmentFault` and no receipt;
+with the evidence outcome unchanged; through an in-crate seam run each of four separate staged-lock
+failure cases: make one staged lock unreadable, omit an owning package, change its repository source,
+and give the two staged locks different owning package source identities. Require `DependencyLock` /
+`EnvironmentFault` and no receipt for every case;
 inject a changed staged byte, a native launch failure and malformed helper output, and require
 `EnvironmentFault`. (3) Force the canonical identity encode to fail (a
 content limit of zero in a test seam) and require `IdentityEncode`, `identity_encode`,

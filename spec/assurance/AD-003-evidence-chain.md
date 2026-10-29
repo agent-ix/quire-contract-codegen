@@ -256,7 +256,8 @@ authored).
   CG shall construct the owning `ParityPreimage` and call public `parity_obligation`, the
   shared scalar/composite mint function using ADR-013 section 2's `quire-canonical` encoder.
   QSL owns that sole parity encoder; CG calls it through its existing dependency and adds
-  no obligation-canonical-byte encoder. The FR-032 vector is a cross-check only.
+  no obligation-canonical-byte encoder. Current-run conformance checks use the authoritative
+  scalar metadata and the actual QSL operator route.
   `operator_parity.rs` authenticates application/operator/function membership, occurrence
   and positional operands before verifying the digest. Mismatch refuses
   `ScalarIdentity::Obligation` with claimed/recomputed digests; encoder refusal returns

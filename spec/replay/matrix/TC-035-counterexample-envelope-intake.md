@@ -83,8 +83,17 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
 18. Mint a frame identity (empty `arguments`) and a function identity from current-run claims.
     Require the frame identity to equal the same public identity function called with its frame
     site and kind, and equal function claims to retain equal identities. Change each included
-    member and an excluded source span; inspect the non-test source to confirm both paths use
-    the one identity function without a second encoder.
+    member and an excluded source span. Through a test seam before encoding, compare each
+    preimage object with an independently assembled four-member object for the admitted site:
+    `function` is lowercase 64-digit node hex; `declaration` is exactly `{node, role, ordinal}`
+    with lowercase node hex, string role and numeric ordinal; `kind` is the snake-case kind;
+    `arguments` is empty for the frame and, for the function, is ordered by declared parameter
+    identifier with each entry exactly `{domain, parameter}`. Check lowercase parameter-node
+    hex and both domain shapes: `{"type":"boolean"}` and
+    `{"type":"integerRange","minimum":"<decimal>","maximum":"<decimal>"}` with decimal-string
+    bounds. Read `Cargo.toml` and inspect the non-test source of `src/replay/obligation.rs` to
+    confirm both paths call the one identity function, `sha2` is absent from `[dependencies]`,
+    and that source names no `quire_canonical` encoder function, `sha2` or `ByteDigest::of`.
 19. Change one input of a frame identity at a time: the kind, the `function` node and each part
     of the `declaration` key; change the clause node, the module and harness symbols, the state
     and subject paths, the unwind bound, the options and the state fields and their ranges; mint
@@ -216,9 +225,12 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
 17. The first two return `StateClauseReplayError::UnsupportedOperationShape` carrying the operation
     and its declaration, with no document built and the executor not called; the third is not refused for its shape
     (FR-024-AC-19).
-18. The frame and function paths use one public mint; equal claims keep equal identities,
-    included-member changes alter identities, and source-span changes do not. No fixed or
-    computed expected digest is compared (FR-024-AC-20).
+18. The frame and function paths use one public mint; their exposed preimage objects match the
+    independently assembled exact four-member objects and value forms, including empty frame
+    arguments and both function argument domain shapes. Equal claims keep equal identities,
+    included-member changes alter identities, and source-span changes do not. The dependency
+    and non-test-source scan finds no second encoder or hash path. No fixed or computed expected
+    digest is compared (FR-024-AC-20).
 19. Each change alone changes the identity; the clause node, symbol, path, unwind, option, field
     and range changes do not; two clauses of one operation mint one identity; the two
     grant variants and the two equal-frame operations differ; the shifted unit's identity equals

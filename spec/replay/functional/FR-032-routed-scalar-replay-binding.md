@@ -262,9 +262,9 @@ CG shall construct the owning `ParityPreimage` with `ParityArgument` and `Domain
 and mint it through QSL's public `parity_obligation`, which uses ADR-013 section 2's one
 RFC 8785 `quire-canonical` encoder. QSL is the sole parity-encoder owner: CG shall call
 `qsl_replay::parity_obligation(&ParityPreimage)` through its existing QSL dependency and
-shall implement no canonical-byte encoder for obligation identities. The worked vector is
-a conformance cross-check only, not an alternative mint implementation. Independent
-conformance checks shall match O-09's exact preimage. Its closed object members are `arguments`, `node`, `obligation_kind` and
+shall implement no canonical-byte encoder for obligation identities. Current-run conformance
+checks shall inspect the exact O-09 preimage and require acceptance by the actual QSL operator
+route. Its closed object members are `arguments`, `node`, `obligation_kind` and
 `occurrence_key`. `node` is the application node id in lowercase hex;
 `occurrence_key` is `{ordinal, role}`, with numeric ordinal and the authentic `expression`
 role string; `obligation_kind` is the scalar wire string from the allocation above, supplied by typed generation. Each ordered argument is
