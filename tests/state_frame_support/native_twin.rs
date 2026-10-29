@@ -797,6 +797,8 @@ impl Twin {
                 assert_eq!(source.matches(&authored).count(), 1, "one authored clause");
                 let start = source.find(&authored).expect("authored clause") + "post ".len();
                 let end = start + name.len();
+                let start = u64::try_from(start).expect("source offset fits wire domain");
+                let end = u64::try_from(end).expect("source offset fits wire domain");
                 let matches = package
                     .source_map()
                     .iter()
@@ -805,8 +807,8 @@ impl Twin {
                             && entry.regions.iter().any(|region| {
                                 region.source.authority.as_ref() == AUTHORITY
                                     && region.source.identity.as_ref() == IDENTITY
-                                    && region.start <= start as u64
-                                    && region.end >= end as u64
+                                    && region.start <= start
+                                    && region.end >= end
                             })
                     })
                     .collect::<Vec<_>>();
