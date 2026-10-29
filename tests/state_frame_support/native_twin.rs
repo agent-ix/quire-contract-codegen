@@ -19,9 +19,9 @@ use qsl_replay::{
     SourceIdentity, WitnessEnvelope, DEFAULT_REPLAY_INPUT_BYTES,
 };
 use quire_contract_codegen::{
-    DependencyLock, DocumentLabel, FrameReplay, FrameReplayError, FrameReplayInputs, LockedSource,
-    ProvidedDocument, ReplayInputs, StateClauseReplayInputs, StateFrameIdentity,
-    StateObjectAddress,
+    parse_assertion_playback, DependencyLock, DocumentLabel, FrameReplay, FrameReplayError,
+    FrameReplayInputs, LockedSource, ProvidedDocument, ReplayInputs, StateClauseReplayInputs,
+    StateFrameIdentity, StateObjectAddress,
 };
 use quire_contract_model::{
     CheckedNodeId, CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2,
@@ -45,6 +45,13 @@ const fn unbounded_decode_limits() -> quire_contract_codegen::WitnessDecodeLimit
     quire_contract_codegen::WitnessDecodeLimits {
         bytes: usize::MAX,
         values: usize::MAX,
+    }
+}
+
+pub(crate) const fn frame_decode_limits() -> quire_contract_codegen::WitnessDecodeLimits {
+    quire_contract_codegen::WitnessDecodeLimits {
+        bytes: 1_048_576,
+        values: 1024,
     }
 }
 
@@ -271,6 +278,8 @@ pub struct Run {
     pub harness: StateFrameIdentity,
     /// The concrete-playback text.
     pub playback: String,
+    /// The proving run's witness decode limits.
+    pub decode_limits: quire_contract_codegen::WitnessDecodeLimits,
 }
 
 /// The playback block Kani prints for `harness`'s falsified assertion `check`, binding one `i64`
@@ -966,7 +975,7 @@ impl Twin {
             account,
             field,
             run,
-            unbounded_decode_limits(),
+            frame_decode_limits(),
         )
     }
 
@@ -980,8 +989,42 @@ impl Twin {
         run: &Run,
         limits: quire_contract_codegen::WitnessDecodeLimits,
     ) -> Result<FrameReplay, FrameReplayError> {
+        let effective_limits = quire_contract_codegen::WitnessDecodeLimits {
+            bytes: limits.bytes.min(run.decode_limits.bytes),
+            values: limits.values.min(run.decode_limits.values),
+        };
+        self.try_frame_replay_with_parse_limits(
+            operation,
+            invocation,
+            account,
+            field,
+            run,
+            limits,
+            effective_limits,
+        )
+    }
+
+    /// The parse limits are separately selectable to verify replay's own bound check.
+    pub fn try_frame_replay_with_parse_limits(
+        &self,
+        operation: &str,
+        invocation: &Invocation,
+        account: &str,
+        field: &str,
+        run: &Run,
+        limits: quire_contract_codegen::WitnessDecodeLimits,
+        parse_limits: quire_contract_codegen::WitnessDecodeLimits,
+    ) -> Result<FrameReplay, FrameReplayError> {
         let mut inputs = self.run();
-        inputs.decode_limits = limits;
+        inputs.decode_limits = run.decode_limits;
+        let playback = parse_assertion_playback(
+            &run.playback,
+            run.harness.harness_symbol.as_str(),
+            run.harness.module_symbol.as_str(),
+            parse_limits.bytes,
+            parse_limits.values,
+        )
+        .map_err(|refusal| FrameReplayError::Decode(refusal.into()))?;
         FrameReplay::new(FrameReplayInputs {
             run: inputs,
             packages: self.packages(),
@@ -1000,7 +1043,8 @@ impl Twin {
                 field: field.to_owned(),
             },
             harness: run.harness.clone(),
-            playback: run.playback.clone(),
+            playback,
+            requested_decode_limits: limits,
         })
     }
 

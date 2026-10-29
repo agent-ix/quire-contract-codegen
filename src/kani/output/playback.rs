@@ -198,7 +198,7 @@ impl PlaybackRefusal {
 }
 
 /// One selected assertion playback block, read.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Playback<'a> {
     pub(crate) source_len: usize,
     pub(crate) harness: &'a str,

@@ -175,7 +175,7 @@ members against the operation's declaration in the domain package.
   - each state field's declared integer range (FR-015-AC-27; for the package QSL emits,
     FR-015-AC-77, planned), and the operation's declared parameters and result, read from the
     admitted package and the clause's node, which the caller supplies.
-- For a frame counterexample (IR-459; typed intake planned in IR-1086): the falsified harness's
+- For a frame counterexample (IR-459; typed intake implemented in IR-1086): the falsified harness's
   `StateFrameIdentity` and parsed `Playback` from the falsified outcome's complete counterexample
   text, both read by the generator, and the requested decode limits (bounded by the proving run's
   `run.decode_limits`), the proving run's members, the
@@ -522,8 +522,8 @@ FR-024-AC-8 remain planned. FR-024-AC-5 and FR-024-AC-9 are retired (IR-890);
 their IDs are not reused.
 FR-024-AC-10 has a source-scan test over `src/`;
 FR-024-AC-11 and FR-024-AC-13 to FR-024-AC-29 have implemented slices described below.
-FR-024-AC-12 remains planned under IR-965. FR-024-AC-30 remains planned for typed frame intake
-under IR-1086 and the QSL-emitted harness without `Twin::aligned` under IR-624:
+FR-024-AC-12 remains planned under IR-965. FR-024-AC-30's typed frame intake is implemented under
+IR-1086; its QSL-emitted harness without `Twin::aligned` remains planned under IR-624:
 
 - `src/replay/witness.rs` decodes the playback into `qsl_replay::WitnessValue` and imports no
   Contract IR witness type.
@@ -569,9 +569,9 @@ under IR-1086 and the QSL-emitted harness without `Twin::aligned` under IR-624:
 - The frame path's own hand-built invocation document and encoder remain in
   `tests/state_frame_support/native_twin.rs`; its `result` member is now `null`, as the twin's
   operations declare no result.
-- The frame path's current text intake is implemented (IR-459): `FrameReplayInputs` carries the
-  falsified harness's `StateFrameIdentity` and its playback text and no obligation identity or
-  transcript. IR-1086 replaces that text input with parsed `Playback`. The one
+- The frame path's typed intake is implemented (IR-1086): `FrameReplayInputs` carries the
+  falsified harness's `StateFrameIdentity` and parsed `Playback`, and no obligation identity or
+  transcript. The one
   function of `src/replay/obligation.rs` mints the identity from the `OperationSite` and the
   harness's property; `StateFrameIdentity` and its record carry `state_fields`; the playback is
   decoded by the one decoder and rendered by `render_witness`; and the harness's field set,

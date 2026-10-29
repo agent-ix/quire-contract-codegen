@@ -766,7 +766,7 @@ Where the runner, report parser and witness decode sit. One module reads Kani's 
 | Report parse | `kani/output/report.rs` | the JSON file, typed |
 | Playback extraction | `kani/output/playback.rs` | the printed block, as a payload; Kani's report carries no concrete playback |
 | Run classification and vacuity | `kani/classify.rs` | the typed report and `Option<CounterexamplePlayback>` extracted by `kani/output/playback.rs`; step 5 removed the console-text input |
-| Witness decode | `replay/witness.rs` | `decode_falsification` and the V2 clause entry take typed playback entries from `kani/output/playback.rs`; state-clause and function replay entries take typed `Playback`; frame replay retains transcript text (L-6 residual below) |
+| Witness decode | `replay/witness.rs` | `decode_falsification` and the V2 clause entry take typed playback entries from `kani/output/playback.rs`; state-clause, function and frame replay entries take typed `Playback` |
 | FR-029 map: `KaniRunOutcome` to a terminal value | `kani/terminal.rs` | typed run outcome only |
 | C-09 map: IR's `KaniOutcome` with the replay outcome to `TerminalValue` | `kani/terminal.rs`, a public entry | typed outcome and the replay-outcome type it defines; total over the pair (step 5) |
 | Pairing the two inputs | the driver, outside this crate | runs the replay and calls the C-09 entry with both |
@@ -813,8 +813,10 @@ caller-supplied limits. Existing function replay test callers parse the complete
 under finite byte and value limits before passing `Playback` to the typed entry, retaining
 `source_len` for replay's independent byte check. The CG function replay boundary is complete.
 IR-1106 owns the later production intake in quire-driver, which currently stops at generation;
-that external integration is not evidence of a CG production caller today. Frame replay retains
-its separate L-6 residual below. The removal of IR's witness-accessor re-parse (IR-277) is on IR's
+that external integration is not evidence of a CG production caller today. The frame replay
+boundary also takes typed `Playback`, parsed once by its caller from the complete
+retained output under the component-wise minimum of requested and proving-run limits. Frame replay
+rechecks both limits before decoding. The removal of IR's witness-accessor re-parse (IR-277) is on IR's
 side: CG imports no IR witness type already (AD-001), so nothing in CG depends on those
 accessors. Batching (IR-277) touches `run/` only, plus the keyed parse above.
 
@@ -964,14 +966,15 @@ requirement is authored.
   typed entries for witness decoding. Function replay entries now accept parsed `Playback` and
   recheck its byte and value bounds before decoding. `replay/function.rs` no longer reads Kani
   output text. Test callers perform the bounded parse of the complete retained counterexample;
-  IR-1106 owns production driver intake. Public frame replay entries still accept transcript text
-  and call the output parser before decoding. The state-clause L-6 slice makes its decode entry take parsed
+  IR-1106 owns production driver intake. Public frame replay now accepts parsed `Playback`, with
+  complete-source length and value count checked against requested and proving-run bounds before
+  decoding; its caller performs the bounded parse in `kani/output/playback.rs`. The state-clause L-6 slice makes its decode entry take parsed
   `Playback` from `kani/output/playback.rs`
   through `kani/classify.rs::parse_state_clause_falsification` after that helper's
   falsified-run check and bounded parse. It retains harness identity,
   selected clause, generated postcondition assertion, property and state-field draw-order
-  checks before binding values. CG's function replay boundary is complete; L-6 remains partial
-  until frame replay takes parsed playback at its boundary, as itemized under Interim exceptions.
+  checks before binding values. CG's replay text intake is complete at the frame, function and
+  state-clause boundaries; L-6 retains the other residuals stated above.
 - L-7. The report path is `<target-dir>/quire-kani-report-<pid>-<seq>.json`, unique to the launch,
   removed only by its own run before launch and after reading, and absent from every
   `ArtifactBundle`. Test: a stand-in launcher that leaves another run's report, and concurrent
@@ -1499,9 +1502,8 @@ Each is a place where the target of this AD is not yet true, stated so that no s
 
 | Exception | Where | Removed by |
 | --- | --- | --- |
-| The public frame replay input carries transcript text, which `FrameReplay::new` passes to the parser through `decoded_state` | `replay/frame.rs`, `FrameReplayInputs::playback`, `FrameReplay::new` and `decoded_state` | IR-348 step 5 completion: pass typed `Playback` at `FrameReplayInputs::playback` and through its helpers |
 | `validate_dependencies` and the diagnostic type it returns | `kani/generate/census_validation.rs` | 4g or the V2 census input; `deterministic_json` was already deleted by PR #356 |
-| The frame family still renders its own template | `kani/generate/frame.rs` | IR-1084 ports frame rendering to `HarnessSpec` and `render.rs` after CG #608 / IR-1079 and the remaining frame L-6 slice; separate from step 4d's V2 census work |
+| The frame family still renders its own template | `kani/generate/frame.rs` | IR-1084 ports frame rendering to `HarnessSpec` and `render.rs` after CG #608 / IR-1079 and the completed frame L-6 slice; separate from step 4d's V2 census work |
 | The corpus keeps its own template, with its cover after the assertion (FR-015-AC-55) | `kani/generate/corpus/bounded_kani_corpus.rs` | step 4g retires the corpus template; step 4h already moved collection rendering to `render.rs` |
 | The remaining collection and graph finite lowerers | `kani/generate/lower/{bounded_collections,finite_reference_graphs}.rs` | IR-347 replaced the step-2f forwarders with CG-owned lowerings and request/result types; IR removes its former exports afterwards. FR-015-AC-109 has retired arithmetic; collection and graph remain until FR-015-AC-110 and FR-015-AC-111. |
 | `generate_state_frame_obligations` is a second public entry beside `negotiate_kani_obligations` | `kani/generate/frame.rs` | step 4d |
