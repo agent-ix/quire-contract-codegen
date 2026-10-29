@@ -98,6 +98,7 @@ mod v2_integer_comparison_admission;
 mod v2_llvm_coverage;
 mod v2_numeric_population;
 mod v2_numeric_strategy;
+mod v2_point_renderer;
 mod v2_selected_claim_entry;
 mod vacuity_primitives;
 

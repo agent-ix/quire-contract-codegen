@@ -731,6 +731,31 @@ impl Twin {
         Self { unit, domain }
     }
 
+    /// One QSL-authored numeric clause at the requested state-clause kind. Its condition has
+    /// valuations on both sides, so the V2 numeric runner can construct a broad population.
+    pub fn numeric_clause(kind: &str, name: &str) -> Self {
+        let mut twin = Self::build(&["balance"], &[(name, "deposit", "balance")], 0);
+        let source = String::from_utf8(twin.unit).expect("native unit");
+        let original = format!(
+            "post {name} using v on Bank::Account::deposit {{ self.balance >= pre(self.balance) }}"
+        );
+        let selected = match kind {
+            "invariant" => format!(
+                "invariant {name} using v on Bank::Account at current {{ self.balance >= 500 }}"
+            ),
+            "pre" => {
+                format!("pre {name} using v on Bank::Account::deposit {{ self.balance >= 500 }}")
+            }
+            "post" => {
+                format!("post {name} using v on Bank::Account::deposit {{ self.balance >= 500 }}")
+            }
+            other => panic!("unsupported test clause kind: {other}"),
+        };
+        assert_eq!(source.matches(&original).count(), 1, "one source clause");
+        twin.unit = source.replacen(&original, &selected, 1).into_bytes();
+        twin
+    }
+
     /// The `OperationSite` `qsl_replay::call_site` returns for `Bank::Account::<operation>`,
     /// read directly and not through the crate under test.
     pub fn operation_site(&self, operation: &str) -> Result<OperationSite, Box<CallSiteRefusal>> {
@@ -793,9 +818,15 @@ impl Twin {
         let clauses = points
             .iter()
             .map(|(name, _)| {
-                let authored = format!("post {name} using");
-                assert_eq!(source.matches(&authored).count(), 1, "one authored clause");
-                let declaration = source.find(&authored).expect("authored clause");
+                let authored = ["invariant", "pre", "post"]
+                    .into_iter()
+                    .filter_map(|kind| {
+                        let prefix = format!("{kind} {name} using");
+                        source.find(&prefix).map(|offset| (kind, offset))
+                    })
+                    .collect::<Vec<_>>();
+                assert_eq!(authored.len(), 1, "one authored clause named {name}");
+                let declaration = authored[0].1;
                 let body = source[declaration..]
                     .find('{')
                     .expect("authored clause body")
