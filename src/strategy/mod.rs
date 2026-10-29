@@ -16,5 +16,7 @@ pub(crate) mod harness;
 pub(crate) mod v2_comparison;
 // V2 constructive population and complete deterministic census.
 pub(crate) mod v2_population;
+// Atomic V2 numeric strategy generation and campaign runner source.
+pub(crate) mod v2_numeric;
 // Implements: FR-011-AC-13
 pub(crate) mod v2_selected_claim;
