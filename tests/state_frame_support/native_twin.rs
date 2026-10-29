@@ -813,7 +813,10 @@ impl Twin {
                 assert_eq!(matches.len(), 1, "one QSL claim at {name}'s source region");
                 let clause = &matches[0].node_id;
                 let node = package
-                    .node(clause)
+                    .graph()
+                    .nodes
+                    .iter()
+                    .find(|node| &node.node_id == clause)
                     .expect("source-map node in admitted graph");
                 assert_eq!(node.semantic_form.as_ref(), "state_clause");
                 clause.clone()
