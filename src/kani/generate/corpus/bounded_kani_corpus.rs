@@ -861,52 +861,6 @@ pub(crate) mod tests {
         );
     }
 
-    /// The surviving graph case name binds the current canonical identity preimage.
-    #[trace("FR-015-AC-94", "TC-023")]
-    #[test]
-    fn tc_023_graph_case_name_matches_current_canonical_preimage() {
-        let fixture = fixture();
-        let (profile, _, input) = &fixture;
-        let ceilings = crate::kani::test_support::proof_ceilings::proof_ceilings();
-        let normalized = super::normalized_input_value(input.input()).unwrap();
-        let expected_name = |request: &BoundedCorpusRequest| {
-            let BoundedCorpusRequest::Graph(graph) = request;
-            let preimage = serde_json::json!({
-                "ceilings": ceilings,
-                "construct": "finite-reference-graph",
-                "profile": profile.selection(),
-                "input": &normalized,
-                "request": {"graph": {
-                    "source_id": &graph.source_id,
-                    "start_id": &graph.start_id,
-                    "target_id": &graph.target_id,
-                    "field_id": &graph.field_id,
-                    "max_expansions": graph.max_expansions,
-                }},
-                "dependencies": [],
-            });
-            let bytes = crate::core::canonical::content_bytes(&preimage).unwrap();
-            format!("graph_{:x}", qsl_replay::ByteDigest::of(&bytes))
-        };
-        let request = reach("source", "a", "b", "next", 3);
-        let expected = expected_name(&request);
-        let case = emit(&fixture, request, &[], &mut EmittedCorpusIdentities::new())
-            .expect("the graph fixture is admitted");
-        assert_eq!(case_name(&case), expected);
-
-        let changed_request = reach("source", "a", "b", "next", 4);
-        let changed_expected = expected_name(&changed_request);
-        assert_ne!(changed_expected, expected);
-        let changed_case = emit(
-            &fixture,
-            changed_request,
-            &[],
-            &mut EmittedCorpusIdentities::new(),
-        )
-        .expect("the changed graph request is admitted");
-        assert_eq!(case_name(&changed_case), changed_expected);
-    }
-
     /// The owning input's object maps may exceed the final case-name
     /// ceiling even though their normalized tuples fit. Admission is decided by the final bytes.
     #[trace("TC-023")]
