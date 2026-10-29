@@ -55,11 +55,17 @@ eligible target block in print order, then refuses the second target block as a 
 counterexample.
 
 For FR-016-AC-21 to AC-23, build the replay request for a function with two parameters declared
-in an order that differs from their ascending identifier order. Recompute the O-09 digest from
-the `FunctionSite`'s `function` and `declaration`, the requested kind and the arguments ascending
-by identifier, through `quire-canonical`, and compare it with the request's `obligation_identity`
-slot (AC-21). Then build the request for a second function with the same parameters, recompile
-the first with comments and blank lines inserted, change its harness source span, replay it under
+in an order that differs from their ascending identifier order. Observe the O-09 object before
+encoding through the one test seam. Check that it has exactly `function`, `declaration`, `kind`
+and `arguments`: the admitted `FunctionSite`'s node id and occurrence key, the requested
+`ObligationKind`, and all declared parameters with their node ids and domains in ascending
+parameter-identifier order. Check the node-id, occurrence-key, kind and domain value forms
+against the O-09 contract. Capture the request at the executor seam and submit its
+production-minted `obligation_identity` to QSL; verify QSL admits it. Refuse harnesses with a
+missing parameter argument, an unbounded integer or a bounded Boolean, before QSL invocation.
+Do not compute or assert an expected digest (AC-21). Then build the request for a second
+function with the same parameters, recompile the first with comments and blank lines inserted,
+change its harness source span, replay it under
 a different `ObligationKind`, and change one argument domain, comparing slots each time. Replay a
 function whose body has two conjuncts under one kind and count its identities (AC-22). Rebuild the
 identity with every other node of the compiled package perturbed and the `FunctionSite` members
@@ -87,7 +93,11 @@ playback in that run's stdout. A valid replacement after classification fails th
 before replay; healthy verification, the original witness-point replay and its neighbour
 control still pass. In the multi-block selection control, the cover, other-harness and later
 same-harness assertion blocks cannot replace the first eligible target assertion block.
-The slot equals the recomputed digest (AC-21). The two functions' identities differ, comments and
+The observed pre-encoding object has exactly the four O-09 members, with the admitted site's
+function and declaration, requested kind, and all parameters in identifier order with their
+declared domains and O-09 value forms. The request slot carries the production-minted identity
+and QSL admits the actual request. Invalid harness shapes are refused before QSL. No expected
+digest is asserted (AC-21). The two functions' identities differ, comments and
 blank lines and the span change leave one unchanged, the kind change and the domain change each
 alter it, and the two-conjunct function has one identity (AC-22). The identity is unchanged by the
 other-node perturbation and changed by each `FunctionSite` perturbation (AC-23).
@@ -105,19 +115,17 @@ then a repeated identity, then a shared source owner), a lock with several defec
 whichever QSL meets first; AC-24 is therefore limited to a lock whose only defect is the repeated
 identity.
 
-FR-016-AC-21 to AC-23 are implemented and tested in the default suite
-(`tests/it/skeleton_spine.rs` with a direct test-only identity fixture, and unit tests in `src/replay/obligation.rs` and
-`src/replay/function.rs`): `ReplayPackage::obligation_identity` builds the O-09 function-contract
-digest in `core::canonical` over the `FunctionSite`'s `function` and `declaration`, the harness's
-kind and its arguments ascending by identifier, and `replay_counterexample` puts it in the
-request's `obligation_identity` slot. The slot equals a digest recomputed in the test from
-hand-written RFC 8785 text, with a Boolean argument and an identifier order that differs from the
-node-id order, and the request `replay_counterexample` sends is captured at the executor seam
-(`replay_counterexample_through`) and carries it; a harness that is not exactly the function's
-bound parameters is refused (AC-21). The identity separates functions, kinds and domains and
-ignores comments, blank lines and the harness's source span (AC-22), and it ignores an unrelated
-declaration and the order of `FunctionSite.parameters` while a changed `function` or
-`declaration` changes it (AC-23).
+FR-016-AC-21 to AC-23 have default-suite coverage in `tests/it/skeleton_spine.rs` and unit tests
+in `src/replay/obligation.rs` and `src/replay/function.rs`: `ReplayPackage::obligation_identity`
+builds the O-09 function-contract digest over the `FunctionSite`'s `function` and `declaration`,
+the harness's kind and its arguments ascending by identifier, and `replay_counterexample` puts it
+in the request's `obligation_identity` slot. The request is captured at the executor seam
+(`replay_counterexample_through`); a harness that is not exactly the function's bound parameters
+is refused. The identity separates functions, kinds and domains and ignores comments, blank lines
+and the harness's source span (AC-22), and it ignores an unrelated declaration and the order of
+`FunctionSite.parameters` while a changed `function` or `declaration` changes it (AC-23).
+AC-21's pre-encoding object and QSL-admission controls replace the existing test's recomputed
+digest assertion; that code change remains pending under IR-1105.
 
 Partial. FR-016-AC-9 through AC-11 are implemented and tested in the default suite
 (`tests/it/skeleton_spine.rs`): a falsifying input replays through

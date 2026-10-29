@@ -123,8 +123,8 @@ The measured QSL operator API and scalar terminal causes do not close those gate
 
 8. Using merged QSL O-09 and the public shared `qsl_replay::parity_obligation` mint function,
    check CG calls that owner through its existing dependency and implements no second encoder.
-   Use the owning worked vector solely as a cross-check;
-   verify independently that the canonical scalar preimage has the exact closed members,
+   Verify independently from current-run authoritative metadata that the canonical scalar
+   preimage has the exact closed members,
    tags, lowercase node hex, numeric ordinals/positions and decimal-string bounds specified
    in FR-032: arguments `{domain, operand, position}`, scalar domain
    `{lower, tag: "range", upper}`. Send the CG-minted identity to the actual operator entry

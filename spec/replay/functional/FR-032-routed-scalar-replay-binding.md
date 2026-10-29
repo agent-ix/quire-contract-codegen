@@ -215,30 +215,15 @@ reuse a precondition/postcondition/invariant/frame role, or accept a caller-chos
 Future parity families require their own owning allocation; the composite family is specified
 separately. Current CG has no typed scalar-kind source. Until generation implements and retains
 this allocation, the route returns the named unavailable-capability refusal without minting an
-identity. The canonical vector below demonstrates encoding only, not authoritative application
-membership, generation implementation or a passing routed replay.
+identity.
 
-**Worked scalar identity cross-check.** The public owning test
-`an_operator_parity_range_preimage_has_its_hand_written_text_and_digest` in
-`qsl-replay/src/execute/parity_identity.rs` on
-[QSL change #655](https://github.com/agent-ix/quire-spec-language/pull/655) uses the following
-synthetic encoding inputs. These ids illustrate the encoder only; they claim no authoritative
-application or operand membership.
-
-| Member | Worked input |
-|---|---|
-| Application node | 32 bytes each `0x11` (64 lowercase hex `1` digits) |
-| Occurrence | `expression`, ordinal `0` |
-| Kind | The sole scalar-family allocation in the table above |
-| Argument at position `0` | Graph child: 32 bytes each `0x22`; inclusive range `[-2,3]` |
-| Expected canonical identity | `ce7c6db3f790558d63e613427d14cfc5916802329b1e3ce032daa5878dc8ee2a` |
-
-The exact canonical UTF-8 text belongs to that owning test; this document references it rather
-than retaining a copied fixture or encoder. Its 350 bytes independently rehash to the identity
-above. The test source asserts both canonical-byte equality and the public mint's identity;
-its encoder execution has not been verified here. Change #655 is unmerged: its merge and
-actual owning-test execution remain explicit CODE evidence gates. This vector is not a
-passing CG replay test and adds no operation/native/content member to O-09.
+**Scalar identity conformance.** For an admitted current-run scalar claim, the AC-9/AC-10 check
+uses the authoritative application, expression occurrence, scalar kind and ordered operand
+identities and ranges with the public shared mint, then requires the actual QSL operator route to
+accept the matching claim. The adverse controls change one included member at a time, retain
+repeated operand positions and refuse invented occurrence or operand membership. A synthetic
+encoding example alone is not evidence of authoritative membership, generated metadata retention
+or passing routed replay.
 
 The scalar subject is the claimed operator's FR-322 application node id and its authentic
 O-07 occurrence key: that node id with the selected `CheckedOccurrence`'s role `expression`
@@ -277,9 +262,9 @@ CG shall construct the owning `ParityPreimage` with `ParityArgument` and `Domain
 and mint it through QSL's public `parity_obligation`, which uses ADR-013 section 2's one
 RFC 8785 `quire-canonical` encoder. QSL is the sole parity-encoder owner: CG shall call
 `qsl_replay::parity_obligation(&ParityPreimage)` through its existing QSL dependency and
-shall implement no canonical-byte encoder for obligation identities. The worked vector is
-a conformance cross-check only, not an alternative mint implementation. Independent
-conformance checks shall match O-09's exact preimage. Its closed object members are `arguments`, `node`, `obligation_kind` and
+shall implement no canonical-byte encoder for obligation identities. Current-run conformance
+checks shall inspect the exact O-09 preimage and require acceptance by the actual QSL operator
+route. Its closed object members are `arguments`, `node`, `obligation_kind` and
 `occurrence_key`. `node` is the application node id in lowercase hex;
 `occurrence_key` is `{ordinal, role}`, with numeric ordinal and the authentic `expression`
 role string; `obligation_kind` is the scalar wire string from the allocation above, supplied by typed generation. Each ordered argument is

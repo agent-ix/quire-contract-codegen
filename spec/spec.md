@@ -186,5 +186,6 @@ Two recorded exceptions to the layout convention, both to be settled at the layo
 
 ## Developer Gate Adoption
 
-[FR-043](core/functional/FR-043-owned-lock-coherence-gate.md) defines planned consumption of the single owned CLI lock
-coherence gate under IR-641. It does not claim consumer implementation or qualification.
+[FR-043](core/functional/FR-043-owned-lock-coherence-gate.md) retires the planned
+IR-641 lock-coherence gate under IR-1105. Cargo's manifest and lock remain the
+dependency authority; `make deny` retains its unrelated `cargo deny` checks.

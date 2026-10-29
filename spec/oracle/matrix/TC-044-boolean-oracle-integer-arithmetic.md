@@ -227,11 +227,10 @@ kernel and can be implemented independently of those kernel calls.
     construction Z-3 (an add and a remainder in one oracle), and assert the source aliases
     `quire_exact` as `rt`, takes `&mut rt::Meter`, returns `rt::Outcome<bool>`, and holds no
     `quire_contract_runtime::exact` path. Compile and run them in a generated crate whose manifest
-    names `quire-exact`, and assert the crate's resolved graph holds one `quire-exact`. Assert
-    CG's `Cargo.toml` names `quire-exact` directly from `agent-ix/quire-exact`, and that `make
-    deny`'s one-copy check passes over CG's lock, with `qsl-replay` and `qsl-semantics` resolving
-    that one entry. CG's coherent dependency graph meets the settled ownership of
-    FR-031 OD-2. Assert, for the migrated oracle (FR-031-AC-26), that no
+    names `quire-exact`. Assert CG's `Cargo.toml` names `quire-exact` directly from
+    `agent-ix/quire-exact` at a version with single-member `divide`. Cargo's manifest and
+    lock determine the resolved dependency; the retired one-copy checker contributes no
+    assertion. Assert, for the migrated oracle (FR-031-AC-26), that no
     `operators::*_short_circuit` path appears, that the connectives are inline matches, that the
     outcomes of step 8's cases and of Z-3 equal their outcomes under Contract Runtime's
     rendering for completed Boolean values and first-stop outcomes. Assert each completed
