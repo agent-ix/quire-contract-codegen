@@ -133,6 +133,18 @@ fn v2_numeric_bundle_keeps_selected_identity_and_runs_both_modes() {
     assert!(source
         .contents
         .contains(&generated.identity.execution_point));
+    assert!(source.contents.contains(&format!(
+        "RequirementId::new({:?})",
+        generated.identity.requirement
+    )));
+    assert!(source.contents.contains(&format!(
+        "RevisionId::new({:?})",
+        generated.identity.revision
+    )));
+    assert!(source.contents.contains(&format!(
+        "ExecutionPoint::new({:?})",
+        generated.identity.execution_point
+    )));
     assert!(source.contents.contains(&generated.identity.symbol_suffix));
     assert!(source
         .contents
