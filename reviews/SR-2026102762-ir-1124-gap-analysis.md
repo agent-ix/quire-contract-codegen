@@ -44,3 +44,10 @@ The computed Quoin matrix at frozen PR #607 head was checked against the changed
 ## Verdict
 
 FAIL for static traceability of the two acceptance criteria this PR implements. The computed matrix has no test binders for AC-16 or AC-17. Runtime evidence and AC-18 live binding remain pending.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The computed Quoin matrix at 6479040d lists two direct FR-011-AC-16 binders, including the source/map/runner integration test. Static check only; build gate pending. |
+| FND-002 | fixed | The computed Quoin matrix at 6479040d lists three direct FR-011-AC-17 binders; the generated-runner integration test now seeds a prior discard and asserts identity mismatch over the ceiling. Static check only; build gate pending. |
