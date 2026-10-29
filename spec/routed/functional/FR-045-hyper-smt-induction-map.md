@@ -112,6 +112,28 @@ Alethe proof bytes emitted by that invocation. Query bytes are never inferred
 from proof output, and proof bytes are never inserted into or substituted for
 the query field. A present empty proof remains present and empty.
 
+The supported direct cvc5 proof-capture mode selects `--dump-proofs` and
+`--proof-format-mode=alethe` in the retained argument vector. Those arguments
+request proof output after an unsatisfiable `(check-sat)` without changing any
+FR-315 query byte or appending a command to stdin (the
+[cvc5 Alethe output example](https://cvc5.github.io/docs-ci/docs-main/proofs/output_alethe.html)
+shows this command-line mode). For this mode CG SHALL take
+the status from the first response line after optional SMT-LIB comments and
+`success` notices. Only a completed, successful invocation whose status is
+`Unsat` may supply proof bytes. CG SHALL identify the proof as the exact
+contiguous stdout bytes after that status line, including its whitespace and
+newlines, when that tail contains one or more complete top-level SMT-LIB
+S-expressions and no other token. It SHALL NOT take proof bytes from stderr,
+another attempt, a caller-supplied field or a later process. A second status,
+an SMT-LIB error response, an incomplete expression or any other trailing
+non-proof token SHALL yield `MalformedResponse` and no proof-bearing handoff.
+CG does not interpret Alethe rules or remove an outer proof expression; QSL
+FR-314 judges the exact extracted bytes. A status with no proof expression
+leaves the proof field absent and gives `MissingField`, not an inferred
+present-empty proof. Other solver modes may carry a present empty proof only
+when their selected, explicit output framing distinguishes its presence from
+no proof; absent such framing they SHALL leave the proof field absent.
+
 CG SHALL validate the complete record collection against the selected
 refinement before producing the certificate handoff: exactly one `Base`,
 exactly one `Step { row: r }` for each `r` in `0..N`, no row outside that
@@ -160,7 +182,7 @@ validated handoff contains only the fields FR-314's adapter needs.
 | FR-045-AC-2 | A base `Sat` response remains only a candidate for QSL reconstruction and replay; base `Unsat` with step `Sat` is not induction; solver `Unknown`, QSL encoding refusal, resource stop, missing or malformed response, process failure and a response paired with another product, item, instance, depth, kind or query bytes remain distinct typed non-proof evidence. A resource stop is handed to FR-182 V-7 as incomplete. Every branch retains its available identities and depth, and no CG branch claims terminal refutation or certification. | Test (TC-059) |
 | FR-045-AC-3 | CG invokes the selected solver executable directly, one process per QSL query, with exact query bytes on stdin and finite per-query input-byte, wall-clock, memory and captured-output limits; it retains the executable, arguments, limits, completion, status, captured output and any emitted model/proof bytes in a CG-owned run record. An input-byte excess refuses before spawn, a missing executable gives `MissingTool`, and a reached limit gives `Stopped` with that limit; none becomes `Unsat` or a QSL outcome. Separate attempt and query identities prevent a stale or swapped response from satisfying the other query. | Test (TC-059) |
 | FR-045-AC-4 | For a refinement with seven step rows, CG retains one `Base` and exactly seven typed `Step { row }` records numbered 0 through 6 from the recompiled, canonically ordered `steps` array, even when records arrive out of order or the source rows were written in another order. Each record binds the refinement item, subjects, distinct invocation attempt, role and row, and exact FR-315 `Initial` or `Step { row }` query bytes sent on stdin; changing a query byte or exchanging the base and a step role refuses the handoff. With zero step rows, the complete shape has only `Base`. | Test (TC-059) |
-| FR-045-AC-5 | Given seven completed `Unsat` step records and one completed `Unsat` base record with present Alethe proofs, CG emits one deterministic handoff sequence in `Base`, `Step { row: 0 }` through `Step { row: 6 }` order for either input permutation. Every entry has separate length-delimited query and proof byte fields equal to the original FR-315 query and emitted Alethe proof, including a present empty proof. Repeating serialization of the same typed fields gives identical bytes; changing a proof byte changes only that entry's proof field. The QSL adapter can construct `RefinementSmtCertificate` without reinterpreting or rewriting either byte field. | Test (TC-059) |
+| FR-045-AC-5 | Given seven completed `Unsat` step records and one completed `Unsat` base record with present Alethe proofs extracted from each record's own proof-producing solver invocation, CG emits one deterministic handoff sequence in `Base`, `Step { row: 0 }` through `Step { row: 6 }` order for either input permutation. Every entry has separate length-delimited query and proof byte fields equal to the original FR-315 query and emitted Alethe proof, including a present empty proof when explicit output framing reports one. Repeating serialization of the same typed fields gives identical bytes; changing a proof byte changes only that entry's proof field. The QSL adapter can construct `RefinementSmtCertificate` without reinterpreting or rewriting either byte field. | Test (TC-059) |
 | FR-045-AC-6 | Starting from AC-5's collection, removing `Base`, removing row 3, duplicating `Base` or row 3, or adding row 7 yields a typed shape refusal and no certificate handoff. Replacing row 3 with a record from another item, subject or attempt, or swapping row 3's record with row 4's while retaining the old row labels, yields a typed association refusal and no handoff. | Test (TC-059) |
 | FR-045-AC-7 | Starting from AC-5's collection, making row 3's query or proof field absent yields a typed missing-field refusal and no handoff; making the proof present but empty preserves the empty bytes in the handoff. An FR-315 refusal, a `Sat` or `Unknown` answer, a missing or malformed response, a failed solver invocation or a reached limit remains typed non-proof evidence and produces no proof-bearing handoff. | Test (TC-059) |
 
