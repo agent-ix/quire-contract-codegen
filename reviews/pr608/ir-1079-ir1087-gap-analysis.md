@@ -56,6 +56,13 @@ Plan completion: not assessed. Diff-scoped AC-to-test-to-code review; no reposit
 
 | FND-003 | fixed | At `b9406c45`, both TestMatrix rows now say Partially covered and name the unverified numerical runtime/V2 parity clause. Focused assertions additionally check authenticated IrConfirmed provenance, retained quantity member target and exact owner call, and the selected Truncating division law in emitted source. The remaining numerical oracle agreement is explicitly recorded as unverified under the existing Planned FR-014-AC-48 through AC-51 work; it is not credited as proof from this compile adaptation. |
 
+| FND-004 | still-open | At 704a9956, tagged formula and fairness declared-body controls now assert `Unsupported`, but the changed direct fairness plain-read control still asserts QSL-121. Because FR-021-AC-11/33 have no plain-read exception, the TC-031 trace claim remains partly contradicted. |
+
+| FND-004 | fixed | Merged FR-021-AC-41 now defines a whole-call typed refusal for a plain-read temporal-tag `Unsupported` record with `NotAdmitted` root kind. At 3628eea4, the plain direct fairness/formula controls assert that refusal, while authenticated direct and declared-body roots assert `Unsupported`; the previous QSL-121 plain-read assertion is gone. |
+
+| FND-005 | fixed | At ac68c8d6, the temporal function gets a distinct name. Two separate lowering requests place the body and direct clause respectively at driver index 0, and each asserts the fixed index/root under both function-order and item-order permutations. The late arity control separately proves body precedence. |
+| FND-006 | fixed | The authored TM-003 TestMatrix now includes FR-021-AC-41 in TC-031's criterion list and a dedicated FR-021 coverage row. That row is explicitly Partially covered and identifies the missing combined public selected-reference fixture, so it does not overclaim the seam-only control. |
+
 ## Disposition evidence
 
 Focused final-head evidence: `target/ir1087-ir1098-cohort-794a921d.log` (new public-route typed-error test 1/1, authenticated quantity control 1/1, association 3/3, all-target check, Clippy, fmt, diff check). My additional focused existing test `cargo test --locked --lib admitted_ordering_variants_change_routed_oracle_bytes_and_keep_refused_sibling` failed 0/1 with `UnauthenticatedOperationView` at `src/routed/contract_package_tests.rs:1774` using clean QSpec `f8d63672`. Plan completion: not assessed.
@@ -77,3 +84,32 @@ At `6e868001`, the explicit plain-read exception closes the original public-rout
 ### Disposition round 4
 
 Reviewed only the `6e868001..b9406c45` delta: two matrix status corrections and focused quantity/division assertions. The matrix no longer overclaims AC-55/AC-30. The authenticated V1 numeric result versus direct owner and V2 oracle remains unverified, as the corrected rows state; that is the pre-existing FR-014-AC-48 agreement slice (IR-818), not part of IR-1079's compile/API adaptation or its one authorized observable refusal. No full gate or Kani was run by this review. Plan completion: not assessed.
+
+## New findings (disposition pass 5)
+
+Plan completion: not assessed. This is a semantic AC-to-test-to-code check of `4a20e01b..ce76e123`, not a repository-wide matrix claim. FR-021's API description accepts a strictly reader-admitted `ContractPackageV1` and states no source-authentication prerequisite. The changed fairness test asserts a QSL-121 blocker for a plain-read direct root, and the existing declared-body-root test asserts the same for an authenticated formula. Both contradict FR-021-AC-11/33. An independent Opus source review reached the same result. No aggregate gate was run here.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | medium | TC-031's direct-root and declared-body-root controls assert QSL-121 for inputs whose required FR-021-AC-33 outcome is Unsupported, so their trace tags give false acceptance credit | tests/it/exact_function_generation.rs:1932, tests/it/exact_function_generation.rs:2503 |
+
+FND-001/002/003 retain their prior dispositions; FND-004 needs a new disposition after the same-PR fix or an explicit unresolved-blocker decision.
+
+### Disposition round 6
+
+The exact `ce76e123..704a9956` delta corrects the declared-body-root assertion and adds a separate fairness-body call control. The direct plain-read fairness assertion still expects QSL-121; FR-021 does not require source authentication for the public `ContractPackageV1` input. Plan completion: not assessed. No aggregate gate was run.
+
+## New findings (disposition pass 7)
+
+Plan completion: not assessed. Reviewed `3628eea4` against merged FR-021-AC-41 and TC-031 step 13. The new typed error closes the former false assertion. An independent Opus source review found the following coverage defects; no aggregate gate was run.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | medium | The AC-41 mixed body/direct permutation control uses two declarations with the same name, so Stage 1 marks both `AmbiguousFunctionName`; the body never enters `unauthenticated_bodies`, and the computed `min` expectation cannot prove lowest eligible index across both kinds | tests/it/exact_function_generation.rs:2640 |
+| FND-006 | medium | The TC-031 TestMatrix index stops its criterion list at FR-021-AC-40 and has no FR-021-AC-41 coverage/status row, although normative TC-031 step 13 and three tagged tests now cite AC-41 | spec/oracle/matrix/tests.md:108, spec/oracle/matrix/TC-031-function-application-oracles.md:257 |
+
+FND-004 is fixed under merged AC-41; FND-005/006 require same-PR fixes.
+
+### Disposition round 8
+
+Reviewed `3628eea4..ac68c8d6` against merged AC-41 and TC-031 step 13. The mixed permutation test no longer has ambiguous declaration names, and its two root orders use fixed index-0 expectations, one for each eligible winner. The imported-call control uses source compilation and a real admitted V1 closure; it checks the shared preflight seam rather than a combined public temporal-body request. The new TM-003 row accurately marks that evidence partial. Focused controls and Quire validation passed at the exact head; no aggregate gate was run here. Plan completion: not assessed.
