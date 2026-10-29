@@ -33,3 +33,11 @@ Ticket: IR-1121. Reviewed PR #626 at 09d3cd428219279c1cde7308e809dc48cae5d98b ag
 ## Verdict
 
 CHANGES REQUESTED. Scope limited to the changed spec and its declared owner boundaries.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | rejected | The initial claim about the base was incorrect: at bd24ad40, ReplayInputs.decode_limits exists (src/replay/function.rs:364), decode_falsification takes WitnessDecodeLimits (src/replay/witness.rs:150-155), and replay_counterexample_through passes those bounds. The revised FR-047 correctly names the separate V2 wiring prerequisite. |
+
+Disposition checked at PR #626 head dddc4e2961e470ad743a0172253c41f8d5288288.

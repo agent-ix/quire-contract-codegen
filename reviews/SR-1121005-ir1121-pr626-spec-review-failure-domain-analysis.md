@@ -35,3 +35,12 @@ Ticket: IR-1121. Reviewed PR #626 at 09d3cd428219279c1cde7308e809dc48cae5d98b ag
 ## Verdict
 
 CHANGES REQUESTED. Scope limited to the changed spec and its declared owner boundaries.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The original claim that with_kani_identity was absent was wrong; the real defect was using its mandatory V1 ClauseRef for a V2 function. The revised Outputs defines distinct planned V2FunctionProofIdentity, bind_v2_function_replay and BoundV2FunctionReplay with predecode mismatch refusal. |
+| FND-002 | fixed | The revised Inputs and Behavior explicitly hold dependency-owned selection on QSL IR-1122, require the actual declaring package and occurrence from the original lock, and forbid unit-site substitution. |
+
+Disposition checked at PR #626 head dddc4e2961e470ad743a0172253c41f8d5288288.

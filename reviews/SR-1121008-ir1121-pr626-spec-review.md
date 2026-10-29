@@ -33,3 +33,11 @@ Ticket: IR-1121. Reviewed PR #626 at 09d3cd428219279c1cde7308e809dc48cae5d98b ag
 ## Verdict
 
 CHANGES REQUESTED. Scope limited to the changed spec and its declared owner boundaries.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | rejected | The initial contradiction was based on historical IR-845 prose. At bd24ad40 FR-021 already names delivered QSL FR-485 and CG IR-595 as its planned concrete oracle consumer (Description and AC-32/35-37). The revised FR-047 clarifies this actual prerequisite without weakening AC-1. |
+
+Disposition checked at PR #626 head dddc4e2961e470ad743a0172253c41f8d5288288.
