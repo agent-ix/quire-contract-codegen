@@ -143,7 +143,6 @@ mod tests {
         .expect("the retained proof identity binds the twin")
     }
 
-
     /// The observer passes through the launcher's stdout and exit status while retaining its
     /// own byte-identical copy, including a nonzero exit as Kani uses for falsification.
     #[trace("FR-016-AC-25", "TC-026")]

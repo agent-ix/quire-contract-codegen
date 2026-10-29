@@ -14,8 +14,7 @@ use qsl_replay::{
     call_site, replay, BackendId, ByteDigest, CallSite, CallSiteRefusal, CanonicalAssignment,
     DeclaredDomain, DependencyEntryWire, DependencyInput, DependencyInputRefusal, DigestDomain,
     DigestRecord, DisagreementCause, EnvelopeSource, FunctionSite, Identifier, MalformedTranscript,
-    NoPayload,
-    ObligationIdentity, OccurrenceKey, QualifiedName, ReplayLimits, ReplayRefusal,
+    NoPayload, ObligationIdentity, OccurrenceKey, QualifiedName, ReplayLimits, ReplayRefusal,
     ReplayRequestWire, ReplayResult, ReplaySource, ReplayTarget, RequestTargetWire, ScalarLimits,
     SourceIdentity, StateEnvironment, SuppliedLibrary, WireNodeId, Witness, WitnessArmResult,
     WitnessEnvelope, WitnessPacket, WitnessRefusal, WitnessSettlement, WitnessValue,
@@ -561,8 +560,6 @@ pub enum PacketClaimMember {
     Limits,
     /// The packet's declared domains differ from the proving run.
     Domains,
-    /// The packet names a different backend producer.
-    Backend,
     /// A function falsification requires a backend witness.
     SourceArm,
     /// The packet named another obligation.
@@ -833,7 +830,7 @@ impl ReplayPackage {
             claim.obligation_identity,
             self.site.site.function,
             self.site.site.declaration.clone(),
-            ReplaySource::Input(assignments),
+            EnvelopeSource::Input(assignments),
             generator.as_str(),
             Vec::new(),
         ))
@@ -850,7 +847,6 @@ impl ReplayPackage {
     pub fn value_parity_request(
         &self,
         packet: WitnessPacket<NoPayload>,
-        generator: &BackendId,
     ) -> Result<ReplayRequestWire, FunctionPacketError> {
         let claim = self
             .site
@@ -860,11 +856,6 @@ impl ReplayPackage {
             .ok_or(FunctionPacketError::NoValueParityClaim)?;
         let envelope = WitnessEnvelope::reconstruct(packet, self.inputs.replay_limits)
             .map_err(FunctionPacketError::Admission)?;
-        if envelope.backend() != generator {
-            return Err(FunctionPacketError::ClaimMismatch(
-                PacketClaimMember::Backend,
-            ));
-        }
         self.request_from_envelope_for_arm(
             &envelope,
             claim.obligation_identity,
@@ -946,13 +937,6 @@ impl ReplayPackage {
                 PacketClaimMember::Domains,
             ));
         }
-        if matches!(arm, FunctionPacketArm::Witness)
-            && envelope.backend().as_str() != BACKEND_IDENTITY
-        {
-            return Err(FunctionPacketError::ClaimMismatch(
-                PacketClaimMember::Backend,
-            ));
-        }
         let expected_source = matches!(
             (arm, envelope.source()),
             (FunctionPacketArm::Witness, EnvelopeSource::Witness(_))
@@ -989,7 +973,7 @@ impl ReplayPackage {
         );
         request.backend = envelope.backend().as_str().to_owned();
         request.declared_domains = envelope.declared_domains().to_vec();
-        if matches!(envelope.source(), ReplaySource::Input(_)) {
+        if matches!(envelope.source(), EnvelopeSource::Input(_)) {
             request.supplied_limits = Some(self.inputs.supplied_limits.unwrap_or_default());
         }
         Ok(request)
@@ -1071,7 +1055,7 @@ fn function_packet(
     obligation: ObligationIdentity,
     subject: WireNodeId,
     occurrence: OccurrenceKey,
-    source: ReplaySource,
+    source: EnvelopeSource,
     backend: &str,
     declared_domains: Vec<DeclaredDomain>,
 ) -> WitnessPacket<NoPayload> {
@@ -1732,10 +1716,12 @@ mod tests {
         let envelope = WitnessEnvelope::reconstruct(packet.clone(), package.inputs.replay_limits)
             .expect("QSL admits the original checked claim packet");
         assert_eq!(envelope.occurrence_key(), &package.site.site.declaration);
-        assert!(matches!(envelope.source(), ReplaySource::Input(values) if values == &assignments));
+        assert!(
+            matches!(envelope.source(), EnvelopeSource::Input(values) if values == &assignments)
+        );
 
         let wire = package
-            .value_parity_request(packet.clone(), &generator)
+            .value_parity_request(packet.clone())
             .expect("the independently selected claim binds its packet");
         assert_eq!(
             wire.replay_target.occurrence_key.as_ref(),
@@ -1802,7 +1788,7 @@ mod tests {
             .value_parity_packet(&generator, assignments.clone())
             .expect("value claim exists");
         let default_wire = selected
-            .value_parity_request(default_packet, &generator)
+            .value_parity_request(default_packet)
             .expect("default request binds");
         assert_eq!(default_wire.supplied_limits, Some(defaults));
 
@@ -1813,7 +1799,7 @@ mod tests {
             .value_parity_packet(&generator, assignments.clone())
             .expect("value claim exists");
         let explicit_wire = explicit_package
-            .value_parity_request(explicit_packet, &generator)
+            .value_parity_request(explicit_packet)
             .expect("explicit default request binds");
         assert_eq!(default_wire.supplied_limits, explicit_wire.supplied_limits);
 
@@ -1828,7 +1814,7 @@ mod tests {
             .value_parity_packet(&generator, assignments)
             .expect("value claim exists");
         let wire = configured
-            .value_parity_request(packet, &generator)
+            .value_parity_request(packet)
             .expect("configured request binds");
         assert_eq!(wire.supplied_limits, Some(selected_limits));
         let readback = ReplayRequest::decode(wire.clone(), configured.inputs.replay_limits)
@@ -1880,16 +1866,9 @@ mod tests {
             "QSL selected distinct checked claims"
         );
         assert!(matches!(
-            package.value_parity_request(other_packet, &generator),
+            package.value_parity_request(other_packet),
             Err(FunctionPacketError::ClaimMismatch(
                 PacketClaimMember::Target
-            ))
-        ));
-
-        assert!(matches!(
-            package.value_parity_request(packet.clone(), &BackendId::new("other-provider")),
-            Err(FunctionPacketError::ClaimMismatch(
-                PacketClaimMember::Backend
             ))
         ));
 
@@ -1901,7 +1880,7 @@ mod tests {
         WitnessEnvelope::reconstruct(alternate.clone(), package.inputs.replay_limits)
             .expect("the alternate packet is well formed");
         assert!(matches!(
-            package.value_parity_request(alternate, &generator),
+            package.value_parity_request(alternate),
             Err(FunctionPacketError::ClaimMismatch(
                 PacketClaimMember::Occurrence
             ))
@@ -1913,18 +1892,18 @@ mod tests {
                 .expect("valid selection"),
         );
         assert!(matches!(
-            package.value_parity_request(wrong_target, &generator),
+            package.value_parity_request(wrong_target),
             Err(FunctionPacketError::ClaimMismatch(
                 PacketClaimMember::Target
             ))
         ));
 
         let mut wrong_arm = packet.clone();
-        wrong_arm.source = Some(ReplaySource::Witness(
+        wrong_arm.source = Some(EnvelopeSource::Witness(
             render_witness("value_fixture", "falsified", &[]).expect("the fixture witness renders"),
         ));
         assert!(matches!(
-            package.value_parity_request(wrong_arm, &generator),
+            package.value_parity_request(wrong_arm),
             Err(FunctionPacketError::ClaimMismatch(
                 PacketClaimMember::SourceArm
             ))
@@ -1933,7 +1912,7 @@ mod tests {
         let mut wrong_package = packet.clone();
         wrong_package.package_id = Some((Some("sha256-jcs".to_owned()), "ab".repeat(32)));
         assert!(matches!(
-            package.value_parity_request(wrong_package, &generator),
+            package.value_parity_request(wrong_package),
             Err(FunctionPacketError::ClaimMismatch(
                 PacketClaimMember::Package
             ))
@@ -1943,7 +1922,7 @@ mod tests {
         wrong_subject.clause_node =
             Some(WireNodeId::from_hex(&"44".repeat(32)).expect("the test node id is valid"));
         assert!(matches!(
-            package.value_parity_request(wrong_subject, &generator),
+            package.value_parity_request(wrong_subject),
             Err(FunctionPacketError::ClaimMismatch(
                 PacketClaimMember::Subject
             ))
@@ -1952,7 +1931,7 @@ mod tests {
         let mut wrong_obligation = packet.clone();
         wrong_obligation.obligation_identity = Some([0x55; 32]);
         assert!(matches!(
-            package.value_parity_request(wrong_obligation, &generator),
+            package.value_parity_request(wrong_obligation),
             Err(FunctionPacketError::ClaimMismatch(
                 PacketClaimMember::Obligation
             ))
@@ -1961,7 +1940,7 @@ mod tests {
         let mut missing_occurrence = packet;
         missing_occurrence.occurrence_key = None;
         assert!(matches!(
-            package.value_parity_request(missing_occurrence, &generator),
+            package.value_parity_request(missing_occurrence),
             Err(FunctionPacketError::Admission(
                 WitnessRefusal::MissingMember("occurrence_key")
             ))
