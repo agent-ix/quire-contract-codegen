@@ -149,10 +149,11 @@ classification; FR-028 and NFR-006 constrain ceilings and the real-Kani lane;
 FR-029/030 own terminal mapping; FR-016/024 own playback and envelope intake,
 including FR-024's public parser in `kani/classify.rs`. FR-040's cancellation producer
 is live in `kani/run/execute.rs` and `kani/run/launch.rs`, with tagged tests for
-AC-1 to AC-7. FR-041's claim-gate controls for AC-1 to AC-5 are live in
-`scripts/cg_gates.rs` and `scripts/kani_claims.json`, with tagged tests in
-`tests/it/kani_generation_claims.rs` and `tests/it/kani_gate.rs`; its V2 claim
-and historical hold discharge (AC-6 to AC-10) remain planned. FR-034 and
+AC-1 to AC-7. FR-041's module discharge and mutation controls remain Open:
+the fixed V1 claim inventory, its held row, and its coupled test were retired.
+`scripts/cg_gates.rs` and `tests/it/kani_gate.rs` retain the separate NFR-006
+real-Kani lane controls. FR-041's V2 implication and historical FR-003@4
+claims (AC-6 to AC-10) remain planned. FR-034 and
 FR-046 retain planned obligations without a completed implementation claim here.
 FR-015's V2 contract/invariant, composite and graph obligations remain planned
 or partial where their individual criteria say so.
