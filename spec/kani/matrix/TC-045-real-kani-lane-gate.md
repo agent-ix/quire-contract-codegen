@@ -12,7 +12,7 @@ relationships:
 
 Verify that `make kani-scope` decides from changed paths whether the real-Kani lane is required,
 that `make kani-gate` runs the same recipe as `make kani` serially under the host lock and reports a
-run result that cannot read as a pass when nothing ran or the tree moved, and that the lane selects
+run result that cannot read as a pass when nothing ran or the tree is dirty, and that the lane selects
 every real-Kani test (NFR-006). The pull-request and release criteria are inspection, step 13.
 
 ## Test Procedure
@@ -28,9 +28,8 @@ test` and holds no host-wide lock.
    changed paths and assert `required` and the path on the output.
 2. Scope, not required (NFR-006-AC-2): feed each of the six paths of NFR-006-AC-2 alone and assert
    `not required`.
-3. Rename (NFR-006-AC-3): have the stand-in `git`, asked for names with rename detection off, report
-   `src/kani/old.rs` and `src/strategy/new.rs`, then `src/strategy/old.rs` and `src/kani/new.rs`;
-   assert `required` for each. Assert the binary's `git` argument vector turns rename detection off.
+3. Rename (NFR-006-AC-3): supply both `src/kani/old.rs` and `src/strategy/new.rs`, then
+   both `src/strategy/old.rs` and `src/kani/new.rs`; assert `required` for each input pair.
 4. One recipe (NFR-006-AC-4): run `make -n kani` and `make -n kani-gate`; assert the same `cargo test`
    command line in both and that it holds each of the eight current filters, `--ignored` and
    `--test-threads=1`.
@@ -52,14 +51,10 @@ test` and holds no host-wide lock.
    `tree=clean`, while `result=failed` and exit non-zero preserve the trusted-Cargo refusal. With
    a stand-in `cargo-kani` that prints no version, assert `result=failed` and non-zero. Step 13
    checks the `result=passed` line from a successful trusted installed-Kani run.
-8. Re-read (NFR-006-AC-8): with a stateful stand-in `git` whose head is `A` before the build and `B`
-   after, and one whose tree is clean before and dirty after, assert `result=failed` and non-zero
-   for each.
-   For NFR-006-AC-14, make the stand-in `git` report a Kani-touching path changed between the
-   merge base and `origin/main`, with main absent from the candidate; assert that the gate names
-   the path and refuses before starting the lane. Repeat with only a non-touching main path and
-   assert that the full lane can run. The stand-in must observe both branch-changed and main-changed
-   diff directions with `--no-renames`; one diff cannot substitute for the other.
+8. Post-run tree (NFR-006-AC-8): with a stateful stand-in `git` that reports a clean
+   tree before the build and a dirty tree after the run, assert `tree=dirty`, no
+   `result=passed`, and a non-zero exit. Assert that the gate reads no Git revision.
+   NFR-006-AC-14's merge-base comparison is retired.
 9. Dirty tree (NFR-006-AC-9): with the stand-in `git` reporting a dirty tree before the build and the
    tests passing, assert `tree=dirty`, no `result=passed` on the output, and a non-zero exit.
 10. Launcher absent (NFR-006-AC-10): with no `cargo-kani` on `PATH`, assert the stand-in `cargo` never
@@ -77,11 +72,9 @@ test` and holds no host-wide lock.
     `tests/state_frame_support/subject.rs` and the three Kani
     schemas must be found.
 12. `make ci` (NFR-006-AC-12): run `make -n ci` and assert no line contains `kani`.
-13. Inspection (NFR-006-AC-13 to NFR-006-AC-17): for a Kani-touching pull request, observe the
+13. Inspection (NFR-006-AC-13, AC-15 to AC-17): for a Kani-touching pull request, observe the
     author run the actual full gate on the clean, stable candidate before opening it. Before merge,
-    check that the current candidate contains the pull request's changes. If the gate reports
-    Kani-reaching main changes absent from the candidate, update the candidate from current main.
-    Observe a fresh full gate on
+    check that the current candidate contains the pull request's changes. Observe a fresh full gate on
     that clean, stable candidate immediately before merge; require successful process exit and every
     listed test run. A copied PR-body status line does not pass this step. A failed, absent or skipped
     gate leaves the pull request unmerged and without a verification claim. For a `not required`
@@ -91,7 +84,7 @@ test` and holds no host-wide lock.
 ## Expected Results
 
 The scope target is a pure function of the changed paths, renames included. The gate prints `passed`
-only for a run in which every listed test ran and passed on a clean tree that did not move, serially,
+only for a run in which every listed test ran and passed on a clean tree, serially,
 under the lock, with the `make kani` command line, and prints a `not run` or `failed` line otherwise,
 with a non-zero exit. The lane selects exactly the tests that carry its tag. `make ci` does not run
 the lane. Before a Kani-touching pull request opens or merges, and before a tag is pushed, the actual

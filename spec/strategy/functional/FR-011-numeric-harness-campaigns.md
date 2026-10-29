@@ -68,6 +68,9 @@ until specified.
   or FR-331 wire member is added.
 - A caller-owned proptest `TestRunner` and `quire_contract_runtime::CampaignReport`.
 - The existing campaign policy: minimum accepted, minimum rejected, and maximum discarded counts.
+- Planned (IR-1124, after IR-1072): the typed V2 selected-claim result, the FR-008
+  contextual comparison and V2 oracle for that same claim, and the requested
+  constructive or census population. No V1 bound strategy output is an input.
 
 ## Outputs
 
@@ -84,8 +87,52 @@ until specified.
 - Planned (IR-1072): the selected-claim entry returns either a typed V2 selection for the exact
   supplied key or a distinct typed V2 selection diagnostic retaining Contract IR's refusal code,
   clause id, claim owner id, and occurrence. This entry alone emits no strategy bundle or runner.
+- Planned (IR-1124): one complete V2 source, map, census and numeric runner bundle for
+  the selected claim, or one typed diagnostic with zero published artifacts and no
+  campaign, verdict or coverage result.
 
 ## Behavior
+
+- When the selected V2 claim and its FR-008 comparison are admitted, CG shall construct
+  the numeric population, census and oracle-conformance runner from that admitted
+  checked-package selection and shall publish the complete generated bundle atomically.
+  The V2 entry shall not call the V1 bound strategy generator or adapt V1 output.
+- When publishing a V2 bundle, CG shall require the same selected package id, checked
+  clause id, claim owner node id and authentic claim occurrence throughout selection,
+  comparison, generated source/map and runner identity. CG shall require a complete
+  selected comparison oracle, nonempty requested population, valid generated syntax,
+  and the rendered point equal to the selected checked point.
+- For a V2 numeric request, CG shall preserve FR-008's comparison-admission
+  first-defect order: unknown selected clause; absent or inauthentic claim; IR
+  accessor's remaining order, including unsupported clause kind; CG relation/domain;
+  selected-oracle construction; then rendering. After a successful comparison
+  admission, CG shall refuse a missing accepted point before population construction,
+  and shall check population, identity, rendered point, generated syntax and resource
+  limits before publication. The FR-011-AC-15 point-selection entry retains its
+  own IR FR-058 refusal order when called alone; its diagnostic shall not replace
+  an earlier FR-008 admission refusal in the numeric request. The FR-331 reader
+  and driver retain their earlier package/owner and export refusals.
+- The V2 diagnostic shall retain the selected clause, owner, occurrence,
+  underlying typed IR cause and reached structural locus when available.
+- The V2 numeric diagnostic shall map an unknown selected clause to
+  StrategyErrorCode::UnknownClause; an absent or inauthentic claim or owner to
+  MissingClaimOccurrence; an unsupported clause kind to UnsupportedClauseKind;
+  an absent accepted point to MissingExecutionPoint; an unbound model element
+  to UnboundModelElement; a noncanonical or mismatched identity to
+  InvalidIdentityRendering or OwnerIdentityMismatch according to the owner
+  comparison boundary; and a changed rendered point to ExecutionPointMismatch.
+  CG shall preserve a distinct typed FR-008 cause and locus for other comparison
+  refusals, and shall use the existing EmptyPopulation,
+  UnsupportedCampaignConstraint, InvalidGeneratedSyntax and
+  ResourceLimitExceeded codes for their corresponding post-admission failures.
+- When a V2 generated campaign runs, CG shall keep its result, source/map bytes,
+  selected claim identity and package revision associated with that runner invocation
+  for FR-004 live producer binding. Publication alone shall convey no authenticated
+  campaign, measured coverage or proof credit; only FR-004's same-invocation
+  producer/profile/export association may qualify campaign evidence.
+- If V2 selection or prepublication generation refuses, then CG shall publish nothing
+  for that selection and shall not create a campaign result or offer that selection as
+  evidence to the V2 analyzer. A valid sibling selection shall retain its own result.
 
 - When the IR-1072 V2 selected-claim entry is called, that entry shall pass its complete claim key to
   `CheckedPackageV2::clause_execution_point(&clause_id, (&claim_owner_node_id,
@@ -231,6 +278,9 @@ producer and artifact association required by FR-004.
 | FR-011-AC-13 | PLANNED (IR-1072). The public V2 selected-claim entry accepts an admitted `CheckedPackageV2` and a typed complete claim key (checked clause id, claim owner node id, authentic `claim` `CheckedOccurrence`) without a second caller-supplied owner; a matching key selects only that claim and its exact checked point. With the same clause and occurrence but a different claim owner, the entry returns a distinct typed V2 diagnostic retaining Contract IR `CheckedExecutionPointRefusal::MissingClaimOccurrence` and the supplied clause, owner, and occurrence, and publishes no artifact. The V1 `BoundPackage` entry and `StrategyDiagnostic` are unchanged. | Test |
 | FR-011-AC-14 | PLANNED (IR-1070). For selected authentic `claim` occurrences of distinct V2 invariant clause nodes whose condition and anchor are equal but whose accepted points are respectively `initialization{name: "startup"}` and `handler{name: "tick"}`, each constructed verdict carries the exact point of its selected node through the FR-058 accessor and injective runtime rendering. The nodes and otherwise identical packages have distinct identities; changing only the accepted handler name changes its rederived node and package identities and runtime point. Precondition and postcondition claims preserve their accepted `pre` and `post` points, including their operation names (QSpec FR-322-AC-131, FR-341-AC-14, FR-342-AC-10; IR FR-058-AC-9). Two authentic claims of one pointed node return its one identical point; no claim occurrence supplies a second point. | Test (TC-020) |
 | FR-011-AC-15 | PLANNED (IR-1070). An absent checked clause returns `StrategyErrorCode::UnknownClause`, a non-state clause returns `StrategyErrorCode::UnsupportedClauseKind`, and a wrong-role, wrong-ordinal, or other-node occurrence returns `StrategyErrorCode::MissingClaimOccurrence`, each before artifact publication and without substituting another claim or node's point. An authentic claim of a separate V2 clause node whose optional point is absent returns `StrategyErrorCode::MissingExecutionPoint` without borrowing a pointed sibling node's point. A renderer mutant changing only the selected point returns `StrategyErrorCode::ExecutionPointMismatch` before publication. Two authentic claims of one pointed node use the same point; clause kind and anchor never synthesize a missing point. | Test (TC-020) |
+| FR-011-AC-16 | PLANNED (IR-1124; depends on IR-1072 and FR-008). A public V2 strategy request over an admitted checked package and one authentic selected claim produces a complete source, map, census and numeric runner bundle whose selected clause, owner, occurrence, package revision, comparison and runner identities agree exactly. The runner executes the FR-009 constructive population and FR-010 census with the selected V2 oracle; source inspection finds no V1 `BoundPackage`, V1 `ClauseRef`, `generate_bound_strategy` call or V1-to-V2 adapter in this V2 path, while the selected V2 checked clause key is retained. | Test |
+| FR-011-AC-17 | PLANNED (IR-1124). Independently injected unknown clause, unsupported kind, wrong owner/role/ordinal, missing accepted point, FR-008 comparison refusal, empty population, identity mismatch, point-render mutant, invalid generated syntax and resource overflow each return a typed diagnostic with the selected key and available structural locus, publish zero artifacts and start no campaign. Pairwise overlapping defects return the first cause in Behavior order; a valid sibling still publishes its complete bundle. | Test |
+| FR-011-AC-18 | PLANNED (IR-1124; FR-004 live binding remains separate). A campaign run from the emitted V2 runner retains the selected claim and package identity with its own source/map and result for same-invocation producer binding. Published bytes or a detached/copied result alone yield no authenticated campaign, measured coverage or proof credit. A refused selection yields no campaign evidence, including when another claim of the same package succeeds. | Test |
 
 ## Open Questions
 

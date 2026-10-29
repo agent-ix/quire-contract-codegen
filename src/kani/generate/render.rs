@@ -3,8 +3,8 @@
 use super::{
     outcome::UnsupportedObligation,
     spec::{
-        Argument, CollectionElement, CollectionSpec, HarnessShape, HarnessSpec, Init, LetBinding,
-        LetType, ProofKind, Statement,
+        Argument, CollectionElement, CollectionSpec, FrameAssertion, FrameSpec, HarnessShape,
+        HarnessSpec, Init, LetBinding, LetType, ProofKind, Statement,
     },
 };
 use crate::{
@@ -81,7 +81,76 @@ pub(super) fn render(spec: &HarnessSpec) -> Result<Artifact, UnsupportedObligati
             body,
         } => render_statements(spec, label, oracle_source, *proof, body),
         HarnessShape::Collection(collection) => render_collection(spec, collection),
+        HarnessShape::Frame(frame) => render_frame(spec, frame),
     }
+}
+
+fn render_frame(spec: &HarnessSpec, frame: &FrameSpec) -> Result<Artifact, UnsupportedObligation> {
+    let path = spec.path();
+    let fields = frame
+        .state_fields
+        .iter()
+        .map(|field| format!("{field}: kani::any()"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let mut source = format!(
+        "{}#[cfg(kani)]\nmod {} {{\n    use super::*;\n\n    #[kani::proof]\n    fn {}() {{\n        let pre: {} = {} {{ {fields} }};\n",
+        frame.prefix, path.module, path.harness, frame.state_path, frame.state_path,
+    );
+    for domain in &frame.domains {
+        source.push_str(&format!(
+            "        kani::assume(pre.{} >= {} && pre.{} <= {});\n",
+            domain.field,
+            i64_literal(domain.minimum),
+            domain.field,
+            i64_literal(domain.maximum),
+        ));
+    }
+    source.push_str(&format!(
+        "        let mut post = pre.clone();\n        {}(&mut post);\n",
+        frame.subject_path
+    ));
+    match &frame.assertion {
+        FrameAssertion::Postcondition {
+            field,
+            operator,
+            left_is_pre,
+            message,
+        } => {
+            let (left, right) = if *left_is_pre {
+                ("pre", "post")
+            } else {
+                ("post", "pre")
+            };
+            source.push_str(&format!(
+                "        assert!(\n            {left}.{field} {operator} {right}.{field},\n            \"{{}}\",\n            {message:?}\n        );\n"
+            ));
+        }
+        FrameAssertion::Effects(checked) => {
+            for (field, message) in checked {
+                source.push_str(&format!(
+                    "        assert!(post.{field} == pre.{field}, \"{{}}\", {message:?});\n"
+                ));
+            }
+        }
+    }
+    source.push_str(&format!(
+        "        kani::cover!({}, {:?});\n    }}\n}}\n",
+        spec.cover().condition.as_str(),
+        spec.cover().message
+    ));
+    if source.len() > MAX_GENERATED_SOURCE_BYTES {
+        return Err(UnsupportedObligation::ResourceLimitExceeded {
+            bytes: source.len(),
+        });
+    }
+    syn::parse_file(&source).map_err(|error| UnsupportedObligation::InvalidGeneratedSyntax {
+        error: error.to_string(),
+    })?;
+    Ok(Artifact::new(
+        format!("src/generated/{}.rs", path.module),
+        source,
+    ))
 }
 
 fn render_statements(

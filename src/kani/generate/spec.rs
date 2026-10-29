@@ -272,6 +272,26 @@ pub(super) struct CollectionSpec {
     pub(super) quantifier: CollectionQuantifier,
     pub(super) predicate: CollectionPredicateIdentity,
 }
+#[derive(Clone, Debug)]
+pub(super) struct FrameSpec {
+    pub(super) prefix: String,
+    pub(super) state_path: String,
+    pub(super) subject_path: String,
+    pub(super) state_fields: Vec<String>,
+    pub(super) domains: Vec<crate::kani::identity::StateFieldDomain>,
+    pub(super) assertion: FrameAssertion,
+}
+
+#[derive(Clone, Debug)]
+pub(super) enum FrameAssertion {
+    Postcondition {
+        field: String,
+        operator: &'static str,
+        left_is_pre: bool,
+        message: String,
+    },
+    Effects(Vec<(String, String)>),
+}
 impl CollectionSpec {
     pub(super) fn predicate_expression(&self) -> String {
         match &self.predicate {
@@ -308,6 +328,7 @@ pub(super) enum HarnessShape {
         body: Vec<Statement>,
     },
     Collection(CollectionSpec),
+    Frame(FrameSpec),
 }
 fn identifier_identity(identifier: &syn::Ident) -> String {
     identifier.unraw().to_string()
@@ -346,6 +367,61 @@ fn literal_true(expression: &Expr) -> bool {
     }
 }
 impl HarnessSpec {
+    pub(super) fn new_frame(
+        path: HarnessPath,
+        frame: FrameSpec,
+        cover_message: String,
+        unwind: u32,
+        solver: KaniSolver,
+    ) -> Result<Self, HarnessSpecError> {
+        if !(1..=MAX_OBLIGATION_UNWIND).contains(&unwind) {
+            return Err(HarnessSpecError::InvalidUnwind(unwind));
+        }
+        message(&cover_message)?;
+        if syn::parse_str::<syn::Path>(&frame.state_path).is_err()
+            || syn::parse_str::<syn::Path>(&frame.subject_path).is_err()
+        {
+            return Err(HarnessSpecError::InvalidExpression);
+        }
+        let mut fields = BTreeSet::new();
+        for field in &frame.state_fields {
+            identifier(field)?;
+            if !fields.insert(field.clone()) {
+                return Err(HarnessSpecError::DuplicateBinding(field.clone()));
+            }
+        }
+        for domain in &frame.domains {
+            if !fields.contains(&domain.field) || domain.minimum > domain.maximum {
+                return Err(HarnessSpecError::InvalidDomain);
+            }
+        }
+        match &frame.assertion {
+            FrameAssertion::Postcondition { field, .. } if !fields.contains(field) => {
+                return Err(HarnessSpecError::InvalidDomain);
+            }
+            FrameAssertion::Effects(checked) if checked.is_empty() => {
+                return Err(HarnessSpecError::InvalidDomain);
+            }
+            FrameAssertion::Effects(checked)
+                if checked.iter().any(|(field, _)| !fields.contains(field)) =>
+            {
+                return Err(HarnessSpecError::InvalidDomain);
+            }
+            _ => {}
+        }
+        let options = adapter_options(&path.to_string(), unwind, solver, false);
+        Ok(Self {
+            path,
+            shape: HarnessShape::Frame(frame),
+            cover: Cover {
+                condition: ExprText::new("true")?,
+                message: cover_message,
+            },
+            unwind,
+            solver,
+            options,
+        })
+    }
     pub(super) fn new(
         label: String,
         path: HarnessPath,

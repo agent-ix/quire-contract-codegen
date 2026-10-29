@@ -222,8 +222,8 @@ src/
       outcome.rs              the request and result vocabulary the entry and every family speak
                               (ObligationItem, UnsupportedObligation, ObligationRecord, ...); a leaf
                               inside generate/: it imports no family
-      scalar.rs  frame.rs       scalar renders through HarnessSpec; frame retains its own template
-                              until the separate IR-1084 renderer port. The former V1 precondition.rs and
+      scalar.rs  frame.rs       scalar and frame render through HarnessSpec and render.rs. The
+                              separate IR-1084 frame port is step 4i. The former V1 precondition.rs and
                               contract.rs were deleted by 4f; V2 clauses live in clause/v2.rs
       collection.rs           the symbolic collection family: lowers an admitted model-field
                               collection claim to its typed domain and a HarnessSpec. Step 4h
@@ -443,7 +443,7 @@ Rules, each checkable:
   seven prefixes for `collection.rs`); `scalar` and `collection` share a rank, so neither imports the other. `spec` imports `outcome` (for `MAX_OBLIGATION_UNWIND`), `core::identity` (for `HarnessPath`), `kani::abi` and `kani::identity` (for the typed collection predicate); `render` imports `spec`, `outcome`, `core::artifact` and `kani::abi`, and not `record`; a family that has been ported (scalar at 4b, collection at 4h) imports `spec` and `render`. A family file may import `outcome` and `record` and never `negotiate`: the passes that read the whole request
   (classification, name settlement, assumption resolution) are `negotiate`'s, and what lowers or
   renders one item is its family's. `corpus` imports `lower` and `census_validation`;
-  `frame` imports `outcome` only. `kani/test_support.rs` is
+  `frame` imports `outcome`, `spec` and `render` after step 4i. `kani/test_support.rs` is
   `#[cfg(test)]`, imports `identity` and `abi` and no generator, and may be imported by any test
   module under `kani/`.
 - A `#[cfg(test)]` module obeys the same direction as the file it sits in. A test that needs a
@@ -486,10 +486,13 @@ one identity record, one cover rule and one entry, not one function:
 - `kani/generate/render.rs` is the only code that emits `#[kani::proof]`, `#[kani::proof_for_contract]`,
   `kani::requires`, `kani::ensures`, `kani::any`, `kani::assume` and `kani::cover!`. A layout test
   checks string literals in non-test source (not comments, so doc prose that names them passes).
-- The scalar, V2 clause and collection families return `HarnessSpec`s. A ported family formats
-  no harness structure (statements, attributes, macros, layout, cover placement); the one text
-  it supplies is an expression fragment (`ExprText`, decision H-2). The frame family retains
-  its own template until its renderer port; collection was ported at step 4h.
+- The scalar, V2 clause, collection and frame families return `HarnessSpec`s. A ported family
+  formats no proof-module structure (attributes, macros, layout or cover placement). The
+  statement shape supplies checked expression fragments (`ExprText`, decision H-2); the
+  collection shape supplies its typed domain and predicate; the frame shape supplies its
+  provenance header, validated state and subject paths, ordered fields and ranges, comparison
+  operator, and assertion messages for renderer escaping. `render.rs` owns the proof-module structure for
+  all three shapes. Collection was ported at step 4h and frame at step 4i.
   `generate_state_frame_obligations`
   becomes a frame arm of `ObligationItem`, so `negotiate_kani_obligations` is the one public
   generation entry; ADR-004 owns what the frame arm asserts.
@@ -505,10 +508,17 @@ this step) and states what step 4b changes. It decides only what the scalar fami
 member another family needs (a `proof_for_contract` target, contract attributes, a frame's
 `requires`/`ensures`, a collection's typed domain) is added by the step that ports that family, as
 an edit to this subsection; 4b adds no variant, field or helper for a family it does not port.
-Steps 4c to 4h are not specified here.
+Steps 4c to 4h are not specified here. Step 4i adds `FrameSpec` and
+`FrameAssertion` as a typed `HarnessShape::Frame`: the state and subject paths, ordered state
+fields, admitted ranges and role assertion are data; `render.rs` owns their Kani structure and
+places the frame's one literal-true cover after the assertions. The frame constructor validates
+paths, fields, ranges and the unwind bound. This is the frame exception to the scalar
+constructor's literal-true-cover refusal, preserving FR-015-AC-7.
 
 **Decision H-1. The shape of `HarnessSpec` (`kani/generate/spec.rs`).** A `HarnessSpec` is a typed
-description of one harness, with no Kani spelling in it. Its fields:
+description of one harness, with no Kani spelling in it. This table records the shared fields
+and the step 4b statement shape; collection and frame add their own typed shapes in steps 4h
+and 4i:
 
 | Field | Type and meaning |
 | --- | --- |
@@ -548,10 +558,10 @@ description of one harness, with no Kani spelling in it. Its fields:
   `BorrowMut(name)`.
 - `Assert { condition, message }`: `assert!(<condition>, "<message>");`.
 
-**Decision H-2. `ExprText` is the one text a lowerer supplies, and it is an expression only.**
-`ExprText` is one Rust expression as text, for the native `i128` expression, the outcome `match`
-and the `matches!` of the cover: the family's own meaning, not harness structure. It is a
-validated newtype whose constructor refuses text that:
+**Decision H-2. A statement-shape `ExprText` is an expression only.**
+For that shape, `ExprText` is one Rust expression as text, for the native `i128` expression, the
+outcome `match` and the `matches!` of the cover: the family's own meaning, not harness structure.
+It is a validated newtype whose constructor refuses text that:
 
 - does not parse as a `syn::Expr`;
 - spells `kani::` or `#[`;
@@ -570,32 +580,38 @@ for four arithmetic expressions, and `syn` is already the validity check on the 
 The cost is that an `ExprText` is checked for parse, form and the absence of Kani spellings, not
 for meaning; the real-Kani lane remains the meaning check.
 
-A `message` (of an `Assert` or the `Cover`) is a string with no `"`, `\`, `{`, `}` or line
-break; the constructor refuses one that has any, as a typed error, rather than escaping it, because
-the scalar assertion message interpolates the operation identity and an escape rule would change
-bytes. `label` follows the same rule except that it may hold backticks and may not hold a line
-break.
+For the statement shape, a `message` (of an `Assert` or the `Cover`) is a string with no `"`,
+`\`, `{`, `}` or line break; its constructor refuses one that has any, as a typed error, rather
+than escaping it, because the scalar assertion message interpolates the operation identity and
+an escape rule would change bytes. `label` follows the same rule except that it may hold
+backticks and may not hold a line break. The frame constructor applies this rule to its fixed
+cover message; the frame assertion messages may contain braces and are escaped as Rust string
+literals by `render.rs`.
 
-**Decision H-3. Invariants, enforced by `HarnessSpec::new`, the only constructor.** A refusal is a
-typed `HarnessSpecError`; none is a panic.
+**Decision H-3. Invariants enforced by the `HarnessSpec` constructors.** A refusal is a typed
+`HarnessSpecError`; none is a panic. Items 1 and 5 apply to every shape. Items 2-4 and the
+statement-specific part of item 6 apply to `HarnessShape::Statements`.
 
 1. Exactly one cover. The AD's earlier wording was "at least one"; FR-015-AC-7 says every
-   generated harness has exactly one non-vacuity cover, and L-4 follows it. A spec with no cover
-   or two covers does not construct.
+   generated harness has exactly one non-vacuity cover, and L-4 follows it. The statement
+   constructor refuses zero or two covers; the collection and frame constructors create one
+   cover each. No family can add a second cover through its source data.
 2. Exactly one `Call`, and every `Input` and `Assume` precedes it. Every `Assert` follows it.
 3. A binding name is bound once, except that a `then` `Let` may rebind its own input's name (the
    `rt::Integer` shadow). Every name, `result` and `callee` is a valid Rust identifier.
 4. Every `Input` domain has `minimum <= maximum` and lies within the type of `ty`. An inverted or
    out-of-type domain is a typed refusal, not a harness whose assumption is unsatisfiable.
 5. `unwind` is in `1..=MAX_OBLIGATION_UNWIND`.
-6. Every `ExprText` satisfies H-2 and every message satisfies the message rule of H-2. The cover
-   condition is an `ExprText` that is not the literal `true`. This last rule is new in 4b: no
-   FR-015 text forbids a `true` cover today, but a `true` cover is reachable whenever the harness is
-   and so is not the property's own reachability that IR-464 requires. A frame harness's
-   `kani::cover!(true, ...)` (FR-015-AC-7) is 4d's to allow in its own spec change.
+6. For the statement shape, every `ExprText` satisfies H-2, every message satisfies its message
+   rule, and the cover condition is not literal `true`. That last rule makes the scalar cover
+   express the property's own reachability. The collection shape derives its cover from the
+   typed cardinality endpoints. The frame shape stores one literal-true cover under
+   FR-015-AC-7, after its subject call and assertions; its fixed cover message is validated,
+   while assertion messages are escaped by the renderer as described above.
 
-Placement is not an invariant of the spec because the spec does not choose it: the cover is a field
-outside `body` precisely so no family can put it elsewhere.
+Placement is not an invariant of the spec because the spec does not choose it: the cover is held
+outside the statement `body` and outside the collection and frame assertion data, so no family
+can put it elsewhere.
 
 **Decision H-4. Ownership and visibility.** Each family lowerer constructs its `HarnessSpec`
 (`scalar.rs` at 4b); nothing else constructs one, and `negotiate.rs` does not. `HarnessSpec`,
@@ -615,20 +631,22 @@ spec, from the same lowered claim, and `record.rs` joins identity and artifact a
    `kani::assume`, `kani::cover!`, `#[cfg(kani)]`, the `mod` wrapper, `use super::*;` and the
    generated-runtime ABI text the spec cannot say in a typed field (`Init::UnlimitedMeter`).
    At 4b that covered the ported scalar family only. Steps 4f and 4h subsequently removed the
-   V1 bundle and moved collection rendering here. The frame and corpus still spell their own
-   templates, so L-3 (render.rs is the only site for all seven spellings) remains open until
-   IR-1084 ports frame rendering and 4g retires the corpus. After the
+   V1 bundle and moved collection rendering here. The corpus still spells its own template, so L-3 (render.rs is the only site for all seven spellings) remains open until 4g retires the corpus. Step 4i moved frame rendering here. After the
    port `scalar.rs` spells none of them.
-2. It places the cover. The body is the header, the oracle source, the module wrapper, the
-   attribute, then the `body` statements in spec order, then the cover as the last statement of
-   the function, after every assumption, the call and every assertion (IR-464, FR-015-AC-7).
-   Nothing a lowerer provides can change where the cover goes (H-2 keeps a cover or an assertion
-   out of an `ExprText`).
-3. It holds no family-specific template text. It has one emitter per `Statement` variant, per
-   `ProofKind` and per `Init`; a family's meaning reaches it only as data (`label`, `ExprText`,
-   `message`). This is evidenced by behaviour (FR-015-AC-113): specs whose labels, expressions and
-   messages are not the scalar family's render to source that holds exactly what the spec
-   supplied and the fixed structure, and nothing else.
+2. It places the cover. For the statement shape it emits the header, oracle source, module
+   wrapper, attribute and ordered `body`, then the cover as the function's last statement. For
+   the frame shape it emits the header, module wrapper, symbolic state and range assumptions,
+   subject call and role assertions, then the cover; the collection shape has the same
+   cover-last rule after its claim assertion. Nothing a lowerer provides can move the cover
+   before an assumption, call or assertion (IR-464, FR-015-AC-7).
+3. It has explicit emitters for the statement, collection and frame shapes. The statement
+   emitter handles each `Statement`, `ProofKind` and `Init` variant. The frame emitter owns the
+   frame-only proof template; `FrameSpec` supplies its validated paths, fields, ranges,
+   comparison operator, provenance header and assertion messages as data. The collection
+   emitter likewise owns the collection proof template. Thus one file owns every ported
+   family's Kani spellings and cover placement. FR-015-AC-113 verifies that statement specs
+   with non-scalar labels, expressions and messages render their supplied data in the fixed
+   statement structure.
 4. Design rationale: it is a pure function of the spec, with no map or set iteration, no clock,
    no environment and no address-dependent formatting, so equal specs render equal bytes.
    The scalar harness wrapper and body preserve the pre-port template's actual whitespace: eight
@@ -637,8 +655,7 @@ spec, from the same lowered claim, and `record.rs` joins identity and artifact a
 5. It validates what it renders as today's `render_scalar` does, in the same order and with the
    same refusals: first `ResourceLimitExceeded` when the source exceeds `MAX_GENERATED_SOURCE_BYTES`
    (core/artifact), then `InvalidGeneratedSyntax` when `syn::parse_file` rejects the source. Those
-   two checks leave `scalar.rs`; a family not yet ported keeps its own check (collection and
-   frame carry the same two checks today).
+   two checks leave `scalar.rs`; the still-live corpus template keeps its own checks until 4g.
 6. It returns the `Artifact` at `src/generated/<module>.rs`; it builds no identity and no record.
    It imports `spec`, `outcome` (for `UnsupportedObligation`), `core::artifact` and `kani::abi`,
    and not `record`.
@@ -943,9 +960,8 @@ requirement is authored.
 - L-3. `#[kani::proof]`, `#[kani::proof_for_contract]`, `kani::requires`, `kani::ensures`,
   `kani::any`, `kani::assume` and `kani::cover!` occur in string literals of non-test source in
   `kani/generate/render.rs` only. Test: a literal scan that ignores comments. Steps 4f and 4h
-  removed the V1 and collection exceptions. The frame template in `kani/generate/frame.rs`
-  remains until IR-1084 ports its renderer, and the corpus template in
-  `kani/generate/corpus/bounded_kani_corpus.rs` remains until 4g. L-3 remains open for both.
+  removed the V1 and collection exceptions. Step 4i removed the frame template from `kani/generate/frame.rs`; the corpus template in
+  `kani/generate/corpus/bounded_kani_corpus.rs` remains until 4g. L-3 remains open for the corpus.
 - L-4. A `HarnessSpec` has exactly one cover (FR-015-AC-7; decision H-3), and `render.rs` places every cover after all
   assumptions, the subject call and every assertion, as the last statement. Test: the constructor's refusal, and a real-Kani test that a
   harness with an unsatisfiable assumption does not classify `Verified`.
@@ -1199,8 +1215,7 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
      cannot replace it. The admitted symbolic cases render through `HarnessSpec` and `render.rs`
      under the cover rule; a case with no symbolic input does not render a proof. Generation
      returns no proof verdict (FR-015-AC-95); the installed backend supplies one under FR-017.
-     L-3 remains open until IR-1084 ports frame rendering and 4g retires the corpus; steps 4f and
-     4h have landed. IR-347 moved the Kani family lowerings
+     L-3 remains open until 4g retires the corpus; steps 4f, 4h and 4i have landed in this branch. IR-347 moved the Kani family lowerings
      into CG; IR removal follows this consumer change. FR-015-AC-109 has retired CG's
      arithmetic lowerer, so the current CG lowerer set is collection and graph. The collection and graph
      corpus arms, replay and shared auxiliaries remain; this does not complete step 4g.
@@ -1210,6 +1225,11 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
      It keeps its typed domain and its refusals. The collection proof template is now in
      `render.rs` and is subject to L-4; FR-015-AC-58's inspection covers the emitted text. Step 4h needs `HarnessSpec` and `render` from step 4b and is independent of
      4c to 4g.
+   - 4i (IR-1084): the frame family. `kani/generate/frame.rs` builds a typed `FrameSpec`
+     through `HarnessSpec::new_frame`; `render.rs` emits the symbolic state, bounds, subject call,
+     role-specific assertions and one cover after every assertion. The frame family retains its
+     admitted domain, roles, identity, refusals, and public route. The FR-015-AC-58 source guard
+     leaves only the still-live corpus template outside `render.rs`; L-3 stays open for 4g.
 5. **One output reader and the terminal map.** The playback scanning already sits in
    `kani/output/playback.rs` (step 2f moved it verbatim); this step changes the interface:
    `playback.rs` returns typed entries and its own typed refusal, `replay/witness.rs` takes them
@@ -1503,7 +1523,6 @@ Each is a place where the target of this AD is not yet true, stated so that no s
 | Exception | Where | Removed by |
 | --- | --- | --- |
 | `validate_dependencies` and the diagnostic type it returns | `kani/generate/census_validation.rs` | 4g or the V2 census input; `deterministic_json` was already deleted by PR #356 |
-| The frame family still renders its own template | `kani/generate/frame.rs` | IR-1084 ports frame rendering to `HarnessSpec` and `render.rs` after CG #608 / IR-1079 and the completed frame L-6 slice; separate from step 4d's V2 census work |
 | The corpus keeps its own template, with its cover after the assertion (FR-015-AC-55) | `kani/generate/corpus/bounded_kani_corpus.rs` | step 4g retires the corpus template; step 4h already moved collection rendering to `render.rs` |
 | The remaining collection and graph finite lowerers | `kani/generate/lower/{bounded_collections,finite_reference_graphs}.rs` | IR-347 replaced the step-2f forwarders with CG-owned lowerings and request/result types; IR removes its former exports afterwards. FR-015-AC-109 has retired arithmetic; collection and graph remain until FR-015-AC-110 and FR-015-AC-111. |
 | `generate_state_frame_obligations` is a second public entry beside `negotiate_kani_obligations` | `kani/generate/frame.rs` | step 4d |

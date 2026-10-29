@@ -24,6 +24,7 @@ type: TestMatrix
 | FR-010 | FR-010-AC-1 through FR-010-AC-5 | TC-019 | 🚧 V2 planned (V1 tests exist) |
 | FR-011 | FR-011-AC-1 through FR-011-AC-12 | TC-020 | 🚧 V2 planned (V1 tests exist) |
 | FR-011 | FR-011-AC-13 | TC-020 | 🚧 V2 selected-claim entry planned (IR-1072) |
+| FR-011 | FR-011-AC-16 through FR-011-AC-18 | TC-020, TC-006 | 🚧 Planned (IR-1124); V2 numeric runner and typed publication are absent; live evidence binding remains FR-004 |
 | FR-012 | FR-012-AC-1 through FR-012-AC-3 | TC-021 | 🚧 V2 planned (V1 tests exist) |
 | FR-012 | FR-012-AC-4 | TC-021 | 🚧 V2 planned (V1 tests exist) |
 | FR-013 | FR-013-AC-1, FR-013-AC-2, FR-013-AC-4 | TC-022 | 🚧 V2 planned (V1 tests exist) |
@@ -49,7 +50,7 @@ criteria. The V2 rows remain planned until tagged tests run on the public checke
 | TC-017 | Verify checked V2 clause strategy admission and refusal | Integration | P0 | FR-008-AC-1, FR-008-AC-2, FR-008-AC-3, FR-008-AC-4, FR-008-AC-5, FR-008-AC-6, FR-008-AC-7, FR-008-AC-9, FR-008-CON-2, FR-008-CON-3, FR-008-CON-4 | 🚧 V2 planned (V1 tests exist) |
 | TC-018 | Verify constructive satisfying and violating populations | Property | P0 | FR-009-AC-1, FR-009-AC-2, FR-009-AC-3, FR-009-AC-4, FR-009-AC-5, FR-009-AC-6, FR-009-AC-7 | 🚧 V2 planned (V1 tests exist) |
 | TC-019 | Verify domain and relation boundary censuses | Integration | P0 | FR-010-AC-1, FR-010-AC-2, FR-010-AC-3, FR-010-AC-4, FR-010-AC-5, NFR-004-AC-2 | 🚧 V2 planned (V1 tests exist) |
-| TC-020 | Verify numeric conformance campaigns and rate reporting | Integration | P0 | FR-011-AC-1, FR-011-AC-2, FR-011-AC-3, FR-011-AC-4, FR-011-AC-5, FR-011-AC-6, FR-011-AC-7, FR-011-AC-8, FR-011-AC-9, FR-011-AC-10, FR-011-AC-11, FR-011-AC-12, FR-011-AC-13, FR-011-AC-14, FR-011-AC-15, NFR-004-AC-1 | 🚧 V2 planned (V1 tests exist); AC-6/7 superseded with no credit; AC-13 selected-claim entry planned (IR-1072); AC-14/15 point-carrier repair planned (IR-1070) |
+| TC-020 | Verify numeric conformance campaigns and rate reporting | Integration | P0 | FR-011-AC-1, FR-011-AC-2, FR-011-AC-3, FR-011-AC-4, FR-011-AC-5, FR-011-AC-6, FR-011-AC-7, FR-011-AC-8, FR-011-AC-9, FR-011-AC-10, FR-011-AC-11, FR-011-AC-12, FR-011-AC-13, FR-011-AC-14, FR-011-AC-15, FR-011-AC-16, FR-011-AC-17, FR-011-AC-18, NFR-004-AC-1 | 🚧 V2 planned (V1 tests exist); AC-6/7 superseded with no credit; AC-13 selected-claim entry planned (IR-1072); AC-14/15 point-carrier repair planned (IR-1070); AC-16/17/18 V2 runner/publication planned (IR-1124) |
 | TC-021 | Verify shrinking preserves numeric constraints | Property | P0 | FR-012-AC-1, FR-012-AC-2, FR-012-AC-3, FR-012-AC-4 | 🚧 V2 planned (V1 tests exist) |
 | TC-022 | Verify strategy output is consumable without a local wire schema | Integration | P0 | FR-013-AC-1, FR-013-AC-2, FR-013-AC-4 | 🚧 V2 planned (V1 tests exist) |
 
