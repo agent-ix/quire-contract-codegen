@@ -65,7 +65,7 @@ impl<Item, Subjects> RefinementRun<Item, Subjects> {
         let super::SolverExecution { query, process } = execution;
         let super::QueryRun {
             association,
-            status,
+            status: mut status,
         } = query;
         let super::QueryAssociation { selection, attempt } = association;
         let proof_bytes = if status == SolverStatus::Unsat
@@ -76,11 +76,14 @@ impl<Item, Subjects> RefinementRun<Item, Subjects> {
             )
             && cvc5_proof_dump_selected(&process.arguments)
         {
-            process
-                .stdout
-                .as_deref()
-                .and_then(captured_alethe_proof)
-                .map(<[u8]>::to_vec)
+            match process.stdout.as_deref().map(captured_alethe_proof) {
+                Some(Ok(Some(proof))) => Some(proof.to_vec()),
+                Some(Err(error)) => {
+                    status = error;
+                    None
+                }
+                Some(Ok(None)) | None => None,
+            }
         } else {
             None
         };
@@ -241,7 +244,7 @@ fn validate_records<'a, Item: Eq, Subjects: Eq>(
             .process
             .stdout
             .as_deref()
-            .and_then(captured_alethe_proof)
+            .and_then(|stdout| captured_alethe_proof(stdout).ok().flatten())
             != Some(proof)
             || !cvc5_proof_dump_selected(&record.process.arguments)
         {
@@ -326,10 +329,17 @@ mod tests {
     type Run = RefinementRun<&'static str, [&'static str; 2]>;
     type Expected = RefinementExpected<&'static str, [&'static str; 2]>;
 
-    fn run(role: RefinementRole, proof: &[u8]) -> (Expected, Run) {
+    fn run_with_proof(role: RefinementRole, proof: Option<&[u8]>) -> (Expected, Run) {
         let query = format!("canonical query for {role:?}\n").into_bytes();
-        let proof_text = std::str::from_utf8(proof).expect("ASCII test proof");
-        let script = format!("cat >&2; printf 'unsat\\n{proof_text}'");
+        let proof_text = proof
+            .map(|bytes| std::str::from_utf8(bytes).expect("ASCII test proof"))
+            .unwrap_or_default();
+        let wrapper = if proof.is_some() {
+            format!("({proof_text})")
+        } else {
+            String::new()
+        };
+        let script = format!("cat >&2; printf 'unsat\\n{wrapper}'");
         let execution = run_solver_query(
             QuerySelection {
                 product: (),
@@ -356,7 +366,7 @@ mod tests {
         )
         .expect("direct bounded solver invocation");
         let mut response = b"unsat\n".to_vec();
-        response.extend_from_slice(proof);
+        response.extend_from_slice(wrapper.as_bytes());
         assert_eq!(
             execution.process().stdout.as_deref(),
             Some(response.as_slice())
@@ -366,16 +376,8 @@ mod tests {
             Some(query.as_slice())
         );
         let attempt = execution.query().association.attempt();
-        let emitted = execution
-            .process()
-            .stdout
-            .as_deref()
-            .expect("captured stdout")
-            .strip_prefix(b"unsat\n")
-            .expect("test solver response");
-        assert_eq!(emitted, proof);
         let record = Run::from_execution(["concrete", "abstract"], execution);
-        assert_eq!(record.proof_bytes(), (!proof.is_empty()).then_some(proof));
+        assert_eq!(record.proof_bytes(), proof);
         (
             Expected {
                 item: "refinement-a",
@@ -386,6 +388,10 @@ mod tests {
             },
             record,
         )
+    }
+
+    fn run(role: RefinementRole, proof: &[u8]) -> (Expected, Run) {
+        run_with_proof(role, Some(proof))
     }
 
     fn collection_with_step_proof(step_proof: &[u8]) -> (Vec<Expected>, Vec<Run>) {
@@ -611,12 +617,15 @@ mod tests {
     #[trace("TC-059", "FR-045-AC-7")]
     #[test]
     fn completed_unsat_without_emitted_proof_has_missing_field() {
-        let (expected, record) = run(RefinementRole::Base, b"");
+        let (expected, record) = run_with_proof(RefinementRole::Base, None);
         assert_eq!(record.status(), SolverStatus::Unsat);
         assert_eq!(record.proof_bytes(), None);
         assert_eq!(
             refinement_handoff(0, &[expected], &[record]),
             Err(RefinementHandoffError::MissingField)
         );
+        let (expected, record) = run(RefinementRole::Base, b"");
+        assert_eq!(record.proof_bytes(), Some(b"".as_slice()));
+        assert!(refinement_handoff(0, &[expected], &[record]).is_ok());
     }
 }
