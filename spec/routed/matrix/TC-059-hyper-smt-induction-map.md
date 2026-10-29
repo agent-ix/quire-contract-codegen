@@ -48,14 +48,19 @@ do not claim coverage by the existing HP-2 pair tests.
    any emitted model/proof bytes. Neither refusal is `Unsat`; the reached
    resource limit is handed to QSL FR-182 V-7 as incomplete
    (FR-045-AC-2, AC-3).
-5. Using a recompiled refinement with seven step rows in QSpec FR-375's
-   authored `steps` order, obtain `Initial` and each `Step { row: r }` query
-   from FR-315. Observe the selected solver's stdin for every invocation.
+5. Using a recompiled refinement with seven step rows, take row `r` from
+   QSpec FR-375's canonically ordered `steps` array, not from source row
+   position. Obtain `Initial` and each `Step { row: r }` query from FR-315.
+   Observe the selected solver's stdin for every invocation.
    Assert one typed `Base` and seven typed `Step` records for rows 0 through
    6, with distinct attempts and matching refinement, subjects, role, row
-   and exact query bytes. Repeat with a zero-step refinement and assert that
-   only `Base` is required. Change one query byte and exchange a base and
-   step role, then assert no handoff (FR-045-AC-4).
+   and exact query bytes. Reverse the source order of two distinct step rows
+   whose source order differs from their canonical array order, recompile,
+   and assert the canonical `steps` array, each row's FR-315 query bytes and
+   CG's row associations remain equal. A record relabelled by its new source
+   position must instead refuse association. Repeat with a zero-step
+   refinement and assert that only `Base` is required. Change one query byte
+   and exchange a base and step role, then assert no handoff (FR-045-AC-4).
 6. Return completed `Unsat` and distinct Alethe proof byte strings for the
    base and every step row. Supply records in two different orders. Decode
    the serialized handoff and assert both byte streams are identical and
