@@ -743,9 +743,9 @@ impl Twin {
         self.emitted_package_with_model(clause, None)
     }
 
-    /// Admit QSL's emitted graph against a deliberately changed selected model document. The
-    /// graph and clause identity still come from QSL; this negative fixture reaches an IR field
-    /// type that QSL's current model reader cannot emit.
+    /// Start with QSL's emitted graph and replace its selected model document. IR's public
+    /// candidate API rederives the model-root and affected clause/node identities before
+    /// admission. This negative fixture reaches a field type QSL cannot currently emit.
     pub fn emitted_package_with_unread_string_audit(
         &self,
         clause: &str,
