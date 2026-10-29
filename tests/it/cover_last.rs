@@ -20,17 +20,13 @@ use ix_trace_rs::trace;
 
 /// Every family the inspection drives, with the one source file that emits it. A file in this
 /// table is a file the scan allows to spell a proof attribute.
-const FAMILIES: [(&str, &str); 7] = [
+const FAMILIES: [(&str, &str); 6] = [
     ("scalar", "kani/generate/render.rs"),
     ("v2 precondition", "kani/generate/render.rs"),
     ("state clause", "kani/generate/render.rs"),
     ("frame effect", "kani/generate/render.rs"),
     (
         "corpus graph",
-        "kani/generate/corpus/bounded_kani_corpus.rs",
-    ),
-    (
-        "corpus collection",
         "kani/generate/corpus/bounded_kani_corpus.rs",
     ),
     ("symbolic collection", "kani/generate/render.rs"),
