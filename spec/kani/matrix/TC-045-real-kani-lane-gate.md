@@ -51,7 +51,10 @@ test` and holds no host-wide lock.
    `tree=clean`, while `result=failed` and exit non-zero preserve the trusted-Cargo refusal. With
    a stand-in `cargo-kani` that prints no version, assert `result=failed` and non-zero. Step 13
    checks the `result=passed` line from a successful trusted installed-Kani run.
-8. Retired (NFR-006-AC-8 and AC-14): no Git head or merge-base comparison is made.
+8. Post-run tree (NFR-006-AC-8): with a stateful stand-in `git` that reports a clean
+   tree before the build and a dirty tree after the run, assert `tree=dirty`, no
+   `result=passed`, and a non-zero exit. Assert that the gate reads no Git revision.
+   NFR-006-AC-14's merge-base comparison is retired.
 9. Dirty tree (NFR-006-AC-9): with the stand-in `git` reporting a dirty tree before the build and the
    tests passing, assert `tree=dirty`, no `result=passed` on the output, and a non-zero exit.
 10. Launcher absent (NFR-006-AC-10): with no `cargo-kani` on `PATH`, assert the stand-in `cargo` never

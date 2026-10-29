@@ -48,7 +48,9 @@ relationships:
   result=<passed|failed> ran=<n> expected=<n> elapsed=<s>s kani=<version> tree=<clean|dirty>`,
   with `kani` the version the launcher reports. The line describes the run; it is not a
   transferable approval or a substitute for running the gate on the candidate under review.
-- If the working tree is dirty, then `make kani-gate` shall print `tree=dirty` and exit non-zero.
+- The `make kani-gate` target shall inspect the working tree before the build and after the run.
+  If either inspection finds a dirty tree, it shall print `tree=dirty`, never report a pass,
+  and exit non-zero. It shall not read or compare a Git revision for this check.
 - If the `cargo-kani` launcher is absent, then `make kani-gate` shall run no test, print `kani-gate:
   not run: launcher absent` and exit non-zero.
 - When a change touches a path in the Kani-touching set, the author shall run the actual full
@@ -176,7 +178,8 @@ decision (Open decisions); until the owner rules, the answer is no.
 | NFR-006-AC-5 | `make kani-gate` starts the lane's `cargo test` once with `--test-threads=1`, holds the lock named by `KANI_LOCK` while it runs, and does not start it while another process holds that lock. | Test (TC-045) |
 | NFR-006-AC-6 | `make kani-gate` exits non-zero and prints `result=failed` when the lane's filters list zero tests, when fewer tests run than are listed, and when any test fails; it exits zero and prints `result=passed` only when every listed test ran and passed and the count is above zero. | Test (TC-045) |
 | NFR-006-AC-7 | The passing run-result line has the fields `result`, `ran`, `expected`, `elapsed`, `kani`, `tree` in that order, with `ran` equal to `expected`, a non-empty `kani` equal to the version the launcher reports, and `tree=clean`. A run whose launcher reports no version prints `result=failed`. | Test (TC-045) |
-| NFR-006-AC-9 | With a dirty working tree `make kani-gate` prints `tree=dirty`, never `result=passed`, and exits non-zero. | Test (TC-045) |
+| NFR-006-AC-8 | When the tree is clean before the build but dirty after the run, `make kani-gate` prints `tree=dirty`, never `result=passed`, and exits non-zero without reading or comparing a Git revision. | Test (TC-045) |
+| NFR-006-AC-9 | With a dirty working tree before the build, `make kani-gate` prints `tree=dirty`, never `result=passed`, and exits non-zero. | Test (TC-045) |
 | NFR-006-AC-10 | With no `cargo-kani` launcher `make kani-gate` starts no test, prints `kani-gate: not run: launcher absent` and exits non-zero. | Test (TC-045) |
 | NFR-006-AC-11 | The tests marked `#[ignore = "kani lane: ..."]` in `tests/it` are exactly the `#[ignore]`d tests of `tests/it` whose path holds one of the `make kani` filters. | Test (TC-045) |
 | NFR-006-AC-12 | `make -n ci` expands to no `kani` or `kani-gate` command. | Test (TC-045) |
@@ -187,8 +190,9 @@ decision (Open decisions); until the owner rules, the answer is no.
 | NFR-006-AC-18 | Every `include!`, `include_str!`, `include_bytes!` and `#[path]` target named in a file of `tests/it` that holds a lane test, and in each file those name in turn, matches a pattern of the Kani-touching set. | Test (TC-045) |
 | NFR-006-AC-19 | On a clean current candidate, `make kani-gate` runs FR-041's current-build module census and real mutation controls in its one required lane, and a failure of any claim or shared-helper control makes the gate exit non-zero. An optional mutation target, retired fixed inventory or saved earlier result cannot substitute. Open until a genuine current-build claim source exists. | Test |
 
-NFR-006-AC-8 and NFR-006-AC-14 are retired under IR-1105 because they compared Git revisions.
-No equivalent revision or digest gate replaces them. The actual current-candidate Kani runs remain required.
+NFR-006-AC-8 retains the post-run dirty-tree refusal without a Git revision comparison.
+NFR-006-AC-14 is retired under IR-1105 because it compared Git revisions.
+No equivalent revision or digest gate replaces AC-14. The actual current-candidate Kani runs remain required.
 
 NFR-006-AC-19 remains Open. IR-1105 retires the frozen V1 claim inventory and
 its hold; neither provides module proof credit. The original FR-003@4 transition
@@ -213,7 +217,7 @@ remains unmet.
 
 TC-045 drives the two targets with stand-in launcher and `cargo` executables, a fixture list of changed
 paths, a temporary lock path and a source walk of the `#[ignore]`d tests. The pull-request and
-release criteria inspect the actual gate processes, candidate and main-path freshness.
+release criteria inspect the actual gate processes and clean candidate.
 
 ## Dependencies
 

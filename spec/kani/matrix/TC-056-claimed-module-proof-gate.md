@@ -55,8 +55,8 @@ The V2 implication and original FR-003@4 transition are separate obligations.
    test-count behavior, and exits non-zero if any step above fails (NFR-006-AC-19).
 6. Select an admitted V2 Boolean implication scalar claim through the production
    `KaniObligationRequest` path and render it through the scalar generator. Assert the
-   generated identity's module and harness match the reviewed claim declaration and
-   compiled module census. Inspect the generated module's named
+   generated identity's module and harness match the genuine current-build claim source
+   and compiled module census. Inspect the generated module's named
    `subject_boolean_implication` and `expected_boolean_implication` call-graph roots:
    subject calls the runtime implication helper, expectation computes `!left || right`
    from the same two drawn Booleans and reaches no subject, oracle or `quire-exact`
