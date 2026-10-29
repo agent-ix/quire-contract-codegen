@@ -331,7 +331,7 @@ mod tests {
         serialize_unverified_fields(&validated).expect("format")
     }
 
-    #[trace("TC-059", "FR-045-AC-4", "FR-045-AC-5")]
+    #[trace("TC-059", "FR-045-AC-4")]
     #[test]
     fn canonical_roles_and_exact_fields_are_order_independent() {
         let (expected, mut records) = collection();
@@ -481,7 +481,7 @@ mod tests {
         );
     }
 
-    #[trace("TC-059", "FR-045-AC-5", "FR-045-AC-7")]
+    #[trace("TC-059", "FR-045-AC-7")]
     #[test]
     fn caller_supplied_proof_cannot_be_handed_off_as_emitted_proof() {
         let (expected, mut records) = collection();
