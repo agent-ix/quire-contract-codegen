@@ -181,7 +181,7 @@ same CG type, and assigns the value directly to `quire_exact::ScalarLimits`. Req
 identity without conversion, wrapper or compatibility shim; a source import alone is insufficient.
 Current-main delivery is not credited by the specification amendment.
 
-Private native observer custody (FR-017-AC-45/46/48/49/52/53), **Planned / UNRUN**:
+Private native observer custody (FR-017-AC-46/48/49/52/53), **Planned / UNRUN**:
 construct the isolated resolver-2 observer package inside the private snapshot, with the example
 root at `../src/bin/ir791_native.rs`. Verify that this is the single canonical adapter, loading
 `../lib.rs`, with no wrapper, copy or symlink. Compare all four original emitted artifacts
@@ -209,9 +209,8 @@ to all ten v3 entries before proof, after proof and after native execution. Muta
 each entry independently and inject an extra file in each package root at both execution
 boundaries; require a typed failure and no receipt. Retain the existing source-tree write controls.
 Check non-UTF-8 bytes separately in each lock, the observer manifest and canonical adapter, with
-`snapshot_io` / `EnvironmentFault` and no receipt. Extend the independent current-run digest recomputation,
-schema assertion, per-entry digest mutations, cleanup-survival and cleanup-failure controls below
-to the whole v3 set. Neither this procedure nor source inspection establishes Cargo acceptance of
+`snapshot_io` / `EnvironmentFault` and no receipt. Extend the entry-by-entry byte comparison, cleanup-survival and cleanup-failure controls below
+to the whole staged set. Neither this procedure nor source inspection establishes Cargo acceptance of
 the nested isolated package/external example path, fresh resolution, or sealed execution; those
 checks remain UNRUN until the implementation executes them. The separate Unicode resolution
 failure and IR-705/IR-844 qualification are not resolved by this amendment.
@@ -369,7 +368,7 @@ its evidence carrying `None` for obligation kind.
 
 The paired routed-scalar run with operand `4` produces Kani `Verified` and an actual native
 `Outcome::Completed(5)`. Its receipt retains the selected scalar identity, operand vector, exact
-request limits used by the native meter, proof-content identity and Kani evidence. Any unsuccessful proof, native execution fault,
+request limits used by the native meter, captured staged entries and Kani evidence. Any unsuccessful proof, native execution fault,
 malformed native response or changed staged tree yields no receipt. Request-context mismatch is
 typed and occurs before either child is started; changing an otherwise valid operand produces a
 receipt for that exact ordered request, which cannot be substituted for a prior receipt.
@@ -380,8 +379,7 @@ request `ScalarLimits` and request concrete operand `4` within the generated ran
 `make kani` lane, require the paired runner to stage the package and harness, run real Kani on the
 staged harness, and report `Verified`. Require the runner to execute the staged public oracle at
 that operand with those exact limits; the opaque receipt must contain actual typed
-`Outcome::Completed(5)`, the exact operand and limits, the scalar identity, measured canonical
-identity and Kani evidence. No result derived from the Kani verdict or supplied by the test caller
+`Outcome::Completed(5)`, the exact operand and limits, the scalar identity, captured staged entries and Kani evidence. No result derived from the Kani verdict or supplied by the test caller
 counts.
 
 Order-sensitive binary receipt (FR-017-AC-31): generate a genuine routed subtraction operation
@@ -391,8 +389,7 @@ Run each vector through the paired runner separately in the `make kani` lane. Ea
 real Kani and report `Verified`, then invoke the staged public oracle with the exact ordered vector
 and request limits. Require native `Outcome::Completed(3)` for `[4, 1]` and
 `Outcome::Completed(-3)` for `[1, 4]`; each opaque receipt must carry its own exact ordered vector
-and actual typed result. The receipts share the same canonical proof-content identity because the
-proved and executed staged bytes are unchanged. Both runs and both receipt assertions are
+and actual typed result. The receipts retain the same staged path and byte set because the proved and executed bytes are unchanged. Both runs and both receipt assertions are
 mandatory; neither the unary `x + 1` case nor an optional binary case substitutes for them.
 
 Request-boundary controls (FR-017-AC-28): before either child starts, separately change the
@@ -402,21 +399,20 @@ a typed mismatch/refusal, produce no receipt, and leave a launch marker absent. 
 control, first run the same generated harness, artifacts and operand `[4]` with the normal request
 limits; require Kani `Verified`, native `Outcome::Completed(5)`, and the exact request limits in the
 receipt and meter observation. Then change only `result_units` to `0` and repeat against the same
-generated staged bytes. Require Kani `Verified` again, the same proof-content identity as the
+generated staged bytes. Require Kani `Verified` again, the same staged path and byte set as the
 `Completed(5)` receipt, and `Outcome::Incomplete` with `limit_kind = ResultUnits`, `limit = 0`,
 `consumed = 0`, `next_charge = 1`, and charge point `IntegerArithmeticResultRetain`. The meter
 observation must report zero consumed result units and no admitted result-retain charge. In both
 runs, assert that the exact supplied `ScalarLimits`, the limit value observed at meter
 initialization, and the receipt's returned limits agree. This proves supplied-to-used-to-returned
-equality while the same artifact identity is retained across distinct native outcomes; it does not
+equality while the same staged artifact bytes are retained across distinct native outcomes; it does not
 assert that either request matches the upstream generation context.
 For a two-operand scalar identity, change only the
 operand order and confirm the receipt retains the exact changed order; it must not be possible to
 reuse an earlier receipt as evidence for the reordered request. The mandatory AC-31 binary runs
 must demonstrate this with the distinct subtraction results above. A different in-range operand
 vector may be run as a distinct request, but its receipt must bind that vector separately from the
-unchanged proof-content identity. A caller-selected digest must not make any inconsistent request
-acceptable. The IR-773 consumer's comparison against its retained original limits, and its
+unchanged staged artifact bytes. No caller-supplied artifact digest can make an inconsistent request acceptable. The IR-773 consumer's comparison against its retained original limits, and its
 local refusal/skip behavior on mismatch, are consumer-owned checks outside this CG test. If the
 driver has no defined typed outcome for a mismatch, its owner must specify and plan that outcome
 before implementation. No driver adversarial coverage is claimed here.
@@ -437,8 +433,7 @@ failure cases: make one staged lock unreadable, omit an owning package, change i
 and give the two staged locks different owning package source identities. Require `DependencyLock` /
 `EnvironmentFault` and no receipt for every case;
 inject a changed staged byte, a native launch failure and malformed helper output, and require
-`EnvironmentFault`. (3) Force the canonical identity encode to fail (a
-content limit of zero in a test seam) and require `IdentityEncode`, `identity_encode`,
+`EnvironmentFault`. (3) A malformed native-helper result yields `NativeResult`, `native_result`,
 `EnvironmentFault`, and not `NativeResult`; feed malformed helper output and require
 `native_result`. (4) Keep a frozen list of all variants and codes and of the mapping to class: one class for a fixed
 variant, and for `ProofNotVerified` and `Kani` the class of every `KaniRunOutcome`,
@@ -470,10 +465,10 @@ and both independently generated dependency locks;
 attempt a source-tree write from each child execution boundary, and require that neither child can
 change it. Inject a changed byte in each execution-relevant staged item, a replaced path and an
 unexpected file after staging and across the Kani/native boundary;
-each must produce a typed failure and no receipt carrying the earlier identity. Check that changes
+each must produce a typed failure and no receipt carrying the earlier staged byte set. Check that changes
 to the concrete operand vector, its order, request limits or scalar identity cannot be represented
 by reusing an earlier receipt. Inspect the public receipt surface to verify that it has read-only access to
-the actual Kani evidence, exact scalar invocation context, canonical identity and typed native
+the actual Kani evidence, exact scalar invocation context, captured staged entries and typed native
 outcome, and that callers cannot construct, deserialize or mutate it. The generated package is
 staged for this run and is not copied into a repository.
 
@@ -486,7 +481,7 @@ For the scalar error discriminant, each variant has its table code and class, th
 and frozen, the three refusal variants, the nested request-fixed `Kani` refusals and a `ProofNotVerified` carrying a
 property or proof verdict are `CompletionRefusal`; the seven fault variants, every other nested refusal and a
 `ProofNotVerified` of a cancelled, timed-out, memory-exhausted or no-verdict run are
-`EnvironmentFault`, and an identity-encode failure is `IdentityEncode`, never `NativeResult`.
+`EnvironmentFault`, and no identity encoder runs in the paired runner.
 
 In the `make kani` lane the three healthy harnesses are verified, each with exit code zero and an
 argument vector that begins, after the subcommand, with its harness identity's options; the seeded defect is
@@ -575,29 +570,8 @@ witness remains owed to IR-655 slice 2. Both slices remain PLANNED/UNRUN; actual
 compile/adaptation gaps are reported, not bypassed with named compatibility, helper identity
 override, skipped tests or invented coverage. All guarantees precede complete IR-639/MVP acceptance.
 
-Scalar proof-content digest (FR-017-AC-45 to AC-50): the v3 extensions below are
-**Planned / UNRUN**; existing v2 controls do not establish them. Run the paired runner on a genuine routed
-`x + 1` package. (1) Assert the receipt's `DigestRecord` has domain `sha256-jcs` and 32 bytes equal
-to `as_bytes()`, and recompute SHA-256 of the RFC 8785 encoding of the explicit `agent-ix/cg-kani-scalar-proof-content/v3` schema object and the sorted
-artifact list in the test, independently of the runner's encoder. (2) Assert the exposed entry
-paths are exactly the AC-46 set in UTF-8 byte order, with both manifests, both locks, original source map, canonical adapter, the library under
-`src/oracle-artifacts-lib.rs` and the harness under `src/lib.rs`; compare every original artifact
-under that rename map, plus harness and record, byte for byte; then drop, rename, reorder,
-duplicate and one-byte-change each entry in turn and require a different digest; through a test
-seam that writes non-UTF-8 bytes to the snapshot's two locks, observer manifest and adapter independently after
-it is generated, require `Snapshot`, `snapshot_io`, `EnvironmentFault`, and no receipt. (3) Run the two operand orders of AC-31 and a different `ScalarLimits`
-value and require equal `DigestRecord`s. (4) After the receipt is returned, assert the snapshot path no longer exists (the private snapshot is dropped before the receipt is returned), then require the exposed entries to still read and the digest to recompute byte-identically; this is a mutation-style check, not a source scan. (5) Recompute from only the exposed entries, including
-both manifests, both locks, source map and `src/bin/ir791_native.rs`, and require equality; substitute one byte of the
-package, harness or record and require inequality. (6) Assert the v3 schema string directly and independently recompute the digest from the ten exposed current-run entries using RFC 8785 and SHA-256. Change each manifest, each lock and adapter bytes independently in a test seam and require a changed digest with the schema string unchanged. No fixed literal digest is stored or compared. Review any schema change against the preimage contract. (7) Meter limits (FR-017-AC-50): require the meter observation's `ScalarLimits` equal the request's and `scalar_limits()`, equal and unchanged after the snapshot is gone; through a seam that makes the adapter report a different limit, require `native_result`, `EnvironmentFault` and no receipt. (8) Name `quire_contract_codegen::DigestRecord` and `qsl_replay::DigestRecord` as the same type, and make the snapshot directory removal fail through a seam: require the same verdict, exposed entries and digest as an un-failed run, a non-empty `cleanup_diagnostic()` naming the removal failure, and an empty `cleanup_diagnostic()` when removal succeeds; the diagnostic is in neither the digest nor the entries. No
-driver-side authentication coverage is claimed here: the driver's recomputation and refusal are
-driver-owned (FR-032 boundary), as is the quire-driver FR-009 amendment named in FR-017. Existing controls are located in the scalar runner unit tests, the real paired receipt and
-subtraction tests in `tests/it/kani_obligations.rs`, and the private cleanup control in
-`tests/it/kani_scalar_native_private.rs`. The private real controls run separately from the
-integration lane with `cargo test --locked --lib kani_scalar_native_private -- --ignored
---test-threads=1`; the default private control covers cancellation and timeout stand-ins.
-Their v3 extensions and companion checks above remain Planned; existing test names and trace tags
-are not evidence that those extensions ran. The independent JCS/SHA-256 computation uses the exposed current-run entries, and schema
-changes remain subject to review. No driver authentication coverage is claimed.
+Staged scalar custody and meter limits (FR-017-AC-45 to AC-50), **Planned / UNRUN**:
+Run the paired runner on a genuine routed `x + 1` package. Assert that the receipt contains no generated-content `DigestRecord` or scalar proof-content digest. Compare the ten captured staged entries with the AC-46 path set and original emitted bytes under the rename map. Mutate, replace or add an entry before and after each execution boundary and require a typed refusal with no receipt. Verify that the entries remain readable after snapshot cleanup, that cleanup failure only adds a diagnostic, and that no entry accessor reads the filesystem. Compare driver-owned originals directly by path and bytes. Verify the meter-observed `ScalarLimits` equal the request and `scalar_limits()`; a helper reporting a different limit yields `NativeResult` / `EnvironmentFault` and no receipt. These extensions remain Planned; current test names or trace tags do not establish that they ran.
 
 ## Admitted native integer qualification (IR-705 option 2)
 
