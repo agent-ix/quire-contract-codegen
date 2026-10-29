@@ -34,7 +34,7 @@ fn admitted(
 }
 
 /// Six authored QSL comparisons keep their operator and one shared IR domain.
-#[trace("TC-020", "FR-008-AC-1", "FR-008-AC-3", "FR-008-AC-9")]
+#[trace("TC-020")]
 #[test]
 fn selected_v2_comparisons_follow_typed_ir_projection() {
     for (symbol, expected) in [
@@ -82,7 +82,7 @@ fn selected_v2_comparisons_follow_typed_ir_projection() {
 }
 
 /// Literal placement changes the authored operand order without changing read provenance.
-#[trace("TC-020", "FR-008-AC-2")]
+#[trace("TC-020")]
 #[test]
 fn selected_v2_literal_first_comparison_keeps_order() {
     for (condition, position) in [
@@ -114,7 +114,7 @@ fn selected_v2_literal_first_comparison_keeps_order() {
 }
 
 /// Emitted V2 source executes all six predicates over independently expected valuations.
-#[trace("TC-020", "FR-008-AC-3", "FR-008-AC-7")]
+#[trace("TC-020")]
 #[test]
 fn selected_v2_comparison_oracles_execute_author_order() {
     let scratch = scratch_crate::TemporaryDirectory::new("v2-numeric-comparison-oracles");
@@ -179,7 +179,7 @@ fn selected_v2_comparison_oracles_execute_author_order() {
 }
 
 /// IR's structural refusal wins before CG's owner and domain checks.
-#[trace("TC-020", "FR-008-AC-4", "FR-008-AC-5")]
+#[trace("TC-020")]
 #[test]
 fn v2_comparison_refusals_preserve_selected_key_and_ir_cause() {
     let (package, clause, claim) = admitted("self.balance >= pre(self.balance)");
