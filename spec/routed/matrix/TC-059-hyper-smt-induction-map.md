@@ -70,17 +70,18 @@ do not claim coverage by the existing HP-2 pair tests.
    base and every step row from separate direct proof-producing solver
    invocations. In cvc5 proof-capture mode, use `--dump-proofs` and
    `--proof-format-mode=alethe` with each unchanged FR-315 query on stdin;
-   assert that the proof field equals the complete stdout tail after the
-   `Unsat` line, with no normalization. Supply records in two different
-   orders. Decode
+   capture real cvc5 output and assert that the proof field equals the
+   exact bytes between the one outer proof list's parentheses. Check that
+   removing only those delimiters leaves the original interior bytes and
+   that QSL's FR-314 reader accepts the extracted Alethe commands. Supply
+   records in two different orders. Decode
    the serialized handoff and assert both byte streams are identical and
    contain `Base` followed by rows 0 through 6, with the exact query and
    proof bytes in separate length-delimited fields. Repeat the serialization;
    make one proof present but empty, then change only one proof byte, and
-   assert byte preservation and field isolation. The present-empty case
-   remains open on IR-1120 until CG has an authenticated source that
-   distinguishes it from absent proof; the cvc5 proof-dump mode alone is
-   insufficient. Feed the handoff to the QSL
+   assert byte preservation and field isolation. For the empty case, capture
+   `Unsat` followed by one empty outer list and assert a present zero-length
+   proof field; distinguish status-only output as absent. Feed the handoff to the QSL
    adapter and assert it can form the FR-314 certificate in row order;
    QSL's TC-893 owns certificate checking and settlement (FR-045-AC-5).
 7. From step 6's valid collection, remove `Base`, remove row 3, duplicate
@@ -94,9 +95,10 @@ do not claim coverage by the existing HP-2 pair tests.
    present but empty and assert handoff preserves it. Separately exercise an
    FR-315 query refusal and `Sat`, `Unknown`, absent response, malformed
    response, process failure and reached-limit solver results. For the
-   proof-capture mode, exercise `Unsat` with no proof expression, a second
-   status, an error response, an incomplete expression and a trailing
-   non-proof token; none supplies proof bytes or a handoff. Assert typed
+   proof-capture mode, exercise `Unsat` with no outer proof list, a second
+   status, an error response, an incomplete outer list, a second outer list
+   and a trailing non-whitespace token; none supplies proof bytes or a
+   handoff. Assert typed
    non-proof evidence and no proof-bearing handoff (FR-045-AC-7).
 
 ## Expected Results

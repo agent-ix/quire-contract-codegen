@@ -117,24 +117,25 @@ The supported direct cvc5 proof-capture mode selects `--dump-proofs` and
 request proof output after an unsatisfiable `(check-sat)` without changing any
 FR-315 query byte or appending a command to stdin (the
 [cvc5 Alethe output example](https://cvc5.github.io/docs-ci/docs-main/proofs/output_alethe.html)
-shows this command-line mode). For this mode CG SHALL take
-the status from the first response line after optional SMT-LIB comments and
-`success` notices. Only a completed, successful invocation whose status is
-`Unsat` may supply proof bytes. CG SHALL identify the proof as the exact
-contiguous stdout bytes after that status line, including its whitespace and
-newlines, when that tail contains one or more complete top-level SMT-LIB
-S-expressions and no other token. It SHALL NOT take proof bytes from stderr,
-another attempt, a caller-supplied field or a later process. A second status,
-an SMT-LIB error response, an incomplete expression or any other trailing
-non-proof token SHALL yield `MalformedResponse` and no proof-bearing handoff.
-CG does not interpret Alethe rules or remove an outer proof expression; QSL
-FR-314 judges the exact extracted bytes. A status with no proof expression
-leaves the proof field absent and gives `MissingField`, not an inferred
-present-empty proof. Other solver modes may carry a present empty proof only
-when their selected, explicit output framing distinguishes its presence from
-no proof; absent such framing they SHALL leave the proof field absent. CG
-still owes the present-empty handoff required by AC-5 and AC-7. The direct
-cvc5 proof-dump mode alone cannot discharge that case.
+shows this command-line mode). For this mode CG SHALL take the status from
+the first response line after optional SMT-LIB comments and `success`
+notices. Only a completed, successful invocation whose status is `Unsat` may
+supply proof bytes. The remainder of that invocation's captured stdout SHALL
+contain exactly one balanced outer SMT-LIB list, optionally surrounded by
+ASCII whitespace, whose direct children are complete SMT-LIB expressions;
+the empty outer list is admitted. CG SHALL retain the full stdout as process
+evidence and take the exact byte slice between that list's matching outer
+parentheses as the proof field. It SHALL remove only those two framing
+parentheses, without changing any interior byte, so the captured stdout and
+the field together account for every emitted byte. The empty outer list
+therefore gives a present, zero-length proof; a status with no outer list
+leaves the proof field absent and gives `MissingField`. CG SHALL NOT take
+proof bytes from stderr, another attempt, a caller-supplied field or a later
+process. A second status, an SMT-LIB error response, a second outer
+expression, an incomplete expression or any other trailing non-whitespace
+token SHALL yield `MalformedResponse` and no proof-bearing handoff. QSL
+FR-314 interprets the interior Alethe commands and judges the proof; CG's
+framing check makes no claim that those commands constitute a refutation.
 
 CG SHALL validate the complete record collection against the selected
 refinement before producing the certificate handoff: exactly one `Base`,
@@ -205,13 +206,7 @@ base/step evidence classifier exist in `src/routed/smt/`; QSL exports the
 hyper query encoder and outcome types, but their CG integration remains
 planned. The refinement Base/Step record collection and validation are
 partial after CG #630; deterministic FR-314 handoff and TC-059 steps 5-8
-remain open on IR-1120. In particular, CG owns an authenticated source of
-present-empty proof bytes distinct from absent proof, as AC-5 and AC-7
-require. The cvc5 proof-dump transcript has no such presence marker, so it
-cannot close those criteria by itself. The owner must define and test that
-source before claiming the positive handoff covered.
-The documented cvc5 Alethe dump encloses its `assume` and `step` commands in
-one outer expression; QSL's current `read_proof` expects those commands as
-top-level expressions. QSL owns accepting that exact solver output in FR-314
-or specifying a supported direct output form. CG cannot silently strip the
-wrapper while claiming to hand off exact emitted proof bytes.
+remain open on IR-1120. CG owns the cvc5 response framing and its end-to-end
+proof extraction, including the distinction between an empty outer list and
+status-only output. CG SHALL pass the exact extracted interior bytes through
+the QSL reader before claiming AC-5 or TC-059 step 6 covered.
