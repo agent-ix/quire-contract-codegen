@@ -451,6 +451,7 @@ mod tests {
                 authority: "quire".into(),
                 identity: "complete-v1".into(),
             },
+            required_source_selections: Vec::new(),
             supported_tags: [
                 CheckedNodeTag::ScalarType,
                 CheckedNodeTag::CompositeType,

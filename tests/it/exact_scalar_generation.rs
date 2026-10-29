@@ -917,6 +917,7 @@ fn tc_024_refused_items_are_typed_emit_no_code_and_leave_siblings_unchanged() {
                 authority: "agent-ix".into(),
                 identity: "quire.codegen.exact-scalar/v1".into(),
             },
+            required_source_selections: Vec::new(),
             supported_tags: BTreeSet::from(SCALAR_LOWERING_SUPPORTED_TAGS),
             require_bounds: true,
             work_limit: SCALAR_LOWERING_WORK_LIMIT,
@@ -1091,6 +1092,7 @@ fn tc_024_claim_map_carries_identity_source_bounds_and_operation_per_item() {
             authority: "agent-ix".into(),
             identity: "quire.codegen.exact-scalar/v1".into(),
         },
+        required_source_selections: Vec::new(),
         supported_tags: claim_supported_tags,
         require_bounds: true,
         work_limit: SCALAR_LOWERING_WORK_LIMIT,
@@ -2520,6 +2522,7 @@ fn tc_031_ac33_direct_control_case_is_unsupported() {
                 authority: "agent-ix".into(),
                 identity: "quire.codegen.exact-function/v1".into(),
             },
+            required_source_selections: Vec::new(),
             supported_tags: [
                 CheckedNodeTag::ScalarType,
                 CheckedNodeTag::CompositeType,
@@ -3937,6 +3940,7 @@ fn contract_request(
                 authority: "agent-ix".into(),
                 identity: "quire.codegen.exact-function/v1".into(),
             },
+            required_source_selections: Vec::new(),
             supported_tags: [
                 CheckedNodeTag::ScalarType,
                 CheckedNodeTag::CompositeType,

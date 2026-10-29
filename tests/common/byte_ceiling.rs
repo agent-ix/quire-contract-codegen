@@ -35,6 +35,7 @@ pub fn measuring_profile(require_bounds: bool, identity: &str) -> CompleteLoweri
             authority: "agent-ix".into(),
             identity: identity.into(),
         },
+        required_source_selections: Vec::new(),
         supported_tags: BTreeSet::from([
             CheckedNodeTag::ScalarType,
             CheckedNodeTag::CompositeType,

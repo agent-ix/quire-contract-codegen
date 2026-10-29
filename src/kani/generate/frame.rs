@@ -474,6 +474,7 @@ fn lower_clause(request: &StateFrameRequest<'_>) -> Result<(), StateFrameRefusal
             authority: "agent-ix".into(),
             identity: "quire.codegen.state-frame/v1".into(),
         },
+        required_source_selections: Vec::new(),
         supported_tags: BTreeSet::from(STATE_FRAME_LOWERING_TAGS),
         require_bounds: true,
         work_limit: LOWERING_WORK_LIMIT,

@@ -27,6 +27,7 @@ pub fn routed_contract_lowering_profile() -> CompleteLoweringProfileV2 {
             authority: "agent-ix".into(),
             identity: "quire.codegen.routed-contract/v1".into(),
         },
+        required_source_selections: Vec::new(),
         supported_tags: BTreeSet::from([
             CheckedNodeTag::ScalarType,
             CheckedNodeTag::CompositeType,
