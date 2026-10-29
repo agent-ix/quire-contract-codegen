@@ -10,6 +10,9 @@ relationships:
 ---
 # TC-006: Distinguish vacuity and unexecuted control flow
 
+FR-004-AC-25's original same-node/different-point case is superseded under QSpec #449
+and earns no test credit. The node-qualified V2 controls below back Planned AC-26.
+
 ## Description
 
 Verify actual generated-oracle probes against native LLVM export, and ultimately keep measured
@@ -107,18 +110,19 @@ four classifications hold (AC-19 to AC-22); each removal prevents success (AC-23
 input gives non-success with no invented classification (AC-24); and neither `BoundPackage` nor
 `ClauseRef` is named (AC-17). These controls are planned.
 
-## Planned V2 execution-point selection controls (FR-004-AC-25)
+## Planned V2 execution-point selection controls (FR-004-AC-26)
 
-1. Admit one V2 package whose single invariant checked clause has two authentic `claim`
-   occurrences bound to distinct initialization and handler points. Select each exact checked
-   clause id and occurrence for V2 strategy generation in turn. Compare the generated runner's
-   verdict point with the selected accepted QSL binding point; the two points must remain distinct
-   even though the executable clause population still contains the clause only once.
+1. Admit V2 packages with distinct invariant checked clause nodes whose condition and anchor are
+   equal but whose accepted points are initialization and handler. Select each exact checked clause
+   id and authentic occurrence for V2 strategy generation in turn. Compare the generated runner's
+   verdict point with that node's accepted QSL point, and compare the rederived node and package
+   identities. Each executable clause node has one expected population entry. In a control, select
+   two authentic claims of one pointed node and verify both render its identical point.
 2. Select a wrong-role, wrong-ordinal, and other-node occurrence against that checked clause while
-   its authentic sibling retains a point. Separately select an authentic occurrence with no
-   accepted point, then mutate only the rendered runner point for a valid selected occurrence.
-   Require the corresponding typed no-artifact refusal of FR-011-AC-7 for each case, with no
-   sibling-point substitution or inferred point.
+   another authentic node retains a point. Separately select an authentic claim of a clause node
+   whose optional point is absent, then mutate only the rendered runner point for a valid selected
+   occurrence. Require the corresponding typed no-artifact refusal of FR-011-AC-15 for each case,
+   with no cross-node substitution or inferred point.
 3. In a fresh invocation for each refusal, submit only the artifacts actually emitted (none for
    that selection) to the V2 analyzer. Confirm structured non-success with no generated-campaign
    evidence or coverage discharge. The independently derived expected executable-clause population

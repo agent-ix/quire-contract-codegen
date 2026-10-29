@@ -32,7 +32,9 @@ per-requirement vacuity report without executing a coverage producer itself.
   selects a checked clause id and one authentic `claim` `CheckedOccurrence`. The accepted QSL
   `ClauseBinding.execution_point` for that exact package, clause and occurrence is exposed through
   the planned Contract IR FR-058 typed accessor under FR-011. A node alone does not identify the
-  point: two authentic claims on one node may carry distinct points. Each QSL driver-bound FR-331
+  point: distinct accepted points require distinct point-qualified clause nodes, while two
+  authentic claims of one node share its one point (QSpec FR-322-AC-131, FR-341-AC-14;
+  IR FR-058-AC-9/10). Each QSL driver-bound FR-331
   claim supplies its admitted requirement occurrence. A process frame's FR-331
   `request.package_id` is compared with this separately admitted package under FR-011; a linked
   driver exports, emits, and admits this one package before passing its selected claim to CG.
@@ -185,12 +187,13 @@ per-requirement vacuity report without executing a coverage producer itself.
   V2 clause population without change.
 - When an executable clause in the V2 analyzer's expected population and one authentic claim
   occurrence are selected for V2 strategy generation, the CG V2 strategy generator shall apply
-  FR-011's occurrence-keyed point rule through the planned Contract IR FR-058 typed accessor for
+  FR-011's selected claim rule through the planned Contract IR FR-058 typed accessor for
   that admitted package, checked clause id and exact claim occurrence. It shall not substitute a
-  point bound to another claim on the same node.
+  point bound to another clause node. Two authentic claims of one point-qualified node shall
+  use that node's one point.
 - If the supplied claim occurrence is unauthentic, its accepted binding point is absent, or the
   rendered runner's point differs from the selected binding point, then the CG V2 strategy
-  generator shall apply the corresponding typed no-artifact refusal of FR-011-AC-7 before
+  generator shall apply the corresponding typed no-artifact refusal of FR-011-AC-15 before
   publication. It shall not infer a point from clause kind or caller invocation context.
 - The V2 analyzer shall not count a refused selection as generated campaign evidence.
 
@@ -222,7 +225,8 @@ per-requirement vacuity report without executing a coverage producer itself.
 | FR-004-AC-22 | PLANNED (IR-815). Over a V2 clause population, an implication-bearing clause with every expected consequent probe observed, and an implication-free clause with its evaluation region observed, is `exercised`. | Test (TC-006) |
 | FR-004-AC-23 | PLANNED (IR-815). Over a V2 clause population, removing one clause, one consequent probe, one evaluation probe, or every clause from the generated artifacts, each alone, prevents successful analysis. | Test (TC-006) |
 | FR-004-AC-24 | PLANNED (IR-815). Over a V2 clause population, each malformed input class of FR-004-AC-5 yields a non-success outcome with no invented classification. | Test (TC-006) |
-| FR-004-AC-25 | PLANNED. For any executable clause in the V2 analyzer's expected population selected for strategy generation, the generator uses the accepted QSL point returned by Contract IR FR-058's typed accessor for the admitted package, checked clause id and authentic `claim` `CheckedOccurrence`. Two authentic occurrences on one node with different accepted points retain their distinct rendered points when selected separately. A wrong-role, wrong-ordinal or other-node occurrence, an authentic tuple with no accepted point, and a renderer mutant changing the selected point each return the corresponding typed no-artifact refusal of FR-011-AC-7; none uses a sibling point, an inferred point or caller context. The analyzer grants no generated-campaign evidence for a refused selection. | Test (TC-006, TC-020 steps 7-8) |
+| FR-004-AC-25 | SUPERSEDED by FR-004-AC-26 under QSpec #449 / IR-1070; no implementation credit. Original planned text: For any executable clause in the V2 analyzer's expected population selected for strategy generation, the generator uses the accepted QSL point returned by Contract IR FR-058's typed accessor for the admitted package, checked clause id and authentic `claim` `CheckedOccurrence`. Two authentic occurrences on one node with different accepted points retain their distinct rendered points when selected separately. A wrong-role, wrong-ordinal or other-node occurrence, an authentic tuple with no accepted point, and a renderer mutant changing the selected point each return the corresponding typed no-artifact refusal of FR-011-AC-7; none uses a sibling point, an inferred point or caller context. The analyzer grants no generated-campaign evidence for a refused selection. The second sentence is infeasible because the point contributes to node identity. | Test (TC-006, TC-020 steps 7-8) |
+| FR-004-AC-26 | PLANNED (IR-1070). For each selected executable V2 clause, the generator uses the exact accepted point of that point-qualified clause node and authentic claim through IR FR-058; separate nodes with equal condition and anchor but different points produce distinct rendered points when selected separately, while two authentic claims of one pointed node produce the same point. The analyzer retains one expected population entry per executable clause node and grants no campaign evidence for a refused selection. Wrong-role, wrong-ordinal, other-node, absent-point-node, and renderer-mutant selections each receive the corresponding typed no-artifact refusal of FR-011-AC-15, with no sibling substitution or inferred point. | Test (TC-006, TC-020 steps 7-8) |
 
 ## Implementation boundary
 
