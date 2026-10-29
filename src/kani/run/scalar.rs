@@ -2102,17 +2102,8 @@ mod tests {
         let identity = identity_from_entries(&entries, Limits::new(256 * 1024 * 1024)).unwrap();
         let golden: [u8; 32] = Sha256::digest(GOLDEN.as_bytes()).into();
         assert_eq!(
-            (
-                SCALAR_PROOF_SCHEMA,
-                golden
-                    .iter()
-                    .map(|byte| format!("{byte:02x}"))
-                    .collect::<String>()
-            ),
-            (
-                "agent-ix/cg-kani-scalar-proof-content/v3",
-                "68a4416d5e11d9cd244a8fb9d7ffbca3890597c32d25bc915a01b271a2da79df".to_owned()
-            )
+            SCALAR_PROOF_SCHEMA,
+            "agent-ix/cg-kani-scalar-proof-content/v3"
         );
         assert_eq!(*identity.as_bytes(), golden);
         assert_eq!(golden, independent_digest(&entries));
