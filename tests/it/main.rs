@@ -75,7 +75,6 @@ mod harness_generation;
 mod kani_batching;
 mod kani_gate;
 mod kani_generation;
-mod kani_generation_claims;
 mod kani_obligations;
 mod kani_obligations_state_clause_replay;
 mod kani_obligations_state_frame;
