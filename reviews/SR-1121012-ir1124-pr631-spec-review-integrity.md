@@ -66,3 +66,15 @@ scope:
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | medium | AC-16 forbids an unqualified “clause reference” in the V2 path, although the public V2 request must retain its selected checked clause; name the V1 `ClauseRef` that is forbidden | spec/strategy/functional/FR-011-numeric-harness-campaigns.md:281 |
+
+## Dispositions
+
+Round 1, CG #631 exact head `311b2606a6167996725528b29c9f6b7c326ee032`.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | FR-011-AC-16 now forbids V1 `BoundPackage`, V1 `ClauseRef`, `generate_bound_strategy` and V1-to-V2 adapters specifically, while requiring the selected V2 checked clause key; TC-020 step 13 matches this boundary. |
+
+## Current verdict
+
+No remaining finding in the scoped review at the fixed head.
