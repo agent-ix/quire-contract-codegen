@@ -387,6 +387,9 @@ fn generate_with_control(
     if let Some(tail) = control.source_tail {
         source.push_str(tail);
     }
+    syn::parse_file(&source).map_err(|_| {
+        V2NumericDiagnostic::new(key, V2NumericErrorCode::InvalidGeneratedSyntax, source_path)
+    })?;
     if source.len()
         > control
             .max_source_bytes
@@ -398,9 +401,6 @@ fn generate_with_control(
             source_path,
         ));
     }
-    syn::parse_file(&source).map_err(|_| {
-        V2NumericDiagnostic::new(key, V2NumericErrorCode::InvalidGeneratedSyntax, source_path)
-    })?;
     let map = SourceMap {
         identity: &identity,
         comparison: &admitted.projection.comparison,
@@ -781,6 +781,14 @@ mod tests {
                     ..RenderControl::default()
                 },
                 V2NumericErrorCode::ResourceLimitExceeded,
+            ),
+            (
+                RenderControl {
+                    source_tail: Some("\nthis is not Rust;\n"),
+                    max_source_bytes: Some(1),
+                    ..RenderControl::default()
+                },
+                V2NumericErrorCode::InvalidGeneratedSyntax,
             ),
         ] {
             let diagnostic = generate_with_control(&request, control).expect_err("mutant refusal");
