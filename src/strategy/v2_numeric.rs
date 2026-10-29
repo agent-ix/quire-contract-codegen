@@ -380,12 +380,8 @@ fn generate_with_control(
     source.push_str(&population.census_source);
     source.push('\n');
     let runner_line = source.lines().count() + 1;
-    source.push_str(&render_runner(
-        &identity,
-        &admitted.projection.kind,
-        &population,
-        request,
-    ));
+    let runner = render_runner(&identity, &admitted.projection.kind, &population, request);
+    source.push_str(runner.trim_start_matches('\n'));
     if let Some(tail) = control.source_tail {
         source.push_str(tail);
     }

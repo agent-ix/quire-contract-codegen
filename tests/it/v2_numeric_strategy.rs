@@ -94,6 +94,28 @@ fn v2_numeric_bundle_keeps_selected_identity_and_runs_both_modes() {
         generated.identity.requirement
     );
     assert_eq!(parsed["identity"]["revision"], generated.identity.revision);
+    let lines: Vec<_> = source.contents.lines().collect();
+    for (field, marker) in [
+        (
+            "oracleLine",
+            "/// Evaluates the selected checked integer comparison.",
+        ),
+        (
+            "populationLine",
+            "// Generated V2 numeric population artifact.",
+        ),
+        (
+            "censusLine",
+            "/// Domain edge an unrepresentable edge value is adjacent to.",
+        ),
+        (
+            "runnerLine",
+            "/// Exact selected V2 requirement and admitted package revision.",
+        ),
+    ] {
+        let line = parsed[field].as_u64().expect("map line number") as usize;
+        assert_eq!(lines.get(line - 1), Some(&marker), "{field}");
+    }
     assert!(source.contents.contains(&generated.identity.requirement));
     assert!(source.contents.contains(&generated.identity.revision));
     assert!(source
