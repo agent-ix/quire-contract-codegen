@@ -210,3 +210,8 @@ present-empty proof bytes distinct from absent proof, as AC-5 and AC-7
 require. The cvc5 proof-dump transcript has no such presence marker, so it
 cannot close those criteria by itself. The owner must define and test that
 source before claiming the positive handoff covered.
+The documented cvc5 Alethe dump encloses its `assume` and `step` commands in
+one outer expression; QSL's current `read_proof` expects those commands as
+top-level expressions. QSL owns accepting that exact solver output in FR-314
+or specifying a supported direct output form. CG cannot silently strip the
+wrapper while claiming to hand off exact emitted proof bytes.
