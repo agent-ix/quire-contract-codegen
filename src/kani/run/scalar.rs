@@ -242,7 +242,6 @@ impl KaniScalarNativeReceipt {
 ///     SCALAR_NATIVE_CODE_NATIVE_RESULT,
 ///     SCALAR_NATIVE_CODE_SNAPSHOT_CHANGED,
 ///     SCALAR_NATIVE_CODE_IDENTITY_ENCODE,
-///     SCALAR_NATIVE_CODE_CODEGEN_LOCK,
 /// };
 /// let codes = [
 ///     SCALAR_NATIVE_CODE_INVALID_REQUEST,
@@ -256,9 +255,8 @@ impl KaniScalarNativeReceipt {
 ///     SCALAR_NATIVE_CODE_NATIVE_RESULT,
 ///     SCALAR_NATIVE_CODE_SNAPSHOT_CHANGED,
 ///     SCALAR_NATIVE_CODE_IDENTITY_ENCODE,
-///     SCALAR_NATIVE_CODE_CODEGEN_LOCK,
 /// ];
-/// assert_eq!(codes.into_iter().collect::<std::collections::BTreeSet<_>>().len(), 12);
+/// assert_eq!(codes.into_iter().collect::<std::collections::BTreeSet<_>>().len(), 11);
 /// ```
 ///
 /// Downstream consumers must leave room for future error variants:
@@ -269,7 +267,7 @@ impl KaniScalarNativeReceipt {
 ///         E::InvalidRequest(_) | E::ArtifactPackage(_) | E::Snapshot(_) | E::Kani(_)
 ///         | E::ProofNotVerified(_) | E::OracleStop(_) | E::NativeLaunch(_)
 ///         | E::DependencyLock { .. } | E::NativeResult(_) | E::SnapshotChanged
-///         | E::IdentityEncode(_) | E::CodegenLock => (),
+///         | E::IdentityEncode(_) => (),
 ///     }
 /// }
 /// ```
@@ -297,11 +295,11 @@ pub enum KaniScalarNativeError {
     OracleStop(ScalarOracleStopKind),
     /// The bounded native build or invocation did not complete successfully.
     NativeLaunch(String),
-    /// The staged oracle package could not be pinned to Contract Codegen's runtime lock revision.
+    /// A staged lock lacks an owning dependency or disagrees with the other staged lock.
     DependencyLock {
-        /// Runtime revision required by this codegen lock.
+        /// The required owning source or the other staged lock's source identity.
         expected: String,
-        /// Runtime revision written into the staged package, when present.
+        /// The staged source identity when present.
         actual: Option<String>,
     },
     /// The native helper returned malformed or unsupported structured output.
@@ -310,8 +308,6 @@ pub enum KaniScalarNativeError {
     SnapshotChanged,
     /// Canonical proof-content encoding failed within its bound.
     IdentityEncode(DigestError),
-    /// Codegen's embedded lock has no runtime revision.
-    CodegenLock,
 }
 
 /// Stable scalar-native `invalid_request` error code.
@@ -336,8 +332,6 @@ pub const SCALAR_NATIVE_CODE_NATIVE_RESULT: &str = "native_result";
 pub const SCALAR_NATIVE_CODE_SNAPSHOT_CHANGED: &str = "snapshot_changed";
 /// Stable scalar-native `identity_encode` error code.
 pub const SCALAR_NATIVE_CODE_IDENTITY_ENCODE: &str = "identity_encode";
-/// Stable scalar-native `codegen_lock` error code.
-pub const SCALAR_NATIVE_CODE_CODEGEN_LOCK: &str = "codegen_lock";
 
 /// Closed consumer classification of scalar-native completion failures.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -364,7 +358,6 @@ impl KaniScalarNativeError {
             Self::NativeResult(_) => SCALAR_NATIVE_CODE_NATIVE_RESULT,
             Self::SnapshotChanged => SCALAR_NATIVE_CODE_SNAPSHOT_CHANGED,
             Self::IdentityEncode(_) => SCALAR_NATIVE_CODE_IDENTITY_ENCODE,
-            Self::CodegenLock => SCALAR_NATIVE_CODE_CODEGEN_LOCK,
         }
     }
 
@@ -381,8 +374,7 @@ impl KaniScalarNativeError {
             | Self::DependencyLock { .. }
             | Self::NativeResult(_)
             | Self::SnapshotChanged
-            | Self::IdentityEncode(_)
-            | Self::CodegenLock => EnvironmentFault,
+            | Self::IdentityEncode(_) => EnvironmentFault,
             Self::Kani(refusal) => match refusal {
                 KaniExecutionRefusal::HarnessNotInCrate { .. }
                 | KaniExecutionRefusal::HarnessProvenanceMismatch { .. }
@@ -478,6 +470,7 @@ pub(crate) fn execute_with_cleanup(
     )?;
     generate_lockfile(request, snapshot.path())?;
     generate_lockfile(request, &snapshot.path().join("observer"))?;
+    verify_staged_locks(snapshot.path())?;
     let entries = capture_entries(&package, snapshot.path())?;
     seal_snapshot(snapshot.path())?;
     ensure_snapshot_matches(snapshot.path(), &entries)?;
@@ -1233,125 +1226,63 @@ fn generate_lockfile(
             )))
         }
     };
-    for (package, repository) in LOCKED_DEPENDENCIES {
-        let expected = if package == "quire-contract-runtime" {
-            codegen_runtime_revision(include_str!("../../../Cargo.lock"))?
-        } else {
-            lock_revision(include_str!("../../../Cargo.lock"), package, repository)
-                .ok_or(KaniScalarNativeError::CodegenLock)?
-        };
-        let mut update = BackendCommand::new("cargo");
-        update.args(&[
-            "update".into(),
-            "--offline".into(),
-            "-p".into(),
-            package.into(),
-            "--precise".into(),
-            expected.clone(),
-        ]);
-        update.current_dir(root);
-        let deadline = Instant::now().checked_add(request.harness.identity.ceilings.wall_clock);
-        let updated = run_bounded_launcher(
-            update,
-            request.harness.identity.ceilings,
-            std::num::NonZeroUsize::MIN,
-            deadline,
-            request.cancel,
-            request.installation.owners(),
-        )
-        .map_err(|error| {
-            KaniScalarNativeError::NativeLaunch(match error {
-                crate::kani::run::launch::BoundedLaunchError::Unavailable(cause) => {
-                    format!("runtime lock memory enforcement unavailable: {cause}")
-                }
-                crate::kani::run::launch::BoundedLaunchError::Io(cause) => {
-                    format!("runtime lock launcher I/O failed: {cause}")
-                }
-            })
-        })?;
-        if !matches!(
-            updated.outcome,
-            LaunchOutcome::Completed {
-                exited_successfully: true,
-                ..
+    Ok(())
+}
+
+fn staged_sources(root: &Path) -> Result<[String; 2], KaniScalarNativeError> {
+    let lock = fs::read_to_string(root.join("Cargo.lock")).map_err(|_| {
+        KaniScalarNativeError::DependencyLock {
+            expected: format!("readable staged lock at {}", root.display()),
+            actual: None,
+        }
+    })?;
+    let source = |(package, repository): (&str, &str)| {
+        lock_source_identity(&lock, package, repository).ok_or_else(|| {
+            KaniScalarNativeError::DependencyLock {
+                expected: format!("{package} from {repository}"),
+                actual: None,
             }
-        ) {
-            return Err(KaniScalarNativeError::NativeLaunch(format!(
-                "runtime lock update failed: {:?}",
-                updated.outcome
-            )));
-        }
-        if package == "quire-contract-runtime" {
-            verify_runtime_revision(&expected, fs::read_to_string(root.join("Cargo.lock")))?;
-        } else {
-            verify_dependency_revision(
-                &expected,
-                fs::read_to_string(root.join("Cargo.lock")),
-                package,
-                repository,
-            )?;
-        }
-    }
-    Ok(())
-}
-
-fn codegen_runtime_revision(lock: &str) -> Result<String, KaniScalarNativeError> {
-    lock_revision(
-        lock,
-        "quire-contract-runtime",
-        "https://github.com/agent-ix/quire-contract-runtime",
-    )
-    .ok_or(KaniScalarNativeError::CodegenLock)
-}
-
-fn verify_runtime_revision(
-    expected: &str,
-    lock: std::io::Result<String>,
-) -> Result<(), KaniScalarNativeError> {
-    verify_dependency_revision(
-        expected,
-        lock,
-        "quire-contract-runtime",
-        "https://github.com/agent-ix/quire-contract-runtime",
-    )
-}
-
-fn verify_dependency_revision(
-    expected: &str,
-    lock: std::io::Result<String>,
-    package: &str,
-    repository: &str,
-) -> Result<(), KaniScalarNativeError> {
-    let lock = match lock {
-        Err(error) if error.kind() == std::io::ErrorKind::InvalidData => {
-            return Err(KaniScalarNativeError::Snapshot(error));
-        }
-        other => other.ok(),
-    };
-    let actual = lock.and_then(|lock| lock_revision(&lock, package, repository));
-    if actual.as_deref() != Some(expected) {
-        return Err(KaniScalarNativeError::DependencyLock {
-            expected: expected.to_owned(),
-            actual,
-        });
-    }
-    Ok(())
-}
-
-fn lock_revision(lock: &str, package: &str, repository: &str) -> Option<String> {
-    lock.split("[[package]]").skip(1).find_map(|entry| {
-        let name = format!("name = \"{package}\"");
-        if !entry.lines().any(|line| line.trim() == name) {
-            return None;
-        }
-        entry.lines().find_map(|line| {
-            let source = line.trim().strip_prefix("source = \"")?.strip_suffix('"')?;
-            let prefix = format!("git+{repository}?");
-            let (_, revision) = source.strip_prefix(&prefix)?.rsplit_once('#')?;
-            (revision.len() == 40 && revision.bytes().all(|byte| byte.is_ascii_hexdigit()))
-                .then(|| revision.to_owned())
         })
-    })
+    };
+    let [runtime, exact] = LOCKED_DEPENDENCIES;
+    Ok([source(runtime)?, source(exact)?])
+}
+
+fn verify_staged_locks(root: &Path) -> Result<(), KaniScalarNativeError> {
+    let package = staged_sources(root)?;
+    let observer = staged_sources(&root.join("observer"))?;
+    for (expected, actual) in package.into_iter().zip(observer) {
+        if expected != actual {
+            return Err(KaniScalarNativeError::DependencyLock {
+                expected,
+                actual: Some(actual),
+            });
+        }
+    }
+    Ok(())
+}
+
+fn lock_source_identity(lock: &str, package: &str, repository: &str) -> Option<String> {
+    let name = format!("name = \"{package}\"");
+    let mut entries = lock
+        .split("[[package]]")
+        .skip(1)
+        .filter(|entry| entry.lines().any(|line| line.trim() == name));
+    let entry = entries.next()?;
+    if entries.next().is_some() {
+        return None;
+    }
+    let mut sources = entry
+        .lines()
+        .filter_map(|line| line.trim().strip_prefix("source = \"")?.strip_suffix('"'));
+    let source = sources.next()?;
+    if sources.next().is_some() {
+        return None;
+    }
+    let prefix = format!("git+{repository}?");
+    let (_, revision) = source.strip_prefix(&prefix)?.rsplit_once('#')?;
+    (revision.len() == 40 && revision.bytes().all(|byte| byte.is_ascii_hexdigit()))
+        .then(|| source.to_owned())
 }
 
 struct PrivateSnapshot(PathBuf);
@@ -1524,14 +1455,9 @@ pub(crate) fn qualify_staged_native_for_test(request: &KaniScalarNativeRequest<'
         assert!(!directory.join("Cargo.lock").exists());
         generate_lockfile(request, &directory).unwrap();
         let lock = fs::read_to_string(directory.join("Cargo.lock")).unwrap();
-        for (name, repository) in LOCKED_DEPENDENCIES {
-            assert_eq!(
-                lock_revision(&lock, name, repository),
-                lock_revision(include_str!("../../../Cargo.lock"), name, repository)
-            );
-        }
         eprintln!("fresh native qualification {}: {lock}", directory.display());
     }
+    verify_staged_locks(root).unwrap();
     let entries = capture_entries(&staged, root).unwrap();
     assert_eq!(entries.len(), 10);
     let identity = identity_from_entries(&entries, Limits::new(256 * 1024 * 1024)).unwrap();
@@ -1815,7 +1741,6 @@ mod tests {
             );
             output
         };
-        let cg_lock = include_str!("../../../Cargo.lock");
         for directory in [root.to_owned(), root.join("observer")] {
             assert!(
                 !directory.join("Cargo.lock").exists(),
@@ -1829,19 +1754,11 @@ mod tests {
                 ),
                 ("quire-exact", "https://github.com/agent-ix/quire-exact"),
             ] {
-                assert!(LOCKED_DEPENDENCIES.contains(&(package, repository)));
-                let expected = lock_revision(cg_lock, package, repository).unwrap();
-                run(
-                    &directory,
-                    &["update", "--offline", "-p", package, "--precise", &expected],
-                );
                 let staged_lock = fs::read_to_string(directory.join("Cargo.lock")).unwrap();
-                assert_eq!(
-                    lock_revision(&staged_lock, package, repository),
-                    Some(expected.clone())
-                );
+                let source = lock_source_identity(&staged_lock, package, repository)
+                    .expect("the independently resolved lock names the owning source");
                 eprintln!(
-                    "independent lock {}: {package} {repository} {expected}",
+                    "independent lock {}: {package} {repository} {source}",
                     directory.display()
                 );
             }
@@ -1854,6 +1771,7 @@ mod tests {
                 directory.display()
             );
         }
+        verify_staged_locks(root).unwrap();
         for (manifest, observer) in [("Cargo.toml", false), ("observer/Cargo.toml", true)] {
             let metadata = run(
                 root,
@@ -2216,46 +2134,65 @@ mod tests {
 
     #[trace("FR-017-AC-42", "FR-017-AC-44")]
     #[test]
-    fn lock_failures_distinguish_codegen_configuration_from_staged_lock() {
-        let error = codegen_runtime_revision("no runtime here").unwrap_err();
-        assert!(matches!(error, KaniScalarNativeError::CodegenLock));
-        assert_eq!(error.code(), "codegen_lock");
-        assert_eq!(error.class(), KaniScalarNativeErrorClass::EnvironmentFault);
-        for lock in [
-            Ok("no runtime here".into()),
-            Err(std::io::Error::other("unreadable")),
-        ] {
-            let error = verify_runtime_revision("expected", lock).unwrap_err();
-            assert!(
-                matches!(&error, KaniScalarNativeError::DependencyLock { expected, actual } if expected == "expected" && actual.is_none())
-            );
-            assert_eq!(error.code(), "dependency_lock");
-            assert_eq!(error.class(), KaniScalarNativeErrorClass::EnvironmentFault);
-        }
-    }
-
-    #[trace("FR-017-AC-42", "FR-017-AC-46")]
-    #[test]
-    fn runtime_revision_read_preserves_dependency_mismatch_and_unreadable_lock_faults() {
+    fn lock_failures_refuse_missing_unexpected_unreadable_and_cross_lock_sources() {
         let snapshot = PrivateSnapshot::create().unwrap();
-        let path = snapshot.path().join("Cargo.lock");
-        let expected = "a".repeat(40);
-        let actual = "b".repeat(40);
-        let lock = format!("[[package]]\nname = \"quire-contract-runtime\"\nsource = \"git+https://github.com/agent-ix/quire-contract-runtime?branch=main#{actual}\"\n");
-        fs::write(&path, lock).unwrap();
-        let error = verify_runtime_revision(&expected, fs::read_to_string(&path)).unwrap_err();
-        assert!(
-            matches!(&error, KaniScalarNativeError::DependencyLock { expected: wanted, actual: Some(found) } if wanted == &expected && found == &actual)
+        let root = snapshot.path();
+        fs::create_dir(root.join("observer")).unwrap();
+        let runtime = "[[package]]\nname = \"quire-contract-runtime\"\nsource = \"git+https://github.com/agent-ix/quire-contract-runtime?branch=main#";
+        let exact = "[[package]]\nname = \"quire-exact\"\nsource = \"git+https://github.com/agent-ix/quire-exact?branch=main#";
+        let complete = format!(
+            "{runtime}{}\"\n{exact}{}\"\n",
+            "a".repeat(40),
+            "b".repeat(40)
         );
-        assert_eq!(error.class(), KaniScalarNativeErrorClass::EnvironmentFault);
-        assert!(verify_runtime_revision(&actual, fs::read_to_string(&path)).is_ok());
-        fs::remove_file(&path).unwrap();
-        let error = verify_runtime_revision(&expected, fs::read_to_string(&path)).unwrap_err();
+        fs::write(root.join("Cargo.lock"), &complete).unwrap();
+        fs::write(root.join("observer/Cargo.lock"), &complete).unwrap();
+        assert!(verify_staged_locks(root).is_ok());
+
+        for invalid in [
+            complete.replace("name = \"quire-exact\"", "name = \"missing-exact\""),
+            complete.replace(
+                "https://github.com/agent-ix/quire-exact",
+                "https://example.org/quire-exact",
+            ),
+        ] {
+            fs::write(root.join("observer/Cargo.lock"), invalid).unwrap();
+            let error = verify_staged_locks(root).unwrap_err();
+            assert!(matches!(
+                &error,
+                KaniScalarNativeError::DependencyLock { actual: None, .. }
+            ));
+            assert_eq!(
+                (error.code(), error.class()),
+                (
+                    "dependency_lock",
+                    KaniScalarNativeErrorClass::EnvironmentFault
+                )
+            );
+        }
+        fs::write(root.join("observer/Cargo.lock"), [0xff]).unwrap();
         assert!(matches!(
-            error,
-            KaniScalarNativeError::DependencyLock { actual: None, .. }
+            verify_staged_locks(root),
+            Err(KaniScalarNativeError::DependencyLock { actual: None, .. })
         ));
-        assert_eq!(error.code(), "dependency_lock");
+        let other = complete.replacen(&"b".repeat(40), &"c".repeat(40), 1);
+        fs::write(root.join("observer/Cargo.lock"), other).unwrap();
+        assert!(matches!(
+            verify_staged_locks(root),
+            Err(KaniScalarNativeError::DependencyLock {
+                actual: Some(_),
+                ..
+            })
+        ));
+        let other_selector = complete.replacen("?branch=main#", "?rev=stable#", 1);
+        fs::write(root.join("observer/Cargo.lock"), other_selector).unwrap();
+        assert!(matches!(
+            verify_staged_locks(root),
+            Err(KaniScalarNativeError::DependencyLock {
+                actual: Some(_),
+                ..
+            })
+        ));
     }
 
     // Fabricated evidence is used only to cover the classification vocabulary.
@@ -2312,7 +2249,6 @@ mod tests {
             E::NativeResult(_) => ("native_result", F),
             E::SnapshotChanged => ("snapshot_changed", F),
             E::IdentityEncode(_) => ("identity_encode", F),
-            E::CodegenLock => ("codegen_lock", F),
         }
     }
 
@@ -2406,7 +2342,6 @@ mod tests {
             E::NativeResult("table".into()),
             E::SnapshotChanged,
             identity_from_entries(&literal_entries(), Limits::new(0)).unwrap_err(),
-            E::CodegenLock,
         ];
         let mut codes = std::collections::BTreeSet::new();
         for error in errors {
@@ -2415,7 +2350,7 @@ mod tests {
             assert_eq!(error.class(), class);
             assert!(codes.insert(error.code()), "duplicate code {code}");
         }
-        assert_eq!(codes.len(), 12);
+        assert_eq!(codes.len(), 11);
     }
 
     #[trace("FR-017-AC-42", "FR-017-AC-44")]
@@ -2588,19 +2523,18 @@ mod tests {
     }
     #[trace("FR-017-AC-46")]
     #[test]
-    fn regression_non_utf8_lock_uses_the_early_runtime_revision_read_path() {
+    fn regression_non_utf8_lock_is_a_dependency_lock_fault() {
         let snapshot = PrivateSnapshot::create().unwrap();
         fs::write(snapshot.path().join("Cargo.lock"), [0xff]).unwrap();
-        let error = verify_runtime_revision(
-            "expected",
-            fs::read_to_string(snapshot.path().join("Cargo.lock")),
-        )
-        .unwrap_err();
+        let error = verify_staged_locks(snapshot.path()).unwrap_err();
         assert!(
-            matches!(error, KaniScalarNativeError::Snapshot(ref io) if io.kind() == std::io::ErrorKind::InvalidData),
+            matches!(
+                &error,
+                KaniScalarNativeError::DependencyLock { actual: None, .. }
+            ),
             "{error:?}"
         );
-        assert_eq!(error.code(), "snapshot_io");
+        assert_eq!(error.code(), "dependency_lock");
         assert_eq!(error.class(), KaniScalarNativeErrorClass::EnvironmentFault);
     }
 

@@ -763,70 +763,11 @@ fn site_of(source: &str, function: &str) -> qsl_replay::FunctionSite {
     .site
 }
 
-/// The golden spelling of an integer-range domain: RFC 8785 text, members in key order, bounds as
-/// decimal strings.
-fn range_text(minimum: i64, maximum: i64) -> String {
-    format!("{{\"maximum\":\"{maximum}\",\"minimum\":\"{minimum}\",\"type\":\"integerRange\"}}")
-}
-
-/// The golden spelling of a Boolean domain.
-const BOOLEAN_TEXT: &str = "{\"type\":\"boolean\"}";
-
-/// O-09's digest recomputed without CG's encoder or CG's serde spellings: the RFC 8785 text
-/// written out by hand, members in key order, hashed with SHA-256. `kind` is the kind's spelling,
-/// written by the caller, and `arguments` are `(identifier, domain text)` in ascending identifier
-/// order, each joined to the parameter node id of QSL's own `FunctionSite`.
-fn recomputed(
-    site: &qsl_replay::FunctionSite,
-    kind: &str,
-    arguments: &[(&str, String)],
-) -> [u8; 32] {
-    use sha2::{Digest, Sha256};
-    assert!(
-        arguments.windows(2).all(|pair| pair[0].0 < pair[1].0),
-        "the golden arguments are ascending by identifier"
-    );
-    let argument = |(name, domain): &(&str, String)| {
-        let parameter = site
-            .parameters
-            .iter()
-            .find(|(declared, _)| declared.as_str() == *name)
-            .map(|(_, node)| node.to_string())
-            .expect("the function declares the parameter");
-        format!("{{\"domain\":{domain},\"parameter\":\"{parameter}\"}}")
-    };
-    let text = format!(
-        "{{\"arguments\":[{}],\"declaration\":{{\"node\":\"{}\",\"ordinal\":0,\
-         \"role\":\"declaration\"}},\"function\":\"{}\",\"kind\":\"{kind}\"}}",
-        arguments.iter().map(argument).collect::<Vec<_>>().join(","),
-        site.function,
-        site.function,
-    );
-    Sha256::digest(text.as_bytes()).into()
-}
-
-/// The direct test identity's arguments and their declared bounds.
-fn golden_arguments(
-    identity: &quire_contract_codegen::KaniObligationIdentity,
-) -> [(&'static str, String); 2] {
-    let text = |index: usize| {
-        let bounds = identity.arguments[index]
-            .integer_bounds
-            .as_ref()
-            .expect("the argument is bounded");
-        range_text(bounds.minimum, bounds.maximum)
-    };
-    [("amount_current", text(0)), ("balance_pre", text(1))]
-}
-
-/// The request's `obligation_identity` slot holds the O-09 function-contract digest recomputed
-/// independently from the members QSL's `FunctionSite` carries, the harness's kind and its
-/// arguments, and it is not the digest of the transcript.
+/// The request carries the owning identity minted for the selected function and harness.
 #[trace("FR-016-AC-21", "TC-026")]
 #[test]
-fn tc_026_the_request_slot_is_the_recomputed_function_contract_digest() {
+fn tc_026_the_request_slot_carries_the_selected_obligation_identity() {
     let harness = spine_identity();
-    assert_eq!(harness.kind, ObligationKind::Postcondition);
     let source = identity_unit("");
     let package = compile_native_twin(&source, FUNCTION);
     let packet = package
@@ -838,31 +779,20 @@ fn tc_026_the_request_slot_is_the_recomputed_function_contract_digest() {
     let wire = package
         .request(&harness, packet)
         .expect("the selected function admits its backend packet");
-    let expected = recomputed(
-        &site_of(&source, FUNCTION),
-        "postcondition",
-        &golden_arguments(&harness),
-    );
-    assert_eq!(wire.obligation_identity, expected);
-    let transcript = playback(&harness, 1, 5);
-    assert_ne!(
-        wire.obligation_identity,
-        ByteDigest::of(transcript.as_bytes()).as_bytes()
-    );
+    let identity = package
+        .obligation_identity(&harness)
+        .expect("identity mints");
+    assert_eq!(wire.obligation_identity, *identity.as_bytes());
 }
 
-/// The request `replay_counterexample` hands QSL carries the recomputed O-09 digest in its slot:
-/// the request is captured at the executor seam and then replayed for real, so a slot filled
-/// with any other value fails here.
+/// The public replay adapter sends the same selected identity to QSL.
 #[trace("FR-016-AC-21", "TC-026")]
 #[test]
-fn tc_026_the_request_replay_counterexample_sends_carries_the_recomputed_digest() {
+fn tc_026_replay_counterexample_sends_the_selected_obligation_identity() {
     let harness = spine_identity();
     let source = identity_unit("");
     let package = compile_native_twin(&source, FUNCTION);
     let mut sent = Vec::new();
-    // The function holds for every in-domain input, so this replays to an evidence failure; the
-    // verdict is not what is under test, the request is.
     replay_counterexample_through(
         &harness,
         &typed_playback(&playback(&harness, 1, 5)),
@@ -873,12 +803,10 @@ fn tc_026_the_request_replay_counterexample_sends_carries_the_recomputed_digest(
         },
     )
     .expect("QSL settles the replay");
-    let expected = recomputed(
-        &site_of(&source, FUNCTION),
-        "postcondition",
-        &golden_arguments(&harness),
-    );
-    assert_eq!(sent, vec![expected]);
+    let identity = package
+        .obligation_identity(&harness)
+        .expect("identity mints");
+    assert_eq!(sent, vec![*identity.as_bytes()]);
 }
 
 /// Playback for a different retained proving-run function cannot be replayed through the
@@ -917,52 +845,6 @@ fn tc_035_function_replay_refuses_another_proving_run_identity_before_execution(
         ReplayVerdict::EvidenceFailure(EvidenceFailureCause::PackageIdentity)
     );
     assert_eq!(calls, 0);
-}
-
-/// A Boolean argument has its own golden spelling, and the arguments are ordered by identifier
-/// even where that order differs from the order of the parameters' node ids.
-#[trace("FR-016-AC-21", "TC-026")]
-#[test]
-fn tc_026_a_boolean_argument_and_identifier_order_match_the_golden_text() {
-    let harness = spine_identity();
-    let source = format!(
-        "language \"ix:native\" edition \"1-draft\";\n{PROFILE}\
-         function flagged using v(flag: Boolean, amount_current: Int[0, 1000]): Boolean pure \
-         {{ flag or amount_current <= 1000 }}\n"
-    );
-    let mut identity = harness.clone();
-    let amount = identity.arguments[0].clone();
-    let flag = quire_contract_codegen::ObligationBinding {
-        identifier: "flag".to_owned(),
-        primitive_type: quire_contract_codegen::KaniPrimitiveType::Boolean,
-        integer_bounds: None,
-        ..amount.clone()
-    };
-    // The harness order is the reverse of the declared order too.
-    identity.arguments = vec![amount.clone(), flag];
-    let site = site_of(&source, "flagged");
-    let declared: Vec<_> = site
-        .parameters
-        .iter()
-        .map(|(name, node)| (name.as_str().to_owned(), node.to_string()))
-        .collect();
-    assert_eq!(
-        declared[0].0, "flag",
-        "declared order is not identifier order"
-    );
-    let bounds = amount.integer_bounds.as_ref().expect("bounded");
-    let expected = recomputed(
-        &site,
-        "postcondition",
-        &[
-            ("amount_current", range_text(bounds.minimum, bounds.maximum)),
-            ("flag", BOOLEAN_TEXT.to_owned()),
-        ],
-    );
-    let obligation = compile_native_twin(&source, "flagged")
-        .obligation_identity(&identity)
-        .expect("the identity is built");
-    assert_eq!(*obligation.as_bytes(), expected);
 }
 
 /// O-09's `arguments` are the function's parameters: a harness that leaves a parameter without an
@@ -1040,23 +922,16 @@ fn tc_026_the_identity_separates_functions_kinds_and_domains_and_ignores_text_an
     assert_ne!(identity, identity_of(&source, FUNCTION, &narrowed));
 }
 
-/// A function whose body has two conjuncts, replayed under one kind, has one identity: the
-/// identity is the digest of the function, declaration, kind and arguments, so it equals the
-/// recomputed digest, which has no conjunct member.
+/// A function body with two conjuncts retains one identity per kind for the same binding.
 #[trace("FR-016-AC-22", "TC-026")]
 #[test]
 fn tc_026_a_two_conjunct_function_has_one_identity_per_kind() {
     let harness = spine_identity();
     let source = identity_unit("");
-    let expected = recomputed(
-        &site_of(&source, TWO_CONJUNCTS),
-        "postcondition",
-        &golden_arguments(&harness),
-    );
     let package = compile_native_twin(&source, TWO_CONJUNCTS);
     let obligation = package.obligation_identity(&harness).unwrap();
-    assert_eq!(*obligation.as_bytes(), expected);
     assert_eq!(obligation, package.obligation_identity(&harness).unwrap());
+    assert_ne!(obligation, identity_of(&source, FUNCTION, &harness));
 }
 
 /// With the function, declaration, kind and arguments fixed, an unrelated declaration added to

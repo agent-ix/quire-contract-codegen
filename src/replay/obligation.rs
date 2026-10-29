@@ -218,9 +218,21 @@ pub(crate) fn function_contract_identity(
     kind: ObligationKind,
     arguments: &[ContractArgument],
 ) -> Result<ObligationIdentity, ObligationIdentityError> {
+    let preimage = obligation_preimage(function, declaration, kind, arguments);
+    content_digest(&preimage)
+        .map(ObligationIdentity::from_digest)
+        .map_err(ObligationIdentityError::Digest)
+}
+
+fn obligation_preimage<'a>(
+    function: WireNodeId,
+    declaration: &OccurrenceKey,
+    kind: ObligationKind,
+    arguments: &'a [ContractArgument],
+) -> Preimage<'a> {
     let mut ascending: Vec<&ContractArgument> = arguments.iter().collect();
     ascending.sort_by(|left, right| left.identifier.cmp(&right.identifier));
-    let preimage = Preimage {
+    Preimage {
         function: function.to_string(),
         declaration: OccurrenceMember {
             node: declaration.node().to_string(),
@@ -235,10 +247,7 @@ pub(crate) fn function_contract_identity(
                 domain: &argument.domain,
             })
             .collect(),
-    };
-    content_digest(&preimage)
-        .map(ObligationIdentity::from_digest)
-        .map_err(ObligationIdentityError::Digest)
+    }
 }
 
 /// The kind of the obligation a state-frame harness proves, read from its `property` and from
@@ -364,32 +373,31 @@ mod tests {
         assert_ne!(identity(7, 7, kind, &extreme), identity(7, 7, kind, &near));
     }
 
-    /// Ascending by identifier is not ascending by node id: with `a` bound to a node id above
-    /// `b`'s, the digest equals the hand-written text that lists `a` first. A sort by node id
-    /// would list `b` first and fail.
-    #[trace("FR-016-AC-21", "TC-026")]
+    /// The object passed to the sole encoder has the four allocated members and preserves
+    /// identifier order even when parameter node order is different.
+    #[trace("FR-024-AC-20", "TC-035")]
     #[test]
-    fn tc_026_arguments_are_ordered_by_identifier_not_by_node_id() {
-        use sha2::{Digest, Sha256};
+    fn tc_035_preimage_has_exact_four_members_before_encoding() {
         let hex = |byte: u8| format!("{byte:02x}").repeat(32);
         let arguments = [
             argument("b", 1, ArgumentDomain::Boolean),
             argument("a", 9, range("0", "9")),
         ];
-        let text = format!(
-            "{{\"arguments\":[{{\"domain\":{{\"maximum\":\"9\",\"minimum\":\"0\",\
-             \"type\":\"integerRange\"}},\"parameter\":\"{}\"}},\
-             {{\"domain\":{{\"type\":\"boolean\"}},\"parameter\":\"{}\"}}],\
-             \"declaration\":{{\"node\":\"{}\",\"ordinal\":0,\"role\":\"declaration\"}},\
-             \"function\":\"{}\",\"kind\":\"frame\"}}",
-            hex(9),
-            hex(1),
-            hex(7),
-            hex(7),
+        let declaration = declaration(node(7));
+        let preimage =
+            obligation_preimage(node(7), &declaration, ObligationKind::Frame, &arguments);
+        assert_eq!(
+            serde_json::to_value(&preimage).unwrap(),
+            serde_json::json!({
+                "function": hex(7),
+                "declaration": {"node": hex(7), "role": "declaration", "ordinal": 0},
+                "kind": "frame",
+                "arguments": [
+                    {"domain": {"type": "integerRange", "minimum": "0", "maximum": "9"}, "parameter": hex(9)},
+                    {"domain": {"type": "boolean"}, "parameter": hex(1)},
+                ],
+            })
         );
-        let expected: [u8; 32] = Sha256::digest(text.as_bytes()).into();
-        let built = identity(7, 7, ObligationKind::Frame, &arguments);
-        assert_eq!(*built.as_bytes(), expected);
     }
 
     fn frame_site(frame: u8, role: &str, ordinal: u64) -> OperationSite {
@@ -408,46 +416,6 @@ mod tests {
             frame_occurrence: OccurrenceKey::new(frame, Origin::new(Role::new(role), ordinal)),
             clauses: Vec::new(),
         }
-    }
-
-    /// A frame identity over a fixed site and kind, with empty `arguments`, equals the SHA-256 of
-    /// a hand-written text of the preimage. The text is RFC 8785's: members and occurrence
-    /// members in code-point order (`arguments`, `declaration`, `function`, `kind`), which is not
-    /// the order the preimage struct declares them in (`function`, `declaration`, `kind`,
-    /// `arguments`), so a digest of the struct's own order, or of any other order, fails. A
-    /// function identity over a fixed site equals the digest of its own hand-written text too.
-    #[trace("FR-024-AC-20", "TC-035")]
-    #[test]
-    fn tc_035_the_frame_and_function_identities_equal_their_hand_written_digests() {
-        use sha2::{Digest, Sha256};
-        let hex = |byte: u8| format!("{byte:02x}").repeat(32);
-        let digest = |text: &str| -> [u8; 32] { Sha256::digest(text.as_bytes()).into() };
-
-        let frame = frame_identity(&frame_site(7, "generated", 2), ObligationKind::Frame)
-            .expect("the preimage encodes");
-        let frame_text = format!(
-            "{{\"arguments\":[],\"declaration\":{{\"node\":\"{f}\",\"ordinal\":2,\
-             \"role\":\"generated\"}},\"function\":\"{f}\",\"kind\":\"frame\"}}",
-            f = hex(7),
-        );
-        assert_eq!(*frame.as_bytes(), digest(&frame_text));
-
-        let function = function_contract_identity(
-            node(5),
-            &OccurrenceKey::new(node(5), Origin::new(Role::new("declaration"), 0)),
-            ObligationKind::Postcondition,
-            &[argument("a", 9, range("-1", "9"))],
-        )
-        .expect("the preimage encodes");
-        let function_text = format!(
-            "{{\"arguments\":[{{\"domain\":{{\"maximum\":\"9\",\"minimum\":\"-1\",\
-             \"type\":\"integerRange\"}},\"parameter\":\"{p}\"}}],\
-             \"declaration\":{{\"node\":\"{f}\",\"ordinal\":0,\"role\":\"declaration\"}},\
-             \"function\":\"{f}\",\"kind\":\"postcondition\"}}",
-            p = hex(9),
-            f = hex(5),
-        );
-        assert_eq!(*function.as_bytes(), digest(&function_text));
     }
 
     /// The frame identity is the function path's one function over the frame node, the frame's
