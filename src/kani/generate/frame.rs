@@ -38,18 +38,20 @@ use serde::Serialize;
 
 use crate::oracle::operator_catalog::{FrameSymbol, Operator as CatalogOperator};
 use crate::{
-    core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES},
+    core::artifact::Artifact,
     core::identity::{HarnessPath, HarnessSymbol, ModuleSymbol, SymbolError},
     core::ir::checked_term::{aggregate_members, application, bound_members, literal},
     core::ir::clause::ClauseGraphView,
     core::ir::frame::{
         application_identity, clause_kind, parameter_references, projected_field, Located,
     },
-    kani::abi::{adapter_options, i64_literal, KaniSolver},
+    kani::abi::KaniSolver,
     kani::generate::outcome::{
         BoundNotResolvedCause, StateFrameLoweringRefusal, StateFrameRefusal, StateFrameRole,
         UnsupportedFrameEffect, MAX_OBLIGATION_UNWIND,
     },
+    kani::generate::render::render as render_spec,
+    kani::generate::spec::{FrameAssertion, FrameSpec, HarnessSpec},
     kani::identity::{
         StateComparison, StateFieldDomain, StateFrameHarness, StateFrameIdentity,
         StateFrameProperty, StateFrameScope, StateUnrangedField, StateUnrangedReason,
@@ -952,37 +954,87 @@ fn render(
         module: ModuleSymbol::try_from(module).map_err(invalid_symbol)?,
         harness: HarnessSymbol::try_from(HARNESS).map_err(invalid_symbol)?,
     };
-    let options = adapter_options(
-        &path.to_string(),
-        request.unwind,
-        KaniSolver::Cadical,
-        false,
-    );
-    let abi = Abi {
-        state_path: request.state_path,
-        subject_path: request.subject_path,
-        state_fields: request.state_fields,
-    };
-    let body = match &property {
+    let assertion = match &property {
         StateFrameProperty::Postcondition {
             field,
             comparison,
             left_is_pre,
-        } => postcondition_body(
-            &abi,
-            scope,
-            domains,
-            &Postcondition {
-                field,
-                comparison: *comparison,
-                left_is_pre: *left_is_pre,
-            },
-            module,
+        } => FrameAssertion::Postcondition {
+            field: field.clone(),
+            operator: comparison.rust(),
+            left_is_pre: *left_is_pre,
+            message: postcondition_check_text(&scope.operation, field, *comparison, *left_is_pre),
+        },
+        StateFrameProperty::Frame { checked, .. } => FrameAssertion::Effects(
+            checked
+                .iter()
+                .map(|field| {
+                    (
+                        field.clone(),
+                        format!(
+                            "operation `{}` changed `{field}`, which its frame does not modify",
+                            scope.operation
+                        ),
+                    )
+                })
+                .collect(),
         ),
-        StateFrameProperty::Frame { checked, .. } => {
-            frame_body(&abi, scope, domains, checked, module)
-        }
     };
+    let subjects = [
+        crate::core::provenance::node_subject(request.clause),
+        scope.operation.to_owned(),
+        crate::core::provenance::node_subject(&scope.object),
+        crate::core::provenance::node_subject(&scope.anchor),
+        crate::core::provenance::node_subject(&scope.frame),
+    ];
+    let prefix = crate::core::provenance::with_rust_header(
+        format!(
+            "// Obligation: state-clause {} of operation {:?}\n\n",
+            match &property {
+                StateFrameProperty::Postcondition { .. } => "postcondition",
+                StateFrameProperty::Frame { .. } => "frame",
+            },
+            scope.operation,
+        ),
+        subjects.iter().map(String::as_str),
+    );
+    let spec = HarnessSpec::new_frame(
+        path,
+        FrameSpec {
+            prefix,
+            state_path: request.state_path.to_owned(),
+            subject_path: request.subject_path.to_owned(),
+            state_fields: request
+                .state_fields
+                .iter()
+                .map(|field| (*field).to_owned())
+                .collect(),
+            domains: domains.to_vec(),
+            assertion,
+        },
+        match &property {
+            StateFrameProperty::Postcondition { .. } => {
+                "state bounds hold and the operation returns".to_owned()
+            }
+            StateFrameProperty::Frame { .. } => "the operation returns".to_owned(),
+        },
+        request.unwind,
+        KaniSolver::Cadical,
+    )
+    .map_err(|error| StateFrameRefusal::InvalidGeneratedSyntax {
+        error: error.to_string(),
+    })?;
+    let rust = render_spec(&spec).map_err(|error| match error {
+        crate::kani::generate::outcome::UnsupportedObligation::ResourceLimitExceeded { bytes } => {
+            StateFrameRefusal::ResourceLimitExceeded { bytes }
+        }
+        crate::kani::generate::outcome::UnsupportedObligation::InvalidGeneratedSyntax { error } => {
+            StateFrameRefusal::InvalidGeneratedSyntax { error }
+        }
+        other => StateFrameRefusal::InvalidGeneratedSyntax {
+            error: format!("frame renderer refused a validated spec: {other:?}"),
+        },
+    })?;
     let identity = StateFrameIdentity {
         ceilings: request.ceilings,
         clause: request.clause.clone(),
@@ -997,39 +1049,12 @@ fn render(
         unranged: unranged.to_vec(),
         state_path: request.state_path.to_owned(),
         subject_path: request.subject_path.to_owned(),
-        module_symbol: path.module,
-        harness_symbol: path.harness,
-        solver: KaniSolver::Cadical,
-        unwind: request.unwind,
-        options,
+        module_symbol: spec.path().module.clone(),
+        harness_symbol: spec.path().harness.clone(),
+        solver: spec.solver(),
+        unwind: spec.unwind(),
+        options: spec.options().to_vec(),
     };
-    let source = format!(
-        "// SPDX-License-Identifier: MIT OR Apache-2.0\n// Obligation: state-clause {} of operation {:?}\n\n{body}",
-        match identity.property {
-            StateFrameProperty::Postcondition { .. } => "postcondition",
-            StateFrameProperty::Frame { .. } => "frame",
-        },
-        scope.operation,
-    );
-    let subjects = [
-        crate::core::provenance::node_subject(&identity.clause),
-        scope.operation.to_owned(),
-        crate::core::provenance::node_subject(&scope.object),
-        crate::core::provenance::node_subject(&scope.anchor),
-        crate::core::provenance::node_subject(&scope.frame),
-    ];
-    let source =
-        crate::core::provenance::with_rust_header(source, subjects.iter().map(String::as_str));
-    if source.len() > MAX_GENERATED_SOURCE_BYTES {
-        return Err(StateFrameRefusal::ResourceLimitExceeded {
-            bytes: source.len(),
-        });
-    }
-    if let Err(error) = syn::parse_file(&source) {
-        return Err(StateFrameRefusal::InvalidGeneratedSyntax {
-            error: error.to_string(),
-        });
-    }
     let mut record = serde_json::to_string(&RecordView {
         identity: &identity,
         rust_path: &format!("src/generated/{module}.rs"),
@@ -1037,7 +1062,7 @@ fn render(
     .map_err(|_| StateFrameRefusal::RecordSerialization)?;
     record.push('\n');
     Ok(StateFrameHarness {
-        rust: Artifact::new(format!("src/generated/{module}.rs"), source),
+        rust,
         record: Artifact::new(format!("kani-obligations/{module}.json"), record),
         identity,
     })
@@ -1050,57 +1075,8 @@ struct RecordView<'a> {
     rust_path: &'a str,
 }
 
-/// What the generated harness bodies need of the request: the subject ABI.
-struct Abi<'a> {
-    state_path: &'a str,
-    subject_path: &'a str,
-    state_fields: &'a [&'a str],
-}
-
-/// `let pre: S = S { a: kani::any(), ... };` and an assumption of each field's IR range.
-fn symbolic_state(abi: &Abi<'_>, domains: &[StateFieldDomain]) -> String {
-    let fields = abi
-        .state_fields
-        .iter()
-        .map(|field| format!("{field}: kani::any()"))
-        .collect::<Vec<_>>()
-        .join(", ");
-    let assumptions = domains
-        .iter()
-        .map(
-            |StateFieldDomain {
-                 field,
-                 minimum,
-                 maximum,
-             }| {
-                format!(
-                    "        kani::assume(pre.{field} >= {} && pre.{field} <= {});\n",
-                    i64_literal(*minimum),
-                    i64_literal(*maximum)
-                )
-            },
-        )
-        .collect::<String>();
-    format!(
-        "        let pre: {state} = {state} {{ {fields} }};\n{assumptions}",
-        state = abi.state_path
-    )
-}
-
-/// `text` as a Rust string literal. It is passed to `assert!` as a format argument, never as the
-/// format string, so braces in an operation name cannot break the generated source.
-fn assertion_message(text: &str) -> String {
-    format!("{text:?}")
-}
-
-/// The `kani::proof` function every generated module holds.
+/// The proof function every generated frame module holds.
 const HARNESS: &str = "check";
-
-struct Postcondition<'a> {
-    field: &'a str,
-    comparison: StateComparison,
-    left_is_pre: bool,
-}
 
 /// The assertion named by an operation-contract harness and its Kani playback.
 pub(crate) fn postcondition_check_text(
@@ -1117,72 +1093,6 @@ pub(crate) fn postcondition_check_text(
     format!(
         "operation `{operation}`: postcondition `{left}.{field} {} {right}.{field}` failed",
         comparison.rust()
-    )
-}
-
-/// The operation-contract harness body.
-///
-/// It ends with its one non-vacuity cover, after the assertion (FR-015-AC-7, IR-451). Kani prints
-/// one concrete playback per distinct input valuation, and a cover that precedes the assertion is
-/// satisfied by every valuation, the failing one included, so a violation found at a valuation the
-/// cover also took (the all-zero one, say) printed only the cover's playback and read as a failure
-/// with no counterexample. An assertion that fails does not return, so a cover placed after it can
-/// only be satisfied by a valuation that passed it, and the failing valuation's playback is the
-/// assertion's own.
-fn postcondition_body(
-    abi: &Abi<'_>,
-    scope: &StateFrameScope,
-    domains: &[StateFieldDomain],
-    condition: &Postcondition<'_>,
-    module: &str,
-) -> String {
-    let Postcondition {
-        field,
-        comparison,
-        left_is_pre,
-    } = *condition;
-    let (left, right) = if left_is_pre {
-        ("pre", "post")
-    } else {
-        ("post", "pre")
-    };
-    let operator = comparison.rust();
-    let message = assertion_message(&postcondition_check_text(
-        &scope.operation,
-        field,
-        comparison,
-        left_is_pre,
-    ));
-    format!(
-        "#[cfg(kani)]\nmod {module} {{\n    use super::*;\n\n    #[kani::proof]\n    fn {HARNESS}() {{\n{state}        let mut post = pre.clone();\n        {subject}(&mut post);\n        assert!(\n            {left}.{field} {operator} {right}.{field},\n            \"{{}}\",\n            {message}\n        );\n        kani::cover!(true, \"state bounds hold and the operation returns\");\n    }}\n}}\n",
-        state = symbolic_state(abi, domains),
-        subject = abi.subject_path,
-    )
-}
-
-/// The frame-effect harness body. Like [`postcondition_body`] it ends with its one cover, after
-/// every assertion, for the reason given there (FR-015-AC-7, IR-451).
-fn frame_body(
-    abi: &Abi<'_>,
-    scope: &StateFrameScope,
-    domains: &[StateFieldDomain],
-    checked: &[String],
-    module: &str,
-) -> String {
-    let assertions = checked
-        .iter()
-        .map(|field| {
-            let message = assertion_message(&format!(
-                "operation `{}` changed `{field}`, which its frame does not modify",
-                scope.operation
-            ));
-            format!("        assert!(post.{field} == pre.{field}, \"{{}}\", {message});\n")
-        })
-        .collect::<String>();
-    format!(
-        "#[cfg(kani)]\nmod {module} {{\n    use super::*;\n\n    #[kani::proof]\n    fn {HARNESS}() {{\n{state}        let mut post = pre.clone();\n        {subject}(&mut post);\n{assertions}        kani::cover!(true, \"the operation returns\");\n    }}\n}}\n",
-        state = symbolic_state(abi, domains),
-        subject = abi.subject_path,
     )
 }
 
@@ -1228,54 +1138,56 @@ mod tests {
             None
         );
 
-        let abi = Abi {
-            state_path: "crate::State",
-            subject_path: "crate::operate",
-            state_fields: &["balance"],
-        };
-        let scope = scope("withdraw");
-        let pre_on_left = postcondition_body(
-            &abi,
-            &scope,
-            &[],
-            &Postcondition {
-                field: "balance",
-                comparison: StateComparison::Lt,
+        let pre_on_left = render_test(
+            "withdraw",
+            FrameAssertion::Postcondition {
+                field: "balance".to_owned(),
+                operator: "<",
                 left_is_pre: true,
+                message: postcondition_check_text("withdraw", "balance", StateComparison::Lt, true),
             },
-            "m",
         );
         assert!(pre_on_left.contains("pre.balance < post.balance"));
         assert!(!pre_on_left.contains("post.balance < pre.balance"));
-        let post_on_left = postcondition_body(
-            &abi,
-            &scope,
-            &[],
-            &Postcondition {
-                field: "balance",
-                comparison: StateComparison::Lt,
+        let post_on_left = render_test(
+            "withdraw",
+            FrameAssertion::Postcondition {
+                field: "balance".to_owned(),
+                operator: "<",
                 left_is_pre: false,
+                message: postcondition_check_text(
+                    "withdraw",
+                    "balance",
+                    StateComparison::Lt,
+                    false,
+                ),
             },
-            "m",
         );
         assert!(post_on_left.contains("post.balance < pre.balance"));
         assert!(!post_on_left.contains("pre.balance < post.balance"));
     }
 
-    fn scope(operation: &str) -> StateFrameScope {
-        let id = |digest: &str| -> CheckedNodeId {
-            serde_json::from_value(serde_json::json!({
-                "domain": "quire.checked-semantic-node/v1",
-                "digest": digest,
-            }))
-            .expect("a node id")
+    fn render_test(operation: &str, assertion: FrameAssertion) -> String {
+        let path = HarnessPath {
+            module: ModuleSymbol::try_from("frame_test").unwrap(),
+            harness: HarnessSymbol::try_from(HARNESS).unwrap(),
         };
-        StateFrameScope {
-            operation: operation.to_owned(),
-            object: id(&"1".repeat(64)),
-            anchor: id(&"2".repeat(64)),
-            frame: id(&"3".repeat(64)),
-        }
+        let spec = HarnessSpec::new_frame(
+            path,
+            FrameSpec {
+                prefix: format!("// Operation: {operation:?}\n"),
+                state_path: "crate::State".to_owned(),
+                subject_path: "crate::operate".to_owned(),
+                state_fields: vec!["balance".to_owned(), "audit".to_owned()],
+                domains: Vec::new(),
+                assertion,
+            },
+            "the operation returns".to_owned(),
+            1,
+            KaniSolver::Cadical,
+        )
+        .unwrap();
+        render_spec(&spec).unwrap().contents
     }
 
     /// An operation name that would break a format string reaches the generated assertions as a
@@ -1283,24 +1195,22 @@ mod tests {
     #[trace("FR-015-AC-26", "TC-025")]
     #[test]
     fn tc_025_an_operation_name_with_braces_cannot_break_an_assertion() {
-        let abi = Abi {
-            state_path: "crate::State",
-            subject_path: "crate::operate",
-            state_fields: &["balance", "audit"],
-        };
-        let scope = scope("dep{osit}{}");
-        let domains = [];
-        let frame = frame_body(&abi, &scope, &domains, &["audit".to_owned()], "m");
-        let postcondition = postcondition_body(
-            &abi,
-            &scope,
-            &domains,
-            &Postcondition {
-                field: "balance",
-                comparison: StateComparison::Ge,
+        let operation = "dep{osit}{}";
+        let frame = render_test(
+            operation,
+            FrameAssertion::Effects(vec![(
+                "audit".to_owned(),
+                format!("operation `{operation}` changed `audit`, which its frame does not modify"),
+            )]),
+        );
+        let postcondition = render_test(
+            operation,
+            FrameAssertion::Postcondition {
+                field: "balance".to_owned(),
+                operator: ">=",
                 left_is_pre: false,
+                message: postcondition_check_text(operation, "balance", StateComparison::Ge, false),
             },
-            "m",
         );
         syn::parse_file(&frame).expect("the frame harness parses");
         syn::parse_file(&postcondition).expect("the postcondition harness parses");
