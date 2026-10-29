@@ -28,3 +28,7 @@ Reviewed PR #607 at 55637acf891ca18422105948599990ffbf4bf4e7 against merged FR-0
 ## Verdict
 
 PASS for the reviewed diff's static code and Rust behavior. Focused compilation and final aggregate gate remain pending the compatible merged QSL dependency.
+
+## Final-head recheck
+
+At rebased PR #607 head `fed57257c8b9d8e4bee0300cd18268e05b33d5c5` against CG main `218e4cdec8799fa48526c4a4ca623063fb7cccaf`, the source/test patch has the same stable patch-id `5ef5bba71fa11ca5be21dd13c46c28971be66e2f` as reviewed head `55637acf891ca18422105948599990ffbf4bf4e7`. The PR changes no Cargo manifest, lockfile, CI workflow, or specification relative to current main. Current CG main already pins QSL `c8584d28a20b584a43b61a3e40ffeeaff8edfb48` and Contract IR `a97babf051510a35f9fea27e67ab07784aec8edd`. The pinned Contract IR accessor still returns `ExecutionPoint` and preserves `CheckedExecutionPointError`'s typed code, clause, owner, and occurrence. No new static finding arose from the rebase. The earlier QSL-unmerged note was historical; final-head focused execution and aggregate gate evidence remain pending, so this review does not claim a runtime pass.
