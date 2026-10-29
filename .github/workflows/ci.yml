@@ -30,13 +30,13 @@ jobs:
       - name: Lint
         run: cargo clippy --all-targets -- -D warnings
 
+      - name: Minimum supported Rust version
+        run: make msrv
+
       - name: Test
         run: cargo test
         env:
           QSPEC_DIR: ${{ github.workspace }}/quire-specification
-
-      - name: Minimum supported Rust version
-        run: make msrv
 
       - name: Validate specification
         run: |

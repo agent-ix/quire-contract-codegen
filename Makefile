@@ -127,7 +127,7 @@ build:
 
 .PHONY: msrv
 msrv:
-	rustup toolchain install $(MSRV) --profile minimal
+	@rustup run $(MSRV) rustc --version >/dev/null 2>&1 || rustup toolchain install $(MSRV) --profile minimal
 	rustup run $(MSRV) cargo check $(LOCKED) --all-targets
 
 .PHONY: spec
