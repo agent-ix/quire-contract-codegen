@@ -1,6 +1,6 @@
 ---
 id: TC-047
-title: "Check public routed scalar lowering replay and generated-content binding"
+title: "Check public routed scalar lowering replay and staged-content binding"
 type: TC
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-032
@@ -8,7 +8,7 @@ relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-029
     type: verifies
 ---
-# TC-047: Check public routed scalar lowering replay and generated-content binding
+# TC-047: Check public routed scalar lowering replay and staged-content binding
 
 ## Description
 
@@ -42,7 +42,7 @@ The measured QSL operator API and scalar terminal causes do not close those gate
    instead supplies the divergence control. The observed ranges and native refusal must be
    asserted; source admission failure remains a gate, not a hand-built package replacement.
 3. Build the scalar plan from the actual identity, decoded playback, proving package and
-   canonical identity of that same proved generated oracle and the retained original generation
+   retained staged path and byte set of that same proved generated oracle and the retained original generation
    limits context. Check setup precedence with one defect at a time: context/identity/schema,
    selected playback bytes above 8 MiB, adapter block/harness/arity/width, then operand domain.
    Those distinct refusals occur before an absent-capability check. Only an otherwise valid
@@ -58,8 +58,8 @@ The measured QSL operator API and scalar terminal causes do not close those gate
    Execute the same proved oracle artifact natively over those operands and limits, following the
    driver authentication contract, and retain the typed outcome and its checked completion.
    CG supplies the original generation/proving record; the driver authenticates the observation
-   against that record's canonical proved content, decoded vector and retained limits. Attempt
-   replay with a bare echoed outcome/digest, without authenticated observation, with another
+   by comparing the receipt's staged bytes with its original artifacts, alongside the decoded vector and retained limits. Attempt
+   replay with a bare echoed outcome, without authenticated observation, with another
    artifact's observation and with a regenerated correct oracle replacing the proved arithmetic
    mutation. Each must refuse before QSL evaluation; QSL receives no artifact and cannot be
    credited with authenticating the driver's execution.
@@ -81,7 +81,7 @@ The measured QSL operator API and scalar terminal causes do not close those gate
    other `Refused` report produced by the actual public QSL facade, pass that immutable report
    with CG's retained expected sent `OperatorIdentity` and checked run/context completion to
    the converter. Compare its full `claim()` before settlement. Hold the real report fixed and
-   change only one retained expected member at a time: obligation, node, content identity,
+   change only one retained expected member at a time: obligation, node,
    occurrence, kind, operator, operand identity/value/range, result range, limits or native
    outcome. Require binding refusal with no settlement. Keep the obligation digest equal for
    the other member mutations; a native-outcome-only difference cannot be found by the digest.
@@ -115,7 +115,7 @@ The measured QSL operator API and scalar terminal causes do not close those gate
    independently at two positions and assert two distinct
    position entries; identifier sorting and node-id deduplication must fail. Exclude unrelated
    enclosing-function parameters. Change each included member and require an identity change;
-   changing source span, native outcome and generated-content identity leaves it unchanged.
+   changing source span or native outcome leaves it unchanged.
    Missing selected occurrence, authentic operand identity/range or scalar kind whose typed retention is gated refuses with
    no identity. IR graph/source-map access supplies node occurrence data, but raw JSON or
    an invented literal node does not close the typed scalar accessor CODE gate; IR-648 must
@@ -148,9 +148,9 @@ The measured QSL operator API and scalar terminal causes do not close those gate
 | FR-032-AC-1 | Public typed consumer uses scalar identity; unavailable named capability refuses after setup; all named capabilities available yields an admitted plan | Require function identity, admit a synthetic predicate, or continue refusing after every named capability is available |
 | FR-032-AC-2 | Adapter-decoded playback uses persisted order; builder rejects above 8 MiB before parsing | Decode in alphabetic order, ignore another harness name or discard extra bytes |
 | FR-032-AC-3 | Operand endpoints and request operator/ranges agree with the harness/package; limits match original generation context, including AD-002 identities | Skip a bound check, replace operator/node, use result bounds for a literal or swap operands |
-| FR-032-AC-4 | Driver authenticates same-proved-artifact observation against CG's retained record and checked completion ties operands/limits/content | Accept an unchecked outcome/digest echo, treat playback as a generated result or accept fresh regeneration that removes the mutation |
+| FR-032-AC-4 | Driver authenticates same-proved-artifact observation by direct staged-byte comparison and checked completion ties operands/limits/content | Accept an unchecked outcome echo, treat playback as a generated result or accept fresh regeneration that removes the mutation |
 | FR-032-AC-5 | Driver executes the proved artifact and calls QSL between builder and converter; QSL measures the current four-operator completed-value/refused-outside-range projection | Execute inside the CG builder, substitute a local evaluator, stub the positive verdict, accept `Undefined`/`Incomplete` as agreement or add unproved refusal-cause/accounting-counter equality |
-| FR-032-AC-6 | Immutable full report claim and actual sent context match the retained binding/original proving context on every outcome, or no settlement | Check only the obligation digest or agreement; omit node/content/operator/operand range/result range/limits/native outcome on a refusal, exact Incomplete, generated fault or divergence |
+| FR-032-AC-6 | Immutable full report claim and actual sent context match the retained binding/original proving context on every outcome, or no settlement | Check only the obligation digest or agreement; omit node/operator/operand range/result range/limits/native outcome on a refusal, exact Incomplete, generated fault or divergence |
 | FR-032-AC-7 | Divergence/generated fault is `Failed`, agreement is `Inconclusive(ScalarAgrees)`, exact exhaustion is `Incomplete(ResourceExhausted)` and typed QSL refusal keeps its code; never `Refuted`/`Verified` | Convert every Kani falsification to `Reproduced`, fabricate a predicate disagreement or turn a fault into a data refusal |
 | FR-032-AC-8 | Increment emission/result range is observed; the separate bounded-addition check derives the exact result from actual retained in-domain operands and asserts it is outside `[-1000,1000]`, with correct refusal/harness-defect agreement rather than source violation | Use a hand-built function harness, assume `(600,600)` instead of reading actual playback, substitute increment as the unreachable refusal case, relabel expected refusal as source falsification or accept wrong emitted fixture ranges |
 | FR-032-AC-9 | Scalar positional shape measured in merged QSL change #650: actual application/expression occurrence/kind and one ordinal/tagged-identity/range entry per draw; `GraphChild` for graph references, `InlineLiteral` for application/occurrence/position, literal value in singleton range, repeated parameter draws distinct | Invent occurrence/operand ids or extra literal nodes, omit or swap identity tags, sort by identifier, deduplicate repeated nodes, omit a literal position, add unrelated function parameters/content/outcome/tracking fields or narrow a harness range |

@@ -288,7 +288,7 @@ authored).
   the inline arm. Node ids are lowercase hex; ordinals/positions numeric; SHA-256 hashes the
   RFC 8785 bytes with no added digest-label preimage member. Independent CG conformance checks must match that QSL
   encoding; no copied encoder or additional CG member enters it. Source spans, native
-  outcomes, transcript, generated-content identity, operator label, renderer counters and
+  outcomes, transcript, operator label, renderer counters and
   build/tool/version fields remain excluded.
   [FR-032](../replay/functional/FR-032-routed-scalar-replay-binding.md) owns acceptance criteria
   and the metadata/accessor gate. IR's `CheckedPackageV2::graph()` exposes authentic node ids
@@ -314,13 +314,11 @@ authored).
   alone does not establish it.
   Literal and repeated-parameter semantics are resolved; authentic metadata access, retention
   and actual consumer conformance remain CODE gates. Decoder/context work is independent.
-  The same-artifact content identity is a separate canonical proof-content tie. The driver
-  executes the same proved generated artifact at decoded operands and retained renderer limits,
-  authenticates its typed observation against CG's retained generation/proving record, then
-  completes CG's checked plan. This trusts the driver's actual execution/authentication; an
-  unchecked digest/outcome echo or regenerated oracle is insufficient. QSL never sees the
-  artifact and does not authenticate it: it carries the `DigestRecord` and evaluates exact
-  semantics. Before any scalar settlement, CG compares every member of the report's full claim
+  The driver executes the same proved generated artifact at decoded operands and retained
+  renderer limits, compares the receipt's staged artifacts, harness and record byte for byte
+  against its originals, then completes CG's checked plan. This trusts the driver's actual
+  execution/authentication; an unchecked outcome echo or regenerated oracle is insufficient.
+  QSL never sees the artifact and does not authenticate it; it evaluates exact semantics. Before any scalar settlement, CG compares every member of the report's full claim
   with the retained sent claim at the immutable-report/retained-binding converter boundary,
   plus checked driver completion's actual wire/run context against the original proving
   package/function/source/dependencies/limits. The report and O-09 do not bind that wire;
