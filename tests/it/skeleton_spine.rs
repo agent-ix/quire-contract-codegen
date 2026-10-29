@@ -10,8 +10,8 @@ use ix_trace_rs::trace;
 use std::collections::BTreeMap;
 
 use qsl_replay::{
-    call_site, ByteDigest, CallSiteRefusal, CanonicalAssignment, Code, DeclaredDomain,
-    DependencyInput, DependencyInputRefusal, DependencySelectionsCause, DigestDomain, DigestRecord,
+    call_site, CallSiteRefusal, CanonicalAssignment, Code, DeclaredDomain, DependencyInput,
+    DependencyInputRefusal, DependencySelectionsCause, DigestDomain, DigestRecord,
     DisagreementCause, DomainKey, DomainKind, FiniteBound, Identifier, Integer, ObligationIdentity,
     ProofBound, QualifiedName, ReplayLimits, ReplayRefusal, ReplayRequestRefusal, ReplaySource,
     ScalarLimits, SourceIdentity, Verdict, WireNodeId, WitnessSettlement,
