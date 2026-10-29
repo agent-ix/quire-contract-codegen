@@ -68,7 +68,7 @@ body, malformed or absent selected declaration, and an over-ceiling domain.
 Check typed `requires_bound` versus `unsupported`, no emitted harness for each
 refusal, and one disposition per item in a mixed request.
 
-For FR-015-AC-96 (IR-1091, pending owner decision), use QSL-emitted,
+For FR-015-AC-96 (IR-1091), use QSL-emitted,
 IR-admitted unique Boolean and bounded `IntRange` fields after the applicable
 form, empty-domain, representation, unwind and memory checks pass. A feasible
 unique maximum equal to its distinct-value capacity retains both cardinality
