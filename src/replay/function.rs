@@ -1473,6 +1473,7 @@ fn verdict_of(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::kani::generate::corpus::bounded_kani_corpus::tests::false_cases;
     use crate::kani::output::playback::parse_assertion_playback;
     use crate::kani::{
         abi::{KaniBindingRole, KaniIntegerBounds, KaniPrimitiveType},
@@ -1488,6 +1489,37 @@ mod tests {
     const UNIT: &str = "language \"ix:native\" edition \"1-draft\";\n\
         profile v = \"quire.value.complete/v1\";\n\
         function f using v(a: Int[0, 9], b: Int[0, 9]): Boolean pure { a <= b }\n";
+
+    /// A source-bound typed identity rejects a different case package and a transcript naming
+    /// another harness before any replay verdict is produced.
+    #[trace("TC-023")]
+    #[test]
+    fn tc_023_source_replay_rejects_wrong_package_and_harness() {
+        let cases = false_cases();
+        let case = &cases[0];
+        let transcript = format!(
+            "/// Test generated for harness `{}`\n\
+             /// Check for `assertion`: \"synthetic assertion\"\n\
+             #[test]\n\
+             fn kani_concrete_playback_synthetic() {{\n\
+                 let concrete_vals: Vec<Vec<u8>> = vec![];\n\
+                 kani::concrete_playback_run(concrete_vals, synthetic);\n\
+             }}\n",
+            case.harness_symbol.as_str()
+        );
+        let parsed = parse_assertion_playback(
+            &transcript,
+            case.harness_symbol.as_str(),
+            "corpus",
+            transcript.len(),
+            0,
+        )
+        .unwrap();
+        assert!(case
+            .replay_rejects_other_case_package(&parsed, &cases[1])
+            .unwrap());
+        assert!(case.replay_rejects_wrong_harness(&parsed).unwrap());
+    }
 
     fn unlimited() -> ScalarLimits {
         let max = u64::MAX;

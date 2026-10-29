@@ -782,7 +782,7 @@ fn render_artifacts(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use ix_trace_rs::trace;
     use quire_contract_ir::kani::{
         CapabilityDisposition, CapabilityEntry, DispatchIndex, FiniteInput, FiniteObject,
@@ -903,37 +903,6 @@ mod tests {
             cases[0].artifacts.qsl_dependency, cases[1].artifacts.qsl_dependency,
             "each imported dependency carries the case's own semantic source"
         );
-    }
-
-    /// A source-bound typed identity rejects a different case package and a transcript naming
-    /// another harness before any replay verdict is produced.
-    #[trace("TC-023")]
-    #[test]
-    fn tc_023_source_replay_rejects_wrong_package_and_harness() {
-        let cases = false_cases();
-        let case = &cases[0];
-        let transcript = format!(
-            "/// Test generated for harness `{}`\n\
-             /// Check for `assertion`: \"synthetic assertion\"\n\
-             #[test]\n\
-             fn kani_concrete_playback_synthetic() {{\n\
-                 let concrete_vals: Vec<Vec<u8>> = vec![];\n\
-                 kani::concrete_playback_run(concrete_vals, synthetic);\n\
-             }}\n",
-            case.harness_symbol.as_str()
-        );
-        let parsed = crate::kani::output::playback::parse_assertion_playback(
-            &transcript,
-            case.harness_symbol.as_str(),
-            "corpus",
-            transcript.len(),
-            0,
-        )
-        .unwrap();
-        assert!(case
-            .replay_rejects_other_case_package(&parsed, &cases[1])
-            .unwrap());
-        assert!(case.replay_rejects_wrong_harness(&parsed).unwrap());
     }
 
     /// Owner serializers supply each value; the input projection
