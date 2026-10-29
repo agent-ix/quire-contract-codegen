@@ -60,9 +60,7 @@ encoding through the one test seam. Check that it has exactly `function`, `decla
 and `arguments`: the admitted `FunctionSite`'s node id and occurrence key, the requested
 `ObligationKind`, and all declared parameters with their node ids and domains in ascending
 parameter-identifier order. Check the node-id, occurrence-key, kind and domain value forms
-against the O-09 contract. Inspect the source and dependency graph to confirm the function
-path uses the one `quire-canonical` encoder, does not mint from transcript content, and has
-no second identity encoder. Capture the request at the executor seam and submit its
+against the O-09 contract. Capture the request at the executor seam and submit its
 production-minted `obligation_identity` to QSL; verify QSL admits it. Refuse harnesses with a
 missing parameter argument, an unbounded integer or a bounded Boolean, before QSL invocation.
 Do not compute or assert an expected digest (AC-21). Then build the request for a second
@@ -97,10 +95,9 @@ control still pass. In the multi-block selection control, the cover, other-harne
 same-harness assertion blocks cannot replace the first eligible target assertion block.
 The observed pre-encoding object has exactly the four O-09 members, with the admitted site's
 function and declaration, requested kind, and all parameters in identifier order with their
-declared domains and O-09 value forms. One encoder mints the request slot from that object,
-the source has no transcript-derived or second identity route, and QSL admits the actual
-production request. Invalid harness shapes are refused before QSL. No expected digest is
-asserted (AC-21). The two functions' identities differ, comments and
+declared domains and O-09 value forms. The request slot carries the production-minted identity
+and QSL admits the actual request. Invalid harness shapes are refused before QSL. No expected
+digest is asserted (AC-21). The two functions' identities differ, comments and
 blank lines and the span change leave one unchanged, the kind change and the domain change each
 alter it, and the two-conjunct function has one identity (AC-22). The identity is unchanged by the
 other-node perturbation and changed by each `FunctionSite` perturbation (AC-23).
