@@ -13,7 +13,10 @@ pub enum RefinementRole {
     /// FR-315's Initial query.
     Base,
     /// FR-315's Step query at the canonical array position.
-    Step { row: usize },
+    Step {
+        /// Zero-based position in the recompiled canonical steps array.
+        row: usize,
+    },
 }
 
 /// The invocation selected from authoritative FR-315 query output.
