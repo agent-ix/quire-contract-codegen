@@ -872,9 +872,9 @@ records only the work order the ruling allows, because the code still has V1 rea
   too. CG writes no hash or encoding routine of its own. Coupling: CG's own `Cargo.lock` already
   resolves `quire-canonical` from QSL's tag `quire-canonical-v0.3.0`, through `qsl-replay`
   (`Cargo.lock:1345-1347`). A direct `branch = "main"` dependency adds a second entry, and CG's own
-  `make deny` one-copy check (`scripts/check_one_copy.awk`) fails on it. The same holds for any lock
-  that pulls QSL together with CG or IR on `main` (quire-integration, the driver), the second
-  consumers. See the step 1a precondition.
+  former `make deny` one-copy check (`scripts/check_one_copy.awk`) rejected it. That checker
+  and the planned owned replacement retire under IR-1105; Cargo's manifest and lock remain
+  the dependency authority. The historical step 1a precondition is not an active gate.
 - **One digest identity.** The only digest CG mints for a proof is the obligation digest that
   binds a proof to its content (AD-003, E-1). `ContentDigest` in `core/identity.rs` is a CG type over
   `quire-canonical`'s digest; it is built only by `core::canonical`, over the RFC 8785 preimage.
@@ -1798,8 +1798,8 @@ V2 clause and mutation controls are tracked by IR-917.
   ticket. The IR-347 CG lowering move is implemented here; IR export removal and its `BoundPackage`
   retirement remain separate work. The C-09 terminal cases were checked against QSL's merged ADR-011 T-13; the closed-set
   rule for `ReplayRefused` is relayed.
-- The `quire-canonical` API names (`to_vec`, `Limits`, `sha256`), QSL's tag pin and the driver's
-  one-copy gate are relayed and were not checked.
+- The `quire-canonical` API names (`to_vec`, `Limits`, `sha256`) and QSL's tag pin were
+  relayed and were not checked. The former one-copy gate is retired under IR-1105.
 
 ## IR-364 V2 strategy replacement gate
 
