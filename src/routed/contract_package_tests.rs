@@ -44,7 +44,7 @@ mod tests {
         let CheckedTerm::Application { operation, .. } = &node.body else {
             return None;
         };
-        operation.get("identity")?.as_str()
+        operation.identity()
     }
 
     fn argument_target(node: &CheckedSemanticNodeV2, index: usize) -> Option<&CheckedNodeId> {
@@ -1134,6 +1134,11 @@ mod tests {
         let _ = crate::oracle::function::take_function_preflight_graph_visits();
         let _ = crate::oracle::function::take_function_preflight_graph_lookup_work();
         let expected_visits = shared.graph().nodes.len() + different.graph().nodes.len();
+        let max_graph_nodes = shared
+            .graph()
+            .nodes
+            .len()
+            .max(different.graph().nodes.len());
         let first = RequestItem {
             kind: RequestedKind::Known(CapabilityKind::ValueValidity),
             extent: Some(ExtentClassification {
@@ -1217,7 +1222,7 @@ mod tests {
         assert!(
             lookup_work
                 .iter()
-                .all(|&comparisons| (1..=16).contains(&comparisons)),
+                .all(|&comparisons| (1..=max_graph_nodes).contains(&comparisons)),
             "{lookup_work:?}"
         );
     }

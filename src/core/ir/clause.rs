@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use super::checked_term::{application, node_id, reference};
+use super::checked_term::{application, reference};
 use quire_contract_model::{
     ApplicationOperator, CheckedMemberType, CheckedNodeId, CheckedNodeKind, CheckedPackageV2,
     CheckedSemanticNodeV2, CheckedTerm, LiteralKind,
@@ -201,7 +201,7 @@ impl Reader<'_, '_> {
                 arguments: args,
                 ..
             } => {
-                let identity = operation.get("identity")?.as_str()?;
+                let identity = operation.identity()?;
                 match identity {
                     "quire.op.state.pre" if args.len() == 1 => {
                         let read = self.term_body(&args[0])?;
@@ -213,7 +213,7 @@ impl Reader<'_, '_> {
                         else {
                             return None;
                         };
-                        if operation.get("identity")?.as_str()? != "quire.op.record.project" {
+                        if operation.identity()? != "quire.op.record.project" {
                             return None;
                         }
                         let [deref] = arguments.as_slice() else {
@@ -250,19 +250,15 @@ impl Reader<'_, '_> {
         let CheckedTerm::Application { operation, .. } = project else {
             return None;
         };
-        let member = operation.get("member")?;
-        let declaration = node_id(member.get("declaration")?)?;
-        let name = member.get("name")?.as_str()?;
-        if member.get("kind")?.as_str()? != "field"
-            || !matches!(side, ClauseInputSide::Current | ClauseInputSide::Pre)
-        {
+        let (declaration, name) = operation.projection_field().ok()??;
+        if !matches!(side, ClauseInputSide::Current | ClauseInputSide::Pre) {
             return None;
         }
         let deref = self.term_body(deref)?;
         let CheckedTerm::Application { result_type, .. } = &deref else {
             return None;
         };
-        if result_type != &declaration {
+        if result_type != declaration {
             return None;
         }
         let [subject] = application(&deref, ApplicationOperator::Deref, "quire.op.model.deref")?
@@ -272,7 +268,7 @@ impl Reader<'_, '_> {
         if reference(subject)? != &self.self_id {
             return None;
         }
-        let fields = self.package.model_object_fields(&declaration).ok()?;
+        let fields = self.package.model_object_fields(declaration).ok()?;
         let field = fields.field(name)?;
         let Some(CheckedMemberType::IntRange { lower, upper }) = field.member_type() else {
             return None;

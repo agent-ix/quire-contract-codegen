@@ -523,7 +523,7 @@ fn lowering_refusal(record: CompleteLoweringRecordV2) -> Option<StateFrameLoweri
         } => Some(StateFrameLoweringRefusal::InvalidBody {
             node_id,
             body_node_id,
-            refusal,
+            refusal: Box::new(refusal),
         }),
         CompleteLoweringRecordV2::BodyIncomplete {
             node_id,
@@ -869,13 +869,19 @@ pub(crate) fn field_range(
         Some(
             CheckedMemberType::Boolean
             | CheckedMemberType::Integer
+            | CheckedMemberType::Float32
+            | CheckedMemberType::Float64
             | CheckedMemberType::String
+            | CheckedMemberType::Bytes
+            | CheckedMemberType::JsonObject
+            | CheckedMemberType::TextBounds { .. }
             | CheckedMemberType::Uuid
             | CheckedMemberType::Timestamp
             | CheckedMemberType::Clock
             | CheckedMemberType::Quantity(_)
             | CheckedMemberType::Reference(_)
             | CheckedMemberType::Record(_)
+            | CheckedMemberType::Tuple(_)
             | CheckedMemberType::Variant(_)
             | CheckedMemberType::Option(_)
             | CheckedMemberType::Collection { .. },

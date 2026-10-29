@@ -108,7 +108,7 @@ fn typed_clauses() -> (DeclarationEnvironment, TypedExpression, TypedExpression)
             &precondition,
             &ValueType::Boolean,
             &ExecutionPoint::Pre {
-                operation: AnchorName::new("update").unwrap(),
+                operation: AnchorName::new("update").unwrap().into(),
             },
             true,
         )
@@ -118,7 +118,7 @@ fn typed_clauses() -> (DeclarationEnvironment, TypedExpression, TypedExpression)
             &postcondition,
             &ValueType::Boolean,
             &ExecutionPoint::Handler {
-                name: AnchorName::new("update").unwrap(),
+                name: AnchorName::new("update").unwrap().into(),
             },
             true,
         )
@@ -554,10 +554,10 @@ fn tc_004_state_only_and_dependency_free_harnesses_compile_with_denied_warnings(
     let literal =
         |value, at| Expression::new(ExpressionKind::BooleanLiteral { value }, span(at, at + 1));
     let execution_pre = ExecutionPoint::Pre {
-        operation: AnchorName::new("update").unwrap(),
+        operation: AnchorName::new("update").unwrap().into(),
     };
     let execution_post = ExecutionPoint::Handler {
-        name: AnchorName::new("update").unwrap(),
+        name: AnchorName::new("update").unwrap().into(),
     };
 
     let dependency_free_environment =
@@ -867,7 +867,7 @@ fn tc_004_multiple_state_bindings_fail_closed() {
             &Expression::new(ExpressionKind::BooleanLiteral { value: true }, span(4, 5)),
             &ValueType::Boolean,
             &ExecutionPoint::Pre {
-                operation: AnchorName::new("update").unwrap(),
+                operation: AnchorName::new("update").unwrap().into(),
             },
             true,
         )
@@ -877,7 +877,7 @@ fn tc_004_multiple_state_bindings_fail_closed() {
             &postcondition,
             &ValueType::Boolean,
             &ExecutionPoint::Handler {
-                name: AnchorName::new("update").unwrap(),
+                name: AnchorName::new("update").unwrap().into(),
             },
             true,
         )

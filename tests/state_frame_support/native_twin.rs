@@ -18,19 +18,22 @@ use qsl_replay::{
     OperationName, OperationSite, ReplayLimits, ReplayRefusal, ScalarLimits, SelectedObject,
     SourceIdentity, WitnessEnvelope, DEFAULT_REPLAY_INPUT_BYTES,
 };
-use quire_canonical::{sha256, Limits};
 use quire_contract_codegen::{
     DependencyLock, DocumentLabel, FrameReplay, FrameReplayError, FrameReplayInputs, LockedSource,
     ProvidedDocument, ReplayInputs, StateClauseReplayInputs, StateFrameIdentity,
     StateObjectAddress,
 };
 use quire_contract_model::{
-    CheckedNodeId, CheckedPackageEvidence, CheckedPackageIdentityPreimageRefV2,
-    CheckedPackageIdentityPreimageV2, CheckedPackageReadLimits, CheckedPackageV2,
-    CheckedPackageV2ReadResult, CheckedSemanticNodeV2,
+    CheckedNodeId, CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2,
+    CheckedPackageV2ReadResult,
 };
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
+
+#[path = "../checked_package_support/rekey.rs"]
+// The native twin is included by several test modules that also use this fixture helper.
+#[allow(dead_code, clippy::duplicate_mod)]
+mod rekey;
 
 const AUTHORITY: &str = "agent-ix";
 const IDENTITY: &str = "test:state-frame-twin";
@@ -741,9 +744,9 @@ impl Twin {
         self.emitted_package_with_model(clause, None)
     }
 
-    /// Admit QSL's emitted graph against a deliberately changed selected model document. The
-    /// graph and clause identity still come from QSL; this negative fixture reaches an IR field
-    /// type that QSL's current model reader cannot emit.
+    /// Start with QSL's emitted graph and replace its selected model document. IR's public
+    /// candidate API rederives the model-root and affected clause/node identities before
+    /// admission. This negative fixture reaches a field type QSL cannot currently emit.
     pub fn emitted_package_with_unread_string_audit(
         &self,
         clause: &str,
@@ -824,6 +827,7 @@ impl Twin {
             &name,
         )
         .expect("the clause is located");
+        let overridden = model_override.is_some();
         let document = model_override.unwrap_or_else(|| self.domain.clone());
         let mut wire: Value = serde_json::from_slice(&located.package).expect("emitted package");
         if document != self.domain {
@@ -831,42 +835,44 @@ impl Twin {
             wire["lock"]["model_selections"][0]["digest"] = json!(digest);
             wire["identity_preimage"]["model_selections"] =
                 wire["lock"]["model_selections"].clone();
-            let selections: CheckedPackageIdentityPreimageV2 =
-                serde_json::from_value(wire["identity_preimage"].clone())
-                    .expect("typed package selections");
-            let nodes: Vec<CheckedSemanticNodeV2> =
-                serde_json::from_value(wire["semantic_graph"]["nodes"].clone())
-                    .expect("typed package graph");
-            let preimage = CheckedPackageIdentityPreimageRefV2 {
-                version: &selections.version,
-                edition: &selections.edition,
-                profile_selections: &selections.profile_selections,
-                definition_selections: &selections.definition_selections,
-                model_selections: &selections.model_selections,
-                required_features: &selections.required_features,
-                dependency_selections: &selections.dependency_selections,
-                identity_projection: &nodes,
-            };
-            wire["package_id"]["digest"] = json!(sha256(&preimage, Limits::new(u64::MAX))
-                .expect("canonical package identity")
-                .to_string());
+            for node in wire["semantic_graph"]["nodes"]
+                .as_array_mut()
+                .expect("emitted graph nodes")
+            {
+                if node["owner"]["kind"] == "model_root" {
+                    node["owner"]["digest"] = json!(digest);
+                }
+            }
         }
-        let bytes = wire.to_string().into_bytes();
         let mut evidence = CheckedPackageEvidence::new();
         evidence
             .insert_domain_package_document(hex(&jcs_digest(&document)), document)
             .expect("retain emitted model document");
         evidence.support_feature("quire.value.complete/v1");
-        let package =
-            match CheckedPackageV2::read(&bytes, CheckedPackageReadLimits::bounded(), &evidence) {
-                CheckedPackageV2ReadResult::Admitted(package) => *package,
-                other => panic!("QSL's emitted package is admitted: {other:?}"),
-            };
-        let clause_node = serde_json::from_value(json!({
+        let (outcome, ids) = if overridden {
+            // A changed model selection also changes its generated model-root
+            // identity and every node that refers to it. Ask IR's public
+            // candidate API to settle those fixture identities before read.
+            let resolved =
+                rekey::resolve_wire(&wire, &evidence, CheckedPackageReadLimits::bounded());
+            (resolved.outcome, Some(resolved.ids))
+        } else {
+            let bytes = wire.to_string().into_bytes();
+            (
+                CheckedPackageV2::read(&bytes, CheckedPackageReadLimits::bounded(), &evidence),
+                None,
+            )
+        };
+        let package = match outcome {
+            CheckedPackageV2ReadResult::Admitted(package) => *package,
+            other => panic!("QSL's emitted package is admitted: {other:?}"),
+        };
+        let clause_node: CheckedNodeId = serde_json::from_value(json!({
             "domain": "quire.checked-semantic-node/v1",
             "digest": located.site.node.to_string(),
         }))
         .expect("a node id");
+        let clause_node = ids.map_or(clause_node.clone(), |ids| ids.resolve(&clause_node));
         (package, clause_node)
     }
 

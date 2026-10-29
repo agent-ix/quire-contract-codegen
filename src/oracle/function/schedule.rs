@@ -1072,6 +1072,7 @@ mod tests {
         source_nodes.push(Node::new(
             super::super::CheckedSemanticNodeV2 {
                 node_id: parameter.clone(),
+                owner_model: None,
                 schema_version: "quire.checked-semantic-graph/v2".into(),
                 node_tag: "value".into(),
                 semantic_form: "parameter".into(),
@@ -1096,6 +1097,7 @@ mod tests {
             source_nodes.push(Node::new(
                 super::super::CheckedSemanticNodeV2 {
                     node_id,
+                    owner_model: None,
                     schema_version: "quire.checked-semantic-graph/v2".into(),
                     node_tag: "expression".into(),
                     semantic_form: "call".into(),
@@ -1110,7 +1112,10 @@ mod tests {
                 },
                 Some(CheckedTerm::Application {
                     operator: ApplicationOperator::Call,
-                    operation: serde_json::json!({"identity": "quire.op.function.call"}),
+                    operation: serde_json::from_value(
+                        serde_json::json!({"identity": "quire.op.function.call"}),
+                    )
+                    .expect("fixture operation"),
                     result_type: integer_type.clone(),
                     arguments: vec![reference(&declaration), reference(&argument)],
                 }),

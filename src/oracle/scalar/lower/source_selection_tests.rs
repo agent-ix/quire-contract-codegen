@@ -21,7 +21,7 @@ fn application_identity(node: &CheckedSemanticNodeV2) -> Option<&str> {
     let CheckedTerm::Application { operation, .. } = &node.body else {
         return None;
     };
-    operation.get("identity")?.as_str()
+    operation.identity()
 }
 
 fn first_reference(node: &CheckedSemanticNodeV2) -> Option<&CheckedNodeId> {

@@ -146,12 +146,12 @@ use crate::oracle::equality::EqualityOperatorKind;
 use crate::oracle::operator_catalog::IntegerOperator;
 use crate::oracle::{classify_lowering_failure, direct_unsupported_form, LoweringFailure};
 use quire_contract_model::{
-    ApplicationOperator, CheckedNodeId, CheckedNodeTag, CheckedPackageIncomplete,
+    ApplicationOperator, CheckedNodeId, CheckedNodeKind, CheckedNodeTag, CheckedPackageIncomplete,
     CheckedPackageReadLimits, CheckedPackageRefusal, CheckedPackageV2, CheckedSemanticId,
     CheckedSemanticNodeV2, CheckedSourceMapEntry, CheckedTerm, CompleteLoweringProfileV2,
     CompleteLoweringRecordV2, ContractDependencies, ContractFeatureRecordV1,
     ContractPackageReadResult, ContractPackageV1, ContractPackageWireV1, ContractReachedClosureV1,
-    LiteralKind,
+    ContractUnsupportedSourceKindError, LiteralKind, TemporalForm,
 };
 use quire_contract_runtime::exact as rt;
 use quire_exact::{self as exact, Outcome, Refusal};
@@ -1770,6 +1770,7 @@ mod ir988_source_function_tests {
         let metadata = CheckedSemanticNodeV2 {
             node_id: id(value),
             owner: None,
+            owner_model: None,
             schema_version: "quire.checked-semantic-graph/v2".into(),
             node_tag: if name.is_some() {
                 "function"
@@ -2387,6 +2388,70 @@ fn check_position(
     Ok(())
 }
 
+/// Preserve an authenticated direct temporal root's unsupported provenance.
+/// The V1 represented graph omits refused roots; a plain V1 read cannot
+/// distinguish a formula or fairness request from a temporal clause.
+fn authenticated_direct_temporal_refusal(
+    package: &ContractPackageV1,
+    accounting_index: usize,
+    item: &PackageItem<'_>,
+) -> Option<ExactFunctionRefusal> {
+    if !matches!(
+        package.unsupported_source_kind_at(accounting_index),
+        Ok(Some(CheckedNodeKind::Temporal(
+            TemporalForm::Formula | TemporalForm::Fairness
+        )))
+    ) {
+        return None;
+    }
+    let PackageItem::Refused {
+        record:
+            ContractFeatureRecordV1::Unsupported {
+                unsupported_node_id,
+                node_tag,
+                ..
+            },
+        ..
+    } = item
+    else {
+        return None;
+    };
+    Some(ExactFunctionRefusal::Unsupported {
+        unsupported_node_id: unsupported_node_id.clone(),
+        node_tag: CheckedNodeTag::from_wire(node_tag.as_ref())
+            .map_or("unknown", CheckedNodeTag::as_wire),
+    })
+}
+
+/// A temporal tag on an unsupported record cannot distinguish a direct temporal
+/// root from a clause when the V1 reader did not retain its V2 source kind.
+fn unauthenticated_temporal_root(
+    package: &ContractPackageV1,
+    accounting_index: usize,
+    item: &PackageItem<'_>,
+) -> bool {
+    matches!(
+        item,
+        PackageItem::Refused {
+            record: ContractFeatureRecordV1::Unsupported { node_tag, .. },
+            ..
+        } if node_tag.as_ref() == "temporal"
+    ) && matches!(
+        package.unsupported_source_kind_at(accounting_index),
+        Err(ContractUnsupportedSourceKindError::NotAdmitted)
+    )
+}
+
+/// Whether a distinct call item reaches its declaration's Stage 1 body result
+/// before later arity, source-binding, argument-type or package checks.
+fn item_reaches_temporal_body(admitted: &PackageItem<'_>, graph: &Graph<'_>) -> bool {
+    let PackageItem::Lowered { closure, .. } = admitted else {
+        return false;
+    };
+    check_lowered_binary_body(closure, graph).is_ok()
+        && closure.root.semantic_form.as_ref() == "call"
+}
+
 fn admitted_binary_body<'a>(
     item: PackageItem<'a>,
     graph: &Graph<'_>,
@@ -2429,6 +2494,15 @@ fn admitted_binary_body<'a>(
             ..
         } => (closure, occurrences),
     };
+    check_lowered_binary_body(&closure, graph)?;
+    Ok((closure, occurrences))
+}
+
+/// Checks shared by the normal item path and AC-41's pre-resolved-body guard.
+fn check_lowered_binary_body(
+    closure: &ContractReachedClosureV1<'_>,
+    graph: &Graph<'_>,
+) -> Result<(), ExactFunctionRefusal> {
     if !closure.selected_references.is_empty() {
         return Err(ExactFunctionRefusal::SelectedDependencyUnsupported {
             references: closure
@@ -2454,7 +2528,7 @@ fn admitted_binary_body<'a>(
             |tag| unsupported_family(&closure.root.node_id, tag),
         ));
     }
-    Ok((closure, occurrences))
+    Ok(())
 }
 
 fn lowering_profile() -> CompleteLoweringProfileV2 {
@@ -2700,9 +2774,9 @@ fn validate_signature(
 /// Generate function-application oracles for `items`, over the declared
 /// functions in `functions`, from an admitted package.
 ///
-/// Fails as a whole only with `SourceTooLarge`, `ClaimMapSerialization` or
-/// `LocationMapSerialization`; every per-item problem is a refusal in the
-/// claim map.
+/// Fails as a whole for invalid package correspondence, unauthenticated
+/// requested temporal-root kind, or artifact generation failure. Other
+/// per-item problems are refusals in the claim map.
 pub fn generate_exact_function_oracles(
     package: &ContractPackageV1,
     requested: &[ContractRequestPosition],
@@ -2766,6 +2840,9 @@ pub fn generate_exact_function_oracles(
         let admitted = accounting
             .at(position, &declaration.node_id)
             .map_err(OracleGenerationError::PackageRequest)?;
+        let accounting_index = accounting
+            .accounting_index(position)
+            .map_err(OracleGenerationError::PackageRequest)?;
         let result = (|| -> Result<Stage1Shape<'_>, ExactFunctionRefusal> {
             if names.shares_node_id(&declaration.node_id) {
                 return Err(ExactFunctionRefusal::DuplicateDeclaringNode {
@@ -2787,6 +2864,11 @@ pub fn generate_exact_function_oracles(
                     capability: capability.clone(),
                 });
             }
+            if let Some(refusal) =
+                authenticated_direct_temporal_refusal(package, accounting_index, &admitted)
+            {
+                return Err(refusal);
+            }
             let (closure, _) = admitted_binary_body(admitted, graph)?;
             let body =
                 classify_body_shape(closure.root, graph.term(&closure.root.node_id), declaration)?;
@@ -2804,6 +2886,25 @@ pub fn generate_exact_function_oracles(
         })();
         shapes.push(result);
     }
+
+    let unauthenticated_bodies: BTreeMap<&CheckedNodeId, usize> = ordered_functions
+        .iter()
+        .zip(&shapes)
+        .filter_map(|(declaration, shape)| {
+            let position = function_position_by_id[&declaration.node_id];
+            let accounting_index = accounting.accounting_index(position).ok()?;
+            let admitted = accounting.at(position, &declaration.node_id).ok()?;
+            (matches!(
+                shape,
+                Err(ExactFunctionRefusal::BlockedOnUpstream {
+                    node_tag: "temporal",
+                    issue: UpstreamBlocker::QuireSpecLanguage121,
+                    ..
+                })
+            ) && unauthenticated_temporal_root(package, accounting_index, &admitted))
+            .then_some((&declaration.node_id, position))
+        })
+        .collect();
 
     let mut resolved: BTreeMap<&CheckedNodeId, Result<(), ExactFunctionRefusal>> = BTreeMap::new();
     for _ in 0..=ordered_functions.len() {
@@ -2888,10 +2989,15 @@ pub fn generate_exact_function_oracles(
             ieee_requirements: Vec::new(),
             integer_division_consumers: Vec::new(),
             measure_discharged: true,
-            body: Box::new(|_frame, _args| {
-                Outcome::Refused(Refusal::CheckedInvariant {
-                    cause: quire_exact::CheckedInvariantCause::GeneratedBodyPlaceholderInvoked,
-                })
+            body: Box::new(|_args| {
+                Box::new(
+                    |_frame: &rt::Frame<'_, '_>, _completed: Option<exact::Value>| {
+                        rt::BodyStep::Return(Outcome::Refused(Refusal::CheckedInvariant {
+                            cause:
+                                quire_exact::CheckedInvariantCause::GeneratedBodyPlaceholderInvoked,
+                        }))
+                    },
+                )
             }),
         })
         .collect();
@@ -2965,14 +3071,16 @@ pub fn generate_exact_function_oracles(
 
     let mut source = SourceBuilder::default();
     let mut claims = Vec::with_capacity(by_key.len());
+    let mut unauthenticated_root: Option<(usize, CheckedNodeId)> = None;
     // Generated claims as (claim position, readable stem, key, declaration), rendered once
     // every generated function is named.
     let mut pending = Vec::new();
     for (key, (position, item)) in by_key {
         let duplicate = counts.get(&key).copied().unwrap_or(0) > 1;
+        let duplicate_node = names.duplicate_node_refusal(&item.function);
         // An item naming a refused duplicate-node function carries that
         // refusal even when it was also requested more than once (AC-22).
-        let result = if let Some(refusal) = names.duplicate_node_refusal(&item.function) {
+        let result = if let Some(refusal) = duplicate_node {
             ClaimDisposition::Refused { refusal }
         } else if duplicate {
             ClaimDisposition::Refused {
@@ -2992,25 +3100,73 @@ pub fn generate_exact_function_oracles(
             let admitted = accounting
                 .at(position, &item.call_node_id)
                 .map_err(OracleGenerationError::PackageRequest)?;
-            match item_disposition(
-                &names,
-                &resolved,
-                &survivor_index,
-                &package_refusal,
-                (package, &source_index),
-                item,
-                admitted,
-            ) {
-                Ok((stem, claim, declaration)) => {
-                    pending.push((claims.len(), stem, key.clone(), declaration));
-                    ClaimDisposition::Generated(Box::new(claim))
+            let accounting_index = accounting
+                .accounting_index(position)
+                .map_err(OracleGenerationError::PackageRequest)?;
+            let capability_refused = names
+                .unique_node_id(&item.function)
+                .and_then(|function_node_id| {
+                    ordered_functions
+                        .iter()
+                        .find(|declaration| &declaration.node_id == function_node_id)
+                })
+                .is_some_and(|declaration| !declaration.capability_requirements.is_empty());
+            let direct_candidate = !capability_refused
+                && unauthenticated_temporal_root(package, accounting_index, &admitted);
+            let body_candidate = if let Ok(function_node_id) = names.resolve(&item.function) {
+                unauthenticated_bodies
+                    .get(function_node_id)
+                    .and_then(|&body_position| {
+                        item_reaches_temporal_body(&admitted, graph)
+                            .then_some((body_position, function_node_id.clone()))
+                    })
+            } else {
+                None
+            };
+            let candidate = if direct_candidate {
+                Some((position, item.call_node_id.clone()))
+            } else {
+                body_candidate
+            };
+            if let Some(candidate) = candidate {
+                if unauthenticated_root
+                    .as_ref()
+                    .is_none_or(|current| candidate < *current)
+                {
+                    unauthenticated_root = Some(candidate);
                 }
-                Err(refusal) => ClaimDisposition::Refused { refusal },
+            }
+            if let Some(refusal) =
+                authenticated_direct_temporal_refusal(package, accounting_index, &admitted)
+            {
+                ClaimDisposition::Refused { refusal }
+            } else {
+                match item_disposition(
+                    &names,
+                    &resolved,
+                    &survivor_index,
+                    &package_refusal,
+                    (package, &source_index),
+                    item,
+                    admitted,
+                ) {
+                    Ok((stem, claim, declaration)) => {
+                        pending.push((claims.len(), stem, key.clone(), declaration));
+                        ClaimDisposition::Generated(Box::new(claim))
+                    }
+                    Err(refusal) => ClaimDisposition::Refused { refusal },
+                }
             }
         };
         claims.push(ExactFunctionClaim {
             node_id: item.call_node_id.clone(),
             result,
+        });
+    }
+    if let Some((request_index, node_id)) = unauthenticated_root {
+        return Err(OracleGenerationError::UnauthenticatedRequestedRootKind {
+            request_index,
+            node_id,
         });
     }
     // Each function is named by the function it applies; items applying one function are
@@ -3436,8 +3592,8 @@ fn render_body(body: &ClassifiedBody<'_>) -> String {
         ClassifiedBody::Scalar(operator) => {
             let variant = operator.variant();
             format!(
-                "|frame: &rt::Frame, args: &[exact::Value]| -> exact::Outcome<exact::Value> {{\n        \
-                 let [exact::Value::Integer(left), exact::Value::Integer(right)] = args else {{\n            \
+                "|args: Vec<exact::Value>| {{ Box::new(move |frame: &rt::Frame<'_, '_>, _completed: Option<exact::Value>| {{ rt::BodyStep::Return((|| -> exact::Outcome<exact::Value> {{\n        \
+                 let [exact::Value::Integer(left), exact::Value::Integer(right)] = args.as_slice() else {{\n            \
                  return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedArgumentShapeMismatch }});\n        }};\n        \
                  let evaluated = frame.meter(|meter| exact::evaluate_integer_arithmetic(exact::IntegerArithmetic::{variant}(left, right), None, meter));\n        \
                  match evaluated {{\n            \
@@ -3446,7 +3602,7 @@ fn render_body(body: &ClassifiedBody<'_>) -> String {
                  Ok(exact::Outcome::Refused(refusal)) => exact::Outcome::Refused(refusal),\n            \
                  Ok(exact::Outcome::Incomplete(incomplete)) => exact::Outcome::Incomplete(incomplete),\n            \
                  Err(refusal) => exact::Outcome::Refused(refusal),\n            \
-                 }}\n    }}"
+                 }}\n    }})()) }}) }}"
             )
         }
         ClassifiedBody::Equality(operator) => {
@@ -3455,8 +3611,8 @@ fn render_body(body: &ClassifiedBody<'_>) -> String {
                 EqualityOperatorKind::NotEqual => "sv::EqualityOperator::NotEqual",
             };
             format!(
-                "|frame: &rt::Frame, args: &[exact::Value]| -> exact::Outcome<exact::Value> {{\n        \
-                 let [left, right] = args else {{\n            \
+                "|args: Vec<exact::Value>| {{ Box::new(move |frame: &rt::Frame<'_, '_>, _completed: Option<exact::Value>| {{ rt::BodyStep::Return((|| -> exact::Outcome<exact::Value> {{\n        \
+                 let [left, right] = args.as_slice() else {{\n            \
                  return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedArgumentShapeMismatch }});\n        }};\n        \
                  let operand_type = match left {{\n            \
                  exact::Value::Boolean(_) => exact::ValueType::Boolean,\n            \
@@ -3474,13 +3630,20 @@ fn render_body(body: &ClassifiedBody<'_>) -> String {
                  Ok(exact::Outcome::Refused(refusal)) => exact::Outcome::Refused(refusal),\n            \
                  Ok(exact::Outcome::Incomplete(incomplete)) => exact::Outcome::Incomplete(incomplete),\n            \
                  Err(refusal) => exact::Outcome::Refused(refusal),\n            \
-                 }}\n    }}"
+                 }}\n    }})()) }}) }}"
             )
         }
         ClassifiedBody::Call(callee) => {
             format!(
-                "|frame: &rt::Frame, args: &[exact::Value]| -> exact::Outcome<exact::Value> {{\n        \
-                 frame.call({callee:?}, args)\n    }}"
+                "|args: Vec<exact::Value>| {{ let mut pending = Some(args); Box::new(move |_frame: &rt::Frame<'_, '_>, completed: Option<exact::Value>| {{\n        \
+                 if let Some(arguments) = pending.take() {{\n            \
+                 rt::BodyStep::Call {{ function: {callee:?}.to_owned(), arguments }}\n        \
+                 }} else {{\n            \
+                 rt::BodyStep::Return(match completed {{\n                \
+                 Some(value) => exact::Outcome::Completed(value),\n                \
+                 None => exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedUnexpectedOutcome }}),\n            \
+                 }})\n        \
+                 }}\n    }}) }}"
             )
         }
     }
@@ -3494,6 +3657,135 @@ mod tests {
     use ix_trace_rs::trace;
     use quire_contract_model::CheckedPackageLimit;
 
+    /// A real imported call carries selected references in its admitted V1
+    /// closure. That item refusal precedes a declaration's Stage 1 body result.
+    #[trace("FR-021-AC-41", "TC-031")]
+    #[test]
+    fn selected_imported_call_is_ineligible_for_temporal_body_guard() -> Result<(), String> {
+        use qsl_replay::{
+            compile_package, DependencyInput, ReplayLimits, SourceIdentity, StageLimits,
+            SuppliedLibrary,
+        };
+        use quire_contract_model::{
+            CheckedPackageEvidence, CheckedPackageV2ReadResult, ContractDependencyInput,
+        };
+
+        let library_source = "language \"ix:native\" edition \"1-draft\";\n\
+            profile v = \"quire.value.complete/v1\";\n\
+            function f using v(a: Int[0, 9]): Boolean pure { a < 5 }\n";
+        let library_compiled = compile_package(
+            SourceIdentity::new("test", "selected-library", "git", "fixture"),
+            "selected-library.native",
+            library_source.as_bytes(),
+            [],
+            &DependencyInput::default(),
+            StageLimits::default(),
+            ReplayLimits::default(),
+        )
+        .expect("source-backed library compiles");
+        let mut evidence = CheckedPackageEvidence::new();
+        evidence.support_feature("quire.value.complete/v1");
+        let library = match CheckedPackageV2::read(
+            library_compiled.bytes(),
+            CheckedPackageReadLimits::bounded(),
+            &evidence,
+        ) {
+            CheckedPackageV2ReadResult::Admitted(package) => *package,
+            other => return Err(format!("library admits: {other:?}")),
+        };
+        let source = "language \"ix:native\" edition \"1-draft\";\n\
+            profile v = \"quire.value.complete/v1\";\n\
+            import \"test/selected-library\" as g;\n\
+            function p using v(a: Int[0, 9]): Boolean pure { g::f(a) }\n";
+        let dependencies = DependencyInput::new([SuppliedLibrary {
+            identity: "test/selected-library".into(),
+            source: SourceIdentity::new("test", "selected-library", "git", "fixture"),
+            path: "selected-library.native".into(),
+            bytes: library_source.as_bytes().to_vec(),
+        }])
+        .expect("one selected library");
+        let compiled = compile_package(
+            SourceIdentity::new("test", "selected-program", "git", "fixture"),
+            "selected-program.native",
+            source.as_bytes(),
+            [],
+            &dependencies,
+            StageLimits::default(),
+            ReplayLimits::default(),
+        )
+        .expect("imported call compiles");
+        evidence
+            .insert_dependency_package(
+                "test/selected-library",
+                std::sync::Arc::new(library.clone()),
+            )
+            .expect("retain selected library");
+        let checked = match CheckedPackageV2::read(
+            compiled.bytes(),
+            CheckedPackageReadLimits::bounded(),
+            &evidence,
+        ) {
+            CheckedPackageV2ReadResult::Admitted(package) => *package,
+            other => return Err(format!("selected program admits: {other:?}")),
+        };
+        let call_id = checked
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| {
+                node.node_tag.as_ref() == "expression"
+                    && node.semantic_form.as_ref() == "call"
+                    && matches!(
+                        &node.body,
+                        CheckedTerm::Application {
+                            operator: ApplicationOperator::Call,
+                            ..
+                        }
+                    )
+            })
+            .expect("source-backed imported call root")
+            .node_id
+            .clone();
+        let lowered = checked.lower(
+            std::slice::from_ref(&call_id),
+            &routed_contract_lowering_profile(),
+        );
+        let mut contract_dependencies = ContractDependencies::new();
+        contract_dependencies.insert(
+            "test/selected-library",
+            ContractDependencyInput {
+                identity: "test/selected-library",
+                package: &library,
+            },
+        );
+        let admitted = match ContractPackageWireV1::read(
+            lowered.package.canonical_bytes().expect("real V1 bytes"),
+            CheckedPackageReadLimits::bounded(),
+            &contract_dependencies,
+        ) {
+            ContractPackageReadResult::Admitted(package) => *package,
+            other => return Err(format!("selected V1 call admits: {other:?}")),
+        };
+        let requests = [ContractRequestPosition::DriverItem {
+            node_id: call_id.clone(),
+            result_selection: ContractDriverResultSelection::NotApplicable,
+        }];
+        let accounting = PackageItems::new(&admitted, &requests).expect("exact real request");
+        let item = accounting.at(0, &call_id).expect("selected call closure");
+        let PackageItem::Lowered { closure, .. } = &item else {
+            return Err("selected call must lower".to_owned());
+        };
+        assert!(!closure.selected_references.is_empty());
+        assert_eq!(closure.root.semantic_form.as_ref(), "call");
+        let graph = super::Graph::new(&admitted);
+        assert!(!item_reaches_temporal_body(&item, &graph));
+        assert!(matches!(
+            admitted_binary_body(item, &graph),
+            Err(ExactFunctionRefusal::SelectedDependencyUnsupported { .. })
+        ));
+        Ok(())
+    }
+
     #[trace("TC-030")]
     #[test]
     fn function_preflight_reuses_one_graph_index_across_items() {
@@ -3504,6 +3796,7 @@ mod tests {
             };
             CheckedSemanticNodeV2 {
                 node_id: id.clone(),
+                owner_model: None,
                 schema_version: "quire.checked-semantic-graph/v2".into(),
                 node_tag: "expression".into(),
                 semantic_form: "binary".into(),
@@ -3543,7 +3836,10 @@ mod tests {
         };
         let call = CheckedTerm::Application {
             operator: ApplicationOperator::Call,
-            operation: serde_json::json!({"identity": "quire.op.function.call"}),
+            operation: serde_json::from_value(
+                serde_json::json!({"identity": "quire.op.function.call"}),
+            )
+            .expect("fixture operation"),
             result_type: nodes[0].semantic_type.clone(),
             arguments: vec![
                 reference(&nodes[0]),
@@ -3623,6 +3919,7 @@ mod tests {
         crate::oracle::checked_graph::fixture::Node::new(
             CheckedSemanticNodeV2 {
                 node_id: id.clone(),
+                owner_model: None,
                 schema_version: "quire.checked-semantic-graph/v2".into(),
                 node_tag: tag.into(),
                 semantic_form: form.into(),
@@ -3833,7 +4130,10 @@ mod tests {
             "binary",
             Some(CheckedTerm::Application {
                 operator: ApplicationOperator::Binary,
-                operation: serde_json::json!({"identity": "quire.op.integer.eq"}),
+                operation: serde_json::from_value(
+                    serde_json::json!({"identity": "quire.op.integer.eq"}),
+                )
+                .expect("fixture operation"),
                 arguments: vec![],
                 result_type: boolean.node_id.clone(),
             }),

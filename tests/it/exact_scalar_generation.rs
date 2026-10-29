@@ -792,7 +792,6 @@ fn tc_024_refused_items_are_typed_emit_no_code_and_leave_siblings_unchanged() {
         ),
         (STATE, unsupported(STATE, "state")),
         (TEMPORAL, unsupported(TEMPORAL, "temporal")),
-        (PROTOCOL, unsupported(PROTOCOL, "protocol")),
         (MISSING, ExactScalarRefusal::InvalidInput),
         (
             V_BOOLEAN,
@@ -2043,10 +2042,12 @@ fn tc_024_corpus_reader_admits_anonymous_integer_ranges() {
         panic!("admitted conversion is an application");
     };
     assert_eq!(body_type, &result_type);
-    assert_eq!(
-        operation["mode"],
-        json!({"kind": "rounding", "value": "nearest-away"})
-    );
+    let mode = operation
+        .mode()
+        .expect("authenticated operation view")
+        .expect("admitted rounding mode");
+    assert_eq!(mode.kind, quire_contract_model::OperationModeKind::Rounding);
+    assert_eq!(mode.value, "nearest-away");
 }
 
 #[trace("FR-014-AC-9", "TC-024")]
@@ -2352,6 +2353,45 @@ fn tc_024_ac44_direct_temporal_formula_is_unsupported() {
         .items
         .iter()
         .any(|claim| matches!(claim.result, ClaimDisposition::Generated(_))));
+}
+
+/// FR-014-AC-7 uses an admitted protocol obligation because the scalar corpus's
+/// former unary application is no longer a valid protocol body in Contract IR.
+#[trace("FR-014-AC-7", "TC-024")]
+#[test]
+fn tc_024_admitted_protocol_node_is_unsupported() {
+    let package = qspec_package("positive-all-families.json");
+    let node = package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| node.semantic_form.as_ref() == "obligation")
+        .expect("QSpec fixture has an admitted protocol obligation");
+    let requested_id = node.node_id.clone();
+    let oracles = generate_exact_scalar_oracles(
+        &package,
+        &[ExactScalarItem {
+            node_id: requested_id.clone(),
+            operation: add_over(-100, 100),
+        }],
+    )
+    .expect("direct unsupported request settles in claim map");
+    let [claim] = oracles.claim_map.items.as_slice() else {
+        panic!("one protocol claim expected");
+    };
+    assert_eq!(claim.node_id, requested_id);
+    let ClaimDisposition::Refused {
+        refusal:
+            ExactScalarRefusal::Unsupported {
+                unsupported_node_id,
+                node_tag: "protocol",
+            },
+    } = &claim.result
+    else {
+        panic!("expected typed protocol refusal, got {:?}", claim.result);
+    };
+    assert_eq!(unsupported_node_id, &requested_id);
+    assert!(!contents(&oracles, "src/lib.rs").contains(requested_id.digest.as_ref()));
 }
 
 fn qspec_package(fixture: &str) -> CheckedPackageV2 {
@@ -3842,9 +3882,11 @@ fn quantity_conversion_derives_and_preserves_target_provenance() {
         let CheckedTerm::Application { operation, .. } = &node.body else {
             panic!("quantity conversion is an application");
         };
-        let target: quire_contract_model::CheckedNodeId =
-            serde_json::from_value(operation["member"]["declaration"].clone()).expect("target");
-        assert_eq!(generated.quantity_conversion_target.as_ref(), Some(&target));
+        let target = operation
+            .member_declaration()
+            .expect("authenticated operation view")
+            .expect("admitted conversion target");
+        assert_eq!(generated.quantity_conversion_target.as_ref(), Some(target));
         assert_eq!(
             serde_json::to_value(generated).unwrap()["quantity_conversion_target"],
             serde_json::to_value(target).unwrap()

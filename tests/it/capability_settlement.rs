@@ -35,7 +35,7 @@ fn checked_operation_identity(body: &CheckedTerm) -> Option<&str> {
     let CheckedTerm::Application { operation, .. } = body else {
         return None;
     };
-    operation.get("identity")?.as_str()
+    operation.identity()
 }
 
 fn function_body_target(body: &CheckedTerm) -> Option<&CheckedNodeId> {
@@ -518,12 +518,13 @@ fn selected_scalar_form(package: CheckedPackageV2, node_id: CheckedNodeId) -> Ka
         roots.push(conversion.clone());
     }
     let lowered = package.lower(&roots, &routed_contract_lowering_profile());
-    let contract = match ContractPackageWireV1::read(
+    let contract = match ContractPackageWireV1::read_with_source(
         lowered.package.canonical_bytes().expect("FR-330 bytes"),
         CheckedPackageReadLimits::bounded(),
         &ContractDependencies::new(),
+        &package,
     ) {
-        ContractPackageReadResult::Admitted(contract) => contract,
+        Ok(ContractPackageReadResult::Admitted(contract)) => contract,
         other => panic!("scalar selection package must admit: {other:?}"),
     };
     KaniForm::V2ScalarClaim {
@@ -1783,7 +1784,13 @@ fn kani_form_preflight_gates_support_and_preserves_extent_rules() {
 }
 
 /// A selected exact quantity conversion settles as OperationNotRendered for Kani.
-#[trace("FR-014-AC-2", "FR-014-AC-51", "FR-019-AC-44", "TC-024")]
+#[trace(
+    "FR-014-AC-2",
+    "FR-014-AC-51",
+    "FR-014-AC-55",
+    "FR-019-AC-44",
+    "TC-024"
+)]
 #[test]
 fn a_selected_quantity_conversion_settles_as_operation_not_rendered() {
     let (package, _, ids) = crate::kani_obligations::routed_scalar_package();
@@ -2073,6 +2080,8 @@ fn direct_fr015_division_keeps_renderer_refusal() {
     "FR-019-AC-25",
     "FR-019-AC-29",
     "FR-019-AC-44",
+    "FR-014-AC-55",
+    "FR-022-AC-30",
     "TC-030"
 )]
 #[test]
@@ -2115,6 +2124,7 @@ fn kani_selected_division_preserves_exact_renderer_refusal() {
     );
     builder.expression_occurrences();
     let (checked, ids) = builder.admit_resolved();
+    let plain_source = checked.clone();
     let form = selected_scalar_form(checked, ids.resolve(&package::code_id(DIVISION)));
     let KaniForm::V2ScalarClaim {
         contract,
@@ -2204,6 +2214,7 @@ fn kani_selected_division_preserves_exact_renderer_refusal() {
     )
     .expect("linked Kani route")
     .with_scalar_selection(contract, result_selection.clone());
+    let plain_route = routed.clone();
     let generated = quire_contract_codegen::generate_routed(
         contract,
         positions,
@@ -2218,6 +2229,24 @@ fn kani_selected_division_preserves_exact_renderer_refusal() {
     )
     .expect("admitted route keeps a per-item refusal");
     assert!(generated.rejected.is_empty());
+    let claim = generated
+        .claim_map
+        .as_ref()
+        .expect("division claim map")
+        .items
+        .iter()
+        .find(|claim| claim.node_id == *node_id)
+        .expect("selected division claim");
+    assert_eq!(
+        claim.operation.provenance,
+        quire_contract_codegen::OperationProvenance::IrConfirmed
+    );
+    let quire_contract_codegen::ClaimDisposition::Generated(oracle) = &claim.result else {
+        panic!("source-backed division must generate its oracle: {claim:?}");
+    };
+    assert!(oracle
+        .oracle_source
+        .contains("rt::DivisionProfile::Truncating"));
     let quire_contract_codegen::KindOutput::Kani { record, harness } = &generated.items[0].output
     else {
         panic!("selected division must reach the Kani arm")
@@ -2227,6 +2256,39 @@ fn kani_selected_division_preserves_exact_renderer_refusal() {
         quire_contract_codegen::ObligationDisposition::Unsupported { reason: refusal }
     );
     assert!(harness.is_none(), "refused division emits no Kani harness");
+
+    let roots = positions
+        .iter()
+        .map(|position| position.node_id().clone())
+        .collect::<Vec<_>>();
+    let lowered = plain_source.lower(&roots, &routed_contract_lowering_profile());
+    let plain = match ContractPackageWireV1::read(
+        lowered.package.canonical_bytes().expect("FR-330 bytes"),
+        CheckedPackageReadLimits::bounded(),
+        &ContractDependencies::new(),
+    ) {
+        ContractPackageReadResult::Admitted(package) => package,
+        other => panic!("plain division package must admit: {other:?}"),
+    };
+    let plain_route = plain_route.with_scalar_selection(&plain, result_selection.clone());
+    assert!(matches!(
+        quire_contract_codegen::generate_routed(
+            &plain,
+            positions,
+            &[plain_route],
+            &quire_contract_codegen::GenerationContexts {
+                kani: Some(quire_contract_codegen::KaniGenerationContext {
+                    ceilings: crate::common::proof_ceilings::proof_ceilings(),
+                    subject_path: "crate::subject",
+                    unwind: 4,
+                }),
+            },
+        ),
+        Err(quire_contract_codegen::RoutedGenerationError::UnauthenticatedOperationView {
+            request_index: 0,
+            node_id: refused,
+        }) if refused == *node_id
+    ));
 }
 
 fn v2_state_frame_form(

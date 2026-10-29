@@ -40,7 +40,7 @@ fn application_identity(node: &CheckedSemanticNodeV2) -> Option<&str> {
     let CheckedTerm::Application { operation, .. } = &node.body else {
         return None;
     };
-    operation.get("identity")?.as_str()
+    operation.identity()
 }
 
 fn argument_target(node: &CheckedSemanticNodeV2, index: usize) -> Option<&CheckedNodeId> {
@@ -793,31 +793,15 @@ fn qsl_emits_and_ir_admits_the_authored_collection_and_reference_shapes() {
     else {
         panic!("forall operand is a model-field projection");
     };
+    assert_eq!(projection.identity(), Some("quire.op.record.project"));
+    let (declaration, name) = projection
+        .projection_field()
+        .expect("authenticated operation view")
+        .expect("admitted field projection");
+    assert_eq!(name, "items");
     assert_eq!(
-        projection.get("identity").and_then(Value::as_str),
-        Some("quire.op.record.project")
-    );
-    assert_eq!(
-        projection
-            .get("member")
-            .and_then(|member| member.get("kind"))
-            .and_then(Value::as_str),
-        Some("field")
-    );
-    assert_eq!(
-        projection
-            .get("member")
-            .and_then(|member| member.get("name"))
-            .and_then(Value::as_str),
-        Some("items")
-    );
-    assert_eq!(
-        projection
-            .get("member")
-            .and_then(|member| member.get("declaration"))
-            .and_then(|declaration| declaration.get("digest"))
-            .and_then(Value::as_str),
-        Some(fixture.object_type.digest.as_ref()),
+        declaration.digest.as_ref(),
+        fixture.object_type.digest.as_ref(),
         "projection declaration is the admitted model object containing items"
     );
     let receiver_digest = argument_target(collection_node, 0)

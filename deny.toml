@@ -47,6 +47,7 @@ exceptions = [
     { allow = ["AGPL-3.0-or-later"], crate = "qsl-semantics" },
     { allow = ["AGPL-3.0-or-later"], crate = "quire-canonical" },
     { allow = ["AGPL-3.0-or-later"], crate = "quire-canonical-derive" },
+    { allow = ["AGPL-3.0-or-later"], crate = "quire-checked" },
     { allow = ["AGPL-3.0-or-later"], crate = "quire-exact" },
     { allow = ["AGPL-3.0-or-later"], crate = "quire-eval" },
     { allow = ["AGPL-3.0-or-later"], crate = "quire-semantic-value" },

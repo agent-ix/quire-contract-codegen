@@ -45,7 +45,7 @@ fn operation_identity(body: &CheckedTerm) -> Option<&str> {
     let CheckedTerm::Application { operation, .. } = body else {
         return None;
     };
-    operation.get("identity")?.as_str()
+    operation.identity()
 }
 
 const RENDERED: [&str; 3] = [
@@ -211,12 +211,13 @@ fn admitted_routing_input_with_limits(
         }
     }
     let lowered = checked.lower(&roots, &routed_contract_lowering_profile());
-    let package = match ContractPackageWireV1::read(
+    let package = match ContractPackageWireV1::read_with_source(
         lowered.package.canonical_bytes().expect("FR-330 bytes"),
         read_limits,
         &ContractDependencies::new(),
+        checked,
     ) {
-        ContractPackageReadResult::Admitted(package) => *package,
+        Ok(ContractPackageReadResult::Admitted(package)) => *package,
         other => panic!("Contract IR must admit its routed package: {other:?}"),
     };
     AdmittedRoutingInput { package, positions }
@@ -2233,7 +2234,9 @@ fn tc_033_an_underivable_item_keeps_its_refusal_and_its_siblings_are_unaffected(
 #[trace(
     "FR-014-AC-2",
     "FR-014-AC-51",
+    "FR-014-AC-55",
     "FR-022-AC-11",
+    "FR-022-AC-30",
     "FR-015-AC-15",
     "TC-033"
 )]
@@ -2250,10 +2253,13 @@ fn tc_033_quantity_conversion_has_an_oracle_and_no_harness() {
         let (record, harness) = kani_parts(&generated.items[0].output);
         assert!(harness.is_none(), "no harness is emitted");
         let claim_map = generated.claim_map.as_ref().expect("claim map");
-        assert!(claim_map
-            .items
-            .iter()
-            .all(|claim| matches!(claim.result, ClaimDisposition::Generated(_))));
+        assert!(
+            claim_map
+                .items
+                .iter()
+                .all(|claim| matches!(claim.result, ClaimDisposition::Generated(_))),
+            "quantity conversion must generate every claim: {claim_map:?}"
+        );
         let oracle_artifacts = generated.oracle_artifacts.as_ref().expect("oracle crate");
         let oracle_source = oracle_artifacts
             .iter()
@@ -2272,6 +2278,142 @@ fn tc_033_quantity_conversion_has_an_oracle_and_no_harness() {
         );
         let wire = serde_json::to_value(&record.disposition).expect("serializes");
         assert_eq!(wire["reason"]["code"], "operation_not_rendered");
+    }
+}
+
+/// A plain V1 read has the same wire and accounting but lacks authenticated operation views.
+#[trace(
+    "FR-014-AC-51",
+    "FR-014-AC-55",
+    "FR-022-AC-11",
+    "FR-022-AC-30",
+    "TC-024",
+    "TC-033"
+)]
+#[test]
+fn tc_033_quantity_conversion_requires_authenticated_operation_views() {
+    let derived = derived();
+    let node_id = derived
+        .quantity_conversions
+        .first()
+        .expect("genuine quantity conversion");
+    let routed = [route(0, node_id)];
+    let input = admitted_routing_input(&derived.package, &routed);
+    let roots = input
+        .positions
+        .iter()
+        .map(|position| position.node_id().clone())
+        .collect::<Vec<_>>();
+    let lowered = derived
+        .package
+        .lower(&roots, &routed_contract_lowering_profile());
+    let plain = match ContractPackageWireV1::read(
+        lowered.package.canonical_bytes().expect("FR-330 bytes"),
+        CheckedPackageReadLimits::bounded(),
+        &ContractDependencies::new(),
+    ) {
+        ContractPackageReadResult::Admitted(package) => package,
+        other => panic!("plain V1 package must admit: {other:?}"),
+    };
+    let contexts = kani_context("crate::subject", 1);
+    let authenticated = generate_routed(&input.package, &input.positions, &routed, &contexts)
+        .expect("source-backed package generates the quantity claim");
+    assert!(authenticated
+        .claim_map
+        .as_ref()
+        .expect("quantity claim map")
+        .items
+        .iter()
+        .all(|claim| matches!(claim.result, ClaimDisposition::Generated(_))));
+    let claim = authenticated
+        .claim_map
+        .as_ref()
+        .expect("quantity claim map")
+        .items
+        .iter()
+        .find(|claim| claim.node_id == *node_id)
+        .expect("routed quantity claim");
+    assert_eq!(
+        claim.operation.provenance,
+        quire_contract_codegen::OperationProvenance::IrConfirmed
+    );
+    let ClaimDisposition::Generated(oracle) = &claim.result else {
+        panic!("source-backed quantity conversion must generate: {claim:?}");
+    };
+    let Some(CheckedTerm::Application { operation, .. }) = input.package.term(node_id) else {
+        panic!("source-backed V1 retains the quantity operation");
+    };
+    let target = operation
+        .member_declaration()
+        .expect("authenticated member view")
+        .expect("quantity target declaration");
+    assert_eq!(oracle.quantity_conversion_target.as_ref(), Some(target));
+    assert!(oracle.oracle_source.contains(
+        "quantity_owner::convert_quantity(operand, unit.unit(), &quantity_owner::QuantityTarget::Exact, meter)"
+    ));
+    assert!(matches!(
+        generate_routed(&plain, &input.positions, &routed, &contexts),
+        Err(RoutedGenerationError::UnauthenticatedOperationView {
+            request_index: 0,
+            node_id: refused,
+        }) if refused == *node_id
+    ));
+}
+
+/// The lowest affected driver index wins even when the caller permutes routed items.
+#[trace("FR-014-AC-55", "FR-022-AC-30", "TC-033")]
+#[test]
+fn tc_033_unauthenticated_view_refusal_uses_lowest_request_index() {
+    let derived = derived();
+    let conversion = derived
+        .quantity_conversions
+        .first()
+        .expect("genuine quantity conversion");
+    let division = &derived
+        .package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| operation_identity(&node.body) == Some("quire.op.integer.div"))
+        .expect("genuine integer division")
+        .node_id;
+    let integer = derived.generated.first().expect("genuine integer add");
+    let routed = [route(0, integer), route(1, division), route(2, conversion)];
+    let input = admitted_routing_input(&derived.package, &routed);
+    let roots = input
+        .positions
+        .iter()
+        .map(|position| position.node_id().clone())
+        .collect::<Vec<_>>();
+    let lowered = derived
+        .package
+        .lower(&roots, &routed_contract_lowering_profile());
+    let plain = match ContractPackageWireV1::read(
+        lowered.package.canonical_bytes().expect("FR-330 bytes"),
+        CheckedPackageReadLimits::bounded(),
+        &ContractDependencies::new(),
+    ) {
+        ContractPackageReadResult::Admitted(package) => package,
+        other => panic!("plain V1 package must admit: {other:?}"),
+    };
+    let contexts = kani_context("crate::subject", 1);
+    let integer_only = generate_routed(&plain, &input.positions, &routed[..1], &contexts)
+        .expect("plain-read integer route keeps its result");
+    assert_eq!(integer_only.items.len(), 1);
+    assert_eq!(integer_only.items[0].request_index, 0);
+    assert!(matches!(
+        kani_parts(&integer_only.items[0].output).0.disposition,
+        ObligationDisposition::Supported { .. }
+    ));
+    for order in [[2, 0, 1], [1, 2, 0]] {
+        let permuted = order.map(|index| routed[index].clone());
+        assert!(matches!(
+            generate_routed(&plain, &input.positions, &permuted, &contexts),
+            Err(RoutedGenerationError::UnauthenticatedOperationView {
+                request_index: 1,
+                node_id,
+            }) if node_id == *division
+        ));
     }
 }
 

@@ -438,6 +438,9 @@ pub(super) fn references(term: Option<&CheckedTerm>, id: &CheckedNodeId) -> bool
             members.iter().any(|term| references(Some(term), id))
         }
         Some(CheckedTerm::Binding { value, .. }) => references(Some(value), id),
+        Some(CheckedTerm::OperationAnchorBody(body)) => {
+            body.members.iter().any(|term| references(Some(term), id))
+        }
         Some(CheckedTerm::ExtensionForm { clauses, .. }) => {
             clauses.iter().any(|term| references(Some(term), id))
         }
@@ -445,7 +448,8 @@ pub(super) fn references(term: Option<&CheckedTerm>, id: &CheckedNodeId) -> bool
             CheckedTerm::Literal { .. }
             | CheckedTerm::DependencyReference { .. }
             | CheckedTerm::Frame { .. }
-            | CheckedTerm::AbstractionRelation { .. },
+            | CheckedTerm::AbstractionRelation { .. }
+            | CheckedTerm::Refinement { .. },
         )
         | None => false,
     }

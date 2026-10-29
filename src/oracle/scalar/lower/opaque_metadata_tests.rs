@@ -14,8 +14,9 @@ use quire_contract_model::{
     derive_application_node_id, encode_checked_package_v2, ApplicationIdentityContext,
     ApplicationNodeDraft, ApplicationOperator, CheckedCapability, CheckedNodeId,
     CheckedPackageEvidence, CheckedPackageIdentityPreimageRefV2, CheckedPackageIdentityPreimageV2,
-    CheckedPackageReadLimits, CheckedPackageV2, CheckedPackageV2ReadResult, CheckedSemanticGraphV2,
-    CheckedSemanticId, CheckedSourceMapEntry, CheckedTerm,
+    CheckedPackageReadLimits, CheckedPackageSourceCorrespondenceRef, CheckedPackageV2,
+    CheckedPackageV2ReadResult, CheckedSemanticGraphV2, CheckedSemanticId, CheckedSourceMapEntry,
+    CheckedTerm,
 };
 use serde_json::{json, Value};
 use std::{fs, path::PathBuf};
@@ -84,12 +85,17 @@ fn encode_draft(wire: &Value) -> Vec<u8> {
         .map(|byte| format!("{byte:02x}"))
         .collect::<String>()
         .into();
+    let source_map: Vec<CheckedSourceMapEntry> =
+        serde_json::from_value(wire["source_map"].clone()).unwrap();
     encode_checked_package_v2(
         &borrowed,
         &id,
         &serde_json::from_value(wire["lock"].clone()).unwrap(),
         &graph,
-        &serde_json::from_value::<Vec<CheckedSourceMapEntry>>(wire["source_map"].clone()).unwrap(),
+        CheckedPackageSourceCorrespondenceRef {
+            source_map: &source_map,
+            refinement_step_rows: None,
+        },
         &serde_json::from_value::<Vec<CheckedCapability>>(wire["capability_report"].clone())
             .unwrap(),
         &serde_json::from_value(wire["diagnostics"].clone()).unwrap(),
@@ -130,7 +136,7 @@ fn opaque_operation_member_does_not_add_a_consumer_to_true_narrowing() {
     let original_bytes = canonical::content_bytes(&wire).unwrap();
     let original = read(&original_bytes, &evidence, "ORIGINAL");
     let target = original.graph().nodes.iter().find(|n| matches!(original.term(&n.node_id),
-        Some(CheckedTerm::Application { operation, .. }) if operation["identity"] == "quire.op.integer.mul")).unwrap();
+        Some(CheckedTerm::Application { operation, .. }) if operation.identity() == Some("quire.op.integer.mul"))).unwrap();
     let bound = original
         .graph()
         .nodes
@@ -160,14 +166,11 @@ fn opaque_operation_member_does_not_add_a_consumer_to_true_narrowing() {
     assert_eq!(entry["mode"], Value::Null);
     assert_eq!(entry["leaves"], Value::Null);
     // Retain the published member record's actual shape, changing its target.
-    let mut member = original
-        .graph()
-        .nodes
+    let mut member = wire["semantic_graph"]["nodes"]
+        .as_array()
+        .unwrap()
         .iter()
-        .filter_map(|n| match &n.body {
-            CheckedTerm::Application { operation, .. } => operation.get("member"),
-            _ => None,
-        })
+        .filter_map(|node| node["body"]["operation"].get("member"))
         .find(|m| m["kind"] == entry["member"])
         .unwrap()
         .clone();
@@ -213,11 +216,11 @@ fn opaque_operation_member_does_not_add_a_consumer_to_true_narrowing() {
     let baseline_bytes = encode_draft(&wire);
     let baseline = read(&baseline_bytes, &evidence, "TRUE_NARROW_BASELINE");
     let opaque_node = baseline.graph().nodes.iter().find(|n| matches!(baseline.term(&n.node_id),
-        Some(CheckedTerm::Application { operation, .. }) if operation["identity"] == "quire.op.integer.add")).unwrap();
+        Some(CheckedTerm::Application { operation, .. }) if operation.identity() == Some("quire.op.integer.add"))).unwrap();
     let CheckedTerm::Application { operation, .. } = &opaque_node.body else {
         panic!("admitted opaque node is an application");
     };
-    assert!(operation["member"].is_null());
+    assert!(serde_json::to_value(operation).unwrap()["member"].is_null());
     let node = wire["semantic_graph"]["nodes"]
         .as_array_mut()
         .unwrap()
@@ -244,7 +247,7 @@ fn opaque_operation_member_does_not_add_a_consumer_to_true_narrowing() {
         else {
             panic!("genuine narrowing application must survive strict admission")
         };
-        assert_eq!(operation["identity"], entry["identity"]);
+        assert_eq!(operation.identity(), entry["identity"].as_str());
         assert_eq!(result_type, &bound.node_id);
         assert!(
             matches!(arguments.as_slice(), [CheckedTerm::Reference { target: id }]
@@ -288,7 +291,7 @@ fn opaque_operation_member_does_not_add_a_consumer_to_true_narrowing() {
         panic!("opaque metadata not retained")
     };
     assert_eq!(
-        operation["member"],
+        serde_json::to_value(operation).unwrap()["member"],
         json!({"term":"reference", "target":target.node_id})
     );
     // Positive discriminator: a real argument reference, unlike metadata,
@@ -332,7 +335,7 @@ fn opaque_operation_member_does_not_add_a_consumer_to_true_narrowing() {
     };
     assert!(matches!(&arguments[0], CheckedTerm::Reference {target: id} if id == &target.node_id));
     assert_eq!(
-        operation["member"],
+        serde_json::to_value(operation).unwrap()["member"],
         json!({"term":"reference", "target":target.node_id})
     );
 }

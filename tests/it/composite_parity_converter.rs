@@ -131,7 +131,7 @@ fn public_composite_fixture() -> PublicCompositeFixture {
         .find(|node| {
             node.node_tag.as_ref() == "expression"
                 && matches!(&node.body, quire_contract_model::CheckedTerm::Application { operation, .. }
-                    if operation.get("identity").and_then(serde_json::Value::as_str) == Some("quire.op.structural.eq"))
+                    if operation.identity() == Some("quire.op.structural.eq"))
         })
         .expect("compiled structural equality");
     let node = WireNodeId::from_hex(&application.node_id.digest).unwrap();

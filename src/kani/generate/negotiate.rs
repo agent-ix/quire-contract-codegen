@@ -74,7 +74,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use quire_contract_model::{
     CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticId, CheckedSemanticNodeV2,
-    CheckedSourceMapEntry, CheckedTerm, ContractPackageV1,
+    CheckedSourceMapEntry, CheckedTerm, ContractPackageV1, StateClauseKind,
 };
 
 use crate::{
@@ -598,14 +598,15 @@ fn classify_v2_clause<'a>(
     let kind = package
         .term(clause)
         .and_then(|term| match term {
-            CheckedTerm::Application { operation, .. } => operation.get("member"),
+            CheckedTerm::Application { operation, .. } => {
+                operation.state_clause_kind().ok().flatten()
+            }
             _ => None,
         })
-        .and_then(|member| member.get("clause")?.as_str())
-        .and_then(|name| match name {
-            "precondition" => Some(ObligationKind::Precondition),
-            "postcondition" => Some(ObligationKind::Postcondition),
-            "invariant" => Some(ObligationKind::Invariant),
+        .and_then(|kind| match kind {
+            StateClauseKind::Precondition => Some(ObligationKind::Precondition),
+            StateClauseKind::Postcondition => Some(ObligationKind::Postcondition),
+            StateClauseKind::Invariant => Some(ObligationKind::Invariant),
             _ => None,
         });
     let mut outcome = match graph_node {
@@ -1487,8 +1488,7 @@ mod tests {
                 matches!(
                     &node.body,
                     CheckedTerm::Application { operation, .. }
-                        if operation.get("identity")
-                            == Some(&json!("quire.op.collection.forall"))
+                        if operation.identity() == Some("quire.op.collection.forall")
                 )
             })
             .map(|node| node.node_id.clone())

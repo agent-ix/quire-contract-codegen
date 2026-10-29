@@ -26,10 +26,11 @@ use std::{collections::BTreeMap, fmt};
 use qsl_replay::{
     call_site, replay_state_clause, CallSiteRefusal, ClauseName, ClauseSelectionInput,
     DeclaredDomain, DigestDomain, DigestRecord, DocumentRef, DomainKey, DomainKind,
-    EmptyQualifiedName, FiniteBound, Integer, MalformedTranscript, OperationName, ProofBound,
-    ProofBoundRefusal, QualifiedName, ReplayRefusal, ReplayRequestWire, ReplayResult, ReplaySource,
-    ReplayTargetMembers, RequestTargetWire, StateClauseCounterexample, StateClauseReplayResult,
-    WireNodeId, WitnessEnvelope, WitnessPacket, WitnessRefusal, WitnessSettlement, WitnessValue,
+    EmptyQualifiedName, EnvelopeSource, FiniteBound, Integer, MalformedTranscript, OperationName,
+    ProofBound, ProofBoundRefusal, QualifiedName, ReplayRefusal, ReplayRequestWire, ReplayResult,
+    ReplaySource, ReplayTargetMembers, RequestTargetWire, StateClauseCounterexample,
+    StateClauseReplayResult, WireNodeId, WitnessEnvelope, WitnessPacket, WitnessRefusal,
+    WitnessSettlement, WitnessValue,
 };
 use quire_canonical::{Encode, FixedShape};
 use quire_contract_model::{CheckedModelFieldsError, CheckedNodeId, CheckedPackageV2};
@@ -420,7 +421,9 @@ impl<'a> From<&'a StateClauseReplayResult> for ReplaySettlement<'a> {
             }
             // The envelope is on the witness arm, so the result is: an input-arm result is not
             // one this adapter asked for.
-            ReplayResult::Input(_) => Self::CgDefect,
+            ReplayResult::Input(_)
+            | ReplayResult::ObservedTemporal(_)
+            | ReplayResult::ModelGraph(_) => Self::CgDefect,
         }
     }
 }
@@ -699,7 +702,7 @@ impl StateClauseReplay {
             declared_domains: Some(domains),
             backend: Some(wire.backend.clone()),
             trace_position: Some(None),
-            source: Some(ReplaySource::Witness(witness)),
+            source: Some(EnvelopeSource::Witness(witness)),
             family_payload: Some(payload),
         };
         Ok(Self {

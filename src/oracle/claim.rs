@@ -87,6 +87,13 @@ pub enum OracleGenerationError {
     EnvironmentAdmission(quire_semantic_value::declaration::EnvironmentFailure),
     /// The caller's request sequence disagrees with admitted FR-330 accounting.
     PackageRequest(crate::core::contract_package::PackageRequestError),
+    /// A plain V1 read cannot authenticate the kind of a requested temporal root.
+    UnauthenticatedRequestedRootKind {
+        /// Original driver request index, independent of input slice order.
+        request_index: usize,
+        /// Requested call or declaration-body root, not the first unsupported descendant.
+        node_id: quire_contract_model::CheckedNodeId,
+    },
     /// A lowered record has no admitted Contract IR package value.
     ContractPackageUnavailable,
     /// Generated source exceeds the effective caller-selected byte ceiling.

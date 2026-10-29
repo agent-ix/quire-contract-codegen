@@ -5,12 +5,6 @@
 
 use quire_contract_model::{ApplicationOperator, CheckedNodeId, CheckedTerm, LiteralKind};
 use quire_exact::Integer;
-use serde_json::Value;
-
-/// Decode a checked node id carried by an operation member.
-pub(crate) fn node_id(value: &Value) -> Option<CheckedNodeId> {
-    serde_json::from_value(value.clone()).ok()
-}
 
 /// The node named by a checked reference term.
 pub(crate) fn reference(term: &CheckedTerm) -> Option<&CheckedNodeId> {
@@ -32,9 +26,7 @@ pub(crate) fn application<'a>(
             operation,
             arguments,
             ..
-        } if *actual == operator && operation.get("identity")?.as_str()? == identity => {
-            Some(arguments)
-        }
+        } if *actual == operator && operation.identity()? == identity => Some(arguments),
         _ => None,
     }
 }

@@ -444,11 +444,75 @@ impl FixtureIds {
 
 include!("../checked_package_support/base.rs");
 
+const REFERENCE_MODEL: &str = "test/cg-composite-reference";
+const REFERENCE_OBJECT: &str = "ix://test/cg-composite-reference/Point";
+const REFERENCE_MODEL_ROOT: u32 = 9200;
+const REFERENCE_OBJECT_TYPE: u32 = 9201;
+
+fn reference_model_document() -> Value {
+    json!({
+        "contractVersion": "2.0.0",
+        "package": {"identity": REFERENCE_MODEL, "version": "1"},
+        "constructs": [{
+            "kind": {"module": REFERENCE_MODEL, "name": "entity"},
+            "construct": {"meaning": "quire.meaning.model.object-type/v1"},
+        }],
+        "types": [{
+            "identity": REFERENCE_OBJECT, "displayName": "Point",
+            "kind": {"module": REFERENCE_MODEL, "name": "entity"},
+            "roles": [], "constraints": [], "extensions": [], "unknownPolicy": "reject",
+            "supertypes": [], "fields": [], "operations": [], "relationships": [],
+        }],
+    })
+}
+
 impl Default for PackageBuilder {
     fn default() -> Self {
-        Self {
-            value: base_package(),
-        }
+        let mut value = base_package();
+        let document = reference_model_document();
+        let digest = quire_canonical::sha256(
+            &document,
+            quire_canonical::Limits::new(CheckedPackageReadLimits::bounded().bytes),
+        )
+        .expect("canonical model document")
+        .to_string();
+        let selection = json!({
+            "identity": REFERENCE_MODEL,
+            "digest_domain": "sha256-jcs",
+            "digest": digest.clone(),
+        });
+        value["lock"]["model_selections"] = json!([selection]);
+        value["identity_preimage"]["model_selections"] = value["lock"]["model_selections"].clone();
+        let mut builder = Self { value };
+        let root_id = key(REFERENCE_MODEL_ROOT);
+        let source = builder.value["lock"]["sources"][0].clone();
+        builder.value["semantic_graph"]["nodes"]
+            .as_array_mut()
+            .expect("nodes")
+            .push(json!({
+                "node_id": node_ref(&root_id),
+                "schema_version": "quire.checked-semantic-graph/v2",
+                "node_tag": "model",
+                "semantic_form": "model_root",
+                "semantic_type": node_ref(&root_id),
+                "dependencies": [],
+                "occurrences": [{"role": "generated", "ordinal": 0}],
+                "body": aggregate(vec![]),
+                "owner": {"kind": "model_root", "identity": REFERENCE_MODEL, "digest": digest},
+            }));
+        let position = builder.value["source_map"]
+            .as_array()
+            .expect("source map")
+            .len();
+        builder.value["source_map"]
+            .as_array_mut()
+            .expect("source map")
+            .push(json!({
+                "node_id": node_ref(&root_id), "role": "generated", "ordinal": 0,
+                "regions": [{"source": source, "start": position, "end": position + 1}],
+            }));
+        builder.model_owned_object_type(REFERENCE_OBJECT_TYPE, REFERENCE_MODEL, REFERENCE_OBJECT);
+        builder
     }
 }
 
@@ -880,6 +944,24 @@ impl PackageBuilder {
 fn evidence_for_wire(wire: &Value) -> CheckedPackageEvidence {
     let mut evidence = CheckedPackageEvidence::new();
     evidence.support_feature("quire.value.complete/v1");
+    if wire["lock"]["model_selections"]
+        .as_array()
+        .is_some_and(|rows| rows.iter().any(|row| row["identity"] == REFERENCE_MODEL))
+    {
+        let document = reference_model_document();
+        let digest = quire_canonical::sha256(
+            &document,
+            quire_canonical::Limits::new(CheckedPackageReadLimits::bounded().bytes),
+        )
+        .expect("canonical model document")
+        .to_string();
+        evidence
+            .insert_domain_package_document(
+                digest,
+                serde_json::to_vec(&document).expect("fixture model bytes"),
+            )
+            .expect("retain fixture model document");
+    }
     if let Some(qspec_dir) = std::env::var_os("QSPEC_DIR") {
         let qspec = std::path::PathBuf::from(qspec_dir);
         crate::checked_package_evidence::retain_selected_extensions(&qspec, wire, &mut evidence);
@@ -929,18 +1011,13 @@ pub fn read_malformed_body_wire(wire: Value) -> CheckedPackageV2ReadResult {
 // The composite/structural corpus (codes in `codes.rs`)
 // ---------------------------------------------------------------------------
 
-/// [`corpus_package`] plus [`E_REFERENCE_DIRECT`]: `quire.op.reference.eq` over two `REF_TYPE`
-/// operands. Contract IR refuses it (`reference.eq`'s `conforming_reference` constraint needs a
-/// `Reference<X>` naming a model object type of a selected document, and `REF_TYPE` names none),
-/// so it cannot be in the corpus; `tc_029_ac7_a_direct_reference_operand_is_refused_by_ir_today`
-/// pins the refusal.
+/// [`corpus_package`] plus [`E_REFERENCE_DIRECT`]: `quire.op.reference.eq` over a selected
+/// model-object reference and a record. Contract IR refuses the non-reference second operand,
+/// before the generator runs; `tc_029_ac7_a_direct_reference_operand_is_refused_by_ir_today`
+/// pins the reader refusal.
 pub fn direct_reference_package() -> PackageBuilder {
     let mut builder = corpus_package();
-    builder.application_code(
-        E_REFERENCE_DIRECT,
-        "binary",
-        binary_body(REF_TYPE, REF_TYPE),
-    );
+    builder.application_code(E_REFERENCE_DIRECT, "binary", binary_body(REF_TYPE, R_POINT));
     builder
 }
 
@@ -1344,7 +1421,7 @@ fn corpus_package_with_nested_ieee() -> PackageBuilder {
             "composite_type",
             "reference",
             REF_TYPE,
-            aggregate(vec![reference(R_POINT)]),
+            aggregate(vec![reference(REFERENCE_OBJECT_TYPE)]),
         )
         .code_in_group(
             R_SELF,

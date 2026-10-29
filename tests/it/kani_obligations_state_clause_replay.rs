@@ -15,8 +15,8 @@ use std::cell::RefCell;
 use qsl_replay::{
     replay_state_clause, CallSiteRefusal, ClauseName, ClauseSelectionInput, DisagreementCause,
     DomainKey, DomainKind, EvaluatedValue, FiniteBound, Identifier, Integer, ReplayRequestWire,
-    ReplayResult, ReplaySource, ReplayTargetMembers, StateClauseReplayResult, TerminalValue,
-    Verdict, WireNodeId, WitnessEnvelope, WitnessPacket, WitnessRefusal, WitnessSettlement,
+    ReplayResult, ReplayTargetMembers, StateClauseReplayResult, TerminalValue, Verdict, WireNodeId,
+    WitnessEnvelope, WitnessPacket, WitnessRefusal, WitnessSettlement,
 };
 use quire_contract_codegen::{
     parse_state_clause_falsification, run_terminal_value, DocumentLabel, KaniRunOutcome,
@@ -1095,7 +1095,7 @@ fn tc_035_the_envelope_declares_each_ranged_field_and_the_transcript_names_the_p
     let operation = candidate.operation.to_string();
     let replay = StateClauseReplay::new(candidate).expect("the replay is built");
 
-    let Some(ReplaySource::Witness(witness)) = &replay.packet.source else {
+    let Some(qsl_replay::EnvelopeSource::Witness(witness)) = &replay.packet.source else {
         panic!("the envelope is on the witness arm");
     };
     assert_eq!(
@@ -1160,7 +1160,7 @@ fn tc_035_a_violating_run_reproduces_and_a_respecting_run_is_inconclusive() {
         let replay = built(&twin, &fixture, BALANCE, pre, post);
         assert!(matches!(
             replay.packet.source,
-            Some(ReplaySource::Witness(_))
+            Some(qsl_replay::EnvelopeSource::Witness(_))
         ));
         let payload = replay.packet.family_payload.as_ref().expect("a payload");
         assert!(payload.witness.is_none());
@@ -1372,7 +1372,7 @@ fn tc_035_real_kani_state_clause_counterexample_replays_through_qsl() {
     assert_eq!(replay.packet.obligation_identity, Some([1; 32]));
     assert!(matches!(
         replay.packet.source,
-        Some(ReplaySource::Witness(_))
+        Some(qsl_replay::EnvelopeSource::Witness(_))
     ));
     let result = replay.replay().expect("the replay settles");
     let arm = witness_arm(&result);

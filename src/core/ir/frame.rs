@@ -5,7 +5,7 @@
 
 use quire_contract_model::{CheckedNodeId, CheckedNodeKind, CheckedTerm, LiteralKind, StateForm};
 
-use super::checked_term::{aggregate_members, bound_members, literal, node_id, reference};
+use super::checked_term::{aggregate_members, bound_members, literal, reference};
 use super::clause::ClauseGraphView;
 
 /// A graph node's checked shape, independent of its body representation.
@@ -55,7 +55,7 @@ impl<'g> ClauseGraphView<'g> {
         if self.kind(anchor)? != CheckedNodeKind::State(StateForm::OperationAnchor) {
             return None;
         }
-        let members = aggregate_members(self.term(anchor))?;
+        let members = unpointed_anchor_members(self.term(anchor)?)?;
         let [context, operation, frame] =
             bound_members(members, ["context", "operation", "frame"])?;
         let object = reference(context)?.clone();
@@ -70,6 +70,13 @@ impl<'g> ClauseGraphView<'g> {
             frame,
         })
     }
+}
+
+fn unpointed_anchor_members(term: &CheckedTerm) -> Option<&[CheckedTerm; 3]> {
+    let CheckedTerm::OperationAnchorBody(body) = term else {
+        return None;
+    };
+    body.execution_point.is_none().then_some(&body.members)
 }
 
 /// A term resolved to the node holding it, if it names one.
@@ -92,7 +99,7 @@ pub(crate) fn application_identity(body: &CheckedTerm) -> Option<&str> {
     let CheckedTerm::Application { operation, .. } = body else {
         return None;
     };
-    operation.get("identity")?.as_str()
+    operation.identity()
 }
 
 /// The clause kind carried by a checked state-clause application.
@@ -100,7 +107,7 @@ pub(crate) fn clause_kind(body: &CheckedTerm) -> Option<&str> {
     let CheckedTerm::Application { operation, .. } = body else {
         return None;
     };
-    operation.get("member")?.get("clause")?.as_str()
+    Some(operation.state_clause_kind().ok()??.as_wire())
 }
 
 /// The selected field declaration and name of a record projection.
@@ -108,14 +115,8 @@ pub(crate) fn projected_field(body: &CheckedTerm) -> Option<(CheckedNodeId, &str
     let CheckedTerm::Application { operation, .. } = body else {
         return None;
     };
-    let member = operation.get("member")?;
-    if member.get("kind")?.as_str()? != "field" {
-        return None;
-    }
-    Some((
-        node_id(member.get("declaration")?)?,
-        member.get("name")?.as_str()?,
-    ))
+    let (declaration, name) = operation.projection_field().ok()??;
+    Some((declaration.clone(), name))
 }
 
 /// The ordered node ids in a state-clause parameter aggregate.
@@ -129,6 +130,31 @@ pub(crate) fn parameter_references(term: &CheckedTerm) -> Option<Vec<CheckedNode
 
 #[cfg(test)]
 mod tests {
+    use super::unpointed_anchor_members;
+    use quire_contract_model::{
+        CheckedOperationAnchorBody, CheckedTerm, ExecutionPoint, ExecutionPointName,
+    };
+
+    /// Trace: AD-004 L-8.
+    #[test]
+    fn pointed_operation_anchor_is_not_a_frame_scope() {
+        let members = std::array::from_fn(|_| CheckedTerm::aggregate(Vec::new()));
+        let point = ExecutionPoint::Pre {
+            operation: ExecutionPointName::new("deposit").expect("nonempty point name"),
+        };
+        let pointed = CheckedTerm::OperationAnchorBody(Box::new(CheckedOperationAnchorBody {
+            members: members.clone(),
+            execution_point: Some(point),
+        }));
+        assert!(unpointed_anchor_members(&pointed).is_none());
+
+        let unpointed = CheckedTerm::OperationAnchorBody(Box::new(CheckedOperationAnchorBody {
+            members,
+            execution_point: None,
+        }));
+        assert!(unpointed_anchor_members(&unpointed).is_some());
+    }
+
     #[test]
     fn function_oracle_reads_operation_identity_through_core_ir() {
         let source = include_str!("../../oracle/function/mod.rs");

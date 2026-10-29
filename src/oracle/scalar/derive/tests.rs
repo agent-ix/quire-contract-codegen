@@ -3,13 +3,16 @@
 
 //! Scalar descriptor derivation controls.
 
-use super::super::lower::tests::{app_term, node_id, v2_node};
+use super::super::lower::tests::{node_id, v2_node};
 use super::super::lower::{catalogued_operation, operation_confirmed};
 use super::super::*;
 use super::*;
 use crate::oracle::checked_graph::fixture::Node as FixtureNode;
 use ix_trace_rs::trace;
-use quire_contract_model::CompleteContractNodeV2;
+use quire_contract_model::{
+    ApplicationOperator, CheckedApplicationOperation, CheckedApplicationOperationFixture,
+    CheckedArtifactRef, CompleteContractNodeV2, OperationModeKind,
+};
 use quire_exact::{TextProfile, TextType};
 use std::collections::BTreeMap;
 
@@ -245,6 +248,16 @@ fn application_node(body: impl Into<Option<CheckedTerm>>) -> (CheckedNodeId, Fix
     (node.node_id.clone(), node)
 }
 
+fn fixture_application(fixture: CheckedApplicationOperationFixture) -> CheckedTerm {
+    CheckedTerm::Application {
+        operator: ApplicationOperator::Binary,
+        operation: CheckedApplicationOperation::from_test_fixture(fixture)
+            .expect("valid typed operation fixture"),
+        result_type: node_id('1'),
+        arguments: Vec::new(),
+    }
+}
+
 /// The lowered form of a hand-built node, as IR lowering would return it.
 fn lowered_node(node: &FixtureNode) -> CompleteContractNodeV2 {
     CompleteContractNodeV2 {
@@ -305,9 +318,12 @@ fn tc_024_derivation_checks_the_graph_and_the_lowering_before_the_identity() {
 fn quantity_conversion_confirmation_requires_identity_and_exact_mode() {
     for identity in [QUANTITY_CONVERT_IDENTITY, "quire.op.quantity.add"] {
         for mode in ["exact", "nearest-even"] {
-            let (_, node) = application_node(app_term(serde_json::json!({
-                "identity": identity, "mode": {"kind":"rounding", "value": mode}
-            })));
+            let (_, node) =
+                application_node(fixture_application(CheckedApplicationOperationFixture {
+                    identity: Some(identity.into()),
+                    mode: Some((OperationModeKind::Rounding, mode.into())),
+                    ..Default::default()
+                }));
             let graph: Graph<'_> = [(&node.node_id, &node)].into_iter().collect();
             assert_eq!(
                 operation_confirmed(
@@ -329,11 +345,13 @@ fn quantity_conversion_rejects_scalar_targets_after_mode() {
     for form in ["decimal", "integer", "compound_unit"] {
         let target = v2_node('b', "scalar_type", form, 'b', None);
         for mode in ["exact", "nearest-even", "toward-zero"] {
-            let (id, node) = application_node(app_term(serde_json::json!({
-                "identity": QUANTITY_CONVERT_IDENTITY,
-                "mode": {"kind": "rounding", "value": mode},
-                "member": {"kind": "type_argument", "declaration": target.node_id},
-            })));
+            let (id, node) =
+                application_node(fixture_application(CheckedApplicationOperationFixture {
+                    identity: Some(QUANTITY_CONVERT_IDENTITY.into()),
+                    mode: Some((OperationModeKind::Rounding, mode.into())),
+                    member_declaration: Some(target.node_id.clone()),
+                    ..Default::default()
+                }));
             let graph: Graph<'_> = [(&id, &node), (&target.node_id, &target)]
                 .into_iter()
                 .collect();
@@ -365,7 +383,9 @@ fn quantity_conversion_rejects_scalar_targets_after_mode() {
 #[test]
 fn tc_024_derivation_refuses_a_missing_identity_a_non_application_and_a_foreign_identity() {
     assert_eq!(
-        derive_hand_built(app_term(serde_json::json!({}))),
+        derive_hand_built(fixture_application(
+            CheckedApplicationOperationFixture::default()
+        )),
         Err(no_claim(ClaimDerivationRefusal::MissingOperationIdentity))
     );
     assert_eq!(
@@ -375,9 +395,10 @@ fn tc_024_derivation_refuses_a_missing_identity_a_non_application_and_a_foreign_
         }))
     );
     assert_eq!(
-        derive_hand_built(app_term(
-            serde_json::json!({"identity": "quire.op.rational.eq"})
-        )),
+        derive_hand_built(fixture_application(CheckedApplicationOperationFixture {
+            identity: Some("quire.op.rational.eq".into()),
+            ..Default::default()
+        })),
         Err(no_claim(ClaimDerivationRefusal::OperationNotDerivable {
             operation_identity: "quire.op.rational.eq".to_owned()
         }))
@@ -390,15 +411,17 @@ fn tc_024_derivation_refuses_a_missing_identity_a_non_application_and_a_foreign_
 #[test]
 fn tc_024_derivation_reads_the_division_profile_from_the_laws_and_nowhere_else() {
     let laws = |identities: &[&str]| {
-        app_term(serde_json::json!({
-            "identity": "quire.op.integer.div",
-            "laws": identities
+        fixture_application(CheckedApplicationOperationFixture {
+            identity: Some("quire.op.integer.div".into()),
+            law_definitions: identities
                 .iter()
-                .map(|identity| serde_json::json!({
-                    "role": "integer_division", "definition": {"identity": identity}
-                }))
-                .collect::<Vec<_>>(),
-        }))
+                .map(|identity| CheckedArtifactRef {
+                    authority: "quire".into(),
+                    identity: (*identity).into(),
+                })
+                .collect(),
+            ..Default::default()
+        })
     };
     let profile_of = |body: CheckedTerm| {
         let (id, node) = application_node(body);
@@ -437,10 +460,13 @@ fn tc_024_derivation_reads_the_division_profile_from_the_laws_and_nowhere_else()
 #[trace("FR-014-AC-18", "TC-024")]
 #[test]
 fn tc_024_derivation_requires_the_mode_to_agree_with_the_bound_rounding() {
-    let derivation_of = |mode: Value| {
-        let (id, node) = application_node(app_term(
-            serde_json::json!({"identity": "quire.op.decimal.add", "mode": mode}),
-        ));
+    let derivation_of = |mode: Option<(OperationModeKind, &str)>| {
+        let (id, node) =
+            application_node(fixture_application(CheckedApplicationOperationFixture {
+                identity: Some("quire.op.decimal.add".into()),
+                mode: mode.map(|(kind, value)| (kind, value.into())),
+                ..Default::default()
+            }));
         let graph: Graph<'_> = [(&id, &node)].into_iter().collect();
         let lowered = lowered_node(&node);
         Derivation {
@@ -454,17 +480,17 @@ fn tc_024_derivation_requires_the_mode_to_agree_with_the_bound_rounding() {
     let refusal = Err(no_claim(ClaimDerivationRefusal::ModeNotDerivable {
         operation_identity: "quire.op.decimal.add".to_owned(),
     }));
-    assert_eq!(derivation_of(Value::Null), refusal);
+    assert_eq!(derivation_of(None), refusal);
     assert_eq!(
-        derivation_of(serde_json::json!({"kind": "text_profile", "value": "nearest-even"})),
+        derivation_of(Some((OperationModeKind::TextProfile, "nearest-even"))),
         refusal
     );
     assert_eq!(
-        derivation_of(serde_json::json!({"kind": "rounding", "value": "toward-zero"})),
+        derivation_of(Some((OperationModeKind::Rounding, "toward-zero"))),
         refusal
     );
     assert_eq!(
-        derivation_of(serde_json::json!({"kind": "rounding", "value": "nearest-even"})),
+        derivation_of(Some((OperationModeKind::Rounding, "nearest-even"))),
         Ok(())
     );
 }

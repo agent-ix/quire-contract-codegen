@@ -78,13 +78,14 @@ fn roots(source: &CheckedPackageV2) -> Vec<CheckedNodeId> {
         .collect()
 }
 
-fn read_lowered(bytes: &[u8]) -> ContractPackageV1 {
-    match ContractPackageWireV1::read(
+fn read_lowered(bytes: &[u8], source: &CheckedPackageV2) -> ContractPackageV1 {
+    match ContractPackageWireV1::read_with_source(
         bytes,
         CheckedPackageReadLimits::bounded(),
         &ContractDependencies::new(),
+        source,
     ) {
-        ContractPackageReadResult::Admitted(package) => *package,
+        Ok(ContractPackageReadResult::Admitted(package)) => *package,
         other => panic!("strict reader must admit the actual lowering: {other:?}"),
     }
 }
@@ -199,6 +200,7 @@ fn reversed_and_duplicate_requests_keep_keyed_node_and_term_associations() {
                 .package
                 .canonical_bytes()
                 .expect("reordered lowering bytes"),
+            &source,
         );
         for package in [lowered.package.wire().expect("reordered producer"), &reader] {
             assert_associations(&source, package);
@@ -225,8 +227,14 @@ fn genuine_other_owner_and_unrepresented_source_keys_do_not_cross_package_author
     let source_b = published_package("positive-two-owners-b.json");
     let lowered_a = source_a.lower(&roots(&source_a), &routed_contract_lowering_profile());
     let lowered_b = source_b.lower(&roots(&source_b), &routed_contract_lowering_profile());
-    let read_a = read_lowered(lowered_a.package.canonical_bytes().expect("owner A bytes"));
-    let read_b = read_lowered(lowered_b.package.canonical_bytes().expect("owner B bytes"));
+    let read_a = read_lowered(
+        lowered_a.package.canonical_bytes().expect("owner A bytes"),
+        &source_a,
+    );
+    let read_b = read_lowered(
+        lowered_b.package.canonical_bytes().expect("owner B bytes"),
+        &source_b,
+    );
     for (package_a, package_b) in [
         (
             lowered_a.package.wire().expect("producer A"),
@@ -281,7 +289,10 @@ fn genuine_other_owner_and_unrepresented_source_keys_do_not_cross_package_author
         std::slice::from_ref(&value.node_id),
         &routed_contract_lowering_profile(),
     );
-    let subset_reader = read_lowered(subset.package.canonical_bytes().expect("subset bytes"));
+    let subset_reader = read_lowered(
+        subset.package.canonical_bytes().expect("subset bytes"),
+        &source_a,
+    );
     for package in [
         subset.package.wire().expect("subset producer"),
         &subset_reader,

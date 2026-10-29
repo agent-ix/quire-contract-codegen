@@ -13,9 +13,9 @@ use std::{collections::BTreeMap, fmt};
 use qsl_replay::{
     call_site, replay, ByteDigest, CallSite, CallSiteRefusal, DeclaredDomain, DependencyEntryWire,
     DependencyInput, DependencyInputRefusal, DigestDomain, DigestRecord, DisagreementCause,
-    FunctionSite, Identifier, MalformedTranscript, NoPayload, ObligationIdentity, OccurrenceKey,
-    QualifiedName, ReplayLimits, ReplayRefusal, ReplayRequestWire, ReplayResult, ReplaySource,
-    ReplayTarget, RequestTargetWire, ScalarLimits, SourceIdentity, StateEnvironment,
+    EnvelopeSource, FunctionSite, Identifier, MalformedTranscript, NoPayload, ObligationIdentity,
+    OccurrenceKey, QualifiedName, ReplayLimits, ReplayRefusal, ReplayRequestWire, ReplayResult,
+    ReplaySource, ReplayTarget, RequestTargetWire, ScalarLimits, SourceIdentity, StateEnvironment,
     SuppliedLibrary, WireNodeId, Witness, WitnessArmResult, WitnessEnvelope, WitnessPacket,
     WitnessRefusal, WitnessSettlement, WitnessValue,
 };
@@ -183,7 +183,7 @@ pub fn replay_falsification(
         check_text,
         values,
         parameters,
-        |source| Ok(request(source)),
+        |source| Ok(request(source.into())),
         &mut |wire| replay(wire, replay_limits),
     )
 }
@@ -220,7 +220,7 @@ fn replay_falsification_through(
     check_text: &str,
     values: &[(String, WitnessValue)],
     parameters: &[ReplayParameter<'_>],
-    request: impl FnOnce(ReplaySource) -> Result<ReplayRequestWire, SpineReplayError>,
+    request: impl FnOnce(EnvelopeSource) -> Result<ReplayRequestWire, SpineReplayError>,
     execute: Execute<'_>,
 ) -> Result<WitnessArmResult, SpineReplayError> {
     if [harness, check_text]
@@ -272,10 +272,14 @@ fn replay_falsification_through(
     // QSL joins function witness entries by parameter node id and requires ascending id order.
     bindings.sort_unstable_by(|left, right| left.0.cmp(right.0));
     let witness = render_witness(harness, check_text, &bindings)?;
-    let request = request(ReplaySource::Witness(witness))?;
+    let request = request(EnvelopeSource::Witness(witness))?;
     match execute(request) {
         Ok(ReplayResult::Witness(result)) => Ok(result),
-        Ok(ReplayResult::Input(_)) => Err(SpineReplayError::WrongArm),
+        Ok(
+            ReplayResult::Input(_)
+            | ReplayResult::ObservedTemporal(_)
+            | ReplayResult::ModelGraph(_),
+        ) => Err(SpineReplayError::WrongArm),
         Err(refusal) => Err(SpineReplayError::Refused(Box::new(refusal))),
     }
 }
@@ -737,7 +741,9 @@ impl ReplayPackage {
                 Some(qsl_replay::EvaluatedValue::Boolean(value)) => Ok(value),
                 None => Err(SpineReplayError::NoInputValue),
             },
-            ReplayResult::Witness(_) => Err(SpineReplayError::WrongArm),
+            ReplayResult::Witness(_)
+            | ReplayResult::ObservedTemporal(_)
+            | ReplayResult::ModelGraph(_) => Err(SpineReplayError::WrongArm),
         }
     }
 
@@ -788,7 +794,7 @@ impl ReplayPackage {
             obligation,
             self.site.site.function,
             self.site.site.declaration.clone(),
-            ReplaySource::Witness(witness),
+            EnvelopeSource::Witness(witness),
         ))
     }
 
@@ -849,7 +855,7 @@ impl ReplayPackage {
                 PacketClaimMember::Backend,
             ));
         }
-        if !matches!(envelope.source(), ReplaySource::Witness(_)) {
+        if !matches!(envelope.source(), EnvelopeSource::Witness(_)) {
             return Err(FunctionPacketError::ClaimMismatch(
                 PacketClaimMember::SourceArm,
             ));
@@ -874,7 +880,7 @@ impl ReplayPackage {
         Ok(self.inputs.wire(
             envelope.package_id(),
             RequestTargetWire::function(name.clone(), envelope.occurrence_key().clone()),
-            envelope.source().clone(),
+            envelope.source().clone().into(),
             *envelope.obligation_identity().as_bytes(),
             &[],
         ))
@@ -938,7 +944,7 @@ fn backend_function_packet(
     obligation: ObligationIdentity,
     subject: WireNodeId,
     occurrence: OccurrenceKey,
-    source: ReplaySource,
+    source: EnvelopeSource,
 ) -> WitnessPacket<NoPayload> {
     let package_id = package.site.package_id;
     WitnessPacket {
@@ -1576,7 +1582,7 @@ mod tests {
             declared_domains: Some(package.inputs.declared_domains.clone()),
             backend: Some(BACKEND_IDENTITY.to_owned()),
             trace_position: Some(None),
-            source: Some(ReplaySource::Witness(
+            source: Some(EnvelopeSource::Witness(
                 render_witness("function_fixture", "falsified", &[])
                     .expect("the fixture witness renders"),
             )),
@@ -1607,12 +1613,14 @@ mod tests {
         let readback = ReplayRequest::decode(request, package.inputs.replay_limits)
             .expect("QSL reads the packet-backed request");
         assert_eq!(
-            readback.replay_target().occurrence_key(),
+            readback
+                .replay_target()
+                .and_then(ReplayTarget::occurrence_key),
             packet.occurrence_key.as_ref()
         );
 
         let mut wrong_arm = packet.clone();
-        wrong_arm.source = Some(ReplaySource::Input(Vec::new()));
+        wrong_arm.source = Some(EnvelopeSource::Input(Vec::new()));
         assert!(matches!(
             package.request_from_packet(wrong_arm, obligation),
             Err(FunctionPacketError::ClaimMismatch(

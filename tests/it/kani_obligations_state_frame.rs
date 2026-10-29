@@ -4512,7 +4512,10 @@ fn tc_035_the_frame_witness_is_rendered_from_the_decoded_playback() {
             panic!("a frame replay is a witness replay");
         };
         assert_eq!(witness.transcript(), expected);
-        assert_eq!(replay.packet.source, Some(replay.wire.source.clone()));
+        assert_eq!(
+            replay.packet.source,
+            Some(qsl_replay::EnvelopeSource::Witness(witness.clone()))
+        );
     }
 }
 
@@ -4880,15 +4883,17 @@ fn tc_035_the_node_ids_of_the_package_qsl_emits_are_the_ids_call_site_names() {
     assert_eq!(*anchor.node_id.digest, *site.anchor.to_string());
     assert_eq!(*frame.node_id.digest, *site.frame.to_string());
     let bound_frame = match &anchor.body {
-        CheckedTerm::Aggregate { members } => members.iter().find_map(|member| match member {
-            CheckedTerm::Binding { name, value } if name.as_ref() == "frame" => {
-                match value.as_ref() {
-                    CheckedTerm::Reference { target } => Some(target),
-                    _ => None,
+        CheckedTerm::OperationAnchorBody(body) => {
+            body.members.iter().find_map(|member| match member {
+                CheckedTerm::Binding { name, value } if name.as_ref() == "frame" => {
+                    match value.as_ref() {
+                        CheckedTerm::Reference { target } => Some(target),
+                        _ => None,
+                    }
                 }
-            }
-            _ => None,
-        }),
+                _ => None,
+            })
+        }
         _ => None,
     };
     assert_eq!(bound_frame, Some(&frame.node_id));

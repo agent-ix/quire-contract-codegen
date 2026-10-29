@@ -16,7 +16,8 @@ use quire_contract_codegen::{
     ExactFunctionRefusal, FunctionScheduleDeclaration, FunctionScheduleDisposition,
     FunctionScheduleItem, FunctionScheduleLimits, FunctionScheduleOperand as ScheduleOperand,
     FunctionScheduleParameter, FunctionScheduleRefusal as ScheduleRefusal,
-    FunctionScheduledOperation, GeneratedExactFunctionClaim, UpstreamBlocker,
+    FunctionScheduledOperation, GeneratedExactFunctionClaim, OracleGenerationError,
+    UpstreamBlocker,
 };
 use quire_contract_model::{derive_structural_candidates, CheckedPackageV2, CheckedSemanticNodeV2};
 use std::ops::Deref;
@@ -1432,6 +1433,24 @@ fn admitted_full_request(
     }
 }
 
+fn plain_read_function_contract(
+    admitted: &quire_contract_model::ContractPackageV1,
+) -> quire_contract_model::ContractPackageV1 {
+    let bytes = quire_canonical::to_vec(
+        &serde_json::to_value(admitted.wire()).expect("project admitted V1 wire"),
+        quire_canonical::Limits::new(1 << 20),
+    )
+    .expect("encode canonical admitted V1 wire");
+    match quire_contract_model::ContractPackageWireV1::read(
+        &bytes,
+        quire_contract_model::CheckedPackageReadLimits::bounded(),
+        &quire_contract_model::ContractDependencies::new(),
+    ) {
+        quire_contract_model::ContractPackageReadResult::Admitted(package) => *package,
+        other => panic!("plain V1 read admits the same wire: {other:?}"),
+    }
+}
+
 /// Select descriptors from one admitted complete request without changing its
 /// root sequence or package identity for subset and permutation controls.
 fn generate_in_request(
@@ -1945,10 +1964,9 @@ fn tc_031_ac33_call_claim_retains_identity_and_uses_declared_body_refusal() {
     assert!(matches!(
         disposition_for(&oracles, ITEM_CALL_ADD),
         ClaimDisposition::Refused {
-            refusal: ExactFunctionRefusal::BlockedOnUpstream {
+            refusal: ExactFunctionRefusal::Unsupported {
                 unsupported_node_id,
                 node_tag: "temporal",
-                issue: UpstreamBlocker::QuireSpecLanguage121,
             }
         } if *unsupported_node_id == body_id
     ));
@@ -2089,22 +2107,23 @@ fn tc_031_ac33_direct_unsupported_item_keeps_identity_and_healthy_function(
         roots.iter().position(|root| root == id).unwrap()
     };
     let contract = admitted_function_contract(&package.checked, &roots);
+    let plain = plain_read_function_contract(&contract);
     let combined = generate_exact_function_oracles(
         &contract,
         &requests,
         &[position(&body_id)],
         std::slice::from_ref(&function),
         &[position(&requested_id), position(&healthy_call_id)],
-        &[direct_item, healthy_item.clone()],
+        &[direct_item.clone(), healthy_item.clone()],
     )
     .unwrap();
     let healthy_only = generate_exact_function_oracles(
         &contract,
         &requests,
         &[position(&body_id)],
-        &[function],
+        std::slice::from_ref(&function),
         &[position(&healthy_call_id)],
-        &[healthy_item],
+        std::slice::from_ref(&healthy_item),
     )
     .unwrap();
     let direct = combined
@@ -2114,17 +2133,6 @@ fn tc_031_ac33_direct_unsupported_item_keeps_identity_and_healthy_function(
         .find(|claim| claim.node_id == requested_id)
         .expect("direct claim retains request identity");
     match (&direct.result, expected_tag) {
-        (
-            ClaimDisposition::Refused {
-                refusal:
-                    ExactFunctionRefusal::BlockedOnUpstream {
-                        unsupported_node_id,
-                        node_tag: "temporal",
-                        issue: UpstreamBlocker::QuireSpecLanguage121,
-                    },
-            },
-            "temporal",
-        ) => assert_eq!(unsupported_node_id, &requested_id),
         (
             ClaimDisposition::Refused {
                 refusal:
@@ -2160,10 +2168,38 @@ fn tc_031_ac33_direct_unsupported_item_keeps_identity_and_healthy_function(
     );
     assert_eq!(combined.location_map, healthy_only.location_map);
     assert!(!contents(&combined, "src/lib.rs").contains(requested_id.digest.as_ref()));
+    let plain_result = generate_exact_function_oracles(
+        &plain,
+        &requests,
+        &[position(&body_id)],
+        std::slice::from_ref(&function),
+        &[position(&requested_id)],
+        std::slice::from_ref(&direct_item),
+    );
+    if expected_tag == "temporal" {
+        assert_eq!(
+            plain_result,
+            Err(OracleGenerationError::UnauthenticatedRequestedRootKind {
+                request_index: position(&requested_id),
+                node_id: requested_id,
+            })
+        );
+    } else {
+        let plain_oracles = plain_result.expect("non-temporal root retains its result");
+        assert!(matches!(
+            &plain_oracles.claim_map.items[0].result,
+            ClaimDisposition::Refused {
+                refusal: ExactFunctionRefusal::Unsupported {
+                    node_tag: "expression",
+                    ..
+                }
+            }
+        ));
+    }
 }
 
 /// A directly requested formula call-node settles to Unsupported, retains its request identity, and does not alter a healthy function sibling.
-#[trace("FR-021-AC-33", "TC-031")]
+#[trace("FR-021-AC-33", "FR-021-AC-41", "TC-031")]
 #[test]
 fn tc_031_ac33_direct_formula_call_node_is_unsupported() {
     tc_031_ac33_direct_unsupported_item_keeps_identity_and_healthy_function(
@@ -2176,7 +2212,7 @@ fn tc_031_ac33_direct_formula_call_node_is_unsupported() {
 }
 
 /// A directly requested case call-node settles to Unsupported, retains its request identity, and does not alter a healthy function sibling.
-#[trace("FR-021-AC-33", "TC-031")]
+#[trace("FR-021-AC-33", "FR-021-AC-41", "TC-031")]
 #[test]
 fn tc_031_ac33_direct_case_call_node_is_unsupported() {
     tc_031_ac33_direct_unsupported_item_keeps_identity_and_healthy_function(
@@ -2188,14 +2224,14 @@ fn tc_031_ac33_direct_case_call_node_is_unsupported() {
     );
 }
 
-/// A reader-admitted fairness root keeps its request identity, refuses with the temporal cause, and leaves a supported function sibling byte-identical.
-#[trace("FR-021-AC-33", "TC-031")]
+/// An authenticated fairness root is Unsupported, its clause remains QSL-121,
+/// and a plain V1 read refuses the unavailable requested-root kind as a call.
+#[trace("FR-021-AC-33", "FR-021-AC-41", "TC-031")]
 #[test]
 fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
     use serde_json::{json, Value};
     use std::{fs, path::PathBuf};
 
-    const MODEL_NODE: u32 = 992_001;
     const FAIRNESS_NODE: u32 = 992_002;
     const FUNCTION_BODY: u32 = 992_003;
     const HEALTHY_CALL: u32 = 992_004;
@@ -2259,6 +2295,19 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
         .as_str()
         .unwrap()
         .to_owned();
+    let model_placeholder = nodes
+        .iter()
+        .find(|node| {
+            node["node_tag"] == "model"
+                && node["semantic_form"] == "object_type"
+                && node["owner"]["kind"] == "model"
+                && node["owner"]["identity"] == "acme/orders"
+                && node["owner"]["node"] == "ix://acme/orders/Order"
+        })
+        .expect("published model-owned object type")["node_id"]["digest"]
+        .as_str()
+        .expect("model node digest")
+        .to_owned();
 
     let infinite_trace =
         json!({"authority":"agent-ix", "identity":"quire.temporal.infinite-trace/v1"});
@@ -2288,8 +2337,6 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
     }
 
     let mut builder = PackageBuilder::from_wire(wire);
-    builder.model_owned_object_type(MODEL_NODE, "acme/orders", "ix://acme/orders/Order");
-    let model_placeholder = key(MODEL_NODE);
     let parameter_placeholder = key(992_005);
     builder.node(
         &parameter_placeholder,
@@ -2378,6 +2425,7 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
         other => panic!("candidate must be admitted by public CheckedPackageV2::read: {other:?}"),
     };
     let fairness_id = ids.resolve(&fairness_placeholder);
+    let clause_id = ids.resolve(&id(&clause_digest));
     let model_id = ids.resolve(&id(&model_placeholder));
     let body_id = ids.resolve(&code_id(FUNCTION_BODY));
     let call_id = ids.resolve(&code_id(HEALTHY_CALL));
@@ -2416,12 +2464,22 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
         function: "healthy_fairness_sibling".into(),
         argument_node_ids: vec![parameter_id.clone(), parameter_id.clone()],
     };
+    let clause_item = ExactFunctionItem {
+        call_node_id: clause_id.clone(),
+        function: "healthy_fairness_sibling".into(),
+        argument_node_ids: direct_item.argument_node_ids.clone(),
+    };
     let healthy_item = ExactFunctionItem {
         call_node_id: call_id.clone(),
         function: "healthy_fairness_sibling".into(),
         argument_node_ids: vec![parameter_id.clone(), parameter_id],
     };
-    let mut roots = vec![body_id.clone(), fairness_id.clone(), call_id.clone()];
+    let mut roots = vec![
+        body_id.clone(),
+        fairness_id.clone(),
+        clause_id.clone(),
+        call_id.clone(),
+    ];
     roots.sort();
     let position = |id: &quire_contract_model::CheckedNodeId| {
         roots.iter().position(|root| root == id).unwrap()
@@ -2433,17 +2491,25 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
         &requests,
         &[position(&body_id)],
         std::slice::from_ref(&function),
-        &[position(&fairness_id), position(&call_id)],
-        &[direct_item, healthy_item.clone()],
+        &[
+            position(&fairness_id),
+            position(&clause_id),
+            position(&call_id),
+        ],
+        &[
+            direct_item.clone(),
+            clause_item.clone(),
+            healthy_item.clone(),
+        ],
     )
     .unwrap();
     let healthy_only = generate_exact_function_oracles(
         &contract,
         &requests,
         &[position(&body_id)],
-        &[function],
+        std::slice::from_ref(&function),
         &[position(&call_id)],
-        &[healthy_item],
+        std::slice::from_ref(&healthy_item),
     )
     .unwrap();
     let direct = combined
@@ -2452,16 +2518,188 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
         .iter()
         .find(|claim| claim.node_id == fairness_id)
         .expect("direct fairness claim retains requested identity");
+    assert!(
+        matches!(
+            &direct.result,
+            ClaimDisposition::Refused {
+            refusal: ExactFunctionRefusal::Unsupported {
+                unsupported_node_id,
+                node_tag: "temporal",
+            }
+            } if unsupported_node_id == &fairness_id
+        ),
+        "direct result: {:?}",
+        direct.result
+    );
+    let clause = combined
+        .claim_map
+        .items
+        .iter()
+        .find(|claim| claim.node_id == clause_id)
+        .expect("temporal clause claim retains requested identity");
+    assert!(
+        matches!(
+            &clause.result,
+            ClaimDisposition::Refused {
+                refusal: ExactFunctionRefusal::BlockedOnUpstream {
+                    node_tag: "temporal",
+                    issue: UpstreamBlocker::QuireSpecLanguage121,
+                    ..
+                }
+            }
+        ),
+        "clause result: {:?}",
+        clause.result
+    );
+    let plain = plain_read_function_contract(&contract);
+    let plain_result = generate_exact_function_oracles(
+        &plain,
+        &requests,
+        &[position(&body_id)],
+        std::slice::from_ref(&function),
+        &[position(&fairness_id)],
+        std::slice::from_ref(&direct_item),
+    );
+    assert_eq!(
+        plain_result,
+        Err(OracleGenerationError::UnauthenticatedRequestedRootKind {
+            request_index: position(&fairness_id),
+            node_id: fairness_id.clone(),
+        })
+    );
+    let duplicate = generate_exact_function_oracles(
+        &plain,
+        &requests,
+        &[position(&body_id)],
+        std::slice::from_ref(&function),
+        &[position(&fairness_id), position(&fairness_id)],
+        &[direct_item.clone(), direct_item.clone()],
+    )
+    .expect("duplicate item precedence retains its claim");
     assert!(matches!(
-        &direct.result,
+        &duplicate.claim_map.items[0].result,
         ClaimDisposition::Refused {
-        refusal: ExactFunctionRefusal::BlockedOnUpstream {
-            unsupported_node_id,
-            node_tag: "temporal",
-            issue: UpstreamBlocker::QuireSpecLanguage121,
+            refusal: ExactFunctionRefusal::DuplicateRequest
         }
+    ));
+
+    let plain_healthy = generate_exact_function_oracles(
+        &plain,
+        &requests,
+        &[position(&body_id)],
+        std::slice::from_ref(&function),
+        &[position(&call_id)],
+        std::slice::from_ref(&healthy_item),
+    )
+    .expect("plain read without a selected temporal refusal retains its result");
+    assert!(matches!(
+        &plain_healthy.claim_map.items[0].result,
+        ClaimDisposition::Generated(_)
+    ));
+
+    // The separate declared-body root uses its own driver position. Both input
+    // slices may be permuted without changing the lowest eligible position.
+    let mut temporal_function = function.clone();
+    temporal_function.node_id = fairness_id.clone();
+    temporal_function.name = "temporal_body".into();
+    let declared_item = ExactFunctionItem {
+        function: temporal_function.name.clone(),
+        ..healthy_item.clone()
+    };
+    let body_position = position(&fairness_id);
+    let authenticated_body = generate_exact_function_oracles(
+        &contract,
+        &requests,
+        &[body_position],
+        std::slice::from_ref(&temporal_function),
+        &[position(&call_id)],
+        std::slice::from_ref(&declared_item),
+    )
+    .expect("authenticated declared body retains its typed claim");
+    assert!(matches!(
+        &authenticated_body.claim_map.items[0].result,
+        ClaimDisposition::Refused {
+            refusal: ExactFunctionRefusal::Unsupported {
+                unsupported_node_id,
+                node_tag: "temporal"
+            }
         } if unsupported_node_id == &fairness_id
     ));
+    assert_eq!(
+        generate_exact_function_oracles(
+            &plain,
+            &requests,
+            &[body_position],
+            std::slice::from_ref(&temporal_function),
+            &[position(&call_id)],
+            std::slice::from_ref(&declared_item),
+        ),
+        Err(OracleGenerationError::UnauthenticatedRequestedRootKind {
+            request_index: body_position,
+            node_id: fairness_id.clone(),
+        })
+    );
+    let mut later_arity_refusal = declared_item.clone();
+    later_arity_refusal.argument_node_ids.pop();
+    assert_eq!(
+        generate_exact_function_oracles(
+            &plain,
+            &requests,
+            &[body_position],
+            std::slice::from_ref(&temporal_function),
+            &[position(&call_id)],
+            std::slice::from_ref(&later_arity_refusal),
+        ),
+        Err(OracleGenerationError::UnauthenticatedRequestedRootKind {
+            request_index: body_position,
+            node_id: fairness_id.clone(),
+        })
+    );
+    for (first, second) in [
+        (fairness_id.clone(), clause_id.clone()),
+        (clause_id.clone(), fairness_id.clone()),
+    ] {
+        let ordered_roots = [first.clone(), second, body_id.clone(), call_id.clone()];
+        let ordered_requests = driver_positions(&ordered_roots);
+        let ordered_contract = admitted_function_contract(&package, &ordered_roots);
+        let ordered_plain = plain_read_function_contract(&ordered_contract);
+        let ordered_position = |id: &quire_contract_model::CheckedNodeId| {
+            ordered_roots.iter().position(|root| root == id).unwrap()
+        };
+        for functions in [
+            [temporal_function.clone(), function.clone()],
+            [function.clone(), temporal_function.clone()],
+        ] {
+            for items in [
+                [clause_item.clone(), declared_item.clone()],
+                [declared_item.clone(), clause_item.clone()],
+            ] {
+                let function_positions = functions
+                    .iter()
+                    .map(|function| ordered_position(&function.node_id))
+                    .collect::<Vec<_>>();
+                let item_positions = items
+                    .iter()
+                    .map(|item| ordered_position(&item.call_node_id))
+                    .collect::<Vec<_>>();
+                let result = generate_exact_function_oracles(
+                    &ordered_plain,
+                    &ordered_requests,
+                    &function_positions,
+                    &functions,
+                    &item_positions,
+                    &items,
+                );
+                assert_eq!(
+                    result,
+                    Err(OracleGenerationError::UnauthenticatedRequestedRootKind {
+                        request_index: 0,
+                        node_id: first.clone(),
+                    })
+                );
+            }
+        }
+    }
     let generated = combined
         .claim_map
         .items
@@ -2482,6 +2720,43 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
     );
     assert_eq!(combined.location_map, healthy_only.location_map);
     assert!(!contents(&combined, "src/lib.rs").contains(fairness_id.digest.as_ref()));
+
+    let mut fairness_body = function.clone();
+    fairness_body.name = "fairness_body".into();
+    fairness_body.node_id = fairness_id.clone();
+    let body_call = ExactFunctionItem {
+        call_node_id: call_id.clone(),
+        function: fairness_body.name.clone(),
+        argument_node_ids: direct_item.argument_node_ids.clone(),
+    };
+    let body_oracles = generate_exact_function_oracles(
+        &contract,
+        &requests,
+        &[position(&fairness_id)],
+        &[fairness_body],
+        &[position(&call_id)],
+        &[body_call],
+    )
+    .unwrap();
+    let body_claim = body_oracles
+        .claim_map
+        .items
+        .iter()
+        .find(|claim| claim.node_id == call_id)
+        .expect("distinct call claim retains its own identity");
+    assert!(
+        matches!(
+            &body_claim.result,
+            ClaimDisposition::Refused {
+                refusal: ExactFunctionRefusal::Unsupported {
+                    unsupported_node_id,
+                    node_tag: "temporal",
+                }
+            } if unsupported_node_id == &fairness_id
+        ),
+        "declared fairness body result: {:?}",
+        body_claim.result
+    );
 }
 
 /// FR-021-AC-1 (duplicate handling, matching FR-014/FR-018). One

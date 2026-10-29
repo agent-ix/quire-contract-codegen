@@ -60,13 +60,14 @@ pub fn admitted_function_contract(
         work_limit: 65_536,
     };
     let lowered = checked.lower(requested, &profile);
-    match ContractPackageWireV1::read(
+    match ContractPackageWireV1::read_with_source(
         lowered.package.canonical_bytes().expect("FR-330 bytes"),
         CheckedPackageReadLimits::bounded(),
         &ContractDependencies::new(),
+        checked,
     ) {
-        ContractPackageReadResult::Admitted(package) => *package,
-        other => panic!("Contract IR must admit its FR-330 output: {other:?}"),
+        Ok(ContractPackageReadResult::Admitted(package)) => *package,
+        other => panic!("Contract IR must authenticate its FR-330 output: {other:?}"),
     }
 }
 

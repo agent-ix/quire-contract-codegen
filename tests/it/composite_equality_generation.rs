@@ -1366,12 +1366,9 @@ fn tc_029_ac7_each_family_gets_its_own_distinct_blocker() {
     }
 }
 
-/// The direct `reference` composite form: an equality over two
-/// `REF_TYPE` operands is refused by Contract IR at admission, before this generator runs, so the
-/// generator's `QuireSpecLanguage120` blocker is not reached for it today. This pins the exact
-/// refusal (code, cause, pointer, locus); `quire.op.reference.eq` needs a `Reference<X>` naming a
-/// model object type of a selected document, which `REF_TYPE` does not. Unblocked by a corpus
-/// with such a model declaration.
+/// A direct `reference` equality with a non-reference second operand is refused by Contract IR
+/// at admission, before this generator runs. This pins the exact reader refusal and preserves
+/// the independent admitted reference-bearing record in the corpus.
 #[trace("FR-018-AC-7", "TC-029")]
 #[test]
 fn tc_029_ac7_a_direct_reference_operand_is_refused_by_ir_today() {
@@ -1384,7 +1381,7 @@ fn tc_029_ac7_a_direct_reference_operand_is_refused_by_ir_today() {
         .position(|node| node["node_id"]["digest"].as_str() == Some(node_id.digest.as_ref()))
         .expect("the node is in the wire");
     let CheckedPackageV2ReadResult::Refused(refusal) = result else {
-        panic!("IR now admits a direct reference operand ({result:?}); add it to the corpus");
+        panic!("IR admitted an ineligible reference equality: {result:?}");
     };
     assert_eq!(refusal.code, CheckedPackageRefusalCode::IllTyped);
     assert_eq!(
@@ -1393,7 +1390,7 @@ fn tc_029_ac7_a_direct_reference_operand_is_refused_by_ir_today() {
     );
     assert_eq!(
         refusal.path.as_ref().map(|path| path.as_str().to_owned()),
-        Some(format!("/semantic_graph/nodes/{position}/body/arguments/0"))
+        Some(format!("/semantic_graph/nodes/{position}/body/arguments/1"))
     );
     assert_eq!(refusal.locus, Some(node_id));
 }

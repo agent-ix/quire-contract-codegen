@@ -297,6 +297,19 @@ impl<'a> PackageItems<'a> {
             .map(ContractFeatureRecordV1::node_id)
     }
 
+    /// Accounting slot for one bound driver; context roots may occupy slots
+    /// between drivers, so the driver index is not the accounting index.
+    pub(crate) fn accounting_index(
+        &self,
+        request_index: usize,
+    ) -> Result<usize, PackageRequestError> {
+        self.bound_driver_node(request_index)?;
+        self.driver_to_accounting
+            .get(request_index)
+            .copied()
+            .ok_or(PackageRequestError::Position { request_index })
+    }
+
     /// Exact key only for a bound driver position; refuse excluded indexes before generation.
     pub(crate) fn bound_driver_node(
         &self,

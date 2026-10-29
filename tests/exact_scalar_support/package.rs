@@ -494,11 +494,24 @@ impl Default for PackageBuilder {
         });
         value["lock"]["model_selections"] = json!([selection]);
         value["identity_preimage"]["model_selections"] = value["lock"]["model_selections"].clone();
-        Self {
+        let mut builder = Self {
             value,
             bounds: BTreeSet::new(),
             dedicated_operands: BTreeSet::new(),
-        }
+        };
+        // The selected package has one authenticated, generated model root.
+        let root = key(SELECTED_MODEL_ROOT);
+        builder.node_with(&root, "model", "model_root", &root, aggregate(), &[]);
+        builder.value["semantic_graph"]["nodes"]
+            .as_array_mut()
+            .expect("fixture nodes")
+            .last_mut()
+            .expect("selected model root")["owner"] = json!({
+            "kind": "model_root",
+            "identity": FIXTURE_MODEL,
+            "digest": builder.value["lock"]["model_selections"][0]["digest"],
+        });
+        builder
     }
 }
 
@@ -582,6 +595,7 @@ impl PackageBuilder {
         // The schema's `BodyBindingRules` fix the occurrence role of these forms.
         let role = match (tag, form) {
             ("scalar_type", "integer") if digest == key(T_INTEGER) => "generated",
+            ("model", "model_root") => "generated",
             ("value", "parameter") => "expression",
             ("state", "frame") => "generated",
             ("state", "operation_anchor") => "anchor",
@@ -1408,7 +1422,7 @@ pub const MODEL: u32 = 2003;
 pub const RELATION: u32 = 2004;
 pub const STATE: u32 = 2005;
 pub const TEMPORAL: u32 = 2006;
-pub const PROTOCOL: u32 = 2007;
+const SELECTED_MODEL_ROOT: u32 = 9200;
 /// A `claim`-tagged node wired only as an extra dependency of
 /// `LITERAL_OPERAND` (issue #100 / FR-014-AC-5): it is never itself
 /// requested, so it never gets its own oracle -- its sole purpose is to
@@ -2906,15 +2920,9 @@ fn corpus_package_with_expression_operand() -> PackageBuilder {
     );
     builder
         .code(COMPOSITE, "composite_type", "record", &boolean, aggregate())
-        // `FUNCTION`/`TEMPORAL`/`PROTOCOL` are non-`expression`-tagged
-        // nodes CG refuses on tag alone -- see `refused_items` below -- but
-        // each still carries an `application` body, so IR-216 validates it
-        // like any other application node. Their bodies are simplified to
-        // a minimal catalogued `boolean.not` application (unrelated to
-        // what each node tag actually denotes) rather than kept as
-        // 0-argument placeholders: the catalog has no 0-operand identity
-        // for any operator, so a 0-argument application could never be
-        // made catalog-conformant at all.
+        // `FUNCTION` is a non-expression node CG refuses on tag alone, but IR-216
+        // still validates its application body. The minimal `boolean.not` body
+        // satisfies the operator catalog without a zero-operand placeholder.
         .application_code(
             FUNCTION,
             "function",
@@ -2965,18 +2973,6 @@ fn corpus_package_with_expression_operand() -> PackageBuilder {
                 ],
             ),
             &[key(TEMPORAL_PARAMETER), clause_formula.clone()],
-        )
-        .application_code(
-            PROTOCOL,
-            "protocol",
-            "protocol_clause",
-            &boolean,
-            application(
-                "unary",
-                op("quire.op.boolean.not"),
-                &boolean,
-                vec![literal("boolean", "true")],
-            ),
         );
     // Each anchor is dedicated to its own fixture's exact bound set (see
     // `dedicated_operand`'s doc): `key(V_INTEGER)` directly would union
@@ -4433,7 +4429,6 @@ pub fn refused_items() -> Vec<ExactScalarItem> {
         RELATION,
         STATE,
         TEMPORAL,
-        PROTOCOL,
         CALLS_FUNCTION,
         WRONG_BODY,
         MISSING,

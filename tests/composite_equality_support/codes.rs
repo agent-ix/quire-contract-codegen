@@ -59,9 +59,8 @@ pub const OPT_SELF: u32 = 30;
 pub const R_PAIR_OF_POINTS: u32 = 31;
 pub const SEQ_INT: u32 = 32;
 /// A record whose one field is a `REF_TYPE` reference: an equality operand reaching a
-/// `reference` composite (FR-018-AC-7). `quire.op.reference.eq` needs a `Reference<X>` whose `X` is
-/// a model object type of a selected document, which this corpus has none of, so the reference
-/// is reached through a record and compared by `quire.op.structural.eq`.
+/// `reference` composite (FR-018-AC-7). The reference is reached through a record and compared by
+/// `quire.op.structural.eq`.
 pub const R_WITH_REF: u32 = 34;
 /// Not registered in `corpus_package()`: used only as a `key()`/`code_id()`
 /// input to build a standalone `TypeEnvironment` for FR-018-AC-6's negative
@@ -125,7 +124,7 @@ pub const E_CONV_DEC_DEC: u32 = 119;
 /// `admits_equality_conversion`'s `Decimal -> Integer/Int` row, exercised
 /// against `Integer` (codegen#83).
 pub const E_CONV_DEC_INT: u32 = 120;
-/// An equality directly over `REF_TYPE` operands: refused by Contract IR at admission, so it is
+/// An equality over `REF_TYPE` and a record: refused by Contract IR at admission, so it is
 /// only in [`direct_reference_package`](super::direct_reference_package), never in the corpus.
 pub const E_REFERENCE_DIRECT: u32 = 121;
 /// An equality whose left operand is a conversion of a conversion, only in
