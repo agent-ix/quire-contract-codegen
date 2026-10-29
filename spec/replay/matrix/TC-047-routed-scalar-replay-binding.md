@@ -42,7 +42,7 @@ The measured QSL operator API and scalar terminal causes do not close those gate
    instead supplies the divergence control. The observed ranges and native refusal must be
    asserted; source admission failure remains a gate, not a hand-built package replacement.
 3. Build the scalar plan from the actual identity, decoded playback, proving package and
-   canonical identity of that same proved generated oracle and the retained original generation
+   retained staged path and byte set of that same proved generated oracle and the retained original generation
    limits context. Check setup precedence with one defect at a time: context/identity/schema,
    selected playback bytes above 8 MiB, adapter block/harness/arity/width, then operand domain.
    Those distinct refusals occur before an absent-capability check. Only an otherwise valid
@@ -58,8 +58,8 @@ The measured QSL operator API and scalar terminal causes do not close those gate
    Execute the same proved oracle artifact natively over those operands and limits, following the
    driver authentication contract, and retain the typed outcome and its checked completion.
    CG supplies the original generation/proving record; the driver authenticates the observation
-   against that record's canonical proved content, decoded vector and retained limits. Attempt
-   replay with a bare echoed outcome/digest, without authenticated observation, with another
+   by comparing the receipt's staged bytes with its original artifacts, alongside the decoded vector and retained limits. Attempt
+   replay with a bare echoed outcome, without authenticated observation, with another
    artifact's observation and with a regenerated correct oracle replacing the proved arithmetic
    mutation. Each must refuse before QSL evaluation; QSL receives no artifact and cannot be
    credited with authenticating the driver's execution.
@@ -81,7 +81,7 @@ The measured QSL operator API and scalar terminal causes do not close those gate
    other `Refused` report produced by the actual public QSL facade, pass that immutable report
    with CG's retained expected sent `OperatorIdentity` and checked run/context completion to
    the converter. Compare its full `claim()` before settlement. Hold the real report fixed and
-   change only one retained expected member at a time: obligation, node, content identity,
+   change only one retained expected member at a time: obligation, node,
    occurrence, kind, operator, operand identity/value/range, result range, limits or native
    outcome. Require binding refusal with no settlement. Keep the obligation digest equal for
    the other member mutations; a native-outcome-only difference cannot be found by the digest.

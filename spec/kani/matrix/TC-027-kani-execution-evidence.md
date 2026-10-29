@@ -418,9 +418,9 @@ driver has no defined typed outcome for a mismatch, its owner must specify and p
 before implementation. No driver adversarial coverage is claimed here.
 
 Scalar native error discriminant (FR-017-AC-41 to AC-44): build one `KaniScalarNativeError` of each
-of the eleven variants, the nested `Kani` error once for each `KaniExecutionRefusal` variant, and
+of the ten variants, the nested `Kani` error once for each `KaniExecutionRefusal` variant, and
 `ProofNotVerified` once for each evidence outcome.
-(1) Assert `code()` of each equals its table code, that the eleven codes are pairwise distinct, that
+(1) Assert `code()` of each equals its table code, that the ten codes are pairwise distinct, that
 `Kani` gives `kani_execution` for every nested refusal, and that the type, the class enum and the
 code constants are reachable at the crate root. (2) Assert `class()` of each variant, of each nested
 `Kani` refusal, and of `ProofNotVerified` for `Falsified`, `CoverUnsatisfied`, each inconclusive
@@ -433,9 +433,8 @@ failure cases: make one staged lock unreadable, omit an owning package, change i
 and give the two staged locks different owning package source identities. Require `DependencyLock` /
 `EnvironmentFault` and no receipt for every case;
 inject a changed staged byte, a native launch failure and malformed helper output, and require
-`EnvironmentFault`. (3) A malformed native-helper result yields `NativeResult`, `native_result`,
-`EnvironmentFault`, and not `NativeResult`; feed malformed helper output and require
-`native_result`. (4) Keep a frozen list of all variants and codes and of the mapping to class: one class for a fixed
+`EnvironmentFault`. (3) Feed malformed helper output and require `NativeResult` / `native_result` /
+`EnvironmentFault`, with no receipt. (4) Keep a frozen list of all variants and codes and of the mapping to class: one class for a fixed
 variant, and for `ProofNotVerified` and `Kani` the class of every `KaniRunOutcome`,
 `KaniInconclusiveReason`, `KaniFailureCause` and nested-refusal value, with exhaustive `match`es (no
 wildcard) over those types inside the defining crate that stop compiling when one is added, and
@@ -479,7 +478,7 @@ other.
 
 For the scalar error discriminant, each variant has its table code and class, the codes are distinct
 and frozen, the three refusal variants, the nested request-fixed `Kani` refusals and a `ProofNotVerified` carrying a
-property or proof verdict are `CompletionRefusal`; the seven fault variants, every other nested refusal and a
+property or proof verdict are `CompletionRefusal`; the five fixed fault variants, every other nested refusal and a
 `ProofNotVerified` of a cancelled, timed-out, memory-exhausted or no-verdict run are
 `EnvironmentFault`, and no identity encoder runs in the paired runner.
 
