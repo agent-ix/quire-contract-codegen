@@ -795,10 +795,17 @@ impl Twin {
             .map(|(name, _)| {
                 let authored = format!("post {name} using");
                 assert_eq!(source.matches(&authored).count(), 1, "one authored clause");
-                let start = source.find(&authored).expect("authored clause") + "post ".len();
-                let end = start + name.len();
-                let start = u64::try_from(start).expect("source offset fits wire domain");
-                let end = u64::try_from(end).expect("source offset fits wire domain");
+                let declaration = source.find(&authored).expect("authored clause");
+                let body = source[declaration..]
+                    .find('{')
+                    .expect("authored clause body")
+                    + declaration
+                    + 1;
+                let body = body
+                    + source[body..]
+                        .find(|character: char| !character.is_whitespace())
+                        .expect("nonempty clause body");
+                let body = u64::try_from(body).expect("source offset fits wire domain");
                 let matches = package
                     .source_map()
                     .iter()
@@ -807,8 +814,8 @@ impl Twin {
                             && entry.regions.iter().any(|region| {
                                 region.source.authority.as_ref() == AUTHORITY
                                     && region.source.identity.as_ref() == IDENTITY
-                                    && region.start <= start
-                                    && region.end >= end
+                                    && region.start <= body
+                                    && region.end > body
                             })
                     })
                     .collect::<Vec<_>>();
