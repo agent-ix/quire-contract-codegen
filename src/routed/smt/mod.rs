@@ -227,6 +227,17 @@ pub fn run_solver_query<Product, Item, Instance, Kind>(
 }
 
 fn parse_solver_status(stdout: &[u8]) -> SolverStatus {
+    let Some((status, tail)) = status_and_tail(stdout) else {
+        return SolverStatus::MalformedResponse;
+    };
+    if valid_solver_tail(tail) {
+        status
+    } else {
+        SolverStatus::MalformedResponse
+    }
+}
+
+fn status_and_tail(stdout: &[u8]) -> Option<(SolverStatus, &[u8])> {
     let mut offset = 0;
     for line in stdout.split_inclusive(|byte| *byte == b'\n') {
         offset += line.len();
@@ -238,19 +249,45 @@ fn parse_solver_status(stdout: &[u8]) -> SolverStatus {
             b"sat" => SolverStatus::Sat,
             b"unsat" => SolverStatus::Unsat,
             b"unknown" => SolverStatus::Unknown,
-            _ => return SolverStatus::MalformedResponse,
+            _ => return None,
         };
-        return if valid_solver_tail(&stdout[offset..]) {
-            status
-        } else {
-            SolverStatus::MalformedResponse
-        };
+        return Some((status, &stdout[offset..]));
     }
-    SolverStatus::MalformedResponse
+    None
+}
+
+// Retain the exact tail of the same completed solver stream. A proof is a
+// nonempty sequence of complete top-level Alethe commands; QSL checks their
+// meaning after the CG handoff.
+pub(super) fn captured_alethe_proof(stdout: &[u8]) -> Option<&[u8]> {
+    let (SolverStatus::Unsat, tail) = status_and_tail(stdout)? else {
+        return None;
+    };
+    let mut index = 0;
+    let mut commands = 0usize;
+    while index < tail.len() {
+        match tail[index] {
+            byte if byte.is_ascii_whitespace() => index += 1,
+            b';' => {
+                while index < tail.len() && tail[index] != b'\n' {
+                    index += 1;
+                }
+            }
+            b'(' => {
+                if solver_error_head(&tail[index..]) {
+                    return None;
+                }
+                index = sexpr_end(tail, index)?;
+                commands += 1;
+            }
+            _ => return None,
+        }
+    }
+    (commands > 0).then_some(tail)
 }
 
 // Model and proof output is retained raw. Only its outer SMT-LIB response
-// framing is checked: comments, success notices and balanced S-expressions.
+// framing is checked: comments and balanced S-expressions after the status.
 fn valid_solver_tail(bytes: &[u8]) -> bool {
     let mut index = 0;
     while index < bytes.len() {
@@ -260,11 +297,6 @@ fn valid_solver_tail(bytes: &[u8]) -> bool {
                 while index < bytes.len() && bytes[index] != b'\n' {
                     index += 1;
                 }
-            }
-            b's' if bytes[index..].starts_with(b"success")
-                && bytes.get(index + 7).is_none_or(u8::is_ascii_whitespace) =>
-            {
-                index += 7;
             }
             b'(' => {
                 if solver_error_head(&bytes[index..]) {
@@ -410,5 +442,52 @@ pub fn classify_pair<Product: Eq, Item: Eq, Instance: Eq, Kind: Eq>(
 
 #[cfg(test)]
 mod pair_tests;
+
+#[cfg(test)]
+mod proof_tests {
+    use ix_trace_rs::trace;
+
+    use super::{captured_alethe_proof, parse_solver_status, SolverStatus};
+
+    #[trace("TC-059", "FR-045-AC-5", "FR-045-AC-7")]
+    #[test]
+    fn completed_unsat_stdout_keeps_exact_proof_tail() {
+        let response = b"success\nunsat\n(assume a0 true)\n(step s0 (cl) :rule resolution)\n";
+        assert_eq!(parse_solver_status(response), SolverStatus::Unsat);
+        assert_eq!(
+            captured_alethe_proof(response),
+            Some(b"(assume a0 true)\n(step s0 (cl) :rule resolution)\n".as_slice())
+        );
+    }
+
+    #[trace("TC-059", "FR-045-AC-7")]
+    #[test]
+    fn absent_or_ambiguous_proof_tail_is_not_proof_evidence() {
+        for response in [
+            b"unsat\n".as_slice(),
+            b"unsat\n; only a comment\n",
+            b"unsat\nsat\n",
+            b"unsat\n(error \"failure\")\n",
+            b"unsat\n(step s0 (cl) :rule resolution",
+            b"unsat\n(step s0 (cl) :rule resolution) trailing",
+            b"unsat\nsuccess\n",
+            b"unknown\n(step s0 (cl) :rule resolution)",
+        ] {
+            assert_eq!(captured_alethe_proof(response), None);
+        }
+        for response in [
+            b"unsat\nsat\n".as_slice(),
+            b"unsat\n(error \"failure\")\n",
+            b"unsat\n(step s0 (cl) :rule resolution",
+            b"unsat\n(step s0 (cl) :rule resolution) trailing",
+            b"unsat\nsuccess\n",
+        ] {
+            assert_eq!(
+                parse_solver_status(response),
+                SolverStatus::MalformedResponse
+            );
+        }
+    }
+}
 
 pub mod refinement;
