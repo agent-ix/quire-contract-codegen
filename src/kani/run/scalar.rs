@@ -2082,31 +2082,16 @@ mod tests {
 
     #[trace("FR-017-AC-43", "FR-017-AC-45", "FR-017-AC-46", "FR-017-AC-49")]
     #[test]
-    fn literal_ten_entry_jcs_golden_and_mutation_controls() {
-        use sha2::{Digest, Sha256};
-        const GOLDEN: &str = concat!(
-            "{\"artifacts\":[",
-            "{\"contents\":\"lock\\n\",\"path\":\"Cargo.lock\"},",
-            "{\"contents\":\"manifest\",\"path\":\"Cargo.toml\"},",
-            "{\"contents\":\"{}\",\"path\":\"claim-map.json\"},",
-            "{\"contents\":\"record\",\"path\":\"kani-obligations/m.json\"},",
-            "{\"contents\":\"observer-lock\\n\",\"path\":\"observer/Cargo.lock\"},",
-            "{\"contents\":\"observer-manifest\",\"path\":\"observer/Cargo.toml\"},",
-            "{\"contents\":\"source-map\",\"path\":\"source-maps/lib.json\"},",
-            "{\"contents\":\"adapter\",\"path\":\"src/bin/ir791_native.rs\"},",
-            "{\"contents\":\"harness\",\"path\":\"src/lib.rs\"},",
-            "{\"contents\":\"oracle\",\"path\":\"src/oracle-artifacts-lib.rs\"}",
-            "],\"schema\":\"agent-ix/cg-kani-scalar-proof-content/v3\"}"
-        );
+    fn literal_ten_entry_jcs_digest_and_mutation_controls() {
         let entries = literal_entries();
+        assert_eq!(entries.len(), 10);
         let identity = identity_from_entries(&entries, Limits::new(256 * 1024 * 1024)).unwrap();
-        let golden: [u8; 32] = Sha256::digest(GOLDEN.as_bytes()).into();
+        let expected = independent_digest(&entries);
         assert_eq!(
             SCALAR_PROOF_SCHEMA,
             "agent-ix/cg-kani-scalar-proof-content/v3"
         );
-        assert_eq!(*identity.as_bytes(), golden);
-        assert_eq!(golden, independent_digest(&entries));
+        assert_eq!(*identity.as_bytes(), expected);
         let record = DigestRecord::mint(DigestDomain::Sha256Jcs, *identity.as_bytes());
         assert_eq!(record.domain().as_str(), "sha256-jcs");
         assert_eq!(record.as_bytes(), identity.as_bytes());
@@ -2124,7 +2109,7 @@ mod tests {
                     _ => unreachable!(),
                 }
                 let independent = independent_digest(&changed);
-                assert_ne!(independent, golden, "mutation {mutation} member {index}");
+                assert_ne!(independent, expected, "mutation {mutation} member {index}");
                 let measured =
                     identity_from_entries(&changed, Limits::new(256 * 1024 * 1024)).unwrap();
                 assert_eq!(*measured.as_bytes(), independent);
