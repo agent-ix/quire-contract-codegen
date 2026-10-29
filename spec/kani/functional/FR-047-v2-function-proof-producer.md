@@ -55,7 +55,7 @@ that concrete producer to execute; an FR-021 schedule cannot stand in for it.
   declaration, claim kind, source occurrence and original request index. The
   declaring owner may be the unit or one explicitly selected dependency.
   QSL's current `call_site` selects a function in the unit source only; the
-  dependency-owner branch remains PLANNED until QSL exposes an admitted
+  dependency-owner branch remains PLANNED under IR-1122 until QSL exposes an admitted
   imported-function site selection with declaring package, function node and
   occurrence from the same source/dependency lock. CG SHALL NOT relabel an
   imported function as a unit function to use the existing constructor.
@@ -130,7 +130,7 @@ that concrete producer to execute; an FR-021 schedule cannot stand in for it.
   selection or mismatch cause before decoding playback. A successful
   `BoundV2FunctionReplay` SHALL refer to the same function occurrence and
   proving identity as the emitted harness. When a dependency owns the selected
-  function, CG SHALL use the planned QSL imported-function site API and the original
+  function, CG SHALL use the QSL imported-function site API owned by IR-1122 and the original
   dependency lock; until that API exists, it remains Planned and receives
   no success credit.
 - When the selected function's concrete oracle executes in a harness, CG SHALL
@@ -148,7 +148,7 @@ that concrete producer to execute; an FR-021 schedule cannot stand in for it.
 | FR-047-AC-2 | For two distinct claim occurrences on one node, both outputs retain their own occurrence, original request index and selected declaration; their persisted identities and replay contexts do not cross-bind. A function name or equal body cannot merge them. PLANNED (IR-1121). | Test |
 | FR-047-AC-3 | Unknown claim or declaration, ambiguous occurrence or declaration, and a claim whose selected form is not a function each yield distinguishable typed selection refusals before oracle emission, Kani execution or playback decoding; an unrelated admitted sibling is unchanged. PLANNED (IR-1121). | Test |
 | FR-047-AC-4 | Changing only the admitted package, source owner or source bytes, dependency selection, request index, function declaration, claim occurrence, obligation kind, parameter identity/domain, generated artifact or proof ceiling produces a named typed mismatch or a distinct admitted proof identity; the harness and replay package never bind across those changes. The canonical proof-content identity may bind exact proved content; no tracking hash or source-version pin is introduced. PLANNED (IR-1121). | Test |
-| FR-047-AC-5 | The retained original `ReplayInputs`, selected QSL site and emitted `V2FunctionProofIdentity` bind through CG's planned `bind_v2_function_replay` before decoding. The same bound context and identity admit the planned typed `replay_v2_function_counterexample` for a falsifying Kani transcript; wrong package, source, dependency, request or identity is refused with its named typed cause before native replay. A dependency-owned function selects its actual declaring package and occurrence through an upstream QSL imported-function site API; that branch remains Planned until the API exists. The V1 `ReplayPackage::new`/`with_kani_identity` path is not evidence for this criterion. PLANNED (IR-1121; imported site API prerequisite). | Test |
+| FR-047-AC-5 | The retained original `ReplayInputs`, selected QSL site and emitted `V2FunctionProofIdentity` bind through CG's planned `bind_v2_function_replay` before decoding. The same bound context and identity admit the planned typed `replay_v2_function_counterexample` for a falsifying Kani transcript; wrong package, source, dependency, request or identity is refused with its named typed cause before native replay. A dependency-owned function selects its actual declaring package and occurrence through an upstream QSL imported-function site API; that branch remains Planned under IR-1122 until the API exists. The V1 `ReplayPackage::new`/`with_kani_identity` path is not evidence for this criterion. PLANNED (IR-1121; IR-1122 imported site API prerequisite). | Test |
 | FR-047-AC-6 | A transcript one byte above the smaller caller/capture byte ceiling, or one decoded value above the smaller value-count ceiling, is refused before native replay. An in-bound transcript decodes values only against the emitted V2 identity's complete ordered domains; missing, extra and out-of-domain values do not become a reproduced failure. FR-016-AC-6's required public decode bounds are a prerequisite and must be used by the V2 entry; the existing bounded V1 decode does not prove V2 wiring. PLANNED (IR-1121). | Test |
 | FR-047-AC-7 | The producer uses one admitted checked package and owner-selected callable for generation and proving, and preserves FR-021's `Undefined`, `Refused`, `Incomplete` and checked-invariant distinctions. The FR-042 wrong-completed-result and genuine environment-construction guards remain their own separately planned producer tests; this criterion does not count an invented fault as coverage of either guard. PLANNED (IR-1121; FR-021/FR-042 prerequisites). | Test and Inspection |
 
@@ -161,7 +161,7 @@ that concrete producer to execute; an FR-021 schedule cannot stand in for it.
   generation, [FR-017](./FR-017-kani-execution-evidence.md) capture, and
   [FR-016-AC-6](../../replay/functional/FR-016-witness-native-replay.md)
   public decode bounds. Imported-function selection additionally needs an
-  upstream QSL function-site API for the declaring dependency and occurrence;
+  upstream QSL function-site API (IR-1122) for the declaring dependency and occurrence;
   the current unit-only `call_site` cannot supply that branch.
 - **Downstream:** [FR-016](../../replay/functional/FR-016-witness-native-replay.md)
   typed replay consumer and quire-driver IR-1106/IR-610 E9 composition.

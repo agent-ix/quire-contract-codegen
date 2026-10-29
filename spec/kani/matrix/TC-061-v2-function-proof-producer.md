@@ -53,7 +53,7 @@ function-site selector are Planned; current V1 replay APIs do not back them.
    `V2FunctionProofIdentity` to `bind_v2_function_replay`; check that only its
    matching `BoundV2FunctionReplay` reaches typed replay. For a function
    declared by a dependency, select its actual declaring package/function
-   occurrence through QSL's planned imported-function site API and compare
+   occurrence through QSL's planned imported-function site API (IR-1122) and compare
    the original dependency lock; report the branch Planned until that API
    exists, without substituting the unit-only `call_site` (AC-4, AC-5).
 6. Use FR-016-AC-6's required public decode bounds in the V2 entry. Test byte and physical value-count ceilings at the smaller of caller and
@@ -78,4 +78,4 @@ selection failure is typed and leaves healthy sibling output unchanged.
 PLANNED under IR-1121. No current-V2 function Kani producer exists on CG main;
 the direct test-only function identity fixture does not back these criteria.
 CG's concrete FR-021 oracle (IR-595) and QSL's imported-function site
-selection remain prerequisites for the respective controls.
+selection (IR-1122) remain prerequisites for the respective controls.
