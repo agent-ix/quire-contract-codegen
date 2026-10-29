@@ -5,8 +5,8 @@ use quire_contract_codegen::{
     select_v2_claim_execution_point, V2SelectedClaimKey, V2SelectedClaimRequest,
 };
 use quire_contract_model::{
-    CheckedExecutionPointRefusal, CheckedOccurrence, CheckedOccurrenceRole, ExecutionPoint,
-    ExecutionPointName,
+    CheckedExecutionPointRefusal, CheckedNodeId, CheckedOccurrence, CheckedOccurrenceRole,
+    ExecutionPoint, ExecutionPointName,
 };
 
 use super::kani_obligations_state_frame::native_twin::Twin;
@@ -23,9 +23,18 @@ fn v2_selected_claim_entry_keeps_point_and_exact_refusal_key() {
         ],
         0,
     );
-    let (package, deposit_clause) = twin.emitted_package("BalanceNeverDrops");
-    let (second_package, transfer_clause) = twin.emitted_package("TransferBalanceNeverDrops");
-    assert_eq!(package.package_id(), second_package.package_id());
+    let deposit_expected = ExecutionPoint::Post {
+        operation: ExecutionPointName::new("deposit").expect("point name"),
+    };
+    let transfer_expected = ExecutionPoint::Post {
+        operation: ExecutionPointName::new("transfer").expect("point name"),
+    };
+    let (package, clauses) = twin.emitted_package_with_execution_points(&[
+        ("BalanceNeverDrops", deposit_expected.clone()),
+        ("TransferBalanceNeverDrops", transfer_expected.clone()),
+    ]);
+    let [deposit_clause, transfer_clause] =
+        <[CheckedNodeId; 2]>::try_from(clauses).expect("two distinct QSL-authored clauses");
 
     let deposit = package
         .graph()
@@ -68,18 +77,8 @@ fn v2_selected_claim_entry_keeps_point_and_exact_refusal_key() {
         },
     })
     .expect("authentic transfer claim selects its point");
-    assert_eq!(
-        deposit_point,
-        ExecutionPoint::Post {
-            operation: ExecutionPointName::new("deposit").expect("point name"),
-        }
-    );
-    assert_eq!(
-        transfer_point,
-        ExecutionPoint::Post {
-            operation: ExecutionPointName::new("transfer").expect("point name"),
-        }
-    );
+    assert_eq!(deposit_point, deposit_expected);
+    assert_eq!(transfer_point, transfer_expected);
     assert_ne!(deposit_point, transfer_point);
 
     let wrong_role = CheckedOccurrence {

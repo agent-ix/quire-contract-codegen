@@ -13,10 +13,11 @@
 use super::model;
 
 use qsl_replay::{
-    call_site, CallSiteRefusal, ClaimedChange, ClauseName, ClauseSite, DependencyInput,
-    DigestDomain, DigestRecord, DocumentRef, FrameReplayResult, Identifier, OccurrenceKey,
-    OperationName, OperationSite, ReplayLimits, ReplayRefusal, ScalarLimits, SelectedObject,
-    SourceIdentity, WitnessEnvelope, DEFAULT_REPLAY_INPUT_BYTES,
+    call_site, compile_package_with_execution_points, CallSiteRefusal, ClaimedChange, ClauseName,
+    ClauseSite, DependencyInput, DigestDomain, DigestRecord, DocumentRef, FrameReplayResult,
+    Identifier, OccurrenceKey, OperationName, OperationSite, ReplayLimits, ReplayRefusal,
+    ScalarLimits, SelectedObject, SourceIdentity, StageLimits, WitnessEnvelope,
+    DEFAULT_REPLAY_INPUT_BYTES,
 };
 use quire_contract_codegen::{
     parse_assertion_playback, DependencyLock, DocumentLabel, FrameReplay, FrameReplayError,
@@ -24,8 +25,8 @@ use quire_contract_codegen::{
     StateFrameIdentity, StateObjectAddress,
 };
 use quire_contract_model::{
-    CheckedNodeId, CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2,
-    CheckedPackageV2ReadResult,
+    CheckedNodeId, CheckedOccurrenceRole, CheckedPackageEvidence, CheckedPackageReadLimits,
+    CheckedPackageV2, CheckedPackageV2ReadResult, ExecutionPoint,
 };
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -751,6 +752,74 @@ impl Twin {
     /// ids QSL itself names.
     pub fn emitted_package(&self, clause: &str) -> (CheckedPackageV2, CheckedNodeId) {
         self.emitted_package_with_model(clause, None)
+    }
+
+    /// Compile one package with QSL-accepted points and locate each authored clause by its
+    /// admitted claim source region. A point changes the clause node's identity, so an unpointed
+    /// `call_site` node id cannot be reused for this package.
+    pub fn emitted_package_with_execution_points(
+        &self,
+        points: &[(&str, ExecutionPoint)],
+    ) -> (CheckedPackageV2, Vec<CheckedNodeId>) {
+        let selected = points
+            .iter()
+            .map(|(name, point)| ((*name).to_owned(), point.clone()))
+            .collect();
+        let compiled = compile_package_with_execution_points(
+            SourceIdentity::new(AUTHORITY, IDENTITY, "git", "1"),
+            IDENTITY,
+            &self.unit,
+            [self.domain.as_slice()],
+            &DependencyInput::default(),
+            &selected,
+            StageLimits::default(),
+            ReplayLimits::default(),
+        )
+        .expect("QSL accepts the authored clause points");
+        let mut evidence = CheckedPackageEvidence::new();
+        evidence
+            .insert_domain_package_document(hex(&jcs_digest(&self.domain)), self.domain.clone())
+            .expect("retain emitted model document");
+        evidence.support_feature("quire.value.complete/v1");
+        let package = match CheckedPackageV2::read(
+            compiled.bytes(),
+            CheckedPackageReadLimits::bounded(),
+            &evidence,
+        ) {
+            CheckedPackageV2ReadResult::Admitted(package) => *package,
+            other => panic!("QSL's pointed package is admitted: {other:?}"),
+        };
+        let source = std::str::from_utf8(&self.unit).expect("native unit is UTF-8");
+        let clauses = points
+            .iter()
+            .map(|(name, _)| {
+                let authored = format!("post {name} using");
+                assert_eq!(source.matches(&authored).count(), 1, "one authored clause");
+                let start = source.find(&authored).expect("authored clause") + "post ".len();
+                let end = start + name.len();
+                let matches = package
+                    .source_map()
+                    .iter()
+                    .filter(|entry| {
+                        entry.role == CheckedOccurrenceRole::Claim
+                            && entry.regions.iter().any(|region| {
+                                region.source.authority.as_ref() == AUTHORITY
+                                    && region.source.identity.as_ref() == IDENTITY
+                                    && region.start <= start as u64
+                                    && region.end >= end as u64
+                            })
+                    })
+                    .collect::<Vec<_>>();
+                assert_eq!(matches.len(), 1, "one QSL claim at {name}'s source region");
+                let clause = &matches[0].node_id;
+                let node = package
+                    .node(clause)
+                    .expect("source-map node in admitted graph");
+                assert_eq!(node.semantic_form.as_ref(), "state_clause");
+                clause.clone()
+            })
+            .collect();
+        (package, clauses)
     }
 
     /// Start with QSL's emitted graph and replace its selected model document. IR's public
