@@ -4,8 +4,9 @@
 //! Complete V2 numeric source and map publication for one selected checked claim.
 
 use quire_contract_model::{
-    CheckedComparisonRefusal, CheckedExecutionPointError, CheckedExecutionPointRefusal,
-    CheckedNodeId, CheckedOccurrence, CheckedPackageV2, CheckedSemanticId, ExecutionPoint,
+    CheckedClauseComparison, CheckedComparisonRefusal, CheckedExecutionPointError,
+    CheckedExecutionPointRefusal, CheckedNodeId, CheckedOccurrence, CheckedPackageV2,
+    CheckedSemanticId, ExecutionPoint,
 };
 use serde::Serialize;
 
@@ -78,6 +79,8 @@ pub struct V2NumericBundle {
     pub artifacts: ArtifactBundle,
     /// Exact identity that the source and map carry.
     pub identity: V2NumericIdentity,
+    /// Exact IR projection used to emit the oracle and constructive census.
+    pub comparison: CheckedClauseComparison,
     /// Deterministic in-domain and out-of-domain census of the selected relation.
     pub census: BoundaryCensus,
 }
@@ -105,8 +108,6 @@ pub enum V2NumericErrorCode {
     OwnerIdentityMismatch,
     /// The selected point changed during rendering.
     ExecutionPointMismatch,
-    /// Canonical V2 identity rendering was altered or invalid.
-    InvalidIdentityRendering,
     /// The generated Rust or map is invalid.
     InvalidGeneratedSyntax,
     /// Generated source exceeded its finite byte ceiling.
@@ -279,6 +280,7 @@ fn render_execution_point(point: &ExecutionPoint) -> String {
 #[serde(rename_all = "camelCase")]
 struct SourceMap<'a> {
     identity: &'a V2NumericIdentity,
+    comparison: &'a CheckedNodeId,
     source_path: &'a str,
     oracle_line: usize,
     population_line: usize,
@@ -401,6 +403,7 @@ fn generate_with_control(
     })?;
     let map = SourceMap {
         identity: &identity,
+        comparison: &admitted.projection.comparison,
         source_path,
         oracle_line,
         population_line,
@@ -424,6 +427,7 @@ fn generate_with_control(
     Ok(V2NumericBundle {
         artifacts,
         identity,
+        comparison: admitted.projection,
         census: population.census,
     })
 }

@@ -70,6 +70,14 @@ fn v2_numeric_bundle_keeps_selected_identity_and_runs_both_modes() {
         repeated.artifacts.artifacts()
     );
     assert_eq!(generated.artifacts.artifacts().len(), 2);
+    assert_eq!(generated.comparison.clause, clause);
+    assert_eq!(generated.comparison.claim, claim);
+    assert_eq!(
+        generated.comparison,
+        package
+            .direct_integer_comparison(&clause, &claim)
+            .expect("exact selected IR comparison")
+    );
     let source = generated
         .artifacts
         .artifacts()
@@ -94,6 +102,10 @@ fn v2_numeric_bundle_keeps_selected_identity_and_runs_both_modes() {
         generated.identity.requirement
     );
     assert_eq!(parsed["identity"]["revision"], generated.identity.revision);
+    assert_eq!(
+        parsed["comparison"]["digest"],
+        &*generated.comparison.comparison.digest
+    );
     let lines: Vec<_> = source.contents.lines().collect();
     for (field, marker) in [
         (
