@@ -23,7 +23,10 @@ fn admitted(
     let twin = Twin::with_balance_condition(condition);
     let (package, clause) = twin.emitted_package("BalanceNeverDrops");
     let claim = package
-        .node(&clause)
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| node.node_id == clause)
         .expect("selected clause")
         .occurrences
         .iter()
