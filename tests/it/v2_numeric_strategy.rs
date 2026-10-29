@@ -118,6 +118,29 @@ fn population_and_census() {
     assert_eq!(census.attempted, 10);
     assert_eq!(census.discard_rate(), Some((0, 10)));
 }
+
+/// Every closed direct operator is emitted through the same selected V2 entry.
+#[trace("TC-020")]
+#[test]
+fn v2_numeric_bundle_admits_all_six_authored_comparisons() {
+    for (operator, emitted) in [
+        ("=", "=="),
+        ("!=", "!="),
+        ("<", "<"),
+        ("<=", "<="),
+        (">", ">"),
+        (">=", ">="),
+    ] {
+        let condition = format!("self.balance {operator} pre(self.balance)");
+        let (package, clause, claim) = admitted(&condition);
+        let generated = generate_v2_numeric_strategy(&request(&package, &clause, &claim))
+            .expect("the selected V2 claim produces a complete bundle");
+        assert_eq!(generated.artifacts.artifacts().len(), 2);
+        let source = &generated.artifacts.artifacts()[0].contents;
+        assert!(source.contains(&format!("primary {emitted} other")));
+        assert!(!generated.census.in_domain().is_empty());
+    }
+}
 "#;
     fs::write(scratch.path.join("src/lib.rs"), &source.contents).expect("generated source");
     fs::create_dir_all(scratch.path.join("tests")).expect("scratch tests");
