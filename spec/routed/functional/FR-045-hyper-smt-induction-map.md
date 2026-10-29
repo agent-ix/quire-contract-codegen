@@ -112,6 +112,31 @@ Alethe proof bytes emitted by that invocation. Query bytes are never inferred
 from proof output, and proof bytes are never inserted into or substituted for
 the query field. A present empty proof remains present and empty.
 
+The supported direct cvc5 proof-capture mode selects `--dump-proofs` and
+`--proof-format-mode=alethe` in the retained argument vector. Those arguments
+request proof output after an unsatisfiable `(check-sat)` without changing any
+FR-315 query byte or appending a command to stdin (the
+[cvc5 Alethe output example](https://cvc5.github.io/docs-ci/docs-main/proofs/output_alethe.html)
+shows this command-line mode). For this mode CG SHALL take the status from
+the first response line after optional SMT-LIB comments and `success`
+notices. Only a completed, successful invocation whose status is `Unsat` may
+supply proof bytes. The remainder of that invocation's captured stdout SHALL
+contain exactly one balanced outer SMT-LIB list, optionally surrounded by
+ASCII whitespace, whose direct children are complete SMT-LIB expressions;
+the empty outer list is admitted. CG SHALL retain the full stdout as process
+evidence and take the exact byte slice between that list's matching outer
+parentheses as the proof field. It SHALL remove only those two framing
+parentheses, without changing any interior byte, so the captured stdout and
+the field together account for every emitted byte. The empty outer list
+therefore gives a present, zero-length proof; a status with no outer list
+leaves the proof field absent and gives `MissingField`. CG SHALL NOT take
+proof bytes from stderr, another attempt, a caller-supplied field or a later
+process. A second status, an SMT-LIB error response, a second outer
+expression, an incomplete expression or any other trailing non-whitespace
+token SHALL yield `MalformedResponse` and no proof-bearing handoff. QSL
+FR-314 interprets the interior Alethe commands and judges the proof; CG's
+framing check makes no claim that those commands constitute a refutation.
+
 CG SHALL validate the complete record collection against the selected
 refinement before producing the certificate handoff: exactly one `Base`,
 exactly one `Step { row: r }` for each `r` in `0..N`, no row outside that
@@ -179,6 +204,9 @@ validated handoff contains only the fields FR-314's adapter needs.
 PARTIAL (IR-974). CG's bounded single-query solver execution and associated
 base/step evidence classifier exist in `src/routed/smt/`; QSL exports the
 hyper query encoder and outcome types, but their CG integration remains
-planned. The refinement Base/Step record
-collection, validation and deterministic FR-314 handoff are PLANNED
-(IR-1120), with no implementation or tagged tests yet.
+planned. The refinement Base/Step record collection and validation are
+partial after CG #630; deterministic FR-314 handoff and TC-059 steps 5-8
+remain open on IR-1120. CG owns the cvc5 response framing and its end-to-end
+proof extraction, including the distinction between an empty outer list and
+status-only output. CG SHALL pass the exact extracted interior bytes through
+the QSL reader before claiming AC-5 or TC-059 step 6 covered.
