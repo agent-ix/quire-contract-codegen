@@ -58,6 +58,8 @@ No new cross-repo copied file, compatibility layer, unsafe block, or CI gate nar
 
 | FND-005 | fixed | At ac68c8d6, `item_reaches_temporal_body` calls the shared `check_lowered_binary_body` used by normal item classification before requiring `call` form. This preserves selected-reference, direct-form and node-tag refusals before the body result; later arity/source/type/package checks no longer suppress AC-41. A real source-compiled imported call with selected references passes the focused control. |
 
+| FND-006 | fixed | At 939b550f the comment states QSL's emitted graph is the starting input and IR public candidates rederive model-root and affected clause/node identities before admission. The diff changes only those three comment lines; no test assertion or fixture path changed. |
+
 ## Disposition evidence
 
 The fix delta is `eee90d17..794a921d`, limited to `Cargo.lock`, `src/routed/generate.rs`, and `tests/it/routed_generation.rs`. The IR and model entries share revision `3e74887e`. The focused final-head log `target/ir1087-ir1098-cohort-794a921d.log` records all-target check, the new public-route regression test, authenticated quantity control, association tests 3/3, Clippy `-D warnings`, fmt, and diff check passing. I ran one additional focused existing test with clean QSpec `f8d63672`: `cargo test --locked --lib admitted_ordering_variants_change_routed_oracle_bytes_and_keep_refused_sibling` failed 0/1 in 0.36 seconds, returning `UnauthenticatedOperationView` for a plain-read integer-ordering route at `src/routed/contract_package_tests.rs:1774`. No aggregate gate or Kani was run.
@@ -102,3 +104,17 @@ FND-003 is fixed under merged AC-41. FND-005 requires a same-PR fix and independ
 ### Disposition round 8
 
 Reviewed only `3628eea4..ac68c8d6` for FND-005. The preflight and ordinary item path now share `check_lowered_binary_body`, so a selected imported call remains `SelectedDependencyUnsupported` before an eligible temporal body can trigger the whole-call refusal. A later arity mismatch still reaches the body result, matching the normal classification order. The source-compiled imported-call unit control passed 1/1 and the focused AC-33 integration group passed 5/5 according to the exact-head evidence. No aggregate gate was run by this reviewer.
+
+## New findings (disposition pass 9)
+
+Reviewed only `6c4e7486..ff3e2f5d`, a post-gate test-fixture repair. The four `panic!` replacements return test failures via `Result`; the TC-025 claim replacement uses an admitted snapshot and still asserts exact `UnknownNodeKind`, no harness and null kind; TC-035 still compares the typed operation anchor's bound frame id with the emitted frame id. The no-override path reads QSL's exact package bytes. The override path starts from those bytes, changes the selected model and model-root digest, then uses the same-repo IR public candidate helper and strict reader to rederive and admit affected identities. An independent Opus read-only review found no behavior or assertion weakening. No aggregate gate was run by this reviewer.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-006 | low | The override fixture's doc comment says its graph and clause identity still come from QSL, but the new model-root rewrite and IR candidate rekey change affected node and clause identities; this misstates the fixture's source-backed provenance | tests/state_frame_support/native_twin.rs:746 |
+
+The behavior review is clean; FND-006 needs a same-PR documentation correction and disposition.
+
+### Disposition round 10
+
+Reviewed only `ff3e2f5d..939b550f`. The corrected comment distinguishes the QSL-emitted starting graph from the IR-rederived identities of the selected-model override. The no-override source-backed identity claim remains accurate and untouched. The change is comment-only and `git diff --check` passes. No aggregate gate was run by this reviewer.

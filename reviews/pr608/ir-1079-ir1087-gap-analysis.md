@@ -113,3 +113,7 @@ FND-004 is fixed under merged AC-41; FND-005/006 require same-PR fixes.
 ### Disposition round 8
 
 Reviewed `3628eea4..ac68c8d6` against merged AC-41 and TC-031 step 13. The mixed permutation test no longer has ambiguous declaration names, and its two root orders use fixed index-0 expectations, one for each eligible winner. The imported-call control uses source compilation and a real admitted V1 closure; it checks the shared preflight seam rather than a combined public temporal-body request. The new TM-003 row accurately marks that evidence partial. Focused controls and Quire validation passed at the exact head; no aggregate gate was run here. Plan completion: not assessed.
+
+### Post-gate fixture delta review
+
+Diff-scoped semantic check of `6c4e7486..ff3e2f5d`: FR-015-AC-14 remains bound to a real admitted non-expression `state/snapshot` node with an intentionally replaced Generated scalar claim, then checks `UnknownNodeKind` tag/form and no harness. The selected-model override controls for FR-015-AC-78/81 retain their range and replay assertions; the synthetic override remains explicitly partial evidence under FR-024-AC-35. TC-035's no-override QSL-emitted package still checks operation-anchor and frame ids and the bound frame reference, now through IR's typed `OperationAnchorBody`. No changed trace tag or matrix row overclaims this delta. Plan completion: not assessed. No aggregate gate was run here.
