@@ -10,6 +10,7 @@ type: TestMatrix
 
 | Functional Req | Acceptance Criteria | Test Cases | Status |
 |---|---|---|---|
+| FR-047 | FR-047-AC-1 through FR-047-AC-7 | TC-061 | 🚧 PLANNED (IR-1121): no current-V2 function Kani proof producer or authentic retained proving-run identity; TC-061's installed healthy/mutant, same-node occurrence, mismatch and limit controls have not run. |
 | FR-015 | FR-015-AC-1, FR-015-AC-2 | TC-025 | 🚧 Planned/open; AC-2's only tagged V1 `BoundClause` test retires under IR-348, and surviving V2 identity evidence remains required. |
 | FR-015 | FR-015-AC-3, FR-015-AC-5, FR-015-AC-6 | TC-025 | ✅ Covered |
 | FR-015 | FR-015-AC-4 | TC-025 | 🚧 Open after IR-348: the only tagged V1 `BoundClause` assumption test retired; surviving V2 runtime-outcome assumptions need criterion-preserving evidence. |
