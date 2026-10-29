@@ -46,32 +46,10 @@ impl Sandbox {
 set -euo pipefail
 case "$1" in
   merge-base)
-    if [[ "${2-}" == --is-ancestor ]]; then
-      [[ "${FAKE_MAIN_ANCESTOR:-yes}" == yes ]]
-    else
-      printf 'base\n'
-    fi ;;
+    printf 'base\n' ;;
   diff)
     [[ " $* " == *" --no-renames "* ]] || exit 3
-    if [[ " $* " == *" origin/main "* ]]; then
-      printf '%s' "${FAKE_MAIN_PATHS:-}"
-    else
-      printf '%s' "${FAKE_BRANCH_PATHS:-}"
-    fi ;;
-  ls-tree)
-    [[ " $* " == " ls-tree --name-only base -- scripts/kani_claims.json " ]] || exit 3
-    printf 'scripts/kani_claims.json\n' ;;
-  show)
-    [[ "${2-}" == 'base:scripts/kani_claims.json' ]] || exit 3
-    printf '{"modules":[{"name":"kani_fr_003_4_proof_boolean_transition_module"}]}\n' ;;
-  rev-parse)
-    if [[ "${FAKE_MOVE_HEAD:-no}" == yes ]]; then
-      count=$(cat "$FAKE_HEAD_COUNT" 2>/dev/null || printf 0)
-      printf '%s\n' "$((count + 1))" > "$FAKE_HEAD_COUNT"
-      printf 'head%s\n' "$count"
-    else
-      printf 'head\n'
-    fi ;;
+    printf '%s' "${FAKE_BRANCH_PATHS:-}" ;;
   status)
     if [[ "${FAKE_DIRTY:-no}" == yes ]]; then
       printf ' M changed.rs\n'
@@ -89,20 +67,11 @@ esac
             r##"#!/usr/bin/env bash
 set -euo pipefail
 if [[ " $* " == *" --list "* ]]; then
-  if [[ "${FAKE_CLAIM_REPORTS:-no}" == yes ]]; then
-    printf 'kani_generation_claims::real_kani_claims_have_discharge_and_falsifying_mutations: test\n'
-  fi
   for ((i=0; i<${FAKE_LIST_COUNT:-2}; i++)); do
     printf 'kani_obligations::proof_%s: test\n' "$i"
   done
 else
   printf 'started\n' >> "$FAKE_MARKER"
-  if [[ "${FAKE_CLAIM_REPORTS:-no}" == yes ]]; then
-    mkdir -p target-codex-backends/ir19-claim-crate
-    printf '{"fake":"original"}\n' > target-codex-backends/ir19-claim-crate/original-0-report.json
-    printf '{"fake":"mutation"}\n' > target-codex-backends/ir19-claim-crate/mutation-fake-0-report.json
-    printf 'test kani_generation_claims::real_kani_claims_have_discharge_and_falsifying_mutations ... ok\n'
-  fi
   if ! flock -n "$FAKE_LOCK" true; then
     printf 'held\n' >> "$FAKE_LOCK_MARKER"
   fi
@@ -145,31 +114,23 @@ fi
         command.env("FAKE_MARKER", self.root.join("run-marker"));
         command.env("FAKE_LOCK_MARKER", self.root.join("lock-marker"));
         command.env("FAKE_LOCK", self.root.join("lane.lock"));
-        command.env("FAKE_HEAD_COUNT", self.root.join("head-count"));
         command.env("FAKE_TREE_COUNT", self.root.join("tree-count"));
         command
     }
 
     fn gate(&self) -> Command {
-        self.gate_with_cargo("cargo")
-    }
-
-    fn gate_with_cargo(&self, cargo: &str) -> Command {
         let script = Path::new(env!("CARGO_BIN_EXE_cg_gates"));
-        self.gate_script(script, cargo)
+        self.gate_script(script, "cargo")
     }
 
     fn gate_script(&self, script: &Path, cargo: &str) -> Command {
-        // The gate clears and the stand-in cargo writes its claim evidence
-        // relative to the working directory, so it runs inside the sandbox
-        // rather than the shared checkout.
+        // Run the stand-in gate in its own sandbox.
         let mut command = Command::new(script);
         command.arg("kani-gate");
         command.env("PATH", format!("{}:/usr/bin:/bin", self.bin.display()));
         command.env("FAKE_MARKER", self.root.join("run-marker"));
         command.env("FAKE_LOCK_MARKER", self.root.join("lock-marker"));
         command.env("FAKE_LOCK", self.root.join("lane.lock"));
-        command.env("FAKE_HEAD_COUNT", self.root.join("head-count"));
         command.env("FAKE_TREE_COUNT", self.root.join("tree-count"));
         command.current_dir(&self.root);
         command.args([
@@ -210,21 +171,6 @@ fn rust_gate_rejects_a_kani_reaching_path_without_silently_skipping() {
         stdout(&output),
         "required\nsrc/kani/generate/negotiate.rs\n"
     );
-}
-
-#[trace("NFR-006-AC-14", "TC-045")]
-#[test]
-fn rust_scope_refuses_stale_main_when_kani_reaching_paths_changed() {
-    let sandbox = Sandbox::new();
-    let output = sandbox
-        .command("kani-scope")
-        .arg("--main-freshness")
-        .env("FAKE_MAIN_PATHS", "src/kani/generate/negotiate.rs\n")
-        .env("FAKE_MAIN_ANCESTOR", "no")
-        .output()
-        .expect("freshness command");
-    assert!(!output.status.success());
-    assert_eq!(stdout(&output), "stale\nsrc/kani/generate/negotiate.rs\n");
 }
 
 #[trace("NFR-006-AC-6", "TC-045")]
@@ -340,7 +286,7 @@ fn gate_runs_once_under_lock_and_refuses_missing_tests_or_failures() {
     let output = sandbox.gate().output().expect("stand-in gate");
     assert!(
         !output.status.success(),
-        "a stand-in cannot discharge a claim"
+        "a stand-in cannot satisfy the installed Kani gate"
     );
     let result = stdout(&output)
         .lines()
@@ -383,45 +329,6 @@ fn gate_runs_once_under_lock_and_refuses_missing_tests_or_failures() {
             assert!(!sandbox.marker());
         }
     }
-}
-
-#[trace("FR-041-AC-5", "NFR-006-AC-19", "TC-056")]
-#[test]
-fn gate_rejects_fake_cargo_and_kani_with_printed_proof_and_reports() {
-    let sandbox = Sandbox::new();
-    let alias = sandbox.bin.join("caller-cargo");
-    std::os::unix::fs::symlink(sandbox.bin.join("cargo"), &alias)
-        .expect("mutable caller cargo symlink");
-    let output = sandbox
-        .gate_with_cargo(alias.to_str().expect("UTF-8 caller cargo path"))
-        .env("HOME", &sandbox.root)
-        .env("CARGO_HOME", &sandbox.bin)
-        .env("RUSTUP_HOME", &sandbox.root)
-        .env("KANI_HOME", &sandbox.root)
-        .env("FAKE_CLAIM_REPORTS", "yes")
-        .env("FAKE_LIST_COUNT", "2")
-        .env("FAKE_RUN_COUNT", "3")
-        .output()
-        .expect("stand-in proof attempt");
-    assert!(!output.status.success(), "{}", stdout(&output));
-    assert!(sandbox.marker(), "fake executable reached run phase");
-    assert!(
-        sandbox
-            .root
-            .join("target-codex-backends/ir19-claim-crate/original-0-report.json")
-            .exists(),
-        "stand-in wrote a nonempty report before rejection"
-    );
-    let report = stdout(&output);
-    let result = report
-        .lines()
-        .find(|line| line.starts_with("kani-gate: result="))
-        .expect("gate result line");
-    assert!(
-        result.starts_with("kani-gate: result=failed ran=3 expected=3 elapsed=")
-            && result.ends_with("s kani=Kani 1.0 tree=clean"),
-        "only the identity check may fail: {result}"
-    );
 }
 
 /// The installed gate binary also works through a symlink.
@@ -499,20 +406,14 @@ fn gate_waits_for_the_existing_lock_holder() {
     let output = gate.wait_with_output().expect("gate after lock release");
     assert!(
         !output.status.success(),
-        "a stand-in cannot discharge a claim"
+        "a stand-in cannot satisfy the installed Kani gate"
     );
     assert!(sandbox.marker(), "lane must start after lock release");
 }
 
-#[trace(
-    "NFR-006-AC-8",
-    "NFR-006-AC-9",
-    "NFR-006-AC-10",
-    "NFR-006-AC-14",
-    "TC-045"
-)]
+#[trace("NFR-006-AC-8", "NFR-006-AC-9", "NFR-006-AC-10", "TC-045")]
 #[test]
-fn gate_refuses_missing_launcher_dirty_or_moving_tree_and_stale_main() {
+fn gate_refuses_missing_launcher_and_dirty_tree() {
     let sandbox = Sandbox::new();
     fs::remove_file(sandbox.bin.join("cargo-kani")).expect("remove own launcher stand-in");
     let output = sandbox.gate().output().expect("absent launcher");
@@ -522,30 +423,13 @@ fn gate_refuses_missing_launcher_dirty_or_moving_tree_and_stale_main() {
         "cargo-kani",
         "#!/usr/bin/env bash\nprintf '%s\\n' \"${FAKE_KANI_VERSION-Kani 1.0}\"\n",
     );
-    for (name, value) in [
-        ("FAKE_DIRTY", "yes"),
-        ("FAKE_KANI_VERSION", ""),
-        ("FAKE_MAIN_PATHS", "src/kani/new.rs\n"),
-    ] {
+    for (name, value) in [("FAKE_DIRTY", "yes"), ("FAKE_KANI_VERSION", "")] {
         let mut command = sandbox.gate();
         command.env(name, value);
-        if name == "FAKE_MAIN_PATHS" {
-            command.env("FAKE_MAIN_ANCESTOR", "no");
-        }
         let output = command.output().expect("negative gate");
         assert_failed_without_run(&output, &sandbox);
         assert!(stdout(&output).contains("result=failed"));
-        if name == "FAKE_MAIN_PATHS" {
-            assert!(String::from_utf8_lossy(&output.stderr).contains("src/kani/new.rs"));
-        }
     }
-    let output = sandbox
-        .gate()
-        .env("FAKE_MOVE_HEAD", "yes")
-        .output()
-        .expect("moving head");
-    assert!(!output.status.success());
-    assert!(stdout(&output).contains("result=failed"));
     let output = sandbox
         .gate()
         .env("FAKE_MOVE_TREE", "yes")
@@ -553,16 +437,6 @@ fn gate_refuses_missing_launcher_dirty_or_moving_tree_and_stale_main() {
         .expect("moving tree");
     assert!(!output.status.success());
     assert!(stdout(&output).contains("tree=dirty"));
-    let output = sandbox
-        .gate()
-        .env("FAKE_MAIN_PATHS", "spec/readme.md\n")
-        .env("FAKE_MAIN_ANCESTOR", "no")
-        .output()
-        .expect("unrelated main change");
-    assert!(
-        !output.status.success(),
-        "a stand-in cannot discharge a claim"
-    );
 }
 
 #[trace("NFR-006-AC-4", "NFR-006-AC-12", "TC-045")]

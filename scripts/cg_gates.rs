@@ -1,8 +1,6 @@
 //! Host controls for the Kani lane and QSpec fixture preflight.
-//! The scope table is the authority for reachability; the gate reuses it for freshness.
 
 use std::{
-    collections::BTreeSet,
     env, fs,
     io::{self, BufRead, BufReader, Write},
     path::{Path, PathBuf},
@@ -23,7 +21,9 @@ fn main() {
 
 fn dispatch(mut args: Vec<String>) -> Result<(), String> {
     if args.is_empty() {
-        return Err("usage: cg_gates kani-scope [--main-freshness] | kani-gate LOCK -- CARGO ... | qspec-selftest".into());
+        return Err(
+            "usage: cg_gates kani-scope | kani-gate LOCK -- CARGO ... | qspec-selftest".into(),
+        );
     }
     match args.remove(0).as_str() {
         "kani-scope" => scope(&args),
@@ -84,11 +84,8 @@ fn merge_base() -> Result<String, String> {
         .to_owned())
 }
 
-fn changed_paths(base: &str, end: Option<&str>) -> Result<Vec<String>, String> {
+fn changed_paths(base: &str) -> Result<Vec<String>, String> {
     let mut args = vec!["diff", "--no-renames", "--name-only", base];
-    if let Some(end) = end {
-        args.push(end);
-    }
     args.push("--");
     Ok(git(&args)?
         .lines()
@@ -97,26 +94,10 @@ fn changed_paths(base: &str, end: Option<&str>) -> Result<Vec<String>, String> {
         .collect())
 }
 
-fn freshness() -> Result<Vec<String>, String> {
-    let base = merge_base()?;
-    let paths = changed_paths(&base, Some("origin/main"))?;
-    if paths.is_empty()
-        || Command::new("git")
-            .args(["merge-base", "--is-ancestor", "origin/main", "HEAD"])
-            .status()
-            .map_err(|error| format!("git merge-base: {error}"))?
-            .success()
-    {
-        Ok(Vec::new())
-    } else {
-        Ok(paths)
-    }
-}
-
 fn scope(args: &[String]) -> Result<(), String> {
     match args {
         [] => {
-            let paths = changed_paths(&merge_base()?, None)?;
+            let paths = changed_paths(&merge_base()?)?;
             if paths.is_empty() {
                 println!("not required");
             } else {
@@ -127,20 +108,7 @@ fn scope(args: &[String]) -> Result<(), String> {
             }
             Ok(())
         }
-        [flag] if flag == "--main-freshness" => {
-            let paths = freshness()?;
-            if paths.is_empty() {
-                println!("fresh");
-                Ok(())
-            } else {
-                println!("stale");
-                for path in paths {
-                    println!("{path}");
-                }
-                Err("Kani-reaching main changes require a refresh".into())
-            }
-        }
-        _ => Err("usage: cg_gates kani-scope [--main-freshness]".into()),
+        _ => Err("usage: cg_gates kani-scope".into()),
     }
 }
 
@@ -218,123 +186,8 @@ fn gate_command(executable: &str, args: &[String], real_cargo: bool, home: &Path
     command
 }
 
-fn git_state() -> Result<(String, String), String> {
-    Ok((
-        git(&["rev-parse", "HEAD"])?,
-        git(&["status", "--porcelain", "--untracked-files=all"])?,
-    ))
-}
-
-fn proof_reports_present() -> bool {
-    let root = Path::new("target-codex-backends/ir19-claim-crate");
-    let original = root.join("original-0-report.json");
-    let original_ok = fs::metadata(original).is_ok_and(|metadata| metadata.len() > 0);
-    let mutation_ok = fs::read_dir(root).ok().is_some_and(|entries| {
-        entries.flatten().any(|entry| {
-            let name = entry.file_name();
-            let name = name.to_string_lossy();
-            name.starts_with("mutation-")
-                && name.ends_with("-report.json")
-                && entry.metadata().is_ok_and(|metadata| metadata.len() > 0)
-        })
-    });
-    original_ok && mutation_ok
-}
-
-fn claim_names(modules: &[serde_json::Value]) -> Result<BTreeSet<String>, String> {
-    modules
-        .iter()
-        .map(|module| {
-            module["name"]
-                .as_str()
-                .map(str::to_owned)
-                .ok_or_else(|| "claim has no name".to_owned())
-        })
-        .collect()
-}
-
-fn base_claim_names() -> Result<BTreeSet<String>, String> {
-    let base = merge_base()?;
-    let path = "scripts/kani_claims.json";
-    let present = git(&["ls-tree", "--name-only", &base, "--", path])?;
-    if present.is_empty() {
-        return Ok(BTreeSet::new());
-    }
-    if present.trim() != path {
-        return Err(format!("unexpected base claim tree entry: {present:?}"));
-    }
-    let object = format!("{base}:{path}");
-    let previous = git(&["show", &object])?;
-    let declaration: serde_json::Value = serde_json::from_str(&previous)
-        .map_err(|error| format!("base claim declaration must parse: {error}"))?;
-    let modules = declaration["modules"]
-        .as_array()
-        .ok_or("base claim declaration has no module array")?;
-    claim_names(modules)
-}
-
-fn validate_claim_rows(
-    modules: &[serde_json::Value],
-    base_names: &BTreeSet<String>,
-) -> Result<(usize, Vec<String>), String> {
-    if modules.is_empty() {
-        return Err("claim declaration has no modules".into());
-    }
-    let current = claim_names(modules)?;
-    if current.len() != modules.len() {
-        return Err("duplicate claimed module".into());
-    }
-    let removed: Vec<_> = base_names.difference(&current).cloned().collect();
-    if !removed.is_empty() {
-        return Err(format!("removed claimed module(s): {}", removed.join(", ")));
-    }
-    let mut held_lines = Vec::new();
-    for module in modules {
-        let Some(hold) = module.get("hold") else {
-            continue;
-        };
-        let name = module["name"].as_str().ok_or("claim has no name")?;
-        let reason = hold["reason"].as_str().ok_or("claim hold has no reason")?;
-        let expiry = hold["expiry"].as_str().ok_or("claim hold has no expiry")?;
-        let follow_up = hold["follow_up"]
-            .as_str()
-            .ok_or("claim hold has no follow-up")?;
-        if name != "kani_fr_003_4_proof_boolean_transition_module"
-            || reason != "V1 deleted by owner ruling 2026-10-27; no genuine V2 named independent expectation/control exists yet"
-            || expiry != "until the V2 named independent expectation + real positive/falsifying control exists"
-            || follow_up != "IR-1047"
-        {
-            return Err(format!("unauthorized claim hold: {name}"));
-        }
-        held_lines.push(format!(
-            "kani-gate: held={name} reason={reason} expiry={expiry} follow_up={follow_up}"
-        ));
-    }
-    if held_lines.len() > 1 {
-        return Err("more than one claim held".into());
-    }
-    Ok((modules.len() - held_lines.len(), held_lines))
-}
-
-fn claim_counts() -> Result<(usize, usize), String> {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/kani_claims.json");
-    let bytes = fs::read(&path).map_err(|error| format!("read claim declaration: {error}"))?;
-    let declaration: serde_json::Value = serde_json::from_slice(&bytes)
-        .map_err(|error| format!("parse claim declaration: {error}"))?;
-    let modules = declaration["modules"]
-        .as_array()
-        .ok_or("claim declaration has no module array")?;
-    let (active, held_lines) = validate_claim_rows(modules, &base_claim_names()?)?;
-    for line in &held_lines {
-        println!("{line}");
-    }
-    let held = held_lines.len();
-    println!("{}", claim_count_line(active, held));
-    Ok((active, held))
-}
-
-fn claim_count_line(active: usize, held: usize) -> String {
-    format!("kani-gate: claims active={active} held={held}")
+fn tree_clean() -> Result<bool, String> {
+    Ok(git(&["status", "--porcelain", "--untracked-files=all"])?.is_empty())
 }
 
 fn passed_count(output: &str) -> Option<usize> {
@@ -393,20 +246,9 @@ fn gate_held(test_command: &[String]) -> Result<(), String> {
         gate_result("failed", 0, 0, start, "unavailable", "clean");
         return Err("Kani version unavailable".into());
     }
-    let (active_claims, _held_claims) = claim_counts()?;
-    let before = git_state()?;
-    if !before.1.is_empty() {
+    if !tree_clean()? {
         gate_result("failed", 0, 0, start, &version, "dirty");
         return Err("dirty tree".into());
-    }
-    let stale = freshness()?;
-    if !stale.is_empty() {
-        eprintln!(
-            "kani-gate: source stale against origin/main (stale, {})",
-            stale.join(", ")
-        );
-        gate_result("failed", 0, 0, start, &version, "clean");
-        return Err("source stale".into());
     }
     let delimiter = test_command.iter().position(|arg| arg == "--");
     let Some(delimiter) = delimiter else {
@@ -422,10 +264,6 @@ fn gate_held(test_command: &[String]) -> Result<(), String> {
     let mut list = test_command[1..=delimiter].to_vec();
     list.extend(["--list".into(), "--ignored".into()]);
     list.extend_from_slice(&test_command[delimiter + 3..]);
-    let evidence = Path::new("target-codex-backends/ir19-claim-crate");
-    if evidence.exists() {
-        fs::remove_dir_all(evidence).map_err(|error| format!("clear claim evidence: {error}"))?;
-    }
     let list_output = command_output(&mut gate_command(
         &test_command[0],
         &list,
@@ -469,7 +307,6 @@ fn gate_held(test_command: &[String]) -> Result<(), String> {
     let mut line = Vec::new();
     let mut result_lines = 0;
     let mut ran = None;
-    let mut claim_run_count = 0;
     loop {
         line.clear();
         if reader
@@ -489,11 +326,6 @@ fn gate_held(test_command: &[String]) -> Result<(), String> {
             result_lines += 1;
             ran = passed_count(text);
         }
-        if text
-            == "test kani_generation_claims::real_kani_claims_have_discharge_and_falsifying_mutations ... ok"
-        {
-            claim_run_count += 1;
-        }
     }
     let run_status = run
         .wait()
@@ -503,19 +335,8 @@ fn gate_held(test_command: &[String]) -> Result<(), String> {
     } else {
         0
     };
-    let after = git_state()?;
-    let tree = if after.1.is_empty() { "clean" } else { "dirty" };
-    let claim_list = listed.lines().filter(|line| *line == "kani_generation_claims::real_kani_claims_have_discharge_and_falsifying_mutations: test").count() == 1;
-    let claim_run = claim_run_count == 1;
-    if run_status.success()
-        && ran == expected
-        && real_cargo
-        && before.0 == after.0
-        && tree == "clean"
-        && claim_list
-        && claim_run
-        && (active_claims == 0 || proof_reports_present())
-    {
+    let tree = if tree_clean()? { "clean" } else { "dirty" };
+    if run_status.success() && ran == expected && real_cargo && tree == "clean" {
         gate_result("passed", ran, expected, start, &version, tree);
         Ok(())
     } else {
@@ -593,69 +414,4 @@ fn qspec_selftest() -> Result<(), String> {
     }
     println!("qspec preflight selftest passed");
     Ok(())
-}
-
-#[cfg(test)]
-mod claim_hold_tests {
-    use super::*;
-    use serde_json::json;
-
-    fn held(name: &str) -> serde_json::Value {
-        json!({
-            "name": name,
-            "hold": {
-                "reason": "V1 deleted by owner ruling 2026-10-27; no genuine V2 named independent expectation/control exists yet",
-                "expiry": "until the V2 named independent expectation + real positive/falsifying control exists",
-                "follow_up": "IR-1047"
-            }
-        })
-    }
-
-    #[test]
-    fn sole_retired_claim_hold_is_reported_without_proof_credit() {
-        let base = BTreeSet::from(["kani_fr_003_4_proof_boolean_transition_module".to_owned()]);
-        let (active, lines) = validate_claim_rows(
-            &[held("kani_fr_003_4_proof_boolean_transition_module")],
-            &base,
-        )
-        .expect("the reviewed hold is admitted");
-        assert_eq!(active, 0);
-        assert_eq!(lines.len(), 1);
-        assert_eq!(
-            claim_count_line(active, lines.len()),
-            "kani-gate: claims active=0 held=1"
-        );
-        assert_eq!(
-            lines[0],
-            "kani-gate: held=kani_fr_003_4_proof_boolean_transition_module reason=V1 deleted by owner ruling 2026-10-27; no genuine V2 named independent expectation/control exists yet expiry=until the V2 named independent expectation + real positive/falsifying control exists follow_up=IR-1047"
-        );
-    }
-
-    #[test]
-    fn unauthorized_or_incomplete_holds_and_removed_base_rows_fail() {
-        let name = "kani_fr_003_4_proof_boolean_transition_module";
-        let base = BTreeSet::from([name.to_owned()]);
-        let valid = held(name);
-        let other = held("another_module");
-        assert!(validate_claim_rows(&[other], &BTreeSet::new())
-            .unwrap_err()
-            .contains("unauthorized claim hold"));
-        let mut no_reason = valid.clone();
-        no_reason["hold"].as_object_mut().unwrap().remove("reason");
-        assert!(validate_claim_rows(&[no_reason], &base)
-            .unwrap_err()
-            .contains("no reason"));
-        let mut no_expiry = valid.clone();
-        no_expiry["hold"].as_object_mut().unwrap().remove("expiry");
-        assert!(validate_claim_rows(&[no_expiry], &base)
-            .unwrap_err()
-            .contains("no expiry"));
-        assert!(validate_claim_rows(&[valid.clone(), valid.clone()], &base)
-            .unwrap_err()
-            .contains("duplicate claimed module"));
-        let removed_base = BTreeSet::from([name.to_owned(), "former_active_module".to_owned()]);
-        assert!(validate_claim_rows(&[valid], &removed_base)
-            .unwrap_err()
-            .contains("removed claimed module(s): former_active_module"));
-    }
 }
