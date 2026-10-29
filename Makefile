@@ -99,10 +99,12 @@ test: qspec-preflight qspec-preflight-selftest
 # The test suite drives real tools: the native-coverage tests run `cargo +$(MSRV)
 # llvm-cov` and read llvm-cov/llvm-profdata from that toolchain's sysroot, and the Kani
 # tests run `cargo kani`. Install them once per machine.
-.PHONY: tools
-tools:
+.PHONY: coverage-tools tools
+coverage-tools:
 	rustup component add llvm-tools-preview --toolchain $(MSRV)
 	$(CARGO) install --locked cargo-llvm-cov
+
+tools: coverage-tools
 	$(CARGO) install --locked kani-verifier
 	$(CARGO) kani setup
 

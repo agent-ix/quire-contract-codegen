@@ -33,6 +33,9 @@ jobs:
       - name: Minimum supported Rust version
         run: make msrv
 
+      - name: Install test coverage tools
+        run: make coverage-tools
+
       - name: Test
         run: cargo test
         env:
