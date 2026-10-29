@@ -185,34 +185,6 @@ fn population_and_census() {
     assert_eq!(census.discard_rate(), Some((0, 10)));
 }
 
-/// Every closed direct operator is emitted through the same selected V2 entry.
-#[trace("TC-020")]
-#[test]
-fn v2_numeric_bundle_admits_all_six_authored_comparisons() {
-    for (operator, emitted) in [
-        ("=", "=="),
-        ("!=", "!="),
-        ("<", "<"),
-        ("<=", "<="),
-        (">", ">"),
-        (">=", ">="),
-    ] {
-        let condition = format!("self.balance {operator} pre(self.balance)");
-        let (package, clause, claim) = admitted(&condition);
-        let generated = generate_v2_numeric_strategy(&request(&package, &clause, &claim))
-            .expect("the selected V2 claim produces a complete bundle");
-        assert_eq!(generated.artifacts.artifacts().len(), 2);
-        let source = &generated
-            .artifacts
-            .artifacts()
-            .iter()
-            .find(|artifact| artifact.path.ends_with(".rs"))
-            .expect("generated runner source")
-            .contents;
-        assert!(source.contains(&format!("primary {emitted} other")));
-        assert!(!generated.census.in_domain().is_empty());
-    }
-}
 "#;
     fs::write(scratch.path.join("src/lib.rs"), &source.contents).expect("generated source");
     fs::create_dir_all(scratch.path.join("tests")).expect("scratch tests");
@@ -262,6 +234,7 @@ fn oracle_negation_is_a_typed_conformance_failure() {
         }) if summary.attempted > 0 && summary.discarded == 0
     ));
 }
+
 "#;
     fs::write(scratch.path.join("tests/mutant.rs"), mutant_test).expect("write mutant control");
     let output = Command::new(std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
@@ -278,6 +251,34 @@ fn oracle_negation_is_a_typed_conformance_failure() {
     );
 }
 
+/// Every closed direct operator is emitted through the same selected V2 entry.
+#[trace("TC-020")]
+#[test]
+fn v2_numeric_bundle_admits_all_six_authored_comparisons() {
+    for (operator, emitted) in [
+        ("=", "=="),
+        ("!=", "!="),
+        ("<", "<"),
+        ("<=", "<="),
+        (">", ">"),
+        (">=", ">="),
+    ] {
+        let condition = format!("self.balance {operator} pre(self.balance)");
+        let (package, clause, claim) = admitted(&condition);
+        let generated = generate_v2_numeric_strategy(&request(&package, &clause, &claim))
+            .expect("the selected V2 claim produces a complete bundle");
+        assert_eq!(generated.artifacts.artifacts().len(), 2);
+        let source = &generated
+            .artifacts
+            .artifacts()
+            .iter()
+            .find(|artifact| artifact.path.ends_with(".rs"))
+            .expect("generated runner source")
+            .contents;
+        assert!(source.contains(&format!("primary {emitted} other")));
+        assert!(!generated.census.in_domain().is_empty());
+    }
+}
 /// Refused selections never yield a source, map, or campaign result.
 #[trace("TC-020")]
 #[test]
