@@ -135,7 +135,7 @@ fn operand_value(
 ///
 /// IR's refusal is returned before CG checks i64 representability or common read domains.
 /// No V1 projection, private node body, or caller-supplied operand is inspected.
-// Implements: FR-008-AC-1, FR-008-AC-2, FR-008-AC-4, FR-008-AC-6
+// Implements: FR-008-CON-1
 pub fn admit_v2_integer_comparison(
     package: &CheckedPackageV2,
     key: V2SelectedClaimKey<'_>,
