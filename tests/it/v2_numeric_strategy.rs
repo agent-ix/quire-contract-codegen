@@ -43,6 +43,29 @@ fn v2_numeric_bundle_keeps_selected_identity_and_runs_both_modes() {
     let repeated = generate_v2_numeric_strategy(&request(&package, &clause, &claim))
         .expect("same selected claim");
     assert_eq!(
+        generated.identity.requirement,
+        format!("qocc2_{}_5_636c61696d_{}", clause.digest, claim.ordinal)
+    );
+    let package_id = package.package_id();
+    let hex = |text: &str| {
+        text.as_bytes()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    };
+    assert_eq!(
+        generated.identity.revision,
+        format!(
+            "qpkg2_{}_{}_{}_{}_{}_{}",
+            package_id.domain.len(),
+            hex(&package_id.domain),
+            package_id.algorithm.len(),
+            hex(&package_id.algorithm),
+            package_id.digest.len(),
+            hex(&package_id.digest),
+        )
+    );
+    assert_eq!(
         generated.artifacts.artifacts(),
         repeated.artifacts.artifacts()
     );
@@ -159,6 +182,51 @@ fn v2_numeric_bundle_admits_all_six_authored_comparisons() {
     assert!(
         output.status.success(),
         "generated V2 campaign failed:\n{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+
+    let negated_oracle = source
+        .contents
+        .replace("Some(primary >= other)", "Some(primary < other)");
+    assert_ne!(
+        negated_oracle, source.contents,
+        "the selected oracle changed"
+    );
+    fs::write(scratch.path.join("src/lib.rs"), negated_oracle).expect("write oracle mutant");
+    let mutant_test = r#"
+#[test]
+fn oracle_negation_is_a_typed_conformance_failure() {
+    use v2_numeric_campaign_generated as generated;
+    let config = proptest::test_runner::Config {
+        cases: 8, failure_persistence: None,
+        ..proptest::test_runner::Config::default()
+    };
+    let mut runner = proptest::test_runner::TestRunner::new_with_rng(
+        config,
+        proptest::test_runner::TestRng::deterministic_rng(
+            proptest::test_runner::RngAlgorithm::ChaCha,
+        ),
+    );
+    let mut report = quire_contract_runtime::CampaignReport::new(generated::V2_NUMERIC_IDENTITY);
+    let result = generated::run_v2_numeric_population(&mut runner, &mut report);
+    assert!(matches!(result,
+        Err(generated::V2NumericCampaignError::ConformanceMismatch {
+            summary, partner: Some(_), ..
+        }) if summary.attempted > 0 && summary.discarded == 0
+    ));
+}
+"#;
+    fs::write(scratch.path.join("tests/mutant.rs"), mutant_test).expect("write mutant control");
+    let output = Command::new(std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
+        .args(["test", "--locked", "--offline", "-j2", "--test", "mutant"])
+        .env("CARGO_TARGET_DIR", scratch.path.join("target"))
+        .current_dir(&scratch.path)
+        .output()
+        .expect("run mutated V2 campaign");
+    assert!(
+        output.status.success(),
+        "mutated V2 campaign control failed:\n{}\n{}",
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr),
     );
