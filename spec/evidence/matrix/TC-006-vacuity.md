@@ -182,3 +182,9 @@ consume a QSL result and is not evidence for these steps.
 
 TC-006 and FR-004 matrix rows remain planned: primitive controls are partial implementation, not
 completion of bound analysis, native-run binding, or a consuming obligation.
+
+## Planned V2 runner publication control (IR-1124)
+
+Obtain one admitted checked package with a valid selected numeric claim and another selected claim that refuses before publication. In a fresh invocation for each, ask the production V2 strategy entry for its complete bundle. Pass only its actually published source and map, campaign result if executed, and any native producer association to the V2 coverage boundary. Repeat with source/map bytes copied from a prior valid run, and with a campaign result detached from its producing invocation.
+
+The valid generated bundle and its run remain identifiable by the exact selected clause, owner-bound claim occurrence and package revision, but publication alone is unqualified. The refused selection publishes no source/map or campaign evidence even when its sibling succeeds. The copied or detached values never qualify a campaign, measured classification or coverage discharge without FR-004's same-invocation producer/profile/export binding (FR-011-AC-18, FR-004-AC-10/26).
