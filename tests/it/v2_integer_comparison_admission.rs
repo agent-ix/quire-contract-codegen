@@ -9,6 +9,7 @@ use quire_contract_codegen::{
 };
 use quire_contract_model::{
     CheckedComparisonOperator, CheckedComparisonRefusal, CheckedOccurrence, CheckedOccurrenceRole,
+    ExecutionPoint, ExecutionPointName,
 };
 
 use super::{kani_obligations_state_frame::native_twin::Twin, scratch_crate};
@@ -25,7 +26,13 @@ fn admitted(
     } else {
         Twin::with_balance_condition(condition)
     };
-    let (package, clause) = twin.emitted_package("BalanceNeverDrops");
+    let point = ExecutionPoint::Post {
+        operation: ExecutionPointName::new("deposit").expect("point name"),
+    };
+    let (package, clauses) =
+        twin.emitted_package_with_execution_points(&[("BalanceNeverDrops", point)]);
+    let [clause] = <[quire_contract_model::CheckedNodeId; 1]>::try_from(clauses)
+        .expect("one QSL-authored clause");
     let claim = package
         .graph()
         .nodes
