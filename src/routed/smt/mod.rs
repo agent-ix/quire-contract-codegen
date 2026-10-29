@@ -312,7 +312,7 @@ fn valid_proof_commands(proof: &[u8]) -> bool {
 }
 
 // Model and proof output is retained raw. Only its outer SMT-LIB response
-// framing is checked: comments and balanced S-expressions after the status.
+// framing is checked: comments, success notices and balanced S-expressions.
 fn valid_solver_tail(bytes: &[u8]) -> bool {
     let mut index = 0;
     while index < bytes.len() {
@@ -322,6 +322,11 @@ fn valid_solver_tail(bytes: &[u8]) -> bool {
                 while index < bytes.len() && bytes[index] != b'\n' {
                     index += 1;
                 }
+            }
+            b's' if bytes[index..].starts_with(b"success")
+                && bytes.get(index + 7).is_none_or(u8::is_ascii_whitespace) =>
+            {
+                index += 7;
             }
             b'(' => {
                 if solver_error_head(&bytes[index..]) {
@@ -515,13 +520,16 @@ mod proof_tests {
             b"unsat\n(error \"failure\")\n",
             b"unsat\n(step s0 (cl) :rule resolution",
             b"unsat\n(step s0 (cl) :rule resolution) trailing",
-            b"unsat\nsuccess\n",
         ] {
             assert_eq!(
                 parse_solver_status(response),
                 SolverStatus::MalformedResponse
             );
         }
+        assert_eq!(
+            parse_solver_status(b"unsat\nsuccess\n"),
+            SolverStatus::Unsat
+        );
     }
 }
 
