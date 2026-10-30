@@ -770,13 +770,32 @@ mod tests {
             },
             process_package_id: None,
         };
-        for (control, expected) in [
+        for (control, expected, expected_path) in [
             (
                 RenderControl {
                     point: Some("handler:6:mutant"),
                     ..RenderControl::default()
                 },
                 V2NumericErrorCode::ExecutionPointMismatch,
+                "generated.execution_point",
+            ),
+            (
+                RenderControl {
+                    point: Some("handler:6:mutant"),
+                    source_tail: Some("\nthis is not Rust;\n"),
+                    ..RenderControl::default()
+                },
+                V2NumericErrorCode::ExecutionPointMismatch,
+                "generated.execution_point",
+            ),
+            (
+                RenderControl {
+                    point: Some("handler:6:mutant"),
+                    max_source_bytes: Some(1),
+                    ..RenderControl::default()
+                },
+                V2NumericErrorCode::ExecutionPointMismatch,
+                "generated.execution_point",
             ),
             (
                 RenderControl {
@@ -784,6 +803,7 @@ mod tests {
                     ..RenderControl::default()
                 },
                 V2NumericErrorCode::InvalidGeneratedSyntax,
+                "src/generated/v2_numeric.rs",
             ),
             (
                 RenderControl {
@@ -791,6 +811,7 @@ mod tests {
                     ..RenderControl::default()
                 },
                 V2NumericErrorCode::ResourceLimitExceeded,
+                "src/generated/v2_numeric.rs",
             ),
             (
                 RenderControl {
@@ -799,12 +820,15 @@ mod tests {
                     ..RenderControl::default()
                 },
                 V2NumericErrorCode::InvalidGeneratedSyntax,
+                "src/generated/v2_numeric.rs",
             ),
         ] {
             let diagnostic = generate_with_control(&request, control).expect_err("mutant refusal");
             assert_eq!(diagnostic.code, expected);
             assert_eq!(diagnostic.clause, clause);
+            assert_eq!(diagnostic.claim_owner, clause);
             assert_eq!(diagnostic.occurrence, *claim);
+            assert_eq!(diagnostic.path, expected_path);
         }
     }
 }
