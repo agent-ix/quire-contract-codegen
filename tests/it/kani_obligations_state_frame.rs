@@ -2247,21 +2247,20 @@ fn refusal(shape: &Shape, fields: &[&str]) -> StateFrameRefusal {
         .expect_err("the request must be refused")
 }
 
-/// The admitted frame reaches the same rekeyed object and
-/// integer bound as the authored clause, even when the clause uses a second parameter.
-#[trace("FR-037-AC-1", "TC-052")]
+/// The reader-admitted frame retains the producer-assigned object and integer-bound
+/// references, even when the clause uses a second parameter.
 #[test]
-fn tc_025_state_frame_structural_candidates_settle_through_object_and_bound() {
+fn state_frame_producer_ids_connect_object_and_bound() {
     let shape = Shape {
         variant: 12,
         condition: Condition::BalanceAgainstOther,
         ..Shape::HEALTHY
     };
-    let (package, ids) = package_for(&shape).admit_resolved();
-    let object = ids.resolve(&package::id(&key(shape.scoped(OBJECT))));
-    let frame = ids.resolve(&package::id(&key(shape.scoped(FRAME))));
+    let package = package_for(&shape).admit();
+    let object = package::id(&key(shape.scoped(OBJECT)));
+    let frame = package::id(&key(shape.scoped(FRAME)));
     let (lower, upper) = model::FIELDS[0].1;
-    let bound = ids.resolve(&package::id(&Bound::Integer(lower, upper).key()));
+    let bound = package::id(&Bound::Integer(lower, upper).key());
     let graph = &package.graph().nodes;
     let admitted_frame = graph
         .iter()
