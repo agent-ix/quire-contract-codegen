@@ -1653,10 +1653,10 @@ pub(crate) mod tests {
     #[trace("FR-015-AC-101", "TC-025")]
     #[test]
     fn domain_representability_failures_keep_the_typed_reason() {
-        let node_id = CheckedNodeId {
-            domain: "ix://test/domain".into(),
-            digest: "test-node".into(),
-        };
+        let node_id = serde_json::from_value(serde_json::json!({
+            "package": "test-package", "path": ["test-node"], "ordinal": 0,
+        }))
+        .expect("structural node id");
         assert!(matches!(
             collection_i64(i128::from(i64::MAX) + 1, &node_id),
             Err(UnsupportedObligation::CollectionClaimNotRendered {
@@ -1706,10 +1706,11 @@ pub(crate) mod tests {
     #[trace("FR-014-AC-2", "TC-024")]
     #[test]
     fn a_quantity_conversion_predicate_is_an_unsupported_shape() {
-        let id = |digest: &str| {
+        let id = |name: &str| {
             serde_json::json!({
-                "domain": "quire.checked-semantic-node/v1",
-                "digest": digest.repeat(64),
+                "package": "test-package",
+                "path": [name],
+                "ordinal": 0,
             })
         };
         let node = |form: &str, operator: &str, identity: &str| -> CheckedSemanticNodeV2 {
@@ -1736,10 +1737,7 @@ pub(crate) mod tests {
             operator,
             operation: serde_json::from_value(serde_json::json!({"identity": identity}))
                 .expect("fixture operation"),
-            result_type: CheckedNodeId {
-                domain: "quire.checked-semantic-node/v1".into(),
-                digest: "2".repeat(64).into(),
-            },
+            result_type: serde_json::from_value(id("2")).expect("structural result type"),
             arguments: Vec::new(),
         };
         let conversion = term(ApplicationOperator::Convert, "quire.op.quantity.convert");
@@ -1794,7 +1792,13 @@ pub(crate) mod tests {
     fn unresolved_projection_declaration_is_field_not_admitted() {
         let graph = CollectionNodeIndex::from_nodes(std::iter::empty());
         assert_eq!(
-            admitted_declaration(&graph, "missing-declaration"),
+            admitted_declaration(
+                &graph,
+                &serde_json::from_value(serde_json::json!({
+                    "package": "test-package", "path": ["missing-declaration"], "ordinal": 0,
+                }))
+                .expect("structural node id"),
+            ),
             Err(CollectionDomainRefusal::FieldNotAdmitted),
         );
     }
