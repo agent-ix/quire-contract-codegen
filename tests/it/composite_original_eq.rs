@@ -278,7 +278,10 @@ fn parameter_bounds(
         .flat_map(|node| {
             [
                 ProofBound::new(
-                    DomainKey::Node { node, path: vec![] },
+                    DomainKey::Node {
+                        node: node.clone(),
+                        path: vec![],
+                    },
                     Some(DomainKind::Collection),
                     FiniteBound::cardinality(3),
                 )
@@ -421,7 +424,7 @@ fn original_literal_operands_retain_graph_children_and_empty_bounds() {
                 };
                 assert!(entries.entries().is_empty());
             } else {
-                let OperandIdentity::GraphChild(child) = argument.identity else {
+                let OperandIdentity::GraphChild(ref child) = argument.identity else {
                     panic!("parameter graph child")
                 };
                 let Domain::Bounds(entries) = &argument.domain else {

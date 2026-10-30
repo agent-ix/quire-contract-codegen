@@ -9,13 +9,12 @@
 use ix_trace_rs::trace;
 use qsl_replay::{
     std001_code, AdmissionFailure, CallSiteRefusal, Certification, ClauseName, Code, DeclineCode,
-    DependencyInput, DependencyInputRefusal, DigestDomain, DigestRecord, DisagreementCause,
-    FieldName, FrameCounterexample, Identifier, IncompleteCause, InconclusiveCause,
-    MalformedTranscript, OperationName, PopulationName, ProofBasis, ProofRefusalCause,
-    QualifiedName, ReplayLimits, ReplayRefusal, ReplayTargetMembers, ReportedInconclusiveCause,
-    ScalarLimits, SourceIdentity, StateClauseCounterexample, Std001Code, SuppliedLibrary,
-    TerminalValue, UnavailabilityCause, Verdict, Witness, WitnessEnvelope, WitnessFailure,
-    WitnessPacket,
+    DependencyInput, DependencyInputRefusal, DisagreementCause, FieldName, FrameCounterexample,
+    Identifier, IncompleteCause, InconclusiveCause, LibraryName, MalformedTranscript,
+    OperationName, PopulationName, ProofBasis, ProofRefusalCause, QualifiedName, ReplayLimits,
+    ReplayRefusal, ReplayTargetMembers, ReportedInconclusiveCause, ScalarLimits, SourceIdentity,
+    StateClauseCounterexample, Std001Code, SuppliedLibrary, TerminalValue, UnavailabilityCause,
+    Verdict, Witness, WitnessEnvelope, WitnessFailure, WitnessPacket,
 };
 use quire_contract_codegen::{
     ir_outcome_terminal_value, run_terminal_value, DecodeFailure, DependencyLock,
@@ -407,8 +406,6 @@ fn for_each_cg_failure(check: impl Fn(ReplaySettlement<'_>)) {
             occurrence_key: None,
             clause_node: None,
             replay_target: ReplayTargetMembers::default(),
-            package_id: None,
-            source_digests: None,
             profile_selections: None,
             run_limits: None,
             declared_domains: None,
@@ -594,7 +591,7 @@ fn tc_040_a_setup_refusal_after_a_refutation_is_replay_refused_never_declined() 
 /// `CallSiteRefusal` and `DependencyLockError::Input`, bare and wrapped.
 fn for_each_setup_refusal(check: impl Fn(Code, ReplaySettlement<'_>)) {
     let call_sites = || {
-        let package = DigestRecord::mint(DigestDomain::PackageSemanticV2, [1; 32]);
+        let package = LibraryName::new("terminal-map").expect("fixture package name");
         [
             CallSiteRefusal::Compile {
                 code: Code::InvalidIdentifier,
@@ -617,7 +614,7 @@ fn for_each_setup_refusal(check: impl Fn(Code, ReplaySettlement<'_>)) {
             },
             CallSiteRefusal::UnknownFunction {
                 selection: QualifiedName::new(vec![identifier("f")]).expect("a name"),
-                package,
+                package: package.clone(),
             },
             CallSiteRefusal::UnknownOperation {
                 selection: OperationName {
@@ -625,11 +622,11 @@ fn for_each_setup_refusal(check: impl Fn(Code, ReplaySettlement<'_>)) {
                     object: identifier("o"),
                     operation: identifier("op"),
                 },
-                package,
+                package: package.clone(),
             },
             CallSiteRefusal::UnknownClause {
                 selection: ClauseName(identifier("c")),
-                package,
+                package: package.clone(),
             },
             CallSiteRefusal::UnknownField {
                 selection: FieldName {
@@ -637,14 +634,14 @@ fn for_each_setup_refusal(check: impl Fn(Code, ReplaySettlement<'_>)) {
                     object: identifier("o"),
                     field: identifier("f"),
                 },
-                package,
+                package: package.clone(),
             },
             CallSiteRefusal::UnknownPopulation {
                 selection: PopulationName {
                     model: identifier("m"),
                     population: identifier("p"),
                 },
-                package,
+                package: package.clone(),
             },
         ]
     };
@@ -713,7 +710,6 @@ fn repeated_identity_refusal() -> ReplayPackageError {
     };
     let dependency = |source: &str| DependencyLock {
         identity: "test/units".to_owned(),
-        package_id: DigestRecord::mint(DigestDomain::PackageSemanticV2, [7; 32]),
         source: locked(source),
     };
     let inputs = ReplayInputs {
@@ -776,8 +772,6 @@ fn tc_040_the_state_clause_replay_reads_as_fr029_ac16() {
         occurrence_key: None,
         clause_node: None,
         replay_target: ReplayTargetMembers::default(),
-        package_id: None,
-        source_digests: None,
         profile_selections: None,
         run_limits: None,
         declared_domains: None,
@@ -832,7 +826,7 @@ fn tc_040_the_state_clause_replay_reads_as_fr029_ac16() {
         map_settled(&StateClauseReplayError::Refused(Box::new(refusal))),
         expected
     );
-    let package = DigestRecord::mint(DigestDomain::PackageSemanticV2, [1; 32]);
+    let package = LibraryName::new("terminal-map").expect("fixture package name");
     let unknown = CallSiteRefusal::UnknownClause {
         selection: ClauseName(identifier("c")),
         package,

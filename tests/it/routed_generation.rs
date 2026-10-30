@@ -269,7 +269,7 @@ fn fixture() -> Fixture {
         let target = builder.bound(bound);
         builder.narrow(
             49_000 + u32::try_from(index).expect("four selected expressions"),
-            package::code_id(expression.code).digest.as_ref(),
+            &package::key(expression.code),
             &target,
         );
     }
@@ -301,11 +301,7 @@ fn fixture() -> Fixture {
 fn routed_bounded_increment_package() -> (CheckedPackageV2, package::FixtureIds) {
     let mut builder = package::bounded_increment_package();
     let result = builder.bound(&package::Bound::Integer(0, 9));
-    builder.narrow(
-        49_100,
-        &package::code_id(package::BOUNDED_INCREMENT).digest,
-        &result,
-    );
+    builder.narrow(49_100, &package::key(package::BOUNDED_INCREMENT), &result);
     builder.expression_occurrences();
     builder.admit_resolved()
 }
@@ -331,7 +327,7 @@ fn routed_two_parameter_package() -> (CheckedPackageV2, package::FixtureIds) {
         ),
     ] {
         let result = builder.bound(&bound);
-        builder.narrow(49_100 + code, &package::code_id(code).digest, &result);
+        builder.narrow(49_100 + code, &package::key(code), &result);
     }
     builder.expression_occurrences();
     builder.admit_resolved()
@@ -564,18 +560,24 @@ fn routed_scalar_selection_must_match_admitted_driver_position() {
     let other_route = route(0, &fixture.rendered[1]);
     let other_package =
         admitted_routing_input(&fixture.package, std::slice::from_ref(&other_route));
-    assert_ne!(input.package.identity(), other_package.package.identity());
+    assert_ne!(
+        input.package.wire().feature_accounting,
+        other_package.package.wire().feature_accounting
+    );
+    assert_eq!(
+        input.package.wire().package.source,
+        other_package.package.wire().package.source
+    );
     let bound_elsewhere =
         route(0, &fixture.rendered[0]).with_scalar_selection(&other_package.package, selection);
-    assert_eq!(
-        generate_routed_impl(
-            &input.package,
-            &input.positions,
-            std::slice::from_ref(&bound_elsewhere),
-            &context,
-        ),
-        Err(RoutedGenerationError::ScalarSelectionMismatch { request_index: 0 }),
-    );
+    let accepted = generate_routed_impl(
+        &input.package,
+        &input.positions,
+        std::slice::from_ref(&bound_elsewhere),
+        &context,
+    )
+    .expect("the same source provenance and exact result selection remain valid");
+    assert_eq!(accepted.items.len(), 1);
 }
 
 #[trace("FR-028-AC-1")]
@@ -1304,17 +1306,13 @@ fn tc_033_routed_operand_refusals_leave_healthy_sibling_unchanged() {
         package::op("quire.op.integer.add"),
         &integer,
         vec![
-            package::reference(&package::code_id(DIVISION).digest),
+            package::reference(&package::key(DIVISION)),
             package::reference(&package::key(package::QSL_LITERAL_TWO)),
         ],
     );
     builder.application_bounded(NESTED, "expression", "binary", &integer, nested, &[]);
     let division_bound = builder.bound(&package::Bound::Integer(0, 10));
-    builder.narrow(
-        NESTED_NARROW,
-        &package::code_id(NESTED).digest,
-        &division_bound,
-    );
+    builder.narrow(NESTED_NARROW, &package::key(NESTED), &division_bound);
     builder.expression_occurrences();
     let (checked, ids) = builder.admit_resolved();
 
@@ -2147,7 +2145,7 @@ fn derived() -> Derived {
         let result = builder.bound(expression.bounds.first().expect("selected result bound"));
         builder.narrow(
             49_200 + u32::try_from(index).expect("four selected expressions"),
-            &package::code_id(expression.code).digest,
+            &package::key(expression.code),
             &result,
         );
     }
@@ -2488,7 +2486,8 @@ fn tc_033_the_returned_claim_map_orders_package_claims_and_refusals() {
         expected_generated.iter().collect::<Vec<_>>()
     );
     assert!(generated.iter().all(|(node, value)| {
-        value.node_id == *node && value.contract_package_identity == *input.package.identity()
+        value.node_id == *node
+            && value.contract_package_identity == input.package.wire().package.source
     }));
     let ids = claim_map
         .items

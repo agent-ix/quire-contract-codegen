@@ -1452,8 +1452,11 @@ mod tests {
             .node_id
             .clone();
         let absent = CheckedNodeId {
-            domain: "quire.checked-semantic-node/v1".into(),
-            digest: "0".repeat(64).into_boxed_str(),
+            package: source.name().into(),
+            path: vec![quire_contract_model::CheckedNodePathSegment::Name(
+                "absent".into(),
+            )],
+            ordinal: 0,
         };
         let requested = vec![
             function.clone(),
@@ -1721,8 +1724,11 @@ mod tests {
                 .node_id
                 .clone();
             let absent = CheckedNodeId {
-                domain: "quire.checked-semantic-node/v1".into(),
-                digest: "0".repeat(64).into_boxed_str(),
+                package: checked.name().into(),
+                path: vec![quire_contract_model::CheckedNodePathSegment::Name(
+                    "absent".into(),
+                )],
+                ordinal: 0,
             };
             let requested = vec![expression.clone(), absent.clone()];
             let lowered = checked.lower(&requested, &routed_contract_lowering_profile());
@@ -3441,15 +3447,13 @@ mod tests {
             CheckedPackageV2ReadResult::Refused(refusal) => refusal,
             other => panic!("forged same-key wire must refuse before CG: {other:?}"),
         };
-        assert_eq!(refusal.code, CheckedPackageRefusalCode::InvalidPackage);
         assert_eq!(
-            refusal.cause,
-            Some(quire_contract_model::CheckedPackageRefusalCause::StaleNodeKey)
+            refusal.code,
+            CheckedPackageRefusalCode::InvalidSemanticGraph
         );
-        assert_eq!(refusal.locus, Some(target));
-        assert_eq!(refusal.expected_node_id(), Some(&local));
+        assert_eq!(refusal.cause, None);
         assert_eq!(
-            refusal.path.as_ref().map(|path| path.as_str()),
+            refusal.loci[0].path.as_ref().map(|path| path.as_str()),
             Some("/semantic_graph/nodes/11/node_id")
         );
     }
