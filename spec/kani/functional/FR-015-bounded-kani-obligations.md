@@ -134,7 +134,8 @@ Partly implemented (IR-268 collection half; IR-1091 OrderedSet and invariant-cla
 is implemented and -102 is implemented for the collection family. FR-015-AC-96 remains partial:
 function-body and invariant-clause claims have tagged Sequence and OrderedSet symbolic-domain,
 order and uniqueness controls, with function-body capacity-refusal and installed-Kani controls at
-IntRange OrderedSet lengths `[2,3]` and Boolean OrderedSet length `[2,2]`. Precondition and
+IntRange OrderedSet lengths `[2,3]` and Boolean OrderedSet length `[2,2]`. Receiver-only collection preconditions now have a draft V2 operation-clause route with
+source-backed totality and separate satisfiability checks; added operation parameters and
 postcondition collection claims remain refused pending operation context (IR-1091); submitted
 constraint clauses remain typed unsupported under FR-015-AC-128, with constrained-method
 semantics pending IR-1157. TC-025

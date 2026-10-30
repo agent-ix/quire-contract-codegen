@@ -207,8 +207,16 @@ pub struct V2ClauseObligationIdentity {
 pub struct CollectionPreconditionIdentity {
     /// The admitted collection's complete typed symbolic identity.
     pub collection: CollectionObligationIdentity,
+    /// SHA-256 of the exact generated Rust artifact, before it is staged in a crate.
+    pub source_digest: String,
     /// Unique one-based line of the Boolean-completion assertion in generated Rust.
     pub totality_assertion_line: u32,
+}
+
+pub(crate) fn collection_source_digest(source: &str) -> String {
+    use sha2::Digest;
+    let digest = sha2::Sha256::digest(source.as_bytes());
+    digest.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 /// Exact generated assertion bound to a collection precondition's Kani check location.
@@ -391,7 +399,7 @@ pub struct CollectionObligationIdentity {
     pub package_digest: String,
     /// Caller-selected subject label recorded in the harness identity.
     pub subject_path: String,
-    /// Selected function or invariant state-clause identity.
+    /// Selected function or state-clause identity.
     pub function_id: CheckedNodeId,
     /// Selected quantifier identity.
     pub quantifier_id: CheckedNodeId,

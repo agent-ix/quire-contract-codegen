@@ -599,21 +599,16 @@ impl HarnessSpec {
             options,
         })
     }
-    pub(super) fn new_collection_precondition(
-        path: HarnessPath,
-        collection: CollectionSpec,
-        unwind: u32,
-        solver: KaniSolver,
-    ) -> Result<Self, HarnessSpecError> {
-        let mut spec = Self::new_collection(path, collection, unwind, solver)?;
-        if let HarnessShape::Collection { precondition, .. } = &mut spec.shape {
-            *precondition = true;
-        }
-        spec.cover = Cover {
+    pub(super) fn into_collection_precondition(mut self) -> Result<Self, HarnessSpecError> {
+        let HarnessShape::Collection { precondition, .. } = &mut self.shape else {
+            return Err(HarnessSpecError::InvalidDomain);
+        };
+        *precondition = true;
+        self.cover = Cover {
             condition: ExprText::new("matches!(outcome, ClauseEvaluation::Completed(true))")?,
             message: "the selected precondition is satisfiable in its admitted domain".to_owned(),
         };
-        Ok(spec)
+        Ok(self)
     }
     pub(super) fn shape(&self) -> &HarnessShape {
         &self.shape

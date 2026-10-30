@@ -300,15 +300,18 @@ fn render_collection(
         ),
     };
     let predicate = collection.predicate_expression();
+    let claim_loop = format!(
+        "let claim = (0..{length_name}).{collection_call}(|index| {{\n\
+         let item = {item_name}[index as usize];\n\
+         {predicate}\n\
+         }});"
+    );
     let (oracle_source, claim_source, evaluation, assertion) = if precondition {
         (
             format!(
                 "             #[allow(dead_code)] enum ClauseEvaluation {{ Completed(bool), Undefined, Refused, Incomplete }}\n\
                  fn oracle_clause({item_name}: &[{element_type}; {array_len}], {length_name}: i64) -> ClauseEvaluation {{\n\
-                     let claim = (0..{length_name}).{collection_call}(|index| {{\n\
-                         let item = {item_name}[index as usize];\n\
-                         {predicate}\n\
-                     }});\n\
+                     {claim_loop}\n\
                      ClauseEvaluation::Completed(claim)\n\
                  }}\n"
             ),
@@ -319,12 +322,7 @@ fn render_collection(
     } else {
         (
             String::new(),
-            format!(
-                "                 let claim = (0..{length_name}).{collection_call}(|index| {{\n\
-                     let item = {item_name}[index as usize];\n\
-                     {predicate}\n\
-                 }});\n"
-            ),
+            format!("                 {claim_loop}\n"),
             String::new(),
             format!("assert!(claim, \"the symbolic collection satisfies the selected QSL {quantifier} body\");"),
         )

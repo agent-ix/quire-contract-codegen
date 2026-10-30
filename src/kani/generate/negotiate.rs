@@ -682,26 +682,7 @@ fn classify_v2_clause<'a>(
                 Err(reason) if kind == ObligationKind::Precondition && !native => {
                     match lower_collection_precondition(lookup.collection(), clause) {
                         Ok(lowered) => Outcome::LoweredCollectionPrecondition(Box::new(lowered)),
-                        Err(CollectionDomainRefusal::RequiresBound { unbounded_type }) => {
-                            Outcome::RequiresBound(unbounded_type)
-                        }
-                        Err(CollectionDomainRefusal::FieldNotAdmitted) => collection_refusal(
-                            clause,
-                            CollectionUnsupportedReason::FieldNotAdmitted,
-                        ),
-                        Err(CollectionDomainRefusal::UnsupportedFieldType) => collection_refusal(
-                            clause,
-                            CollectionUnsupportedReason::UnsupportedFieldType,
-                        ),
-                        Err(CollectionDomainRefusal::UnsatisfiableElementDomain) => {
-                            collection_refusal(
-                                clause,
-                                CollectionUnsupportedReason::UnsatisfiableElementDomain,
-                            )
-                        }
-                        Err(CollectionDomainRefusal::UnsupportedShape) => {
-                            Outcome::Unsupported(reason)
-                        }
+                        Err(refusal) => collection_domain_refusal(clause, refusal, Some(reason)),
                     }
                 }
                 Err(reason) => Outcome::Unsupported(reason),
@@ -776,22 +757,7 @@ fn classify_collection<'a>(
     let package = lookup.package;
     let outcome = match lower_collection_claim(lookup.collection(), function_id, node_id) {
         Ok(lowered) => Outcome::LoweredCollection(Box::new(lowered)),
-        Err(CollectionDomainRefusal::RequiresBound { unbounded_type }) => {
-            Outcome::RequiresBound(unbounded_type)
-        }
-        Err(CollectionDomainRefusal::UnsupportedShape) => {
-            collection_refusal(node_id, CollectionUnsupportedReason::UnsupportedClaimShape)
-        }
-        Err(CollectionDomainRefusal::FieldNotAdmitted) => {
-            collection_refusal(node_id, CollectionUnsupportedReason::FieldNotAdmitted)
-        }
-        Err(CollectionDomainRefusal::UnsupportedFieldType) => {
-            collection_refusal(node_id, CollectionUnsupportedReason::UnsupportedFieldType)
-        }
-        Err(CollectionDomainRefusal::UnsatisfiableElementDomain) => collection_refusal(
-            node_id,
-            CollectionUnsupportedReason::UnsatisfiableElementDomain,
-        ),
+        Err(refusal) => collection_domain_refusal(node_id, refusal, None),
     };
     ItemState {
         kind: None,
@@ -805,6 +771,33 @@ fn classify_collection<'a>(
             quantifier: node_id.clone(),
         }),
         outcome,
+    }
+}
+
+fn collection_domain_refusal(
+    node_id: &CheckedNodeId,
+    refusal: CollectionDomainRefusal,
+    original_clause_refusal: Option<UnsupportedObligation>,
+) -> Outcome {
+    match refusal {
+        CollectionDomainRefusal::RequiresBound { unbounded_type } => {
+            Outcome::RequiresBound(unbounded_type)
+        }
+        CollectionDomainRefusal::UnsupportedShape => original_clause_refusal
+            .map(Outcome::Unsupported)
+            .unwrap_or_else(|| {
+                collection_refusal(node_id, CollectionUnsupportedReason::UnsupportedClaimShape)
+            }),
+        CollectionDomainRefusal::FieldNotAdmitted => {
+            collection_refusal(node_id, CollectionUnsupportedReason::FieldNotAdmitted)
+        }
+        CollectionDomainRefusal::UnsupportedFieldType => {
+            collection_refusal(node_id, CollectionUnsupportedReason::UnsupportedFieldType)
+        }
+        CollectionDomainRefusal::UnsatisfiableElementDomain => collection_refusal(
+            node_id,
+            CollectionUnsupportedReason::UnsatisfiableElementDomain,
+        ),
     }
 }
 

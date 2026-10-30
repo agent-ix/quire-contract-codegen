@@ -159,8 +159,10 @@ pub struct ClassifiedRun {
 /// classifier production uses (IR-220), instead of re-implementing the check and misreading an
 /// inconclusive run — CBMC out-of-memory among them — as a decided failure.
 ///
-/// A precondition harness asserts nothing: its one property is its non-vacuity cover, so the
-/// zero-checks rule does not apply to it and the satisfied cover is its one successful check.
+/// The general parameter precondition harness has only a non-vacuity cover, so its
+/// satisfied cover is one successful check. A collection precondition additionally binds a
+/// Boolean-completion assertion in its execution identity. The runner requires that exact
+/// assertion to succeed before accepting a verified result.
 pub fn classify_kani_run(
     exited_successfully: bool,
     report: Option<&[u8]>,

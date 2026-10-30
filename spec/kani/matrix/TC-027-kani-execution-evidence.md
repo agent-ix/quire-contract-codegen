@@ -312,7 +312,7 @@ is inconclusive with the vacuous-proof reason. An unrelated successful assertion
 at the same line number in another file, another check class at the right file
 and line, and an unrelated assertion elsewhere in `src/lib.rs` each fail to
 satisfy the bound check. A successful assertion at the exact file and converted
-line is required before the cover can classify the run as verified. This collection control is planned under IR-1091.
+line is required before the cover can classify the run as verified. This collection control is implemented in draft CG #651; final reviewed-head Kani evidence and native QSL clause equivalence remain pending.
 
 For a caller Text-admission harness, the same classifications apply while the
 evidence remains bound to its caller identity and harness path, never a
@@ -509,6 +509,12 @@ jointly unsatisfiable contract is cover-unsatisfied rather than verified; and th
 not contain the harness is refused with no run.
 
 ## Implementation
+
+Draft CG #651 adds `collection_totality_controls_single_readonly_and_batch_evidence`
+for source binding and report checks through all three execution entries, plus the
+ignored installed-Kani collection precondition control in
+`tests/it/kani_obligations_symbolic_domains.rs`. Native QSL clause equivalence and
+final reviewed-head gate evidence remain pending.
 
 `src/kani/classify.rs` unit tests for classification, including
 `a_report_with_no_successful_check_is_inconclusive_not_verified_even_with_every_cover_satisfied` for

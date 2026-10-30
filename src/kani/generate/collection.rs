@@ -46,7 +46,7 @@ pub(crate) enum CollectionElementDomain {
 /// The admitted selected model field and its inclusive collection bounds.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct CollectionFieldDomain {
-    /// Selected function or invariant state clause whose body contains the quantifier.
+    /// Selected function or state clause whose body contains the quantifier.
     pub(crate) function: CheckedNodeId,
     /// Quantifier node selected by the request.
     pub(crate) quantifier: CheckedNodeId,
@@ -293,6 +293,22 @@ pub(super) fn render_collection(
     request: &KaniObligationRequest<'_>,
     lowered: &LoweredCollectionClaim,
 ) -> Result<KaniCollectionObligationHarness, UnsupportedObligation> {
+    let (spec, identity) = prepare_collection(request, lowered)?;
+    let rust = render_collection_artifact(&spec, &identity)?;
+    let record = record(&spec.path().module.to_string(), &identity, &rust)?;
+    let harness = KaniCollectionObligationHarness::generated(identity, rust, record);
+    if !harness.has_valid_provenance() {
+        return Err(UnsupportedObligation::RenderFailed);
+    }
+    Ok(harness)
+}
+
+/// Validate the admitted symbolic domain and construct the one source-backed layout shared by
+/// direct claims and precondition clauses. Neither caller renders an unused second harness.
+fn prepare_collection(
+    request: &KaniObligationRequest<'_>,
+    lowered: &LoweredCollectionClaim,
+) -> Result<(HarnessSpec, CollectionObligationIdentity), UnsupportedObligation> {
     let field = &lowered.field;
     let minimum_length = collection_i64(i128::from(field.minimum_length), &field.quantifier)?;
     let maximum_length = collection_i64(i128::from(field.maximum_length), &field.quantifier)?;
@@ -462,7 +478,14 @@ pub(super) fn render_collection(
             error: error.to_string(),
         },
     })?;
-    let rendered = render::render(&spec)?;
+    Ok((spec, identity))
+}
+
+fn render_collection_artifact(
+    spec: &HarnessSpec,
+    identity: &CollectionObligationIdentity,
+) -> Result<crate::core::artifact::Artifact, UnsupportedObligation> {
+    let rendered = render::render(spec)?;
     let subjects = [
         crate::core::provenance::node_subject(&identity.function_id),
         crate::core::provenance::node_subject(&identity.quantifier_id),
@@ -485,84 +508,21 @@ pub(super) fn render_collection(
             error: error.to_string(),
         });
     }
-    let rust = crate::core::artifact::Artifact::new(rendered.path, source);
-    let record = record(&path.module.to_string(), &identity, &rust)?;
-    let harness = KaniCollectionObligationHarness::generated(identity, rust, record);
-    if !harness.has_valid_provenance() {
-        return Err(UnsupportedObligation::RenderFailed);
-    }
-    Ok(harness)
+    Ok(crate::core::artifact::Artifact::new(rendered.path, source))
 }
 
 /// Render a source-backed collection precondition as its one V2 operation-clause harness.
-/// The direct renderer is used only as an internal domain validator; its universal-assertion
-/// artifact is never returned or exposed as a second obligation.
+/// The shared collection domain is validated before the operation-clause source is rendered.
 pub(super) fn render_collection_precondition(
     request: &KaniObligationRequest<'_>,
     lowered: &LoweredCollectionClaim,
 ) -> Result<KaniV2ClauseObligationHarness, UnsupportedObligation> {
-    let validated = render_collection(request, lowered)?;
-    let collection = validated.identity;
-    let path = harness_path(
-        &collection.module_symbol.to_string(),
-        &collection.harness_symbol.to_string(),
-    )?;
-    let element = match collection.element {
-        CollectionElementIdentity::Boolean => CollectionElement::Boolean,
-        CollectionElementIdentity::Integer { minimum, maximum } => {
-            CollectionElement::Integer { minimum, maximum }
-        }
-    };
-    let quantifier = match collection.quantifier_operation.as_str() {
-        "quire.op.collection.forall" => CollectionQuantifier::ForAll,
-        "quire.op.collection.exists" => CollectionQuantifier::Exists,
-        _ => return Err(UnsupportedObligation::RenderFailed),
-    };
-    let item_name = format!("selected_{}", readable_component(&collection.field_name));
-    let spec = HarnessSpec::new_collection_precondition(
-        path,
-        CollectionSpec {
-            field_name: collection.field_name.clone(),
-            length_name: format!("{item_name}_len"),
-            item_name,
-            minimum_length: collection.minimum_length,
-            maximum_length: collection.maximum_length,
-            array_len: usize::try_from(collection.maximum_length)
-                .map_err(|_| UnsupportedObligation::RenderFailed)?,
-            kind: collection.collection_kind,
-            element,
-            quantifier,
-            predicate: collection.predicate.clone(),
-        },
-        request.unwind,
-        KaniSolver::Cadical,
-    )?;
-    let rendered = render::render(&spec)?;
-    let subjects = [
-        &collection.function_id,
-        &collection.quantifier_id,
-        &collection.projection_id,
-        &collection.declaration_id,
-        &collection.element_type_id,
-        &collection.predicate_id,
-    ]
-    .iter()
-    .map(|node| crate::core::provenance::node_subject(node))
-    .collect::<Vec<_>>();
-    let source = crate::core::provenance::with_rust_header(
-        rendered.contents,
-        subjects.iter().map(String::as_str),
-    );
-    if source.len() > MAX_GENERATED_SOURCE_BYTES {
-        return Err(UnsupportedObligation::ResourceLimitExceeded {
-            bytes: source.len(),
-        });
-    }
-    syn::parse_file(&source).map_err(|error| UnsupportedObligation::InvalidGeneratedSyntax {
-        error: error.to_string(),
-    })?;
+    let (spec, collection) = prepare_collection(request, lowered)?;
+    let spec = spec.into_collection_precondition()?;
+    let rust = render_collection_artifact(&spec, &collection)?;
     let assertion = crate::kani::identity::COLLECTION_PRECONDITION_TOTALITY_ASSERTION;
-    let lines = source
+    let lines = rust
+        .contents
         .lines()
         .enumerate()
         .filter(|(_, line)| line.trim() == assertion)
@@ -572,7 +532,6 @@ pub(super) fn render_collection_precondition(
     let [totality_assertion_line] = lines.as_slice() else {
         return Err(UnsupportedObligation::RenderFailed);
     };
-    let rust = crate::core::artifact::Artifact::new(rendered.path, source);
     let identity = V2ClauseObligationIdentity {
         dependencies: lowered.dependencies.clone(),
         readiness: dependency_readiness(&lowered.dependencies),
@@ -584,6 +543,7 @@ pub(super) fn render_collection_precondition(
         clause: collection.function_id.clone(),
         collection_precondition: Some(CollectionPreconditionIdentity {
             collection,
+            source_digest: crate::kani::identity::collection_source_digest(&rust.contents),
             totality_assertion_line: *totality_assertion_line,
         }),
         kind: ObligationKind::Precondition,
@@ -722,7 +682,7 @@ enum CollectionClaimRole {
     Precondition,
 }
 
-/// The authored parameters of a function or invariant state clause, in checked graph order.
+/// The authored parameters of a function or supported state clause, in checked graph order.
 fn claim_parameters<'a>(
     graph: &'a CollectionNodeIndex<'_>,
     claim: &'a CheckedSemanticNodeV2,
@@ -745,7 +705,7 @@ fn claim_parameters<'a>(
     }
 }
 
-/// The checked Boolean body selected by a function or invariant state clause.
+/// The checked Boolean body selected by a function or supported state clause.
 fn claim_body(
     graph: &CollectionNodeIndex<'_>,
     claim: &CheckedSemanticNodeV2,
@@ -1231,7 +1191,7 @@ fn term_target(term: &CheckedTerm) -> Option<CheckedNodeId> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     use ix_trace_rs::trace;
@@ -1526,6 +1486,21 @@ mod tests {
                 predicate_id: node("predicate"),
             },
         }
+    }
+
+    pub(crate) fn runner_precondition_fixture(quantifier: &str) -> KaniV2ClauseObligationHarness {
+        let request = KaniObligationRequest {
+            ceilings: crate::kani::identity::ProofCeilings {
+                memory_bytes: std::num::NonZeroU64::new(1 << 30).expect("nonzero"),
+                wall_clock: std::time::Duration::from_secs(30),
+            },
+            items: &[],
+            subject_path: "crate::subject",
+            unwind: 8,
+        };
+        let mut claim = base_claim();
+        claim.field.quantifier_operation = quantifier.to_owned();
+        render_collection_precondition(&request, &claim).expect("runner fixture")
     }
 
     fn rendered_module(

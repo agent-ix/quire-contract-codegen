@@ -36,7 +36,10 @@ use qsl_replay::WitnessValue;
 
 use crate::kani::{
     abi::{KaniBindingRole, KaniPrimitiveType},
-    identity::{KaniV2ClauseObligationHarness, ObligationBinding},
+    identity::{
+        CollectionElementIdentity, CollectionKindIdentity, CollectionObligationIdentity,
+        KaniV2ClauseObligationHarness, ObligationBinding,
+    },
     output::playback::{Playback, PlaybackRefusal, WitnessDecodeLimits},
 };
 
@@ -158,7 +161,9 @@ pub fn decode_falsification(
         .map(|decoded| decoded.values)
 }
 
-/// Decode a sealed V2 clause harness's typed parameter playback and enforce its original bounds.
+/// Decode a sealed V2 clause harness's typed playback and enforce its original bounds.
+/// A collection precondition uses its retained receiver field identity to decode the length
+/// followed by the fixed array's elements, returning one typed collection value for the field.
 ///
 /// # Errors
 ///
@@ -176,6 +181,9 @@ pub fn decode_v2_clause_falsification(
             identity.harness_symbol.as_str(),
             identity.module_symbol.as_str(),
         ));
+    }
+    if let Some(marker) = &identity.collection_precondition {
+        return decode_collection_precondition(&marker.collection, playback, limits);
     }
     let bindings = identity
         .arguments
@@ -212,6 +220,141 @@ pub fn decode_v2_clause_falsification(
         }
     }
     Ok(decoded)
+}
+
+/// Decode the receiver's collection from Kani's length draw followed by one draw per
+/// fixed-size array slot. Only active slots have field-domain and uniqueness assumptions.
+fn decode_collection_precondition(
+    identity: &CollectionObligationIdentity,
+    playback: &Playback<'_>,
+    limits: WitnessDecodeLimits,
+) -> Result<Vec<(String, WitnessValue)>, DecodeFailure> {
+    let max = usize::try_from(identity.maximum_length)
+        .ok()
+        .and_then(|length| length.checked_add(1))
+        .ok_or_else(|| {
+            DecodeFailure::new(
+                "cg_witness_schema_limit",
+                &identity.field_name,
+                "collection capacity is not representable",
+            )
+        })?;
+    if max > limits.values {
+        return Err(DecodeFailure::new(
+            "cg_witness_decode_values_limit",
+            &identity.field_name,
+            &format!("values={}", limits.values),
+        ));
+    }
+    if playback.entries.len() != max {
+        return Err(DecodeFailure::new(
+            "kani_witness_arity_mismatch",
+            &identity.field_name,
+            playback.check_text,
+        ));
+    }
+    let primitive = match identity.element {
+        CollectionElementIdentity::Boolean => KaniPrimitiveType::Boolean,
+        CollectionElementIdentity::Integer { .. } => KaniPrimitiveType::I64,
+    };
+    let mut bindings = Vec::with_capacity(max);
+    bindings.push(ObligationBinding {
+        identifier: format!("{}_len", identity.field_name),
+        role: KaniBindingRole::Argument,
+        primitive_type: KaniPrimitiveType::I64,
+        integer_bounds: None,
+        dependencies: Vec::new(),
+    });
+    for index in 0..max - 1 {
+        bindings.push(ObligationBinding {
+            identifier: format!("{}_{}", identity.field_name, index),
+            role: KaniBindingRole::Argument,
+            primitive_type: primitive,
+            integer_bounds: None,
+            dependencies: Vec::new(),
+        });
+    }
+    let decoded = decode_playback(
+        identity.harness_symbol.as_str(),
+        identity.module_symbol.as_str(),
+        &bindings,
+        playback,
+        limits,
+    )?
+    .values;
+    let Some((_, WitnessValue::Integer(length))) = decoded.first() else {
+        return Err(DecodeFailure::new(
+            "cg_witness_type_mismatch",
+            &identity.field_name,
+            "collection length",
+        ));
+    };
+    if !(i128::from(identity.minimum_length)..=i128::from(identity.maximum_length)).contains(length)
+    {
+        return Err(DecodeFailure::new(
+            "cg_witness_out_of_domain",
+            &identity.field_name,
+            "collection length",
+        ));
+    }
+    let active = usize::try_from(*length).map_err(|_| {
+        DecodeFailure::new(
+            "cg_witness_out_of_domain",
+            &identity.field_name,
+            "collection length",
+        )
+    })?;
+    let mut values = Vec::with_capacity(active);
+    let mut seen = BTreeSet::new();
+    for (_, value) in decoded.into_iter().skip(1).take(active) {
+        match (&identity.element, &value) {
+            (CollectionElementIdentity::Boolean, WitnessValue::Boolean(_)) => {}
+            (
+                CollectionElementIdentity::Integer { minimum, maximum },
+                WitnessValue::Integer(number),
+            ) if (i128::from(*minimum)..=i128::from(*maximum)).contains(number) => {}
+            (CollectionElementIdentity::Integer { .. }, WitnessValue::Integer(_)) => {
+                return Err(DecodeFailure::new(
+                    "cg_witness_out_of_domain",
+                    &identity.field_name,
+                    "collection element",
+                ));
+            }
+            _ => {
+                return Err(DecodeFailure::new(
+                    "cg_witness_type_mismatch",
+                    &identity.field_name,
+                    "collection element",
+                ))
+            }
+        }
+        if identity.collection_kind == CollectionKindIdentity::OrderedSet {
+            let key = match &value {
+                WitnessValue::Boolean(boolean) => (0u8, i128::from(*boolean)),
+                WitnessValue::Integer(integer) => (1u8, *integer),
+                _ => {
+                    return Err(DecodeFailure::new(
+                        "cg_witness_type_mismatch",
+                        &identity.field_name,
+                        "collection element",
+                    ))
+                }
+            };
+            if !seen.insert(key) {
+                return Err(DecodeFailure::new(
+                    "cg_witness_out_of_domain",
+                    &identity.field_name,
+                    "ordered-set duplicate",
+                ));
+            }
+        }
+        values.push(value);
+    }
+    let value = match identity.collection_kind {
+        CollectionKindIdentity::Sequence => WitnessValue::Sequence(values),
+        CollectionKindIdentity::OrderedSet => WitnessValue::OrderedSet(values),
+    };
+    Ok(vec![(identity.field_name.clone(), value)])
 }
 
 /// A decoded playback: the values, and the check text the playback's own assertion block names.

@@ -17,9 +17,11 @@ use qsl_replay::{
 use quire_contract_codegen::{
     classify_kani_run, execute_kani_obligation, negotiate_kani_obligations, select_counterexample,
     CollectionElementIdentity, CollectionKindIdentity, CollectionPredicateIdentity,
-    KaniCollectionObligationHarness, KaniExecutableHarness, KaniExecutionRequest, KaniInstallation,
-    KaniObligationOutcome, KaniObligationRequest, KaniRunOutcome, KaniV2ClauseObligationHarness,
-    ObligationDisposition, ObligationItem, ProofCeilings, UnsupportedObligation,
+    InvalidObligationItem, KaniCollectionObligationHarness, KaniExecutableHarness,
+    KaniExecutionRequest, KaniInstallation, KaniObligationOutcome, KaniObligationRequest,
+    KaniRunOutcome, KaniV2ClauseObligationHarness, ObligationDisposition, ObligationItem,
+    ProofCeilings, ProofDependencyKind, ProofDependencyRequest, ProofDependencyState,
+    ProofReadiness, UnsupportedObligation,
 };
 use quire_contract_model::{
     CheckedMemberType, CheckedModelObjectFields, CheckedNodeId, CheckedPackageEvidence,
@@ -1843,6 +1845,10 @@ fn precondition_collection_fixture(body: &str) -> Emitted {
         .unwrap();
     items["multiplicity"]["unique"] = json!(true);
     items["multiplicity"]["lower"] = json!(2);
+    precondition_fixture_with_model(document, body)
+}
+
+fn precondition_fixture_with_model(document: Value, body: &str) -> Emitted {
     try_emitted_from_document_and_clause(
         document,
         "pre CollectionReady using v on M::Node::step",
@@ -1851,7 +1857,11 @@ fn precondition_collection_fixture(body: &str) -> Emitted {
     .expect("QSL emits and IR admits the authored precondition")
 }
 
-fn precondition_collection_harness(fixture: &Emitted) -> KaniV2ClauseObligationHarness {
+fn precondition_collection_outcome(
+    fixture: &Emitted,
+    unwind: u32,
+    dependencies: Option<&[ProofDependencyRequest<'_>]>,
+) -> KaniObligationOutcome {
     let clause = fixture
         .package
         .graph()
@@ -1864,17 +1874,21 @@ fn precondition_collection_harness(fixture: &Emitted) -> KaniV2ClauseObligationH
     let item = ObligationItem::V2Clause {
         package: &fixture.package,
         clause: &clause,
-        dependencies: None,
+        dependencies,
     };
-    let outcome = negotiate_kani_obligations(&KaniObligationRequest {
+    negotiate_kani_obligations(&KaniObligationRequest {
         ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(
             Duration::from_secs(600),
         ),
         items: std::slice::from_ref(&item),
         subject_path: "subject",
-        unwind: 8,
+        unwind,
     })
-    .expect("valid request");
+    .expect("valid V2 item request")
+}
+
+fn precondition_collection_harness(fixture: &Emitted) -> KaniV2ClauseObligationHarness {
+    let outcome = precondition_collection_outcome(fixture, 8, None);
     let KaniObligationOutcome::Emitted {
         collection_harnesses,
         v2_clause_harnesses,
@@ -1997,6 +2011,239 @@ fn precondition_collection_source_is_admitted() {
     ));
 }
 
+#[trace("FR-015-AC-96", "FR-015-AC-99", "TC-025")]
+#[test]
+fn precondition_collection_source_controls_quantifier_element_and_census() {
+    let exists = precondition_collection_fixture("exists(item in self.items: item = 3)");
+    let exists_harness = precondition_collection_harness(&exists);
+    assert!(exists_harness
+        .rust
+        .contents
+        .contains("(0..selected_items_len).any(|index|"));
+    assert_eq!(
+        exists_harness
+            .identity
+            .collection_precondition
+            .as_ref()
+            .unwrap()
+            .collection
+            .quantifier_operation,
+        "quire.op.collection.exists"
+    );
+
+    let boolean = precondition_fixture_with_model(
+        model_document_with_step(),
+        "forall(flag in self.flags: flag != false)",
+    );
+    let boolean_harness = precondition_collection_harness(&boolean);
+    assert_eq!(
+        boolean_harness
+            .identity
+            .collection_precondition
+            .as_ref()
+            .unwrap()
+            .collection
+            .element,
+        CollectionElementIdentity::Boolean
+    );
+    assert!(boolean_harness
+        .rust
+        .contents
+        .contains("let selected_flags: [bool; 2] = kani::any();"));
+
+    let required = [ProofDependencyRequest {
+        proof_id: "upstream-proof",
+        kind: ProofDependencyKind::Required,
+        state: ProofDependencyState::Missing,
+        original_path: None,
+        replacement_path: None,
+    }];
+    let outcome = precondition_collection_outcome(&exists, 8, Some(&required));
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("valid dependency census emits the clause");
+    };
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("one clause");
+    };
+    assert_eq!(harness.identity.dependencies.len(), 1);
+    assert_eq!(harness.identity.dependencies[0].proof_id, "upstream-proof");
+    assert_eq!(harness.identity.readiness, ProofReadiness::Incomplete);
+    assert!(harness.record.contents.contains("upstream-proof"));
+    let invalid = [ProofDependencyRequest {
+        kind: ProofDependencyKind::Assumed,
+        state: ProofDependencyState::Assumed,
+        ..required[0]
+    }];
+    let rejected = precondition_collection_outcome(&exists, 8, Some(&invalid));
+    let KaniObligationOutcome::Rejected { records } = rejected else {
+        panic!("invalid dependency census exposes no collection precondition harness");
+    };
+    assert!(matches!(
+        records[0].disposition,
+        ObligationDisposition::InvalidRequest {
+            reason: InvalidObligationItem::NonRequiredProofDependency { index: 0 }
+        }
+    ));
+}
+
+#[trace("FR-015-AC-96", "FR-015-AC-101", "TC-025")]
+#[test]
+fn precondition_collection_source_refusals_emit_no_harness() {
+    let fixture = precondition_collection_fixture("forall(item in self.items: item >= 0)");
+    let outcome = precondition_collection_outcome(&fixture, 2, None);
+    let KaniObligationOutcome::Emitted {
+        records,
+        v2_clause_harnesses,
+        collection_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("insufficient unwind settles per item");
+    };
+    assert!(v2_clause_harnesses.is_empty() && collection_harnesses.is_empty());
+    assert!(matches!(&records[0].disposition, ObligationDisposition::Unsupported {
+        reason: UnsupportedObligation::CollectionClaimNotRendered {
+            reason: quire_contract_codegen::CollectionUnsupportedReason::UnwindBelowCollectionBound { .. }, ..
+        }
+    }));
+
+    let mut unbounded = model_document_with_step();
+    let node = unbounded["types"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|ty| ty.get("identity").and_then(Value::as_str) == Some(NODE_ID))
+        .unwrap();
+    let items = node["fields"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|field| field.get("name").and_then(Value::as_str) == Some("items"))
+        .unwrap();
+    items["multiplicity"]
+        .as_object_mut()
+        .unwrap()
+        .remove("upper");
+    let unbounded =
+        precondition_fixture_with_model(unbounded, "forall(item in self.items: item >= 0)");
+    let outcome = precondition_collection_outcome(&unbounded, 8, None);
+    let KaniObligationOutcome::Emitted {
+        records,
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("requires bound disposition");
+    };
+    assert!(v2_clause_harnesses.is_empty());
+    assert!(matches!(
+        records[0].disposition,
+        ObligationDisposition::RequiresBound { .. }
+    ));
+
+    let conjunct = precondition_fixture_with_model(
+        model_document_with_step(),
+        "forall(item in self.items: item >= 0) and true",
+    );
+    let outcome = precondition_collection_outcome(&conjunct, 8, None);
+    let KaniObligationOutcome::Emitted {
+        records,
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("unsupported whole clause");
+    };
+    assert!(v2_clause_harnesses.is_empty());
+    assert!(matches!(
+        records[0].disposition,
+        ObligationDisposition::Unsupported {
+            reason: UnsupportedObligation::V2ClauseConditionNotRendered { .. }
+        }
+    ));
+
+    let mut extra_parameter = model_document_with_step();
+    let node = extra_parameter["types"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|ty| ty.get("identity").and_then(Value::as_str) == Some(NODE_ID))
+        .unwrap();
+    let parameter_id = format!("{NODE_ID}/step/limit");
+    node["operations"][0]["params"] = json!([{
+        "identity": parameter_id,
+        "name": "limit",
+        "typeRef": SMALL_ID,
+        "presence": "required",
+        "nullable": false,
+        "defaultKind": "none",
+        "multiplicity": {"lower": 1, "upper": 1, "ordered": false, "unique": true},
+        "origin": {"generated": {
+            "generatorIdentity": format!("{NODE_ID}/step/limit"),
+            "generatorVersion": "1.0.0",
+            "inputIdentities": [format!("{NODE_ID}/step/limit")]
+        }}
+    }]);
+    let extra_parameter =
+        precondition_fixture_with_model(extra_parameter, "forall(item in self.items: item >= 0)");
+    let outcome = precondition_collection_outcome(&extra_parameter, 8, None);
+    let KaniObligationOutcome::Emitted {
+        records,
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("extra operation parameter is an unsupported item");
+    };
+    assert!(v2_clause_harnesses.is_empty());
+    assert!(matches!(
+        records[0].disposition,
+        ObligationDisposition::Unsupported {
+            reason: UnsupportedObligation::V2ClauseConditionNotRendered { .. }
+        }
+    ));
+
+    let mut unsupported = model_document_with_step();
+    let node = unsupported["types"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|ty| ty.get("identity").and_then(Value::as_str) == Some(NODE_ID))
+        .unwrap();
+    let items = node["fields"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|field| field.get("name").and_then(Value::as_str) == Some("items"))
+        .unwrap();
+    items["typeRef"] = json!(NODE_ID);
+    let unsupported =
+        precondition_fixture_with_model(unsupported, "forall(item in self.items: true)");
+    let outcome = precondition_collection_outcome(&unsupported, 8, None);
+    let KaniObligationOutcome::Emitted {
+        records,
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("reference element is an unsupported item");
+    };
+    assert!(v2_clause_harnesses.is_empty());
+    assert!(matches!(
+        &records[0].disposition,
+        ObligationDisposition::Unsupported {
+            reason: UnsupportedObligation::CollectionClaimNotRendered {
+                reason: quire_contract_codegen::CollectionUnsupportedReason::UnsupportedFieldType,
+                ..
+            }
+        }
+    ));
+}
+
 #[trace(
     "FR-015-AC-7",
     "FR-015-AC-53",
@@ -2109,10 +2356,35 @@ fn real_kani_collection_precondition_distinguishes_totality_from_satisfiability(
             Some(quire_contract_codegen::ObligationKind::Precondition),
         )
         .unwrap_or_else(|refusal| panic!("{variant}: Kani refused the report: {refusal:?}"));
-        assert!(
-            matches!(classified.outcome, KaniRunOutcome::Falsified { .. }),
-            "{variant}: mutated oracle must falsify totality: {classified:?}\n{transcript}"
-        );
+        let KaniRunOutcome::Falsified { counterexample } = &classified.outcome else {
+            panic!("{variant}: mutated oracle must falsify totality: {classified:?}\n{transcript}");
+        };
+        let playback = quire_contract_codegen::parse_assertion_playback(
+            counterexample,
+            "collection precondition",
+            variant,
+            64 * 1024,
+            4,
+        )
+        .expect("Kani's bound totality assertion has one concrete playback");
+        let decoded = quire_contract_codegen::decode_v2_clause_falsification(
+            &harness,
+            &playback,
+            quire_contract_codegen::WitnessDecodeLimits {
+                bytes: 64 * 1024,
+                values: 4,
+            },
+        )
+        .expect("collection receiver witness is in its admitted domain");
+        let [(field, WitnessValue::OrderedSet(items))] = decoded.as_slice() else {
+            panic!("{variant}: expected one typed OrderedSet receiver witness: {decoded:?}");
+        };
+        assert_eq!(field, "items");
+        assert!((2..=3).contains(&items.len()));
+        assert!(items
+            .iter()
+            .all(|item| matches!(item, WitnessValue::Integer(0..=3))));
+        assert_ne!(items[0], items[1]);
     }
 }
 

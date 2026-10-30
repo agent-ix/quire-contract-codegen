@@ -26,7 +26,7 @@ pub enum KaniExecutableHarness<'a> {
     StateFrame(&'a StateFrameHarness),
     /// A V2 admitted symbolic collection claim.
     Collection(&'a KaniCollectionObligationHarness),
-    /// A V2 parameter precondition cover harness.
+    /// A V2 operation-clause precondition harness, including admitted collection clauses.
     V2Clause(&'a KaniV2ClauseObligationHarness),
 }
 
@@ -74,13 +74,11 @@ pub(super) struct HarnessView<'a> {
 }
 
 impl<'a> KaniExecutableHarness<'a> {
-    pub(super) fn collection_totality_line(self) -> Option<u32> {
+    pub(super) fn collection_precondition(
+        self,
+    ) -> Option<&'a crate::kani::identity::CollectionPreconditionIdentity> {
         match self {
-            Self::V2Clause(harness) => harness
-                .identity
-                .collection_precondition
-                .as_ref()
-                .map(|marker| marker.totality_assertion_line),
+            Self::V2Clause(harness) => harness.identity.collection_precondition.as_ref(),
             Self::Contract(_) | Self::Scalar(_) | Self::StateFrame(_) | Self::Collection(_) => None,
         }
     }
