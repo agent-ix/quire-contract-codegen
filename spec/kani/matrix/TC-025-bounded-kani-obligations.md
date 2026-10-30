@@ -84,8 +84,9 @@ The postcondition harness draws the pre-state and operation parameters, assumes
 every supported sibling precondition and refuses if any sibling is unsupported,
 then calls the subject. It asserts produced post-state cardinality, element
 domain, order and uniqueness, as well as the authored postcondition, and covers
-non-vacuity. Seed subjects that produce a duplicate, misordered, over-cardinality
-or out-of-range collection; each must falsify with in-domain pre-state playback
+non-vacuity. Seed subjects that produce a duplicate, misordered, below-minimum or
+over-maximum cardinality, or out-of-range collection; each must falsify with
+in-domain pre-state playback
 and none may be assumed away. The invariant keeps a direct assertion. Replay
 a falsified invariant through `qsl_replay::replay_state_clause` with a snapshot
 observation, and a falsified postcondition with an invocation plus pre/post
