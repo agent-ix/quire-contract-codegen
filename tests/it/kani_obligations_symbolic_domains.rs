@@ -1921,7 +1921,13 @@ fn admitted_full_width_integer_ordered_set_retains_its_domain() {
         harness.identity.collection_kind,
         CollectionKindIdentity::OrderedSet
     );
-    assert_eq!(harness.identity.maximum_length, 3);
+    assert_eq!(
+        (
+            harness.identity.minimum_length,
+            harness.identity.maximum_length
+        ),
+        (0, 3)
+    );
     assert_eq!(
         harness.identity.element,
         CollectionElementIdentity::Integer {
