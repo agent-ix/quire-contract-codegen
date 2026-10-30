@@ -7,13 +7,13 @@
 //! its `occurrence_key` are all QSL's own answer for the operation. The envelope names the
 //! payload's frame node and frame occurrence, the pair `replay_frame` requires it to agree with.
 //!
-//! The obligation identity is minted here from that same site and the falsified harness's
-//! `StateFrameIdentity` (`replay::obligation`), never supplied. The witness is the real playback:
+//! The obligation identity must come from QSL's selected producer claim. Until QSL exposes that
+//! identity, replay refuses it with `ProducerIdentityUnavailable`. The witness is the real playback:
 //! decoded against the harness's `state_fields` by the one decoder and rendered by the one adapter
 //! rendering function. The harness is tied to the replay by checks, not by the identity: the
 //! property is a frame over exactly the state fields, the scope names the operation, anchor and
 //! frame the call site names, every decoded value is in its field's range, and the pre snapshot
-//! the invocation names holds the decoded values.
+//! the invocation names holds the decoded values once producer identity is available.
 //!
 //! The envelope's `declared_domains` is empty until QSL-345 settles the declared-domain key and
 //! refuses an empty declaration; no key shape is adopted here before then (FR-024-AC-29).
@@ -45,8 +45,8 @@ use crate::{
     },
 };
 
-/// Everything one frame replay needs beyond the proved unit. It names no obligation identity and
-/// no witness transcript: both are built from the harness and its parsed playback.
+/// Everything one frame replay needs beyond the proved unit. It names no obligation identity or
+/// witness transcript: the former must come from QSL, while the latter uses parsed playback.
 #[derive(Clone, Debug)]
 pub struct FrameReplayInputs<'a> {
     /// The proving run's lock. A frame replay selects by the operation, so no function is named.
