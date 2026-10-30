@@ -45,7 +45,7 @@ Scope: from an admitted `CheckedPackageV2` to one QSL terminal value per run ite
 oracle generation, strategy generation, Kani's internals, QSL's evaluation and the replay
 request itself (AD-002). The existing source-predicate/function/frame joins below retain their
 meaning; planned composite node parity uses FR-033/FR-029 and never produces source Refuted.
-Its O-09 extension and separate same-artifact content tie are explicitly scoped below.
+Its structural O-09 replacement and separate same-artifact content tie are explicitly scoped below.
 
 ## Views
 
@@ -168,54 +168,18 @@ them. E-2 below states only deterministic identity regeneration.
 Candidate statements (local labels; the repository assigns requirement ids when one is
 authored).
 
-- E-1. CG computes QSL's `ObligationIdentity` by one function over the ADR-013 O-09 members
-  (the clause or application node id, its occurrence key, the obligation kind, and the
-  arguments each as parameter node id and declared domain), excluding the source span, encoded
-  as RFC 8785 JSON in CG's one canonical-encoding place by `quire_canonical`, never by
-  `serde_json`;
-  the value changes when any included member changes and does not when the span changes. The
-  V1 contract and frame paths (`StateFrameIdentity`) use this parameter-domain shape; the scalar
-  parity operation-application path instead uses the IR-read structural identity and positional
-  checked-body comparison specified below; it does not use this canonical encoder. The function path (`call_site` over a `QualifiedName`, ADR-013 O-09 as amended by QSL-352) uses it
-  too, with the checked function node id and its `declaration` occurrence key in place of the
-  clause's, both read from `FunctionSite` and never derived by CG, and the existing `ObligationKind` of the
-  harness replayed (O-09 adds no subject tag and no new kind: one identity per kind the function
-  requests; FR-016-AC-21 to AC-23, implemented for the function path and, by FR-024-AC-20 to
-  FR-024-AC-24 (IR-459), for the frame path: the V1 contract and scalar paths do not compute it
-  yet). The frame path's subject is the operation's frame node
-  and its occurrence the frame's own occurrence, both read from `OperationSite` as the envelope's
-  `clause_node` and `occurrence_key` are (FR-015-AC-34), mapped into the same four members under
-  their existing names; QSL gives each operation its own frame occurrence, so no member is added
-  and E-1 is not widened. A frame has no parameters (its subject is `fn(&mut State)`), so its
-  `arguments` are empty: the state fields and their ranges are not members, because the frame
-  node names the grants and the ranges are the model's and are checked at replay (FR-024-AC-21, FR-024-AC-26). The harness is tied to the identity
-  by the replay's checks (decode against `state_fields`, field set, domain, pre state and scope),
-  not by the digest. The harness's clause node, module and harness symbols, paths, unwind bound
-  and options are not members either: they name the generated artifact and the harness identity
-  record (FR-015-AC-48 keeps the two distinct), and two postcondition clauses of one operation
-  share one frame identity. The function's `arguments` are all of its parameters
-  (O-09): a harness that leaves a parameter without an argument, or declares an integer with no
-  bound (AD-016 arrow 5: `requires-bound`, never narrowed implicitly) or a Boolean with bounds,
-  has no identity and is refused with a typed error. The retained per-argument bound is the
-  per-argument domain AD-016 puts in the identity; it is not a subset of the parameters.
-  The closed preimage, CG's own spelling (O-09 fixes the members, and no QSL or QSpec text pins
-  the member names, the domain encoding, the node-id text form or a digest label as of this
-  revision; AD-016 TK-05, the seed vector `obligationIdentitySha256`, is open): one RFC 8785
-  object with members `function` (the function node id, or for a state frame the frame node id,
-  as 64 lowercase hex digits), `declaration` (`node` as 64 lowercase hex digits, `role` as the
-  role string, `ordinal` as a number: the function's `declaration` key, or the frame's own),
-  `kind` (the `ObligationKind` in snake case), and `arguments`, an array ascending by the
-  parameter's declared identifier (empty for a state frame), each `{domain, parameter}` with
-  `parameter` the parameter node id in lowercase hex and `domain` either `{"type":"boolean"}` or
-  `{"type":"integerRange","minimum":"<decimal>","maximum":"<decimal>"}` (bounds are decimal
-  strings because RFC 8785 integers above 2^53 are not exact). The digest is the plain SHA-256 of
-  that text, with no domain label: interim, until QC-4 / TK-07 may add an FR-201 domain, which
-  would change every identity. The golden text of the FR-016-AC-21 tests
-  (`tests/it/skeleton_spine.rs`, `recomputed`) is the vector; it is written by hand, not by CG's
-  encoder. For a frame the names `function` and `declaration` read awkwardly (they hold the frame
-  node and its occurrence key) and are kept, so that no function-path identity changes
-  (FR-024-AC-20). If QSL later recomputes or compares the identity, QSL pins the spelling and CG
-  follows in a follow-up; until then the spelling is CG's own and interim.
+- E-1. CG carries QSL's producer-issued structural `ObligationIdentity` unchanged:
+  the obligation node's `NodeKey`, optional owning `ModelIdentity`, and producer-assigned ordinal
+  for that node/model pair. QSL ADR-013 O-09 and QC-14 were corrected in
+  878381034d5ddda662def7cffe0096d0e3c5f0cb. The producer assigns distinct ordinals to
+  distinct obligations at the same node/model. CG never computes a preimage, hashes an
+  obligation identity or derives a node from a replay transcript. The complete source occurrence,
+  obligation kind, parameter identities and declared domains stay on the obligation record and
+  are compared field by field against the independently selected claim. A mismatch refuses before
+  replay, even when structural identity is unchanged; a changed structural component changes
+  identity. Function and frame paths retain their own typed record and replay controls in
+  FR-016-AC-26 through AC-28 and FR-024-AC-47 through AC-51. This structural obligation identity
+  remains distinct from the canonical content identity binding a proof to exactly what it proved.
 - E-1 per-step refinement records (PLANNED/CODE-GATED, IR-942). The QSL
   ADR-013 O-07 occurrence of a QSV `StepSimulationRecord` is a locator on the
   owning refinement node: role `generated`, ordinal 0 for `Initial` and 1 +
@@ -292,8 +256,7 @@ authored).
   preimage mint or obligation digest is needed. [FR-033](../replay/functional/FR-033-composite-parity-replay-binding.md)
   AC-18 replaces the retired hash-specific AC-11 while preserving its positional, adverse,
   membership and evidence controls.
-- E-2. Two obligations with identical identity members have the same `ObligationIdentity`;
-  regeneration is byte-identical (NFR-001).
+- E-2. Two obligations with identical node, model and producer ordinal have the same structural `ObligationIdentity`; distinct obligations at one node/model receive distinct ordinals. Equal identity does not bypass exact record/body comparison; regeneration from equal admitted inputs is byte-identical (NFR-001).
 - E-3. Every run item that reaches the map has exactly one terminal value, and the map from
   `KaniRunOutcome` and from `KaniOutcomeKind` is one `match` with no wildcard arm, over the pair
   with the replay settlement (FR-030-AC-7; FR-029-AC-1 and FR-029-AC-12 state `Refuted` only with a
@@ -419,73 +382,26 @@ crate CG's lock selects.
 
 ### Current state and gaps
 
-- E-1 gap, function path closed (IR-553): `ReplayPackage::obligation_identity` computes the
-  function-contract identity through `core::canonical` (`quire-canonical`, a direct
-  `branch = "main"` dependency) and the function path's request carries it. The frame path's
-  request and envelope carry the identity minted by the same function from `OperationSite` and
-  the harness's `StateFrameIdentity` (FR-024-AC-20 to FR-024-AC-24, IR-459). The V1 contract and
-  scalar paths still compute none, and the rest of this entry describes them.
-  No code on those paths computes `ObligationIdentity`. QSL's type says QSL never hashes it.
-  ADR-013 O-09 defines the function/frame preimage from its subject, occurrence, kind and
-  arguments, excluding source span. The retired parity extension does not use this preimage. The postcondition state-clause path takes a caller `[u8; 32]`
-  (`StateClauseReplayInputs::obligation_identity`); the function path's transcript digest in the
-  request's slot is gone (AD-002), replaced by the function-contract identity. The scalar path's
-  positional allocation and driver observation boundary are now specified
-  by FR-032/E-1 using structural identity and complete body comparison, but its authoritative
-  metadata and full-report claim API remain CODE-gated.
-  The state-clause path's is open (FR-024, Open questions Q-1).
-  The work is larger than one missing field. Three identity structs exist and none carries what
-  O-09 needs. `KaniObligationIdentity` holds a `ClauseRef`, not the clause node id, and no
-  occurrence key; its `ObligationBinding` (`identifier`, `role`, `primitive_type`,
-  `integer_bounds`, `dependencies`) has no parameter node id. `ScalarObligationIdentity` holds a
-  node id but no occurrence key, and its `ScalarObligationArgument` (`identifier`, `minimum`,
-  `maximum`) has no typed operand identity. `StateFrameIdentity` (`kani/identity.rs`) holds the clause
-  node id, the operation scope and the property, and it is the identity of the frame harness whose
-  counterexample goes into an envelope (`src/replay/frame.rs`). It needs no occurrence key of its
-  own, because `OperationSite` carries the frame's, but it records no draw order for the state
-  fields, which the playback decode needs (FR-024-AC-23). The other
-  V1 clause route still needs its own missing members; parity no longer joins that O-09 mint.
-  Recommendation below.
-- Encoder gap (closed for the obligation and corpus case identities: `core::canonical` is the one
-  caller of `quire-canonical`; the rest of this entry records what was measured when the gap was
-  open): CG had no obligation-identity digest code and no
-  `quire_canonical` use. The content digest of a corpus case is `serde_json::to_vec` plus a
-  newline in `deterministic_json` (`kani.rs:1045-1046`; a second copy at `oracle.rs:1111-1112`),
-  then `ByteDigest::of` from the `qsl-replay` API (`bounded_kani_corpus.rs:340-342`). CG also
-  hashes bytes with `ByteDigest::of` for source files (`LockedSource::digest` in
-  `src/replay/function.rs`); that hashes given bytes and canonicalises nothing.
-  `serde_json` is not RFC 8785: key order is struct field order, and integers above 2^53, floats
-  and negative zero are not canonicalised. `sha2` is a dev-dependency only. The obligation
-  identity must not copy this. IR-746 moves the corpus case preimage to a typed `FixedShape`
-  projection of every member (wide request integers as decimal strings), and generated source-map
-  and proof-graph JSON artifacts to the same canonical byte encoder with one trailing newline.
-  Target, ruled by QSL (as relayed): CG's one canonical-encoding
-  place (`core::canonical`, CG layout AD step 1a) depends on `quire-canonical` directly (its own
-  repository, `agent-ix/quire-canonical`, spelled `branch = "main"`; `to_vec(v, Limits)` and
-  `sha256`, RFC 8785), with no `qsl-replay` re-export. The O-09 preimage is encoded there, never
-  by `serde_json`, and the corpus case digest moves to the same place. This historical
-  encoder target applies to function/frame and corpus identities, not parity. `ByteDigest` stays only
-  where QSL's own types require it (`qsl-replay` API surfaces such as source digests). This is a
-  CG-owned decision, not a routed need. The CG layout AD (CG PR 215, open)
-  already adopts this target: `core/canonical.rs` is the one caller of `quire-canonical`, both
-  `serde_json` `deterministic_json` copies are deleted, and `ContentDigest` is a CG type built
-  only by `core::canonical` over the RFC 8785 preimage. This AD only relies on it. Two encoders for one identity is the
-  tangle IR has with its own digest; no ticket is filed here.
-- Coupling note: QSL still pins `quire-canonical` by tag (`quire-canonical-v0.3.0`), so a lock
-  that pulls QSL together with CG or IR on `main` (quire-integration, the driver) holds two
-  copies of it until QSL moves to `branch = "main"` (waiting on the owner). CG step 1a and
-  IR-274 must not merge into a two-copy lock; check the driver's one-copy gate first.
+- E-1 structural migration (IR-1079): the former function/frame O-09 four-member
+  digest and `core::canonical` encoder were implemented historically but are retired as
+  obligation-identity mechanisms. QSL's authoritative value is the producer-issued
+  `(NodeKey, Option<ModelIdentity>, ordinal)` tuple (ADR-013 O-09 and QC-14 correction
+  878381034d5ddda662def7cffe0096d0e3c5f0cb). CG carries it unchanged for the
+  function/frame replay request and envelope, compares occurrence, kind and sorted
+  argument domains as separate record fields, and preserves all typed mismatch refusals.
+  The V1 clause and scalar routes remain separately tracked; parity already uses its
+  structural producer identity and complete checked-body comparison. `core::canonical`
+  remains available for content identities that bind exact proved bytes, never for an
+  obligation identity. The postcondition state-clause caller identity remains Q-1.
 - E-3 gap: no CG code builds a `TerminalRecord` or the data an FR-331 `results` record needs,
   and CG is not required to. The driver owns the execute, replay and terminal-record chain
   (quire-driver PR 11); CG provides the map and its typed inputs. QSL exposes
   `TerminalRecord::new` and `BackendProviderSource` publicly. QSL's review says
   `TerminalRecord.item` (a string today) becomes a typed request index; the driver follows when
   it lands.
-- Resolved decision, preimage: AD-001's Decisions section and FR-024 once gave the
-  `ObligationIdentity` preimage as "every `KaniObligationIdentity` member except `source_span`",
-  which conflicted with ADR-013 O-09's member list that E-1 uses (node id, occurrence key,
-  kind, arguments as parameter node id and domain). Decision: O-09 wins. AD-001 and FR-024 now
-  state the O-09 preimage (IR-553).
+- Resolved decision, structural obligation identity: the historical AD-001/FR-024
+  four-member preimage decision is retired. QSL ADR-013 O-09 and QC-14 now define
+  node/model/producer ordinal; CG compares kind, occurrence and domains on the record.
 - Sequencing (QSL's review, not assumed): an inconclusive value with a typed cause and a non-zero
   count in `Proved` change `qsl-replay` types CG builds. They have since merged in QSL
   (02530e7), before the IR-465 terminal map code was written, so that map was written once.
@@ -511,7 +427,7 @@ crate CG's lock selects.
 
 | Question | Owner | Recommendation |
 | --- | --- | --- |
-| ~~Retired parity obligation-preimage decision~~ | IR FR-322 structural identity; QSL-1293 removes parity preimages | The earlier O-09 parity digest decision is historical and no longer authorizes a parity mint. CG obtains the application `NodeKey`/`CheckedNodeId` from IR admission, retains the authentic occurrence, kind and ordered arguments, and compares the complete body even when structural identity is unchanged. Full FR-015-AC-76 evidence and FR-033 same-artifact authentication remain separate. Function/frame identity is outside this replacement. |
+| ~~Retired parity obligation-preimage decision~~ | IR FR-322 structural identity; QSL-1293 removes parity preimages | The earlier O-09 parity digest decision is historical and no longer authorizes a parity mint. CG obtains the application `NodeKey`/`CheckedNodeId` from IR admission, retains the authentic occurrence, kind and ordered arguments, and compares the complete body even when structural identity is unchanged. Full FR-015-AC-76 evidence and FR-033 same-artifact authentication remain separate. Function/frame identity now follows the same structural tuple, with their own record comparisons. |
 | Replace IR's `KaniProviderResult` map | IR | Delete the type and its map as FR-039 already says, together with the CG import change above (IR-347). |
 | IR cause codes as strings | IR | Resolved for the code type: IR exports `Std001Code` with constants for the registered codes (IR FR-044). The family lowerings' own codes are typed `std001_code!` values that STD-001 does not register; they leave with the lowerings (IR-347). |
 | One map instead of two | CG after QSL | After the pending inconclusive types of (a) land. |

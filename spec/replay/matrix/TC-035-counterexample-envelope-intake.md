@@ -80,27 +80,19 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     operation-contract harness of the mutated-to-debit subject.
 17. Request a replay for an operation that declares a parameter, one that declares a result, and
     one that declares neither.
-18. Mint a frame identity (empty `arguments`) and a function identity from current-run claims.
-    Require the frame identity to equal the same public identity function called with its frame
-    site and kind, and equal function claims to retain equal identities. Change each included
-    member and an excluded source span. Through a test seam before encoding, compare each
-    preimage object with an independently assembled four-member object for the admitted site:
-    `function` is lowercase 64-digit node hex; `declaration` is exactly `{node, role, ordinal}`
-    with lowercase node hex, string role and numeric ordinal; `kind` is the snake-case kind;
-    `arguments` is empty for the frame and, for the function, is ordered by declared parameter
-    identifier with each entry exactly `{domain, parameter}`. Check lowercase parameter-node
-    hex and both domain shapes: `{"type":"boolean"}` and
-    `{"type":"integerRange","minimum":"<decimal>","maximum":"<decimal>"}` with decimal-string
-    bounds. Read `Cargo.toml` and inspect the non-test source of `src/replay/obligation.rs` to
-    confirm both paths call the one identity function, `sha2` is absent from `[dependencies]`,
-    and that source names no `quire_canonical` encoder function, `sha2` or `ByteDigest::of`.
-19. Change one input of a frame identity at a time: the kind, the `function` node and each part
-    of the `declaration` key; change the clause node, the module and harness symbols, the state
-    and subject paths, the unwind bound, the options and the state fields and their ranges; mint
-    the identity of two clauses of one operation. Compile, through
-    `qsl_replay::call_site`, two units that differ only in the frame's grants, two operations of
-    one object with equal frame text, one unit twice with the second shifted by blank lines, and a
-    unit with a clause added on an operation that sorts earlier, and mint each identity.
+18. Capture the QSL producer's exact typed `ObligationIdentity(NodeKey, Option<ModelIdentity>,
+    ordinal)` for a frame and function claim, then compare the envelope and request values. Inspect
+    the CG path for an identity preimage, encoder, hash or transcript-derived identity: none may
+    supply either value. Compare complete occurrence, kind and sorted parameter identity/domain
+    bindings from each obligation record against the selected claim before replay. Change each
+    of those record members under a held identity and require a typed mismatch refusal.
+19. Change the frame node, model and producer ordinal independently and compare identities;
+    change comments, source span, symbols, path, solver, options and state-field display while
+    retaining the structural tuple and compare identities. Compile two grant variants through
+    `qsl_replay::call_site`; if the producer rekeys the frame node, compare the changed identity,
+    otherwise compare the full frame body and require mismatch. For two distinct obligations at
+    one node/model, require distinct producer ordinals. Two postcondition claims of one operation
+    retain their distinct complete occurrences even when they use one frame obligation.
 20. Generate a frame harness and read its identity record; then request a replay with a
     `postcondition` harness, and with a frame harness whose granted and checked fields are not
     its state fields; read the record of a harness regenerated from equal inputs.
@@ -225,24 +217,17 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
 17. The first two return `StateClauseReplayError::UnsupportedOperationShape` carrying the operation
     and its declaration, with no document built and the executor not called; the third is not refused for its shape
     (FR-024-AC-19).
-18. The frame and function paths use one public mint; their exposed preimage objects match the
-    independently assembled exact four-member objects and value forms, including empty frame
-    arguments and both function argument domain shapes. Equal claims keep equal identities,
-    included-member changes alter identities, and source-span changes do not. The dependency
-    and non-test-source scan finds no second encoder or hash path. No fixed or computed expected
-    digest is compared (FR-024-AC-20).
-19. Each change alone changes the identity; the clause node, symbol, path, unwind, option, field
-    and range changes do not; two clauses of one operation mint one identity; the two
-    grant variants and the two equal-frame operations differ; the shifted unit's identity equals
-    the first; the identity after adding a clause on an earlier-sorting operation is read and
-    recorded as the stated edge (FR-024-AC-21).
-20. The record holds `state_fields` in draw order; the postcondition harness returns
-    `FrameReplayError::NotAFrame` and the mismatched field set `FieldSetMismatch`, each with no
-    `call_site` or replay; the minted frame identity has empty `arguments`; a regenerated record
-    is byte-identical; a field with no declared range is listed in `state_fields`, decoded and not
-    refused (FR-024-AC-22, FR-024-AC-23).
-21. Request and envelope both equal the minted identity and both change with a grant; the twin
-    passes no identity and `FrameReplayInputs` has no identity member (FR-024-AC-24).
+18. Frame and function envelope/request pairs carry the same producer-issued structural
+    identity, without a CG identity encoder or hash. Their occurrence, kind and argument/domain
+    record members compare exactly; a mismatch refuses before replay (FR-024-AC-47, AC-48).
+19. Node/model/ordinal changes distinguish identities; nonstructural edits preserving those
+    components do not. Changed grants are caught by node rekeying or full body comparison;
+    distinct claims retain complete occurrences (FR-024-AC-49).
+20. The record holds `state_fields` in draw order; postcondition property and mismatched field
+    set return their typed refusals before `call_site` or replay. The frame record has empty
+    arguments, and an unranged field is listed, decoded and not refused (FR-024-AC-50, AC-23).
+21. Request and envelope carry the same producer identity; the twin supplies no identity and
+    `FrameReplayInputs` has no identity member (FR-024-AC-51).
 22. The transcript is the one rendering function's, over the decoded values; the other harness's
     playback, the short playback and the wrong-width playback each return a typed decode refusal
     with `call_site` and replay not called (FR-024-AC-25).
@@ -339,7 +324,7 @@ debit past the floor runs to a post state QSL's snapshot admission refuses.
 Step 10 (FR-024-AC-12) is planned under IR-965: the current state-clause path still carries
 the old payload selection and has not been tested against the `state_clause` replay target.
 
-Steps 18 to 26 (FR-024-AC-20 to FR-024-AC-29, IR-459) are implemented by `src/replay/obligation.rs`
+The former steps 18 to 21 (retired FR-024-AC-20 to AC-24) were implemented for the old digest shape and no longer back replacement AC-47 to AC-51. Steps 22 to 26 (FR-024-AC-25 to AC-29, IR-459) are implemented by `src/replay/obligation.rs`
 and `src/replay/frame.rs`, the `src` unit tests of steps 18 and 26, and the tests of
 `tests/it/kani_obligations_state_frame.rs` over the QSL twin of the state-frame fixture. The twin's
 harness scope is aligned to the node ids QSL names for the twin's compiled unit (`Twin::aligned`),

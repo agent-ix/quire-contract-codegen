@@ -74,9 +74,7 @@ diagnostic precedence. Apply a renderer mutant
 that changes only the generated harness or verdict point after binding selection. Inspect every
 refusal and artifact output and require the diagnostic to name the affected selection.
 For each authentic QSL driver-bound FR-331 selection, inspect the generated header, runtime
-identities, source map, and symbols against the FR-011 `qocc2_`/`qpkg2_` grammar. Change only the
-occurrence node, role, or ordinal, then one package-id field, using separately admitted matching
-FR-331 request/package pairs; require the corresponding rendered identity to change. For a linked
+identities, source map, and symbols against the FR-011 `qocc2_`/`qpkg2_` grammar. Change only the occurrence structural node package, nested path or ordinal, then role or occurrence ordinal, and separately the package name or one lock field using admitted matching FR-331 request/package pairs; require the corresponding rendered identity to change. A body-only change with the same structural identity still fails the admitted-body comparison. For a linked
 provider, use the one S4 package exported by QSL, emitted at E4 and admitted at E5; attempt an
 E4/E5 mismatch and confirm driver refusal, then supply a foreign claim absent from the held
 admitted package and confirm `HarnessErrorCode::MissingClaimOccurrence`. Form an out-of-driver
@@ -84,9 +82,7 @@ request with a missing or non-claim occurrence and one whose selected claim
 references a model element absent from the admitted V2 relation. Pair a process FR-331
 request owner with a different admitted package. Check CG's typed refusals and absence of artifacts; verify that QSL
 keeps `UnknownItem`, `Unbound`, and `Fault` export refusals outside CG.
-At each V2 harness identity text comparison boundary, corrupt one `qocc2_` or `qpkg2_` field,
-truncate it, uppercase hex, or add a leading-zero count. Inspect the typed refusal, artifact
-output, and report state; compare with the exact typed identity pair.
+At each V2 harness identity text comparison boundary, make a malformed nested path or lock encoding, truncate a field, uppercase hex, or add a leading-zero count; require `InvalidIdentityRendering` and no artifact or report mutation. Separately supply a different but canonical occurrence node, role or ordinal and require `MissingClaimOccurrence`, then a different but canonical package name or lock and require `OwnerIdentityMismatch`, each before publication. Compare every accepted canonical text with its exact typed identity pair.
 Inspect the generator source for any `BoundPackage`, `ClauseRef`, `quire_contract_model::TypedExpression`
 or `oracle::boolean_v1` use and for any body opened outside `core/ir/`.
 
@@ -129,10 +125,8 @@ clause ids retain FR-002-AC-10's diagnostic ahead of occurrence checks. Repeatin
 selection with the same package and policy is byte-identical (FR-002-AC-12). These controls are
 planned.
 The identity controls require full canonical rendering and a changed rendered identity when one
-typed field changes (FR-002-AC-21). An out-of-driver missing or non-claim occurrence returns
+typed field changes (FR-002-AC-25). An out-of-driver missing or non-claim occurrence returns
 `HarnessErrorCode::MissingClaimOccurrence`, an absent referenced model element returns
 `HarnessErrorCode::UnboundModelElement`, and a cross-package process request returns `HarnessErrorCode::OwnerIdentityMismatch`; each produces no
 artifact and QSL export refusals stay with the driver (FR-002-AC-22). These controls are planned.
-The malformed-text controls return `HarnessErrorCode::InvalidIdentityRendering` before
-publication, with no normalization or report mutation, while canonical text and typed identity
-agree (FR-002-AC-23). These controls are planned.
+Malformed/noncanonical text returns `HarnessErrorCode::InvalidIdentityRendering`; a different canonical occurrence returns `MissingClaimOccurrence`, and a different canonical package returns `OwnerIdentityMismatch`, each before publication and without report mutation. Accepted canonical text agrees with typed identity (FR-002-AC-26). These controls are planned.

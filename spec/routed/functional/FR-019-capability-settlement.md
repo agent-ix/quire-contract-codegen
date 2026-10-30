@@ -419,10 +419,11 @@ FR-272's `runtime_invariant` code, consistent with its existing internal faults.
 IR-892 adds `EnvelopeRefusal::ContractPackageReadRefused` and
 `EnvelopeRefusal::ContractPackageReadIncomplete` to that same public enum without
 changing `negotiate_backend_provider`'s result type. The locked Contract IR
-reader's `CheckedPackageRefusal` has public `code`, `path`, `cause`, `locus`,
-`contract_version`, `document_pointer`, `expected` and `actual` fields. Its
-`expected_node_id` field is private, although a getter exists, and CG does not
-project it. `CheckedPackageIncomplete` has public `limit_kind`, `limit`,
+reader's `CheckedPackageRefusal` has public `code`, nonempty ordered typed `loci`,
+`cause`, `locus`, `contract_version`, `document_pointer`, `extension_detail`,
+`protocol_detail` and `terminal_duplicate` fields. Each locus retains its
+optional RFC 6901 path and optional admitted source region; the first locus is
+primary. `CheckedPackageIncomplete` has public `limit_kind`, `limit`,
 `consumed` and `path` fields. Neither reader outcome struct implements
 `Serialize`. The reader's code and cause enums implement `Serialize` with
 stable `snake_case` and `kebab-case` string names respectively; neither exposes
@@ -433,17 +434,19 @@ CG SHALL define serializable `ContractPackageRefusalProjection` and
 `ContractPackageIncompleteProjection` and construct them through named adapters
 `project_contract_package_refusal` and `project_contract_package_incomplete`
 from the respective reader outcomes. The refusal projection SHALL have fields
-`code: CheckedPackageRefusalCode`, `path: Option<String>`,
+`code: CheckedPackageRefusalCode`, `loci: Vec<CheckedPackageRefusalLocation>`,
 `cause: Option<CheckedPackageRefusalCause>`, `locus: Option<CheckedNodeId>`,
 `contract_version: Option<String>`, `document_pointer: Option<String>`,
-`expected: Option<CheckedSemanticId>` and `actual: Option<CheckedSemanticId>`.
+`extension_detail: Option<CheckedExtensionRefusalDetail>`,
+`protocol_detail: Option<CheckedProtocolRefusalDetail>` and
+`terminal_duplicate: Option<CheckedTerminalDuplicate>`.
 The incomplete projection SHALL have fields `limit_kind: CheckedPackageLimit`,
 `limit: u64`, `consumed: u64` and `path: Option<String>`. These are the stable
 wire member names inside the existing `EnvelopeRefusal` adjacent-tag shape
 `{"code":"contract_package_read_refused","cause":{"refusal":{...}}}`
 or `{"code":"contract_package_read_incomplete","cause":{"incomplete":{...}}}`.
 Optional fields serialize as explicit JSON `null` when absent; pointers use
-their RFC 6901 text, typed node and semantic identities retain their reader
+their RFC 6901 text, typed node identities and refusal details retain their reader
 serialization, and no debug-string cause is added. The adapters SHALL copy all
 listed public fields without deriving a backend cause. The two variants SHALL
 carry these projections so the existing `EnvelopeRefusal: Serialize` derive
@@ -522,12 +525,13 @@ requires its exhaustive arms to compile. FR-019-AC-14 is a property of the retur
 | FR-019-AC-45 | A manifest with a second descriptor of one backend identity causes a whole-envelope `EnvelopeRefusal::ManifestRepeatsBackendIdentity { identity: String }`, whether the descriptors are identical, differ in `ProviderOrigin` alone, or differ in any other CG descriptor field, and whether adjacent or non-adjacent. The call returns no item settlements. The variant has no string cause, manifest or digest payload; `negotiate_backend_provider` keeps its return signature. | Test (TC-030) |
 | FR-019-AC-46 | With several repeated identities, the refusal names the bytewise-first repeated identity independent of manifest order; identities differing only in case are distinct. An invalid contract version or capability vocabulary is refused as `EnvelopeRefusal::InvalidCapability` before repeat detection or any kind read. | Test (TC-030) |
 | FR-019-AC-47 | QSL's registry snapshot holds each backend identity at most once (FR-290:258-265; FR-331:57), so no driver-built FR-331 manifest repeats an identity. | Analysis (FR-290:258-265; FR-331:57; CG takes no `qsl-route` dependency under FR-019's Rust input boundary paragraph, which cites FR-022 "Where the input type lives", and `generate_routed` accepts routed items rather than settlements) |
-| FR-019-AC-48 | A `Refused(refusal)` outcome from the current Kani oracle-function preflight read produces `Err(EnvelopeRefusal::ContractPackageReadRefused { refusal: ContractPackageRefusalProjection })` for the whole request, with the reader's `code`, `path`, `cause`, `locus`, `contract_version`, `document_pointer`, `expected` and `actual` copied into the named CG projection; the private `expected_node_id` is absent. No item settlement or artifact is returned. | Test (TC-030) |
+| FR-019-AC-48 | RETIRED, replaced by FR-019-AC-54; its old path and expected/actual digest projection is obsolete and earns no implementation credit. | Inspection |
 | FR-019-AC-49 | An `Incomplete(incomplete)` outcome from the current Kani oracle-function preflight read produces `Err(EnvelopeRefusal::ContractPackageReadIncomplete { incomplete: ContractPackageIncompleteProjection })` for the whole request, with the reader's `limit_kind`, `limit`, `consumed` and `path` copied into the named CG projection. No item settlement or artifact is returned. | Test (TC-030) |
 | FR-019-AC-50 | An `Admitted` Kani function-application preflight read whose exact generator produces a claim for an otherwise supported item retains the existing `supported` settlement. | Test (TC-030) |
 | FR-019-AC-51 | Among several request items with non-`Admitted` preflight outcomes, the first failing item in manifest/item request order determines the whole-request `ContractPackageReadRefused` or `ContractPackageReadIncomplete` variant and projection, irrespective of outcome kind. Earlier successful items contribute no returned settlement or artifact. | Test (TC-030) |
 | FR-019-AC-52 | An `Admitted` Kani function-application read whose exact generator emits no claim, and a structural preflight rejection before any read, each retain item-level `KaniFormRefused { OperationNotRendered }` without a reader envelope refusal. | Test (TC-030) |
 | FR-019-AC-53 | Given an admitted package with bound driver items at driver indexes 0 and 2 around an excluded accounting-only position at index 1 whose accounting is `lowered` with a Kani-supported form, an FR-331 envelope with exactly two items settles the bound items without an `EnvelopeItemCount` refusal. Both `ContractItemSettlement.request_index` and its nested `ItemSettlement.request_index` equal 0 and 2 respectively, not envelope indexes 0 and 1. The excluded position produces no settlement or claim, and its own classifier-call and Kani-preflight-read counts are both zero. An envelope with fewer or more than two items returns the typed `EnvelopeItemCount` refusal. A context-only root changes neither count nor driver indexes. | Test (TC-030) |
+| FR-019-AC-54 | A `Refused(refusal)` outcome from the Kani oracle-function preflight reader produces `Err(EnvelopeRefusal::ContractPackageReadRefused { refusal: ContractPackageRefusalProjection })` for the whole request, copying the reader's `code`, nonempty ordered typed `loci` including paths and source regions, `cause`, `locus`, `contract_version`, `document_pointer`, `extension_detail`, `protocol_detail` and `terminal_duplicate` without loss or reinterpretation. The obsolete `path`, `expected` and `actual` projection members are absent. No item settlement or artifact is returned. Distinct extension, protocol and terminal refusals retain their exact detail payloads. | Test (TC-030) |
 | FR-019-AC-7 | An envelope whose `capability_vocabulary` is not exactly `quire.capability-kind/v1`, or is absent, is refused as `invalid_capability`/`unsupported-version` with none of its kinds read. | Test (TC-030) |
 | FR-019-AC-8 | An item with an absent extent classification settles `invalid-request` with `invalid_capability`/`absent-extent`, and an absent or unknown kind settles before the candidate table is consulted. | Test (TC-030) |
 | FR-019-AC-9 | A backend kind added without a negotiation arm does not compile: the dispatch is an exhaustive `match` over the closed kind with no catch-all arm. | Analysis |

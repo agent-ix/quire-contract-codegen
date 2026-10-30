@@ -122,9 +122,12 @@ failure is reported.
   category `violation` is the reproduced failure, a settlement of `inconclusive`
   is a mismatch, and an executor refusal is returned with its own cause.
 
-- The generator shall fill the function path's request `obligation_identity` with the ADR-013
-  O-09 function-contract obligation identity of the function being replayed (FR-016-AC-21 to
-  AC-23).
+- The generator shall carry the producer's QSL structural `ObligationIdentity` for the
+  function-contract obligation into the replay request unchanged (FR-016-AC-26 to AC-28).
+  The identity is the function node's `NodeKey`, optional owning `ModelIdentity` and the
+  producer-assigned ordinal for that node/model pair. The complete occurrence key, obligation
+  kind and sorted argument domains stay on the obligation record and are compared field by field
+  against the selected claim before replay; a mismatch refuses even when identity is unchanged.
 
 ## Acceptance Criteria
 
@@ -149,21 +152,24 @@ failure is reported.
 | FR-016-AC-18 | A lock selecting a library the unit does not import is refused by QSL as unselected. | Test (TC-026) |
 | FR-016-AC-19 | Lock libraries whose sources share a source owner are refused as no dependency input, before the call site compiles anything. | Test (TC-026) |
 | FR-016-AC-20 | A lock library whose source has the unit's own source owner is refused by the call site. | Test (TC-026) |
-| FR-016-AC-21 | The function path's request `obligation_identity` holds the function-contract obligation digest of quire-spec-language ADR-013 O-09, minted by the one `quire-canonical` RFC 8785 encoder (ADR-013 §2, AD-003 E-1). Before encoding, the O-09 object has exactly four members: `function` (the `FunctionSite` node id as lowercase 64-digit hex), `declaration` (its occurrence key as `{node, role, ordinal}`, with lowercase node hex, a role string and a numeric ordinal), `kind` (the harness's `ObligationKind` in snake case), and `arguments` (all function parameters, ordered ascending by parameter identifier rather than in the declared order of `FunctionSite.parameters`, each `{domain, parameter}` with lowercase parameter-node hex and either Boolean domain `{"type":"boolean"}` or bounded integer domain `{"type":"integerRange","minimum":"<decimal>","maximum":"<decimal>"}`). A test seam exposes that object before encoding, and the request passes its minted identity to QSL for admission; no fixed or recomputed expected digest is asserted. The identity is never minted from the transcript. A harness that leaves a parameter without an argument, or declares an unbounded integer or a bounded Boolean, has no identity and is refused. | Test, Inspection |
-| FR-016-AC-22 | For two functions with the same parameters, the identities differ. The identity of one function is the same across recompiles that only add comments or blank lines, and across a change of the harness's source span. It differs between two different `ObligationKind`s over the same function, and when any argument's domain differs. A function yields one identity per existing `ObligationKind` it requests, not one per conjunct of its body: a function whose body has two conjuncts, replayed under one kind, has one identity. | Test (TC-026) |
-| FR-016-AC-23 | The function-contract identity function derives nothing from the package: with the `FunctionSite`'s `function` and `declaration`, the kind and the arguments held fixed, perturbing every other node of the compiled package (an unrelated declaration, the order of `FunctionSite.parameters`) leaves the identity unchanged, and a perturbed `function` or `declaration` changes it. | Test (TC-026) |
+| FR-016-AC-21 | RETIRED, replaced by FR-016-AC-26; the former CG-minted O-09 digest preimage is obsolete and earns no implementation credit. | Inspection |
+| FR-016-AC-22 | RETIRED, replaced by FR-016-AC-27; the former kind/domain-inside-digest control is obsolete and earns no implementation credit. | Inspection |
+| FR-016-AC-23 | RETIRED, replaced by FR-016-AC-28; the former CG identity-derivation control is obsolete and earns no implementation credit. | Inspection |
 | FR-016-AC-24 | A lock whose only defect is one library identity selected twice is refused by QSL's `DependencyInput::new` as `DuplicateIdentity`, code `invalid_package` with cause `conflicting-definition`, and reaches the caller as `DependencyLockError::Input`. | Test (TC-026) |
 | FR-016-AC-25 | In an installed-Kani run that classifies a generated harness as `Falsified`, the retained counterexample is byte-identical to the first eligible assertion playback for that harness in the same launcher's complete captured stdout order, excluding cover blocks, and native replay uses values decoded from that retained counterexample; a `Verified` run supplies no counterexample. A test oracle observing stdout independently compares the complete fence interior, trimmed only of surrounding whitespace, with the retained counterexample before decoding or replay. Substituting another valid, self-consistent playback immediately after classification fails that oracle even when the replacement's comments, bytes, decoded values and replay agree. | Test (TC-026) |
+| FR-016-AC-26 | PLANNED (IR-1079; replaces AC-21). The function replay request carries the producer's exact QSL `ObligationIdentity(NodeKey, Option<ModelIdentity>, ordinal)` unchanged, with no CG hash, preimage, rederivation or transcript-sourced identity. A function harness missing a parameter argument, declaring an unbounded integer or bounding a Boolean refuses before replay with no substituted domain. The selected function occurrence, obligation kind and complete parameter bindings with declared domains remain on the record, sorted by declared parameter identifier, and are compared exactly before replay. | Test, Inspection (TC-026) |
+| FR-016-AC-27 | PLANNED (IR-1079; replaces AC-22). Two function nodes with the same parameters have distinct structural obligation identities; comment, blank-line and source-span edits preserving node/model/ordinal leave identity unchanged. For two distinct obligations on one node/model, the producer assigns distinct ordinals. Changing kind or one argument domain with a held identity fails the field-by-field record/claim comparison before replay; one requested kind for a two-conjunct function remains one obligation, not one per conjunct. | Test (TC-026) |
+| FR-016-AC-28 | PLANNED (IR-1079; replaces AC-23). The function path obtains the producer's node/model/ordinal identity, without deriving one from package contents. Perturbing unrelated declarations or parameter order while the producer identity and sorted argument bindings stay equal leaves the carried identity and accepted comparison unchanged; changing the selected function node, model or assigned ordinal changes identity, while changing the occurrence key, kind or argument domain under the same identity refuses before replay. | Test (TC-026) |
 
-For FR-016-AC-21, code-review inspection verifies the function path uses the one
-`quire-canonical` encoder, has no second identity encoder, and derives no identity member
-from transcript content. TC-026 verifies the pre-encoding object and QSL admission.
+For FR-016-AC-26, inspection verifies that the function path carries the producer's typed
+identity without an identity encoder or transcript-derived member. TC-026 compares the
+record's selected occurrence, kind and ordered domains and QSL admission.
 
 ## Status
 
-FR-016-AC-1 through AC-5 and AC-21 through AC-23 retain default-suite evidence through a
+FR-016-AC-1 through AC-5 retain default-suite evidence through a
 direct test-only `KaniObligationIdentity` fixture and the surviving replay and identity APIs.
-That fixture is an input to those APIs, not a replacement V1 generator or a proof claim.
+That fixture is an input to those APIs, not a replacement V1 generator or a proof claim. Retired AC-21 through AC-23 no longer claim backing; replacement AC-26 through AC-28 are planned.
 FR-016-AC-9 and AC-10 retain their default native replay tests, but the
 `skeleton_spine.rs` installed-prover E7-E9 control was removed with the V1 `BoundClause` generator.
 That installed path is Open and partially backed until IR-1047 supplies a genuine V2 generated

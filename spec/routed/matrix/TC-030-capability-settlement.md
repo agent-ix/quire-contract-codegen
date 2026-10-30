@@ -70,10 +70,7 @@ source-backed Kani `V2FunctionApplication`. Use an admitted checked source
 whose lowered function package selects a dependency: the internal reader's
 empty dependency set produces `Refused(MissingImport)`. Compare the returned
 `ContractPackageReadRefused` projection with a direct call to that reader on the
-same bytes and limits, including `code`, `path`, `cause`, `locus`,
-`contract_version`, `document_pointer`, `expected` and `actual` and every
-present and absent optional field. Assert that `expected_node_id` is not a
-projection member.
+same bytes and limits, including `code`, nonempty ordered typed `loci` with exact paths and source regions, `cause`, `locus`, `contract_version`, `document_pointer`, `extension_detail`, `protocol_detail` and `terminal_duplicate`, with every present and absent optional field. Assert obsolete `path`, `expected` and `actual` are not projection members. Exercise distinct extension, protocol and terminal detail refusals.
 Assert no settlements or artifact and no `KaniFormRefused` or
 `OperationNotRendered`. Repeat with a source-backed package larger than the
 internal reader's bounded byte limit so that it returns `Incomplete`; compare
@@ -302,11 +299,9 @@ order; case-distinct identities remain distinct, and contract-version or
 vocabulary refusal wins before repeat detection or kind reading
 (FR-019-AC-45 and FR-019-AC-46).
 
-For FR-019-AC-48, a refused read yields only the whole-request
+For FR-019-AC-54 (replacing retired AC-48), a refused read yields only the whole-request
 `ContractPackageReadRefused { refusal: ContractPackageRefusalProjection }`.
-Its serialized projection equals the reader's public code, path, cause, locus,
-contract version, document pointer, expected and actual data, with absent
-optional members represented as `null`; `expected_node_id` is absent. No
+Its serialized projection equals the reader's public code, nonempty ordered typed loci with path and source region, cause, locus, contract version, document pointer, extension detail, protocol detail and terminal duplicate, with absent optional members represented as `null`; obsolete path, expected and actual projection members are absent. No
 settlement or artifact is returned.
 
 For FR-019-AC-49, an incomplete read yields only the whole-request
