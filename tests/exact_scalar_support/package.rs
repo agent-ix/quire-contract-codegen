@@ -37,7 +37,6 @@ use quire_exact::{
 };
 use quire_semantic_value::declaration::EqualityOperator;
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 
 #[path = "../checked_package_support/rekey.rs"]
 mod rekey;
@@ -1383,7 +1382,7 @@ pub const STATE: u32 = 2005;
 pub const TEMPORAL: u32 = 2006;
 const SELECTED_MODEL_ROOT: u32 = 9200;
 /// A `claim`-tagged node wired only as an extra dependency of
-/// `LITERAL_OPERAND` (issue #100 / FR-014-AC-5): it is never itself
+/// `LITERAL_OPERAND` (issue #100 / FR-014-AC-56): it is never itself
 /// requested, so it never gets its own oracle -- its sole purpose is to
 /// sit in one requested item's reachable set so the generator's `claims`
 /// field, structurally empty in every fixture node before this one, is
@@ -3062,7 +3061,7 @@ fn corpus_package_with_expression_operand() -> PackageBuilder {
         ),
         &[INT, RAT],
     );
-    // FR-014-AC-5 / issue #100: no fixture node before this one carried the
+    // FR-014-AC-56 / issue #100: no fixture node before this one carried the
     // `claim` tag, so `claim-map.json`'s `claims` field was structurally
     // always empty and TC-024 never exercised it (measured on origin/main:
     // zero `"node_tag": "claim"` occurrences anywhere in this file). These
@@ -3409,8 +3408,6 @@ pub fn source_backed_byte_chain(count: u32) -> (PackageBuilder, String, SourceTo
     let source_ref = json!({
         "authority": "agent-ix",
         "identity": "ir764-ac40-source",
-        "digest_domain": "quire.source.bytes/v1",
-        "digest": format!("{:x}", Sha256::digest(source.as_bytes())),
     });
     builder.value["lock"]["sources"]
         .as_array_mut()

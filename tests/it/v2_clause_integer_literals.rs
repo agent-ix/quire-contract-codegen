@@ -8,7 +8,7 @@ use ix_trace_rs::trace;
 use quire_contract_codegen::generate_v2_clause_oracle;
 use quire_contract_model::{
     CheckedNodeId, CheckedNodeOwner, CheckedPackageEvidence, CheckedPackageReadLimits,
-    CheckedPackageV2, CheckedPackageV2ReadResult, ContractSourceV1,
+    CheckedPackageV2ReadResult, ContractSourceV1,
 };
 use serde_json::{json, Value};
 
