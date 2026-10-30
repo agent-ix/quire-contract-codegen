@@ -26,6 +26,27 @@ pub const MAX_OBLIGATION_ITEMS: usize = 256;
 /// Largest accepted loop unwind bound.
 pub const MAX_OBLIGATION_UNWIND: u32 = 1024;
 
+/// Render the complete structural node path without recursive formatting.
+pub(super) fn node_label(node: &CheckedNodeId) -> impl std::fmt::Display + '_ {
+    struct Label<'a>(&'a CheckedNodeId);
+
+    impl std::fmt::Display for Label<'_> {
+        fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            if let Some(key) = crate::core::ir::node_key::checked_node_key(self.0) {
+                write!(formatter, "{key}")
+            } else {
+                write!(
+                    formatter,
+                    "{}:[invalid path]:{}",
+                    self.0.package, self.0.ordinal
+                )
+            }
+        }
+    }
+
+    Label(node)
+}
+
 /// Which of a state clause's two harnesses a [`ObligationItem::StateFrame`] item asks for.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StateFrameRole {
@@ -827,12 +848,14 @@ impl std::fmt::Display for StateFrameRefusal {
             Self::NotAPostcondition { clause } => {
                 write!(formatter, "clause kind `{clause}` is not a postcondition")
             }
-            Self::MalformedClause { at } => write!(formatter, "malformed clause at {}", at.digest),
+            Self::MalformedClause { at } => {
+                write!(formatter, "malformed clause at {}", node_label(at))
+            }
             Self::ConditionNotSupported { at } => {
                 write!(
                     formatter,
                     "condition is outside the supported shape at {}",
-                    at.digest
+                    node_label(at)
                 )
             }
             Self::ObservationsDiffer { left, right } => {
@@ -848,7 +871,7 @@ impl std::fmt::Display for StateFrameRefusal {
                 write!(
                     formatter,
                     "frame {} has unsupported effect {effect:?}",
-                    frame.digest
+                    node_label(frame)
                 )
             }
             Self::BoundNotResolved { field, cause } => {
@@ -861,7 +884,11 @@ impl std::fmt::Display for StateFrameRefusal {
                 write!(formatter, "`{field}` is not a declared state field")
             }
             Self::NothingForbidden { frame } => {
-                write!(formatter, "frame {} grants every state field", frame.digest)
+                write!(
+                    formatter,
+                    "frame {} grants every state field",
+                    node_label(frame)
+                )
             }
             Self::ResourceLimitExceeded { bytes } => {
                 write!(
@@ -974,8 +1001,11 @@ mod tests {
 
     fn node(seed: u8) -> CheckedNodeId {
         CheckedNodeId {
-            domain: "quire.checked-semantic-node/v1".into(),
-            digest: format!("{seed:064x}").into(),
+            package: "state-frame-test".into(),
+            path: vec![quire_contract_model::CheckedNodePathSegment::Name(
+                format!("node-{seed}").into(),
+            )],
+            ordinal: 0,
         }
     }
 
@@ -1285,7 +1315,7 @@ mod tests {
                     "code": "state_frame_refused",
                     "refusal": {
                         "code": "frame_effect_unsupported",
-                        "frame": {"domain": "quire.checked-semantic-node/v1", "digest": node(8).digest},
+                        "frame": {"package": "state-frame-test", "path": ["node-8"], "ordinal": 0},
                         "effect": "foreign_field",
                     },
                 },
@@ -1305,7 +1335,7 @@ mod tests {
                 "code": "not_lowered",
                 "refusal": {
                     "arm": "failed",
-                    "node_id": {"domain": "quire.checked-semantic-node/v1", "digest": node(1).digest},
+                    "node_id": {"package": "state-frame-test", "path": ["node-1"], "ordinal": 0},
                     "limit_kind": "work",
                     "limit": 10,
                     "consumed": 11,

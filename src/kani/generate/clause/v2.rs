@@ -1,6 +1,6 @@
 //! Bounded cover harness for an admitted V2 parameter precondition (FR-015).
 
-use quire_contract_model::{CheckedNodeId, CheckedPackageV2, CheckedSemanticId};
+use quire_contract_model::{CheckedNodeId, CheckedPackageV2, ContractSourceV1};
 use quote::ToTokens;
 
 use crate::{
@@ -9,7 +9,7 @@ use crate::{
         abi::{KaniPrimitiveType, KaniSolver},
         census::{dependency_readiness, ProofDependencyEdge, ProofExecutionState},
         generate::{
-            outcome::{KaniObligationRequest, UnsupportedObligation},
+            outcome::{node_label, KaniObligationRequest, UnsupportedObligation},
             record::{harness_path, record},
             render,
             spec::{
@@ -29,7 +29,7 @@ use crate::{
 
 pub(in crate::kani::generate) struct LoweredV2Clause {
     dependencies: Vec<ProofDependencyEdge>,
-    pub(super) package: CheckedSemanticId,
+    pub(super) package: ContractSourceV1,
     pub(super) node_id: CheckedNodeId,
     kind: ObligationKind,
     oracle: V2ClauseOracle,
@@ -75,7 +75,12 @@ pub(in crate::kani::generate) fn lower(
     };
     // Kani includes the module in generated filenames. Use the full admitted pair so two
     // revisions of one declaration cannot collide on a readable clause name.
-    let preimage = crate::core::canonical::preimage_value(&(package.package_id(), clause))
+    let package_identity = ContractSourceV1 {
+        name: package.name().into(),
+        lock: package.lock().clone(),
+    };
+    let node_key = node_label(clause).to_string();
+    let preimage = crate::core::canonical::preimage_value(&(&package_identity, &node_key))
         .map_err(|_| UnsupportedObligation::RenderFailed)?;
     let digest = crate::core::canonical::content_digest(&preimage)
         .map_err(|_| UnsupportedObligation::RenderFailed)?;
@@ -93,7 +98,7 @@ pub(in crate::kani::generate) fn lower(
     );
     Ok(LoweredV2Clause {
         dependencies: Vec::new(),
-        package: package.package_id().clone(),
+        package: package_identity,
         node_id: clause.clone(),
         kind,
         oracle,
@@ -183,10 +188,7 @@ pub(in crate::kani::generate) fn render_clause(
     ];
     let path = harness_path(&lowered.module_symbol, &lowered.harness_symbol)?;
     let spec = HarnessSpec::new(
-        format!(
-            "V2 precondition {}/{}",
-            lowered.node_id.domain, lowered.node_id.digest
-        ),
+        format!("V2 precondition {}", node_label(&lowered.node_id)),
         path,
         lowered.oracle.source.clone(),
         ProofKind::Proof,
@@ -464,10 +466,7 @@ fn render_postcondition(
         },
     ]);
     let spec = HarnessSpec::new(
-        format!(
-            "V2 postcondition {}/{}",
-            lowered.node_id.domain, lowered.node_id.digest
-        ),
+        format!("V2 postcondition {}", node_label(&lowered.node_id)),
         harness_path(&lowered.module_symbol, &lowered.harness_symbol)?,
         lowered.oracle.source.clone(),
         ProofKind::Proof,
