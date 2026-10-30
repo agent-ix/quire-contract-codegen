@@ -37,7 +37,7 @@ const PACKAGE: &str = "test/bank";
 const PLACEHOLDER_DIGEST: &str =
     "sha256:0000000000000000000000000000000000000000000000000000000000000000";
 
-fn node_matches_site(id: &CheckedNodeId, key: quire_exact::NodeKeyView<'_>) -> bool {
+pub(crate) fn node_matches_site(id: &CheckedNodeId, key: quire_exact::NodeKeyView<'_>) -> bool {
     if id.package.as_ref() != key.package() || id.ordinal != key.ordinal() {
         return false;
     }
@@ -342,7 +342,7 @@ pub struct Twin {
 /// One invocation of `deposit` on account `account`, with its pre and post snapshots.
 pub struct Invocation {
     reference: DocumentRef,
-    documents: Vec<(DocumentRef, Vec<u8>)>,
+    documents: Vec<(DocumentRef, [u8; 32], Vec<u8>)>,
 }
 
 /// The position of the invocation document in [`Invocation`]'s documents.
@@ -353,24 +353,22 @@ pub const PRE_DOCUMENT: usize = 1;
 impl Invocation {
     /// This invocation with the document at `index` edited as JSON and addressed by the digest
     /// of its new bytes. An edited pre snapshot is re-linked from the invocation, which is
-    /// re-addressed in turn, so every provided document still hashes to its digest and the
+    /// re-digested in turn, so every provided document still hashes to its digest and the
     /// edit is what the replay reads.
     pub fn edited(&self, index: usize, edit: impl FnOnce(&mut Value)) -> Self {
         let mut documents = self.documents.clone();
         let mut value: Value =
-            serde_json::from_slice(&documents[index].1).expect("a JSON document");
+            serde_json::from_slice(&documents[index].2).expect("a JSON document");
         edit(&mut value);
-        documents[index].1 = value.to_string().into_bytes();
-        documents[index].0.digest = jcs_digest(&documents[index].1);
+        documents[index].2 = value.to_string().into_bytes();
+        documents[index].1 = jcs_digest(&documents[index].2);
         if index == PRE_DOCUMENT {
             let mut invocation: Value =
-                serde_json::from_slice(&documents[INVOCATION_DOCUMENT].1).expect("JSON");
-            invocation["pre"]["digest"] = json!(format!(
-                "sha256-jcs:{}",
-                hex(&documents[PRE_DOCUMENT].0.digest)
-            ));
-            documents[INVOCATION_DOCUMENT].1 = invocation.to_string().into_bytes();
-            documents[INVOCATION_DOCUMENT].0.digest = jcs_digest(&documents[INVOCATION_DOCUMENT].1);
+                serde_json::from_slice(&documents[INVOCATION_DOCUMENT].2).expect("JSON");
+            invocation["pre"]["digest"] =
+                json!(format!("sha256-jcs:{}", hex(&documents[PRE_DOCUMENT].1)));
+            documents[INVOCATION_DOCUMENT].2 = invocation.to_string().into_bytes();
+            documents[INVOCATION_DOCUMENT].1 = jcs_digest(&documents[INVOCATION_DOCUMENT].2);
         }
         Self {
             reference: documents[INVOCATION_DOCUMENT].0.clone(),
@@ -382,7 +380,7 @@ impl Invocation {
     /// as it was: a provided document whose bytes do not match the digest it is addressed by.
     pub fn replaced(&self, index: usize, bytes: &[u8]) -> Self {
         let mut documents = self.documents.clone();
-        documents[index].1 = bytes.to_vec();
+        documents[index].2 = bytes.to_vec();
         Self {
             reference: self.reference.clone(),
             documents,
@@ -415,9 +413,9 @@ fn limits(seed: u64) -> ScalarLimits {
     }
 }
 
-fn document(reference: &DocumentRef, bytes: &[u8]) -> ProvidedDocument {
+fn document(digest: [u8; 32], bytes: &[u8]) -> ProvidedDocument {
     ProvidedDocument {
-        digest: DigestRecord::mint(DigestDomain::Sha256Jcs, reference.digest),
+        digest: DigestRecord::mint(DigestDomain::Sha256Jcs, digest),
         bytes: bytes.to_vec(),
     }
 }
@@ -819,6 +817,7 @@ impl Twin {
             .collect();
         let compiled = compile_package_with_execution_points(
             SourceIdentity::new(AUTHORITY, IDENTITY, "git", "1"),
+            IDENTITY.to_owned(),
             IDENTITY,
             &self.unit,
             [self.domain.as_slice()],
@@ -1044,8 +1043,8 @@ impl Twin {
             .into_bytes();
             stamped(label, bytes)
         };
-        let (pre_ref, pre_bytes) = snapshot("twin-pre", "pre", pre);
-        let (post_ref, post_bytes) = snapshot("twin-post", "post", post);
+        let (pre_ref, pre_digest, pre_bytes) = snapshot("twin-pre", "pre", pre);
+        let (post_ref, post_digest, post_bytes) = snapshot("twin-post", "post", post);
         let invocation_label = label("twin-invocation");
         let invocation_bytes = json!({
             "format": "quire.state.invocation/v1",
@@ -1056,11 +1055,11 @@ impl Twin {
             "self": {"population": population(), "key": account},
             "pre": {
                 "identity": identity_json(&pre_ref),
-                "digest": format!("sha256-jcs:{}", hex(&pre_ref.digest)),
+                "digest": format!("sha256-jcs:{}", hex(&pre_digest)),
             },
             "post": {
                 "identity": identity_json(&post_ref),
-                "digest": format!("sha256-jcs:{}", hex(&post_ref.digest)),
+                "digest": format!("sha256-jcs:{}", hex(&post_digest)),
             },
             "parameters": {},
             "result": null,
@@ -1069,12 +1068,12 @@ impl Twin {
         })
         .to_string()
         .into_bytes();
-        let (reference, bytes) = stamped(invocation_label, invocation_bytes);
+        let (reference, digest, bytes) = stamped(invocation_label, invocation_bytes);
         Invocation {
             documents: vec![
-                (reference.clone(), bytes),
-                (pre_ref, pre_bytes),
-                (post_ref, post_bytes),
+                (reference.clone(), digest, bytes),
+                (pre_ref, pre_digest, pre_bytes),
+                (post_ref, post_digest, post_bytes),
             ],
             reference,
         }
@@ -1164,7 +1163,7 @@ impl Twin {
             state_documents: invocation
                 .documents
                 .iter()
-                .map(|(reference, bytes)| document(reference, bytes))
+                .map(|(_, digest, bytes)| document(*digest, bytes))
                 .collect(),
             operation: self.operation(operation),
             invocation: invocation.reference.clone(),
@@ -1315,7 +1314,7 @@ impl Twin {
             .as_ref()
             .expect("the payload is built");
         // The anchor node stands in for any node other than the frame.
-        let other = payload.anchor;
+        let other = payload.anchor.clone();
         match tamper {
             Tamper::Nothing => {}
             Tamper::ClauseNode => packet.clause_node = Some(other),
@@ -1339,7 +1338,6 @@ fn label(name: &str) -> DocumentRef {
         identity: name.to_owned(),
         revision_namespace: "ns".to_owned(),
         revision: "1".to_owned(),
-        digest: [0; 32],
     }
 }
 
@@ -1352,7 +1350,7 @@ fn identity_json(reference: &DocumentRef) -> Value {
     })
 }
 
-fn stamped(label: DocumentRef, bytes: Vec<u8>) -> (DocumentRef, Vec<u8>) {
+fn stamped(label: DocumentRef, bytes: Vec<u8>) -> (DocumentRef, [u8; 32], Vec<u8>) {
     let digest = jcs_digest(&bytes);
-    (DocumentRef { digest, ..label }, bytes)
+    (label, digest, bytes)
 }
