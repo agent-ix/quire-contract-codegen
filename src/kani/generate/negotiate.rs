@@ -73,8 +73,8 @@ mod request_lookup_work {
 use std::collections::{BTreeMap, BTreeSet};
 
 use quire_contract_model::{
-    CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticId, CheckedSemanticNodeV2,
-    CheckedSourceMapEntry, CheckedTerm, ContractPackageV1, StateClauseKind,
+    CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticNodeV2, CheckedSourceMapEntry,
+    CheckedTerm, ContractPackageV1, StateClauseKind,
 };
 
 use crate::{
@@ -200,11 +200,12 @@ fn checked_lookup<'a, 'lookup>(
         .or_insert_with(|| CheckedLookup::new(package))
 }
 
-/// Reuse admitted scalar graph lookups across capability items, whose boxed packages may be
-/// distinct allocations of the same admitted identity.
+/// Reuse admitted scalar graph lookups within one borrowed package instance. The cache key
+/// keeps same-name packages with different locks or graphs separate.
 pub(crate) struct ScalarFormLookups<'a> {
-    checked: BTreeMap<CheckedSemanticId, BTreeMap<&'a CheckedNodeId, &'a CheckedSemanticNodeV2>>,
-    contract: BTreeMap<CheckedSemanticId, ContractLookup<'a>>,
+    checked:
+        BTreeMap<*const CheckedPackageV2, BTreeMap<&'a CheckedNodeId, &'a CheckedSemanticNodeV2>>,
+    contract: BTreeMap<*const ContractPackageV1, ContractLookup<'a>>,
 }
 
 impl<'a> ScalarFormLookups<'a> {
@@ -221,7 +222,7 @@ impl<'a> ScalarFormLookups<'a> {
         node_id: &CheckedNodeId,
     ) -> Option<&CheckedSemanticNodeV2> {
         self.checked
-            .entry(package.package_id().clone())
+            .entry(std::ptr::from_ref(package))
             .or_insert_with(|| {
                 let mut graph = BTreeMap::new();
                 for node in &package.graph().nodes {
@@ -235,7 +236,7 @@ impl<'a> ScalarFormLookups<'a> {
 
     fn contract(&mut self, package: &'a ContractPackageV1) -> &ContractLookup<'a> {
         self.contract
-            .entry(package.identity().clone())
+            .entry(std::ptr::from_ref(package))
             .or_insert_with(|| ContractLookup::new(package))
     }
 }
@@ -927,7 +928,9 @@ pub(crate) fn classify_scalar_form<'a>(
     node_id: &CheckedNodeId,
     lookups: &mut ScalarFormLookups<'a>,
 ) -> ScalarFormAssessment {
-    if contract.wire().package.source.package_id != *package.package_id() {
+    if contract.wire().package.source.name.as_ref() != package.name()
+        || contract.wire().package.source.lock != *package.lock()
+    {
         return ScalarFormAssessment::Invalid(InvalidObligationItem::ScalarSourceMismatch);
     }
     let items = match crate::core::contract_package::PackageItems::new(contract, positions) {
