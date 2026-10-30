@@ -7,12 +7,14 @@
 use crate::scratch_crate::{runtime_dependency, write_manifest, TemporaryDirectory};
 use ix_trace_rs::trace;
 use qsl_replay::{
-    call_site, object_reference_witness, replay, write_object_environment, ByteDigest, ClauseName,
-    DeclarationKey, DependencyInput, DigestDomain, DigestRecord, DomainPackageRef,
-    EnvironmentLabels, EnvironmentModel, EnvironmentObject, EnvironmentPopulation, EvaluatedValue,
-    Identifier, ModelNormalizationLimits, QualifiedName, ReplayLimits, ReplayRequestWire,
-    ReplayResult, ReplaySource, RequestTargetWire, ScalarLimits, SelectedObject, SnapshotValue,
-    SourceIdentity, StateEnvironment, WitnessValue,
+    call_site, evaluate_clause, object_reference_witness, replay, write_object_environment,
+    ByteDigest, ClauseEvaluation, ClauseEvaluationRequest, ClauseIncomplete, ClauseName,
+    ClauseObservation, ClauseRefusal, DeclarationKey, DependencyInput, DigestDomain, DigestRecord,
+    DomainPackageRef, EnvironmentLabels, EnvironmentModel, EnvironmentObject,
+    EnvironmentPopulation, EvaluatedValue, Identifier, ModelNormalizationLimits, ObservationLimits,
+    QualifiedName, ReplayLimits, ReplayRequestWire, ReplayResult, ReplaySource, RequestTargetWire,
+    ScalarLimits, SelectedObject, SnapshotValue, SourceIdentity, SpineLimits, StateEnvironment,
+    WitnessValue,
 };
 use quire_contract_codegen::{
     classify_kani_run, execute_kani_obligation, negotiate_kani_obligations, run_terminal_value,
@@ -1906,6 +1908,240 @@ fn precondition_collection_harness(fixture: &Emitted) -> KaniV2ClauseObligationH
         panic!("one operation-clause harness");
     };
     harness.clone()
+}
+
+fn native_collection_precondition(
+    fixture: &Emitted,
+    items: &[i64],
+    accounting: ScalarLimits,
+) -> ClauseEvaluation {
+    let object = SelectedObject {
+        population: POPULATION_ID.to_owned(),
+        key: "collection-subject".to_owned(),
+    };
+    let fields = json!({
+        "items": {"ordered-set": items.iter().map(ToString::to_string).map(|item| json!({"integer": item})).collect::<Vec<_>>()},
+        "flags": {"sequence": []},
+        "next": {"reference": {"population": POPULATION_ID, "key": object.key}},
+        "maybe": {"absent": {}},
+        "many": {"sequence": []},
+    });
+    let model_digest = DigestRecord::mint(DigestDomain::Sha256Jcs, fixture.model_digest);
+    let snapshot = json!({
+        "format": "quire.state.snapshot/v1",
+        "identity": {"authority": "agent-ix", "identity": "ix://ir268.test/collection/prestate", "revision_namespace": "git", "revision": "fixture"},
+        "observation": "pre",
+        "model": {"identity": "ir268.test/domain", "version": "1.0.0", "digest": format!("sha256-jcs:{}", model_digest.hex())},
+        "populations": [{"population": POPULATION_ID, "complete": true, "objects": [{"key": object.key, "type": NODE_ID, "fields": fields}]}],
+    });
+    evaluate_clause(ClauseEvaluationRequest {
+        source: SourceIdentity::new("agent-ix", "ir1091-clause.native", "git", "fixture"),
+        path: "ir1091-clause.native".to_owned(),
+        bytes: fixture.source.as_bytes().to_vec(),
+        packages: vec![fixture.model_bytes.clone()],
+        dependencies: DependencyInput::default(),
+        clause: "CollectionReady".to_owned(),
+        observation: ClauseObservation::PreCall {
+            snapshot: serde_json::to_vec(&snapshot).expect("bounded prestate snapshot"),
+            self_object: Some(object),
+            parameters: BTreeMap::new(),
+        },
+        limits: SpineLimits::default(),
+        observation_limits: ObservationLimits::default(),
+        accounting,
+    })
+}
+
+fn assert_collection_precondition_equivalence(fixture: &Emitted, cases: &[([i64; 3], i64, bool)]) {
+    let harness = precondition_collection_harness(fixture);
+    let marker = harness
+        .identity
+        .collection_precondition
+        .as_ref()
+        .expect("collection identity");
+    assert_eq!(
+        (
+            marker.collection.minimum_length,
+            marker.collection.maximum_length
+        ),
+        (2, 3)
+    );
+    assert_eq!(
+        marker.collection.collection_kind,
+        CollectionKindIdentity::OrderedSet
+    );
+
+    let parsed = syn::parse_file(&harness.rust.contents).expect("generated source parses");
+    let module = parsed
+        .items
+        .iter()
+        .find_map(|item| match item {
+            syn::Item::Mod(module) => module.content.as_ref().map(|(_, items)| items),
+            _ => None,
+        })
+        .expect("generated proof module");
+    let oracle_items = module
+        .iter()
+        .filter(|item| match item {
+            syn::Item::Enum(item) => item.ident == "ClauseEvaluation",
+            syn::Item::Fn(item) => item.sig.ident == "oracle_clause",
+            _ => false,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        oracle_items.len(),
+        2,
+        "generated enum and oracle are present"
+    );
+    let oracle_source = oracle_items
+        .iter()
+        .map(quote::ToTokens::to_token_stream)
+        .map(|tokens| tokens.to_string())
+        .collect::<Vec<_>>()
+        .join("\n");
+    let count = cases.len();
+    let case_source = cases
+        .iter()
+        .map(|(items, length, _)| format!("([{}, {}, {}], {length})", items[0], items[1], items[2]))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let scratch = TemporaryDirectory::new("ir1091-native-clause-equivalence");
+    let program = format!(
+        "mod generated {{ {oracle_source}\n pub fn observations() -> [bool; {count}] {{\n  let cases: [([i64; 3], i64); {count}] = [{case_source}];\n  cases.map(|(items, len)| match oracle_clause(&items, len) {{ ClauseEvaluation::Completed(value) => value, _ => panic!(\"generated clause did not complete\") }})\n }} }}\nfn main() {{ for value in generated::observations() {{ println!(\"{{value}}\"); }} }}\n"
+    );
+    let source = scratch.path.join("oracle.rs");
+    let executable = scratch.path.join("oracle");
+    fs::write(&source, program).expect("write generated oracle driver");
+    let compile = Command::new("rustc")
+        .args(["--edition=2021", "-o"])
+        .arg(&executable)
+        .arg(&source)
+        .output()
+        .expect("launch rustc");
+    assert!(
+        compile.status.success(),
+        "generated oracle compiles: {}",
+        String::from_utf8_lossy(&compile.stderr)
+    );
+    let run = Command::new(&executable)
+        .output()
+        .expect("run generated oracle");
+    assert!(
+        run.status.success(),
+        "generated oracle runs: {}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+    let generated = String::from_utf8(run.stdout).expect("Boolean output");
+    let generated = generated
+        .lines()
+        .map(str::parse::<bool>)
+        .collect::<Result<Vec<_>, _>>()
+        .expect("Boolean output lines");
+    assert_eq!(generated.len(), count);
+    for (index, (draw, length, expected)) in cases.iter().enumerate() {
+        let items = &draw[..usize::try_from(*length).expect("bounded collection length")];
+        let native = native_collection_precondition(fixture, items, replay_scalar_limits());
+        assert!(
+            matches!(&native, ClauseEvaluation::Completed(value) if value == expected),
+            "native clause at {items:?}: {native:?}"
+        );
+        assert_eq!(
+            generated[index], *expected,
+            "generated and native clauses agree at {items:?}"
+        );
+    }
+}
+
+#[trace("FR-015-AC-96", "FR-015-AC-99", "TC-025")]
+#[test]
+fn collection_precondition_generated_oracle_agrees_with_native_clause_evaluation() {
+    let fixture = precondition_collection_fixture("exists(item in self.items: item = 3)");
+    assert_collection_precondition_equivalence(
+        &fixture,
+        &[
+            ([0, 1, 0], 2, false),
+            ([2, 3, 0], 2, true),
+            ([0, 1, 3], 2, false),
+            ([0, 1, 3], 3, true),
+        ],
+    );
+
+    let incomplete = native_collection_precondition(
+        &fixture,
+        &[2, 3],
+        ScalarLimits {
+            work_units: 0,
+            ..replay_scalar_limits()
+        },
+    );
+    assert!(
+        matches!(
+            &incomplete,
+            ClauseEvaluation::Incomplete(ClauseIncomplete::Accounting(_))
+        ),
+        "{incomplete:?}"
+    );
+    let refused = native_collection_precondition(&fixture, &[3, 3], replay_scalar_limits());
+    assert!(
+        matches!(
+            &refused,
+            ClauseEvaluation::Refused(ClauseRefusal::Coded {
+                code: "invalid_runtime_input",
+                cause: "duplicate-member",
+                ..
+            })
+        ),
+        "{refused:?}"
+    );
+
+    let mut wide_document = model_document_with_step();
+    let node = wide_document["types"]
+        .as_array_mut()
+        .expect("model types")
+        .iter_mut()
+        .find(|ty| ty.get("identity").and_then(Value::as_str) == Some(NODE_ID))
+        .expect("selected node");
+    let items = node["fields"]
+        .as_array_mut()
+        .expect("model fields")
+        .iter_mut()
+        .find(|field| field.get("name").and_then(Value::as_str) == Some("items"))
+        .expect("selected field");
+    items["multiplicity"]["lower"] = json!(2);
+    items["multiplicity"]["unique"] = json!(true);
+    let small_int = wide_document["types"]
+        .as_array_mut()
+        .expect("model types")
+        .iter_mut()
+        .find(|ty| ty.get("identity").and_then(Value::as_str) == Some(SMALL_ID))
+        .expect("selected integer type");
+    small_int["constraints"][0]["operands"]["value"] = json!(i64::MIN.to_string());
+    small_int["constraints"][1]["operands"]["value"] = json!(i64::MAX.to_string());
+    let wide =
+        precondition_fixture_with_model(wide_document, "exists(item in self.items: item = 3)");
+    let wide_harness = precondition_collection_harness(&wide);
+    assert_eq!(
+        wide_harness
+            .identity
+            .collection_precondition
+            .as_ref()
+            .expect("wide collection identity")
+            .collection
+            .element,
+        CollectionElementIdentity::Integer {
+            minimum: i64::MIN,
+            maximum: i64::MAX,
+        }
+    );
+    assert_collection_precondition_equivalence(
+        &wide,
+        &[
+            ([i64::MIN, i64::MAX, 0], 2, false),
+            ([4_294_967_299_i64, 0, 1], 2, false),
+            ([i64::MIN, 3, i64::MAX], 2, true),
+            ([i64::MAX, 3, i64::MIN], 3, true),
+        ],
+    );
 }
 
 #[trace("FR-015-AC-99", "FR-029-AC-11", "TC-025", "TC-040")]
