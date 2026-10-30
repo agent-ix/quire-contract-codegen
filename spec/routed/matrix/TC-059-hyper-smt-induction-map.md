@@ -49,21 +49,22 @@ do not claim coverage by the existing HP-2 pair tests.
    resource limit is handed to QSL FR-182 V-7 as incomplete
    (FR-045-AC-2, AC-3).
 5. Using a recompiled refinement with seven step rows, take row `r` from
-   QSpec FR-375's canonically ordered `steps` array, not from source row
-   position. Obtain `Initial` and each `Step { row: r }` query from FR-315.
+   its `steps` array in authored declaration order under QSL FR-492 as
+   amended by QSL #1864. Obtain `Initial` and each `Step { row: r }` query
+   from FR-315.
    Observe the selected solver's stdin for every invocation.
    Assert one typed `Base` and seven typed `Step` records for rows 0 through
    6, with distinct attempts and matching refinement, subjects, role, row
    and exact query bytes. Permute the source step rows without changing their
-   contents and recompile. Select a permutation for which at least one named
-   row has a source position different from its canonical `steps` ordinal
-   after recompilation; confirm those two positions before testing the record.
-   Assert the canonical `steps` array, each row's FR-315 query bytes and CG's
-   role/row bindings remain equal across the two compilations; each new solver
-   invocation still has its own attempt identity. Assert that the correctly
-   labelled record of the selected row passes association validation. In an
-   otherwise valid collection, relabel only that selected record with its source
-   position and assert typed refusal and no handoff. Repeat with a zero-step
+   contents and recompile. Select a permutation that moves at least one named
+   row. Assert that the recompiled `steps` array follows the new declaration
+   order and that each named row's `Step { row }` label and exact FR-315 query
+   association follow its new position; each new solver invocation still has
+   its own attempt identity. Assert that the correctly labelled records pass
+   association validation. In an otherwise valid collection, exchange the
+   selected moved row's label with the label at its former position while
+   retaining each record's query bytes, and assert typed association refusal
+   and no handoff. Repeat with a zero-step
    refinement and assert that only `Base` is required. Change one query byte
    and exchange a base and step role, then assert no handoff (FR-045-AC-4).
 6. Return completed `Unsat` and distinct Alethe proof byte strings for the
