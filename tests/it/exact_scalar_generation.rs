@@ -132,13 +132,7 @@ pub(super) fn symbol(oracles: &ExactScalarOracles, code: u32) -> String {
     }
 }
 
-/// The generator's current output for the whole corpus request, which
-/// `exact_scalar_agreement` builds and executes.
-pub(super) fn corpus_oracles() -> ExactScalarOracles {
-    let (package, ids) = corpus_package().admit_resolved();
-    generate(&package, &resolved_items(&golden_items(), &ids))
-}
-
+/// Generate every bounded, reader-admitted scalar cohort for direct agreement.
 pub(super) fn corpus_cohort_oracles() -> Vec<ExactScalarOracles> {
     corpus_cohorts()
         .into_iter()
@@ -545,17 +539,27 @@ fn tc_024_generation_is_byte_deterministic_across_runs_and_request_orders() {
 #[trace("TC-001", "NFR-002-AC-1", "NFR-002-AC-2")]
 #[test]
 fn tc_024_every_scalar_family_generates_one_oracle_calling_its_runtime_operator() {
-    let oracles = generate(&corpus_package().admit(), &golden_items());
-    let lib = contents(&oracles, "src/lib.rs");
-    let subjects = oracles
-        .claim_map
-        .items
-        .iter()
-        .filter(|claim| matches!(&claim.result, ClaimDisposition::Generated(_)))
-        .map(|claim| format!("{:?}", claim.node_id))
-        .collect::<Vec<String>>();
-    let subject_refs = subjects.iter().map(String::as_str).collect::<Vec<_>>();
-    crate::generated_headers::assert_header("src/lib.rs", lib, &subject_refs);
+    let mut bodies = BTreeMap::new();
+    let mut generated_count = 0;
+    for oracles in corpus_cohort_oracles() {
+        let lib = contents(&oracles, "src/lib.rs");
+        let subjects = oracles
+            .claim_map
+            .items
+            .iter()
+            .filter(|claim| matches!(&claim.result, ClaimDisposition::Generated(_)))
+            .map(|claim| format!("{:?}", claim.node_id))
+            .collect::<Vec<String>>();
+        let subject_refs = subjects.iter().map(String::as_str).collect::<Vec<_>>();
+        crate::generated_headers::assert_header("src/lib.rs", lib, &subject_refs);
+        for claim in &oracles.claim_map.items {
+            if let ClaimDisposition::Generated(generated) = &claim.result {
+                let body = function_body(lib, &generated.symbol).to_owned();
+                assert!(bodies.insert(claim.node_id.clone(), body).is_none());
+            }
+        }
+        generated_count += lib.matches("\npub fn oracle_").count();
+    }
     let mut calls = vec![
         (
             1001,
@@ -727,27 +731,23 @@ fn tc_024_every_scalar_family_generates_one_oracle_calling_its_runtime_operator(
         ));
     }
     calls.sort();
-    let generated = dispositions(&oracles)
-        .into_iter()
-        .filter(|(_, result)| matches!(result, ClaimDisposition::Generated(_)))
-        .map(|(node_id, _)| node_id)
-        .collect::<Vec<_>>();
+    let generated = bodies.keys().cloned().collect::<Vec<_>>();
     let mut expected = calls
         .iter()
-        .map(|(code, _)| claim_id(&oracles, *code))
+        .map(|(code, _)| code_id(*code))
         .collect::<Vec<_>>();
     expected.sort();
     assert_eq!(generated, expected, "exactly the corpus is generated");
     assert_eq!(corpus().len(), calls.len());
     for (code, call) in &calls {
-        let body = function_body(lib, &symbol(&oracles, *code));
+        let body = &bodies[&code_id(*code)];
         assert!(
             body.contains(call.as_str()),
             "{code} does not call `{call}`:\n{body}"
         );
         assert!(body.contains("meter"), "{code} does not meter");
     }
-    assert_eq!(lib.matches("\npub fn oracle_").count(), calls.len());
+    assert_eq!(generated_count, calls.len());
 }
 
 /// The text of one generated function, from its signature to the closing brace.
@@ -1210,7 +1210,7 @@ fn checks_no_bound(operation: &ExactScalarOperation) -> bool {
 #[trace("FR-014-AC-4", "TC-024")]
 #[test]
 fn tc_024_claim_map_entries_ascend_by_structural_node_key() {
-    let package = corpus_package().admit();
+    let package = corpus_package_for_codes(&[1001, 1002]).admit();
     let other_domain = quire_contract_model::CheckedNodeId {
         package: "a-earlier".into(),
         path: vec![quire_contract_model::CheckedNodePathSegment::Name(
@@ -1218,7 +1218,10 @@ fn tc_024_claim_map_entries_ascend_by_structural_node_key() {
         )],
         ordinal: 0,
     };
-    let mut items = golden_items();
+    let mut items = golden_items()
+        .into_iter()
+        .filter(|item| [code_id(1001), code_id(1002)].contains(&item.node_id))
+        .collect::<Vec<_>>();
     items.push(ExactScalarItem {
         node_id: other_domain.clone(),
         operation: package::integer_add(),
@@ -1253,7 +1256,7 @@ fn tc_024_claim_map_entries_ascend_by_structural_node_key() {
 #[trace("FR-014-AC-13", "TC-024")]
 #[test]
 fn tc_024_a_mislabelled_descriptor_is_refused_where_bounds_disagree_and_marked_otherwise() {
-    let package = corpus_package().admit();
+    let package = corpus_package_for_codes(&[1014, 1011]).admit();
     let floor = |lower, upper| ExactScalarOperation::IntegerDivision {
         profile: DivisionProfile::Floor,
         domain: bounded(lower, upper),
@@ -1321,7 +1324,7 @@ fn tc_024_a_mislabelled_descriptor_is_refused_where_bounds_disagree_and_marked_o
 #[trace("FR-014-AC-12", "FR-038-AC-3", "TC-024")]
 #[test]
 fn tc_024_operator_confusion_within_one_shape_is_not_silently_confirmed() {
-    let package = corpus_package().admit();
+    let package = corpus_package_for_codes(&[1004]).admit();
     let mismatched = generate(
         &package,
         &[ExactScalarItem {
@@ -2132,7 +2135,14 @@ fn tc_024_generated_source_over_the_ceiling_is_refused_whole() {
 #[trace("FR-014-AC-3", "FR-014-AC-9", "TC-024")]
 #[test]
 fn tc_024_literal_operands_are_classified_by_value_kind_and_constants_stop_typed() {
-    let oracles = generate(&corpus_package().admit(), &golden_items());
+    let package = corpus_package_for_codes(&[LITERAL_OPERAND]).admit();
+    let oracles = generate(
+        &package,
+        &golden_items()
+            .into_iter()
+            .filter(|item| item.node_id == code_id(LITERAL_OPERAND))
+            .collect::<Vec<_>>(),
+    );
     let lib = contents(&oracles, "src/lib.rs");
     // Node 1003's right operand is an integer literal, so it type-checks as an
     // integer and the subtraction generates like any other.
@@ -2147,7 +2157,7 @@ fn tc_024_literal_operands_are_classified_by_value_kind_and_constants_stop_typed
     );
 
     // The reader refuses the same shape with a text literal at the operand's type.
-    let mut builder = corpus_package();
+    let mut builder = corpus_package_for_codes(&[V_INTEGER]);
     builder.application_bounded(
         3002,
         "expression",
@@ -2787,7 +2797,7 @@ fn tc_024_ac25_a_plain_typed_reference_operand_beside_bounded_typing_requires_a_
     ));
     // A bounded parameter beside a plain-typed reference to a `value` node whose body is a literal
     // is a constant operand, not a plain-typed one (FR-014-AC-26), so it generates.
-    let (package, ids) = corpus_package().admit_resolved();
+    let (package, ids) = corpus_package_for_codes(&[BOUNDED_OPERAND]).admit_resolved();
     let bounded_operand = ids.resolve(&code_id(BOUNDED_OPERAND));
     let oracles = generate(
         &package,
@@ -3619,12 +3629,13 @@ fn tc_024_ac39_scalar_generator_and_generated_crates_hold_no_panic_site() {
             "{path}"
         );
     }
-    let oracles = corpus_oracles();
-    assert_eq!(
-        panic_tokens_in(contents(&oracles, "src/lib.rs")),
-        Vec::<String>::new(),
-        "the TC-024 corpus crate"
-    );
+    for oracles in corpus_cohort_oracles() {
+        assert_eq!(
+            panic_tokens_in(contents(&oracles, "src/lib.rs")),
+            Vec::<String>::new(),
+            "a TC-024 corpus cohort"
+        );
+    }
 }
 
 /// The non-test code of the three oracle generators reads no `failed` record's limit kind: it
