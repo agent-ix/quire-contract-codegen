@@ -222,9 +222,17 @@ pub(crate) fn collection_source_digest(source: &str) -> String {
         .collect()
 }
 
+/// The one message identifying a collection precondition's totality assertion in Kani output.
+pub(crate) const COLLECTION_PRECONDITION_TOTALITY_MESSAGE: &str =
+    "the selected precondition completes a Boolean";
+
 /// Exact generated assertion bound to a collection precondition's Kani check location.
-pub(crate) const COLLECTION_PRECONDITION_TOTALITY_ASSERTION: &str =
-    "assert!(matches!(outcome, ClauseEvaluation::Completed(_)), \"the selected precondition completes a Boolean\");";
+pub(crate) fn collection_precondition_totality_assertion() -> String {
+    format!(
+        "assert!(matches!(outcome, ClauseEvaluation::Completed(_)), {:?});",
+        COLLECTION_PRECONDITION_TOTALITY_MESSAGE
+    )
+}
 
 /// Generated V2 clause harness, sealed against caller edits before execution.
 #[derive(Clone, Debug, Eq, PartialEq)]

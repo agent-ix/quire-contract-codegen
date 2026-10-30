@@ -38,8 +38,7 @@ use crate::kani::{
     abi::{KaniBindingRole, KaniPrimitiveType},
     identity::{
         CollectionElementIdentity, CollectionKindIdentity, CollectionObligationIdentity,
-        KaniV2ClauseObligationHarness, ObligationBinding,
-        COLLECTION_PRECONDITION_TOTALITY_ASSERTION,
+        KaniV2ClauseObligationHarness, ObligationBinding, COLLECTION_PRECONDITION_TOTALITY_MESSAGE,
     },
     output::playback::{Playback, PlaybackRefusal, WitnessDecodeLimits},
     terminal::ReplaySettlement,
@@ -73,6 +72,12 @@ impl From<PlaybackRefusal> for DecodeFailure {
             source_id: refusal.source_id,
             context: refusal.context,
         }
+    }
+}
+
+impl<'a> From<&'a DecodeFailure> for ReplaySettlement<'a> {
+    fn from(_: &'a DecodeFailure) -> Self {
+        Self::CgDefect
     }
 }
 
@@ -188,10 +193,7 @@ pub fn decode_v2_clause_falsification(
         // A falsification of a different assertion is not evidence about totality.
         // The source digest and line are checked before launch; the playback must also name
         // the generated assertion's message before its values can be settled.
-        let message = "the selected precondition completes a Boolean";
-        if !COLLECTION_PRECONDITION_TOTALITY_ASSERTION.contains(message)
-            || !playback.matches_generated_assertion_message(message)
-        {
+        if !playback.matches_generated_assertion_message(COLLECTION_PRECONDITION_TOTALITY_MESSAGE) {
             return Err(DecodeFailure::new(
                 "cg_witness_assertion_mismatch",
                 identity.harness_symbol.as_str(),
@@ -244,7 +246,9 @@ pub fn decode_v2_clause_falsification(
 /// # Errors
 ///
 /// Returns [`DecodeFailure`] if this is not a collection precondition or its playback does not
-/// match the bound totality assertion and the admitted collection domain.
+/// match the bound totality assertion and the admitted collection domain. A caller with a
+/// falsified run settles that error through [`ReplaySettlement::from`] before calling
+/// [`crate::run_terminal_value`], rather than omitting the settlement.
 pub fn settle_v2_collection_precondition_falsification(
     harness: &KaniV2ClauseObligationHarness,
     playback: &Playback<'_>,

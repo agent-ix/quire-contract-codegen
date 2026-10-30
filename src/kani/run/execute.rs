@@ -446,7 +446,7 @@ fn require_in_crate(
 fn bound_totality_line(library: &str, source: &str, artifact_line: u32) -> Option<u32> {
     let source_line = usize::try_from(artifact_line.checked_sub(1)?).ok()?;
     if source.lines().nth(source_line)?.trim()
-        != crate::kani::identity::COLLECTION_PRECONDITION_TOTALITY_ASSERTION
+        != crate::kani::identity::collection_precondition_totality_assertion()
     {
         return None;
     }
@@ -1360,7 +1360,7 @@ mod tests {
     #[trace("FR-017-AC-13", "TC-027")]
     #[test]
     fn collection_totality_binding_rejects_foreign_or_missing_checks() {
-        let assertion = crate::kani::identity::COLLECTION_PRECONDITION_TOTALITY_ASSERTION;
+        let assertion = crate::kani::identity::collection_precondition_totality_assertion();
         let source = format!("mod proof {{\n    {assertion}\n}}\n");
         let library = format!("// prefix\n{source}");
         assert_eq!(bound_totality_line(&library, &source, 2), Some(3));

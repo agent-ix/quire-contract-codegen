@@ -520,7 +520,7 @@ pub(super) fn render_collection_precondition(
     let (spec, collection) = prepare_collection(request, lowered)?;
     let spec = spec.into_collection_precondition()?;
     let rust = render_collection_artifact(&spec, &collection)?;
-    let assertion = crate::kani::identity::COLLECTION_PRECONDITION_TOTALITY_ASSERTION;
+    let assertion = crate::kani::identity::collection_precondition_totality_assertion();
     let lines = rust
         .contents
         .lines()

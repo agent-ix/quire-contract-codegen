@@ -1908,6 +1908,76 @@ fn precondition_collection_harness(fixture: &Emitted) -> KaniV2ClauseObligationH
     harness.clone()
 }
 
+#[trace("FR-015-AC-99", "FR-029-AC-11", "TC-025", "TC-040")]
+#[test]
+fn collection_totality_playback_binds_the_generated_assertion_in_the_default_lane() {
+    let fixture = precondition_collection_fixture("forall(item in self.items: item >= 0)");
+    let harness = precondition_collection_harness(&fixture);
+    let entries = [2_i64, 0, 1, 0]
+        .iter()
+        .map(|value| {
+            let bytes = value
+                .to_le_bytes()
+                .iter()
+                .map(u8::to_string)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("// {value}\nvec![{bytes}],")
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let transcript = format!(
+        "/// Test generated for harness `{}::{}`\n/// Check for `assertion`: \"\"the selected precondition completes a Boolean\"\"\nlet concrete_vals: Vec<Vec<u8>> = vec![\n{entries}\n];",
+        harness.identity.module_symbol.as_str(),
+        harness.identity.harness_symbol.as_str(),
+    );
+    let limits = quire_contract_codegen::WitnessDecodeLimits {
+        bytes: 4096,
+        values: 4,
+    };
+    let playback = quire_contract_codegen::parse_assertion_playback(
+        &transcript,
+        harness.identity.harness_symbol.as_str(),
+        harness.identity.module_symbol.as_str(),
+        limits.bytes,
+        limits.values,
+    )
+    .expect("synthetic Kani playback parses");
+    let (witness, settlement) =
+        settle_v2_collection_precondition_falsification(&harness, &playback, limits)
+            .expect("the bound assertion and typed receiver settle");
+    assert_eq!(
+        witness,
+        vec![(
+            "items".to_owned(),
+            WitnessValue::OrderedSet(vec![WitnessValue::Integer(0), WitnessValue::Integer(1)])
+        )]
+    );
+    assert!(matches!(
+        settlement,
+        quire_contract_codegen::ReplaySettlement::CgDefect
+    ));
+    let changed = transcript.replace(
+        "the selected precondition completes a Boolean",
+        "a different assertion",
+    );
+    let playback = quire_contract_codegen::parse_assertion_playback(
+        &changed,
+        harness.identity.harness_symbol.as_str(),
+        harness.identity.module_symbol.as_str(),
+        limits.bytes,
+        limits.values,
+    )
+    .expect("the different assertion still parses");
+    let error = settle_v2_collection_precondition_falsification(&harness, &playback, limits)
+        .expect_err("a different assertion is no totality witness");
+    assert_eq!(error.code, "cg_witness_assertion_mismatch");
+    assert!(matches!(
+        quire_contract_codegen::ReplaySettlement::from(&error),
+        quire_contract_codegen::ReplaySettlement::CgDefect
+    ));
+}
+
 #[trace(
     "FR-015-AC-7",
     "FR-015-AC-53",
@@ -2250,8 +2320,10 @@ fn precondition_collection_source_refusals_emit_no_harness() {
     "FR-015-AC-53",
     "FR-015-AC-99",
     "FR-017-AC-13",
+    "FR-029-AC-11",
     "TC-025",
-    "TC-027"
+    "TC-027",
+    "TC-040"
 )]
 #[test]
 #[ignore = "kani lane: run serially through make kani-gate"]
@@ -2409,18 +2481,20 @@ fn real_kani_collection_precondition_distinguishes_totality_from_satisfiability(
             4,
         )
         .expect("mutated assertion text remains a valid playback");
+        let decode_error = settle_v2_collection_precondition_falsification(
+            &harness,
+            &wrong_playback,
+            quire_contract_codegen::WitnessDecodeLimits {
+                bytes: 64 * 1024,
+                values: 4,
+            },
+        )
+        .unwrap_err();
+        assert_eq!(decode_error.code, "cg_witness_assertion_mismatch");
         assert_eq!(
-            settle_v2_collection_precondition_falsification(
-                &harness,
-                &wrong_playback,
-                quire_contract_codegen::WitnessDecodeLimits {
-                    bytes: 64 * 1024,
-                    values: 4,
-                },
-            )
-            .unwrap_err()
-            .code,
-            "cg_witness_assertion_mismatch"
+            run_terminal_value(&evidence, Some((&decode_error).into()))
+                .expect("a typed decode refusal settles the falsified run"),
+            qsl_replay::TerminalValue::Failed
         );
     }
 }

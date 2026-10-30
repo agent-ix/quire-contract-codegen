@@ -438,6 +438,52 @@ fn qsl_parameter_precondition_is_a_separate_v2_cover_obligation() {
     assert!(harness.rust.contents.contains(&oracle.source));
 }
 
+#[trace("FR-029-AC-11", "TC-040")]
+#[test]
+fn ordinary_v2_clause_cannot_settle_as_a_collection_totality_failure() {
+    let (package, clause) =
+        Twin::with_bounded_other_precondition().emitted_package("OtherBelowLimit");
+    let outcome = negotiate(&[ObligationItem::V2Clause {
+        package: &package,
+        clause: &clause,
+        dependencies: None,
+    }]);
+    let KaniObligationOutcome::Emitted {
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("ordinary V2 clause is emitted");
+    };
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("one ordinary V2 clause harness");
+    };
+    assert!(harness.identity.collection_precondition.is_none());
+    let transcript = format!(
+        "/// Test generated for harness `{}::{}`\n/// Check for `assertion`: \"ordinary clause\"\nlet concrete_vals: Vec<Vec<u8>> = vec![];",
+        harness.identity.module_symbol.as_str(),
+        harness.identity.harness_symbol.as_str(),
+    );
+    let playback = quire_contract_codegen::parse_assertion_playback(
+        &transcript,
+        harness.identity.harness_symbol.as_str(),
+        harness.identity.module_symbol.as_str(),
+        4096,
+        0,
+    )
+    .expect("synthetic assertion parses");
+    let error = quire_contract_codegen::settle_v2_collection_precondition_falsification(
+        harness,
+        &playback,
+        quire_contract_codegen::WitnessDecodeLimits {
+            bytes: 4096,
+            values: 0,
+        },
+    )
+    .expect_err("an ordinary clause cannot be treated as collection totality");
+    assert_eq!(error.code, "cg_witness_not_collection_precondition");
+}
+
 /// A malformed declaration rejects the V2 request before any harness is exposed.
 #[trace("FR-015-AC-22", "FR-015-AC-44", "TC-005", "TC-025")]
 #[test]

@@ -317,7 +317,7 @@ fn render_collection(
             ),
             String::new(),
             format!("                 let outcome = oracle_clause(&{item_name}, {length_name});\n"),
-            crate::kani::identity::COLLECTION_PRECONDITION_TOTALITY_ASSERTION.to_owned(),
+            crate::kani::identity::collection_precondition_totality_assertion(),
         )
     } else {
         (
