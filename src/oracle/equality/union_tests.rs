@@ -53,7 +53,7 @@ fn closure(package: &CheckedPackageV2, context: &qsl_replay::AdmittedContext) ->
     let mut closure = TypeClosure::default();
     assert!(
         matches!(resolve_type(Some(context), &graph, &BTreeMap::new(), &mut closure, &id),
-        Ok(ValueType::Composite(key)) if key == root.key())
+        Ok(ValueType::Composite(key)) if &key == root.key())
     );
     closure
 }
@@ -98,7 +98,7 @@ fn union_closure_seals_owner_members_and_admits_each_nested_payload() {
     let payload = declaration(&context, "Payload");
     let record = environment
         .record(
-            payload.key(),
+            payload.key().clone(),
             vec![(
                 "flag",
                 exact::FieldValue::Present(exact::Value::Boolean(true)),
@@ -113,18 +113,21 @@ fn union_closure_seals_owner_members_and_admits_each_nested_payload() {
             actual.node(),
             "type handle and settled node differ"
         );
-        assert_eq!(environment.union_key(actual.key()), Some(actual.node()));
+        assert_eq!(
+            environment.union_key(actual.key().clone()),
+            Some(actual.node().clone())
+        );
         let members = actual.union_members().expect("owner Union");
         assert_eq!(
-            members
-                .iter()
-                .map(|m| m.identifier().as_str())
-                .collect::<Vec<_>>(),
+            members.iter().map(|m| m.identifier()).collect::<Vec<_>>(),
             ["Empty", "Flag", "Boxed"]
         );
-        assert_eq!(members[2].payload(), [ValueType::Composite(payload.key())]);
+        assert_eq!(
+            members[2].payload(),
+            [ValueType::Composite(payload.key().clone())]
+        );
         let CompositeShape::Union(rebuilt) = environment
-            .composite(actual.key())
+            .composite(actual.key().clone())
             .expect("closure")
             .shape()
         else {
@@ -141,13 +144,13 @@ fn union_closure_seals_owner_members_and_admits_each_nested_payload() {
             vec![record.clone()],
         ]) {
             let value = environment
-                .union(actual.key(), member.variant(), values.clone())
+                .union(actual.key().clone(), member.variant(), values.clone())
                 .expect("every member constructs");
             let independent = exact::UnionValue::from_admitted(member.member().clone(), values);
             assert!(environment
-                .admits(&ValueType::Composite(actual.key()), &independent)
+                .admits(&ValueType::Composite(actual.key().clone()), &independent)
                 .expect("owner binding admitted"));
-            let operand = EqualityOperand::typed(ValueType::Composite(actual.key()));
+            let operand = EqualityOperand::typed(ValueType::Composite(actual.key().clone()));
             let checked = environment
                 .check_equality(
                     sv::EqualityOperator::Equal,
@@ -173,15 +176,15 @@ fn union_closure_seals_owner_members_and_admits_each_nested_payload() {
     assert_ne!(shape.key(), other.key());
     assert_ne!(shape.node(), other.node());
     assert!(!environment
-        .admits(&ValueType::Composite(other.key()), &nested[0])
+        .admits(&ValueType::Composite(other.key().clone()), &nested[0])
         .expect("membership runs"));
     let wrap = declaration(&context, "Wrap");
     let members = wrap.union_members().expect("Wrap members");
     assert_eq!(
         members[2].payload(),
         [
-            ValueType::Composite(shape.key()),
-            ValueType::Composite(other.key())
+            ValueType::Composite(shape.key().clone()),
+            ValueType::Composite(other.key().clone())
         ]
     );
     for (member, values) in members.iter().zip([
@@ -190,10 +193,10 @@ fn union_closure_seals_owner_members_and_admits_each_nested_payload() {
         vec![nested[2].clone(), nested[5].clone()],
     ]) {
         let value = environment
-            .union(wrap.key(), member.variant(), values)
+            .union(wrap.key().clone(), member.variant(), values)
             .expect("nested Union payload");
         assert!(environment
-            .admits(&ValueType::Composite(wrap.key()), &value)
+            .admits(&ValueType::Composite(wrap.key().clone()), &value)
             .expect("nested membership"));
     }
     let unsealed = TypeEnvironment::new(closure.composites.values().cloned(), [])
@@ -201,7 +204,7 @@ fn union_closure_seals_owner_members_and_admits_each_nested_payload() {
     assert!(
         unsealed
             .union(
-                shape.key(),
+                shape.key().clone(),
                 shape.union_members().unwrap()[0].variant(),
                 vec![]
             )
@@ -225,7 +228,7 @@ fn union_lookup_and_seal_faults_keep_typed_causes_before_equality() {
                 == Some(shape.node())
         })
         .unwrap();
-    let unchanged = environment(&healthy).union_key(shape.key());
+    let unchanged = environment(&healthy).union_key(shape.key().clone());
     for form in ["record", "tuple"] {
         let mut node = original.clone();
         node.semantic_form = form.into();
@@ -319,8 +322,8 @@ fn union_lookup_and_seal_faults_keep_typed_causes_before_equality() {
     );
     // Swap a genuine owner declaration under a different handle: no forged member/key.
     let mut bindings = healthy.composite_bindings.clone();
-    bindings.get_mut(&shape.key()).unwrap().declaration = declaration(&context, "Wrap").clone();
-    bindings.remove(&declaration(&context, "Wrap").key());
+    bindings.get_mut(shape.key()).unwrap().declaration = declaration(&context, "Wrap").clone();
+    bindings.remove(declaration(&context, "Wrap").key());
     let failure = admit_environment(
         None,
         healthy.composites.values().cloned().collect(),
@@ -338,7 +341,7 @@ fn union_lookup_and_seal_faults_keep_typed_causes_before_equality() {
         ))
     ));
     assert_eq!(
-        environment(&healthy).union_key(shape.key()),
+        environment(&healthy).union_key(shape.key().clone()),
         unchanged,
         "failed item leaves healthy closure unchanged"
     );
