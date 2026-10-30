@@ -56,9 +56,9 @@ fn runtime_node_key(id: &CheckedNodeId) -> NodeKey {
 }
 
 /// Structural equality reaching IEEE is reader-ineligible.
-#[trace("FR-037-AC-1", "TC-052")]
+#[trace("FR-018-AC-6", "TC-029")]
 #[test]
-fn tc_052_nested_ieee_equality_is_refused_by_reader() {
+fn tc_029_nested_ieee_equality_is_refused_by_reader() {
     let (result, wire, ids) = nested_ieee_package().read_resolved();
     let node_id = ids.resolve(&code_id(E_NESTED_IEEE));
     let position = wire["semantic_graph"]["nodes"]
@@ -90,9 +90,9 @@ fn tc_052_nested_ieee_equality_is_refused_by_reader() {
 }
 
 /// A sequence body has one element reference.
-#[trace("FR-037-AC-1", "TC-052")]
+#[trace("TC-029")]
 #[test]
-fn tc_052_two_reference_sequence_body_is_refused_by_reader() {
+fn tc_029_two_reference_sequence_body_is_refused_by_reader() {
     let (_, mut wire, ids) = corpus_package().read_resolved();
     let node_id = ids.resolve(&code_id(SEQ_R_FLOAT));
     let bound = ids.resolve(&code_id(CB_SMALL));
@@ -1111,7 +1111,7 @@ fn tc_029_ac6_ieee_at_any_depth_is_operator_ineligible() {
     };
     // Reconstruct SEQ_R_FLOAT (a sequence of R_FLOAT { f: Float64 }) exactly
     // as the runtime environment sees it, and confirm the reader refusal
-    // asserted by `tc_052_nested_ieee_equality_is_refused_by_reader`
+    // asserted by `tc_029_nested_ieee_equality_is_refused_by_reader`
     // agrees with an independent, direct `contains_ieee` call over that
     // reconstructed type at both its depths (the record field, and the
     // sequence wrapping it) rather than merely riding on the same code path.

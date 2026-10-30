@@ -432,7 +432,7 @@ fn original_literal_operands_retain_graph_children_and_empty_bounds() {
                 };
                 assert_eq!(entries.entries().len(), 1);
                 assert!(entries.entries().iter().all(
-                    |entry| matches!(entry.domain(), DomainKey::Node { node, .. } if *node == child)
+                    |entry| matches!(entry.domain(), DomainKey::Node { node, .. } if node == child)
                 ));
             }
         }
