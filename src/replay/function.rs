@@ -117,6 +117,8 @@ pub enum SpineReplayError {
     Identity(ObligationIdentityError),
     /// The producer packet did not admit or bind to the selected function claim.
     Packet(FunctionPacketError),
+    /// The replay request changed an admitted dependency identity or source selection.
+    DependencySelectionMismatch(DependencySelectionMismatch),
 }
 
 impl fmt::Display for SpineReplayError {
@@ -148,6 +150,7 @@ impl fmt::Display for SpineReplayError {
             }
             Self::Identity(cause) => write!(f, "the obligation identity was not built: {cause}"),
             Self::Packet(cause) => write!(f, "the producer packet was refused: {cause:?}"),
+            Self::DependencySelectionMismatch(cause) => cause.fmt(f),
         }
     }
 }
@@ -186,7 +189,9 @@ pub fn replay_falsification(
         values,
         parameters,
         |source| Ok(request(source.into())),
-        &mut |wire| replay(wire, replay_limits),
+        &mut |wire| {
+            replay(wire, replay_limits).map_err(|cause| SpineReplayError::Refused(Box::new(cause)))
+        },
     )
 }
 
@@ -215,7 +220,7 @@ pub(crate) fn render_witness(
 }
 
 /// What executes a built request: [`qsl_replay::replay`], or a caller's wrapper around it.
-type Execute<'a> = &'a mut dyn FnMut(ReplayRequestWire) -> Result<ReplayResult, ReplayRefusal>;
+type Execute<'a> = &'a mut dyn FnMut(ReplayRequestWire) -> Result<ReplayResult, SpineReplayError>;
 
 fn replay_falsification_through(
     harness: &str,
@@ -282,7 +287,7 @@ fn replay_falsification_through(
             | ReplayResult::ObservedTemporal(_)
             | ReplayResult::ModelGraph(_),
         ) => Err(SpineReplayError::WrongArm),
-        Err(refusal) => Err(SpineReplayError::Refused(Box::new(refusal))),
+        Err(refusal) => Err(refusal),
     }
 }
 
@@ -504,11 +509,36 @@ impl ReplayInputs {
 #[derive(Clone, Debug)]
 pub struct ReplayPackage {
     inputs: ReplayInputs,
+    /// The exact source refs QSL admitted for each dependency, retained apart from request creation.
+    selected_dependencies: Vec<DependencyEntryWire>,
     selection: QualifiedName,
     site: CallSite<FunctionSite>,
     parameters: Vec<(String, String)>,
     kani_binding: Option<KaniProofBinding>,
 }
+
+/// The first request dependency that differs from the source selection QSL admitted.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DependencySelectionMismatch {
+    /// Position in the ascending dependency selection; a missing or extra entry has one absent side.
+    pub position: usize,
+    /// The admitted library identity and complete ordered source references, when present.
+    pub expected: Option<DependencyEntryWire>,
+    /// The request's library identity and complete ordered source references, when present.
+    pub actual: Option<DependencyEntryWire>,
+}
+
+impl fmt::Display for DependencySelectionMismatch {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            formatter,
+            "replay dependency selection differs at position {}",
+            self.position
+        )
+    }
+}
+
+impl std::error::Error for DependencySelectionMismatch {}
 
 /// The retained proving-run identity and the QSL site selected for its hand-mirrored replay.
 #[derive(Clone, Debug)]
@@ -606,6 +636,16 @@ impl ReplayPackage {
             &selection,
         )
         .map_err(ReplayPackageError::CallSite)?;
+        // `DependencyInput::new` and `call_site` admitted these sources before a replay
+        // request exists. Keep their identity and order independently of `inputs.wire`.
+        let selected_dependencies = inputs
+            .dependencies
+            .iter()
+            .map(|dependency| DependencyEntryWire {
+                identity: dependency.identity.clone(),
+                sources: vec![dependency.source.wire()],
+            })
+            .collect();
         let parameters = site
             .site
             .parameters
@@ -614,11 +654,58 @@ impl ReplayPackage {
             .collect();
         Ok(Self {
             inputs,
+            selected_dependencies,
             selection,
             site,
             parameters,
             kani_binding: None,
         })
+    }
+
+    /// Check each request dependency against the exact source selection admitted with this
+    /// package. A changed source under the same library identity is a mismatch as well.
+    ///
+    /// # Errors
+    ///
+    /// [`DependencySelectionMismatch`] at the first missing, extra, reordered or unequal entry.
+    pub fn check_dependency_selection(
+        &self,
+        request: &ReplayRequestWire,
+    ) -> Result<(), DependencySelectionMismatch> {
+        for position in 0..self
+            .selected_dependencies
+            .len()
+            .max(request.dependencies.len())
+        {
+            let expected = self.selected_dependencies.get(position);
+            let actual = request.dependencies.get(position);
+            if expected != actual {
+                return Err(DependencySelectionMismatch {
+                    position,
+                    expected: expected.cloned(),
+                    actual: actual.cloned(),
+                });
+            }
+        }
+        Ok(())
+    }
+
+    /// Dispatch a request only when its dependency identity and complete source references
+    /// still equal the independently admitted selection. The executor is never called on a
+    /// mismatch, including a valid alternate source under the same library name.
+    ///
+    /// # Errors
+    ///
+    /// [`SpineReplayError::DependencySelectionMismatch`] before dispatch, or
+    /// [`SpineReplayError::Refused`] if the executor refuses the admitted request.
+    pub fn replay_request_through(
+        &self,
+        request: ReplayRequestWire,
+        mut execute: impl FnMut(ReplayRequestWire) -> Result<ReplayResult, ReplayRefusal>,
+    ) -> Result<ReplayResult, SpineReplayError> {
+        self.check_dependency_selection(&request)
+            .map_err(SpineReplayError::DependencySelectionMismatch)?;
+        execute(request).map_err(|cause| SpineReplayError::Refused(Box::new(cause)))
     }
 
     /// Retains the independent Kani proving-run identity beside this selected QSL twin before
@@ -712,12 +799,9 @@ impl ReplayPackage {
                 &identity.arguments,
             )
             .map_err(SpineReplayError::Identity)?;
-        match replay(
-            self.request_for_input_oracle(obligation),
-            self.inputs.replay_limits,
-        )
-        .map_err(|refusal| SpineReplayError::Refused(Box::new(refusal)))?
-        {
+        match self.replay_request_through(self.request_for_input_oracle(obligation), |request| {
+            replay(request, self.inputs.replay_limits)
+        })? {
             ReplayResult::Input(result) => match result.value() {
                 Some(qsl_replay::EvaluatedValue::Boolean(value)) => Ok(value),
                 None => Err(SpineReplayError::NoInputValue),
@@ -1174,7 +1258,8 @@ impl<'a> From<&'a SpineReplayError> for ReplaySettlement<'a> {
             | SpineReplayError::Transcript(_)
             | SpineReplayError::WrongArm
             | SpineReplayError::Identity(_)
-            | SpineReplayError::Packet(_) => Self::CgDefect,
+            | SpineReplayError::Packet(_)
+            | SpineReplayError::DependencySelectionMismatch(_) => Self::CgDefect,
             #[cfg(test)]
             SpineReplayError::NoInputValue | SpineReplayError::PackageIdentity => Self::CgDefect,
             SpineReplayError::Refused(refusal) => Self::Refused(refusal),
@@ -1312,7 +1397,7 @@ pub(crate) fn replay_harness_counterexample_through(
                 .request_from_packet(packet, obligation)
                 .map_err(SpineReplayError::Packet)
         },
-        &mut execute,
+        &mut |wire| package.replay_request_through(wire, &mut execute),
     )?;
     Ok(verdict_of(
         result.settlement(),
@@ -1375,7 +1460,7 @@ pub fn replay_counterexample_through(
                 .request_from_packet(packet, obligation.clone())
                 .map_err(SpineReplayError::Packet)
         },
-        &mut execute,
+        &mut |wire| package.replay_request_through(wire, &mut execute),
     )?;
     Ok(verdict_of(
         result.settlement(),
