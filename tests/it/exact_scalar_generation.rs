@@ -139,6 +139,13 @@ pub(super) fn corpus_oracles() -> ExactScalarOracles {
     generate(&package, &resolved_items(&golden_items(), &ids))
 }
 
+pub(super) fn corpus_cohort_oracles() -> Vec<ExactScalarOracles> {
+    corpus_cohorts()
+        .into_iter()
+        .map(|(package, items)| generate(&package, &items))
+        .collect()
+}
+
 fn resolved_items(items: &[ExactScalarItem], ids: &FixtureIds) -> Vec<ExactScalarItem> {
     items
         .iter()
@@ -456,40 +463,43 @@ fn tc_052_mismatched_decimal_mode_is_refused_by_reader() {
 #[trace("FR-014-AC-4", "TC-024")]
 #[test]
 fn tc_024_corpus_crate_artifacts_are_complete_and_self_consistent() {
-    let (package, ids) = corpus_package().admit_resolved();
-    let items = resolved_items(&golden_items(), &ids);
-    let oracles = generate(&package, &items);
-    let paths = oracles
-        .artifacts
-        .iter()
-        .map(|artifact| artifact.path.as_str())
-        .collect::<BTreeSet<_>>();
-    assert_eq!(
-        paths,
-        BTreeSet::from([
-            "Cargo.toml",
-            "claim-map.json",
-            "source-maps/lib.json",
-            "src/lib.rs"
-        ])
-    );
-    let on_disk: Value = serde_json::from_str(contents(&oracles, "claim-map.json")).unwrap();
-    assert_eq!(on_disk, serde_json::to_value(&oracles.claim_map).unwrap());
-    let lib = contents(&oracles, "src/lib.rs");
-    let mut generated = BTreeSet::new();
-    for claim in &oracles.claim_map.items {
-        if let ClaimDisposition::Generated(generated_claim) = &claim.result {
-            let symbol = format!("pub fn {}(", generated_claim.symbol);
-            assert!(lib.contains(&symbol), "{symbol} is not defined");
-            generated.insert(claim.node_id.clone());
+    let mut generated_all = BTreeSet::new();
+    for (package, items) in corpus_cohorts() {
+        let oracles = generate(&package, &items);
+        let paths = oracles
+            .artifacts
+            .iter()
+            .map(|artifact| artifact.path.as_str())
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            paths,
+            BTreeSet::from([
+                "Cargo.toml",
+                "claim-map.json",
+                "source-maps/lib.json",
+                "src/lib.rs"
+            ])
+        );
+        let on_disk: Value = serde_json::from_str(contents(&oracles, "claim-map.json")).unwrap();
+        assert_eq!(on_disk, serde_json::to_value(&oracles.claim_map).unwrap());
+        let lib = contents(&oracles, "src/lib.rs");
+        for claim in &oracles.claim_map.items {
+            if let ClaimDisposition::Generated(generated_claim) = &claim.result {
+                let symbol = format!("pub fn {}(", generated_claim.symbol);
+                assert!(lib.contains(&symbol), "{symbol} is not defined");
+                assert!(
+                    generated_all.insert(claim.node_id.clone()),
+                    "duplicate generated claim"
+                );
+            }
         }
     }
     let expected = corpus()
         .iter()
-        .map(|expression| ids.resolve(&code_id(expression.code)))
+        .map(|expression| code_id(expression.code))
         .collect::<BTreeSet<_>>();
     assert_eq!(
-        generated, expected,
+        generated_all, expected,
         "every admitted expression generates exactly once"
     );
 }
@@ -497,35 +507,38 @@ fn tc_024_corpus_crate_artifacts_are_complete_and_self_consistent() {
 #[trace("FR-014-AC-4", "TC-024")]
 #[test]
 fn tc_024_generation_is_byte_deterministic_across_runs_and_request_orders() {
-    let package = corpus_package().admit();
-    let items = golden_items();
-    let first = generate(&package, &items);
-    assert_eq!(generate(&package, &items), first);
-    assert_eq!(generate(&corpus_package().admit(), &items), first);
+    let first_run = corpus_cohorts();
+    let second_run = corpus_cohorts();
+    for ((package, items), (again, again_items)) in first_run.into_iter().zip(second_run) {
+        assert_eq!(items, again_items);
+        let first = generate(&package, &items);
+        assert_eq!(generate(&package, &items), first);
+        assert_eq!(generate(&again, &again_items), first);
 
-    let mut reversed = items.clone();
-    reversed.reverse();
-    assert_eq!(generate(&package, &reversed), first);
+        let mut reversed = items.clone();
+        reversed.reverse();
+        assert_eq!(generate(&package, &reversed), first);
 
-    // A deterministic interleaving that moves every item.
-    let (even, odd): (Vec<_>, Vec<_>) = items
-        .iter()
-        .cloned()
-        .enumerate()
-        .partition(|(position, _)| position % 2 == 0);
-    let interleaved = odd
-        .into_iter()
-        .chain(even)
-        .map(|(_, item)| item)
-        .collect::<Vec<_>>();
-    assert_ne!(
-        interleaved
+        // A deterministic interleaving that moves every item.
+        let (even, odd): (Vec<_>, Vec<_>) = items
             .iter()
-            .map(|item| &item.node_id)
-            .collect::<Vec<_>>(),
-        items.iter().map(|item| &item.node_id).collect::<Vec<_>>()
-    );
-    assert_eq!(generate(&package, &interleaved), first);
+            .cloned()
+            .enumerate()
+            .partition(|(position, _)| position % 2 == 0);
+        let interleaved = odd
+            .into_iter()
+            .chain(even)
+            .map(|(_, item)| item)
+            .collect::<Vec<_>>();
+        assert_ne!(
+            interleaved
+                .iter()
+                .map(|item| &item.node_id)
+                .collect::<Vec<_>>(),
+            items.iter().map(|item| &item.node_id).collect::<Vec<_>>()
+        );
+        assert_eq!(generate(&package, &interleaved), first);
+    }
 }
 
 #[trace("FR-014-AC-1", "FR-014-AC-2", "TC-024")]
