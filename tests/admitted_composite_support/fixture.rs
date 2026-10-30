@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Authentic record and tuple sources compiled only through the public replay root.
 use qsl_replay::{
-    compile_admitted, AdmittedCompilation, DependencyInput, ReplayLimits, SourceIdentity,
-    StageLimits, SuppliedLibrary,
+    compile_admitted, AdmittedCompilation, CompileUnit, DependencyInput, ReplayLimits,
+    SourceIdentity, StageLimits, SuppliedLibrary,
 };
 
 pub const SOURCE: &str = r#"language "ix:native" edition "1-draft";
@@ -22,9 +22,12 @@ function other_holder_same using v(a: OtherHolder,b: OtherHolder): Boolean pure 
 
 pub fn compile(source: &str, dependencies: &DependencyInput) -> AdmittedCompilation {
     compile_admitted(
-        SourceIdentity::new("test", "admitted-composites.native", "git", "fixture"),
-        "admitted-composites.native",
-        source.as_bytes(),
+        CompileUnit {
+            source: SourceIdentity::new("test", "admitted-composites.native", "git", "fixture"),
+            package_name: "admitted-composites".to_owned(),
+            path: "admitted-composites.native",
+            bytes: source.as_bytes(),
+        },
         [],
         dependencies,
         StageLimits::default(),
@@ -44,9 +47,12 @@ pub fn imported(transitive: bool) -> (AdmittedCompilation, Vec<(String, Admitted
     };
     let compile_library = |item: &SuppliedLibrary, dependencies: &DependencyInput| {
         compile_admitted(
-            item.source.clone(),
-            &item.path,
-            &item.bytes,
+            CompileUnit {
+                source: item.source.clone(),
+                package_name: item.identity.clone(),
+                path: &item.path,
+                bytes: &item.bytes,
+            },
             [],
             dependencies,
             StageLimits::default(),

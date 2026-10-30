@@ -4,8 +4,8 @@
 use super::admitted_enum_equality::{checked, direct_source_item, generate_items};
 use ix_trace_rs::trace;
 use qsl_replay::{
-    compile_admitted, AdmittedCompilation, DependencyInput, ReplayLimits, SourceIdentity,
-    StageLimits,
+    compile_admitted, AdmittedCompilation, CompileUnit, DependencyInput, ReplayLimits,
+    SourceIdentity, StageLimits,
 };
 use quire_contract_codegen::{
     ClaimDisposition, CompositeEqualityOracles, CompositeEqualityRefusal, OracleGenerationError,
@@ -31,9 +31,12 @@ function healthy using v(a: Int[0,9], b: Int[0,9]): Boolean pure { a = b }
 
 fn compile() -> AdmittedCompilation {
     compile_admitted(
-        SourceIdentity::new("agent-ix", "quantity-owner-source", "git", "1"),
-        "quantity-owner.native",
-        SOURCE.as_bytes(),
+        CompileUnit {
+            source: SourceIdentity::new("agent-ix", "quantity-owner-source", "git", "1"),
+            package_name: "quantity-owner-source".to_owned(),
+            path: "quantity-owner.native",
+            bytes: SOURCE.as_bytes(),
+        },
         [],
         &DependencyInput::default(),
         StageLimits::default(),
@@ -219,11 +222,14 @@ fn nested_quantity_stays_unsupported_with_owner_metadata_and_healthy_unions() {
     ));
 
     let other = compile_admitted(
-        SourceIdentity::new("agent-ix", "foreign-quantity-owner", "git", "1"),
-        "foreign-quantity.native",
-        SOURCE
-            .replace("function healthy", "function foreign_healthy")
-            .as_bytes(),
+        CompileUnit {
+            source: SourceIdentity::new("agent-ix", "foreign-quantity-owner", "git", "1"),
+            package_name: "foreign-quantity-owner".to_owned(),
+            path: "foreign-quantity.native",
+            bytes: SOURCE
+                .replace("function healthy", "function foreign_healthy")
+                .as_bytes(),
+        },
         [],
         &DependencyInput::default(),
         StageLimits::default(),

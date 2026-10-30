@@ -26,9 +26,12 @@ use quire_semantic_value::declaration::{EqualityOperand, EqualityOperator, TypeE
 fn compile_source() -> qsl_replay::AdmittedCompilation {
     let source = "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\nfunction f using v(a: Int[0, 9],b: Integer): Boolean pure { convert<Integer>(a) = b }\n";
     qsl_replay::compile_admitted(
-        qsl_replay::SourceIdentity::new("test", "admitted-enums.native", "git", "fixture"),
-        "admitted-enums.native",
-        source.as_bytes(),
+        qsl_replay::CompileUnit {
+            source: qsl_replay::SourceIdentity::new("test", "admitted-enums.native", "git", "fixture"),
+            package_name: "admitted-enums".to_owned(),
+            path: "admitted-enums.native",
+            bytes: source.as_bytes(),
+        },
         [],
         &qsl_replay::DependencyInput::default(),
         qsl_replay::StageLimits::default(),
@@ -131,8 +134,13 @@ fn unbounded_right_values_outside_sibling_interval_still_complete() {
 #[test]
 fn context_free_constructor_rejects_explicit_wrong_context() {
     let other = qsl_replay::compile_admitted(
-        qsl_replay::SourceIdentity::new("test", "other.native", "git", "fixture"),
-        "other.native", b"language \"ix:native\" edition \"1-draft\"; profile v = \"quire.value.complete/v1\"; function other using v(): Boolean pure { true }", [],
+        qsl_replay::CompileUnit {
+            source: qsl_replay::SourceIdentity::new("test", "other.native", "git", "fixture"),
+            package_name: "other".to_owned(),
+            path: "other.native",
+            bytes: b"language \"ix:native\" edition \"1-draft\"; profile v = \"quire.value.complete/v1\"; function other using v(): Boolean pure { true }",
+        },
+        [],
         &qsl_replay::DependencyInput::default(), qsl_replay::StageLimits::default(),
         qsl_replay::ReplayLimits::default(),
     ).expect("another actual source package");
