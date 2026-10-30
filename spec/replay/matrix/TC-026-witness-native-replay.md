@@ -72,10 +72,15 @@ Inspect `package.dependencies` for exactly one `DependencyEntryWire { identity,
 sources }` per lock selection in ascending identity order, each with the
 selection's complete exact source references and corresponding supplied bytes;
 assert there is no dependency `package_id` or lock wire field (FR-016-AC-29).
-Hold the imported dependency identity and proved unit fixed while changing one
-selected dependency source reference to another provisioned source. Assert
-QSL's typed dependency selection or source-authentication refusal before any
-replayed verdict, with no same-identity source substitution (FR-016-AC-30).
+Retain the independently admitted package/dependency source selection. Hold
+its imported identity and proved unit fixed while changing one replay request
+source reference to another valid provisioned source. Also remove, add,
+reorder and change an identity in request entries independently. Compare every
+request entry's identity and complete `sources` list against the admitted
+selection before QSL dispatch. Assert a typed CG dependency-selection mismatch
+refusal and no QSL replay call or verdict for each mismatch, without any
+same-identity source substitution. The unchanged request passes the guard
+(FR-016-AC-30).
 Build a replay
 package from a lock that selects one library identity twice and has no other defect (AC-24).
 
@@ -108,10 +113,12 @@ Changed kind, domain or occurrence under held identity refuses before replay; th
 function under one requested kind has one obligation (FR-016-AC-26 to AC-28).
 The two-dependency request has exactly the sorted lock-selected identities and
 source references, with provisioned bytes and no dependency `package_id` or
-lock wire member (FR-016-AC-29). Changing a selected source reference while
-holding the imported identity and proved unit fixed yields a typed QSL
-selection or source-authentication refusal and no replay verdict; no alternate
-same-identity source is used (FR-016-AC-30).
+lock wire member (FR-016-AC-29). CG matches each request dependency identity
+and complete source-reference list to the independent admitted selection
+before dispatch. Every request-only mismatch, including another valid
+provisioned source under the same imported identity, yields a typed CG
+selection-mismatch refusal without QSL dispatch or a replay verdict; the
+unchanged request passes the guard (FR-016-AC-30).
 A lock whose only defect is a repeated dependency identity is refused with
 `DependencyLockError::Input`, code `invalid_package`, cause `conflicting-definition`, and the
 error has no `Duplicate` variant (AC-24, planned).
@@ -212,5 +219,7 @@ FR-016-AC-14, AC-16 and AC-18 through AC-20 have historical default-suite
 evidence in `tests/it/skeleton_spine.rs`: the selected dependency is compiled
 and evaluated, a missing selection and an unselected library refuse, and
 shared source-owner controls refuse. The old request's dependency `package_id`
-field and mismatch control do not qualify retired AC-15 or AC-17. Replacement
-AC-29 and AC-30 are planned for the selected QSL wire.
+field and mismatch control do not qualify retired AC-15 or AC-17.
+Replacement AC-29 is planned for the selected QSL wire. AC-30 is planned for
+CG's independent pre-replay comparison with the admitted package/dependency
+source selection.

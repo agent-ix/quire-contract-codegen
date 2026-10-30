@@ -128,10 +128,15 @@ wire entry has no dependency `package_id` or lock member.
 - For each lock-selected dependency, the generator SHALL retain one replay
   `package.dependencies` entry in ascending identity order, with that
   selection's exact `identity` and `sources` references. The generator SHALL
-  supply the bytes named by those references through the byte provision. QSL SHALL authenticate
-  the selected references against the dependency actually imported by the
-  proved unit; the generator SHALL retain a typed mismatch refusal without
-  substituting another source or an obsolete dependency `package_id` field.
+  supply the bytes named by those references through the byte provision.
+  When it is about to call QSL, the generator SHALL compare every request
+  dependency `identity` and complete `sources` list with the corresponding
+  independently admitted package/dependency source selection. The generator SHALL
+  refuse any missing, extra, reordered or unequal selection with a typed CG
+  dependency-selection mismatch cause, without dispatching replay or
+  substituting another source.
+  QSL receives only the matched request; it treats its current source references
+  as input and cannot compare them with an earlier admitted selection.
 
 - The generator shall carry the producer's QSL structural `ObligationIdentity` for the
   function-contract obligation into the replay request unchanged (FR-016-AC-26 to AC-28).
@@ -172,7 +177,7 @@ wire entry has no dependency `package_id` or lock member.
 | FR-016-AC-27 | PLANNED (IR-1079; replaces AC-22). Two function nodes with the same parameters have distinct structural obligation identities; comment, blank-line and source-span edits preserving node/model/ordinal leave identity unchanged. For two distinct obligations on one node/model, the producer assigns distinct ordinals. Changing kind or one argument domain with a held identity fails the field-by-field record/claim comparison before replay; one requested kind for a two-conjunct function remains one obligation, not one per conjunct. | Test (TC-026) |
 | FR-016-AC-28 | PLANNED (IR-1079; replaces AC-23). The function path obtains the producer's node/model/ordinal identity, without deriving one from package contents. Perturbing unrelated declarations or parameter order while the producer identity and sorted argument bindings stay equal leaves the carried identity and accepted comparison unchanged; changing the selected function node, model or assigned ordinal changes identity, while changing the occurrence key, kind or argument domain under the same identity refuses before replay. | Test (TC-026) |
 | FR-016-AC-29 | PLANNED (IR-1079; replaces AC-15). The replay request's `package.dependencies` carries exactly one `DependencyEntryWire { identity, sources }` per lock dependency selection, in ascending identity order. Each entry preserves that selection's exact dependency identity and complete selected source references; the byte provision supplies the bytes named by those references. The wire carries no dependency `package_id` or lock field. | Test (TC-026) |
-| FR-016-AC-30 | PLANNED (IR-1079; replaces AC-17). Changing a selected source reference for a dependency the proved unit imports, while holding its dependency identity and the proved unit fixed, causes QSL's typed dependency selection or source-authentication refusal before a replayed verdict. Neither CG nor QSL silently substitutes a source with the same dependency identity, and no `package_id` wire field is fabricated to manufacture the control. | Test (TC-026) |
+| FR-016-AC-30 | PLANNED (IR-1079; replaces AC-17). Before QSL replay, CG compares each replay request dependency's `identity` and complete exact `sources` references with the corresponding independently admitted package/dependency source selection. A missing, extra, reordered or unequal selection, including a changed but valid provisioned source under the same imported dependency identity, yields a typed CG dependency-selection mismatch refusal before dispatch and no replay verdict. CG never substitutes a same-identity source or fabricates a dependency `package_id` wire field; QSL's acceptance of a separately valid current source does not override the admitted selection. | Test (TC-026) |
 
 For FR-016-AC-26, inspection verifies that the function path carries the producer's typed
 identity without an identity encoder or transcript-derived member. TC-026 compares the

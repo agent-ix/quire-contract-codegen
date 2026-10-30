@@ -48,3 +48,16 @@ Reviewed exact PR #659 diff at 72a7e769 against merged Contract IR #720 (0fa7cfd
 
 - Contract IR #720, commit 0fa7cfd, FR-038 Description: `node_id.ordinal` is producer assigned; the reader does not derive group position, rekey, or seal node identity.
 - CG #658, commit ed40a1e0, FR-039-AC-11: exact source name and lock identify generated claims with requested structural node ID.
+
+## Disposition Review
+
+Checked fix head 01e09a9abad72f83c3400ce1e8c23771740335fd. FR-014-AC-53 was retired as AC-57 with integer construction, parse fallback, owner-reader malformed-bound refusal, body comparison, direct-owner agreement and deterministic provenance retained; TC-024 and its matrix point to AC-57 as planned. No additional defect found there. QSL 4926 `request.rs` and `execute.rs` were checked for the dependency replacement.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Verified corrected text at the fix head. |
+| FND-002 | fixed | Verified corrected text at the fix head. |
+| FND-003 | fixed | Verified corrected text at the fix head. |
+| FND-004 | still-open | FR-016-AC-30 promises QSL typed refusal whenever a selected dependency source reference changes under a held identity. QSL 4926 ReplayRequestWire holds only the current identity and sources; execute::recompile uses those references to supply a library, recompiles, then checks selected dependency identities (execute.rs:1487-1564). It has no earlier expected source reference to compare. Another valid provisioned source with the same dependency identity can recompile and replay, so the stated universal QSL refusal and TC-026 control remain unsupported. Require CG to compare the replay request dependency identity and exact source references against the admitted package/dependency source selection before replay, with a typed mismatch refusal. |
