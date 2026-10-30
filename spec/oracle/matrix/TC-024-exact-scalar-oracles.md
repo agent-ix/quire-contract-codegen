@@ -24,8 +24,14 @@ byte-deterministic, and agree with direct runtime execution. Agreement with the 
    descriptor needs, plus unlowered, unbounded, mismatched, mis-bounded,
    duplicate and non-scalar nodes and unsupported and literal operands.
 2. Generate twice and with a permuted request; compare bytes with each other.
-3. Inspect each claim-map entry, its ordering, its checked bounds and its
-   `ir_confirmed` or `caller_declared` provenance, and each refusal; request a
+3. Inspect each claim-map entry for the exact requested structural
+   `CheckedNodeId`, the admitted `ContractSourceV1` package name and complete
+   lock, originating checked-package structural `package_id`, admitted
+   `source_map`, typed `claims` and `bounds`, operation identity and
+   `ir_confirmed` or `caller_declared` provenance. For quantity conversion,
+   assert the exact structural `type_argument` type node ID; assert no
+   generated scalar claim serializes `ir_id` or substitutes a digest
+   (FR-014-AC-56). Inspect ordering, checked bounds and each refusal; request a
    node under a descriptor naming a different catalogued operation; request a
    node under a
    descriptor naming a different law; request a node under a descriptor whose

@@ -10,39 +10,39 @@ relationships:
 
 ## Description
 
-Verify that the two checked-package fixture builders use Contract IR for
-application identities, use its nominal API for any canonical enum-member
-identity, and preserve admitted packages and stale-key controls.
+Verify that both checked-package fixture builders preserve producer-assigned
+structural application and enum-member identities, keep grouped references
+consistent, and retain reader admission and typed negative controls.
 
 ## Test Procedure
 
-1. Build one ungrouped application with each package builder. Compare the
-   candidate returned by `derive_application_node_id` with the corresponding
-   node ID in the reader-admitted package. Inspect both builders for local
-   application preimage construction, version constants, and direct SHA calls
-   on application preimages.
-2. Build an application in a recursion group with a reference to another
-   member. Derive its candidate from a context containing the complete graph
-   in graph order; compare it with the reader's admitted identity. Exercise a
-   missing context, a context whose target fields differ, and a byte ceiling
-   below the canonical preimage length. Assert the corresponding typed
-   `ApplicationIdentityError` and absence of a candidate.
-3. Derive a canonical enum-member node ID through
-   `NominalIdentityPreimage::EnumMember(...).digest`; compare it with the
-   reader-admitted member and repeat with a different case. Inspect agreement
-   fixtures separately and identify any keys used only for in-process
-   uniqueness.
-4. Read representative exact-scalar and composite-equality packages. Then
-   submit copies with one stale application key and one changed application
-   body under its original key. Assert both are refused without fixture rekey
-   repair. Inspect remaining local hashes and classify them as fixture-only
-   keys, ordinary canonical values, or package identities; confirm the latter
-   two use their owning APIs.
+1. Assemble one ungrouped application with each builder. Compare its
+   producer-assigned `CheckedNodeId`, every dependent reference and the
+   reader-admitted node ID (FR-037-AC-6). Inspect the builders for removed
+   candidate derivation, local application preimages and identity digests.
+2. Assemble a complete ordered recursion group with a member-to-member
+   reference. Compare each producer-assigned member ID, ordinal and reference
+   before and after reader admission. Submit missing and mismatched structural
+   context and assert the owner's typed refusal. Set a reader byte ceiling
+   below the complete package length and assert its typed limit result, with
+   no admitted fixture (FR-037-AC-7).
+3. Assemble a canonical enum member from the producer's structural ID,
+   declaration and case. Compare it with the reader-admitted member and repeat
+   with a changed case and its corresponding producer ID. Inspect the separate
+   agreement fixtures for keys used only for in-process uniqueness
+   (FR-037-AC-8).
+4. Admit representative exact-scalar and composite-equality packages. Submit
+   a stale structural key without repair and assert reader refusal. Change a
+   body while retaining its structural key and compare it with the expected
+   admitted source body; assert the mismatch is detected without assuming a
+   new key (FR-037-AC-9). Inspect local keys and canonical-value operations to
+   confirm fixture-only keys remain separate and no package or application
+   digest derivation remains (FR-037-AC-10).
 
 ## Expected Results
 
-Both builders' ordinary and grouped candidate IDs match the admitted reader
-IDs. Context and byte-limit errors retain their typed causes and yield no
-candidate. The nominal member identity matches the reader and changes with
-the case. The positive packages admit; stale-key and body-mutation controls
-refuse. No local application preimage implementation or version tag remains.
+Structural IDs and grouped references match the producer and reader-admitted
+graph. Invalid context and the byte ceiling retain their typed causes without
+an admitted fixture. Canonical enum-member identity follows the producer's
+case. Positive packages admit; stale-key and changed-body controls fail at
+their stated authority. No local application or package preimage rule remains.
