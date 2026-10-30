@@ -247,7 +247,7 @@ fn source_records(reverse: bool) -> (Vec<u64>, Vec<Expected>, Vec<Run>) {
             "/bin/sh".into(),
             vec![
                 OsString::from("-c"),
-                OsString::from("cat >&2; printf 'unsat\\n(proof)'"),
+                OsString::from("cat >&2; printf 'unsat\\n((proof))'"),
                 OsString::from("--dump-proofs"),
                 OsString::from("--proof-format-mode=alethe"),
             ],
