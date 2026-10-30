@@ -375,13 +375,13 @@ fn genuine_enum_generated_native_abi_agrees_with_owner() {
             .find(|artifact| artifact.path == "src/lib.rs")
             .expect("library")
             .contents;
-        let case_lookup = "lookup_enum_case(Some(context), wire, case.case())?";
+        let case_lookup = "lookup_enum_case(Some(context), &key, case.case())?";
         let mutations = [
         ("operator", "environment.check_equality(sv::EqualityOperator::Equal".to_owned(),
             "environment.check_equality(sv::EqualityOperator::NotEqual".to_owned()),
         ("descriptor", descriptor, "let left_source = exact::ValueType::Boolean;".to_owned()),
         ("case", case_lookup.to_owned(),
-            "lookup_enum_case(Some(context), wire, &exact::Identifier::new(\"READY\").map_err(|_| ReconstructionError::Enum)?)?".to_owned()),
+            "lookup_enum_case(Some(context), &key, &exact::Identifier::new(\"READY\").map_err(|_| ReconstructionError::Enum)?)?".to_owned()),
     ];
         for (mutation, from, to) in mutations {
             assert!(

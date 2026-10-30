@@ -41,7 +41,7 @@ mod generated {
         );
         let result = lookup_enum_case(
             prepared.context,
-            wire.clone(),
+            &wire,
             &exact::Identifier::new("DARK").expect("identifier"),
         );
         assert!(
@@ -94,7 +94,7 @@ mod generated {
             .expect("real ordered enum");
         let wire = ordered.key().clone();
         let absent = exact::Identifier::new("ABSENT").expect("identifier");
-        let result = lookup_enum_case(prepared.context, wire.clone(), &absent);
+        let result = lookup_enum_case(prepared.context, &wire, &absent);
         assert!(
             matches!(result, Err(EnvironmentError::Lookup(qsl_replay::AdmittedLookupRefusal::Unknown {
             declaration, case: Some(case),
