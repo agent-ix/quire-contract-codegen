@@ -16,8 +16,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use qsl_replay::{DomainKey, DomainKind, ProofBound};
 use quire_contract_model::{ApplicationOperator, CheckedTerm};
 use quire_contract_model::{
-    CheckedNodeId, CheckedPackageIncomplete, CheckedPackageLimit, CheckedPackageRefusal,
-    CheckedPackageRefusalCause, CheckedPackageRefusalCode, ContractPackageV1,
+    CheckedExtensionRefusalDetail, CheckedNodeId, CheckedPackageIncomplete, CheckedPackageLimit,
+    CheckedPackageRefusal, CheckedPackageRefusalCause, CheckedPackageRefusalCode,
+    CheckedPackageRefusalLocation, CheckedProtocolRefusalDetail, CheckedTerminalDuplicate,
+    ContractPackageV1,
 };
 use serde::Serialize;
 
@@ -1110,8 +1112,8 @@ pub enum EnvelopeRefusal {
 pub struct ContractPackageRefusalProjection {
     /// Stable reader refusal code.
     pub code: CheckedPackageRefusalCode,
-    /// Pointer in the contract package, when the reader located a value.
-    pub path: Option<String>,
+    /// Nonempty reader locations, in declaration order.
+    pub loci: Vec<CheckedPackageRefusalLocation>,
     /// Typed reason paired with the code, when available.
     pub cause: Option<CheckedPackageRefusalCause>,
     /// Offending semantic node, when available.
@@ -1120,10 +1122,12 @@ pub struct ContractPackageRefusalProjection {
     pub contract_version: Option<String>,
     /// Pointer into a selected document, when relevant.
     pub document_pointer: Option<String>,
-    /// Expected semantic identity, when relevant.
-    pub expected: Option<CheckedSemanticId>,
-    /// Actual semantic identity, when relevant.
-    pub actual: Option<CheckedSemanticId>,
+    /// Extension clause details retained by the reader.
+    pub extension_detail: Option<Box<CheckedExtensionRefusalDetail>>,
+    /// Protocol event, type or interval context retained by the reader.
+    pub protocol_detail: Option<Box<CheckedProtocolRefusalDetail>>,
+    /// Both parties to a duplicate terminal declaration.
+    pub terminal_duplicate: Option<CheckedTerminalDuplicate>,
 }
 
 /// Copy the reader's public refusal fields into CG's wire projection.
@@ -1133,7 +1137,7 @@ pub fn project_contract_package_refusal(
 ) -> ContractPackageRefusalProjection {
     ContractPackageRefusalProjection {
         code: refusal.code,
-        path: refusal.path.as_ref().map(|path| path.as_str().to_owned()),
+        loci: refusal.loci.clone(),
         cause: refusal.cause,
         locus: refusal.locus.clone(),
         contract_version: refusal.contract_version.as_deref().map(str::to_owned),
@@ -1141,8 +1145,9 @@ pub fn project_contract_package_refusal(
             .document_pointer
             .as_ref()
             .map(|path| path.as_str().to_owned()),
-        expected: refusal.expected.clone(),
-        actual: refusal.actual.clone(),
+        extension_detail: refusal.extension_detail.clone(),
+        protocol_detail: refusal.protocol_detail.clone(),
+        terminal_duplicate: refusal.terminal_duplicate.clone(),
     }
 }
 
