@@ -5,8 +5,8 @@
 //! the retained field table; unsupported shapes remain typed refusals for the negotiator.
 
 use quire_contract_model::{
-    CheckedCollectionKind, CheckedMemberType, CheckedNodeId, CheckedNodeTag, CheckedPackageV2,
-    CheckedSemanticNodeV2, CheckedTerm, LiteralKind,
+    ApplicationOperator, CheckedCollectionKind, CheckedMemberType, CheckedNodeId, CheckedNodeTag,
+    CheckedPackageV2, CheckedSemanticNodeV2, CheckedTerm, LiteralKind, StateClauseKind,
 };
 use std::{borrow::Borrow, collections::BTreeMap};
 
@@ -521,6 +521,37 @@ fn finite_element_domain(
     }
 }
 
+/// Invariants assert their body over a drawn state. Other state-clause kinds need the
+/// operation-contract context and cannot be emitted as standalone collection proofs.
+fn invariant_clause_parts<'a>(
+    graph: &'a CollectionNodeIndex<'_>,
+    claim: &'a CheckedSemanticNodeV2,
+) -> Option<(&'a [CheckedTerm], CheckedNodeId)> {
+    if CheckedNodeTag::from_wire(&claim.node_tag) != Some(CheckedNodeTag::State)
+        || claim.semantic_form.as_ref() != "state_clause"
+    {
+        return None;
+    }
+    let CheckedTerm::Application {
+        operator: ApplicationOperator::StateClause,
+        operation,
+        arguments,
+        ..
+    } = graph.term(claim)?
+    else {
+        return None;
+    };
+    if operation.identity() != Some("quire.op.state.clause")
+        || operation.state_clause_kind().ok()? != Some(StateClauseKind::Invariant)
+    {
+        return None;
+    }
+    let [parameters, _anchor, body] = arguments.as_slice() else {
+        return None;
+    };
+    Some((aggregate_members(parameters)?, term_target(body)?))
+}
+
 /// The authored parameters of a function or state clause, in their checked graph order.
 fn claim_parameters<'a>(
     graph: &'a CollectionNodeIndex<'_>,
@@ -537,16 +568,8 @@ fn claim_parameters<'a>(
                 }
                 _ => None,
             }),
-        CheckedNodeTag::State
-            if claim.semantic_form.as_ref() == "state_clause"
-                && operation_identity(graph, claim) == Some("quire.op.state.clause") =>
-        {
-            graph
-                .term(claim)
-                .and_then(application_arguments)
-                .filter(|arguments| arguments.len() == 3)
-                .and_then(|arguments| arguments.first())
-                .and_then(aggregate_members)
+        CheckedNodeTag::State => {
+            invariant_clause_parts(graph, claim).map(|(parameters, _)| parameters)
         }
         _ => None,
     }
@@ -563,17 +586,7 @@ fn claim_body(
             .and_then(aggregate_members)
             .and_then(|members| binding(members, "body"))
             .and_then(term_target),
-        CheckedNodeTag::State
-            if claim.semantic_form.as_ref() == "state_clause"
-                && operation_identity(graph, claim) == Some("quire.op.state.clause") =>
-        {
-            graph
-                .term(claim)
-                .and_then(application_arguments)
-                .filter(|arguments| arguments.len() == 3)
-                .and_then(|arguments| arguments.get(2))
-                .and_then(term_target)
-        }
+        CheckedNodeTag::State => invariant_clause_parts(graph, claim).map(|(_, body)| body),
         _ => None,
     }
 }
@@ -641,7 +654,7 @@ fn resolve_collection_field(
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
     let field_name = field_name.to_owned();
     let declaration = admitted_declaration(graph, &field_declaration.digest)?;
-    verify_function_receiver(graph, function, collection, &declaration)?;
+    verify_claim_receiver(graph, function, collection, &declaration)?;
     let fields = package.model_object_fields(&declaration);
     let field = declared_field(fields.as_ref(), |fields| fields.field(&field_name))?;
     let Some(CheckedMemberType::Collection {
@@ -815,7 +828,7 @@ fn collection_element_type(
     .ok_or(CollectionDomainRefusal::UnsupportedShape)
 }
 
-fn verify_function_receiver(
+fn verify_claim_receiver(
     graph: &CollectionNodeIndex<'_>,
     function: &CheckedSemanticNodeV2,
     projection: &CheckedSemanticNodeV2,
@@ -1089,7 +1102,7 @@ mod tests {
 
     #[trace("FR-015-AC-96", "TC-025")]
     #[test]
-    fn empty_integer_range_is_refused_before_a_unique_capacity_can_be_computed() {
+    fn finite_element_domain_refuses_an_empty_integer_range() {
         let element_type = node("empty-element");
         assert_eq!(
             finite_element_domain(
@@ -1143,7 +1156,7 @@ mod tests {
             })
         ));
         claim.field.element = CollectionElementDomain::Integer {
-            minimum: 0,
+            minimum: i128::from(i64::MAX) + 1,
             maximum: i128::from(i64::MAX) + 1,
         };
         assert!(matches!(

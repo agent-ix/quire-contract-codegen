@@ -372,7 +372,7 @@ pub struct CollectionObligationIdentity {
     pub ceilings: ProofCeilings,
     /// Admitted package identity.
     pub package_digest: String,
-    /// Caller-selected function subject whose body contains this claim.
+    /// Caller-selected proof subject called by this collection harness.
     pub subject_path: String,
     /// Selected function or state-clause identity.
     pub function_id: CheckedNodeId,

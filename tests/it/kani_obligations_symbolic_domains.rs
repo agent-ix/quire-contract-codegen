@@ -198,6 +198,35 @@ fn model_document() -> Value {
     })
 }
 
+fn model_document_with_step() -> Value {
+    let mut document = model_document();
+    let node = document["types"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|ty| ty.get("identity").and_then(Value::as_str) == Some(NODE_ID))
+        .unwrap();
+    node["operations"] = json!([{
+        "identity": format!("{NODE_ID}/step"),
+        "name": "step",
+        "params": [],
+        "pre": [],
+        "post": [],
+        "origin": {"source": {
+            "sourceIdentity": SOURCE_ID,
+            "path": "spec.qspec",
+            "startLine": 1,
+            "startColumn": 1
+        }},
+        "frame": {
+            "modifies": [format!("{NODE_ID}/items")],
+            "creates": [],
+            "deletes": []
+        }
+    }]);
+    document
+}
+
 // `deref(input)` is object navigation, admitted under QSL's model layer.
 fn source_unit_with_body(model_digest: &str, body: &str) -> String {
     format!(
@@ -208,12 +237,12 @@ fn source_unit_with_body(model_digest: &str, body: &str) -> String {
     )
 }
 
-fn source_unit_with_clause(model_digest: &str, body: &str) -> String {
+fn source_unit_with_clause(model_digest: &str, declaration: &str, body: &str) -> String {
     format!(
         "language \"ix:native\" edition \"1-draft\";\n\
          profile v = \"quire.model.complete/v1\";\n\
          model M = \"ir268.test/domain\" version \"1.0.0\" digest \"sha256-jcs:{model_digest}\";\n\
-         invariant CollectionReady using v on M::Node at current {{ {body} }}\n"
+         {declaration} {{ {body} }}\n"
     )
 }
 
@@ -740,7 +769,11 @@ fn try_emitted_from_document_and_body(document: Value, body: &str) -> Result<Emi
     )
 }
 
-fn try_emitted_from_document_and_clause(document: Value, body: &str) -> Result<Emitted, String> {
+fn try_emitted_from_document_and_clause(
+    document: Value,
+    declaration: &str,
+    body: &str,
+) -> Result<Emitted, String> {
     let limits = quire_canonical::Limits::new(1 << 20);
     let document_bytes = quire_canonical::to_vec(&document, limits)
         .expect("the authored model document has bounded JCS bytes");
@@ -748,7 +781,7 @@ fn try_emitted_from_document_and_clause(document: Value, body: &str) -> Result<E
         .expect("the authored model document has a JCS digest");
     let model_digest = model_digest_value.to_string();
     let model_digest_bytes = *model_digest_value.as_bytes();
-    let unit = source_unit_with_clause(&model_digest, body);
+    let unit = source_unit_with_clause(&model_digest, declaration, body);
     let site = call_site(
         SourceIdentity::new("agent-ix", "ir1091-clause.native", "git", "fixture"),
         "ir1091-clause.native",
@@ -831,6 +864,7 @@ fn admit_emitted(
 fn admitted_state_clause_collection_preserves_order_and_uniqueness() {
     let fixture = try_emitted_from_document_and_clause(
         ordered_set_document(),
+        "invariant CollectionReady using v on M::Node at current",
         "forall(item in self.items: item >= 0)",
     )
     .expect("admitted clause");
@@ -878,6 +912,7 @@ fn admitted_state_clause_collection_preserves_order_and_uniqueness() {
 fn negated_state_clause_quantifier_is_not_an_independent_collection_claim() {
     let fixture = try_emitted_from_document_and_clause(
         ordered_set_document(),
+        "invariant CollectionReady using v on M::Node at current",
         "not forall(item in self.items: item >= 0)",
     )
     .expect("negated clause is admitted");
@@ -899,6 +934,51 @@ fn negated_state_clause_quantifier_is_not_an_independent_collection_claim() {
         }
     ));
     assert!(collection_harnesses.is_empty());
+}
+
+#[trace("FR-015-AC-96", "FR-015-AC-97", "TC-025")]
+#[test]
+fn operation_and_constraint_clauses_do_not_get_standalone_collection_proofs() {
+    for (document, declaration) in [
+        (
+            model_document_with_step(),
+            "pre CollectionReady using v on M::Node::step",
+        ),
+        (
+            model_document_with_step(),
+            "post CollectionReady using v on M::Node::step",
+        ),
+        (
+            ordered_set_document(),
+            "constraint CollectionReady using v on M::Node at current",
+        ),
+    ] {
+        let fixture = try_emitted_from_document_and_clause(
+            document,
+            declaration,
+            "forall(item in self.items: item >= 0)",
+        )
+        .unwrap_or_else(|error| panic!("{declaration} must be admitted: {error}"));
+        let KaniObligationOutcome::Emitted {
+            records,
+            collection_harnesses,
+            ..
+        } = collection_item_outcome(&fixture, "quire.op.collection.forall", 8)
+        else {
+            panic!("{declaration} settles per item");
+        };
+        assert!(matches!(
+            records[0].disposition,
+            ObligationDisposition::Unsupported {
+                reason: UnsupportedObligation::CollectionClaimNotRendered {
+                    reason:
+                        quire_contract_codegen::CollectionUnsupportedReason::UnsupportedClaimShape,
+                    ..
+                }
+            }
+        ));
+        assert!(collection_harnesses.is_empty());
+    }
 }
 
 #[trace("FR-015-AC-96", "TC-025")]
@@ -2546,6 +2626,7 @@ fn tc_025_real_kani_state_clause_collection_claim_and_mutant() {
     let installation = KaniInstallation::discover().expect("cargo-kani is installed");
     let healthy = try_emitted_from_document_and_clause(
         ordered_set_document(),
+        "invariant CollectionReady using v on M::Node at current",
         "forall(item in self.items: item >= 0)",
     )
     .expect("healthy clause is admitted");
@@ -2557,6 +2638,7 @@ fn tc_025_real_kani_state_clause_collection_claim_and_mutant() {
 
     let mutant = try_emitted_from_document_and_clause(
         ordered_set_document(),
+        "invariant CollectionReady using v on M::Node at current",
         "forall(item in self.items: item >= 1)",
     )
     .expect("mutated clause is admitted");
