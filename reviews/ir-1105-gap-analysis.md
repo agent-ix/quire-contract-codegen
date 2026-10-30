@@ -27,3 +27,11 @@ CONDITIONAL for the changed scalar receipt trace chain. The real routed receipt 
 ## Coverage
 
 FR-017-AC-29, AC-41 through AC-50 examined. Changed source: `src/kani/run/scalar.rs`, `src/kani/test_support.rs`, `src/lib.rs`; changed tests: `tests/it/kani_obligations.rs`, `tests/it/kani_scalar_native_private.rs`, removed `tests/it/kani_scalar_native_digest.rs`. `ensure_snapshot_matches` checks each expected byte and the complete file path set; `capture_entries` sorts, rejects duplicate names and validates UTF-8 of runner-read entries. Tests bind the ten-entry capture and mutation controls, receipt absence of digest APIs, same staged entries across separate native results, cleanup diagnostics, and typed error codes. They verify original emitted bytes but fail to tag that check to AC-49. Some real Kani tests are intentionally ignored in ordinary Cargo tests and require the Kani lane. Plan completion: not assessed.
+
+## Dispositions
+
+Round 1, exact fix head `ecc2f239aa9bf1a5cc92a48179d25876babbe5fd`:
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Both genuine routed receipt callers of `assert_retained_scalar_content` now carry `FR-017-AC-49` in their `#[trace]` attributes. The helper compares each original artifact, harness, and record byte with the retained entry. |

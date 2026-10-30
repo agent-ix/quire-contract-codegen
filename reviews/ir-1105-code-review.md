@@ -27,3 +27,11 @@ CONDITIONAL. Fix the orphaned comment before merge. Removal of the scalar digest
 ## Coverage
 
 FR-017-AC-29, AC-41 through AC-50 were examined against merged #644 spec; AC-43 still has native-result tests, AC-45 has compile-fail and real receipt controls, and AC-49 has direct original artifact byte comparisons. The source adds no vendored material or duplicated upstream type. Full tests are deferred to the code lead's final reviewed head gate. No applicable AssuranceProfile was found under the scoped `spec/` tree. The PR is stacked, so its worktree's pre-#644 spec is not the normative version used for this review.
+
+## Dispositions
+
+Round 1, exact fix head `ecc2f239aa9bf1a5cc92a48179d25876babbe5fd`:
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The orphaned comment and extra blank line were removed from `src/kani/test_support.rs`; `scalar_source_fixture` is preceded only by its own accurate doc comment. |
