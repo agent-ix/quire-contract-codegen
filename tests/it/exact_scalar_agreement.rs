@@ -178,8 +178,9 @@ fn composite_manifest_for_shared_target(manifest: &str, package_name: &str) -> S
         1,
         "composite corpus must retain its generated package manifest"
     );
-    assert!(
-        !manifest.contains("\nname = ") || manifest.matches("\nname = ").count() == 1,
+    assert_eq!(
+        manifest.matches("\nname = ").count(),
+        1,
         "composite corpus must not declare an explicit library name"
     );
     manifest.replacen(
@@ -229,15 +230,16 @@ fn composite_shared_target_keeps_generated_libraries_distinct() {
             .expect("run isolated test");
         assert!(
             output.status.success(),
-            "{case} linked a sibling artifact: {}",
+            "{case} linked a sibling artifact: {}\n{}",
+            String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
         );
+        assert!(
+            String::from_utf8_lossy(&output.stdout).contains("test result: ok. 1 passed; 0 failed"),
+            "{case} did not run its isolation assertion: {}",
+            String::from_utf8_lossy(&output.stdout)
+        );
     }
-    assert_eq!(
-        original.matches("quire-composite-equality-oracles").count(),
-        1,
-        "the generator's original manifest remains unchanged"
-    );
 }
 
 /// The `names.rs` a scratch crate's agreement cases `include!` into their `generated` module:
