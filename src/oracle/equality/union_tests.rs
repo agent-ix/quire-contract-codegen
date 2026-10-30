@@ -44,7 +44,9 @@ fn closure(package: &CheckedPackageV2, context: &qsl_replay::AdmittedContext) ->
         .graph()
         .nodes
         .iter()
-        .find(|node| node.node_id.digest.as_ref() == root.node().to_string())
+        .find(|node| {
+            crate::core::ir::node_key::checked_node_key(&node.node_id).as_ref() == Some(root.node())
+        })
         .expect("original Union node")
         .node_id
         .clone();
@@ -218,7 +220,10 @@ fn union_lookup_and_seal_faults_keep_typed_causes_before_equality() {
         .graph()
         .nodes
         .iter()
-        .find(|node| node.node_id.digest.as_ref() == shape.node().to_string())
+        .find(|node| {
+            crate::core::ir::node_key::checked_node_key(&node.node_id).as_ref()
+                == Some(shape.node())
+        })
         .unwrap();
     let unchanged = environment(&healthy).union_key(shape.key());
     for form in ["record", "tuple"] {
@@ -238,16 +243,33 @@ fn union_lookup_and_seal_faults_keep_typed_causes_before_equality() {
         Err(CompositeEqualityRefusal::CompositeContextMismatch { .. })
     ));
     let mut unknown = original.clone();
-    unknown.node_id.digest = "07".repeat(32).into();
+    unknown
+        .node_id
+        .path
+        .push(quire_contract_model::CheckedNodePathSegment::Name(
+            "unknown".into(),
+        ));
+    let unknown_key = crate::core::ir::node_key::checked_node_key(&unknown.node_id)
+        .expect("structural unknown key");
     assert_eq!(
         admitted::resolve_composite(&context, &mut TypeClosure::default(), &unknown),
         Err(CompositeEqualityRefusal::UnknownComposite {
-            declaration: "07".repeat(32)
+            declaration: unknown_key.to_string()
         })
     );
     let mut wrong_kind = original.clone();
     let marker = context.enums().next().expect("genuine enum");
-    wrong_kind.node_id.digest = marker.key().to_string().into();
+    wrong_kind.node_id = package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| {
+            crate::core::ir::node_key::checked_node_key(&node.node_id).as_ref()
+                == Some(marker.key())
+        })
+        .expect("genuine enum key")
+        .node_id
+        .clone();
     assert_eq!(
         admitted::resolve_composite(&context, &mut TypeClosure::default(), &wrong_kind),
         Err(CompositeEqualityRefusal::WrongAdmittedKind {
@@ -267,24 +289,32 @@ fn union_lookup_and_seal_faults_keep_typed_causes_before_equality() {
     };
     let dependencies = qsl_replay::DependencyInput::new([library]).unwrap();
     let importer = qsl_replay::compile_admitted(
-        qsl_replay::SourceIdentity::new("test", "union-importer.native", "git", "fixture"),
-        "union-importer.native",
-        br#"language "ix:native" edition "1-draft"; profile v = "quire.value.complete/v1";
+        qsl_replay::CompileUnit {
+            source: qsl_replay::SourceIdentity::new(
+                "test",
+                "union-importer.native",
+                "git",
+                "fixture",
+            ),
+            package_name: "union-importer".to_owned(),
+            path: "union-importer.native",
+            bytes:
+                br#"language "ix:native" edition "1-draft"; profile v = "quire.value.complete/v1";
         import "test/union" as u;
         function healthy using v(a: Boolean,b: Boolean): Boolean pure { a = b }"#,
+        },
         [],
         &dependencies,
         Default::default(),
         Default::default(),
     )
     .expect("distinct authentic importer source");
-    let owner = context.package_id().record();
+    let owner = context.package_name();
     assert_eq!(
         admitted::resolve_composite(importer.context(), &mut TypeClosure::default(), original),
         Err(CompositeEqualityRefusal::ForeignComposite {
             declaration: shape.node().to_string(),
-            package_domain: owner.domain().as_str().to_owned(),
-            package_digest: owner.hex(),
+            package_name: owner.as_str().to_owned(),
         })
     );
     // Swap a genuine owner declaration under a different handle: no forged member/key.
