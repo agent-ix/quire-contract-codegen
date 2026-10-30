@@ -262,11 +262,11 @@ pub const CLAUSES: [(&str, &str, &str); 2] = [
     ("AuditNeverDrops", "deposit", "audit"),
 ];
 
-fn unit_source(model_digest: &str, clauses: &[(&str, &str, &str)], blank_lines: usize) -> String {
+fn unit_source(clauses: &[(&str, &str, &str)], blank_lines: usize) -> String {
     let header = format!(
         "language \"ix:native\" edition \"1-draft\";\n\
          profile v = \"quire.value.complete/v1\";\n\
-         model Bank = {PACKAGE:?} version \"1.0.0\" digest \"sha256-jcs:{model_digest}\";\n"
+         model Bank = {PACKAGE:?};\n"
     );
     let clauses = clauses
         .iter()
@@ -449,7 +449,7 @@ impl Twin {
             .expect("deposit operation");
         deposit["params"][0]["typeRef"] = json!(range_type("balance"));
         twin.domain = domain.to_string().into_bytes();
-        let source = unit_source(&hex(&jcs_digest(&twin.domain)), &[CLAUSES[0]], 0);
+        let source = unit_source(&[CLAUSES[0]], 0);
         twin.unit = source
             .replace("self.balance >= pre(self.balance)", "self.balance >= other")
             .into_bytes();
@@ -491,7 +491,7 @@ impl Twin {
         deposit["params"][0]["name"] = json!("amount");
         deposit["params"][0]["identity"] = json!(format!("{}/deposit/amount", account_type()));
         twin.domain = domain.to_string().into_bytes();
-        twin.unit = unit_source(&hex(&jcs_digest(&twin.domain)), &[CLAUSES[0]], 0)
+        twin.unit = unit_source(&[CLAUSES[0]], 0)
             .replace("self.balance >= pre(self.balance)", condition)
             .into_bytes();
         twin
@@ -543,7 +543,7 @@ impl Twin {
             });
         }
         twin.domain = domain.to_string().into_bytes();
-        twin.unit = unit_source(&hex(&jcs_digest(&twin.domain)), &CLAUSES, 0).into_bytes();
+        twin.unit = unit_source(&CLAUSES, 0).into_bytes();
         twin
     }
 
@@ -564,7 +564,7 @@ impl Twin {
             .expect("field");
         field["typeRef"] = json!(type_ref);
         twin.domain = domain.to_string().into_bytes();
-        twin.unit = unit_source(&hex(&jcs_digest(&twin.domain)), &[CLAUSES[0]], 0).into_bytes();
+        twin.unit = unit_source(&[CLAUSES[0]], 0).into_bytes();
         twin
     }
 
@@ -582,7 +582,6 @@ impl Twin {
     pub fn with_unbounded_audit_clause() -> Self {
         let mut twin = Self::with_field_native_type("audit", "ix://quire/native/Integer");
         twin.unit = unit_source(
-            &hex(&jcs_digest(&twin.domain)),
             &[
                 CLAUSES[0],
                 CLAUSES[1],
@@ -713,7 +712,7 @@ impl Twin {
             }
         }
         twin.domain = document.to_string().into_bytes();
-        twin.unit = unit_source(&hex(&jcs_digest(&twin.domain)), &[CLAUSES[0]], 0).into_bytes();
+        twin.unit = unit_source(&[CLAUSES[0]], 0).into_bytes();
         twin
     }
 
@@ -751,7 +750,7 @@ impl Twin {
     /// `blank_lines` empty lines before the first of them.
     pub fn build(granted: &[&str], clauses: &[(&str, &str, &str)], blank_lines: usize) -> Self {
         let domain = domain_document(granted);
-        let unit = unit_source(&hex(&jcs_digest(&domain)), clauses, blank_lines).into_bytes();
+        let unit = unit_source(clauses, blank_lines).into_bytes();
         Self { unit, domain }
     }
 
@@ -946,12 +945,8 @@ impl Twin {
             })
         }));
         let domain = document.to_string().into_bytes();
-        let previous = hex(&jcs_digest(&self.domain));
-        let selected = hex(&jcs_digest(&domain));
-        let source = String::from_utf8(self.unit.clone()).expect("native unit");
-        assert_eq!(source.matches(&previous).count(), 1, "one model selection");
         let twin = Self {
-            unit: source.replacen(&previous, &selected, 1).into_bytes(),
+            unit: self.unit.clone(),
             domain,
         };
         twin.emitted_package(clause)
@@ -963,16 +958,7 @@ impl Twin {
         model_override: Option<Vec<u8>>,
     ) -> (CheckedPackageV2, CheckedNodeId) {
         let document = model_override.unwrap_or_else(|| self.domain.clone());
-        let unit = if document == self.domain {
-            self.unit.clone()
-        } else {
-            let previous = hex(&jcs_digest(&self.domain));
-            let selected = hex(&jcs_digest(&document));
-            let source = String::from_utf8(self.unit.clone()).expect("native unit");
-            assert_eq!(source.matches(&previous).count(), 1, "one model selection");
-            source.replacen(&previous, &selected, 1).into_bytes()
-        };
-        self.admit_emitted_package(clause, &unit, &document, document.clone())
+        self.admit_emitted_package(clause, &self.unit, &document, document.clone())
     }
 
     fn admit_emitted_package(
