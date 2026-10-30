@@ -17,7 +17,7 @@
 
 use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
 
-use quire_contract_model::{CheckedNodeId, CheckedSemanticId, CheckedTerm, ContractPackageV1};
+use quire_contract_model::{CheckedNodeId, CheckedTerm, ContractPackageV1, ContractSourceV1};
 
 use crate::{
     core::artifact::Artifact,
@@ -54,7 +54,7 @@ pub struct RoutedGenerationItem {
     /// The routed backend's kind.
     kind: BackendKind,
     /// The selection authenticated during scalar capability preflight.
-    scalar_selection: Option<(CheckedSemanticId, ContractDriverResultSelection)>,
+    scalar_selection: Option<(ContractSourceV1, ContractDriverResultSelection)>,
 }
 
 /// A routed item cannot be constructed from a contradictory descriptor.
@@ -109,7 +109,7 @@ impl RoutedGenerationItem {
         package: &ContractPackageV1,
         selection: ContractDriverResultSelection,
     ) -> Self {
-        self.scalar_selection = Some((package.identity().clone(), selection));
+        self.scalar_selection = Some((package.wire().package.source.clone(), selection));
         self
     }
 }
@@ -365,7 +365,7 @@ fn generate_routed_with_integer_policy(
                 || item
                     .scalar_selection
                     .as_ref()
-                    .is_some_and(|(identity, _)| identity != package.identity())
+                    .is_some_and(|(source, _)| source != &package.wire().package.source)
                 || selected.is_some_and(|selection| {
                     matches!(selection, ContractDriverResultSelection::OwnResult { .. })
                         && !crate::oracle::scalar::valid_selected_scalar_result(
