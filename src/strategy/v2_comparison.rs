@@ -75,15 +75,15 @@ fn diagnostic(
     cause: V2ComparisonRefusal,
     path: CheckedComparisonPath,
     child: Option<CheckedNodeId>,
-) -> V2ComparisonDiagnostic {
-    V2ComparisonDiagnostic {
+) -> Box<V2ComparisonDiagnostic> {
+    Box::new(V2ComparisonDiagnostic {
         clause: key.clause.clone(),
         claim_owner: key.claim_owner.clone(),
         occurrence: key.occurrence.clone(),
         cause,
         path,
         child,
-    }
+    })
 }
 
 fn operator(operator: CheckedComparisonOperator) -> ComparisonOperator {
@@ -101,7 +101,7 @@ fn operand_value(
     key: V2SelectedClaimKey<'_>,
     projection: &CheckedClauseComparison,
     ordinal: usize,
-) -> Result<(Option<CheckedComparisonRead>, i64, i64), V2ComparisonDiagnostic> {
+) -> Result<(Option<CheckedComparisonRead>, i64, i64), Box<V2ComparisonDiagnostic>> {
     let operand = &projection.operands[ordinal];
     let path = CheckedComparisonPath::Operand(ordinal as u8);
     let convert = |value| {
@@ -139,7 +139,7 @@ fn operand_value(
 pub fn admit_v2_integer_comparison(
     package: &CheckedPackageV2,
     key: V2SelectedClaimKey<'_>,
-) -> Result<V2ComparisonAdmission, V2ComparisonDiagnostic> {
+) -> Result<V2ComparisonAdmission, Box<V2ComparisonDiagnostic>> {
     let projection = package
         .direct_integer_comparison(key.clause, key.occurrence)
         .map_err(|error| {

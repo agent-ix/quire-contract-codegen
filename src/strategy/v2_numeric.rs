@@ -138,8 +138,8 @@ pub struct V2NumericDiagnostic {
 }
 
 impl V2NumericDiagnostic {
-    fn new(key: V2SelectedClaimKey<'_>, code: V2NumericErrorCode, path: &str) -> Self {
-        Self {
+    fn new(key: V2SelectedClaimKey<'_>, code: V2NumericErrorCode, path: &str) -> Box<Self> {
+        Box::new(Self {
             clause: key.clause.clone(),
             claim_owner: key.claim_owner.clone(),
             occurrence: key.occurrence.clone(),
@@ -148,14 +148,14 @@ impl V2NumericDiagnostic {
             point: None,
             population: None,
             path: path.to_owned(),
-        }
+        })
     }
 }
 
 fn map_comparison(
     key: V2SelectedClaimKey<'_>,
-    comparison: V2ComparisonDiagnostic,
-) -> V2NumericDiagnostic {
+    comparison: Box<V2ComparisonDiagnostic>,
+) -> Box<V2NumericDiagnostic> {
     let code = match &comparison.cause {
         V2ComparisonRefusal::Ir(error) => match error.kind {
             CheckedComparisonRefusal::UnknownClause => V2NumericErrorCode::UnknownClause,
@@ -185,14 +185,14 @@ fn map_comparison(
     };
     let path = format!("{:?}", comparison.path);
     let mut result = V2NumericDiagnostic::new(key, code, &path);
-    result.comparison = Some(comparison);
+    result.comparison = Some(*comparison);
     result
 }
 
 fn map_point(
     key: V2SelectedClaimKey<'_>,
     point: CheckedExecutionPointError,
-) -> V2NumericDiagnostic {
+) -> Box<V2NumericDiagnostic> {
     let code = match point.code {
         CheckedExecutionPointRefusal::UnknownClause => V2NumericErrorCode::UnknownClause,
         CheckedExecutionPointRefusal::NotStateClause => V2NumericErrorCode::UnsupportedClauseKind,
@@ -210,8 +210,8 @@ fn map_point(
 
 fn map_population(
     key: V2SelectedClaimKey<'_>,
-    population: V2PopulationDiagnostic,
-) -> V2NumericDiagnostic {
+    population: Box<V2PopulationDiagnostic>,
+) -> Box<V2NumericDiagnostic> {
     let code = match population.code {
         StrategyErrorCode::EmptyPopulation => V2NumericErrorCode::EmptyPopulation,
         StrategyErrorCode::UnsupportedCampaignConstraint => {
@@ -231,7 +231,7 @@ fn map_population(
     };
     let path = population.path.clone();
     let mut result = V2NumericDiagnostic::new(key, code, &path);
-    result.population = Some(population);
+    result.population = Some(*population);
     result
 }
 
@@ -306,7 +306,7 @@ fn component(source: &str) -> String {
 /// the result does not itself qualify coverage or prove the selected claim.
 pub fn generate_v2_numeric_strategy(
     request: &V2NumericRequest<'_>,
-) -> Result<V2NumericBundle, V2NumericDiagnostic> {
+) -> Result<V2NumericBundle, Box<V2NumericDiagnostic>> {
     generate_with_control(request, RenderControl::default())
 }
 
@@ -320,7 +320,7 @@ struct RenderControl<'a> {
 fn generate_with_control(
     request: &V2NumericRequest<'_>,
     control: RenderControl<'_>,
-) -> Result<V2NumericBundle, V2NumericDiagnostic> {
+) -> Result<V2NumericBundle, Box<V2NumericDiagnostic>> {
     let key = request.key;
     let admitted = admit_v2_integer_comparison(request.package, key)
         .map_err(|cause| map_comparison(key, cause))?;
@@ -708,11 +708,12 @@ pub fn run_v2_numeric_census(
 }
 
 #[cfg(test)]
+#[allow(dead_code, clippy::duplicate_mod)]
 #[path = "../../tests/state_frame_support/model.rs"]
 mod model;
 #[cfg(test)]
+#[allow(dead_code, clippy::duplicate_mod)]
 #[path = "../../tests/state_frame_support/native_twin.rs"]
-#[allow(clippy::duplicate_mod)]
 mod native_twin;
 
 #[cfg(test)]

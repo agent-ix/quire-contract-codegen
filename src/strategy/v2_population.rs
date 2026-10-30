@@ -45,15 +45,15 @@ pub struct V2PopulationDiagnostic {
 fn diagnostic(
     admission: &V2ComparisonAdmission,
     source: StrategyDiagnostic,
-) -> V2PopulationDiagnostic {
-    V2PopulationDiagnostic {
+) -> Box<V2PopulationDiagnostic> {
+    Box::new(V2PopulationDiagnostic {
         clause: admission.clause.clone(),
         claim_owner: admission.claim_owner.clone(),
         occurrence: admission.occurrence.clone(),
         code: source.code,
         path: source.path,
         message: source.message,
-    }
+    })
 }
 
 /// Construct a population and full in-domain census from the same admitted V2 comparison.
@@ -64,7 +64,7 @@ fn diagnostic(
 pub fn prepare_v2_numeric_population(
     admission: &V2ComparisonAdmission,
     requested: Population,
-) -> Result<V2NumericPopulation, V2PopulationDiagnostic> {
+) -> Result<V2NumericPopulation, Box<V2PopulationDiagnostic>> {
     let fields: &[&str] = if admission.relation.has_partner_read() {
         &["primary", "partner"]
     } else {
