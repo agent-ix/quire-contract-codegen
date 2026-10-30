@@ -189,9 +189,12 @@ mod tests {
             function add using v(a: Integer): Integer pure { a + a }\n";
         let library_source_id = SourceIdentity::new("test", "reader-library", "git", "fixture");
         let library_compiled = compile_package(
-            library_source_id.clone(),
-            "reader-library.native",
-            library_source.as_bytes(),
+            qsl_replay::CompileUnit {
+                source: library_source_id.clone(),
+                package_name: "test/reader-library".to_owned(),
+                path: "reader-library.native",
+                bytes: library_source.as_bytes(),
+            },
             [],
             &DependencyInput::default(),
             StageLimits::default(),
@@ -221,9 +224,12 @@ mod tests {
         }])
         .expect("one imported library");
         let program = compile_package(
-            SourceIdentity::new("test", "reader-program", "git", "fixture"),
-            "reader-program.native",
-            program_source.as_bytes(),
+            qsl_replay::CompileUnit {
+                source: SourceIdentity::new("test", "reader-program", "git", "fixture"),
+                package_name: "reader-program".to_owned(),
+                path: "reader-program.native",
+                bytes: program_source.as_bytes(),
+            },
             [],
             &dependencies,
             StageLimits::default(),
@@ -424,9 +430,12 @@ mod tests {
 
     fn admitted_source(source: &str) -> CheckedPackageV2 {
         let compiled = compile_package(
-            SourceIdentity::new("test", "package-items.native", "git", "fixture"),
-            "package-items.native",
-            source.as_bytes(),
+            qsl_replay::CompileUnit {
+                source: SourceIdentity::new("test", "package-items.native", "git", "fixture"),
+                package_name: "package-items".to_owned(),
+                path: "package-items.native",
+                bytes: source.as_bytes(),
+            },
             [],
             &DependencyInput::default(),
             StageLimits::default(),
@@ -2893,9 +2902,12 @@ mod tests {
             function mixed using v(a: Int[0, 9], p: Integer): Integer pure { a + p }\n";
         let checked = admitted_source(source);
         let genuine = qsl_replay::compile_admitted(
-            SourceIdentity::new("test", "package-items.native", "git", "fixture"),
-            "package-items.native",
-            source.as_bytes(),
+            qsl_replay::CompileUnit {
+                source: SourceIdentity::new("test", "package-items.native", "git", "fixture"),
+                package_name: "package-items".to_owned(),
+                path: "package-items.native",
+                bytes: source.as_bytes(),
+            },
             [],
             &DependencyInput::default(),
             StageLimits::default(),
@@ -3135,9 +3147,12 @@ mod tests {
             SOURCE.replace("a = a", "a < 5")
         );
         let library_compiled = compile_package(
-            SourceIdentity::new("test", "geometry", "git", "fixture"),
-            "geometry.native",
-            library_source.as_bytes(),
+            qsl_replay::CompileUnit {
+                source: SourceIdentity::new("test", "geometry", "git", "fixture"),
+                package_name: "test/geometry".to_owned(),
+                path: "geometry.native",
+                bytes: library_source.as_bytes(),
+            },
             [],
             &DependencyInput::default(),
             StageLimits::default(),
@@ -3196,9 +3211,12 @@ mod tests {
         }])
         .expect("one supplied library");
         let compiled = compile_package(
-            SourceIdentity::new("test", "program", "git", "fixture"),
-            "program.native",
-            program_source.as_bytes(),
+            qsl_replay::CompileUnit {
+                source: SourceIdentity::new("test", "program", "git", "fixture"),
+                package_name: "program".to_owned(),
+                path: "program.native",
+                bytes: program_source.as_bytes(),
+            },
             [],
             &dependencies,
             StageLimits::default(),
