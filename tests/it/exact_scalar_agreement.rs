@@ -6,8 +6,9 @@
 //! Nothing generated is committed. This module generates the corpus crate now,
 //! builds it as a scratch crate whose one integration test is
 //! `tests/exact_scalar_support/agreement_cases.rs`, and runs that test. The
-//! scratch-crate runner, [`run_agreement_cases`], is shared with the composite
-//! equality and function-application agreement modules.
+//! scratch-crate runner, [`run_agreement_cases`], also serves the function
+//! application agreement module. Composite equality uses the runner variant
+//! that assigns distinct test-only package names before sharing a target dir.
 
 use ix_trace_rs::trace;
 use std::{
@@ -34,15 +35,28 @@ const AGREEMENT_DEV_DEPENDENCIES: &str = concat!(
 /// offline, and asserts that it succeeded and that every `#[test]` in `cases`
 /// ran and passed.
 ///
-/// Each scratch crate has its own target directory: different generated corpora can have the
-/// same package name and version, so sharing artifacts can link a sibling corpus's library.
+/// By default each scratch crate has its own target directory: generated corpora may share a
+/// package identity, which makes a common target unsafe. The composite corpus has its own
+/// identity-aware runner below.
 pub(super) fn run_agreement_cases<'a>(
     label: &str,
     artifacts: impl IntoIterator<Item = (&'a str, &'a str)>,
     extra_files: &[(&'a str, &'a str)],
     cases: &str,
 ) {
-    run_agreement_cases_with_expectation(label, artifacts, extra_files, cases, None);
+    run_agreement_cases_with_expectation(label, artifacts, extra_files, cases, None, None);
+}
+
+/// Composite equality's fixed corpus uses `label` as each scratch crate's test-only package
+/// identity. The labels must be distinct valid Cargo package names; each generated manifest
+/// retains its original identity in `artifacts`, while these test copies reuse one target dir.
+pub(super) fn run_composite_agreement_cases<'a>(
+    label: &str,
+    artifacts: impl IntoIterator<Item = (&'a str, &'a str)>,
+    extra_files: &[(&'a str, &'a str)],
+    cases: &str,
+) {
+    run_agreement_cases_with_expectation(label, artifacts, extra_files, cases, None, Some(label));
 }
 
 /// Require a named native assertion failure, never a setup or compiler failure.
@@ -53,7 +67,14 @@ pub(super) fn run_agreement_mutant<'a>(
     cases: &str,
     failed_test: &str,
 ) {
-    run_agreement_cases_with_expectation(label, artifacts, extra_files, cases, Some(failed_test));
+    run_agreement_cases_with_expectation(
+        label,
+        artifacts,
+        extra_files,
+        cases,
+        Some(failed_test),
+        None,
+    );
 }
 
 fn run_agreement_cases_with_expectation<'a>(
@@ -62,6 +83,7 @@ fn run_agreement_cases_with_expectation<'a>(
     extra_files: &[(&'a str, &'a str)],
     cases: &str,
     failed_test: Option<&str>,
+    composite_package: Option<&str>,
 ) {
     let scratch = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
     let root = scratch.join(label);
@@ -80,6 +102,12 @@ fn run_agreement_cases_with_expectation<'a>(
     let cases_path = repository.join(cases);
     let manifest_path = root.join("Cargo.toml");
     let mut manifest = fs::read_to_string(&manifest_path).expect("read generated manifest");
+    let target_dir = if let Some(package_name) = composite_package {
+        manifest = composite_manifest_for_shared_target(&manifest, package_name);
+        scratch.join("composite-equality-agreement-target")
+    } else {
+        root.join("target")
+    };
     write!(
         manifest,
         "\n[[test]]\nname = \"agreement\"\npath = {:?}\n\n[dev-dependencies]\n{AGREEMENT_DEV_DEPENDENCIES}",
@@ -91,7 +119,7 @@ fn run_agreement_cases_with_expectation<'a>(
 
     let output = Command::new(env!("CARGO"))
         .args(["test", "--locked", "--offline", "--test", "agreement"])
-        .env("CARGO_TARGET_DIR", root.join("target"))
+        .env("CARGO_TARGET_DIR", target_dir)
         .env_remove("RUSTFLAGS")
         .env_remove("CARGO_ENCODED_RUSTFLAGS")
         .current_dir(&root)
@@ -144,6 +172,86 @@ fn run_agreement_cases_with_expectation<'a>(
         passed, declared,
         "{label}: every agreement case must run and pass:\n{stdout}"
     );
+}
+
+fn composite_manifest_for_shared_target(manifest: &str, package_name: &str) -> String {
+    let original = format!(
+        "[package]\nname = \"{}\"\n",
+        quire_contract_codegen::COMPOSITE_EQUALITY_CRATE_NAME
+    );
+    assert_eq!(
+        manifest.matches(&original).count(),
+        1,
+        "composite corpus must retain its generated package manifest"
+    );
+    assert_eq!(
+        manifest.matches("\nname = ").count(),
+        1,
+        "composite corpus must not declare an explicit library name"
+    );
+    manifest.replacen(
+        &original,
+        &format!("[package]\nname = \"{package_name}\"\n"),
+        1,
+    )
+}
+
+/// A common target must never cause Cargo to run a sibling crate's compiled library.
+/// Provenance: IR-1116.
+#[test]
+fn composite_shared_target_keeps_generated_libraries_distinct() {
+    let scratch = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
+    let root = scratch.join("composite-shared-target-isolation");
+    let _ = fs::remove_dir_all(&root);
+    let target = root.join("target");
+    let original = format!(
+        "[package]\nname = \"{}\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[lib]\npath = \"src/lib.rs\"\n\n[workspace]\n",
+        quire_contract_codegen::COMPOSITE_EQUALITY_CRATE_NAME
+    );
+
+    for (case, value) in [("alpha", 11), ("beta", 29), ("alpha", 11)] {
+        let package_name = format!(
+            "{}-{case}",
+            quire_contract_codegen::COMPOSITE_EQUALITY_CRATE_NAME
+        );
+        let crate_name = package_name.replace('-', "_");
+        let directory = root.join(case);
+        fs::create_dir_all(directory.join("src")).expect("create isolated scratch library");
+        fs::create_dir_all(directory.join("tests")).expect("create isolated scratch tests");
+        let manifest = composite_manifest_for_shared_target(&original, &package_name);
+        fs::write(directory.join("Cargo.toml"), manifest).expect("write isolated manifest");
+        fs::write(
+            directory.join("src/lib.rs"),
+            format!("pub fn source_value() -> u32 {{ {value} }}\n"),
+        )
+        .expect("write isolated library");
+        fs::write(
+            directory.join("tests/agreement.rs"),
+            format!(
+                "#[test] fn source_is_this_case() {{ assert_eq!({crate_name}::source_value(), {value}); }}\n"
+            ),
+        )
+        .expect("write isolated test");
+        let output = Command::new(env!("CARGO"))
+            .args(["test", "--offline", "--test", "agreement"])
+            .env("CARGO_TARGET_DIR", &target)
+            .env_remove("RUSTFLAGS")
+            .env_remove("CARGO_ENCODED_RUSTFLAGS")
+            .current_dir(&directory)
+            .output()
+            .expect("run isolated test");
+        assert!(
+            output.status.success(),
+            "{case} linked a sibling artifact: {}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(
+            String::from_utf8_lossy(&output.stdout).contains("test result: ok. 1 passed; 0 failed"),
+            "{case} did not run its isolation assertion: {}",
+            String::from_utf8_lossy(&output.stdout)
+        );
+    }
 }
 
 /// The `names.rs` a scratch crate's agreement cases `include!` into their `generated` module:
