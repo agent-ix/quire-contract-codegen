@@ -182,7 +182,7 @@ fn scalar_package_with_occurrences(
         );
     if expression_occurrences {
         builder.expression_occurrences();
-        let (_, ids) = builder.admit_resolved();
+        builder.admit();
         let unsatisfiable = builder.bound(&Bound::Integer(5, -5));
         builder.narrow(49_301, &key(UNSATISFIABLE), &unsatisfiable);
         builder.expression_occurrences();

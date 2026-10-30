@@ -611,7 +611,7 @@ fn tc_035_replay_returns_the_direct_result_and_replay_through_returns_the_execut
                     .as_state_clause()
                     .expect("state-clause target")
                     .to_string(),
-                envelope.clause_node(),
+                envelope.clause_node().clone(),
             ));
             Ok(sentinel)
         })
@@ -626,8 +626,7 @@ fn tc_035_replay_returns_the_direct_result_and_replay_through_returns_the_execut
     assert_eq!(clause, BALANCE);
     assert_eq!(
         node,
-        &twin
-            .clause_site(BALANCE)
+        twin.clause_site(BALANCE)
             .expect("the clause is declared")
             .node
     );
