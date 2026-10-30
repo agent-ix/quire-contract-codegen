@@ -34,7 +34,7 @@ comes from the live execution control, and its group refusal produces no member 
 Two words are used for two things below. A **batch** is the list of harnesses the caller hands to
 the batch entry, one call. A **group** is the harnesses of one batch that share one launcher
 process, so G groups are G processes; a group of one is a single run. A rule that says "the
-batch" is about the call: a batch refusal (a member not in the crate) refuses the call and starts
+batch" is about the call: a batch refusal (a member not in the crate or a collection-precondition totality assertion that fails its source binding) refuses the call and starts
 no process. A rule that says "the group" is about one process: a group refusal (an output stream
 over its limit or unread, an outer bound that elapsed, a missing report after a clean exit, a
 report that lacks, repeats or adds a harness, a playback for a non-member) refuses that group,
@@ -219,11 +219,14 @@ Text-admission identity rather than claiming a checked node or contract role.
   inconclusive under the cover rules above. A collection precondition is identified by its
   typed V2 clause identity's precondition kind and admitted collection-quantifier marker,
   even if its generated assertion is missing. Its identity binds the generated source digest
-  and the unique line of the FR-015-AC-99 Boolean-completion assertion; the launcher checks
-  that source digest and that exact assertion at the bound line before classifying a report.
-  A satisfied cover classifies as verified only when a successful non-cover property check
-  reports that bound source line. A missing or replaced assertion is a typed artifact refusal;
-  a report with only an unrelated successful check is inconclusive, not verified.
+  and the unique artifact-relative line of the FR-015-AC-99 Boolean-completion assertion.
+  Before launch, the batch admission checks the digest and exact assertion at that line and
+  locates one occurrence of the artifact in the crate source; absence, replacement or ambiguous
+  placement is `BoundTotalityAssertionMismatch`, a batch refusal with no process started.
+  The launcher converts that artifact-relative line to the `src/lib.rs` line by counting the
+  preceding crate-source lines. A satisfied cover classifies as verified only when a successful
+  report check has class `assertion` and location `{ file: src/lib.rs, line: converted_line }`.
+  A report with only an unrelated successful check is inconclusive, not verified.
 - The generator shall append `-Z`, `unstable-options`, `--export-json`, and `/proc/self/fd/N`, in
   that exact order after the unchanged harness options. `N` is the actual child-only mapped
   anonymous report-pipe writer descriptor, at least 5. Evidence records these actual argument bytes,
@@ -785,7 +788,7 @@ The private observer is an isolated, unpublished resolver-2 package. Its explici
 | FR-017-AC-7 | A crate whose library source does not contain the harness source byte for byte is refused, and no backend runs. | Test (TC-027) |
 | FR-017-AC-11 | A routed FR-022/FR-014 exact-scalar harness (`KaniScalarObligationHarness`) runs through `execute_kani_obligation` and `kani_launch_command` the same way an FR-015 contract harness does: a crate whose library source lacks its generated source byte for byte is `HarnessNotInCrate`, its covers classify a run identically (all satisfied is verified, an unsatisfied one is cover-unsatisfied, none printed is inconclusive), and its evidence carries `None` for obligation kind, since an exact-scalar claim carries no contract role. | Test (TC-027) |
 | FR-017-AC-12 | Real Kani captures of a verified run, a falsified run with a playback, an exhausted unwind bound, a run whose only check is unreachable, a partly satisfied cover and a run with no cover each parse into the expected typed report of harness status, successful checks, cover counts and failed checks, and classify to the expected outcome; the falsifying playback block passes through verbatim. | Test (TC-027) |
-| FR-017-AC-13 | A run whose process exited successfully and whose backend reported success with zero successful checks is inconclusive with the vacuous-proof reason, never verified, except that a non-collection precondition harness with no assertion is decided by its cover summary. A collection precondition is identified by the typed V2 clause identity's precondition kind and admitted collection-quantifier marker even if its assertion is missing. The identity binds the generated source digest and unique Boolean-completion assertion line; a missing or replaced assertion is a typed artifact refusal. With intact source, a satisfied cover verifies only when the report has a successful non-cover property check at that bound line. Zero such checks, including a report with successful unrelated checks or only satisfied covers, is inconclusive with the vacuous-proof reason, never verified. The collection control is planned under IR-1091. | Test (TC-027) |
+| FR-017-AC-13 | A run whose process exited successfully and whose backend reported success with zero successful checks is inconclusive with the vacuous-proof reason, never verified, except that a non-collection precondition harness with no assertion is decided by its cover summary. A collection precondition is identified by the typed V2 clause identity's precondition kind and admitted collection-quantifier marker even if its assertion is missing. The identity binds the generated source digest and unique artifact-relative Boolean-completion assertion line; a missing, replaced or ambiguously placed assertion is a `BoundTotalityAssertionMismatch` batch refusal before launch. With intact source, a satisfied cover verifies only when the report has a successful class-`assertion` check at the converted `src/lib.rs` file and line. Zero such checks, including a report with successful unrelated checks or only satisfied covers, is inconclusive with the vacuous-proof reason, never verified. The collection control is planned under IR-1091. | Test (TC-027) |
 | FR-017-AC-14 | A launcher whose stdout or stderr carries more than 8 MiB times its harness count is stopped, its process group is killed, and the run is refused with `kani_output_over_limit` naming the stream, the limit and the count, with no outcome and no retained text; a launcher whose stream is exactly the limit completes with its real exit status and the whole stream retained. No stream is ever truncated and then classified. | Test (TC-043) |
 | FR-017-AC-15 | A timeout too large to add to the current instant never elapses and does not panic. | Test (TC-027) |
 | FR-017-AC-16 | The launcher's capture threads are stopped and joined on every outcome: they return what the launcher wrote before it ended, stop while a write end is still held open, and stop within their drain limit while a straggler keeps writing, so a process holding a pipe open does not delay the return. | Test (TC-027) |
