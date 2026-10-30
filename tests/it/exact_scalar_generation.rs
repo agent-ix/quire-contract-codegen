@@ -62,17 +62,20 @@ fn contents<'o>(oracles: &'o ExactScalarOracles, path: &str) -> &'o str {
 
 fn dispositions(
     oracles: &ExactScalarOracles,
-) -> BTreeMap<String, &ClaimDisposition<GeneratedScalarClaim, ExactScalarRefusal>> {
+) -> BTreeMap<
+    quire_contract_model::CheckedNodeId,
+    &ClaimDisposition<GeneratedScalarClaim, ExactScalarRefusal>,
+> {
     oracles
         .claim_map
         .items
         .iter()
-        .map(|claim| (claim.node_id.digest.to_string(), &claim.result))
+        .map(|claim| (claim.node_id.clone(), &claim.result))
         .collect()
 }
 
-fn claim_id(oracles: &ExactScalarOracles, code: u32) -> quire_contract_model::CheckedNodeId {
-    fixture_ids_for_digest(oracles.claim_map.package_id.digest.as_ref()).resolve(&code_id(code))
+fn claim_id(_oracles: &ExactScalarOracles, code: u32) -> quire_contract_model::CheckedNodeId {
+    code_id(code)
 }
 
 fn assert_refusal_with_ids(
@@ -103,9 +106,8 @@ impl PartialEq<ExactScalarRefusal> for AdmittedRefusal {
 }
 
 fn refusal_of(oracles: &ExactScalarOracles, code: u32) -> ExactScalarRefusal {
-    let ids = fixture_ids_for_digest(oracles.claim_map.package_id.digest.as_ref());
-    let node_id = ids.resolve(&code_id(code));
-    match dispositions(oracles).get(node_id.digest.as_ref()) {
+    let node_id = code_id(code);
+    match dispositions(oracles).get(&node_id) {
         Some(ClaimDisposition::Refused { refusal }) => refusal.clone(),
         other => panic!("node {code} is not refused: {other:?}"),
     }
@@ -113,9 +115,8 @@ fn refusal_of(oracles: &ExactScalarOracles, code: u32) -> ExactScalarRefusal {
 
 /// The generated oracle function name of node `code`, as the claim map records it.
 pub(super) fn symbol(oracles: &ExactScalarOracles, code: u32) -> String {
-    let ids = fixture_ids_for_digest(oracles.claim_map.package_id.digest.as_ref());
-    let node_id = ids.resolve(&code_id(code));
-    match dispositions(oracles).get(node_id.digest.as_ref()) {
+    let node_id = code_id(code);
+    match dispositions(oracles).get(&node_id) {
         Some(ClaimDisposition::Generated(generated)) => generated.symbol.clone(),
         other => panic!("node {code} is not generated: {other:?}"),
     }
@@ -159,7 +160,7 @@ fn tc_024_text_admission_corpus_is_refused_by_ir_today() {
             .as_array()
             .expect("nodes")
             .iter()
-            .position(|node| node["node_id"]["digest"].as_str() == Some(node_id.digest.as_ref()))
+            .position(|node| node["node_id"] == json!(node_id))
             .unwrap_or_else(|| panic!("node {code} is in the wire"));
         let CheckedPackageV2ReadResult::Refused(refusal) = result else {
             panic!("node {code}: IR now admits it ({result:?}); move it back into the corpus");
@@ -175,7 +176,11 @@ fn tc_024_text_admission_corpus_is_refused_by_ir_today() {
             "node {code}"
         );
         assert_eq!(
-            refusal.path.as_ref().map(|path| path.as_str().to_owned()),
+            refusal
+                .loci
+                .first()
+                .and_then(|locus| locus.path.as_ref())
+                .map(|path| path.as_str().to_owned()),
             Some(format!("/semantic_graph/nodes/{position}/body/arguments/0")),
             "node {code}"
         );
@@ -193,7 +198,7 @@ fn tc_052_aggregate_scalar_operand_is_refused_by_reader() {
         .as_array()
         .expect("nodes")
         .iter()
-        .position(|node| node["node_id"]["digest"].as_str() == Some(node_id.digest.as_ref()))
+        .position(|node| node["node_id"] == json!(node_id))
         .expect("aggregate operand node");
     let CheckedPackageV2ReadResult::Refused(refusal) = result else {
         panic!("aggregate operand unexpectedly admitted: {result:?}");
@@ -204,7 +209,11 @@ fn tc_052_aggregate_scalar_operand_is_refused_by_reader() {
         Some(CheckedPackageRefusalCause::OperatorIneligible)
     );
     assert_eq!(
-        refusal.path.as_ref().map(|path| path.as_str().to_owned()),
+        refusal
+            .loci
+            .first()
+            .and_then(|locus| locus.path.as_ref())
+            .map(|path| path.as_str().to_owned()),
         Some(format!("/semantic_graph/nodes/{position}/body/arguments/0"))
     );
     assert_eq!(refusal.locus, Some(node_id));
@@ -220,7 +229,7 @@ fn tc_052_mistyped_scalar_literal_is_refused_by_reader() {
         .as_array()
         .expect("nodes")
         .iter()
-        .position(|node| node["node_id"]["digest"].as_str() == Some(node_id.digest.as_ref()))
+        .position(|node| node["node_id"] == json!(node_id))
         .expect("mistyped literal node");
     let CheckedPackageV2ReadResult::Refused(refusal) = result else {
         panic!("mistyped literal unexpectedly admitted: {result:?}");
@@ -231,7 +240,11 @@ fn tc_052_mistyped_scalar_literal_is_refused_by_reader() {
         Some(CheckedPackageRefusalCause::OperatorIneligible)
     );
     assert_eq!(
-        refusal.path.as_ref().map(|path| path.as_str().to_owned()),
+        refusal
+            .loci
+            .first()
+            .and_then(|locus| locus.path.as_ref())
+            .map(|path| path.as_str().to_owned()),
         Some(format!(
             "/semantic_graph/nodes/{position}/body/arguments/1/type"
         ))
@@ -249,7 +262,7 @@ fn tc_052_quantity_literal_operand_is_refused_by_reader() {
         .as_array()
         .expect("nodes")
         .iter()
-        .position(|node| node["node_id"]["digest"].as_str() == Some(node_id.digest.as_ref()))
+        .position(|node| node["node_id"] == json!(node_id))
         .expect("quantity literal node");
     let CheckedPackageV2ReadResult::Refused(refusal) = result else {
         panic!("quantity literal unexpectedly admitted: {result:?}");
@@ -260,7 +273,11 @@ fn tc_052_quantity_literal_operand_is_refused_by_reader() {
         Some(CheckedPackageRefusalCause::OperatorIneligible)
     );
     assert_eq!(
-        refusal.path.as_ref().map(|path| path.as_str().to_owned()),
+        refusal
+            .loci
+            .first()
+            .and_then(|locus| locus.path.as_ref())
+            .map(|path| path.as_str().to_owned()),
         Some(format!(
             "/semantic_graph/nodes/{position}/body/arguments/1/type"
         ))
@@ -279,7 +296,7 @@ fn tc_052_noncanonical_integer_endpoint_is_refused_by_reader() {
         .expect("nodes");
     let position = nodes
         .iter()
-        .position(|node| node["node_id"]["digest"].as_str() == Some(bound.digest.as_ref()))
+        .position(|node| node["node_id"] == json!(bound))
         .expect("integer bound");
     let members = nodes[position]["body"]["members"]
         .as_array_mut()
@@ -310,7 +327,11 @@ fn tc_052_noncanonical_integer_endpoint_is_refused_by_reader() {
         Some(CheckedPackageRefusalCause::StaleNodeKey)
     );
     assert_eq!(
-        refusal.path.as_ref().map(|path| path.as_str().to_owned()),
+        refusal
+            .loci
+            .first()
+            .and_then(|locus| locus.path.as_ref())
+            .map(|path| path.as_str().to_owned()),
         Some(format!("/semantic_graph/nodes/{position}/node_id"))
     );
     assert_eq!(refusal.locus, Some(bound));
@@ -332,7 +353,7 @@ fn tc_052_reader_refuses_stale_application_key_in_admitted_positive_wire() {
         .expect("nodes");
     let position = nodes
         .iter()
-        .position(|node| node["node_id"]["digest"] == expected.digest.as_ref())
+        .position(|node| node["node_id"] == json!(expected))
         .expect("admitted increment application");
     assert_eq!(nodes[position]["body"]["term"], "application");
     assert!(nodes.iter().all(|node| node["node_id"] != json!(stale)));
@@ -357,7 +378,11 @@ fn tc_052_reader_refuses_stale_application_key_in_admitted_positive_wire() {
         Some(CheckedPackageRefusalCause::StaleNodeKey)
     );
     assert_eq!(
-        refusal.path.as_ref().map(|path| path.as_str().to_owned()),
+        refusal
+            .loci
+            .first()
+            .and_then(|locus| locus.path.as_ref())
+            .map(|path| path.as_str().to_owned()),
         Some(format!("/semantic_graph/nodes/{position}/node_id"))
     );
     assert_eq!(refusal.locus.as_ref(), Some(&stale));
@@ -377,7 +402,7 @@ fn tc_052_reader_refuses_application_body_mutation_under_prior_key() {
         .expect("nodes");
     let position = nodes
         .iter()
-        .position(|node| node["node_id"]["digest"] == prior.digest.as_ref())
+        .position(|node| node["node_id"] == json!(prior))
         .expect("admitted increment application");
     assert_eq!(nodes[position]["body"]["arguments"][1]["value"], "1");
     nodes[position]["body"]["arguments"][1]["value"] = json!("2");
@@ -403,7 +428,11 @@ fn tc_052_reader_refuses_application_body_mutation_under_prior_key() {
         Some(CheckedPackageRefusalCause::StaleNodeKey)
     );
     assert_eq!(
-        refusal.path.as_ref().map(|path| path.as_str().to_owned()),
+        refusal
+            .loci
+            .first()
+            .and_then(|locus| locus.path.as_ref())
+            .map(|path| path.as_str().to_owned()),
         Some(format!("/semantic_graph/nodes/{position}/node_id"))
     );
     assert_eq!(refusal.locus.as_ref(), Some(&prior));
@@ -421,7 +450,7 @@ fn tc_052_mismatched_decimal_mode_is_refused_by_reader() {
         .expect("nodes");
     let position = nodes
         .iter()
-        .position(|node| node["node_id"]["digest"].as_str() == Some(node_id.digest.as_ref()))
+        .position(|node| node["node_id"] == json!(node_id))
         .expect("decimal add");
     nodes[position]["body"]["operation"]["mode"]["value"] = json!("toward-zero");
     let (result, candidate) = read_application_mutated_wire(wire, &node_id);
@@ -434,7 +463,11 @@ fn tc_052_mismatched_decimal_mode_is_refused_by_reader() {
         Some(CheckedPackageRefusalCause::OperationModeTypeMismatch)
     );
     assert_eq!(
-        refusal.path.as_ref().map(|path| path.as_str().to_owned()),
+        refusal
+            .loci
+            .first()
+            .and_then(|locus| locus.path.as_ref())
+            .map(|path| path.as_str().to_owned()),
         Some(format!(
             "/semantic_graph/nodes/{position}/body/operation/mode/value"
         ))
@@ -531,7 +564,7 @@ fn tc_024_every_scalar_family_generates_one_oracle_calling_its_runtime_operator(
         .items
         .iter()
         .filter(|claim| matches!(&claim.result, ClaimDisposition::Generated(_)))
-        .map(|claim| format!("{}/{}", claim.node_id.domain, claim.node_id.digest))
+        .map(|claim| format!("{:?}", claim.node_id))
         .collect::<Vec<String>>();
     let subject_refs = subjects.iter().map(String::as_str).collect::<Vec<_>>();
     crate::generated_headers::assert_header("src/lib.rs", lib, &subject_refs);
@@ -709,11 +742,11 @@ fn tc_024_every_scalar_family_generates_one_oracle_calling_its_runtime_operator(
     let generated = dispositions(&oracles)
         .into_iter()
         .filter(|(_, result)| matches!(result, ClaimDisposition::Generated(_)))
-        .map(|(digest, _)| digest)
+        .map(|(node_id, _)| node_id)
         .collect::<Vec<_>>();
     let mut expected = calls
         .iter()
-        .map(|(code, _)| claim_id(&oracles, *code).digest.to_string())
+        .map(|(code, _)| claim_id(&oracles, *code))
         .collect::<Vec<_>>();
     expected.sort();
     assert_eq!(generated, expected, "exactly the corpus is generated");
@@ -878,14 +911,14 @@ fn tc_024_refused_items_are_typed_emit_no_code_and_leave_siblings_unchanged() {
     ];
     for (code, refusal) in &expected {
         let node_id = resolve(*code);
-        match dispositions(&oracles).get(node_id.digest.as_ref()) {
+        match dispositions(&oracles).get(&node_id) {
             Some(ClaimDisposition::Refused { refusal: actual }) => {
                 assert_eq!(actual, refusal, "node {code}");
             }
             other => panic!("node {code} is not refused: {other:?}"),
         }
         assert!(
-            !lib.contains(node_id.digest.as_ref()),
+            !lib.contains(&format!("{node_id:?}")),
             "refused node {code} left code behind"
         );
     }
@@ -1172,7 +1205,7 @@ fn tc_024_claim_map_carries_identity_source_bounds_and_operation_per_item() {
             .expect("source map")
             .iter()
             .filter(|entry| {
-                entry["node_id"]["digest"] == *fixture_ids.resolve(&code_id(expression.code)).digest
+                entry["node_id"] == json!(fixture_ids.resolve(&code_id(expression.code)))
             })
             .cloned()
             .collect::<Vec<_>>();
@@ -1217,12 +1250,15 @@ fn checks_no_bound(operation: &ExactScalarOperation) -> bool {
 
 #[trace("FR-014-AC-4", "TC-024")]
 #[test]
-fn tc_024_claim_map_entries_ascend_by_node_id_domain_then_digest() {
+fn tc_024_claim_map_entries_ascend_by_structural_node_key() {
     let package = corpus_package().admit();
-    let other_domain: quire_contract_model::CheckedNodeId = serde_json::from_value(
-        serde_json::json!({"domain": "quire.a-earlier-domain/v1", "digest": "f".repeat(64)}),
-    )
-    .expect("node id");
+    let other_domain = quire_contract_model::CheckedNodeId {
+        package: "a-earlier".into(),
+        path: vec![quire_contract_model::CheckedNodePathSegment::Name(
+            "zzzz".into(),
+        )],
+        ordinal: 0,
+    };
     let mut items = golden_items();
     items.push(ExactScalarItem {
         node_id: other_domain.clone(),
@@ -1233,18 +1269,13 @@ fn tc_024_claim_map_entries_ascend_by_node_id_domain_then_digest() {
         .claim_map
         .items
         .iter()
-        .map(|claim| {
-            (
-                claim.node_id.domain.to_string(),
-                claim.node_id.digest.to_string(),
-            )
-        })
+        .map(|claim| claim.node_id.clone())
         .collect::<Vec<_>>();
     let mut sorted = ids.clone();
     sorted.sort();
-    assert_eq!(ids, sorted, "entries ascend by domain, then digest");
+    assert_eq!(ids, sorted, "entries ascend by structural node key");
     assert_eq!(oracles.claim_map.items[0].node_id, other_domain);
-    // Its digest is the greatest requested, so it sorts first only by its domain.
+    // Its package sorts before the fixture package despite its later path spelling.
     assert_eq!(
         oracles.claim_map.items[0].result,
         ClaimDisposition::Refused {
@@ -1527,7 +1558,7 @@ fn tc_052_aggregate_integer_operand_is_refused_by_reader() {
         .as_array()
         .expect("nodes")
         .iter()
-        .position(|node| node["node_id"]["digest"].as_str() == Some(node_id.digest.as_ref()))
+        .position(|node| node["node_id"] == json!(node_id))
         .expect("aggregate operand node");
     let CheckedPackageV2ReadResult::Refused(refusal) = result else {
         panic!("aggregate operand unexpectedly admitted: {result:?}");
@@ -1538,7 +1569,11 @@ fn tc_052_aggregate_integer_operand_is_refused_by_reader() {
         Some(CheckedPackageRefusalCause::OperatorIneligible)
     );
     assert_eq!(
-        refusal.path.as_ref().map(|path| path.as_str().to_owned()),
+        refusal
+            .loci
+            .first()
+            .and_then(|locus| locus.path.as_ref())
+            .map(|path| path.as_str().to_owned()),
         Some(format!("/semantic_graph/nodes/{position}/body/arguments/1"))
     );
     assert_eq!(refusal.locus, Some(node_id));
@@ -1611,7 +1646,7 @@ fn tc_024_a_byte_ceiling_lowering_failure_is_refused_per_item_as_its_own_refusal
             .as_array()
             .expect("source map")
             .iter()
-            .filter(|entry| entry["node_id"]["digest"] == code_id(*code).digest.as_ref())
+            .filter(|entry| entry["node_id"] == json!(code_id(*code)))
             .collect::<Vec<_>>();
         assert_eq!(entries.len(), spans.len());
         for (ordinal, (entry, (start, end))) in entries.iter().zip(spans).enumerate() {
@@ -1948,7 +1983,11 @@ fn tc_024_missing_rounding_mode_is_a_strict_reader_refusal() {
     assert_eq!(refusal.locus, Some(node));
     let expected_path = format!("/semantic_graph/nodes/{position}/body/operation/mode/value");
     assert_eq!(
-        refusal.path.as_ref().map(|path| path.as_str()),
+        refusal
+            .loci
+            .first()
+            .and_then(|locus| locus.path.as_ref())
+            .map(|path| path.as_str()),
         Some(expected_path.as_str())
     );
     assert!(refusal.expected_node_id().is_none());
@@ -2144,7 +2183,7 @@ fn tc_024_literal_operands_are_classified_by_value_kind_and_constants_stop_typed
     // Node 1003's right operand is an integer literal, so it type-checks as an
     // integer and the subtraction generates like any other.
     assert!(matches!(
-        dispositions(&oracles)[claim_id(&oracles, LITERAL_OPERAND).digest.as_ref()],
+        dispositions(&oracles)[&claim_id(&oracles, LITERAL_OPERAND)],
         ClaimDisposition::Generated(_)
     ));
     let subtract = function_body(lib, &symbol(&oracles, LITERAL_OPERAND));
@@ -2182,7 +2221,7 @@ fn tc_024_literal_operands_are_classified_by_value_kind_and_constants_stop_typed
         .as_array()
         .expect("nodes")
         .iter()
-        .position(|node| node["node_id"]["digest"].as_str() == Some(node_id.digest.as_ref()))
+        .position(|node| node["node_id"] == json!(node_id))
         .expect("text literal node");
     let CheckedPackageV2ReadResult::Refused(refusal) = result else {
         panic!("text literal unexpectedly admitted: {result:?}");
@@ -2193,7 +2232,11 @@ fn tc_024_literal_operands_are_classified_by_value_kind_and_constants_stop_typed
         Some(CheckedPackageRefusalCause::OperatorIneligible)
     );
     assert_eq!(
-        refusal.path.as_ref().map(|path| path.as_str().to_owned()),
+        refusal
+            .loci
+            .first()
+            .and_then(|locus| locus.path.as_ref())
+            .map(|path| path.as_str().to_owned()),
         Some(format!(
             "/semantic_graph/nodes/{position}/body/arguments/1/type"
         ))
@@ -2296,7 +2339,7 @@ fn tc_024_ac17_an_operand_typed_by_a_bounded_domain_generates() {
         }],
     );
     assert!(matches!(
-        dispositions(&oracles).get(claim_id(&oracles, BOUNDED_INCREMENT).digest.as_ref()),
+        dispositions(&oracles).get(&claim_id(&oracles, BOUNDED_INCREMENT)),
         Some(ClaimDisposition::Generated(_))
     ));
 }
@@ -2591,18 +2634,18 @@ fn two_parameter_disposition(
         }],
     );
     let disposition = dispositions(&oracles)
-        .get(node_id.digest.as_ref())
+        .get(&node_id)
         .map(|disposition| (*disposition).clone())
         .expect("one claim per item");
     (oracles, disposition)
 }
 
 fn two_parameter_refusal(code: u32, operation: ExactScalarOperation) -> AdmittedRefusal {
-    let (oracles, disposition) = two_parameter_disposition(code, operation);
+    let (_oracles, disposition) = two_parameter_disposition(code, operation);
     match disposition {
         ClaimDisposition::Refused { refusal } => AdmittedRefusal {
             actual: refusal,
-            ids: fixture_ids_for_digest(oracles.claim_map.package_id.digest.as_ref()),
+            ids: FixtureIds,
         },
         other => panic!("node {code} is not refused: {other:?}"),
     }
@@ -2612,12 +2655,9 @@ fn two_parameter_checked_bounds(
     code: u32,
     operation: ExactScalarOperation,
 ) -> (Vec<quire_contract_model::CheckedNodeId>, FixtureIds) {
-    let (oracles, disposition) = two_parameter_disposition(code, operation);
+    let (_oracles, disposition) = two_parameter_disposition(code, operation);
     match disposition {
-        ClaimDisposition::Generated(generated) => (
-            generated.checked_bounds,
-            fixture_ids_for_digest(oracles.claim_map.package_id.digest.as_ref()),
-        ),
+        ClaimDisposition::Generated(generated) => (generated.checked_bounds, FixtureIds),
         other => panic!("node {code} is not generated: {other:?}"),
     }
 }
@@ -2803,7 +2843,7 @@ fn tc_024_ac25_a_plain_typed_reference_operand_beside_bounded_typing_requires_a_
         }],
     );
     assert!(matches!(
-        dispositions(&oracles).get(bounded_operand.digest.as_ref()),
+        dispositions(&oracles).get(&bounded_operand),
         Some(ClaimDisposition::Generated(_))
     ));
 }
@@ -2827,7 +2867,7 @@ fn qsl_disposition(
         }],
     );
     dispositions(&oracles)
-        .get(node_id.digest.as_ref())
+        .get(&node_id)
         .map(|disposition| (*disposition).clone())
         .expect("one claim per item")
 }
@@ -2853,7 +2893,7 @@ fn qsl_checked_bounds(
         operation,
     };
     let oracles = generate(package, &[item]);
-    match dispositions(&oracles).get(ids.resolve(&code_id(code)).digest.as_ref()) {
+    match dispositions(&oracles).get(&ids.resolve(&code_id(code))) {
         Some(ClaimDisposition::Generated(generated)) => {
             (generated.checked_bounds.clone(), ids.clone())
         }
@@ -3041,7 +3081,7 @@ fn tc_024_ac33_a_narrowing_of_another_form_or_base_type_is_missing_bound() {
         .as_array()
         .expect("nodes")
         .iter()
-        .position(|node| node["node_id"]["digest"] == invalid.digest.as_ref())
+        .position(|node| node["node_id"] == json!(invalid))
         .expect("wrong-base bound node");
     let nodes: Vec<CheckedSemanticNodeV2> =
         serde_json::from_value(wire["semantic_graph"]["nodes"].clone()).expect("nodes parse");
@@ -3063,7 +3103,11 @@ fn tc_024_ac33_a_narrowing_of_another_form_or_base_type_is_missing_bound() {
         Some(CheckedPackageRefusalCause::StaleNodeKey)
     );
     assert_eq!(
-        refusal.path.as_ref().map(|path| path.as_str()),
+        refusal
+            .loci
+            .first()
+            .and_then(|locus| locus.path.as_ref())
+            .map(|path| path.as_str()),
         Some(format!("/semantic_graph/nodes/{position}/node_id").as_str())
     );
     assert_eq!(refusal.locus, Some(invalid));
@@ -3444,7 +3488,7 @@ fn tc_024_boolean_oracle_source_map_probes_the_entry_and_implication_consequent(
         .iter()
         .filter(|region| region["role"] == "oracle_evaluation")
         .collect::<Vec<_>>();
-    let ids = fixture_ids_for_digest(all.claim_map.package_id.digest.as_ref());
+    let ids = FixtureIds;
     let implication_nodes = [DERIVE_BOOLEAN_IMPLIES, DERIVE_BOOLEAN_SHORT_CIRCUIT]
         .map(|code| ids.resolve(&code_id(code)));
     assert_eq!(
