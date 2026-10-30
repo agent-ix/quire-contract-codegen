@@ -67,7 +67,7 @@ impl<Item, Subjects> RefinementRun<Item, Subjects> {
         let super::SolverExecution { query, process } = execution;
         let super::QueryRun {
             association,
-            status: mut status,
+            mut status,
         } = query;
         let super::QueryAssociation { selection, attempt } = association;
         let proof_bytes = if status == SolverStatus::Unsat
