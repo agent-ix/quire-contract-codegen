@@ -59,12 +59,25 @@ fn model(package: &str, operations: &[&str]) -> (Vec<u8>, [u8; 32], String) {
         .iter()
         .map(|name| {
             let identity = key(package, &format!("Object/{name}"));
+            let field = key(package, &format!("Object/flag{}", &name[2..]));
             json!({
                 "identity": identity, "name": name, "params": [], "pre": [], "post": [],
                 "origin": {"source": {"sourceIdentity": key(package, "spec"), "path": "spec.qspec",
                     "startLine": 1, "startColumn": 1}},
-                "frame": {"modifies": [], "creates": [], "deletes": []}
+                "frame": {"modifies": [], "modifies_receiver": [field],
+                    "creates": [], "deletes": []}
             })
+        })
+        .collect();
+    let fields: Vec<_> = (0..7)
+        .map(|index| {
+            let name = format!("flag{index}");
+            let identity = key(package, &format!("Object/{name}"));
+            json!({"identity": identity, "name": name,
+                "typeRef": "ix://quire/native/Boolean", "presence": "required",
+                "nullable": false, "defaultKind": "none",
+                "multiplicity": {"lower": 1, "upper": 1, "ordered": false, "unique": true},
+                "origin": origin(&identity)})
         })
         .collect();
     let document = json!({
@@ -79,11 +92,7 @@ fn model(package: &str, operations: &[&str]) -> (Vec<u8>, [u8; 32], String) {
             "kind": {"module": package, "name": "object_type"}, "roles": [],
             "origin": origin(&object), "constraints": [], "extensions": [],
             "unknownPolicy": "reject", "supertypes": [],
-            "fields": [{"identity": key(package, "Object/flag"), "name": "flag",
-                "typeRef": "ix://quire/native/Boolean", "presence": "required",
-                "nullable": false, "defaultKind": "none",
-                "multiplicity": {"lower": 1, "upper": 1, "ordered": false, "unique": true},
-                "origin": origin(&key(package, "Object/flag"))}],
+            "fields": fields,
             "operations": operations, "relationships": []}],
         "populations": [{"identity": population, "displayName": "objects",
             "kind": {"module": package, "name": "population"},
@@ -101,6 +110,9 @@ fn initial(
     snapshots: &mut BTreeMap<[u8; 32], Vec<u8>>,
 ) -> DocumentRef {
     let name = format!("{package}/start");
+    let fields: BTreeMap<_, _> = (0..7)
+        .map(|index| (format!("flag{index}"), json!({"boolean": false})))
+        .collect();
     let snapshot = json!({
         "format": "quire.state.snapshot/v1",
         "identity": {"authority": "test", "identity": name,
@@ -111,7 +123,7 @@ fn initial(
         "anchor": {"kind": "initialization", "name": "start"},
         "populations": [{"population": key(package, "objects"), "complete": true,
             "objects": [{"key": "only", "type": key(package, "Object"),
-                "fields": {"flag": {"boolean": false}}}]}]
+                "fields": fields}]}]
     });
     let limits = quire_canonical::Limits::new(1 << 20);
     let bytes = quire_canonical::to_vec(&snapshot, limits).expect("snapshot bytes");
@@ -144,6 +156,10 @@ fn authored_rows(reverse: bool) -> String {
 }
 
 fn authored_unit(abstract_digest: &str, concrete_digest: &str, reverse: bool) -> String {
+    let mapping = (0..7)
+        .map(|index| format!("flag{index} = self.flag{index};"))
+        .collect::<Vec<_>>()
+        .join(" ");
     format!(
         "language \"ix:native\" edition \"1-draft\";\n\
          profile inf = \"quire.temporal.infinite-trace/v1\";\n\
@@ -151,7 +167,7 @@ fn authored_unit(abstract_digest: &str, concrete_digest: &str, reverse: bool) ->
          model Concrete = \"{CONCRETE}\" version \"1.0.0\" digest \"sha256-jcs:{concrete_digest}\";\n\
          refinement SevenRows using inf abstract Abstract concrete Concrete {{\n\
          population Abstract::objects from Concrete::objects;\n\
-         object Abstract::Object from Concrete::Object {{ flag = self.flag; }}\n\
+         object Abstract::Object from Concrete::Object {{ {mapping} }}\n\
          {}\
          }}\n",
         authored_rows(reverse)
@@ -285,7 +301,21 @@ fn source_row_permutation_keeps_canonical_refinement_query_bindings() {
     let (first_sources, first_expected, first_records) = source_records(false);
     let (reordered_sources, reordered_expected, mut reordered_records) = source_records(true);
     assert_ne!(first_sources, reordered_sources);
+    for row in 0..7 {
+        assert_eq!(reordered_sources[row], 6 - first_sources[row]);
+    }
     assert_eq!(first_expected.len(), 8);
+    for left in 1..8 {
+        for right in left + 1..8 {
+            assert_ne!(
+                first_expected[left].query_bytes,
+                first_expected[right].query_bytes,
+                "Step rows {} and {} must have distinct canonical queries",
+                left - 1,
+                right - 1
+            );
+        }
+    }
     for (before, after) in first_expected.iter().zip(&reordered_expected) {
         assert_eq!(before.item, after.item);
         assert_eq!(before.subjects, after.subjects);

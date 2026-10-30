@@ -2,7 +2,11 @@
 
 //! Typed refinement solver evidence and the FR-045 certificate adapter handoff.
 
-use std::{collections::BTreeSet, ffi::OsStr, num::NonZeroU64};
+use std::{
+    collections::BTreeSet,
+    ffi::{OsStr, OsString},
+    num::NonZeroU64,
+};
 
 use super::{captured_alethe_proof, SolverExecution, SolverStatus};
 use crate::kani::run::process::{ProcessOutcome, ProcessRun};
@@ -260,7 +264,7 @@ fn validate_records<'a, Item: Eq, Subjects: Eq>(
     Ok(validated)
 }
 
-fn cvc5_proof_dump_selected(arguments: &[std::ffi::OsString]) -> bool {
+fn cvc5_proof_dump_selected(arguments: &[OsString]) -> bool {
     arguments
         .iter()
         .any(|argument| argument.as_os_str() == OsStr::new("--dump-proofs"))
