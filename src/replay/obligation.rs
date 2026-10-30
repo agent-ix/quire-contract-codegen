@@ -15,6 +15,8 @@ use crate::kani::{
 /// Why a function-contract identity could not be built.
 #[derive(Debug)]
 pub enum ObligationIdentityError {
+    /// QSL has not supplied the producer-assigned identity for this selected claim.
+    ProducerIdentityUnavailable,
     /// A harness argument names no parameter of the function.
     UnboundArgument {
         /// The harness argument's identifier.
@@ -44,6 +46,9 @@ pub enum ObligationIdentityError {
 impl fmt::Display for ObligationIdentityError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::ProducerIdentityUnavailable => {
+                f.write_str("QSL did not supply this claim's obligation identity")
+            }
             Self::UnboundArgument { argument } => {
                 write!(
                     f,
@@ -163,7 +168,7 @@ pub(crate) fn contract_arguments(
     }
 }
 
-/// The structural obligation identity over QSL's node and occurrence ordinal.
+/// The structural obligation identity for QSL's selected claim.
 ///
 /// A frame has no parameters, so its `function` is the frame node, its `declaration` is the
 /// frame's own occurrence and its `arguments` are empty ([`frame_identity`]).
@@ -172,16 +177,18 @@ pub(crate) fn contract_arguments(
 ///
 /// # Errors
 ///
-/// [`ObligationIdentityError::OrdinalTooLarge`] for an occurrence beyond `u32`.
+/// [`ObligationIdentityError::OrdinalTooLarge`] for an occurrence beyond `u32`, or
+/// [`ObligationIdentityError::ProducerIdentityUnavailable`] until QSL exposes the producer's
+/// exact identity on the selected site.
 pub(crate) fn function_contract_identity(
-    function: WireNodeId,
+    _function: WireNodeId,
     declaration: &OccurrenceKey,
     _kind: ObligationKind,
     _arguments: &[ContractArgument],
 ) -> Result<ObligationIdentity, ObligationIdentityError> {
-    let ordinal = u32::try_from(declaration.origin().ordinal())
+    let _ordinal = u32::try_from(declaration.origin().ordinal())
         .map_err(|_| ObligationIdentityError::OrdinalTooLarge(declaration.origin().ordinal()))?;
-    Ok(ObligationIdentity::new(function, None, ordinal))
+    Err(ObligationIdentityError::ProducerIdentityUnavailable)
 }
 
 /// The kind of the obligation a state-frame harness proves, read from its `property` and from
@@ -193,15 +200,13 @@ pub(crate) fn frame_kind(property: &StateFrameProperty) -> Option<ObligationKind
     }
 }
 
-/// The identity of the frame obligation of the operation `site` names: [`function_contract_identity`]
-/// with the frame node as `function`, the frame's occurrence as `declaration`, `kind` as
-/// [`frame_kind`] derived it and no `arguments`. The state fields and their ranges are not
-/// members: the frame node names the grants, and the harness is tied to the identity by the
-/// replay's checks (AD-003 E-1).
+/// The frame obligation of the operation `site` names. The exact producer identity must come
+/// from QSL's selected operation site; this adapter refuses while that accessor is absent.
 ///
 /// # Errors
 ///
-/// [`ObligationIdentityError::OrdinalTooLarge`] for an occurrence beyond `u32`.
+/// [`ObligationIdentityError::OrdinalTooLarge`] for an occurrence beyond `u32`, or
+/// [`ObligationIdentityError::ProducerIdentityUnavailable`] while QSL has no accessor.
 pub(crate) fn frame_identity(
     site: &OperationSite,
     kind: ObligationKind,
@@ -223,76 +228,6 @@ mod tests {
 
     fn occurrence(node: WireNodeId, ordinal: u64) -> OccurrenceKey {
         OccurrenceKey::new(node, Origin::new(Role::new("declaration"), ordinal))
-    }
-
-    #[trace("FR-016-AC-21", "FR-016-AC-23", "TC-026")]
-    #[test]
-    fn function_obligation_uses_the_structural_node_and_ordinal() {
-        let function = node("function");
-        let declaration = occurrence(function.clone(), 2);
-        let identity = function_contract_identity(
-            function.clone(),
-            &declaration,
-            ObligationKind::Postcondition,
-            &[],
-        )
-        .expect("valid ordinal");
-        assert_eq!(identity.node(), &function);
-        assert_eq!(identity.model(), None);
-        assert_eq!(identity.ordinal(), 2);
-        assert_ne!(
-            identity,
-            function_contract_identity(
-                node("other"),
-                &declaration,
-                ObligationKind::Postcondition,
-                &[],
-            )
-            .expect("valid ordinal")
-        );
-        assert_ne!(
-            identity,
-            function_contract_identity(
-                function.clone(),
-                &occurrence(function.clone(), 3),
-                ObligationKind::Postcondition,
-                &[],
-            )
-            .expect("valid ordinal")
-        );
-        assert_eq!(
-            identity,
-            function_contract_identity(function, &declaration, ObligationKind::Invariant, &[],)
-                .expect("kind is a separate claim field")
-        );
-    }
-
-    #[trace("FR-024-AC-20", "TC-035")]
-    #[test]
-    fn frame_obligation_uses_qsl_frame_and_occurrence() {
-        let frame = node("frame");
-        let site = OperationSite {
-            frame_operation: qsl_replay::FrameOperation {
-                object: qsl_replay::QualifiedName::new(vec![
-                    Identifier::new("model").expect("alias"),
-                    Identifier::new("Object").expect("object"),
-                ])
-                .expect("qualified object"),
-                operation: Identifier::new("operation").expect("operation"),
-            },
-            anchor: node("anchor"),
-            frame: frame.clone(),
-            frame_occurrence: occurrence(frame.clone(), 2),
-            clauses: Vec::new(),
-        };
-        let identity = frame_identity(&site, ObligationKind::Frame).expect("valid ordinal");
-        assert_eq!(identity.node(), &frame);
-        assert_eq!(identity.ordinal(), 2);
-        assert_eq!(
-            identity,
-            function_contract_identity(frame, &site.frame_occurrence, ObligationKind::Frame, &[],)
-                .expect("valid ordinal")
-        );
     }
 
     #[trace("FR-016-AC-21", "TC-026")]
