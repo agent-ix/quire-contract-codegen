@@ -1090,10 +1090,14 @@ fn compile_corpus_qsl_package(
     };
     use std::collections::BTreeMap;
 
+    // The producer imports the dependency under this library name in its QSL source.
+    const DEPENDENCY_NAME: &str = "ir-453/corpus-dependency";
+    // The corpus producer assigns one name to its shared generated source unit.
+    const PACKAGE_NAME: &str = "ir-453-corpus";
     let maximum = u64::MAX;
     let dependency_source = LockedSource {
         authority: "agent-ix".to_owned(),
-        identity: "ir-453/corpus-dependency".to_owned(),
+        identity: DEPENDENCY_NAME.to_owned(),
         namespace: "generated".to_owned(),
         revision: "ir-453".to_owned(),
         bytes: case.artifacts.qsl_dependency.contents.as_bytes().to_vec(),
@@ -1113,7 +1117,7 @@ fn compile_corpus_qsl_package(
             &dependency_source.namespace,
             &dependency_source.revision,
         ),
-        dependency_source.identity.clone(),
+        DEPENDENCY_NAME.to_owned(),
         &dependency_source.identity,
         &dependency_source.bytes,
         [],
@@ -1125,7 +1129,7 @@ fn compile_corpus_qsl_package(
     ReplayPackage::new(
         ReplayInputs {
             decode_limits,
-            package_name: "ir-453-corpus".to_owned(),
+            package_name: PACKAGE_NAME.to_owned(),
             source: LockedSource {
                 authority: "agent-ix".to_owned(),
                 identity: case.artifacts.qsl_source.path.clone(),
@@ -1134,7 +1138,7 @@ fn compile_corpus_qsl_package(
                 bytes: case.artifacts.qsl_source.contents.as_bytes().to_vec(),
             },
             dependencies: vec![DependencyLock {
-                identity: dependency_source.identity.clone(),
+                identity: DEPENDENCY_NAME.to_owned(),
                 package_id: dependency_package_id,
                 source: dependency_source,
             }],
