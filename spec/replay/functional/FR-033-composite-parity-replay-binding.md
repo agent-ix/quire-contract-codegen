@@ -55,7 +55,7 @@ V-1 to V-5. IR-635's verified constructor accepts Equal for admitted graph-child
 `structural.eq` and NotEqual for admitted graph-child `structural.ne`. It adds the public
 `OriginalCompositeEqContext` and immutable request/report types with retained source-lock checks,
 original node/function/occurrence membership, exact recompiled package/context equality,
-positional O-09 construction and genuine public verified-shadow invocation through the converter.
+positional checked-claim retention and genuine public verified-shadow invocation through the converter.
 The caller's canonical proved-content identity and original limits are retained binding inputs;
 this slice does not independently authenticate a generated artifact or produce backend/refinement
 evidence. The locked IR revision admits `structural.ne`. Falsified same-artifact
@@ -92,26 +92,27 @@ generated-family verification/falsification controls before CODE delivery.
   including explicit absence for `not_run`, without an extra native probe or invented observation. A
   refusal, incomplete outcome or execution fault remains that observation, rather than a fabricated
   Boolean.
-- The CG-minted QSL `ObligationIdentity`, whose O-09 preimage contains only `arguments`, the
-  claimed application `node`, `obligation_kind` and `occurrence_key` from the recompiled package.
+- The IR-reader structural `NodeKey`/`CheckedNodeId` for the claimed application, paired with
+  the retained checked claim body: `arguments`, the application `node`, `obligation_kind` and
+  authentic `occurrence_key` from the recompiled package.
   There is one argument per operand position in operand order, including repeated operands and
   literal operands. Parameter arguments use the actual `graph_child` node at that position and
   only its drawn `DomainKey::Node` harness bounds naming that parameter; repeated positions remain
   distinct argument entries, not a distinct node set. Population-keyed metadata remains in the
-  full CG proving record, outside the admitted QSL composite claim and its O-09 arguments. A QSL
+  full CG proving record, outside the admitted QSL composite claim and its positional arguments. A QSL
   request carrying a `DomainKey::Population` harness bound receives typed `HarnessUnknownKey`
-  refusal during `prepare`, before the O-09 identity tie; its binding-checked `Refused` report maps
+  refusal during `prepare`, before structural identity and body comparison; its binding-checked `Refused` report maps
   to `Inconclusive(ReplayRefused)`. A CG precheck refusal still returns no report or terminal value. Composite literals use their own actual `graph_child` node with empty `bounds` because
   their value is bound by that content-addressed node. The owning operand projection refuses
   every top-level inline literal operand, and CG returns that refusal without a report.
   Within each Bounds argument, keys sort by canonical encoded key bytes, not `DomainKey` Ord;
   duplicate keys within that argument refuse. Repetition across positional arguments is preserved.
 - The full CG harness identity/evidence record owned by FR-015 AC-76, retaining its abstractions,
-  size budget, static closure pair-node count and unexercised behaviours outside O-09. This record
+  size budget, static closure pair-node count and unexercised behaviours outside the checked parity claim. This record
   count is distinct from the runtime occurrence-pair count compared in F-7.
 - The separate canonical proved-content identity and retained original context tying the native
   observation to the actual proved generated artifact and original limits. This content binding is
-  not the O-09 digest and cannot be replaced by it. AD-002 R-6/R-7 and
+  not the structural node identity and cannot be replaced by it. AD-002 R-6/R-7 and
   [AD-003](../../assurance/AD-003-evidence-chain.md) distinguish the roles; no tool/source tracking
   hash, digest label pin or additional tracking identity is introduced.
 - Configured public replay encoded-input-byte, value-occurrence and work limits admitted by the
@@ -134,18 +135,16 @@ generated-family verification/falsification controls before CODE delivery.
 - The builder shall submit the claimed node inside the original recompiled QSpec FR-322 package to
   owning public QSL parity selector and preserve the original retained source/dependency bytes,
   package/context identity and claimed node/occurrence membership checks of AD-002 R-7.
-- The builder shall construct O-09 through QSL's shared public typed `parity_obligation` using
-  `ParityPreimage`, positional `ParityArgument`, `Domain::Range` or `Domain::Bounds` and
-  `BoundEntries`.
-- When the encoder refuses, the builder shall retain typed `IdentityEncodeError`/owning identity
-  refusal rather than a fabricated digest.
-- The canonical four-member preimage shall gain no top-level operator, native observation, content
-  identity, refinement or counter member; operation validation remains in node membership and the
-  full claim.
+- The builder shall take the application `NodeKey`/`CheckedNodeId` from the admitted IR reader
+  and retain the checked claim body with positional arguments and their `Range` or `Bounds`.
+- When the identity or required body metadata is unavailable, the builder shall return a typed
+  setup refusal rather than fabricate an identity.
+- The checked claim body shall gain no top-level operator, native observation, content identity,
+  refinement or counter member; operation validation remains in node membership and the full claim.
 - For each parameter argument, the builder shall include only drawn `DomainKey::Node` bounds naming
   that parameter, including its actual collection/depth bounds under declared-domain substitution.
 - The builder shall retain Population-keyed metadata only in the full CG proving record, outside
-  the admitted QSL composite claim and its O-09 arguments.
+  the admitted QSL composite claim and its positional arguments.
 - When a QSL request carries a `DomainKey::Population` harness bound, the converter shall retain
   the binding-checked `HarnessUnknownKey` refusal report and its `Inconclusive(ReplayRefused)`
   terminal value. A CG pre-invocation refusal produces no report or terminal value.
@@ -226,7 +225,7 @@ Encoded-key ordering example: path `[0,0]` precedes `[0]`, and `[10]` precedes `
   Echo equality does not authenticate the proved artifact: independent retained
   AD-002 R-6/R-7 source/package/context, canonical proved-content and original-limit ties shall
   still establish that the measured native observation belongs to the actual proved generated
-  artifact. O-09, canonical proved-content identity and refinement certificate identity remain
+  artifact. Structural claim identity, canonical proved-content identity and refinement certificate identity remain
   separate roles; none shall substitute for another or create a new tracking digest.
 - The driver shall call QSL's exact equality parity arm between CG's public builder and converter.
   CG supplies no local exact evaluator, synthetic predicate or canned replay verdict.
@@ -236,7 +235,7 @@ Encoded-key ordering example: path `[0,0]` precedes `[0]`, and `[10]` precedes `
   `CeilingReached`, and retained refinement_failed to `Disagreed`. Verified settlement carries no
   native observation, including no extra probe for `not_run`.
 - The converter shall preserve the claim-validity refusals before applying any parity settlement
-  row, including `Disagreed`; another package/node/occurrence, malformed bounds or O-09 mismatch
+  row, including `Disagreed`; another package/node/occurrence, malformed bounds or structural identity/body mismatch
   cannot settle the actual claim.
 - For a valid falsified claim, the converter shall consume QSL's first applicable outcome in the
   Falsified Settlement table below, retaining the actual native cause and resource stage.
@@ -270,7 +269,7 @@ admission shall remain explicitly unsupported/gated, with no synthetic proof or 
 
 ## Falsified Settlement
 
-When source/package, claimed-node membership, bound and O-09 identity admission succeeds, CG shall
+When source/package, claimed-node membership, bound and structural identity/body admission succeeds, CG shall
 preserve the following QSL first-match order for that valid claim. QSL FR-358's F-1 to F-7 rows
 and `qsl-replay` facade were merged in QSL #645. IR-666's public converter preserves their
 bound results; IR-806's original-artifact builder and production invocation remain planned.
@@ -315,7 +314,7 @@ Claim/setup checks and operand/native handling are separate stages:
    checked occurrence/work limits guard every required decode. No valid claim or evidence is
    invented from malformed transport.
 2. CG's original source/package, claimed-node membership/operation/occurrence, declared operand schema,
-   harness-bound keys/kinds and O-09 identity, original limits and proved-content/context identity
+   harness-bound keys/kinds and structural identity/body, original limits and proved-content/context identity
    must be coherent. Adapter assertion/harness selection and the persisted leaf-binding schema
    must name that actual claim; another result/run cannot settle it. These claim-identity refusals
    precede Disagreed and return no report or terminal value. A bound-schema refusal is not an
@@ -368,13 +367,14 @@ and FR-029 resource terminal; it cannot become completed NotExhausted evidence o
 | FR-033-AC-8 | PLANNED/GATED. CG submits the original claim's operand declarations and literal singleton domains and consumes QSL-derived bound keys without a CG-authored declared-bound list. Omitting a bounded position or using an empty list with declared/unbounded/recursive keys leaves it uncovered; unknown/duplicate/kind-mismatched keys refuse. Exact declared coverage and a wider legal harness range cover; a tightened range/cardinality/depth does not silently cover under ADR-021 TX3. Enum Variants bounds cover only when every source-declared variant is included; a Variants bound naming an undeclared variant and a request DeclaredDomain over an enum position each preserve QSL's typed refusal naming the key; text/rational/decimal/IEEE/quantity/reference positions remain uncovered/Tested until an authoritative whole-domain bound kind exists, rather than promoting one dimension as full coverage. CG cannot supply an invented declared-bound list to promote the result. Composite literal graph children have empty Bounds and no free position; this cannot remove declared/drawn bounds of a parameter position or promote source-unbounded derivation-only coverage. | Test |
 | FR-033-AC-9 | PARTIAL (IR-666 report binding covered; IR-635 Eq-only verified source/package/node/occurrence prechecks and genuine invocation covered; generated-artifact authentication and falsified invocation planned, IR-806). CG compares `report.claim()` with `CompositeIdentity::new` over the sent obligation, node, occurrence, operator, obligation kind, harness bounds, limits, content identity and complete observation: falsified operands, shadow verdict/count, native observation/cause and refinement, or verified SUCCESS count and refinement. Changing each CG-owned retained sent-identity member independently with a genuine report held fixed, or omitting the report, yields a typed CG refusal with no terminal value; a valid report binds. The Eq-only verified constructor returns no report or terminal value on its precheck refusal; remaining production prechecks are planned (IR-806). A binding-valid QSL `Refused` report retains its QSL code and maps non-fault to Inconclusive(ReplayRefused), or maps `Fault`/`Admission(Fault)` to Failed; a `prepare` refusal precedes Disagreed, while an admission or exact-comparison refusal follows it. No predicate route, fabricated report or invented catalog code is used. Before every outcome projection, compare against the actual retained sent identity, never a later-mutated request; a genuine public report compared against an independently changed CG-owned retained sent-identity member refuses. A valid request changed before send binds when its genuine report equals that actual changed sent identity; differences from an earlier unsent identity do not cause binding refusal. This is not artifact authentication. Public ReplayLimits remains a separate last facade argument, not a ScalarLimits/full-claim member. | Test |
 | FR-033-AC-10 | PLANNED/GATED. Each lawful generated family exercised by the completed route has a real verify and falsify control with retained backend evidence and mutation-killed same-artifact replay; all canonical families have the AC-2/3 decode checks. Families awaiting shadow generation or upstream admission remain explicitly unsupported/gated and are reported as gaps, rather than counted as passing end-to-end coverage. Open real Text-profile, nested set/bag performance and source-unbounded coverage limitations remain explicit; API presence or rational substitution supplies no generated-family acceptance. | Test |
-| FR-033-AC-11 | PARTIAL (IR-635 Eq graph-child positional O-09 controls and Ne parameter/parameter and parameter/literal controls; Eq self-comparison is covered; Ne literal/literal (AC-14), Ne self-comparison (AC-15) and the inline-operand refusals (AC-16, AC-17) are PLANNED under IR-814. Native integration follows from AC-6 (IR-806); the harness identity record is FR-015-AC-76, and only the Population-keyed metadata part has no owning criterion yet; the planner will specify it as a new FR-033 criterion under IR-806). CG computes O-09 through the owning typed parity_obligation from the exact claimed application node, recompiled occurrence, kind and one argument per operand position in operand order. Self-comparison contributes two graph_child arguments for the same actual parameter, each retaining only its actual Node-keyed bounds naming that parameter; Population-keyed metadata remains only in the full CG proving record, outside the admitted QSL composite claim and O-09. A QSL request carrying a Population-keyed harness bound produces typed HarnessUnknownKey during prepare before identity_tie; its binding-checked Refused report maps to Inconclusive(ReplayRefused), while CG pre-invocation refusal has no report or terminal value; distinct parameters each contribute their positional argument. Composite literal operands contribute their own graph_child node with empty Bounds; the owning operand projection refuses every top-level inline literal operand, so no inline argument is built and AC-16 and AC-17 cover the refusals. Bounds sort by canonical encoded key bytes, not DomainKey Ord, with duplicate-key refusal within each argument; repeated parameter positions are not deduplicated. Changing a preimage member changes identity or refuses original membership; changing only abstractions, size budget, static closure pair-node count or unexercised behaviours does not. That record count is distinct from F-7 runtime occurrence-pair count. Full FR-015-AC-76 evidence and independent original proved-content/context binding remain authoritative even when O-09 matches. No operator/native/content/refinement/counter top-level preimage member or tracking digest is added; existing function/frame preimages remain unchanged. | Test |
-| FR-033-AC-12 | PARTIAL (IR-666 direct QSL F-1 precedence controls; IR-635 Eq-only verified constructor and QSL membership/unknown-bound refusals before supplied Disagreed; falsified and cross-outcome integration planned, IR-806). Both paths carry the same four-state Refinement. Claim/source/node/occurrence/bounds/O-09 refusal precedes Disagreed; for a valid claim Disagreed wins over operand refusal (including an operand field x declared Int[0, 9] but supplied as x: 12), missing native observation, native fault, exact limit, refinement ceiling and agreeing replay. No early operand/native setup refusal erases that disagreement and no missing evidence is fabricated. Completed/Refused native evidence does not replace exact-versus-shadow verdict/pair-count comparison, and the actual Eq/Ne operation survives. | Test |
+| FR-033-AC-11 | ~~Retired O-09 parity-preimage criterion.~~ FR-033-AC-18 carries forward positional graph-child arguments, repeated and literal operands, key ordering, membership refusal, complete retained-body comparison, separate proving-record metadata and independent artifact authentication. The old hash oracle is not reused. | Inspection |
+| FR-033-AC-12 | PARTIAL (IR-666 direct QSL F-1 precedence controls; IR-635 Eq-only verified constructor and QSL membership/unknown-bound refusals before supplied Disagreed; falsified and cross-outcome integration planned, IR-806). Both paths carry the same four-state Refinement. Claim/source/node/occurrence/bounds/structural-identity-or-body refusal precedes Disagreed; for a valid claim Disagreed wins over operand refusal (including an operand field x declared Int[0, 9] but supplied as x: 12), missing native observation, native fault, exact limit, refinement ceiling and agreeing replay. No early operand/native setup refusal erases that disagreement and no missing evidence is fabricated. Completed/Refused native evidence does not replace exact-versus-shadow verdict/pair-count comparison, and the actual Eq/Ne operation survives. | Test |
 | FR-033-AC-13 | PARTIAL (IR-666 direct public F-2 to F-6 controls; IR-806 must reach the same rows from a CG-built request over the original proving context). On a valid falsified claim without Disagreed, a native Incomplete or ExecutionFault wins over an invalid operand, too-small admission limit, too-small exact limit and CeilingReached: CG observes GeneratedFault/Failed retaining its NativeCause. With a Completed native, an operand outside its declared domain yields RefusedInput/ReplayRefused even with CeilingReached; a request limit reached during admission yields Incomplete/Admission with its counter, and an exact limit reached after admission yields Incomplete/ExactEvaluation even with CeilingReached; only with sufficient limits does CeilingReached yield Incomplete/RefinementCeiling. CG asserts these report results and terminal values; QSL FR-358 owns the internal rule that F-2 skips admission and exact evaluation and F-4 skips exact evaluation. All three limits are ResourceExhausted but keep distinct stages. Backend Kani timeout/memory Inconclusive outcomes never enter this facade. No resource stage becomes Tested. | Test |
-| FR-033-AC-14 | PLANNED (IR-814; literal operands are admitted one-field `Integer` records, with bounded-field narrowing literals (IR-691) and collection-constructor literals gated). When the original application node is a `structural.ne` whose two operands are both composite literals and the requested operator is NotEqual, the verified request carries NotEqual and an O-09 of two positional `graph_child` arguments, each the literal's own node with empty Bounds and no parameter position. | Test |
-| FR-033-AC-15 | PLANNED (IR-814). When the original application node is a `structural.ne` comparing one parameter with itself and the requested operator is NotEqual, the verified request carries NotEqual and an O-09 of two positional `graph_child` arguments with the same node identity, each retaining the drawn Node-keyed bounds naming that parameter and neither deduplicated. | Test |
+| FR-033-AC-14 | PLANNED (IR-814; literal operands are admitted one-field `Integer` records, with bounded-field narrowing literals (IR-691) and collection-constructor literals gated). When the original application node is a `structural.ne` whose two operands are both composite literals and the requested operator is NotEqual, the verified request carries NotEqual and a retained checked claim body with two positional `graph_child` arguments, each the literal's own node with empty Bounds and no parameter position. | Test |
+| FR-033-AC-15 | PLANNED (IR-814). When the original application node is a `structural.ne` comparing one parameter with itself and the requested operator is NotEqual, the verified request carries NotEqual and a retained checked claim body with two positional `graph_child` arguments with the same node identity, each retaining the drawn Node-keyed bounds naming that parameter and neither deduplicated. | Test |
 | FR-033-AC-16 | PLANNED (IR-814; verified by Inspection of the single conversion that AC-17 tests). If the owning operand projection refuses an inline integer literal operand (`InlineInteger`), then the builder returns that refusal through `CompositeBuildError::Operands` before any QSL invocation, with no report or terminal value and no built argument. The owning contract treats this branch as defensive because reader admission already refuses an integer operand of `structural.eq` and `structural.ne`, so no admitted fixture can reach it. Both inline refusals pass through the same `CompositeBuildError::Operands` conversion, which AC-17 exercises. | Inspection |
 | FR-033-AC-17 | PLANNED (IR-814). If the owning operand projection refuses an inline non-integer literal operand (`InlineNonInteger`), then the builder returns that refusal through `CompositeBuildError::Operands` before any QSL invocation, with no report or terminal value and no new CG error variant. No test of this path exists yet. | Test |
+| FR-033-AC-18 | PLANNED / CODE-GATED. CG obtains the original equality/inequality application structural identity from IR admission and retains the authentic occurrence, kind and one argument per operand position in original order. A self-comparison keeps two graph-child entries with each drawn Node-keyed bound; distinct parameters and composite literals keep their own graph-child entries, with empty Bounds for literals. Population-keyed metadata stays in the full proving record; an admitted QSL claim containing it refuses as HarnessUnknownKey before identity/body comparison. Bounds key ordering and duplicate-key refusal remain authoritative. A package, path or producer-ordinal change changes the structural identity; changing an included body member under the same identity refuses by complete body comparison. Changes only to abstractions, size budget, static closure pair-node count or unexercised behaviours do not change the structural node identity, but the full proving record and same-artifact/context authentication remain required. No copied parity encoder or hash participates. | Test |
 
 ## Dependencies
 
@@ -388,7 +388,7 @@ encoding authority. No schema, binary or source file is vendored from those owne
 
 Implementation shall consume the delivered owning public interfaces and retain every required
 canonical conversion/lifecycle, refinement, same-claim observation/content and legal cause check.
-The Eq constructor currently projects operands and encodes the genuine O-09 before authenticating
+The Eq constructor currently projects operands and retains the genuine checked claim before authenticating
 recompiled context, because QSL's public request decoder requires that wire to yield typed
 `StageLimits`. Its standalone stage-limit decoder is private, and CG has no original-compile
 caller retaining typed limits. An invalid operand or encoder input can therefore precede a
