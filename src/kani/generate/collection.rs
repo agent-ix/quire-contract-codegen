@@ -106,7 +106,6 @@ pub(super) struct CollectionGraph<'a> {
 struct CollectionNodeIndex<'a> {
     package: Option<&'a CheckedPackageV2>,
     by_id: FirstMatchIndex<&'a CheckedNodeId, &'a CheckedSemanticNodeV2>,
-    by_digest: FirstMatchIndex<&'a str, &'a CheckedSemanticNodeV2>,
 }
 
 #[cfg(test)]
@@ -159,24 +158,17 @@ impl<'a> CollectionNodeIndex<'a> {
         #[cfg(test)]
         COLLECTION_NODE_INDEX_BUILD_COUNT.with(|count| count.set(count.get() + 1));
         let mut by_id = FirstMatchIndex::new();
-        let mut by_digest = FirstMatchIndex::new();
         for node in nodes {
             by_id.insert_first(&node.node_id, node);
-            by_digest.insert_first(node.node_id.digest.as_ref(), node);
         }
         Self {
             package: None,
             by_id,
-            by_digest,
         }
     }
 
     fn node(&self, id: &CheckedNodeId) -> Option<&'a CheckedSemanticNodeV2> {
         self.by_id.get(id).copied()
-    }
-
-    fn declaration(&self, digest: &str) -> Option<&'a CheckedSemanticNodeV2> {
-        self.by_digest.get(digest).copied()
     }
 
     fn term(&self, node: &CheckedSemanticNodeV2) -> Option<&'a CheckedTerm> {
@@ -613,10 +605,10 @@ fn declared_field<'a, F, E, T: ?Sized>(
 
 fn admitted_declaration(
     graph: &CollectionNodeIndex<'_>,
-    digest: &str,
+    id: &CheckedNodeId,
 ) -> Result<CheckedNodeId, CollectionDomainRefusal> {
     graph
-        .declaration(digest)
+        .node(id)
         .map(|node| node.node_id.clone())
         .ok_or(CollectionDomainRefusal::FieldNotAdmitted)
 }
@@ -796,7 +788,7 @@ fn resolve_collection_field(
         .map_err(|_| CollectionDomainRefusal::UnsupportedShape)?
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
     let field_name = field_name.to_owned();
-    let declaration = admitted_declaration(graph, &field_declaration.digest)?;
+    let declaration = admitted_declaration(graph, field_declaration)?;
     verify_claim_receiver(graph, claim, collection, &declaration)?;
     let fields = package.model_object_fields(&declaration);
     let field = declared_field(fields.as_ref(), |fields| fields.field(&field_name))?;
@@ -1398,9 +1390,7 @@ pub(crate) mod tests {
         });
         assert!(
             std::ptr::eq(
-                graph
-                    .declaration(selected.node_id.digest.as_ref())
-                    .expect("declaration"),
+                graph.node(&selected.node_id).expect("declaration"),
                 &selected,
             ),
             "declaration lookup retains the first graph entry"

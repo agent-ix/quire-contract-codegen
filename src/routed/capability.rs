@@ -17,7 +17,7 @@ use qsl_replay::{DomainKey, DomainKind, ProofBound};
 use quire_contract_model::{ApplicationOperator, CheckedTerm};
 use quire_contract_model::{
     CheckedNodeId, CheckedPackageIncomplete, CheckedPackageLimit, CheckedPackageRefusal,
-    CheckedPackageRefusalCause, CheckedPackageRefusalCode, CheckedSemanticId, ContractPackageV1,
+    CheckedPackageRefusalCause, CheckedPackageRefusalCode, ContractPackageV1,
 };
 use serde::Serialize;
 
@@ -73,7 +73,7 @@ mod scalar_cache_tests {
         ] {
             let mut lookups = CapabilityLookups {
                 scalar: crate::kani::generate::negotiate::ScalarFormLookups::new(),
-                scalar_targets: BTreeMap::from([(package.package_id().clone(), targets.clone())]),
+                scalar_targets: BTreeMap::from([(std::ptr::from_ref(&package), targets.clone())]),
                 scalar_families: BTreeMap::new(),
                 functions: BTreeMap::new(),
             };
@@ -92,14 +92,24 @@ mod scalar_cache_tests {
 
 struct CapabilityLookups<'a> {
     scalar: crate::kani::generate::negotiate::ScalarFormLookups<'a>,
-    scalar_targets: BTreeMap<CheckedSemanticId, BTreeSet<CheckedNodeId>>,
-    scalar_families: BTreeMap<CheckedSemanticId, BTreeMap<CheckedNodeId, Option<KaniFormFamily>>>,
-    functions: BTreeMap<CheckedSemanticId, crate::oracle::function::FunctionPreflightGraph<'a>>,
+    scalar_targets:
+        BTreeMap<*const quire_contract_model::CheckedPackageV2, BTreeSet<CheckedNodeId>>,
+    scalar_families: BTreeMap<
+        *const quire_contract_model::CheckedPackageV2,
+        BTreeMap<CheckedNodeId, Option<KaniFormFamily>>,
+    >,
+    functions: BTreeMap<
+        *const quire_contract_model::CheckedPackageV2,
+        crate::oracle::function::FunctionPreflightGraph<'a>,
+    >,
 }
 
 impl<'a> CapabilityLookups<'a> {
     fn new(envelope: &BackendProviderEnvelope) -> Self {
-        let mut scalar_targets = BTreeMap::<CheckedSemanticId, BTreeSet<CheckedNodeId>>::new();
+        let mut scalar_targets = BTreeMap::<
+            *const quire_contract_model::CheckedPackageV2,
+            BTreeSet<CheckedNodeId>,
+        >::new();
         for item in &envelope.items {
             match &item.kani_form {
                 KaniForm::V2ScalarClaim {
@@ -107,7 +117,7 @@ impl<'a> CapabilityLookups<'a> {
                 }
                 | KaniForm::OutsideSet { package, node_id } => {
                     scalar_targets
-                        .entry(package.package_id().clone())
+                        .entry(std::ptr::from_ref(package.as_ref()))
                         .or_default()
                         .insert(node_id.clone());
                 }
@@ -127,25 +137,20 @@ impl<'a> CapabilityLookups<'a> {
         package: &quire_contract_model::CheckedPackageV2,
         node_id: &CheckedNodeId,
     ) -> Option<KaniFormFamily> {
-        let package_id = package.package_id();
-        let families = self
-            .scalar_families
-            .entry(package_id.clone())
-            .or_insert_with(|| {
-                let node_ids = self
-                    .scalar_targets
-                    .get(package_id)
-                    .into_iter()
-                    .flat_map(|targets| targets.iter().cloned())
-                    .collect::<Vec<_>>();
-                crate::oracle::scalar::derive::derive_exact_scalar_items_independent(
-                    package, &node_ids,
-                )
+        let package_key = std::ptr::from_ref(package);
+        let families = self.scalar_families.entry(package_key).or_insert_with(|| {
+            let node_ids = self
+                .scalar_targets
+                .get(&package_key)
+                .into_iter()
+                .flat_map(|targets| targets.iter().cloned())
+                .collect::<Vec<_>>();
+            crate::oracle::scalar::derive::derive_exact_scalar_items_independent(package, &node_ids)
                 .into_iter()
                 .zip(node_ids)
                 .map(|(result, id)| (id, result.ok().map(scalar_family_from_item)))
                 .collect()
-            });
+        });
         families.get(node_id).copied().flatten()
     }
 
@@ -161,10 +166,10 @@ impl<'a> CapabilityLookups<'a> {
         &mut self,
         package: &'a quire_contract_model::CheckedPackageV2,
     ) -> &crate::oracle::function::FunctionPreflightGraph<'a> {
-        // IR admission checks the package ID against the canonical identity preimage,
-        // including its ordered graph projection; equal IDs bind equal checked nodes.
+        // Keep each admitted package's graph separate, including same-name packages with
+        // different contents. The key is used only within this envelope's borrowed lifetime.
         self.functions
-            .entry(package.package_id().clone())
+            .entry(std::ptr::from_ref(package))
             .or_insert_with(|| crate::oracle::function::FunctionPreflightGraph::new(package))
     }
 }

@@ -327,14 +327,12 @@ impl LockedSource {
         )
     }
 
-    pub(crate) fn wire(&self) -> (String, String, String, String, Option<String>, String) {
+    pub(crate) fn wire(&self) -> (String, String, String, String) {
         (
             self.authority.clone(),
             self.identity.clone(),
             self.namespace.clone(),
             self.revision.clone(),
-            Some(DigestDomain::SourceBytesV1.as_str().to_owned()),
-            self.digest().hex(),
         )
     }
 }
