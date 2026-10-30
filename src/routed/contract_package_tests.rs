@@ -1122,7 +1122,7 @@ mod tests {
 
         let (shared, shared_ids) = source_bound_call_package().admit_resolved();
         let (different, different_ids) = ac11_classifier_package().admit_resolved();
-        assert_ne!(shared.package_id(), different.package_id());
+        assert_ne!(shared.lock(), different.lock());
         assert_eq!(
             shared_ids.resolve(&code_id(SOURCE_CALL)),
             different_ids.resolve(&code_id(SOURCE_CALL)),
@@ -1255,7 +1255,7 @@ mod tests {
         let call = ids.resolve(&code_id(SOURCE_CALL));
         let function = ids.resolve(&code_id(SOURCE_FUNCTION));
         let other_call = other_ids.resolve(&code_id(SOURCE_CALL));
-        assert_ne!(checked.package_id(), other.package_id());
+        assert_ne!(checked.lock(), other.lock());
         assert_eq!(
             call, other_call,
             "distinct packages share a checked node id"
@@ -2930,10 +2930,7 @@ mod tests {
             checked, recompiled,
             "retain the whole unchanged source package"
         );
-        assert!(genuine
-            .context()
-            .package_id()
-            .matches(&genuine.package().package_id()));
+        assert_eq!(genuine.context().package_name().as_str(), checked.name());
 
         let integer = checked
             .graph()
@@ -3316,10 +3313,10 @@ mod tests {
         };
         assert_eq!(closure.selected_references.len(), 2);
         assert!(closure.selected_references.iter().any(|selected| {
-            selected.package == *library.package_id() && selected.node == target
+            selected.package.as_ref() == library.name() && selected.node == target
         }));
         assert!(closure.selected_references.iter().any(|selected| {
-            selected.package == *library.package_id() && selected.node == second_target
+            selected.package.as_ref() == library.name() && selected.node == second_target
         }));
         assert!(closure
             .nodes

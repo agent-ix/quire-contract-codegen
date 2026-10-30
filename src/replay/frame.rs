@@ -593,9 +593,7 @@ impl FrameReplay {
         let site = located.site;
         same_node(ScopeMember::Anchor, &harness.scope.anchor, &site.anchor)?;
         same_node(ScopeMember::Frame, &harness.scope.frame, &site.frame)?;
-        let obligation = *frame_identity(&site, kind)
-            .map_err(FrameReplayError::Identity)?
-            .as_bytes();
+        let obligation = frame_identity(&site, kind).map_err(FrameReplayError::Identity)?;
         let OperationSite {
             frame_operation,
             anchor,
