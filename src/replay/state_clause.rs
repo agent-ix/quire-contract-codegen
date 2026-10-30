@@ -338,11 +338,7 @@ impl fmt::Display for StateClauseReplayError {
             Self::Document(cause) => write!(f, "a document was not built: {cause}"),
             Self::ProofBound(cause) => write!(f, "a proof bound was not built: {cause}"),
             Self::ModelFields { object, cause } => {
-                write!(
-                    f,
-                    "model fields of {} are unavailable: {cause:?}",
-                    format_args!("{object:?}")
-                )
+                write!(f, "model fields of {object:?} are unavailable: {cause:?}")
             }
             Self::MissingField { field } => {
                 write!(f, "no value is bound for the state field `{field}`")
