@@ -53,7 +53,7 @@ fn closure(package: &CheckedPackageV2, context: &qsl_replay::AdmittedContext) ->
     let mut closure = TypeClosure::default();
     assert!(
         matches!(resolve_type(Some(context), &graph, &BTreeMap::new(), &mut closure, &id),
-        Ok(ValueType::Composite(key)) if &key == root.key())
+        Ok(ValueType::Composite(ref key)) if key == root.key())
     );
     closure
 }

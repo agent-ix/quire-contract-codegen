@@ -4563,7 +4563,7 @@ fn deep_matches_shallow() {
                         RenderError::UnsupportedValueType { family: "quantity" }
                     );
                 let value_type = if unsupported_quantity {
-                    ValueType::Quantity(unit)
+                    ValueType::Quantity(unit.clone())
                 } else {
                     ValueType::Integer
                 };
