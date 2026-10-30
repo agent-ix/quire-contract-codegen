@@ -3,8 +3,8 @@
 //! vectors, in outcome, every admitted charge, every consumed counter, and
 //! the outcome of denying each admitted charge.
 //!
-//! Nothing generated is committed. This module generates the corpus crate now,
-//! builds it as a scratch crate whose one integration test is
+//! Nothing generated is committed. This module generates bounded corpus cohorts,
+//! compiles their oracle functions in one scratch crate whose integration test is
 //! `tests/exact_scalar_support/agreement_cases.rs`, and runs that test. The
 //! scratch-crate runner, [`run_agreement_cases`], also serves the function
 //! application agreement module. Composite equality uses the runner variant
@@ -12,6 +12,7 @@
 
 use ix_trace_rs::trace;
 use std::{
+    collections::BTreeMap,
     fmt::Write as _,
     fs,
     path::{Path, PathBuf},
@@ -331,21 +332,81 @@ const SCALAR_ORACLE_NAMES: &[(u32, &str)] = &[
     (1135, "quantity_at_least"),
 ];
 
-/// The crate the generator emits now
-/// for the corpus request compiles against the runtime, and every
-/// agreement case in `tests/exact_scalar_support/agreement_cases.rs` passes
-/// against it: each generated oracle equals the direct runtime call in outcome,
-/// admitted charges, consumed counters and single-charge denials, and a width
-/// mismatch stops before any charge.
+/// The bounded admitted cohorts emit every corpus oracle, and the unchanged
+/// agreement cases execute those generated functions together against direct
+/// runtime calls. The scratch crate shares one stop type across the cohorts;
+/// only the duplicate generated stop declarations are replaced, while every
+/// generated oracle function and its helper remains as emitted.
 #[trace("FR-014-AC-6", "FR-014-AC-9", "TC-024")]
 #[test]
 fn tc_024_generated_scalar_crate_agrees_with_direct_runtime() {
-    let oracles = super::exact_scalar_generation::corpus_oracles();
+    let cohorts = super::exact_scalar_generation::corpus_cohort_oracles();
+    let mut artifacts = Vec::<(String, String)>::new();
+    let mut exports = BTreeMap::new();
+    let mut stop_variants = BTreeMap::new();
+    let mut modules = String::new();
+    for (index, oracles) in cohorts.iter().enumerate() {
+        let manifest = oracles
+            .artifacts
+            .iter()
+            .find(|artifact| artifact.path == "Cargo.toml")
+            .expect("bounded cohort emits a manifest");
+        if index == 0 {
+            artifacts.push((manifest.path.clone(), manifest.contents.clone()));
+        } else {
+            assert_eq!(manifest.contents, artifacts[0].1, "cohort manifest drift");
+        }
+        let source = oracles
+            .artifacts
+            .iter()
+            .find(|artifact| artifact.path == "src/lib.rs")
+            .expect("bounded cohort emits Rust source");
+        let source = shared_stop_source(&source.contents, &mut stop_variants);
+        let module = format!("cohort_{index}");
+        writeln!(modules, "mod {module};").expect("write to String");
+        artifacts.push((format!("src/{module}.rs"), source));
+        for claim in &oracles.claim_map.items {
+            let quire_contract_codegen::ClaimDisposition::Generated(generated) = &claim.result
+            else {
+                continue;
+            };
+            let export = format!("{module}_{}", generated.symbol);
+            assert!(
+                exports
+                    .insert(claim.node_id.clone(), export.clone())
+                    .is_none(),
+                "one requested scalar node must have one generated oracle"
+            );
+            writeln!(
+                modules,
+                "pub use {module}::{} as {export};",
+                generated.symbol
+            )
+            .expect("write to String");
+        }
+    }
+    assert!(!cohorts.is_empty(), "bounded scalar corpus has no cohorts");
+    let mut root = String::from(
+        "use quire_exact as rt;\n\
+         /// Why a generated oracle stopped before an operator outcome.\n\
+         #[derive(Clone, Copy, Debug, Eq, PartialEq)]\n\
+         pub enum OracleStop {\n",
+    );
+    for variant in stop_variants.values() {
+        writeln!(root, "    {variant}").expect("write to String");
+    }
+    root.push_str("}\n");
+    root.push_str(&modules);
+    artifacts.push(("src/lib.rs".to_owned(), root));
     let aliases = SCALAR_ORACLE_NAMES
         .iter()
         .map(|(code, alias)| {
+            let node = super::exact_scalar_generation::package::code_id(*code);
             (
-                super::exact_scalar_generation::symbol(&oracles, *code),
+                exports
+                    .get(&node)
+                    .unwrap_or_else(|| panic!("scalar corpus code {code} has no oracle"))
+                    .clone(),
                 (*alias).to_owned(),
             )
         })
@@ -357,13 +418,48 @@ fn tc_024_generated_scalar_crate_agrees_with_direct_runtime() {
     );
     run_agreement_cases(
         "exact-scalar-agreement",
-        oracles
-            .artifacts
+        artifacts
             .iter()
-            .map(|artifact| (artifact.path.as_str(), artifact.contents.as_str())),
+            .map(|(path, contents)| (path.as_str(), contents.as_str())),
         &[("names.rs", names.as_str())],
         "tests/exact_scalar_support/agreement_cases.rs",
     );
+}
+
+/// Keep the generator's function bytes and local helpers intact while making
+/// all cohort modules use the same stop type for one agreement test crate.
+fn shared_stop_source(source: &str, variants: &mut BTreeMap<String, String>) -> String {
+    const STOP_DOC: &str = "/// Why a generated oracle stopped before an operator outcome.\n";
+    let start = source
+        .find(STOP_DOC)
+        .expect("generated scalar source declares OracleStop");
+    let enum_start = source[start..]
+        .find("pub enum OracleStop {\n")
+        .map(|offset| start + offset)
+        .expect("generated scalar source declares OracleStop enum");
+    let end = source[enum_start..]
+        .find("\n}\n")
+        .map(|offset| enum_start + offset + "\n}\n".len())
+        .expect("generated OracleStop enum closes");
+    for line in source[enum_start..end].lines().skip(1) {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with("///") || line == "}" {
+            continue;
+        }
+        assert!(line.ends_with(','), "generated OracleStop variant: {line}");
+        let name = line.split(['(', ',']).next().expect("variant name");
+        if let Some(previous) = variants.insert(name.to_owned(), line.to_owned()) {
+            assert_eq!(
+                previous, line,
+                "generated OracleStop variant {name} drifted"
+            );
+        }
+    }
+    let mut shared = String::with_capacity(source.len());
+    shared.push_str(&source[..start]);
+    shared.push_str("pub use crate::OracleStop;\n");
+    shared.push_str(&source[end..]);
+    shared
 }
 
 /// Each Boolean connective and scalar equality generated from admitted V2 nodes agrees with
