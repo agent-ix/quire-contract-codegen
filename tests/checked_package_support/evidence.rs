@@ -105,11 +105,12 @@ mod tests {
             refusal.code,
             CheckedPackageRefusalCode::UnknownRequiredCapability
         );
+        let path = refusal.loci.first().and_then(|locus| locus.path.as_ref());
         assert_eq!(
-            refusal.path.as_ref().map(|path| path.as_str()),
+            path.map(|path| path.as_str()),
             Some("/semantic_graph/nodes/34/body/definition")
         );
-        assert_eq!(refusal.document_pointer, refusal.path);
+        assert_eq!(refusal.document_pointer.as_ref(), path);
     }
 
     /// Provenance: IR-975 / CG #546 fixture-evidence repair for the IR120 reader.

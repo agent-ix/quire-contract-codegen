@@ -195,7 +195,10 @@ fn ir_988_scalar_source_selections_use_retained_occurrences() {
                 else {
                     panic!("each genuine selected conversion must generate");
                 };
-                assert_eq!(&claim.contract_package_identity, admitted.identity());
+                assert_eq!(
+                    &claim.contract_package_identity,
+                    &admitted.wire().package.source
+                );
                 assert!(!claim.checked_bounds.is_empty());
                 assert!(!claim.source_map.is_empty());
                 assert!(!claim.oracle_source.is_empty());

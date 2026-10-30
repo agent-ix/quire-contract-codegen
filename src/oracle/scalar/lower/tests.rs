@@ -17,7 +17,7 @@ pub(in crate::oracle::scalar) fn app_term(operation: Value) -> CheckedTerm {
 type Graph<'a> = crate::oracle::checked_graph::CheckedGraph<'a, CheckedTerm>;
 use crate::oracle::checked_graph::fixture::Node as FixtureNode;
 use ix_trace_rs::trace;
-use quire_contract_model::{CheckedPackageIncomplete, CheckedPackageLimit};
+use quire_contract_model::{CheckedNodePathSegment, CheckedPackageIncomplete, CheckedPackageLimit};
 
 #[trace("FR-014-AC-3")]
 #[test]
@@ -33,19 +33,19 @@ fn hybrid_family_is_unsupported_and_preserves_node_identity() {
 }
 
 pub(in crate::oracle::scalar) fn node_id(digit: char) -> CheckedNodeId {
-    serde_json::from_value(serde_json::json!({
-        "domain": "quire.checked-semantic-node/v1",
-        "digest": digit.to_string().repeat(64),
-    }))
-    .expect("node id")
+    CheckedNodeId {
+        package: "fixture".into(),
+        path: vec![CheckedNodePathSegment::Name(digit.to_string().into())],
+        ordinal: 0,
+    }
 }
 
 fn numbered_node_id(value: u64) -> CheckedNodeId {
-    serde_json::from_value(serde_json::json!({
-        "domain": "quire.checked-semantic-node/v1",
-        "digest": format!("{value:064x}"),
-    }))
-    .expect("numbered node id")
+    CheckedNodeId {
+        package: "fixture".into(),
+        path: vec![CheckedNodePathSegment::Name(value.to_string().into())],
+        ordinal: 0,
+    }
 }
 
 fn inference_node(
@@ -67,7 +67,6 @@ fn inference_node(
             dependencies: Vec::new(),
             occurrences: Vec::new(),
             recursion_group: None,
-            nominal_identity_preimage: None,
             declaration: None,
             body: CheckedTerm::aggregate(Vec::new()),
         },
@@ -511,12 +510,6 @@ fn tc_024_catalogued_operation_identity_refuses_a_node_whose_operation_has_no_id
         dependencies: vec![],
         bounds: vec![],
         claims: vec![],
-        ir_id: serde_json::from_value(serde_json::json!({
-            "domain": "quire.contract-ir.semantic/v1",
-            "algorithm": "sha-256",
-            "digest": "f".repeat(64),
-        }))
-        .expect("an ir id"),
     };
 
     let fixture = FixtureNode::new(
@@ -717,12 +710,6 @@ fn tc_024_integer_range_is_read_from_binding_members_and_refuses_bare_literals()
         dependencies: vec![],
         bounds: vec![node_id(bound)],
         claims: vec![],
-        ir_id: serde_json::from_value(serde_json::json!({
-            "domain": "quire.contract-ir.semantic/v1",
-            "algorithm": "sha-256",
-            "digest": "f".repeat(64),
-        }))
-        .expect("an ir id"),
     };
     let declared = interval_of("0", "9");
     let (good, bad) = (node('2'), node('7'));
