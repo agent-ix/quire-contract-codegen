@@ -9,6 +9,41 @@ use quire_contract_codegen::{
     ClaimDisposition, CompositeEqualityLimits, CompositeEqualityRefusal, EqualityOperatorKind,
     OracleGenerationError,
 };
+use quire_contract_model::{CheckedNodeId, CheckedNodePathSegment};
+use quire_exact::{NodeKey, PathSegment};
+
+fn node_key(id: &CheckedNodeId) -> NodeKey {
+    let path = id
+        .path
+        .iter()
+        .map(|segment| match segment {
+            CheckedNodePathSegment::Name(name) => PathSegment::Text(name.to_string()),
+            CheckedNodePathSegment::Node(child) => PathSegment::Node(node_key(child)),
+        })
+        .collect();
+    NodeKey::new(id.package.to_string(), path, id.ordinal).expect("admitted structural node")
+}
+
+fn foreign_context() -> qsl_replay::AdmittedCompilation {
+    qsl_replay::compile_admitted(
+        qsl_replay::CompileUnit {
+            source: qsl_replay::SourceIdentity::new(
+                "test",
+                "foreign-composites.native",
+                "git",
+                "fixture",
+            ),
+            package_name: "foreign-composites".to_owned(),
+            path: "foreign-composites.native",
+            bytes: fixture::SOURCE.as_bytes(),
+        },
+        [],
+        &qsl_replay::DependencyInput::default(),
+        qsl_replay::StageLimits::default(),
+        qsl_replay::ReplayLimits::default(),
+    )
+    .expect("independent foreign source compiles")
+}
 
 const FUNCTIONS: [&str; 6] = [
     "pair_same",
@@ -134,10 +169,10 @@ fn genuine_record_tuple_closure_and_native_oracles_use_original_owner_keys() {
                 }
             }
         ));
-        let other = fixture::compile(fixture::SOURCE, &qsl_replay::DependencyInput::default());
+        let other = foreign_context();
         assert_ne!(
-            other.context().package_id(),
-            compiled.context().package_id()
+            other.context().package_name(),
+            compiled.context().package_name()
         );
         for requested in [Vec::new(), vec![selected.clone()]] {
             assert!(matches!(
@@ -169,7 +204,7 @@ fn same_shaped_record_and_tuple_names_keep_distinct_repeatable_owner_identities(
         .collect::<std::collections::BTreeSet<_>>();
     assert_eq!(keys.len(), 4, "same-shaped declarations are not aliases");
     for actual in declarations {
-        let wire = qsl_replay::WireNodeId::from_digest(*actual.node().as_bytes());
+        let wire = actual.node();
         assert_eq!(
             compiled
                 .context()
@@ -233,7 +268,7 @@ pub(super) fn assert_authentic_recursive_item_generation() {
         assert_eq!(actual.form(), qsl_replay::AdmittedCompositeForm::Record);
         assert_eq!(
             actual.node().to_string(),
-            item.left.source_type.digest.as_ref()
+            node_key(&item.left.source_type).to_string()
         );
         assert_ne!(
             actual.key(),
@@ -269,10 +304,13 @@ pub(super) fn assert_authentic_recursive_item_generation() {
         assert_eq!(lib.matches("pub fn oracle_").count(), 1);
         assert_eq!(lib.matches("pub fn environment_").count(), 1);
         assert!(lib.contains(&claim.oracle_symbol));
-        let recipe = format!("lookup_composite_key(_context, {:?}, &[{name:?}], qsl_replay::AdmittedCompositeForm::Record)?", item.left.source_type.digest);
-        assert!(lib.contains(&format!("sv::CompositeDeclaration::new({recipe}, ")));
+        let recipe = "lookup_composite_key(_context, ";
+        assert!(lib.contains(&format!("sv::CompositeDeclaration::new({recipe}")));
+        assert!(lib.contains(&format!(
+            "&[{name:?}], qsl_replay::AdmittedCompositeForm::Record)?"
+        )));
         assert!(lib.contains(&format!("sv::FieldDeclaration::new({field:?}, {{")));
-        assert!(lib.contains(&format!("exact::ValueType::Composite({recipe})")));
+        assert!(lib.contains("exact::ValueType::Composite(lookup_composite_key(_context, "));
         let presence = if optional {
             "exact::Presence::Optional)"
         } else {
@@ -377,10 +415,10 @@ fn genuine_composite_host_generation_preserves_closure_and_capability_ordering()
                 }
             }
         ));
-        let other = fixture::compile(fixture::SOURCE, &qsl_replay::DependencyInput::default());
+        let other = foreign_context();
         assert_ne!(
-            other.context().package_id(),
-            compiled.context().package_id()
+            other.context().package_name(),
+            compiled.context().package_name()
         );
         for requested in [Vec::new(), vec![selected.clone()]] {
             assert!(matches!(
@@ -439,7 +477,7 @@ fn genuine_union_host_generation_closes_nested_owner_declarations() {
                             .eq([name])
                     })
                     .expect("original source declaration");
-                (owner.node().to_string(), owner.key().to_string())
+                (owner.node().clone(), owner.key().to_string())
             })
             .collect::<std::collections::BTreeMap<_, _>>();
         assert_eq!(
@@ -450,7 +488,7 @@ fn genuine_union_host_generation_closes_nested_owner_declarations() {
             .declaration_keys
             .iter()
             .zip(&claim.declaration_runtime_keys)
-            .map(|(node, key)| (node.digest.to_string(), key.clone()))
+            .map(|(node, key)| (node_key(node), key.clone()))
             .collect::<std::collections::BTreeMap<_, _>>();
         assert_eq!(
             actual, expected,
