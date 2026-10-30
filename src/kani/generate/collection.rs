@@ -5,8 +5,8 @@
 //! the retained field table; unsupported shapes remain typed refusals for the negotiator.
 
 use quire_contract_model::{
-    CheckedCollectionKind, CheckedMemberType, CheckedNodeId, CheckedNodeTag, CheckedPackageV2,
-    CheckedSemanticNodeV2, CheckedTerm, LiteralKind,
+    ApplicationOperator, CheckedCollectionKind, CheckedMemberType, CheckedNodeId, CheckedNodeTag,
+    CheckedPackageV2, CheckedSemanticNodeV2, CheckedTerm, LiteralKind, StateClauseKind,
 };
 use std::{borrow::Borrow, collections::BTreeMap};
 
@@ -42,7 +42,7 @@ pub(crate) enum CollectionElementDomain {
 /// The admitted selected model field and its inclusive collection bounds.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct CollectionFieldDomain {
-    /// Selected function whose body contains the quantifier.
+    /// Selected function or invariant state clause whose body contains the quantifier.
     pub(crate) function: CheckedNodeId,
     /// Quantifier node selected by the request.
     pub(crate) quantifier: CheckedNodeId,
@@ -496,6 +496,101 @@ fn admitted_declaration(
         .ok_or(CollectionDomainRefusal::FieldNotAdmitted)
 }
 
+fn finite_element_domain(
+    element: &CheckedMemberType,
+    element_type: &CheckedNodeId,
+) -> Result<CollectionElementDomain, CollectionDomainRefusal> {
+    match element {
+        CheckedMemberType::Boolean => Ok(CollectionElementDomain::Boolean),
+        CheckedMemberType::IntRange { lower, upper } if lower <= upper => {
+            Ok(CollectionElementDomain::Integer {
+                minimum: *lower,
+                maximum: *upper,
+            })
+        }
+        CheckedMemberType::IntRange { .. } => {
+            Err(CollectionDomainRefusal::UnsatisfiableElementDomain)
+        }
+        CheckedMemberType::Integer
+        | CheckedMemberType::String
+        | CheckedMemberType::Uuid
+        | CheckedMemberType::Timestamp => Err(CollectionDomainRefusal::RequiresBound {
+            unbounded_type: element_type.clone(),
+        }),
+        _ => Err(CollectionDomainRefusal::UnsupportedFieldType),
+    }
+}
+
+/// Invariants assert their body over a drawn state. Other state-clause kinds need the
+/// operation-contract context and cannot be emitted as standalone collection proofs.
+fn invariant_clause_parts<'a>(
+    graph: &'a CollectionNodeIndex<'_>,
+    claim: &'a CheckedSemanticNodeV2,
+) -> Option<(&'a [CheckedTerm], CheckedNodeId)> {
+    if CheckedNodeTag::from_wire(&claim.node_tag) != Some(CheckedNodeTag::State)
+        || claim.semantic_form.as_ref() != "state_clause"
+    {
+        return None;
+    }
+    let CheckedTerm::Application {
+        operator: ApplicationOperator::StateClause,
+        operation,
+        arguments,
+        ..
+    } = graph.term(claim)?
+    else {
+        return None;
+    };
+    if operation.identity() != Some("quire.op.state.clause")
+        || operation.state_clause_kind().ok()? != Some(StateClauseKind::Invariant)
+    {
+        return None;
+    }
+    let [parameters, _anchor, body] = arguments.as_slice() else {
+        return None;
+    };
+    Some((aggregate_members(parameters)?, term_target(body)?))
+}
+
+/// The authored parameters of a function or invariant state clause, in checked graph order.
+fn claim_parameters<'a>(
+    graph: &'a CollectionNodeIndex<'_>,
+    claim: &'a CheckedSemanticNodeV2,
+) -> Option<&'a [CheckedTerm]> {
+    match CheckedNodeTag::from_wire(&claim.node_tag)? {
+        CheckedNodeTag::Function => graph
+            .term(claim)
+            .and_then(aggregate_members)
+            .and_then(|members| members.first())
+            .and_then(|member| match member {
+                CheckedTerm::Binding { name, value } if name.as_ref() == "parameters" => {
+                    aggregate_members(value)
+                }
+                _ => None,
+            }),
+        CheckedNodeTag::State => {
+            invariant_clause_parts(graph, claim).map(|(parameters, _)| parameters)
+        }
+        _ => None,
+    }
+}
+
+/// The checked Boolean body selected by a function or invariant state clause.
+fn claim_body(
+    graph: &CollectionNodeIndex<'_>,
+    claim: &CheckedSemanticNodeV2,
+) -> Option<CheckedNodeId> {
+    match CheckedNodeTag::from_wire(&claim.node_tag)? {
+        CheckedNodeTag::Function => graph
+            .term(claim)
+            .and_then(aggregate_members)
+            .and_then(|members| binding(members, "body"))
+            .and_then(term_target),
+        CheckedNodeTag::State => invariant_clause_parts(graph, claim).map(|(_, body)| body),
+        _ => None,
+    }
+}
+
 /// Resolve the first (collection) operand of an admitted quantifier to its exact model field.
 ///
 /// Resolution uses the graph's projection declaration identity plus `model_object_fields`; it
@@ -506,19 +601,11 @@ fn resolve_collection_field(
     function_id: &CheckedNodeId,
     quantifier: &CheckedSemanticNodeV2,
 ) -> Result<CollectionFieldDomain, CollectionDomainRefusal> {
-    let function = graph
+    let claim = graph
         .node(function_id)
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
-    if CheckedNodeTag::from_wire(&function.node_tag) != Some(CheckedNodeTag::Function) {
-        return Err(CollectionDomainRefusal::UnsupportedShape);
-    }
-    let function_body = graph
-        .term(function)
-        .and_then(aggregate_members)
-        .and_then(|members| binding(members, "body"))
-        .and_then(term_target)
-        .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
-    if !is_top_level_conjunct(graph, &function_body, &quantifier.node_id) {
+    let body = claim_body(graph, claim).ok_or(CollectionDomainRefusal::UnsupportedShape)?;
+    if !is_top_level_conjunct(graph, &body, &quantifier.node_id) {
         return Err(CollectionDomainRefusal::UnsupportedShape);
     }
     if CheckedNodeTag::from_wire(&quantifier.node_tag) != Some(CheckedNodeTag::Expression)
@@ -566,7 +653,7 @@ fn resolve_collection_field(
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
     let field_name = field_name.to_owned();
     let declaration = admitted_declaration(graph, &field_declaration.digest)?;
-    verify_function_receiver(graph, function, collection, &declaration)?;
+    verify_claim_receiver(graph, claim, collection, &declaration)?;
     let fields = package.model_object_fields(&declaration);
     let field = declared_field(fields.as_ref(), |fields| fields.field(&field_name))?;
     let Some(CheckedMemberType::Collection {
@@ -585,27 +672,7 @@ fn resolve_collection_field(
         }
     };
     let element_type = collection_element_type(graph, collection, kind)?;
-    let element = match element.as_ref() {
-        CheckedMemberType::Boolean => CollectionElementDomain::Boolean,
-        CheckedMemberType::IntRange { lower, upper } if lower <= upper => {
-            CollectionElementDomain::Integer {
-                minimum: *lower,
-                maximum: *upper,
-            }
-        }
-        CheckedMemberType::IntRange { .. } => {
-            return Err(CollectionDomainRefusal::UnsatisfiableElementDomain);
-        }
-        CheckedMemberType::Integer
-        | CheckedMemberType::String
-        | CheckedMemberType::Uuid
-        | CheckedMemberType::Timestamp => {
-            return Err(CollectionDomainRefusal::RequiresBound {
-                unbounded_type: element_type,
-            });
-        }
-        _ => return Err(CollectionDomainRefusal::UnsupportedFieldType),
-    };
+    let element = finite_element_domain(element, &element_type)?;
     let Some((minimum_length, maximum_length)) = bounds else {
         return Err(CollectionDomainRefusal::RequiresBound {
             unbounded_type: collection.semantic_type.clone(),
@@ -628,7 +695,7 @@ fn resolve_collection_field(
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
     let predicate = resolve_predicate(
         graph,
-        function,
+        claim,
         binder_name,
         predicate_node,
         element,
@@ -672,7 +739,7 @@ fn binary_predicate_operation<'a>(
 
 fn resolve_predicate(
     graph: &CollectionNodeIndex<'_>,
-    function: &CheckedSemanticNodeV2,
+    claim: &CheckedSemanticNodeV2,
     binder_name: &str,
     predicate: &CheckedSemanticNodeV2,
     element: CollectionElementDomain,
@@ -684,17 +751,8 @@ fn resolve_predicate(
         .and_then(application_arguments)
         .filter(|arguments| arguments.len() == 2)
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
-    let parameter_count = graph
-        .term(function)
-        .and_then(aggregate_members)
-        .and_then(|members| members.first())
-        .and_then(|member| match member {
-            CheckedTerm::Binding { name, value } if name.as_ref() == "parameters" => {
-                aggregate_members(value)
-            }
-            _ => None,
-        })
-        .map(|members| members.len())
+    let parameter_count = claim_parameters(graph, claim)
+        .map(<[CheckedTerm]>::len)
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
     let selected_parameter = arguments
         .iter()
@@ -769,23 +827,14 @@ fn collection_element_type(
     .ok_or(CollectionDomainRefusal::UnsupportedShape)
 }
 
-fn verify_function_receiver(
+fn verify_claim_receiver(
     graph: &CollectionNodeIndex<'_>,
-    function: &CheckedSemanticNodeV2,
+    claim: &CheckedSemanticNodeV2,
     projection: &CheckedSemanticNodeV2,
     declaration: &CheckedNodeId,
 ) -> Result<(), CollectionDomainRefusal> {
-    let parameters = graph
-        .term(function)
-        .and_then(aggregate_members)
-        .and_then(|members| members.first())
-        .and_then(|member| match member {
-            CheckedTerm::Binding { name, value } if name.as_ref() == "parameters" => {
-                aggregate_members(value)
-            }
-            _ => None,
-        })
-        .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
+    let parameters =
+        claim_parameters(graph, claim).ok_or(CollectionDomainRefusal::UnsupportedShape)?;
     let parameter_ids = parameters
         .iter()
         .filter_map(term_target)
@@ -1037,6 +1086,40 @@ mod tests {
             }),
             1u128 << 64
         );
+        assert_eq!(
+            unique_capacity_exceeded(
+                CollectionElement::Integer {
+                    minimum: i64::MIN,
+                    maximum: i64::MAX,
+                },
+                u64::MAX,
+            ),
+            None,
+            "the full inclusive i64 domain has one more value than u64::MAX",
+        );
+    }
+
+    #[trace("FR-015-AC-96", "TC-025")]
+    #[test]
+    fn finite_element_domain_refuses_an_empty_integer_range() {
+        let element_type = node("empty-element");
+        assert_eq!(
+            finite_element_domain(
+                &CheckedMemberType::IntRange { lower: 2, upper: 1 },
+                &element_type,
+            ),
+            Err(CollectionDomainRefusal::UnsatisfiableElementDomain),
+        );
+        assert_eq!(
+            finite_element_domain(
+                &CheckedMemberType::IntRange { lower: 1, upper: 2 },
+                &element_type,
+            ),
+            Ok(CollectionElementDomain::Integer {
+                minimum: 1,
+                maximum: 2
+            }),
+        );
     }
 
     #[trace("FR-015-AC-96", "FR-015-AC-101", "TC-025")]
@@ -1072,7 +1155,7 @@ mod tests {
             })
         ));
         claim.field.element = CollectionElementDomain::Integer {
-            minimum: 0,
+            minimum: i128::from(i64::MAX) + 1,
             maximum: i128::from(i64::MAX) + 1,
         };
         assert!(matches!(

@@ -90,11 +90,12 @@ pub enum ObligationItem<'a> {
         /// The caller's selected result occurrence, or `NotApplicable` for a direct node claim.
         result_selection: &'a ContractDriverResultSelection,
     },
-    /// One selected forall/exists occurrence in an admitted V2 function body.
+    /// One selected forall/exists occurrence in an admitted V2 function or state-clause body.
+    /// Only invariant state clauses currently have standalone collection proofs.
     CollectionClaim {
         /// The admitted package.
         package: &'a CheckedPackageV2,
-        /// The selected function whose body contains the claim.
+        /// The selected function or state clause whose body contains the claim.
         function_id: &'a CheckedNodeId,
         /// The exact quantifier node selected for this item.
         node_id: &'a CheckedNodeId,

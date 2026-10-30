@@ -7,7 +7,7 @@
 use crate::scratch_crate::{runtime_dependency, write_manifest, TemporaryDirectory};
 use ix_trace_rs::trace;
 use qsl_replay::{
-    call_site, object_reference_witness, replay, write_object_environment, ByteDigest,
+    call_site, object_reference_witness, replay, write_object_environment, ByteDigest, ClauseName,
     DeclarationKey, DependencyInput, DigestDomain, DigestRecord, DomainPackageRef,
     EnvironmentLabels, EnvironmentModel, EnvironmentObject, EnvironmentPopulation, EvaluatedValue,
     Identifier, ModelNormalizationLimits, QualifiedName, ReplayLimits, ReplayRequestWire,
@@ -198,6 +198,35 @@ fn model_document() -> Value {
     })
 }
 
+fn model_document_with_step() -> Value {
+    let mut document = model_document();
+    let node = document["types"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|ty| ty.get("identity").and_then(Value::as_str) == Some(NODE_ID))
+        .unwrap();
+    node["operations"] = json!([{
+        "identity": format!("{NODE_ID}/step"),
+        "name": "step",
+        "params": [],
+        "pre": [],
+        "post": [],
+        "origin": {"source": {
+            "sourceIdentity": SOURCE_ID,
+            "path": "spec.qspec",
+            "startLine": 1,
+            "startColumn": 1
+        }},
+        "frame": {
+            "modifies": [format!("{NODE_ID}/items")],
+            "creates": [],
+            "deletes": []
+        }
+    }]);
+    document
+}
+
 // `deref(input)` is object navigation, admitted under QSL's model layer.
 fn source_unit_with_body(model_digest: &str, body: &str) -> String {
     format!(
@@ -205,6 +234,15 @@ fn source_unit_with_body(model_digest: &str, body: &str) -> String {
          profile v = \"quire.model.complete/v1\";\n\
          model M = \"ir268.test/domain\" version \"1.0.0\" digest \"sha256-jcs:{model_digest}\";\n\
          predicate inspect using v (input: M::Node): Boolean {{ {body} }}\n"
+    )
+}
+
+fn source_unit_with_clause(model_digest: &str, declaration: &str, body: &str) -> String {
+    format!(
+        "language \"ix:native\" edition \"1-draft\";\n\
+         profile v = \"quire.model.complete/v1\";\n\
+         model M = \"ir268.test/domain\" version \"1.0.0\" digest \"sha256-jcs:{model_digest}\";\n\
+         {declaration} {{ {body} }}\n"
     )
 }
 
@@ -721,13 +759,64 @@ fn try_emitted_from_document_and_body(document: Value, body: &str) -> Result<Emi
     )
     .map_err(|error| format!("{error:?}"))?;
 
+    admit_emitted(
+        document_bytes,
+        model_digest,
+        model_digest_bytes,
+        unit,
+        site.package,
+        site.site.function.to_string(),
+    )
+}
+
+fn try_emitted_from_document_and_clause(
+    document: Value,
+    declaration: &str,
+    body: &str,
+) -> Result<Emitted, String> {
+    let limits = quire_canonical::Limits::new(1 << 20);
+    let document_bytes = quire_canonical::to_vec(&document, limits)
+        .expect("the authored model document has bounded JCS bytes");
+    let model_digest_value = quire_canonical::sha256(&document, limits)
+        .expect("the authored model document has a JCS digest");
+    let model_digest = model_digest_value.to_string();
+    let model_digest_bytes = *model_digest_value.as_bytes();
+    let unit = source_unit_with_clause(&model_digest, declaration, body);
+    let site = call_site(
+        SourceIdentity::new("agent-ix", "ir1091-clause.native", "git", "fixture"),
+        "ir1091-clause.native",
+        unit.as_bytes(),
+        [document_bytes.as_slice()],
+        &DependencyInput::default(),
+        &ClauseName(Identifier::new("CollectionReady").expect("clause name")),
+    )
+    .map_err(|error| format!("{error:?}"))?;
+
+    admit_emitted(
+        document_bytes,
+        model_digest,
+        model_digest_bytes,
+        unit,
+        site.package,
+        site.site.node.to_string(),
+    )
+}
+
+fn admit_emitted(
+    document_bytes: Vec<u8>,
+    model_digest: String,
+    model_digest_bytes: [u8; 32],
+    unit: String,
+    package_bytes: Vec<u8>,
+    function_digest: String,
+) -> Result<Emitted, String> {
     let mut evidence = CheckedPackageEvidence::new();
     evidence.support_feature("quire.value.complete/v1");
     evidence
         .insert_domain_package_document(model_digest.clone(), document_bytes.clone())
         .expect("the exact selected model document is admitted as evidence");
     let package = match CheckedPackageV2::read(
-        &site.package,
+        &package_bytes,
         CheckedPackageReadLimits::bounded(),
         &evidence,
     ) {
@@ -759,7 +848,6 @@ fn try_emitted_from_document_and_body(document: Value, body: &str) -> Result<Emi
         !package.package_id().digest.is_empty(),
         "the admitted package has a semantic identity"
     );
-    let function_digest = site.site.function.to_string();
     Ok(Emitted {
         package,
         function_digest,
@@ -769,6 +857,168 @@ fn try_emitted_from_document_and_body(document: Value, body: &str) -> Result<Emi
         model_digest: model_digest_bytes,
         source: unit,
     })
+}
+
+#[trace("FR-015-AC-96", "TC-025")]
+#[test]
+fn admitted_state_clause_collection_preserves_order_and_uniqueness() {
+    let fixture = try_emitted_from_document_and_clause(
+        ordered_set_document(),
+        "invariant CollectionReady using v on M::Node at current",
+        "forall(item in self.items: item >= 0)",
+    )
+    .expect("admitted clause");
+    let clause = fixture
+        .package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| node.node_id.digest.as_ref() == fixture.function_digest)
+        .expect("selected QSL clause");
+    assert_eq!(clause.semantic_form.as_ref(), "state_clause");
+    let harness = collection_harness(&fixture, "quire.op.collection.forall");
+    assert_eq!(harness.identity.function_id, clause.node_id);
+    assert_eq!(harness.identity.field_name, "items");
+    assert_eq!(
+        harness.identity.collection_kind,
+        CollectionKindIdentity::OrderedSet
+    );
+    assert_eq!(
+        (
+            harness.identity.minimum_length,
+            harness.identity.maximum_length
+        ),
+        (0, 3)
+    );
+    assert_eq!(
+        harness.identity.element,
+        CollectionElementIdentity::Integer {
+            minimum: 0,
+            maximum: 3
+        }
+    );
+    assert!(harness
+        .rust
+        .contents
+        .contains("kani::assume(item != selected_items[prior as usize]);"));
+    assert!(harness
+        .rust
+        .contents
+        .contains("selected_items[index as usize]"));
+}
+
+#[trace("FR-015-AC-96", "TC-025")]
+#[test]
+fn admitted_state_clause_sequence_uses_its_full_symbolic_domain() {
+    let fixture = try_emitted_from_document_and_clause(
+        model_document(),
+        "invariant CollectionReady using v on M::Node at current",
+        "forall(item in self.items: item >= 0)",
+    )
+    .expect("admitted Sequence clause");
+    let harness = collection_harness(&fixture, "quire.op.collection.forall");
+    assert_eq!(
+        harness.identity.collection_kind,
+        CollectionKindIdentity::Sequence
+    );
+    assert_eq!(
+        (
+            harness.identity.minimum_length,
+            harness.identity.maximum_length
+        ),
+        (0, 3)
+    );
+    assert_eq!(
+        harness.identity.element,
+        CollectionElementIdentity::Integer {
+            minimum: 0,
+            maximum: 3,
+        }
+    );
+    assert!(harness
+        .rust
+        .contents
+        .contains("selected_items_len >= 0 && selected_items_len <= 3"));
+    assert!(harness.rust.contents.contains("item >= 0 && item <= 3"));
+    assert!(harness
+        .rust
+        .contents
+        .contains("selected_items[index as usize]"));
+    assert!(!harness.rust.contents.contains("for prior in 0..index"));
+}
+
+#[trace("FR-015-AC-96", "FR-015-AC-97", "TC-025")]
+#[test]
+fn negated_state_clause_quantifier_is_not_an_independent_collection_claim() {
+    let fixture = try_emitted_from_document_and_clause(
+        ordered_set_document(),
+        "invariant CollectionReady using v on M::Node at current",
+        "not forall(item in self.items: item >= 0)",
+    )
+    .expect("negated clause is admitted");
+    let KaniObligationOutcome::Emitted {
+        records,
+        collection_harnesses,
+        ..
+    } = collection_item_outcome(&fixture, "quire.op.collection.forall", 8)
+    else {
+        panic!("nested quantifier settles per item");
+    };
+    assert!(matches!(
+        records[0].disposition,
+        ObligationDisposition::Unsupported {
+            reason: UnsupportedObligation::CollectionClaimNotRendered {
+                reason: quire_contract_codegen::CollectionUnsupportedReason::UnsupportedClaimShape,
+                ..
+            }
+        }
+    ));
+    assert!(collection_harnesses.is_empty());
+}
+
+#[trace("FR-015-AC-96", "FR-015-AC-97", "FR-015-AC-128", "TC-025")]
+#[test]
+fn operation_and_constraint_clauses_do_not_get_standalone_collection_proofs() {
+    for (document, declaration) in [
+        (
+            model_document_with_step(),
+            "pre CollectionReady using v on M::Node::step",
+        ),
+        (
+            model_document_with_step(),
+            "post CollectionReady using v on M::Node::step",
+        ),
+        (
+            ordered_set_document(),
+            "constraint CollectionReady using v on M::Node at current",
+        ),
+    ] {
+        let fixture = try_emitted_from_document_and_clause(
+            document,
+            declaration,
+            "forall(item in self.items: item >= 0)",
+        )
+        .unwrap_or_else(|error| panic!("{declaration} must be admitted: {error}"));
+        let KaniObligationOutcome::Emitted {
+            records,
+            collection_harnesses,
+            ..
+        } = collection_item_outcome(&fixture, "quire.op.collection.forall", 8)
+        else {
+            panic!("{declaration} settles per item");
+        };
+        assert!(matches!(
+            records[0].disposition,
+            ObligationDisposition::Unsupported {
+                reason: UnsupportedObligation::CollectionClaimNotRendered {
+                    reason:
+                        quire_contract_codegen::CollectionUnsupportedReason::UnsupportedClaimShape,
+                    ..
+                }
+            }
+        ));
+        assert!(collection_harnesses.is_empty());
+    }
 }
 
 #[trace("FR-015-AC-96", "TC-025")]
@@ -1577,6 +1827,80 @@ fn ordered_set_document() -> Value {
     document
 }
 
+#[trace("FR-015-AC-96", "FR-015-AC-97", "TC-025")]
+#[test]
+fn unsupported_set_form_precedes_unique_capacity_refusal() {
+    let mut document = ordered_set_document();
+    let node = document["types"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|ty| ty.get("identity").and_then(Value::as_str) == Some(NODE_ID))
+        .unwrap();
+    let items = node["fields"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|field| field.get("name").and_then(Value::as_str) == Some("items"))
+        .unwrap();
+    items["multiplicity"]["ordered"] = json!(false);
+    items["multiplicity"]["upper"] = json!(5);
+    let fixture =
+        emitted_from_document_and_body(document, "forall(item in deref(input).items: item >= 0)");
+    let KaniObligationOutcome::Emitted {
+        records,
+        collection_harnesses,
+        ..
+    } = collection_item_outcome(&fixture, "quire.op.collection.forall", 8)
+    else {
+        panic!("unsupported form settles per item");
+    };
+    assert!(matches!(
+        records[0].disposition,
+        ObligationDisposition::Unsupported {
+            reason: UnsupportedObligation::CollectionClaimNotRendered {
+                reason: quire_contract_codegen::CollectionUnsupportedReason::UnsupportedFieldType,
+                ..
+            }
+        }
+    ));
+    assert!(collection_harnesses.is_empty());
+}
+
+#[trace("FR-015-AC-96", "TC-025")]
+#[test]
+fn nonunique_boolean_sequence_keeps_maximum_above_unique_capacity() {
+    let mut document = model_document();
+    let node = document["types"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|ty| ty.get("identity").and_then(Value::as_str) == Some(NODE_ID))
+        .unwrap();
+    let flags = node["fields"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|field| field.get("name").and_then(Value::as_str) == Some("flags"))
+        .unwrap();
+    flags["multiplicity"]["upper"] = json!(3);
+    let fixture = emitted_from_document_and_body(
+        document,
+        "forall(flag in deref(input).flags: flag != false)",
+    );
+    let harness = collection_harness(&fixture, "quire.op.collection.forall");
+    assert_eq!(
+        harness.identity.collection_kind,
+        CollectionKindIdentity::Sequence
+    );
+    assert_eq!(harness.identity.maximum_length, 3);
+    assert!(harness
+        .rust
+        .contents
+        .contains("let selected_flags: [bool; 3] = kani::any();"));
+    assert!(!harness.rust.contents.contains("for prior in 0..index"));
+}
+
 #[trace("FR-015-AC-96", "TC-025")]
 #[test]
 fn feasible_ordered_set_emits_symbolic_ordered_unique_slots() {
@@ -2333,6 +2657,42 @@ fn native_collection_replay_evaluates_the_authored_healthy_and_mutated_functions
         "forall(item in deref(input).items: item >= 0)",
     );
     assert_native_collection_result(&ordered_set, &[0, 1], CollectionKind::OrderedSet, true);
+}
+
+#[trace("FR-015-AC-96", "TC-025")]
+#[test]
+#[ignore = "kani lane: run serially through make kani-gate"]
+fn tc_025_real_kani_state_clause_collection_claim_and_mutant() {
+    let installation = KaniInstallation::discover().expect("cargo-kani is installed");
+    let healthy = try_emitted_from_document_and_clause(
+        ordered_set_document(),
+        "invariant CollectionReady using v on M::Node at current",
+        "forall(item in self.items: item >= 0)",
+    )
+    .expect("healthy clause is admitted");
+    let healthy_harness = collection_harness(&healthy, "quire.op.collection.forall");
+    assert_eq!(
+        run_collection_kani(&installation, &healthy_harness, "state-clause-healthy").outcome,
+        KaniRunOutcome::Verified
+    );
+
+    let mutant = try_emitted_from_document_and_clause(
+        ordered_set_document(),
+        "invariant CollectionReady using v on M::Node at current",
+        "forall(item in self.items: item >= 1)",
+    )
+    .expect("mutated clause is admitted");
+    let mutant_harness = collection_harness(&mutant, "quire.op.collection.forall");
+    assert_ne!(healthy_harness.identity, mutant_harness.identity);
+    let evidence = run_collection_kani(&installation, &mutant_harness, "state-clause-mutant");
+    let KaniRunOutcome::Falsified { counterexample } = evidence.outcome else {
+        panic!("the source-authored state-clause mutant must falsify: {evidence:?}");
+    };
+    let values = collection_playback_values(&counterexample);
+    assert!(values.contains(&0));
+    for (index, value) in values.iter().enumerate() {
+        assert!(!values[..index].contains(value));
+    }
 }
 
 #[trace("FR-015-AC-99", "TC-025")]
