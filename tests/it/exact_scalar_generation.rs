@@ -23,7 +23,7 @@ use quire_contract_codegen::{
 };
 use quire_contract_model::{
     derive_application_node_id, derive_structural_candidates, ApplicationNodeDraft,
-    ApplicationOperator, CheckedPackageEvidence, CheckedPackageReadLimits,
+    ApplicationOperator, CheckedNodeId, CheckedPackageEvidence, CheckedPackageReadLimits,
     CheckedPackageRefusalCause, CheckedPackageRefusalCode, CheckedPackageV2,
     CheckedPackageV2ReadResult, CheckedSemanticNodeV2, CheckedTerm, StructuralCandidateError,
 };
@@ -39,6 +39,10 @@ use serde_json::{json, Value};
 pub(super) mod package;
 
 use package::*;
+
+fn subject_header(id: &CheckedNodeId) -> String {
+    format!("// Subject: {}", format!("{id:?}").escape_debug())
+}
 
 /// Generate, and scan the `src/lib.rs` it produced for a panic site (FR-014-AC-39). Every crate
 /// this module's TC-024 tests generate comes through here, so each one is scanned.
@@ -1461,8 +1465,8 @@ fn tc_024_catalog_consumer_negative_cases_refuse_wrong_shapes_and_preserve_order
         }
     );
     let golden_source = contents(&golden, "src/lib.rs");
-    assert!(!golden_source.contains(&format!("{:?}", code_id(WRONG_ARITY))));
-    assert!(!golden_source.contains(&format!("{:?}", code_id(WRONG_RESULT))));
+    assert!(!golden_source.contains(&subject_header(&code_id(WRONG_ARITY))));
+    assert!(!golden_source.contains(&subject_header(&code_id(WRONG_RESULT))));
 }
 
 /// The scalar nodes shared by the admitted work-exhaustion fixture and its
@@ -1611,7 +1615,7 @@ fn tc_024_lowering_work_exhaustion_is_a_typed_refusal() {
     };
     assert_eq!(*limit, quire_contract_codegen::SCALAR_LOWERING_WORK_LIMIT);
     assert!(consumed > limit);
-    assert!(!contents(&oracles, "src/lib.rs").contains(&format!("{:?}", code_id(3001))));
+    assert!(!contents(&oracles, "src/lib.rs").contains(&subject_header(&code_id(3001))));
 }
 
 /// A call whose lowered contract package is longer than the checked package, read under a ceiling
@@ -2436,7 +2440,7 @@ fn tc_024_admitted_protocol_node_is_unsupported() {
         panic!("expected typed protocol refusal, got {:?}", claim.result);
     };
     assert_eq!(unsupported_node_id, &requested_id);
-    assert!(!contents(&oracles, "src/lib.rs").contains(&format!("{requested_id:?}")));
+    assert!(!contents(&oracles, "src/lib.rs").contains(&subject_header(&requested_id)));
 }
 
 fn qspec_package(fixture: &str) -> CheckedPackageV2 {
