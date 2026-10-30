@@ -18,7 +18,7 @@ Also verify CG's typed refinement Base and Step run-record handoff to the
 QSL FR-314 certificate adapter. The refinement procedures are partial:
 synthetic handoff and source-authored seven-row permutation controls exist,
 while the production FR-315 driver, authentic zero-step and step 8 refusal
-controls, and live proof readback remain open.
+controls, and QSL-1306 live proof acceptance remain open.
 
 ## Test Procedure
 
