@@ -1,28 +1,15 @@
-//! The obligation identity of the function path and of the frame path (ADR-013 O-09,
-//! FR-016-AC-21 to AC-23, FR-024-AC-20, AD-003 E-1).
+//! Structural obligation identities for function and frame replay.
 //!
-//! The identity is the SHA-256 of the RFC 8785 encoding, made by [`crate::core::canonical`], of
-//! four members: the function's node id, its `declaration` occurrence key, the
-//! [`ObligationKind`] of the harness replayed and the arguments, each a parameter node id with its
-//! declared domain, ascending by identifier. The function node id and the occurrence key are the
-//! ones `qsl_replay::call_site` returns in its `FunctionSite`; this module takes them as given and
-//! derives neither, and it reads nothing else of the compiled package. The source span is not a
-//! member. O-09 fixes the members and not their spelling; the member names below are CG's.
-//! A frame obligation uses the same four members with the frame node as `function`, the frame's
-//! occurrence as `declaration` and no arguments ([`frame_identity`]).
+//! QSL supplies the node and occurrence ordinal. Kind and argument domains remain separate
+//! claim facts checked before replay; they do not enter the identity.
 
 use std::fmt;
 
 use qsl_replay::{Identifier, ObligationIdentity, OccurrenceKey, OperationSite, WireNodeId};
-use quire_canonical::FixedShape;
-use serde::Serialize;
 
-use crate::{
-    core::canonical::{content_digest, DigestError},
-    kani::{
-        abi::KaniPrimitiveType,
-        identity::{ObligationBinding, ObligationKind, StateFrameProperty},
-    },
+use crate::kani::{
+    abi::KaniPrimitiveType,
+    identity::{ObligationBinding, ObligationKind, StateFrameProperty},
 };
 
 /// Why a function-contract identity could not be built.
@@ -50,8 +37,8 @@ pub enum ObligationIdentityError {
         /// The harness argument's identifier.
         argument: String,
     },
-    /// The preimage has no RFC 8785 encoding.
-    Digest(DigestError),
+    /// The QSL occurrence ordinal cannot fit the structural identity.
+    OrdinalTooLarge(u64),
 }
 
 impl fmt::Display for ObligationIdentityError {
@@ -75,7 +62,9 @@ impl fmt::Display for ObligationIdentityError {
                     "the Boolean harness argument `{argument}` carries integer bounds"
                 )
             }
-            Self::Digest(cause) => cause.fmt(f),
+            Self::OrdinalTooLarge(ordinal) => {
+                write!(f, "the occurrence ordinal {ordinal} exceeds u32")
+            }
         }
     }
 }
@@ -83,8 +72,7 @@ impl fmt::Display for ObligationIdentityError {
 impl std::error::Error for ObligationIdentityError {}
 
 /// The declared domain of one argument.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, FixedShape)]
-#[serde(tag = "type", rename_all = "camelCase")]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum ArgumentDomain {
     /// A Boolean: both values.
     Boolean,
@@ -158,7 +146,7 @@ pub(crate) fn contract_arguments(
                 })?;
             Ok(ContractArgument {
                 identifier: binding.identifier.clone(),
-                parameter: *parameter,
+                parameter: parameter.clone(),
                 domain: ArgumentDomain::of(binding)?,
             })
         })
@@ -175,70 +163,25 @@ pub(crate) fn contract_arguments(
     }
 }
 
-#[derive(Serialize, FixedShape)]
-#[serde(rename_all = "camelCase")]
-struct OccurrenceMember {
-    node: String,
-    role: String,
-    ordinal: u64,
-}
-
-#[derive(Serialize, FixedShape)]
-#[serde(rename_all = "camelCase")]
-struct ArgumentMember<'a> {
-    parameter: String,
-    domain: &'a ArgumentDomain,
-}
-
-/// The O-09 preimage members of a function contract.
-#[derive(Serialize, FixedShape)]
-#[serde(rename_all = "camelCase")]
-struct Preimage<'a> {
-    function: String,
-    declaration: OccurrenceMember,
-    kind: ObligationKind,
-    arguments: Vec<ArgumentMember<'a>>,
-}
-
-/// The obligation identity over `function`, its `declaration` occurrence key, the `kind` of the
-/// harness replayed and `arguments`, which are put in ascending order of identifier whatever
-/// order they arrive in. It is the one function that mints an identity, for the function path
-/// and for the frame path (FR-024-AC-20): nothing else encodes or digests an obligation's
-/// members, and the digest is [`content_digest`]'s.
+/// The structural obligation identity over QSL's node and occurrence ordinal.
 ///
 /// A frame has no parameters, so its `function` is the frame node, its `declaration` is the
 /// frame's own occurrence and its `arguments` are empty ([`frame_identity`]).
 ///
+/// The caller separately compares kind and argument domains with its retained claim record.
+///
 /// # Errors
 ///
-/// [`ObligationIdentityError::Digest`] when the preimage has no RFC 8785 encoding.
+/// [`ObligationIdentityError::OrdinalTooLarge`] for an occurrence beyond `u32`.
 pub(crate) fn function_contract_identity(
     function: WireNodeId,
     declaration: &OccurrenceKey,
-    kind: ObligationKind,
-    arguments: &[ContractArgument],
+    _kind: ObligationKind,
+    _arguments: &[ContractArgument],
 ) -> Result<ObligationIdentity, ObligationIdentityError> {
-    let mut ascending: Vec<&ContractArgument> = arguments.iter().collect();
-    ascending.sort_by(|left, right| left.identifier.cmp(&right.identifier));
-    let preimage = Preimage {
-        function: function.to_string(),
-        declaration: OccurrenceMember {
-            node: declaration.node().to_string(),
-            role: declaration.origin().role().to_string(),
-            ordinal: declaration.origin().ordinal(),
-        },
-        kind,
-        arguments: ascending
-            .into_iter()
-            .map(|argument| ArgumentMember {
-                parameter: argument.parameter.to_string(),
-                domain: &argument.domain,
-            })
-            .collect(),
-    };
-    content_digest(&preimage)
-        .map(ObligationIdentity::from_digest)
-        .map_err(ObligationIdentityError::Digest)
+    let ordinal = u32::try_from(declaration.origin().ordinal())
+        .map_err(|_| ObligationIdentityError::OrdinalTooLarge(declaration.origin().ordinal()))?;
+    Ok(ObligationIdentity::new(function, None, ordinal))
 }
 
 /// The kind of the obligation a state-frame harness proves, read from its `property` and from
@@ -258,250 +201,114 @@ pub(crate) fn frame_kind(property: &StateFrameProperty) -> Option<ObligationKind
 ///
 /// # Errors
 ///
-/// [`ObligationIdentityError::Digest`] when the preimage has no RFC 8785 encoding.
+/// [`ObligationIdentityError::OrdinalTooLarge`] for an occurrence beyond `u32`.
 pub(crate) fn frame_identity(
     site: &OperationSite,
     kind: ObligationKind,
 ) -> Result<ObligationIdentity, ObligationIdentityError> {
-    function_contract_identity(site.frame, &site.frame_occurrence, kind, &[])
+    function_contract_identity(site.frame.clone(), &site.frame_occurrence, kind, &[])
 }
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use ix_trace_rs::trace;
     use qsl_replay::{Origin, Role};
+    use quire_exact::PathSegment;
 
-    use super::*;
-
-    fn node(byte: u8) -> WireNodeId {
-        WireNodeId::from_digest([byte; 32])
+    fn node(name: &str) -> WireNodeId {
+        WireNodeId::new("fixture", vec![PathSegment::Text(name.to_owned())], 0)
+            .expect("fixture node")
     }
 
-    fn declaration(function: WireNodeId) -> OccurrenceKey {
-        OccurrenceKey::new(function, Origin::new(Role::new("declaration"), 0))
+    fn occurrence(node: WireNodeId, ordinal: u64) -> OccurrenceKey {
+        OccurrenceKey::new(node, Origin::new(Role::new("declaration"), ordinal))
     }
 
-    fn argument(identifier: &str, parameter: u8, domain: ArgumentDomain) -> ContractArgument {
-        ContractArgument {
-            identifier: identifier.to_owned(),
-            parameter: node(parameter),
-            domain,
-        }
-    }
-
-    fn range(minimum: &str, maximum: &str) -> ArgumentDomain {
-        ArgumentDomain::IntegerRange {
-            minimum: minimum.to_owned(),
-            maximum: maximum.to_owned(),
-        }
-    }
-
-    fn arguments() -> Vec<ContractArgument> {
-        vec![
-            argument("a", 1, range("0", "9")),
-            argument("b", 2, ArgumentDomain::Boolean),
-        ]
-    }
-
-    fn identity(
-        function: u8,
-        declaration_node: u8,
-        kind: ObligationKind,
-        arguments: &[ContractArgument],
-    ) -> ObligationIdentity {
-        function_contract_identity(
-            node(function),
-            &declaration(node(declaration_node)),
-            kind,
-            arguments,
+    #[trace("FR-016-AC-21", "FR-016-AC-23", "TC-026")]
+    #[test]
+    fn function_obligation_uses_the_structural_node_and_ordinal() {
+        let function = node("function");
+        let declaration = occurrence(function.clone(), 2);
+        let identity = function_contract_identity(
+            function.clone(),
+            &declaration,
+            ObligationKind::Postcondition,
+            &[],
         )
-        .expect("the preimage encodes")
-    }
-
-    /// The identity depends on the function, the declaration key, the kind and the arguments
-    /// only: arguments given in any order give one identity, and each member changes it.
-    #[trace("FR-016-AC-23", "TC-026")]
-    #[test]
-    fn tc_026_only_the_four_members_decide_the_identity() {
-        let kind = ObligationKind::Postcondition;
-        let base = identity(7, 7, kind, &arguments());
-
-        let mut reversed = arguments();
-        reversed.reverse();
-        assert_eq!(base, identity(7, 7, kind, &reversed));
-
-        assert_ne!(base, identity(8, 7, kind, &arguments()), "function");
-        assert_ne!(base, identity(7, 8, kind, &arguments()), "declaration");
+        .expect("valid ordinal");
+        assert_eq!(identity.node(), &function);
+        assert_eq!(identity.model(), None);
+        assert_eq!(identity.ordinal(), 2);
         assert_ne!(
-            base,
-            identity(7, 7, ObligationKind::Precondition, &arguments()),
-            "kind"
+            identity,
+            function_contract_identity(
+                node("other"),
+                &declaration,
+                ObligationKind::Postcondition,
+                &[],
+            )
+            .expect("valid ordinal")
         );
-        let mut rebound = arguments();
-        rebound[0].parameter = node(3);
-        assert_ne!(base, identity(7, 7, kind, &rebound), "parameter node id");
-        let mut widened = arguments();
-        widened[0].domain = range("0", "10");
-        assert_ne!(base, identity(7, 7, kind, &widened), "domain");
-    }
-
-    /// An `i64` bound above 2^53 is a decimal string in the preimage, so the encoder accepts it
-    /// and the identity tells the extreme domain from a near one.
-    #[trace("FR-016-AC-21", "TC-026")]
-    #[test]
-    fn tc_026_an_i64_extreme_domain_is_encodable() {
-        let kind = ObligationKind::Invariant;
-        let extreme = [argument(
-            "a",
-            1,
-            range(&i64::MIN.to_string(), &i64::MAX.to_string()),
-        )];
-        let near = [argument(
-            "a",
-            1,
-            range(&i64::MIN.to_string(), &(i64::MAX - 1).to_string()),
-        )];
-        assert_ne!(identity(7, 7, kind, &extreme), identity(7, 7, kind, &near));
-    }
-
-    /// Ascending by identifier is not ascending by node id: with `a` bound to a node id above
-    /// `b`'s, the digest equals the hand-written text that lists `a` first. A sort by node id
-    /// would list `b` first and fail.
-    #[trace("FR-016-AC-21", "TC-026")]
-    #[test]
-    fn tc_026_arguments_are_ordered_by_identifier_not_by_node_id() {
-        use sha2::{Digest, Sha256};
-        let hex = |byte: u8| format!("{byte:02x}").repeat(32);
-        let arguments = [
-            argument("b", 1, ArgumentDomain::Boolean),
-            argument("a", 9, range("0", "9")),
-        ];
-        let text = format!(
-            "{{\"arguments\":[{{\"domain\":{{\"maximum\":\"9\",\"minimum\":\"0\",\
-             \"type\":\"integerRange\"}},\"parameter\":\"{}\"}},\
-             {{\"domain\":{{\"type\":\"boolean\"}},\"parameter\":\"{}\"}}],\
-             \"declaration\":{{\"node\":\"{}\",\"ordinal\":0,\"role\":\"declaration\"}},\
-             \"function\":\"{}\",\"kind\":\"frame\"}}",
-            hex(9),
-            hex(1),
-            hex(7),
-            hex(7),
+        assert_ne!(
+            identity,
+            function_contract_identity(
+                function.clone(),
+                &occurrence(function.clone(), 3),
+                ObligationKind::Postcondition,
+                &[],
+            )
+            .expect("valid ordinal")
         );
-        let expected: [u8; 32] = Sha256::digest(text.as_bytes()).into();
-        let built = identity(7, 7, ObligationKind::Frame, &arguments);
-        assert_eq!(*built.as_bytes(), expected);
+        assert_eq!(
+            identity,
+            function_contract_identity(function, &declaration, ObligationKind::Invariant, &[],)
+                .expect("kind is a separate claim field")
+        );
     }
 
-    fn frame_site(frame: u8, role: &str, ordinal: u64) -> OperationSite {
-        let frame = node(frame);
-        OperationSite {
-            frame_operation: qsl_replay::FrameOperation {
-                object: qsl_replay::QualifiedName::new(vec![
-                    Identifier::new("model").expect("model alias"),
-                    Identifier::new("Object").expect("object name"),
-                ])
-                .expect("qualified object name"),
-                operation: Identifier::new("operation").expect("operation name"),
-            },
-            anchor: node(0xa0),
-            frame,
-            frame_occurrence: OccurrenceKey::new(frame, Origin::new(Role::new(role), ordinal)),
-            clauses: Vec::new(),
-        }
-    }
-
-    /// A frame identity over a fixed site and kind, with empty `arguments`, equals the SHA-256 of
-    /// a hand-written text of the preimage. The text is RFC 8785's: members and occurrence
-    /// members in code-point order (`arguments`, `declaration`, `function`, `kind`), which is not
-    /// the order the preimage struct declares them in (`function`, `declaration`, `kind`,
-    /// `arguments`), so a digest of the struct's own order, or of any other order, fails. A
-    /// function identity over a fixed site equals the digest of its own hand-written text too.
     #[trace("FR-024-AC-20", "TC-035")]
     #[test]
-    fn tc_035_the_frame_and_function_identities_equal_their_hand_written_digests() {
-        use sha2::{Digest, Sha256};
-        let hex = |byte: u8| format!("{byte:02x}").repeat(32);
-        let digest = |text: &str| -> [u8; 32] { Sha256::digest(text.as_bytes()).into() };
-
-        let frame = frame_identity(&frame_site(7, "generated", 2), ObligationKind::Frame)
-            .expect("the preimage encodes");
-        let frame_text = format!(
-            "{{\"arguments\":[],\"declaration\":{{\"node\":\"{f}\",\"ordinal\":2,\
-             \"role\":\"generated\"}},\"function\":\"{f}\",\"kind\":\"frame\"}}",
-            f = hex(7),
-        );
-        assert_eq!(*frame.as_bytes(), digest(&frame_text));
-
-        let function = function_contract_identity(
-            node(5),
-            &OccurrenceKey::new(node(5), Origin::new(Role::new("declaration"), 0)),
-            ObligationKind::Postcondition,
-            &[argument("a", 9, range("-1", "9"))],
-        )
-        .expect("the preimage encodes");
-        let function_text = format!(
-            "{{\"arguments\":[{{\"domain\":{{\"maximum\":\"9\",\"minimum\":\"-1\",\
-             \"type\":\"integerRange\"}},\"parameter\":\"{p}\"}}],\
-             \"declaration\":{{\"node\":\"{f}\",\"ordinal\":0,\"role\":\"declaration\"}},\
-             \"function\":\"{f}\",\"kind\":\"postcondition\"}}",
-            p = hex(9),
-            f = hex(5),
-        );
-        assert_eq!(*function.as_bytes(), digest(&function_text));
-    }
-
-    /// The frame identity is the function path's one function over the frame node, the frame's
-    /// own occurrence and no arguments: it equals that call, and changes when the kind, the
-    /// frame node, or the occurrence's node, role or ordinal changes alone. The frame node is
-    /// the only place a node enters: the anchor is not a member.
-    #[trace("FR-024-AC-20", "FR-024-AC-21", "FR-024-AC-22", "TC-035")]
-    #[test]
-    fn tc_035_a_frame_identity_is_the_one_function_over_the_frame_and_its_occurrence() {
-        let site = frame_site(7, "generated", 2);
-        let base = frame_identity(&site, ObligationKind::Frame).expect("encodes");
+    fn frame_obligation_uses_qsl_frame_and_occurrence() {
+        let frame = node("frame");
+        let site = OperationSite {
+            frame_operation: qsl_replay::FrameOperation {
+                object: qsl_replay::QualifiedName::new(vec![
+                    Identifier::new("model").expect("alias"),
+                    Identifier::new("Object").expect("object"),
+                ])
+                .expect("qualified object"),
+                operation: Identifier::new("operation").expect("operation"),
+            },
+            anchor: node("anchor"),
+            frame: frame.clone(),
+            frame_occurrence: occurrence(frame.clone(), 2),
+            clauses: Vec::new(),
+        };
+        let identity = frame_identity(&site, ObligationKind::Frame).expect("valid ordinal");
+        assert_eq!(identity.node(), &frame);
+        assert_eq!(identity.ordinal(), 2);
         assert_eq!(
-            base,
-            function_contract_identity(
-                site.frame,
-                &site.frame_occurrence,
-                ObligationKind::Frame,
-                &[]
-            )
-            .expect("encodes")
+            identity,
+            function_contract_identity(frame, &site.frame_occurrence, ObligationKind::Frame, &[],)
+                .expect("valid ordinal")
         );
-
-        let mint = |site: &OperationSite, kind| frame_identity(site, kind).expect("encodes");
-        assert_ne!(base, mint(&site, ObligationKind::Postcondition), "kind");
-        assert_ne!(
-            base,
-            mint(&frame_site(8, "generated", 2), ObligationKind::Frame),
-            "function node"
-        );
-        assert_ne!(
-            base,
-            mint(&frame_site(7, "generated", 3), ObligationKind::Frame),
-            "occurrence ordinal"
-        );
-        assert_ne!(
-            base,
-            mint(&frame_site(7, "claim", 2), ObligationKind::Frame),
-            "occurrence role"
-        );
-        let mut moved = site.clone();
-        moved.frame_occurrence =
-            OccurrenceKey::new(node(9), site.frame_occurrence.origin().clone());
-        assert_ne!(base, mint(&moved, ObligationKind::Frame), "occurrence node");
-        let mut other_anchor = site.clone();
-        other_anchor.anchor = node(0xb0);
-        other_anchor.clauses = Vec::new();
-        assert_eq!(base, mint(&other_anchor, ObligationKind::Frame), "anchor");
     }
 
-    /// The kind is read from the harness's property: a frame is the `frame` kind and a
-    /// postcondition has none.
+    #[trace("FR-016-AC-21", "TC-026")]
+    #[test]
+    fn ordinal_outside_structural_identity_range_is_refused() {
+        let function = node("function");
+        let declaration = occurrence(function.clone(), u64::from(u32::MAX) + 1);
+        assert!(matches!(
+            function_contract_identity(function, &declaration, ObligationKind::Postcondition, &[]),
+            Err(ObligationIdentityError::OrdinalTooLarge(_))
+        ));
+    }
+
     #[trace("FR-024-AC-22", "TC-035")]
     #[test]
-    fn tc_035_the_frame_kind_is_derived_from_the_property() {
+    fn frame_kind_is_derived_from_property() {
         use crate::kani::identity::StateComparison;
         let frame = StateFrameProperty::Frame {
             granted: Vec::new(),
@@ -514,41 +321,5 @@ mod tests {
         };
         assert_eq!(frame_kind(&frame), Some(ObligationKind::Frame));
         assert_eq!(frame_kind(&postcondition), None);
-    }
-
-    /// The one minting function encodes and digests through `core::canonical` only: the
-    /// non-test source names no encoder function of `quire_canonical`, no `sha2` and no
-    /// `ByteDigest::of`, and `sha2` is not in `[dependencies]`.
-    #[trace("FR-024-AC-20", "TC-035")]
-    #[test]
-    fn tc_035_the_identity_is_encoded_and_digested_only_through_core_canonical() {
-        let source = include_str!("obligation.rs");
-        let production = source
-            .split("#[cfg(test)]")
-            .next()
-            .expect("the source has a production part")
-            .replace("use quire_canonical::FixedShape;", "");
-        for banned in [
-            "quire_canonical",
-            "sha2",
-            "Sha256",
-            "sha256",
-            "ByteDigest::of",
-            "to_vec",
-            "Writer",
-            "encode(",
-        ] {
-            assert!(
-                !production.contains(banned),
-                "the production source names `{banned}`"
-            );
-        }
-        let manifest = include_str!("../../Cargo.toml");
-        let dependencies = manifest
-            .split("[dependencies]")
-            .nth(1)
-            .and_then(|rest| rest.split("\n[").next())
-            .expect("the manifest has a dependencies table");
-        assert!(!dependencies.contains("sha2"));
     }
 }
