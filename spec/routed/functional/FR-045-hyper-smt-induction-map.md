@@ -124,7 +124,7 @@ the first response line after optional SMT-LIB comments and `success`
 notices. Only a completed, successful invocation whose status is `Unsat` may
 supply proof bytes. The remainder of that invocation's captured stdout SHALL
 contain exactly one balanced outer SMT-LIB list, optionally surrounded by
-ASCII whitespace, whose direct children are complete SMT-LIB expressions;
+ASCII whitespace, whose direct children are complete parenthesized SMT-LIB commands;
 the empty outer list is admitted. CG SHALL retain the full stdout as process
 evidence and take the exact byte slice between that list's matching outer
 parentheses as the proof field. It SHALL remove only those two framing
@@ -206,14 +206,17 @@ validated handoff contains only the fields FR-314's adapter needs.
 
 ## Status
 
-PARTIAL (IR-974). CG's bounded single-query solver execution and associated
+PARTIAL (IR-974, IR-1120). CG's bounded single-query solver execution and associated
 base/step evidence classifier exist in `src/routed/smt/`; QSL exports the
 hyper query encoder and outcome types, but their CG integration remains
 planned. The refinement Base/Step record collection, validation, cvc5 proof
 framing, and deterministic FR-314 handoff are partial after CG #630 and the
-subsequent IR-1120 implementation. The live seven-row source permutation now
-checks QSL's canonical row mapping and exact emitted query bytes against CG's
-invocation and handoff records. cvc5 output through the QSL reader remains open
-in TC-059 step 6. CG SHALL
-pass the exact extracted interior bytes through the QSL reader before claiming
+subsequent IR-1120 implementation. The source-authored seven-row permutation
+test checks QSL's canonical row mapping and distinct exact query bytes against
+CG's solver invocation and handoff records using synthetic proof output. A
+production FR-315 query driver is still absent. TC-059 step 5 still needs an
+authentic zero-step refinement control, and step 8 still needs FR-315 refusal,
+`Sat`, failed-process and reached-limit no-handoff controls. IR-1139 blocks
+live cvc5 proof readback through the QSL reader in TC-059 step 6. CG SHALL
+pass the exact extracted interior bytes through that reader before claiming
 AC-5 or TC-059 step 6 covered.
