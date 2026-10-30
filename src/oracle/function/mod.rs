@@ -1853,7 +1853,7 @@ mod ir988_admitted_generation_tests {
 
     fn source_reference(code: u32) -> serde_json::Value {
         let id = fixture::code_id(code);
-        json!({"term":"reference","target":{"domain":id.domain,"digest":id.digest}})
+        json!({"term":"reference","target":id})
     }
 
     struct AdmittedCase {
