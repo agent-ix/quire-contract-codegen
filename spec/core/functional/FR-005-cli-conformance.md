@@ -40,6 +40,34 @@ atomically and shall retain differential and cross-backend semantic-parity resul
 - Every differential discrepancy shall become a fixture or documented semantic difference, retained as
   one row of the TC-007 Differential Disposition Register.
 
+### Third-party fixture provenance
+
+This slice specifies IR-103's provenance dependency; acquisition and the comparison runner remain
+unimplemented. [AA-001](../../assurance/AA-001-differential-fixture-provenance.md) records the current
+research and open evidence claim under [AP-001](../../assurance/AP-001-differential-provenance.md).
+
+- When a comparison cites a third-party result, its provenance record shall identify the exact tool
+  release and source, acquisition date, invocation, inputs, retained outputs, normalization and
+  permission applying to every retained file.
+- The comparison evidence shall bind its exact input and raw output content through immutable
+  content identities. These bind the evidence being compared; they are not a general tool-version
+  or repository-file checksum catalog.
+- If retention permission is unclear, then the provenance record shall classify the lane as
+  unavailable without retaining third-party bytes or a derived fixture.
+- The acquisition procedure shall require an explicit local invocation rather than downloading,
+  generating or refreshing third-party results as a side effect of Quire, Quoin or a hosted workflow.
+- The comparison record shall retain its raw observation separately from its normalized comparison
+  view and identify each normalization rule that was applied.
+- If a required input is absent, a version is unsupported, output is malformed, or source or content
+  identity differs, then the comparison record shall report that non-success reason without
+  counting the case as agreement.
+- The assurance argument shall identify local independent evaluation and third-party differential
+  comparison as separate evidence classes.
+
+First-party acquisition, normalization, comparison and audit implementations follow the ticket's
+Rust requirement after specification review. Foreign-language input samples and the external tool
+are identified as such; they do not authorize a second first-party executable implementation.
+
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
@@ -54,7 +82,14 @@ atomically and shall retain differential and cross-backend semantic-parity resul
 | FR-005-AC-8 | When removal of the replaced bundle's backup fails after the staged bundle has replaced the destination, the publisher reports destination state `published`, the destination holds every artifact of the new bundle, and the backup sibling remains as visible residue. | Test (TC-002) |
 | FR-005-AC-9 | When replacement fails and restoring the prior destination also fails, the publisher reports destination state `unknown`, the destination path is absent, and the complete prior bundle and the complete staged bundle remain in their sibling directories for recovery. | Test (TC-002) |
 | FR-005-AC-10 | When two artifacts of one bundle share the same path, bundle construction is refused with `DuplicateArtifactPath` naming the later `bundle.artifacts[i].path`, before any destination or staging I/O begins. | Test (TC-002) |
+| FR-005-AC-11 | Each retained third-party fixture has an accountable record naming its tool release/source, source corpus, acquisition date, full argument vector and relevant environment, raw input/output content identities, normalization, and the license/permission for every retained file. Missing fields leave it ineligible as differential evidence. | Inspection |
+| FR-005-AC-12 | The acquisition record identifies an explicit local procedure and its actual invocation. Quire, Quoin and hosted workflows neither acquire nor refresh the third-party outputs implicitly. An unexecuted procedure is recorded as unexecuted, with no invented acquisition date, output or content identity. | Inspection |
+| FR-005-AC-13 | The record enumerates the compared semantics and unsupported or intentionally different cases. Normalization preserves the raw observation and never turns timeout, unknown, malformed output or unsupported semantics into agreement. | Inspection |
+| FR-005-AC-14 | Each observed discrepancy has exactly one TC-007 disposition identifying a retained permitted regression fixture or an explicit semantic difference. A missing disposition, missing referenced fixture or ambiguous comparison leaves that case non-success. | Inspection |
+| FR-005-AC-15 | The provenance contract includes adverse controls for absent input/tool/output, unsupported version, malformed output, source identity drift and content drift. Each leaves a visible non-success reason; unavailable cases are excluded from the agreement numerator and remain visible in the corpus inventory. | Inspection |
+| FR-005-AC-16 | The assurance argument records zero third-party evidence while no permitted result exists. The existing 265-expression evaluator and generated compile/runtime controls remain local evidence and are never relabeled as Sireum/INSPECTA runs. Unclear retention permission retains neither third-party bytes nor a derived fixture. | Inspection |
 
 ## Dependencies
 
 - **Upstream**: [FR-002](../../strategy/functional/FR-002-tristate-proptest.md), [FR-015](../../kani/functional/FR-015-bounded-kani-obligations.md), and [FR-004](../../evidence/functional/FR-004-vacuity-evidence.md).
+- **Provenance boundary**: [NFR-002](../non-functional/NFR-002-provenance-boundary.md).
