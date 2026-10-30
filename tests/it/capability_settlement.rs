@@ -61,7 +61,7 @@ fn kani(advertised: Vec<(CapabilityKind, Mode)>) -> BackendDescriptor {
     }
 }
 
-#[trace("TC-030", "FR-019-AC-48")]
+#[trace("TC-030", "FR-019-AC-54")]
 #[test]
 fn reader_refusal_projection_preserves_every_public_field() {
     let reader = ContractPackageWireV1::read(
@@ -80,7 +80,7 @@ fn reader_refusal_projection_preserves_every_public_field() {
     assert_eq!(wire["code"], "contract_package_read_refused");
     let fields = &wire["cause"]["refusal"];
     assert_eq!(fields["code"], serde_json::to_value(refusal.code).unwrap());
-    assert_eq!(fields["path"], serde_json::to_value(refusal.path).unwrap());
+    assert_eq!(fields["loci"], serde_json::to_value(refusal.loci).unwrap());
     assert_eq!(
         fields["cause"],
         serde_json::to_value(refusal.cause).unwrap()
@@ -98,17 +98,24 @@ fn reader_refusal_projection_preserves_every_public_field() {
         serde_json::to_value(refusal.document_pointer).unwrap()
     );
     assert_eq!(
-        fields["expected"],
-        serde_json::to_value(refusal.expected).unwrap()
+        fields["extension_detail"],
+        serde_json::to_value(refusal.extension_detail).unwrap()
     );
     assert_eq!(
-        fields["actual"],
-        serde_json::to_value(refusal.actual).unwrap()
+        fields["protocol_detail"],
+        serde_json::to_value(refusal.protocol_detail).unwrap()
     );
+    assert_eq!(
+        fields["terminal_duplicate"],
+        serde_json::to_value(refusal.terminal_duplicate).unwrap()
+    );
+    assert!(fields.get("path").is_none());
+    assert!(fields.get("expected").is_none());
+    assert!(fields.get("actual").is_none());
     assert!(fields.get("expected_node_id").is_none());
 }
 
-#[trace("TC-030", "FR-019-AC-48")]
+#[trace("TC-030", "FR-019-AC-54")]
 #[test]
 fn named_refusal_adapter_preserves_unknown_version() {
     let reader = ContractPackageWireV1::read(
@@ -123,7 +130,7 @@ fn named_refusal_adapter_preserves_unknown_version() {
     assert_eq!(projected.contract_version.as_deref(), Some("unknown"));
 }
 
-#[trace("TC-030", "FR-019-AC-48")]
+#[trace("TC-030", "FR-019-AC-54")]
 #[test]
 fn refusal_adapter_preserves_selected_document_pointer() {
     use exact_function_fixture::{source_bound_call_package, PackageBuilder};
@@ -167,7 +174,7 @@ fn refusal_adapter_preserves_selected_document_pointer() {
     );
 }
 
-#[trace("TC-030", "FR-019-AC-48")]
+#[trace("TC-030", "FR-019-AC-54")]
 #[test]
 fn refusal_adapter_preserves_reader_node_locus() {
     use exact_function_fixture::{source_bound_call_package, PackageBuilder};

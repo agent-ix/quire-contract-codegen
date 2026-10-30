@@ -295,7 +295,7 @@ mod tests {
         )
     }
 
-    #[trace("TC-030", "FR-019-AC-48")]
+    #[trace("TC-030", "FR-019-AC-54")]
     #[test]
     fn imported_function_reader_refusal_is_whole_envelope() {
         let (checked, ids, library) = imported_integer_function_case();
@@ -327,16 +327,13 @@ mod tests {
         let ContractPackageReadResult::Refused(stale) = stale else {
             panic!("wrong admitted dependency must refuse: {stale:?}");
         };
-        assert_ne!(wrong.package_id(), library.package_id());
-        assert!(stale.expected.is_some(), "{stale:?}");
-        assert!(stale.actual.is_some());
+        assert_ne!(wrong, library);
+        assert!(!stale.loci.is_empty(), "{stale:?}");
         let projected = crate::routed::capability::project_contract_package_refusal(&stale);
         let wire = serde_json::to_value(projected).expect("serialize dependency mismatch");
-        assert_eq!(
-            wire["expected"],
-            serde_json::to_value(stale.expected).unwrap()
-        );
-        assert_eq!(wire["actual"], serde_json::to_value(stale.actual).unwrap());
+        assert_eq!(wire["loci"], serde_json::to_value(&stale.loci).unwrap());
+        assert!(wire.get("expected").is_none());
+        assert!(wire.get("actual").is_none());
         let item = RequestItem {
             kind: RequestedKind::Known(CapabilityKind::ValueValidity),
             extent: Some(ExtentClassification {
@@ -372,10 +369,7 @@ mod tests {
             panic!("reader refusal must stop negotiation: {result:?}");
         };
         assert_eq!(refusal.code, expected.code);
-        assert_eq!(
-            refusal.path.as_deref(),
-            expected.path.as_ref().map(|path| path.as_str())
-        );
+        assert_eq!(refusal.loci, expected.loci);
         assert_eq!(refusal.cause, expected.cause);
         assert_eq!(refusal.locus.as_ref(), expected.locus.as_ref());
         assert_eq!(
@@ -386,16 +380,17 @@ mod tests {
             refusal.document_pointer.as_deref(),
             expected.document_pointer.as_ref().map(|path| path.as_str())
         );
-        assert_eq!(refusal.expected.as_ref(), expected.expected.as_ref());
-        assert_eq!(refusal.actual.as_ref(), expected.actual.as_ref());
+        assert_eq!(refusal.extension_detail, expected.extension_detail);
+        assert_eq!(refusal.protocol_detail, expected.protocol_detail);
+        assert_eq!(refusal.terminal_duplicate, expected.terminal_duplicate);
         let serialized = serde_json::to_value(&refusal).expect("serialize reader projection");
         assert_eq!(
             serialized["code"],
             serde_json::to_value(expected.code).unwrap()
         );
         assert_eq!(
-            serialized["path"],
-            serde_json::to_value(&expected.path).unwrap()
+            serialized["loci"],
+            serde_json::to_value(&expected.loci).unwrap()
         );
         assert_eq!(
             serialized["cause"],
@@ -414,13 +409,20 @@ mod tests {
             serde_json::to_value(&expected.document_pointer).unwrap()
         );
         assert_eq!(
-            serialized["expected"],
-            serde_json::to_value(&expected.expected).unwrap()
+            serialized["extension_detail"],
+            serde_json::to_value(&expected.extension_detail).unwrap()
         );
         assert_eq!(
-            serialized["actual"],
-            serde_json::to_value(&expected.actual).unwrap()
+            serialized["protocol_detail"],
+            serde_json::to_value(&expected.protocol_detail).unwrap()
         );
+        assert_eq!(
+            serialized["terminal_duplicate"],
+            serde_json::to_value(&expected.terminal_duplicate).unwrap()
+        );
+        assert!(serialized.get("path").is_none());
+        assert!(serialized.get("expected").is_none());
+        assert!(serialized.get("actual").is_none());
         assert!(serialized.get("expected_node_id").is_none());
     }
 
