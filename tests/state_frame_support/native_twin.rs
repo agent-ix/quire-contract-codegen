@@ -25,22 +25,41 @@ use quire_contract_codegen::{
     StateFrameIdentity, StateObjectAddress,
 };
 use quire_contract_model::{
-    CheckedNodeId, CheckedOccurrenceRole, CheckedPackageEvidence, CheckedPackageReadLimits,
-    CheckedPackageV2, CheckedPackageV2ReadResult, ExecutionPoint,
+    CheckedNodeId, CheckedNodePathSegment, CheckedOccurrenceRole, CheckedPackageEvidence,
+    CheckedPackageReadLimits, CheckedPackageV2, CheckedPackageV2ReadResult, ExecutionPoint,
 };
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-
-#[path = "../checked_package_support/rekey.rs"]
-// The native twin is included by several test modules that also use this fixture helper.
-#[allow(dead_code, clippy::duplicate_mod)]
-mod rekey;
 
 const AUTHORITY: &str = "agent-ix";
 const IDENTITY: &str = "test:state-frame-twin";
 const PACKAGE: &str = "test/bank";
 const PLACEHOLDER_DIGEST: &str =
     "sha256:0000000000000000000000000000000000000000000000000000000000000000";
+
+fn node_matches_site(id: &CheckedNodeId, key: quire_exact::NodeKeyView<'_>) -> bool {
+    if id.package.as_ref() != key.package() || id.ordinal != key.ordinal() {
+        return false;
+    }
+    let mut path = key.path();
+    for segment in &id.path {
+        let matches = match (segment, path.next()) {
+            (
+                CheckedNodePathSegment::Name(left),
+                Some(quire_exact::PathSegmentView::Text(right)),
+            ) => left.as_ref() == right,
+            (
+                CheckedNodePathSegment::Node(left),
+                Some(quire_exact::PathSegmentView::Node(right)),
+            ) => node_matches_site(left, right),
+            _ => false,
+        };
+        if !matches {
+            return false;
+        }
+    }
+    path.next().is_none()
+}
 
 const fn unbounded_decode_limits() -> quire_contract_codegen::WitnessDecodeLimits {
     quire_contract_codegen::WitnessDecodeLimits {
@@ -866,9 +885,7 @@ impl Twin {
         (package, clauses)
     }
 
-    /// Start with QSL's emitted graph and replace its selected model document. IR's public
-    /// candidate API rederives the model-root and affected clause/node identities before
-    /// admission. This negative fixture reaches a field type QSL cannot currently emit.
+    /// Compile the twin with an unread model field changed in its selected source document.
     pub fn emitted_package_with_unread_string_audit(
         &self,
         clause: &str,
@@ -939,63 +956,48 @@ impl Twin {
         clause: &str,
         model_override: Option<Vec<u8>>,
     ) -> (CheckedPackageV2, CheckedNodeId) {
+        let document = model_override.unwrap_or_else(|| self.domain.clone());
+        let unit = if document == self.domain {
+            self.unit.clone()
+        } else {
+            let previous = hex(&jcs_digest(&self.domain));
+            let selected = hex(&jcs_digest(&document));
+            let source = String::from_utf8(self.unit.clone()).expect("native unit");
+            assert_eq!(source.matches(&previous).count(), 1, "one model selection");
+            source.replacen(&previous, &selected, 1).into_bytes()
+        };
         let name = ClauseName(Identifier::new(clause).expect("identifier"));
         let located = call_site(
             SourceIdentity::new(AUTHORITY, IDENTITY, "git", "1"),
             IDENTITY.to_owned(),
             IDENTITY,
-            &self.unit,
-            [self.domain.as_slice()],
+            &unit,
+            [document.as_slice()],
             &DependencyInput::default(),
             &name,
         )
         .expect("the clause is located");
-        let overridden = model_override.is_some();
-        let document = model_override.unwrap_or_else(|| self.domain.clone());
-        let mut wire: Value = serde_json::from_slice(&located.package).expect("emitted package");
-        if document != self.domain {
-            let digest = hex(&jcs_digest(&document));
-            wire["lock"]["model_selections"][0]["digest"] = json!(digest);
-            wire["identity_preimage"]["model_selections"] =
-                wire["lock"]["model_selections"].clone();
-            for node in wire["semantic_graph"]["nodes"]
-                .as_array_mut()
-                .expect("emitted graph nodes")
-            {
-                if node["owner"]["kind"] == "model_root" {
-                    node["owner"]["digest"] = json!(digest);
-                }
-            }
-        }
         let mut evidence = CheckedPackageEvidence::new();
         evidence
             .insert_domain_package_document(hex(&jcs_digest(&document)), document)
             .expect("retain emitted model document");
         evidence.support_feature("quire.value.complete/v1");
-        let (outcome, ids) = if overridden {
-            // A changed model selection also changes its generated model-root
-            // identity and every node that refers to it. Ask IR's public
-            // candidate API to settle those fixture identities before read.
-            let resolved =
-                rekey::resolve_wire(&wire, &evidence, CheckedPackageReadLimits::bounded());
-            (resolved.outcome, Some(resolved.ids))
-        } else {
-            let bytes = wire.to_string().into_bytes();
-            (
-                CheckedPackageV2::read(&bytes, CheckedPackageReadLimits::bounded(), &evidence),
-                None,
-            )
-        };
-        let package = match outcome {
+        let package = match CheckedPackageV2::read(
+            &located.package,
+            CheckedPackageReadLimits::bounded(),
+            &evidence,
+        ) {
             CheckedPackageV2ReadResult::Admitted(package) => *package,
             other => panic!("QSL's emitted package is admitted: {other:?}"),
         };
-        let clause_node: CheckedNodeId = serde_json::from_value(json!({
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": located.site.node.to_string(),
-        }))
-        .expect("a node id");
-        let clause_node = ids.map_or(clause_node.clone(), |ids| ids.resolve(&clause_node));
+        let clause_node = package
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node_matches_site(&node.node_id, located.site.node.view()))
+            .expect("QSL clause site names an admitted structural node")
+            .node_id
+            .clone();
         (package, clause_node)
     }
 
