@@ -487,7 +487,7 @@ include!("../checked_package_support/base.rs");
 
 impl Default for PackageBuilder {
     fn default() -> Self {
-        let mut value = base_package();
+        let value = base_package();
         let mut builder = Self {
             value,
             bounds: BTreeSet::new(),

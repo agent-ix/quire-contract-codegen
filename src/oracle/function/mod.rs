@@ -1750,7 +1750,6 @@ mod ir988_source_function_tests {
     use super::*;
     use ix_trace_rs::trace;
     use quire_contract_model::CheckedDeclaration;
-    use serde_json::json;
 
     fn id(value: u64) -> CheckedNodeId {
         CheckedNodeId {
