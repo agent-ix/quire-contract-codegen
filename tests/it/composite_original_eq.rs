@@ -98,9 +98,12 @@ fn checked_with_dependencies(
 
 fn compiled(source: &str, dependencies: &DependencyInput) -> qsl_replay::CompiledPackage {
     compile_package(
-        SourceIdentity::new("test", "original-eq.native", "git", "fixture"),
-        "original-eq.native",
-        source.as_bytes(),
+        qsl_replay::CompileUnit {
+            source: SourceIdentity::new("test", "original-eq.native", "git", "fixture"),
+            package_name: "original-eq".to_owned(),
+            path: "original-eq.native",
+            bytes: source.as_bytes(),
+        },
         [],
         dependencies,
         StageLimits::default(),
@@ -1125,9 +1128,12 @@ fn original_imported_context_refuses_before_invocation() {
             bytes,
         };
         let compiled = compile_package(
-            SourceIdentity::new("test", "eq-library.native", "git", "fixture"),
-            "eq-library.native",
-            &source.bytes,
+            qsl_replay::CompileUnit {
+                source: SourceIdentity::new("test", "eq-library.native", "git", "fixture"),
+                package_name: "test/eq-library".to_owned(),
+                path: "eq-library.native",
+                bytes: &source.bytes,
+            },
             [],
             &DependencyInput::default(),
             StageLimits::default(),

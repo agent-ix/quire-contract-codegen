@@ -1513,9 +1513,12 @@ function huge_nested using v(x: Int[0, 9]): Int[0, 9] pure { (x + 10000000000000
 
 fn nested_qsl_package() -> CheckedPackageV2 {
     let compiled = compile_package(
-        SourceIdentity::new("test", "ir306-nested.native", "git", "fixture"),
-        "ir306-nested.native",
-        NESTED_QSL_SOURCE.as_bytes(),
+        qsl_replay::CompileUnit {
+            source: SourceIdentity::new("test", "ir306-nested.native", "git", "fixture"),
+            package_name: "ir306-nested".to_owned(),
+            path: "ir306-nested.native",
+            bytes: NESTED_QSL_SOURCE.as_bytes(),
+        },
         [],
         &DependencyInput::default(),
         StageLimits::default(),
@@ -1540,9 +1543,12 @@ fn deep_qsl_package() -> CheckedPackageV2 {
         "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\nfunction deep_nested using v(x: Int[0, 9]): Int[0, 9] pure {{ {expression} }}\nfunction sibling using v(x: Int[0, 9]): Int[0, 10] pure {{ x + 1 }}\n"
     );
     let compiled = compile_package(
-        SourceIdentity::new("test", "ir306-deep.native", "git", "fixture"),
-        "ir306-deep.native",
-        source.as_bytes(),
+        qsl_replay::CompileUnit {
+            source: SourceIdentity::new("test", "ir306-deep.native", "git", "fixture"),
+            package_name: "ir306-deep".to_owned(),
+            path: "ir306-deep.native",
+            bytes: source.as_bytes(),
+        },
         [],
         &DependencyInput::default(),
         StageLimits::default(),
@@ -1578,9 +1584,12 @@ fn wide_qsl_package() -> CheckedPackageV2 {
         "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\nfunction wide_nested using v(x: Int[1, 1]): Int[0, 0] pure {{ ({wide_product}) - ({wide_product}) }}\n"
     );
     let compiled = compile_package(
-        SourceIdentity::new("test", "ir306-wide.native", "git", "fixture"),
-        "ir306-wide.native",
-        source.as_bytes(),
+        qsl_replay::CompileUnit {
+            source: SourceIdentity::new("test", "ir306-wide.native", "git", "fixture"),
+            package_name: "ir306-wide".to_owned(),
+            path: "ir306-wide.native",
+            bytes: source.as_bytes(),
+        },
         [],
         &DependencyInput::default(),
         StageLimits::default(),
@@ -1618,9 +1627,12 @@ fn work_qsl_package() -> CheckedPackageV2 {
         "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\nfunction work_nested using v(x: Int[0, 0]): Int[0, 2098176] pure {{ {expression} }}\nfunction sibling using v(x: Int[0, 9]): Int[0, 10] pure {{ x + 1 }}\n"
     );
     let compiled = compile_package(
-        SourceIdentity::new("test", "ir306-work.native", "git", "fixture"),
-        "ir306-work.native",
-        source.as_bytes(),
+        qsl_replay::CompileUnit {
+            source: SourceIdentity::new("test", "ir306-work.native", "git", "fixture"),
+            package_name: "ir306-work".to_owned(),
+            path: "ir306-work.native",
+            bytes: source.as_bytes(),
+        },
         [],
         &DependencyInput::default(),
         StageLimits::default(),
