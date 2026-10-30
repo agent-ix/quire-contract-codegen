@@ -330,6 +330,12 @@ fn v2_numeric_refusals_keep_first_typed_cause() {
     assert_eq!(comparison.clause, clause);
     assert_eq!(comparison.claim_owner, clause);
     assert_eq!(comparison.occurrence, wrong_role);
+    assert_eq!(
+        comparison.path,
+        quire_contract_model::CheckedComparisonPath::Clause
+    );
+    assert_eq!(comparison.child, Some(clause.clone()));
+    assert_eq!(diagnostic.path, "Clause");
     assert!(matches!(
         comparison.cause,
         quire_contract_codegen::V2ComparisonRefusal::Ir(ref error)
@@ -419,4 +425,5 @@ fn v2_numeric_refusals_keep_first_typed_cause() {
     assert_eq!(population.claim_owner, empty_clause);
     assert_eq!(population.occurrence, empty_claim);
     assert_eq!(population.path, "population.satisfying");
+    assert_eq!(diagnostic.path, "population.satisfying");
 }
