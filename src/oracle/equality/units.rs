@@ -21,7 +21,7 @@ mod tests {
     use super::attach_owner_units;
     use ix_trace_rs::trace;
     use qsl_replay::{
-        compile_admitted, DependencyInput, ReplayLimits, SourceIdentity, StageLimits, WireNodeId,
+        compile_admitted, CompileUnit, DependencyInput, ReplayLimits, SourceIdentity, StageLimits,
     };
     use quire_exact::{Integer, Quantity, Rational, ValueType};
     use quire_semantic_value::declaration::TypeEnvironment;
@@ -30,15 +30,18 @@ mod tests {
     #[test]
     fn preparation_preserves_the_complete_owner_table_and_returned_unit_ids() {
         let compiled = compile_admitted(
-            SourceIdentity::new("agent-ix", "unit-environment", "git", "1"),
-            "unit-environment.native",
-            br#"language "ix:native" edition "1-draft";
+            CompileUnit {
+                source: SourceIdentity::new("agent-ix", "unit-environment", "git", "1"),
+                package_name: "unit-environment".to_owned(),
+                path: "unit-environment.native",
+                bytes: br#"language "ix:native" edition "1-draft";
 profile v = "quire.value.complete/v1";
 dimension Length;
 unit m : Length = rational(1, 1);
 unit km : Length = rational(1000, 1) * m;
 function keep using v(a: Quantity<m>): Boolean pure { true }
 "#,
+            },
             [],
             &DependencyInput::default(),
             StageLimits::default(),
@@ -72,7 +75,7 @@ function keep using v(a: Quantity<m>): Boolean pure { true }
         assert_eq!(prepared.units(), context.unit_table());
         for unit in [m, km] {
             let looked_up = context
-                .unit_declaration(WireNodeId::from_digest(*unit.node().as_bytes()))
+                .unit_declaration(unit.node())
                 .expect("lookup uses the owner's node, not a fabricated unit id");
             assert_eq!(looked_up.id(), unit.id());
             assert_eq!(prepared.units().get(unit.id()), Some(unit.quantity_unit()));
