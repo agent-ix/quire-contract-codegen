@@ -1078,7 +1078,7 @@ fn tc_024_tc187_u20_composed_offsets_decide_affinity() {
     let (quantity, unit) = completed(&exact, "U20 u2 sum");
     assert_eq!(*quantity.magnitude(), rt::ratio(3, 1));
     let f = rt::fixture();
-    assert_eq!(quantity.unit(), f.unit("u2").id());
+    assert_eq!(quantity.unit(), &f.unit("u2").id());
     assert_eq!(unit, f.unit("u2"));
     assert!(
         !exact.1.contains(&rt::ChargePoint::UnitEdge),
