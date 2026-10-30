@@ -8,7 +8,7 @@ use ix_trace_rs::trace;
 use quire_contract_codegen::generate_v2_clause_oracle;
 use quire_contract_model::{
     CheckedNodeId, CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2,
-    CheckedPackageV2ReadResult,
+    CheckedPackageV2ReadResult, ContractSourceV1,
 };
 use serde_json::{json, Value};
 
@@ -97,8 +97,7 @@ fn reader_variant(
     let (package, clause) = twin.emitted_package("BalanceNeverDrops");
     let mut wire = json!({
         "contract_version": "quire.checked-package/v2",
-        "identity_preimage": package.identity_preimage(),
-        "package_id": package.package_id(),
+        "name": package.name(),
         "lock": package.lock(),
         "semantic_graph": package.graph(),
         "source_map": package.source_map(),
@@ -328,7 +327,13 @@ fn original_parameter_precondition_regenerates_with_unchanged_proof_semantics() 
     let [harness] = v2_clause_harnesses.as_slice() else {
         panic!("one original clause harness")
     };
-    assert_eq!(harness.identity.package, *package.package_id());
+    assert_eq!(
+        harness.identity.package,
+        ContractSourceV1 {
+            name: package.name().into(),
+            lock: package.lock().clone(),
+        }
+    );
     assert_eq!(harness.identity.clause, clause);
     assert_eq!(harness.identity.unwind, 8);
     assert_eq!(harness.identity.solver, KaniSolver::Cadical);
