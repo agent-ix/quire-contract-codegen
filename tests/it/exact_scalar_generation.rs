@@ -987,186 +987,197 @@ fn tc_024_refused_items_are_typed_emit_no_code_and_leave_siblings_unchanged() {
 #[trace("FR-014-AC-56", "FR-014-AC-11", "FR-014-AC-14", "TC-024")]
 #[test]
 fn tc_024_claim_map_carries_identity_source_bounds_and_operation_per_item() {
-    let wire = corpus_package().wire();
-    let package = corpus_package().admit();
-    let oracles = generate(&package, &golden_items());
-    let fixture_ids = fixture_ids_for(&package);
-    let map = &oracles.claim_map;
-    let lib = contents(&oracles, "src/lib.rs");
-    assert_eq!(map.source, source_identity(&package));
-    let json: Value = serde_json::from_str(contents(&oracles, "claim-map.json")).expect("json");
-    assert_eq!(json, serde_json::to_value(map).expect("typed map"));
+    let mut operation_identities = BTreeMap::new();
+    for (package, items) in corpus_cohorts() {
+        let oracles = generate(&package, &items);
+        let fixture_ids = fixture_ids_for(&package);
+        let map = &oracles.claim_map;
+        let lib = contents(&oracles, "src/lib.rs");
+        assert_eq!(map.source, source_identity(&package));
+        let json: Value = serde_json::from_str(contents(&oracles, "claim-map.json")).expect("json");
+        assert_eq!(json, serde_json::to_value(map).expect("typed map"));
 
-    // No blocker applies to every entry: a Generated claim's operation is IR-confirmed, and an
-    // unconfirmed claim, in any of the cases `OperationProvenance::CallerDeclared` enumerates,
-    // carries the blocker on its own `operation.provenance` rather than at the map
-    // level. `blocked` has writers in `oracle/scalar/render.rs`, both using `Vec::new()`, so this
-    // pair is a regression guard against that literal changing, not a criterion an implementation
-    // can violate; the falsifiable contract is the per-item provenance asserted below.
-    assert_eq!(map.blocked, []);
-    assert_eq!(json["blocked"], serde_json::json!([]));
-    for (claim, entry) in map
-        .items
-        .iter()
-        .zip(json["items"].as_array().expect("items"))
-    {
-        match &claim.result {
-            ClaimDisposition::Generated(_) => {
-                assert_eq!(claim.operation.provenance, OperationProvenance::IrConfirmed);
-                assert_eq!(
-                    entry["operation"]["provenance"],
-                    serde_json::json!({"kind": "ir_confirmed"})
-                );
-            }
-            ClaimDisposition::Refused { .. } => {
-                assert_eq!(
-                    claim.operation.provenance,
-                    OperationProvenance::CallerDeclared {
-                        blocked_on: UpstreamBlocker::OperationIdentityNotConsumed,
-                    }
-                );
-                assert_eq!(
-                    entry["operation"]["provenance"],
-                    serde_json::json!({
-                        "kind": "caller_declared",
-                        "blocked_on": "operation identity not consumed by codegen's generators",
-                    })
-                );
+        // No blocker applies to every entry: a Generated claim's operation is IR-confirmed, and an
+        // unconfirmed claim, in any of the cases `OperationProvenance::CallerDeclared` enumerates,
+        // carries the blocker on its own `operation.provenance` rather than at the map
+        // level. `blocked` has writers in `oracle/scalar/render.rs`, both using `Vec::new()`, so this
+        // pair is a regression guard against that literal changing, not a criterion an implementation
+        // can violate; the falsifiable contract is the per-item provenance asserted below.
+        assert_eq!(map.blocked, []);
+        assert_eq!(json["blocked"], serde_json::json!([]));
+        for (claim, entry) in map
+            .items
+            .iter()
+            .zip(json["items"].as_array().expect("items"))
+        {
+            match &claim.result {
+                ClaimDisposition::Generated(_) => {
+                    assert_eq!(claim.operation.provenance, OperationProvenance::IrConfirmed);
+                    assert_eq!(
+                        entry["operation"]["provenance"],
+                        serde_json::json!({"kind": "ir_confirmed"})
+                    );
+                }
+                ClaimDisposition::Refused { .. } => {
+                    assert_eq!(
+                        claim.operation.provenance,
+                        OperationProvenance::CallerDeclared {
+                            blocked_on: UpstreamBlocker::OperationIdentityNotConsumed,
+                        }
+                    );
+                    assert_eq!(
+                        entry["operation"]["provenance"],
+                        serde_json::json!({
+                            "kind": "caller_declared",
+                            "blocked_on": "operation identity not consumed by codegen's generators",
+                        })
+                    );
+                }
             }
         }
-    }
 
-    // This list is hand-written and independently constructed -- not read from
-    // `scalar_profile()` (`src/oracle/scalar/lower.rs`, private) -- so this cross-check calls IR's
-    // `lower` directly rather than the generator's own profile, and stays meaningful rather than
-    // circular. `LITERAL_OPERAND` reaches the `claim` nodes `corpus_package` wires as its
-    // dependencies (issue #100), so this list must admit `Claim` too, or this cross-check would
-    // mark that corpus node `Unsupported` while the real generator (which also admits `Claim`)
-    // lowers it -- a divergence between the two, not a property of either.
-    //
-    // Nothing kept this list in agreement with `scalar_profile()`'s own `supported_tags` (cg#134):
-    // before PR #132 (issue #100) this list had four tags against production's six, and after it,
-    // this list still omitted `Correspondence`, which production still admitted despite zero
-    // corpus nodes ever carrying it (cg#133, now removed from production instead). The assertion
-    // below closes that gap: it compares this list's *content* against
-    // `SCALAR_LOWERING_SUPPORTED_TAGS`, the tag set `scalar_profile()` itself builds from, so
-    // either list changing without the other now fails here, while the lowering profile below
-    // still never calls `scalar_profile()`.
-    let claim_supported_tags: BTreeSet<quire_contract_model::CheckedNodeTag> = [
-        quire_contract_model::CheckedNodeTag::ScalarType,
-        quire_contract_model::CheckedNodeTag::BoundedDomain,
-        quire_contract_model::CheckedNodeTag::Value,
-        quire_contract_model::CheckedNodeTag::Expression,
-        quire_contract_model::CheckedNodeTag::Claim,
-    ]
-    .into();
-    assert_eq!(
+        // This list is hand-written and independently constructed -- not read from
+        // `scalar_profile()` (`src/oracle/scalar/lower.rs`, private) -- so this cross-check calls IR's
+        // `lower` directly rather than the generator's own profile, and stays meaningful rather than
+        // circular. `LITERAL_OPERAND` reaches the `claim` nodes `corpus_package` wires as its
+        // dependencies (issue #100), so this list must admit `Claim` too, or this cross-check would
+        // mark that corpus node `Unsupported` while the real generator (which also admits `Claim`)
+        // lowers it -- a divergence between the two, not a property of either.
+        //
+        // Nothing kept this list in agreement with `scalar_profile()`'s own `supported_tags` (cg#134):
+        // before PR #132 (issue #100) this list had four tags against production's six, and after it,
+        // this list still omitted `Correspondence`, which production still admitted despite zero
+        // corpus nodes ever carrying it (cg#133, now removed from production instead). The assertion
+        // below closes that gap: it compares this list's *content* against
+        // `SCALAR_LOWERING_SUPPORTED_TAGS`, the tag set `scalar_profile()` itself builds from, so
+        // either list changing without the other now fails here, while the lowering profile below
+        // still never calls `scalar_profile()`.
+        let claim_supported_tags: BTreeSet<quire_contract_model::CheckedNodeTag> = [
+            quire_contract_model::CheckedNodeTag::ScalarType,
+            quire_contract_model::CheckedNodeTag::BoundedDomain,
+            quire_contract_model::CheckedNodeTag::Value,
+            quire_contract_model::CheckedNodeTag::Expression,
+            quire_contract_model::CheckedNodeTag::Claim,
+        ]
+        .into();
+        assert_eq!(
         claim_supported_tags,
         BTreeSet::from(SCALAR_LOWERING_SUPPORTED_TAGS),
         "this test's independently-constructed tag list has drifted from scalar_profile()'s own \
          supported_tags (cg#134) -- update whichever one is stale"
     );
 
-    let profile = quire_contract_model::CompleteLoweringProfileV2 {
-        reference: quire_contract_model::LoweringProfileRef {
-            authority: "agent-ix".into(),
-            identity: "quire.codegen.exact-scalar/v1".into(),
-        },
-        required_source_selections: Vec::new(),
-        supported_tags: claim_supported_tags,
-        require_bounds: true,
-        work_limit: SCALAR_LOWERING_WORK_LIMIT,
-    };
-    let expected_package_identity = source_identity(&package);
-    let lowered = package.lower(
-        &corpus()
-            .iter()
-            .map(|expression| fixture_ids.resolve(&code_id(expression.code)))
-            .collect::<Vec<_>>(),
-        &profile,
-    );
-    for (expression, record) in corpus().iter().zip(&lowered.records) {
-        let quire_contract_model::CompleteLoweringRecordV2::Lowered { node } = record else {
-            panic!("corpus node {} lowers", expression.code);
+        let profile = quire_contract_model::CompleteLoweringProfileV2 {
+            reference: quire_contract_model::LoweringProfileRef {
+                authority: "agent-ix".into(),
+                identity: "quire.codegen.exact-scalar/v1".into(),
+            },
+            required_source_selections: Vec::new(),
+            supported_tags: claim_supported_tags,
+            require_bounds: true,
+            work_limit: SCALAR_LOWERING_WORK_LIMIT,
         };
-        let claim = map
-            .items
+        let expected_package_identity = source_identity(&package);
+        let item_ids = items
             .iter()
-            .find(|claim| claim.node_id == fixture_ids.resolve(&code_id(expression.code)))
-            .expect("claim");
-        assert!(!claim.operation.identity.is_empty());
-        let ClaimDisposition::Generated(generated) = &claim.result else {
-            panic!("corpus node {} generates", expression.code);
-        };
-        assert!(
-            generated.symbol.starts_with("oracle_")
-                && lib.contains(&format!("pub fn {}(", generated.symbol)),
-            "{} names no generated function",
-            generated.symbol
-        );
-        assert_eq!(generated.node_id, claim.node_id);
-        assert_eq!(generated.package_id, expected_package_identity);
-        assert_eq!(
-            generated.contract_package_identity,
-            expected_package_identity
-        );
-        assert!(serde_json::to_value(generated)
-            .expect("generated claim")
-            .get("ir_id")
-            .is_none());
-        assert_eq!(generated.semantic_form, expression.form);
-        assert_eq!(generated.semantic_type, node.semantic_type);
-        assert_eq!(generated.claims, node.claims);
-        assert_eq!(generated.bounds, node.bounds);
-        // Every checked bound is one the expression declares and reaches.
-        let declared = expression
-            .bounds
-            .iter()
-            .map(|bound| fixture_ids.resolve(&id(&bound.key())))
+            .map(|item| item.node_id.clone())
+            .collect::<BTreeSet<_>>();
+        let expressions = corpus()
+            .into_iter()
+            .filter(|expression| item_ids.contains(&code_id(expression.code)))
             .collect::<Vec<_>>();
-        assert!(generated
-            .checked_bounds
-            .iter()
-            .all(|bound| declared.contains(bound) && node.bounds.contains(bound)));
-        assert_eq!(
-            generated.checked_bounds.is_empty(),
-            checks_no_bound(&expression.operation),
-            "node {}",
-            expression.code
+        let lowered = package.lower(
+            &expressions
+                .iter()
+                .map(|expression| fixture_ids.resolve(&code_id(expression.code)))
+                .collect::<Vec<_>>(),
+            &profile,
         );
-        assert_eq!(generated.dependencies, node.dependencies);
-        let source_map = wire["source_map"]
-            .as_array()
-            .expect("source map")
-            .iter()
-            .filter(|entry| {
-                entry["node_id"] == json!(fixture_ids.resolve(&code_id(expression.code)))
-            })
-            .cloned()
-            .collect::<Vec<_>>();
-        assert_eq!(source_map.len(), 1);
-        assert_eq!(
-            serde_json::to_value(&generated.source_map).expect("map"),
-            Value::Array(source_map)
-        );
-    }
+        for (expression, record) in expressions.iter().zip(&lowered.records) {
+            let quire_contract_model::CompleteLoweringRecordV2::Lowered { node } = record else {
+                panic!("corpus node {} lowers", expression.code);
+            };
+            let claim = map
+                .items
+                .iter()
+                .find(|claim| claim.node_id == fixture_ids.resolve(&code_id(expression.code)))
+                .expect("claim");
+            assert!(!claim.operation.identity.is_empty());
+            let ClaimDisposition::Generated(generated) = &claim.result else {
+                panic!("corpus node {} generates", expression.code);
+            };
+            assert!(
+                generated.symbol.starts_with("oracle_")
+                    && lib.contains(&format!("pub fn {}(", generated.symbol)),
+                "{} names no generated function",
+                generated.symbol
+            );
+            assert_eq!(generated.node_id, claim.node_id);
+            assert_eq!(generated.package_id, expected_package_identity);
+            assert_eq!(
+                generated.contract_package_identity,
+                expected_package_identity
+            );
+            assert!(serde_json::to_value(generated)
+                .expect("generated claim")
+                .get("ir_id")
+                .is_none());
+            assert_eq!(generated.semantic_form, expression.form);
+            assert_eq!(generated.semantic_type, node.semantic_type);
+            assert_eq!(generated.claims, node.claims);
+            assert_eq!(generated.bounds, node.bounds);
+            // Every checked bound is one the expression declares and reaches.
+            let declared = expression
+                .bounds
+                .iter()
+                .map(|bound| fixture_ids.resolve(&id(&bound.key())))
+                .collect::<Vec<_>>();
+            assert!(generated
+                .checked_bounds
+                .iter()
+                .all(|bound| declared.contains(bound) && node.bounds.contains(bound)));
+            assert_eq!(
+                generated.checked_bounds.is_empty(),
+                checks_no_bound(&expression.operation),
+                "node {}",
+                expression.code
+            );
+            assert_eq!(generated.dependencies, node.dependencies);
+            let source_map_value = serde_json::to_value(package.source_map()).expect("source map");
+            let source_map = source_map_value
+                .as_array()
+                .expect("source map")
+                .iter()
+                .filter(|entry| {
+                    entry["node_id"] == json!(fixture_ids.resolve(&code_id(expression.code)))
+                })
+                .cloned()
+                .collect::<Vec<_>>();
+            assert_eq!(source_map.len(), 1);
+            assert_eq!(
+                serde_json::to_value(&generated.source_map).expect("map"),
+                Value::Array(source_map)
+            );
+        }
 
-    // The reported identity is the node's own catalogued operation, not a per-instance string:
-    // codes 1011 and 1014 are both `division(_, Truncating, ...)`, differing only in bound
-    // (`[-1000,1000]` vs `[-5,5]`) -- codegen's own descriptor-derived string used to embed the
-    // bound and so differed between them; the catalog does not, and both now report the same
-    // `quire.op.integer.div`.
-    let identity = |code| {
-        map.items
-            .iter()
-            .find(|claim| claim.node_id == fixture_ids.resolve(&code_id(code)))
-            .expect("claim")
-            .operation
-            .identity
-            .clone()
-    };
-    assert_eq!(identity(1011), "quire.op.integer.div");
-    assert_eq!(identity(1014), "quire.op.integer.div");
+        // The reported identity is the node's own catalogued operation, not a per-instance string:
+        // codes 1011 and 1014 are both `division(_, Truncating, ...)`, differing only in bound
+        // (`[-1000,1000]` vs `[-5,5]`) -- codegen's own descriptor-derived string used to embed the
+        // bound and so differed between them; the catalog does not, and both now report the same
+        // `quire.op.integer.div`.
+        for code in [1011, 1014] {
+            if let Some(claim) = map
+                .items
+                .iter()
+                .find(|claim| claim.node_id == fixture_ids.resolve(&code_id(code)))
+            {
+                operation_identities.insert(code, claim.operation.identity.clone());
+            }
+        }
+    }
+    assert_eq!(operation_identities.len(), 2);
+    assert_eq!(operation_identities[&1011], "quire.op.integer.div");
+    assert_eq!(operation_identities[&1014], "quire.op.integer.div");
 }
 
 /// Operations whose parameters the IR carries no bound for.
