@@ -49,17 +49,19 @@ do not claim coverage by the existing HP-2 pair tests.
    resource limit is handed to QSL FR-182 V-7 as incomplete
    (FR-045-AC-2, AC-3).
 5. Using a recompiled refinement with seven step rows, take row `r` from
-   its `steps` array in authored declaration order under QSL FR-492 as
-   amended by QSL #1864. Obtain `Initial` and each `Step { row: r }` query
-   from FR-315.
+   its `steps` array in authored declaration order under QSpec FR-375-AC-22.
+   Obtain `Initial` and each `Step { row: r }` query from FR-315.
    Observe the selected solver's stdin for every invocation.
    Assert one typed `Base` and seven typed `Step` records for rows 0 through
    6, with distinct attempts and matching refinement, subjects, role, row
    and exact query bytes. Permute the source step rows without changing their
    contents and recompile. Select a permutation that moves at least one named
    row. Assert that the recompiled `steps` array follows the new declaration
-   order and that each named row's `Step { row }` label and exact FR-315 query
-   association follow its new position; each new solver invocation still has
+   order and that each named row's `Step { row }` label follows its new
+   position. For each named row, independently compare the FR-315 query bytes
+   obtained before and after permutation and assert equality, then compare
+   the bytes sent on stdin and retained in that row's newly labelled record
+   with those same bytes. Each new solver invocation still has
    its own attempt identity. Assert that the correctly labelled records pass
    association validation. In an otherwise valid collection, exchange the
    selected moved row's label with the label at its former position while

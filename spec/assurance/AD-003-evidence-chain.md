@@ -222,12 +222,13 @@ authored).
 - E-1 per-step refinement records (PLANNED/CODE-GATED, IR-942). The QSL
   ADR-013 O-07 occurrence of a QSV `StepSimulationRecord` is a locator on the
   owning refinement node: role `generated`, ordinal 0 for `Initial` and 1 +
-  the zero-based `StepRowRef` index for `Step`. The index is in QSpec FR-375's
-  total `steps` order; ties on node-key digest and member name are broken by
-  alias-free class spelling in UTF-8 byte order (FR-375-AC-19). CG does not
-  derive that order from source positions. The record *content* identity is a
-  separate SHA-256 over one RFC 8785 object with exactly `subject_kind` equal
-  to `protocol-refinement-step` and `record` equal to QSV's canonical
+  the zero-based `StepRowRef` index for `Step`. The index is the row's
+  position in QSpec FR-375-AC-22's declaration-ordered `steps` array. Source
+  permutation changes the index and occurrence ordinal of a moved row; ties
+  on node key or member name do not introduce a separate sorting rule. The
+  record *content* identity is a separate SHA-256 over one RFC 8785 object
+  with exactly `subject_kind` equal to `protocol-refinement-step` and `record`
+  equal to QSV's canonical
   `StepSimulationRecord` encoding. CG uses `quire-canonical` and QSV's owned
   type/encoder directly; it does not copy or reinterpret the record schema.
   The QSV record's `refinement`, `obligation` and supplied-order `hypotheses`
