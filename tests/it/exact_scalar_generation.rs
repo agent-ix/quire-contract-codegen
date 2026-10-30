@@ -922,7 +922,7 @@ fn tc_024_refused_items_are_typed_emit_no_code_and_leave_siblings_unchanged() {
             other => panic!("node {code} is not refused: {other:?}"),
         }
         assert!(
-            !lib.contains(&format!("{node_id:?}")),
+            !lib.contains(&subject_header(&node_id)),
             "refused node {code} left code behind"
         );
     }

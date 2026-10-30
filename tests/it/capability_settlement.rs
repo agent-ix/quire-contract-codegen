@@ -136,21 +136,13 @@ fn named_refusal_adapter_preserves_unknown_version() {
 fn refusal_adapter_preserves_selected_document_pointer() {
     use exact_function_fixture::{source_bound_call_package, PackageBuilder};
     use quire_contract_model::{CheckedPackageRefusalCause, CheckedPackageRefusalCode};
-    let digest = "ab".repeat(32);
-    let selection = serde_json::json!([{
-        "identity": "acme/orders",
-        "digest_domain": "sha256-jcs",
-        "digest": digest,
-    }]);
-    let mut wire = source_bound_call_package().wire();
-    wire["lock"]["model_selections"] = selection.clone();
-    wire["identity_preimage"]["model_selections"] = selection;
+    let wire = source_bound_call_package().wire();
     let (_, resolved, _) = PackageBuilder::from_wire(wire).read_resolved();
     let mut evidence = CheckedPackageEvidence::new();
     evidence.support_feature("quire.value.complete/v1");
     evidence
         .insert_domain_package_document(
-            digest,
+            "test/cg-exact-scalar".to_owned(),
             br#"{"package":{"count":9007199254740993}}"#.to_vec(),
         )
         .expect("selected document evidence");

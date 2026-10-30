@@ -488,18 +488,6 @@ include!("../checked_package_support/base.rs");
 impl Default for PackageBuilder {
     fn default() -> Self {
         let mut value = base_package();
-        let document = fixture_model_document();
-        let selection = json!({
-            "identity": FIXTURE_MODEL,
-            "digest_domain": "sha256-jcs",
-            "digest": quire_canonical::sha256(
-                &document,
-                quire_canonical::Limits::new(CheckedPackageReadLimits::bounded().bytes),
-            )
-            .expect("canonical model document")
-            .to_string(),
-        });
-        value["lock"]["model_selections"] = json!([selection]);
         let mut builder = Self {
             value,
             bounds: BTreeSet::new(),
@@ -515,7 +503,6 @@ impl Default for PackageBuilder {
             .expect("selected model root")["owner"] = json!({
             "kind": "model_root",
             "identity": FIXTURE_MODEL,
-            "digest": builder.value["lock"]["model_selections"][0]["digest"],
         });
         builder
     }
@@ -1103,14 +1090,8 @@ fn evidence() -> CheckedPackageEvidence {
     evidence.support_feature("quire.value.complete/v1");
     let document = fixture_model_document();
     let bytes = serde_json::to_vec(&document).expect("model document");
-    let digest = quire_canonical::sha256(
-        &document,
-        quire_canonical::Limits::new(CheckedPackageReadLimits::bounded().bytes),
-    )
-    .expect("canonical model document")
-    .to_string();
     evidence
-        .insert_domain_package_document(digest, bytes)
+        .insert_domain_package_document(FIXTURE_MODEL.to_owned(), bytes)
         .expect("retain fixture model document");
     evidence
 }
