@@ -1256,7 +1256,14 @@ impl Twin {
             post_label: label("twin-post"),
             playback: vec![(balance.clone(), playback.0), (audit.clone(), playback.1)],
             post_state: vec![(balance, post.0), (audit, post.1)],
-            obligation_identity: [1; 32],
+            obligation_identity: {
+                let site = self.clause_site(clause).expect("QSL clause site");
+                qsl_replay::ObligationIdentity::new(
+                    site.node,
+                    None,
+                    u32::try_from(site.occurrence.origin().ordinal()).expect("claim ordinal"),
+                )
+            },
         }
     }
 
