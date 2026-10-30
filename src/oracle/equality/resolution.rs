@@ -253,13 +253,13 @@ pub(super) fn resolve_type<Body: GraphBody>(
                                     fields.push((name, wrapped));
                                     children.push(target);
                                 }
-                                closure.in_progress.insert(key);
+                                closure.in_progress.insert(key.clone());
                                 frames.push(Frame::FinishRecord { id, key, fields });
                             } else {
                                 for member in members {
                                     children.push(read_reference(member).ok_or_else(malformed)?);
                                 }
-                                closure.in_progress.insert(key);
+                                closure.in_progress.insert(key.clone());
                                 frames.push(Frame::FinishTuple {
                                     id,
                                     key,
@@ -315,7 +315,7 @@ pub(super) fn resolve_type<Body: GraphBody>(
                                     children.push(read_reference(position).ok_or_else(mismatch)?);
                                 }
                             }
-                            closure.in_progress.insert(key);
+                            closure.in_progress.insert(key.clone());
                             frames.push(Frame::FinishUnion { id, key, members });
                             for child in children.into_iter().rev() {
                                 frames.push(Frame::Enter {
@@ -452,9 +452,9 @@ pub(super) fn resolve_type<Body: GraphBody>(
                 built.reverse();
                 closure.in_progress.remove(&key);
                 closure.composites.insert(
-                    key,
+                    key.clone(),
                     CompositeDeclaration::new(
-                        key,
+                        key.clone(),
                         checked_node_key(&id)
                             .ok_or_else(|| CompositeEqualityRefusal::MalformedComposite {
                                 composite: id.clone(),
@@ -495,9 +495,9 @@ pub(super) fn resolve_type<Body: GraphBody>(
                 }
                 closure.in_progress.remove(&key);
                 closure.composites.insert(
-                    key,
+                    key.clone(),
                     CompositeDeclaration::new(
-                        key,
+                        key.clone(),
                         checked_node_key(&id)
                             .ok_or_else(|| CompositeEqualityRefusal::MalformedComposite {
                                 composite: id.clone(),
@@ -521,9 +521,9 @@ pub(super) fn resolve_type<Body: GraphBody>(
                 built.reverse();
                 closure.in_progress.remove(&key);
                 closure.composites.insert(
-                    key,
+                    key.clone(),
                     CompositeDeclaration::new(
-                        key,
+                        key.clone(),
                         checked_node_key(&id)
                             .ok_or_else(|| CompositeEqualityRefusal::MalformedComposite {
                                 composite: id.clone(),
