@@ -518,6 +518,19 @@ impl Default for PackageBuilder {
 }
 
 impl PackageBuilder {
+    /// Restrict a producer-authored builder to requested nodes and their
+    /// transitive checked closure before adding a test-specific mutation.
+    pub fn focused(mut self, subjects: &[CheckedNodeId]) -> Self {
+        self.value = focused_wire(self.value, subjects);
+        let nodes = self.value["semantic_graph"]["nodes"]
+            .as_array()
+            .expect("focused fixture nodes");
+        let present = |label: &String| nodes.iter().any(|node| node["node_id"] == node_ref(label));
+        self.bounds.retain(&present);
+        self.dedicated_operands.retain(&present);
+        self
+    }
+
     /// Give source-authored scalar expressions the QSL occurrence role used by
     /// FR-049 result selection. Both graph and source-map occurrences remain
     /// aligned before the public checked reader admits this fixture.
@@ -1110,6 +1123,59 @@ pub fn read_mutated_wire(mut wire: Value) -> CheckedPackageV2ReadResult {
     rekey::refresh_identity(&mut wire);
     let bytes = serde_json::to_vec(&wire).expect("mutated fixture wire");
     CheckedPackageV2::read(&bytes, CheckedPackageReadLimits::bounded(), &evidence())
+}
+
+/// Retain selected producer nodes and their exact checked dependencies. Scalar
+/// controls use this to read one bounded cohort instead of the complete corpus,
+/// whose structural IDs now exceed the reader's package byte ceiling.
+pub fn focused_wire(mut wire: Value, subjects: &[CheckedNodeId]) -> Value {
+    let nodes = wire["semantic_graph"]["nodes"]
+        .as_array()
+        .expect("fixture nodes")
+        .clone();
+    let mut retained = BTreeSet::new();
+    let mut pending = subjects
+        .iter()
+        .map(|id| serde_json::to_value(id).expect("subject ID"))
+        .collect::<Vec<_>>();
+    while let Some(next) = pending.pop() {
+        let key = serde_json::to_string(&next).expect("node ID");
+        if !retained.insert(key) {
+            continue;
+        }
+        let node = nodes
+            .iter()
+            .find(|node| node["node_id"] == next)
+            .expect("subject dependency in fixture");
+        pending.extend(
+            node["dependencies"]
+                .as_array()
+                .expect("node dependencies")
+                .iter()
+                .cloned(),
+        );
+        let semantic_type = &node["semantic_type"];
+        if semantic_type != &next {
+            pending.push(semantic_type.clone());
+        }
+    }
+    let keep = |id: &Value| retained.contains(&serde_json::to_string(id).expect("node ID"));
+    wire["semantic_graph"]["nodes"] = Value::Array(
+        nodes
+            .into_iter()
+            .filter(|node| keep(&node["node_id"]))
+            .collect(),
+    );
+    wire["source_map"] = Value::Array(
+        wire["source_map"]
+            .as_array()
+            .expect("source map")
+            .iter()
+            .filter(|entry| keep(&entry["node_id"]))
+            .cloned()
+            .collect(),
+    );
+    wire
 }
 
 /// Re-key a mutated valid-shape wire before asserting its semantic reader refusal.
@@ -3179,6 +3245,13 @@ pub fn corpus_package() -> PackageBuilder {
     builder
 }
 
+/// A mutable scalar corpus slice for tests that extend one or more authored
+/// expressions. The caller lists every original expression its mutation uses.
+pub fn corpus_package_for_codes(codes: &[u32]) -> PackageBuilder {
+    let subjects = codes.iter().map(|code| code_id(*code)).collect::<Vec<_>>();
+    corpus_package().focused(&subjects)
+}
+
 /// A reader-negative integer application with an aggregate operand.
 pub fn expression_operand_package() -> PackageBuilder {
     corpus_package_with_expression_operand()
@@ -4451,6 +4524,31 @@ pub fn golden_items() -> Vec<ExactScalarItem> {
         .collect()
 }
 
+/// Every scalar request in reader-admitted cohorts below the unchanged 1 MiB
+/// complete-package ceiling. Each cohort starts from the same authored source
+/// graph, retaining the requested nodes and their exact transitive closure.
+pub fn corpus_cohorts() -> Vec<(CheckedPackageV2, Vec<ExactScalarItem>)> {
+    let wire = corpus_package().wire();
+    let items = golden_items();
+    items
+        .chunks(8)
+        .map(|items| {
+            let cohort_wire = focused_wire(
+                wire.clone(),
+                &items
+                    .iter()
+                    .map(|item| item.node_id.clone())
+                    .collect::<Vec<_>>(),
+            );
+            let result = read_mutated_wire(cohort_wire);
+            let CheckedPackageV2ReadResult::Admitted(package) = result else {
+                panic!("bounded scalar corpus cohort must admit: {result:?}");
+            };
+            (*package, items.to_vec())
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod bound_tests {
     use super::{aggregate, key, Bound, PackageBuilder, DEC, INT, TEXT, T_INTEGER};
@@ -4565,6 +4663,30 @@ mod fixture_identity_tests {
     use super::*;
     use ix_trace_rs::trace;
     use quire_contract_model::CheckedTerm;
+
+    #[trace("FR-037-AC-9", "TC-052")]
+    #[test]
+    fn bounded_corpus_cohorts_admit_every_requested_scalar_once() {
+        let cohorts = corpus_cohorts();
+        let actual = cohorts
+            .iter()
+            .flat_map(|(package, items)| {
+                items.iter().map(move |item| {
+                    assert!(package
+                        .graph()
+                        .nodes
+                        .iter()
+                        .any(|node| node.node_id == item.node_id));
+                    item.node_id.clone()
+                })
+            })
+            .collect::<Vec<_>>();
+        let expected = golden_items()
+            .into_iter()
+            .map(|item| item.node_id)
+            .collect::<Vec<_>>();
+        assert_eq!(actual, expected);
+    }
 
     #[trace("FR-037-AC-6", "FR-037-AC-8", "TC-052")]
     #[test]

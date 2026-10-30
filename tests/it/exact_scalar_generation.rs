@@ -50,56 +50,6 @@ fn source_identity(package: &CheckedPackageV2) -> ContractSourceV1 {
     }
 }
 
-/// Keep a test subject and its checked graph dependencies under the reader's
-/// unchanged complete-package byte ceiling. The full oracle corpus tests the
-/// aggregate path separately; these controls exercise one owner refusal each.
-fn focused_wire(mut wire: Value, subject: &CheckedNodeId) -> Value {
-    let nodes = wire["semantic_graph"]["nodes"]
-        .as_array()
-        .expect("fixture nodes")
-        .clone();
-    let mut retained = BTreeSet::new();
-    let mut pending = vec![serde_json::to_value(subject).expect("subject ID")];
-    while let Some(next) = pending.pop() {
-        let key = serde_json::to_string(&next).expect("node ID");
-        if !retained.insert(key) {
-            continue;
-        }
-        let node = nodes
-            .iter()
-            .find(|node| node["node_id"] == next)
-            .expect("subject dependency in fixture");
-        pending.extend(
-            node["dependencies"]
-                .as_array()
-                .expect("node dependencies")
-                .iter()
-                .cloned(),
-        );
-        let semantic_type = &node["semantic_type"];
-        if semantic_type != &next {
-            pending.push(semantic_type.clone());
-        }
-    }
-    let keep = |id: &Value| retained.contains(&serde_json::to_string(id).expect("node ID"));
-    wire["semantic_graph"]["nodes"] = Value::Array(
-        nodes
-            .into_iter()
-            .filter(|node| keep(&node["node_id"]))
-            .collect(),
-    );
-    wire["source_map"] = Value::Array(
-        wire["source_map"]
-            .as_array()
-            .expect("source map")
-            .iter()
-            .filter(|entry| keep(&entry["node_id"]))
-            .cloned()
-            .collect(),
-    );
-    wire
-}
-
 /// Generate, and scan the `src/lib.rs` it produced for a panic site (FR-014-AC-39). Every crate
 /// this module's TC-024 tests generate comes through here, so each one is scanned.
 fn generate(package: &CheckedPackageV2, items: &[ExactScalarItem]) -> ExactScalarOracles {
@@ -254,7 +204,7 @@ fn tc_024_text_admission_corpus_is_refused_by_ir_today() {
 fn tc_052_aggregate_scalar_operand_is_refused_by_reader() {
     let (_, wire, ids) = expression_operand_package().read_resolved();
     let node_id = ids.resolve(&code_id(EXPRESSION_OPERAND));
-    let wire = focused_wire(wire, &node_id);
+    let wire = focused_wire(wire, std::slice::from_ref(&node_id));
     let result = read_mutated_wire(wire.clone());
     let position = wire["semantic_graph"]["nodes"]
         .as_array()
@@ -287,7 +237,7 @@ fn tc_052_aggregate_scalar_operand_is_refused_by_reader() {
 fn tc_052_mistyped_scalar_literal_is_refused_by_reader() {
     let (_, wire, ids) = wrong_operand_package().read_resolved();
     let node_id = ids.resolve(&code_id(WRONG_OPERAND));
-    let wire = focused_wire(wire, &node_id);
+    let wire = focused_wire(wire, std::slice::from_ref(&node_id));
     let result = read_mutated_wire(wire.clone());
     let position = wire["semantic_graph"]["nodes"]
         .as_array()
@@ -322,7 +272,7 @@ fn tc_052_mistyped_scalar_literal_is_refused_by_reader() {
 fn tc_052_quantity_literal_operand_is_refused_by_reader() {
     let (_, wire, ids) = literal_quantity_package().read_resolved();
     let node_id = ids.resolve(&code_id(LITERAL_QUANTITY));
-    let wire = focused_wire(wire, &node_id);
+    let wire = focused_wire(wire, std::slice::from_ref(&node_id));
     let result = read_mutated_wire(wire.clone());
     let position = wire["semantic_graph"]["nodes"]
         .as_array()
@@ -357,7 +307,7 @@ fn tc_052_quantity_literal_operand_is_refused_by_reader() {
 fn tc_052_noncanonical_integer_endpoint_is_refused_by_reader() {
     let (_, wire, ids) = corpus_package().read_resolved();
     let bound = ids.resolve(&id(&INT5.key()));
-    let mut wire = focused_wire(wire, &bound);
+    let mut wire = focused_wire(wire, std::slice::from_ref(&bound));
     let nodes = wire["semantic_graph"]["nodes"]
         .as_array_mut()
         .expect("nodes");
@@ -388,7 +338,7 @@ fn tc_052_noncanonical_integer_endpoint_is_refused_by_reader() {
 fn tc_052_reader_refuses_declaration_path_mismatch_in_admitted_positive_wire() {
     let (_, wire, ids) = corpus_package().read_resolved();
     let expected = ids.resolve(&code_id(V_INTEGER));
-    let mut wire = focused_wire(wire, &expected);
+    let mut wire = focused_wire(wire, std::slice::from_ref(&expected));
     assert!(matches!(
         read_mutated_wire(wire.clone()),
         CheckedPackageV2ReadResult::Admitted(_)
@@ -429,7 +379,7 @@ fn tc_052_reader_refuses_declaration_path_mismatch_in_admitted_positive_wire() {
 fn tc_052_changed_application_body_is_not_credited_as_original_fixture() {
     let (_, wire, ids) = bounded_increment_package().read_resolved();
     let prior = ids.resolve(&code_id(BOUNDED_INCREMENT));
-    let mut wire = focused_wire(wire, &prior);
+    let mut wire = focused_wire(wire, std::slice::from_ref(&prior));
     let admitted = read_mutated_wire(wire.clone());
     let CheckedPackageV2ReadResult::Admitted(original) = admitted else {
         panic!("original fixture must admit: {admitted:?}");
@@ -469,7 +419,7 @@ fn tc_052_changed_application_body_is_not_credited_as_original_fixture() {
 fn tc_052_mismatched_decimal_mode_is_refused_by_reader() {
     let (_, wire, ids) = corpus_package().read_resolved();
     let node_id = ids.resolve(&code_id(1051));
-    let mut wire = focused_wire(wire, &node_id);
+    let mut wire = focused_wire(wire, std::slice::from_ref(&node_id));
     let nodes = wire["semantic_graph"]["nodes"]
         .as_array_mut()
         .expect("nodes");
