@@ -1903,6 +1903,85 @@ fn nonunique_boolean_sequence_keeps_maximum_above_unique_capacity() {
 
 #[trace("FR-015-AC-96", "TC-025")]
 #[test]
+fn admitted_full_width_integer_ordered_set_retains_its_domain() {
+    let mut document = ordered_set_document();
+    let small_int = document["types"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|ty| ty.get("identity").and_then(Value::as_str) == Some(SMALL_ID))
+        .unwrap();
+    small_int["constraints"][0]["operands"]["value"] = json!(i64::MIN.to_string());
+    small_int["constraints"][1]["operands"]["value"] = json!(i64::MAX.to_string());
+
+    let fixture =
+        emitted_from_document_and_body(document, "forall(item in deref(input).items: item >= 0)");
+    let harness = collection_harness(&fixture, "quire.op.collection.forall");
+    assert_eq!(
+        harness.identity.collection_kind,
+        CollectionKindIdentity::OrderedSet
+    );
+    assert_eq!(
+        (
+            harness.identity.minimum_length,
+            harness.identity.maximum_length
+        ),
+        (0, 3)
+    );
+    assert_eq!(
+        harness.identity.element,
+        CollectionElementIdentity::Integer {
+            minimum: i64::MIN,
+            maximum: i64::MAX,
+        }
+    );
+    assert!(harness.rust.contents.contains(&format!(
+        "kani::assume(item >= {} && item <= {});",
+        i64::MIN,
+        i64::MAX
+    )));
+    assert!(harness.rust.contents.contains("for prior in 0..index"));
+}
+
+#[trace("FR-015-AC-96", "FR-015-AC-101", "TC-025")]
+#[test]
+fn admitted_unrepresentable_element_endpoint_precedes_unique_capacity() {
+    let mut document = ordered_set_document();
+    let small_int = document["types"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|ty| ty.get("identity").and_then(Value::as_str) == Some(SMALL_ID))
+        .unwrap();
+    small_int["constraints"][0]["operands"]["value"] = json!(i64::MAX.to_string());
+    small_int["constraints"][1]["operands"]["value"] =
+        json!((i128::from(i64::MAX) + 1).to_string());
+
+    let fixture =
+        emitted_from_document_and_body(document, "forall(item in deref(input).items: item >= 0)");
+    let KaniObligationOutcome::Emitted {
+        records,
+        collection_harnesses,
+        ..
+    } = collection_item_outcome(&fixture, "quire.op.collection.forall", 8)
+    else {
+        panic!("the unrepresentable endpoint settles per item");
+    };
+    assert!(matches!(
+        records[0].disposition,
+        ObligationDisposition::Unsupported {
+            reason: UnsupportedObligation::CollectionClaimNotRendered {
+                reason:
+                    quire_contract_codegen::CollectionUnsupportedReason::DomainNotRepresentableInI64,
+                ..
+            }
+        }
+    ));
+    assert!(collection_harnesses.is_empty());
+}
+
+#[trace("FR-015-AC-96", "TC-025")]
+#[test]
 fn feasible_ordered_set_emits_symbolic_ordered_unique_slots() {
     let fixture = emitted_from_document_and_body(
         ordered_set_document(),
