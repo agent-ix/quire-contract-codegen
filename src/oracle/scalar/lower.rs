@@ -2383,6 +2383,7 @@ pub(super) fn plan_exact_scalar_oracles(
                                         .wire()
                                         .ok_or(OracleGenerationError::ContractPackageUnavailable)?
                                         .wire()
+                                        .package
                                         .source
                                         .clone(),
                                     node_id: node_id.clone(),
@@ -2391,6 +2392,7 @@ pub(super) fn plan_exact_scalar_oracles(
                                         .wire()
                                         .ok_or(OracleGenerationError::ContractPackageUnavailable)?
                                         .wire()
+                                        .package
                                         .source
                                         .clone(),
                                     semantic_form: node.node.semantic_form.to_string(),
@@ -2452,6 +2454,7 @@ pub(super) fn plan_exact_scalar_oracles(
             .wire()
             .ok_or(OracleGenerationError::ContractPackageUnavailable)?
             .wire()
+            .package
             .source
             .clone(),
         claims,
