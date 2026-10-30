@@ -323,7 +323,19 @@ fn v2_numeric_refusals_keep_first_typed_cause() {
     assert_eq!(diagnostic.code, V2NumericErrorCode::MissingClaimOccurrence);
     assert_eq!(diagnostic.clause, clause);
     assert_eq!(diagnostic.occurrence, wrong_role);
-    assert!(diagnostic.comparison.is_some());
+    let comparison = diagnostic
+        .comparison
+        .as_ref()
+        .expect("typed comparison cause is retained");
+    assert_eq!(comparison.clause, clause);
+    assert_eq!(comparison.claim_owner, clause);
+    assert_eq!(comparison.occurrence, wrong_role);
+    assert!(matches!(
+        comparison.cause,
+        quire_contract_codegen::V2ComparisonRefusal::Ir(ref error)
+            if error.kind
+                == quire_contract_model::CheckedComparisonRefusal::MissingClaimOccurrence
+    ));
 
     let wrong_ordinal = CheckedOccurrence {
         role: CheckedOccurrenceRole::Claim,
@@ -395,4 +407,16 @@ fn v2_numeric_refusals_keep_first_typed_cause() {
             .expect_err("Broad needs both sides");
     assert_eq!(diagnostic.code, V2NumericErrorCode::EmptyPopulation);
     assert_eq!(diagnostic.clause, empty_clause);
+    let population = diagnostic
+        .population
+        .as_ref()
+        .expect("typed population cause is retained");
+    assert_eq!(
+        population.code,
+        quire_contract_codegen::StrategyErrorCode::EmptyPopulation
+    );
+    assert_eq!(population.clause, empty_clause);
+    assert_eq!(population.claim_owner, empty_clause);
+    assert_eq!(population.occurrence, empty_claim);
+    assert_eq!(population.path, "population.satisfying");
 }
