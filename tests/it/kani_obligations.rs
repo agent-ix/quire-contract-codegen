@@ -2220,6 +2220,7 @@ pub(crate) fn verify_routed_scalar_harness_real_kani() {
     "FR-017-AC-46",
     "FR-017-AC-47",
     "FR-017-AC-48",
+    "FR-017-AC-49",
     "FR-017-AC-50"
 )]
 #[test]
@@ -2309,7 +2310,7 @@ fn tc_027_attested_scalar_subtraction_fixture_has_two_bounded_operands() {
         .all(|argument| argument.minimum == 0 && argument.maximum == 9));
 }
 
-#[trace("FR-017-AC-31", "FR-017-AC-47", "FR-017-AC-50")]
+#[trace("FR-017-AC-31", "FR-017-AC-47", "FR-017-AC-49", "FR-017-AC-50")]
 #[test]
 #[ignore = "kani lane: run serially through make kani"]
 fn tc_027_attested_scalar_subtraction_receipts_bind_both_operand_orders() {

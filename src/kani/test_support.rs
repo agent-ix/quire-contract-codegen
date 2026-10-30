@@ -196,8 +196,6 @@ impl<T> No for &Probe<T> {
     }
 }
 
-// Shared with the integration binary; this oracle never calls production canonicalization.
-
 /// Literal source and identity for runner-only host checks; no generator is invoked.
 pub(crate) fn scalar_source_fixture(
     wall_clock: std::time::Duration,
