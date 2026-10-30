@@ -1593,19 +1593,18 @@ impl<'a, Body: GraphBody + 'a> NodeLookup<'a> for CheckedGraph<'a, Body> {
 pub(crate) struct FunctionPreflightGraph<'a> {
     // Metadata-only private fixtures have no admitted owner; production new() always sets it.
     checked: Option<&'a CheckedPackageV2>,
-    package_id: CheckedSemanticId,
     nodes: BTreeMap<IndexedNodeId, &'a CheckedSemanticNodeV2>,
 }
 
 impl<'a> FunctionPreflightGraph<'a> {
     /// Index the admitted graph once, before classifying its function items.
     pub(crate) fn new(checked: &'a CheckedPackageV2) -> Self {
-        let mut graph = Self::from_nodes(&checked.graph().nodes, checked.package_id().clone());
+        let mut graph = Self::from_nodes(&checked.graph().nodes);
         graph.checked = Some(checked);
         graph
     }
 
-    fn from_nodes(nodes: &'a [CheckedSemanticNodeV2], package_id: CheckedSemanticId) -> Self {
+    fn from_nodes(nodes: &'a [CheckedSemanticNodeV2]) -> Self {
         let nodes = nodes
             .iter()
             .map(|node| {
@@ -1616,7 +1615,6 @@ impl<'a> FunctionPreflightGraph<'a> {
             .collect();
         Self {
             checked: None,
-            package_id,
             nodes,
         }
     }
@@ -1755,11 +1753,13 @@ mod ir988_source_function_tests {
     use serde_json::json;
 
     fn id(value: u64) -> CheckedNodeId {
-        serde_json::from_value(json!({
-            "domain":"quire.checked-semantic-node/v1",
-            "digest":format!("{value:064x}")
-        }))
-        .expect("synthetic node key")
+        CheckedNodeId {
+            package: "fixture".into(),
+            path: vec![quire_contract_model::CheckedNodePathSegment::Name(
+                value.to_string().into(),
+            )],
+            ordinal: 0,
+        }
     }
 
     fn node(
@@ -1788,7 +1788,6 @@ mod ir988_source_function_tests {
             dependencies: Vec::new(),
             occurrences: Vec::new(),
             recursion_group: None,
-            nominal_identity_preimage: None,
             declaration: name.map(|name| CheckedDeclaration {
                 qualified_name: vec![name.into()],
             }),
@@ -2125,7 +2124,10 @@ pub(crate) fn checked_integer_function_application_is_supported_with_graph(
     argument_node_ids: &[CheckedNodeId],
     admitted: Option<(&ContractPackageV1, &[ContractRequestPosition], usize)>,
 ) -> Result<bool, FunctionPackageReadFailure> {
-    if &graph.package_id != checked.package_id() {
+    if !graph
+        .checked
+        .is_some_and(|owner| std::ptr::eq(owner, checked) || owner == checked)
+    {
         return Ok(false);
     }
     #[cfg(test)]
@@ -3798,8 +3800,11 @@ mod tests {
     fn function_preflight_reuses_one_graph_index_across_items() {
         let node = |ordinal: usize| {
             let id = CheckedNodeId {
-                domain: "quire.checked-semantic-node/v1".into(),
-                digest: format!("{ordinal:064x}").into(),
+                package: "fixture".into(),
+                path: vec![quire_contract_model::CheckedNodePathSegment::Name(
+                    ordinal.to_string().into(),
+                )],
+                ordinal: 0,
             };
             CheckedSemanticNodeV2 {
                 node_id: id.clone(),
@@ -3811,7 +3816,6 @@ mod tests {
                 dependencies: Vec::new(),
                 occurrences: Vec::new(),
                 recursion_group: None,
-                nominal_identity_preimage: None,
                 declaration: None,
                 owner: None,
                 body: CheckedTerm::aggregate(Vec::new()),
@@ -3822,14 +3826,7 @@ mod tests {
         nodes[0].semantic_form = "pure_function".into();
         let _ = take_function_preflight_graph_visits();
         let _ = take_function_preflight_graph_lookup_work();
-        let graph = FunctionPreflightGraph::from_nodes(
-            &nodes,
-            CheckedSemanticId {
-                domain: "quire.package.semantic/v2".into(),
-                algorithm: "sha256".into(),
-                digest: "0".repeat(64).into(),
-            },
-        );
+        let graph = FunctionPreflightGraph::from_nodes(&nodes);
         for ordinal in [0, 15, 31, 0, 31] {
             assert_eq!(
                 graph
@@ -3882,12 +3879,18 @@ mod tests {
     #[test]
     fn ac27_inline_scalar_literal_is_retained_with_its_admitted_type() {
         let owner = CheckedNodeId {
-            domain: "quire.checked-semantic-node/v1".into(),
-            digest: "1".repeat(64).into(),
+            package: "fixture".into(),
+            path: vec![quire_contract_model::CheckedNodePathSegment::Name(
+                "1".into(),
+            )],
+            ordinal: 0,
         };
         let type_node = CheckedNodeId {
-            domain: owner.domain.clone(),
-            digest: "2".repeat(64).into(),
+            package: owner.package.clone(),
+            path: vec![quire_contract_model::CheckedNodePathSegment::Name(
+                "2".into(),
+            )],
+            ordinal: 0,
         };
         let literal = CheckedTerm::Literal {
             type_id: type_node.clone(),
@@ -3920,8 +3923,11 @@ mod tests {
         body: Option<quire_contract_model::CheckedTerm>,
     ) -> crate::oracle::checked_graph::fixture::Node {
         let id = CheckedNodeId {
-            domain: "quire.checked-semantic-node/v1".into(),
-            digest: format!("{ordinal:064x}").into(),
+            package: "fixture".into(),
+            path: vec![quire_contract_model::CheckedNodePathSegment::Name(
+                ordinal.to_string().into(),
+            )],
+            ordinal: 0,
         };
         crate::oracle::checked_graph::fixture::Node::new(
             CheckedSemanticNodeV2 {
@@ -3934,7 +3940,6 @@ mod tests {
                 dependencies: Vec::new(),
                 occurrences: Vec::new(),
                 recursion_group: None,
-                nominal_identity_preimage: None,
                 declaration: None,
                 owner: None,
                 body: CheckedTerm::aggregate(Vec::new()),
@@ -4093,7 +4098,7 @@ mod tests {
         );
 
         let mut foreign = body.node_id.clone();
-        foreign.domain = "different-domain".into();
+        foreign.package = "different-package".into();
         let first_dangling = CheckedTerm::Aggregate {
             members: vec![
                 binding(reference(&foreign)),
