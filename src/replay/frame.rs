@@ -623,10 +623,9 @@ impl FrameReplay {
             .collect::<Vec<_>>();
         let request = |source: ReplaySource| {
             run.wire(
-                located.package_id,
                 RequestTargetWire::frame_operation(frame_operation.clone()),
                 source,
-                obligation,
+                obligation.clone(),
                 &documents,
             )
         };
@@ -650,8 +649,6 @@ impl FrameReplay {
             occurrence_key: Some(payload.occurrence.clone()),
             clause_node: Some(payload.frame),
             replay_target: ReplayTargetMembers::frame_operation(frame_operation),
-            package_id: Some(wire.package_id.clone()),
-            source_digests: Some(wire.source_digests.clone()),
             profile_selections: Some(Vec::new()),
             run_limits: Some(run.accounting_limits),
             declared_domains: Some(Vec::new()),

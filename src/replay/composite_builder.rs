@@ -11,7 +11,7 @@ use std::fmt;
 
 use qsl_replay::{
     compile_admitted, parity_obligation, settle_verified_shadow, AdmittedCompilation,
-    AdmittedContext, AdmittedRefusal, BoundEntries, ByteDigest, CompileUnit, CompositeEvidence,
+    AdmittedContext, AdmittedRefusal, BoundEntries, CompileUnit, CompositeEvidence,
     CompositeIdentity, CompositeParityClaim, DependencyInput, DigestDomain, DigestRecord, Domain,
     DomainKey, EnvelopeSource, EqualityOperator, Identifier, IdentityEncodeError, NoPayload,
     OccurrenceKey, OperandIdentity, Origin, ParityArgument, ParityPreimage, ProofBound,
@@ -181,7 +181,6 @@ pub struct OriginalCompositeEqContext {
     inputs: ReplayInputs,
     dependencies: DependencyInput,
     selection: QualifiedName,
-    package_id: DigestRecord,
     content_identity: DigestRecord,
     read_limits: CheckedPackageReadLimits,
 }
@@ -240,15 +239,6 @@ impl OriginalCompositeEqContext {
         if !selections.is_empty() {
             return Err(CompositeBuildError::ImportedContextUnsupported);
         }
-        if original.package_id().domain.as_ref() != DigestDomain::PackageSemanticV2.as_str() {
-            return Err(CompositeBuildError::PackageIdentity);
-        }
-        let package_id = DigestRecord::mint(
-            DigestDomain::PackageSemanticV2,
-            ByteDigest::from_hex(&original.package_id().digest)
-                .map_err(|_| CompositeBuildError::PackageIdentity)?
-                .as_bytes(),
-        );
         original
             .graph()
             .nodes
@@ -266,7 +256,6 @@ impl OriginalCompositeEqContext {
             inputs,
             dependencies,
             selection,
-            package_id,
             content_identity,
             read_limits,
         })
@@ -377,18 +366,13 @@ impl OriginalCompositeEqContext {
         let selected =
             self.selected_claim(node, occurrence, operator, harness_bounds, work_limit)?;
         Ok(WitnessPacket {
-            obligation_identity: Some(*selected.obligation.as_bytes()),
+            obligation_identity: Some(selected.obligation),
             occurrence_key: Some(OccurrenceKey::new(
                 selected.preimage.node,
                 selected.preimage.occurrence.clone(),
             )),
             clause_node: Some(selected.preimage.node),
             replay_target: ReplayTargetMembers::function(self.selection.clone()),
-            package_id: Some((
-                Some(self.package_id.domain().as_str().to_owned()),
-                self.package_id.hex(),
-            )),
-            source_digests: Some(vec![self.inputs.source.wire()]),
             profile_selections: Some(Vec::new()),
             run_limits: Some(self.inputs.accounting_limits),
             declared_domains: Some(self.inputs.declared_domains.clone()),
@@ -434,21 +418,6 @@ impl OriginalCompositeEqContext {
                 CompositePacketMember::Subject,
             ));
         }
-        if envelope.package_id() != self.package_id {
-            return Err(CompositeBuildError::PacketMismatch(
-                CompositePacketMember::Package,
-            ));
-        }
-        let [source_digest] = envelope.source_digests() else {
-            return Err(CompositeBuildError::PacketMismatch(
-                CompositePacketMember::SourceDigests,
-            ));
-        };
-        if source_digest.to_wire() != self.inputs.source.wire() {
-            return Err(CompositeBuildError::PacketMismatch(
-                CompositePacketMember::SourceDigests,
-            ));
-        }
         if !envelope.profile_selections().is_empty() {
             return Err(CompositeBuildError::PacketMismatch(
                 CompositePacketMember::Profiles,
@@ -485,10 +454,9 @@ impl OriginalCompositeEqContext {
             ));
         };
         let mut wire = self.inputs.wire(
-            envelope.package_id(),
             RequestTargetWire::function(name.clone(), envelope.occurrence_key().clone()),
             envelope.source().clone().into(),
-            *envelope.obligation_identity().as_bytes(),
+            envelope.obligation_identity().clone(),
             &[],
         );
         // ReplayInputs is shared with Kani witness paths; input parity's producer is this
@@ -526,11 +494,6 @@ impl OriginalCompositeEqContext {
             self.inputs.replay_limits,
         )
         .map_err(recompile_failure)?;
-        if self.package_id != compiled.package().package_id()
-            || !compiled.context().package_id().matches(&self.package_id)
-        {
-            return Err(CompositeBuildError::PackageMismatch);
-        }
         let mut evidence = CheckedPackageEvidence::new();
         for feature in &self.original.lock().required_features {
             evidence.support_feature(feature.as_ref());
@@ -676,7 +639,7 @@ impl OriginalCompositeEqRequest {
         verified: VerifiedShadow,
     ) -> Result<OriginalCompositeEqReport, CompositeBuildError> {
         let sent = CompositeIdentity::new(
-            qsl_replay::ObligationIdentity::from_digest(self.wire.obligation_identity),
+            self.wire.obligation_identity.clone(),
             &self.claim,
             CompositeEvidence::Verified(verified),
         );
