@@ -81,37 +81,57 @@ on an in-domain draw and require a falsified totality assertion, never an
 assumption. Compare its native result with QSL's public clause-evaluation
 facade once available; counterexample replay alone cannot classify true, false and incomplete
 evaluation across the admitted domain.
-For the collection postcondition, read the selected field's exact
-`CollectionType` and typed inclusive cardinality and element domain from the
-admitted package. Construct each symbolic prestate as exact
-`Value::Collection` through the FR-392 checked builder with a
-caller-authenticated schema-aware element authority. Check both cardinality
-endpoints, inclusive Boolean/IntRange element endpoints, declared order and
-uniqueness in the drawn state. Feed that same typed prestate and operation
-parameters to the customer-produced subject through its declared invocation
-ABI. If the builder, authority, selected field domain or subject invocation ABI
-is unavailable, require a typed item refusal with no harness, proof record or
-CG-local `Vec`/array fallback.
+For the collection postcondition, identify the selected model object and
+all fields the postcondition or any supported sibling precondition reads. Read each
+field's admitted type and domain; require the selected field's exact
+`CollectionType`, inclusive cardinality and element domain. Generate one
+`CgObjectState` struct with a `quire_exact::Value` field for each of those
+fields in declaration order, with generated names that remain distinct for two
+source spellings that would collide after naive Rust identifier conversion.
+Compare the persisted mapping of each generated name to its checked declaration
+and field ID before and after equal regeneration. Draw and validate all fields
+for the whole-object
+prestate. Construct the selected collection field through the FR-392 checked
+builder with a caller-authenticated schema-aware element authority. Check both
+cardinality endpoints, inclusive Boolean/IntRange element endpoints, order and
+uniqueness in that field. Verify another contract-read field stays present in
+the generated state and participates in its declared domain assumptions.
+Copy the entire prestate, then call the customer subject at `subject_path` as
+`fn(&mut CgObjectState, P0, P1, ...) -> R`, with FR-025-ordered supported
+parameters and the admitted supported result type (`()` if absent). Verify the
+call and result type in generated Rust. A selected-field-only state must fail
+this control and leaves FR-015-AC-96/99 partial. Refuse an unsupported
+parameter/result type, missing field/type mapping, any required field CG cannot
+symbolically construct and validate, unavailable domain or builder, absent
+authenticated authority or unavailable typed invocation with
+a typed item reason and no harness or proof record. No CG-local `Vec`/array
+collection ABI or exact record/tuple masquerading as an object is allowed.
 
 The postcondition harness assumes every supported sibling precondition on the
-same prestate and operation parameters, and refuses before invocation if any
-sibling is unsupported. Then it calls the subject. Inspect the
-subject-produced `Value::Collection` with FR-392 using the selected field type
-and authenticated schema-aware authority. Assert successful inspection and
-the produced post-state cardinality, element domain, order and uniqueness,
-as well as the authored postcondition, then cover non-vacuity. Seed subjects
-that produce a duplicate, misordered, below-minimum or over-maximum count,
-out-of-range element, forged nested element or wrong exact collection type;
-each must falsify the poststate-domain assertion with in-domain prestate
-playback, without an assumption hiding it. The invariant keeps a direct
-assertion. Replay a falsified invariant through
-`qsl_replay::replay_state_clause` with a snapshot observation, and a
-falsified postcondition with an invocation plus pre/post snapshots. A healthy
-postcondition verifies; an authored postcondition or subject mutant falsifies
-with in-domain playback. These pre/post controls are planned and receive no
-current proof credit. FR-392 defines the value form and checked boundary;
-this procedure does not assign a generated subject function signature to
-exact or claim QSL emission of one.
+same complete prestate and operation parameters, and refuses before invocation
+if any sibling is unsupported. Then it calls the subject. Check every
+subject-produced field against its admitted type and domain; inspect the
+selected produced `Value::Collection` with FR-392 using its selected field type
+and authenticated schema-aware authority. Assert successful inspection, the
+produced post-state cardinality, element domain, order and uniqueness, and the
+authored postcondition; then cover non-vacuity. Seed subjects that produce a
+duplicate, below-minimum or over-maximum count, out-of-range element, forged
+nested element or wrong exact collection type; each must falsify the
+poststate-domain assertion with in-domain whole-object prestate playback,
+without an assumption hiding it. Independently mutate a nonselected
+contract-read field beyond its admitted domain and require that field's domain
+assertion to fail. Separately author a postcondition requiring the selected
+OrderedSet's stored member order to match its prestate order and seed a subject
+that reorders distinct members. FR-392 inspection must admit that reordered
+set while the authored order postcondition falsifies; a mere permutation is
+not a collection-domain failure. The invariant keeps a direct assertion.
+Replay a falsified invariant through `qsl_replay::replay_state_clause` with a
+snapshot observation, and a falsified postcondition with an invocation plus
+pre/post snapshots. A healthy postcondition verifies; an authored
+postcondition or subject mutant falsifies with in-domain playback. These
+pre/post controls are planned and receive no current proof credit. FR-392
+defines the collection value and checked boundary; CG owns the generated call
+and state struct, while this procedure claims no QSL generation of either.
 
 For FR-015-AC-128 (IR-1091), author a QSL invariant and a constraint clause
 with collection quantifiers over the same bounded field, emit the package through
