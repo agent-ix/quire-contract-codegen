@@ -3,7 +3,7 @@
 //!
 //! The admitted package is emitted by QSL from the native twin of the state-frame fixture,
 //! with two postcondition clauses on `deposit`. The invocation and snapshot documents
-//! are built by the crate under test and read back from the request's byte provision, so each
+//! are built by the crate under test and read back from the request's documents, so each
 //! assertion is about the bytes QSL receives.
 //!
 //! The default lane runs without Kani. The `kani` lane (`#[ignore]` here, run serially by
@@ -15,7 +15,7 @@ use std::cell::RefCell;
 use qsl_replay::{
     replay_state_clause, CallSiteRefusal, ClauseName, ClauseSelectionInput, DisagreementCause,
     DomainKey, DomainKind, EvaluatedValue, FiniteBound, Identifier, Integer, ReplayRequestWire,
-    ReplayResult, ReplayTargetMembers, StateClauseReplayResult, TerminalValue, Verdict, WireNodeId,
+    ReplayResult, ReplayTargetMembers, StateClauseReplayResult, TerminalValue, Verdict,
     WitnessEnvelope, WitnessPacket, WitnessRefusal, WitnessSettlement,
 };
 use quire_contract_codegen::{
@@ -598,12 +598,14 @@ fn tc_035_replay_returns_the_direct_result_and_replay_through_returns_the_execut
     // The executor sees the request and envelope the replay built, and its value comes back.
     let seen = RefCell::new(None);
     let replay = built(&twin, &fixture, BALANCE, VIOLATING.0, VIOLATING.1);
-    let expected_package = replay.wire.package_id.clone();
+    let expected_package = replay.wire.package_name.clone();
+    let expected_sources = replay.wire.sources.clone();
     let sentinel = respecting.clone();
     let returned = replay
         .replay_through(|wire: ReplayRequestWire, envelope| {
             *seen.borrow_mut() = Some((
-                wire.package_id.clone(),
+                wire.package_name.clone(),
+                wire.sources.clone(),
                 envelope
                     .replay_target()
                     .as_state_clause()
@@ -616,10 +618,11 @@ fn tc_035_replay_returns_the_direct_result_and_replay_through_returns_the_execut
         .expect("the executor's value is returned");
     assert_eq!(&returned, respecting, "the sentinel replaces the verdict");
     assert_ne!(&returned, violating);
-    let Some((package_id, clause, node)) = seen.take() else {
+    let Some((package_name, sources, clause, node)) = seen.take() else {
         panic!("the executor was called");
     };
-    assert_eq!(package_id, expected_package);
+    assert_eq!(package_name, expected_package);
+    assert_eq!(sources, expected_sources);
     assert_eq!(clause, BALANCE);
     assert_eq!(
         node,
@@ -671,8 +674,6 @@ fn tc_035_missing_packet_members_stop_before_replay() {
         ));
         assert_eq!(calls, 0);
     }
-    missing_member!(package_id);
-    missing_member!(source_digests);
     missing_member!(profile_selections);
     missing_member!(run_limits);
     missing_member!(declared_domains);
@@ -687,8 +688,6 @@ fn tc_035_missing_packet_members_stop_before_replay() {
         occurrence_key: _,
         clause_node: _,
         replay_target: _,
-        package_id: _,
-        source_digests: _,
         profile_selections: _,
         run_limits: _,
         declared_domains: _,
@@ -767,7 +766,7 @@ fn tc_035_the_envelope_carries_the_call_sites_clause_identities() {
             ClauseSelectionInput::Invocation { .. }
         ));
         assert!(payload.witness.is_none());
-        assert_eq!(replay.packet.clause_node, Some(site.node));
+        assert_eq!(replay.packet.clause_node, Some(site.node.clone()));
         assert_eq!(
             replay.packet.occurrence_key.as_ref(),
             Some(&site.occurrence)
@@ -800,18 +799,20 @@ struct Documents {
     post: (String, Value),
 }
 
-/// Reads the invocation and the two snapshots from `wire`'s byte provision, each with the digest
-/// the request addresses it by, after checking that digest is SHA-256 of the bytes provided.
+/// Reads the invocation and the two snapshots from `wire`'s documents, with each digest
+/// computed from the canonical bytes the request provides.
 fn documents(wire: &ReplayRequestWire) -> Documents {
     let mut found = (None, None, None);
-    for (domain, hex, bytes) in &wire.byte_provision {
-        if domain.as_deref() != Some("sha256-jcs") {
-            continue;
-        }
+    for bytes in &wire.documents {
         let Ok(document) = serde_json::from_slice::<Value>(bytes) else {
             continue;
         };
-        let entry = (hex.clone(), document.clone());
+        let digest = Sha256::digest(bytes);
+        let hex = digest
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        let entry = (hex, document.clone());
         match document.get("format").and_then(Value::as_str) {
             Some("quire.state.invocation/v1") => found.0 = Some(entry),
             Some("quire.state.snapshot/v1") => match document.get("observation") {
@@ -821,15 +822,6 @@ fn documents(wire: &ReplayRequestWire) -> Documents {
             },
             _ => continue,
         }
-        let digest = Sha256::digest(bytes);
-        let actual = digest
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect::<String>();
-        assert_eq!(
-            &actual, hex,
-            "the request addresses a document by its bytes' digest"
-        );
     }
     let (Some(invocation), Some(pre), Some(post)) = found else {
         panic!("the request provides the invocation and both snapshots");
@@ -1110,11 +1102,22 @@ fn tc_035_the_envelope_declares_each_ranged_field_and_the_transcript_names_the_p
         .iter()
         .filter(|node| node.semantic_form.as_ref() == "parameter")
         .collect::<Vec<_>>();
-    let [parameter] = parameters.as_slice() else {
+    let [declared_parameter] = parameters.as_slice() else {
         panic!("the emitted clause has one self parameter");
     };
-    let parameter = WireNodeId::from_hex(&parameter.node_id.digest).expect("a node id");
     let domains = replay.packet.declared_domains.as_ref().expect("domains");
+    let DomainKey::Node {
+        node: parameter, ..
+    } = domains[0].domain()
+    else {
+        panic!("the first field has a node domain");
+    };
+    assert!(
+        super::kani_obligations_state_frame::native_twin::node_matches_site(
+            &declared_parameter.node_id,
+            parameter.view(),
+        )
+    );
     assert_eq!(domains.len(), model::FIELDS.len());
     for (position, (domain, (_, (minimum, maximum)))) in
         domains.iter().zip(model::FIELDS).enumerate()
@@ -1123,7 +1126,7 @@ fn tc_035_the_envelope_declares_each_ranged_field_and_the_transcript_names_the_p
         assert_eq!(
             domain.domain(),
             &DomainKey::Node {
-                node: parameter,
+                node: parameter.clone(),
                 path: vec![u32::try_from(position).expect("small")],
             }
         );
@@ -1368,8 +1371,9 @@ fn tc_035_real_kani_state_clause_counterexample_replays_through_qsl() {
         ("balance".to_owned(), account.balance),
         ("audit".to_owned(), account.audit),
     ];
+    let expected_identity = inputs.obligation_identity.clone();
     let replay = StateClauseReplay::new(inputs.clone()).expect("emitted package replays");
-    assert_eq!(replay.packet.obligation_identity, Some([1; 32]));
+    assert_eq!(replay.packet.obligation_identity, Some(expected_identity));
     assert!(matches!(
         replay.packet.source,
         Some(qsl_replay::EnvelopeSource::Witness(_))

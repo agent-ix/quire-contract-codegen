@@ -64,11 +64,7 @@ fn scalar_with_policy(
     route: ScalarRoute,
 ) -> (KaniScalarObligationHarness, Vec<Artifact>) {
     let bound = builder.bound(&result_bound);
-    builder.narrow(
-        narrow_code,
-        package::code_id(operation_code).digest.as_ref(),
-        &bound,
-    );
+    builder.narrow(narrow_code, &package::key(operation_code), &bound);
     builder.expression_occurrences();
     let (package, ids) = builder.admit_resolved();
     let node_id = ids.resolve(&package::code_id(operation_code));
