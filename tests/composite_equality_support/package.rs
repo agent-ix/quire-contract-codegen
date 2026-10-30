@@ -103,7 +103,13 @@ pub fn code_id(code: u32) -> CheckedNodeId {
 }
 
 fn node_ref(path: &str) -> Value {
-    json!({"package": BASE_PACKAGE_NAME, "path": path.split('/').collect::<Vec<_>>(), "ordinal": 0})
+    if path == key(REFERENCE_MODEL_ROOT) {
+        json!({"package": REFERENCE_MODEL, "path": ["model", "model_root", REFERENCE_MODEL], "ordinal": 0})
+    } else if path == key(REFERENCE_OBJECT_TYPE) {
+        json!({"package": REFERENCE_MODEL, "path": ["model", "object_type", REFERENCE_OBJECT], "ordinal": 0})
+    } else {
+        json!({"package": BASE_PACKAGE_NAME, "path": path.split('/').collect::<Vec<_>>(), "ordinal": 0})
+    }
 }
 
 pub fn reference(code: u32) -> Value {
@@ -485,11 +491,11 @@ impl Default for PackageBuilder {
 
 impl PackageBuilder {
     fn node_ref(&self, path: &str) -> Value {
-        json!({
-            "package": self.value["name"],
-            "path": path.split('/').collect::<Vec<_>>(),
-            "ordinal": 0,
-        })
+        let mut node = node_ref(path);
+        if node["package"] == BASE_PACKAGE_NAME {
+            node["package"] = self.value["name"].clone();
+        }
+        node
     }
 
     fn repackage(&self, value: &mut Value) {

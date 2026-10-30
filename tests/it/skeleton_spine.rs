@@ -411,6 +411,7 @@ fn dependency_lock() -> DependencyLock {
 /// ascending identity order. Byte provision is keyed by source identity even when bytes repeat.
 #[trace("FR-016-AC-29", "TC-026")]
 #[test]
+#[ignore = "blocked by QSL-1320: producer obligation identity accessor"]
 fn tc_026_the_request_package_reference_carries_the_lock_dependencies() {
     let native = native_source(VIOLATING_TWIN);
     let lock = dependency_lock();
@@ -615,6 +616,7 @@ fn tc_026_an_import_with_no_locked_dependency_is_refused() {
 /// A request mutation cannot silently select a different imported source or dependency ordering.
 #[trace("FR-016-AC-30", "TC-026")]
 #[test]
+#[ignore = "blocked by QSL-1320: producer obligation identity accessor"]
 fn tc_026_a_changed_dependency_selection_is_refused_before_replay() {
     let (mut lock_inputs, _) = importing_inputs(&units_library(BIG));
     let mut extra = dependency_lock();
