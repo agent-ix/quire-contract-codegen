@@ -12,12 +12,12 @@ use std::fmt;
 use qsl_replay::{
     compile_admitted, parity_obligation, settle_verified_shadow, AdmittedCompilation,
     AdmittedContext, AdmittedRefusal, BoundEntries, CompileUnit, CompositeEvidence,
-    CompositeIdentity, CompositeParityClaim, DependencyInput, DigestDomain, DigestRecord, Domain,
-    DomainKey, EnvelopeSource, EqualityOperator, Identifier, IdentityEncodeError, NoPayload,
-    OccurrenceKey, OperandIdentity, Origin, ParityArgument, ParityPreimage, ProofBound,
-    QualifiedName, ReplayRequest, ReplayRequestRefusal, ReplayRequestWire, ReplayTarget,
-    ReplayTargetMembers, RequestTargetWire, Role, VerifiedShadow, VerifiedShadowReport,
-    WitnessEnvelope, WitnessPacket, WitnessRefusal,
+    CompositeIdentity, CompositeParityClaim, DependencyInput, DigestRecord, Domain, DomainKey,
+    EnvelopeSource, EqualityOperator, Identifier, IdentityEncodeError, NoPayload, OccurrenceKey,
+    OperandIdentity, Origin, ParityArgument, ParityPreimage, ProofBound, QualifiedName,
+    ReplayRequest, ReplayRequestRefusal, ReplayRequestWire, ReplayTarget, ReplayTargetMembers,
+    RequestTargetWire, Role, VerifiedShadow, VerifiedShadowReport, WitnessEnvelope, WitnessPacket,
+    WitnessRefusal,
 };
 use quire_contract_model::{
     CheckedCompositeOperandDomain, CheckedCompositeOperandError, CheckedCompositeOperands,
@@ -136,7 +136,7 @@ impl fmt::Display for CompositeBuildError {
             Self::RequestDecode(cause) => cause.fmt(f),
             Self::PackageRead(cause) => {
                 f.write_str("checked-package read refused")?;
-                if let Some(path) = &cause.path {
+                if let Some(path) = cause.loci.first().and_then(|locus| locus.path.as_ref()) {
                     write!(f, " at {path}")?;
                 }
                 Ok(())
@@ -323,7 +323,7 @@ impl OriginalCompositeEqContext {
         let node = wire_node(node)?;
         let occurrence = origin(occurrence);
         let preimage = ParityPreimage {
-            node,
+            node: node.clone(),
             occurrence: occurrence.clone(),
             obligation_kind: "bounded_shadow".to_owned(),
             arguments,
@@ -368,7 +368,7 @@ impl OriginalCompositeEqContext {
         Ok(WitnessPacket {
             obligation_identity: Some(selected.obligation),
             occurrence_key: Some(OccurrenceKey::new(
-                selected.preimage.node,
+                selected.preimage.node.clone(),
                 selected.preimage.occurrence.clone(),
             )),
             clause_node: Some(selected.preimage.node),
@@ -407,13 +407,16 @@ impl OriginalCompositeEqContext {
             ));
         }
         if envelope.occurrence_key()
-            != &OccurrenceKey::new(selected.preimage.node, selected.preimage.occurrence.clone())
+            != &OccurrenceKey::new(
+                selected.preimage.node.clone(),
+                selected.preimage.occurrence.clone(),
+            )
         {
             return Err(CompositeBuildError::PacketMismatch(
                 CompositePacketMember::Occurrence,
             ));
         }
-        if envelope.clause_node() != selected.preimage.node {
+        if envelope.clause_node() != &selected.preimage.node {
             return Err(CompositeBuildError::PacketMismatch(
                 CompositePacketMember::Subject,
             ));

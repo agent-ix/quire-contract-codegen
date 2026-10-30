@@ -341,7 +341,7 @@ impl fmt::Display for StateClauseReplayError {
                 write!(
                     f,
                     "model fields of {} are unavailable: {cause:?}",
-                    object.digest
+                    format_args!("{object:?}")
                 )
             }
             Self::MissingField { field } => {
@@ -654,7 +654,7 @@ impl StateClauseReplay {
         };
         let invocation_encoded = encode_document(&invocation_document)
             .map_err(|cause| StateClauseReplayError::Document(DocumentError::Encode(cause)))?;
-        let invocation = invocation_label.reference(invocation_encoded.digest);
+        let invocation = invocation_label.reference();
 
         let selected =
             QualifiedName::new(vec![site.name.clone()]).map_err(StateClauseReplayError::Name)?;
@@ -769,13 +769,12 @@ pub(crate) fn encode_document<T: Encode + ?Sized>(
 }
 
 impl DocumentLabel {
-    fn reference(&self, digest: [u8; 32]) -> DocumentRef {
+    fn reference(&self) -> DocumentRef {
         DocumentRef {
             authority: self.authority.clone(),
             identity: self.identity.clone(),
             revision_namespace: self.revision_namespace.clone(),
             revision: self.revision.clone(),
-            digest,
         }
     }
 }
@@ -1134,7 +1133,7 @@ fn declared_domains(
         domains.push(DeclaredDomain::new(
             ProofBound::new(
                 DomainKey::Node {
-                    node: parameter,
+                    node: parameter.clone(),
                     path: vec![path],
                 },
                 Some(DomainKind::Integer),

@@ -21,8 +21,8 @@
 use std::{collections::BTreeMap, fmt};
 
 use qsl_replay::{
-    call_site, replay_frame, CallSiteRefusal, ClaimedChange, DigestDomain, DigestRecord,
-    DocumentRef, EmptyQualifiedName, EnvelopeSource, FrameCounterexample, FrameReplayResult,
+    call_site, replay_frame, CallSiteRefusal, ClaimedChange, DigestDomain, DocumentRef,
+    EmptyQualifiedName, EnvelopeSource, FrameCounterexample, FrameReplayResult,
     MalformedTranscript, OperationName, OperationSite, ReplayLimits, ReplayRefusal, ReplayRequest,
     ReplayRequestWire, ReplaySource, ReplayTargetMembers, RequestTargetWire, WitnessEnvelope,
     WitnessPacket, WitnessRefusal, WitnessValue,
@@ -443,6 +443,28 @@ struct InvocationRead {
     pre: SnapshotLink,
 }
 
+#[derive(Deserialize)]
+struct DocumentIdentityRead {
+    identity: DocumentRefRead,
+}
+
+#[derive(Deserialize)]
+struct DocumentRefRead {
+    authority: String,
+    identity: String,
+    revision_namespace: String,
+    revision: String,
+}
+
+impl DocumentRefRead {
+    fn matches(&self, reference: &DocumentRef) -> bool {
+        self.authority == reference.authority
+            && self.identity == reference.identity
+            && self.revision_namespace == reference.revision_namespace
+            && self.revision == reference.revision
+    }
+}
+
 /// The members of a snapshot document this check reads, as `state_clause` writes them.
 #[derive(Deserialize)]
 struct SnapshotRead {
@@ -458,8 +480,14 @@ fn pre_fields(
     invocation: &DocumentRef,
     documents: &[ProvidedDocument],
 ) -> Result<BTreeMap<String, IntegerValue>, PreStateFault> {
-    let own = DigestRecord::mint(DigestDomain::Sha256Jcs, invocation.digest).hex();
-    let bytes = provided(documents, &own).ok_or(PreStateFault::InvocationNotProvided)?;
+    let bytes = documents
+        .iter()
+        .find(|document| {
+            serde_json::from_slice::<DocumentIdentityRead>(&document.bytes)
+                .is_ok_and(|read| read.identity.matches(invocation))
+        })
+        .map(|document| document.bytes.as_slice())
+        .ok_or(PreStateFault::InvocationNotProvided)?;
     let InvocationRead {
         self_object: ObjectRef { population, key },
         pre,
@@ -645,7 +673,7 @@ impl FrameReplay {
         let packet = WitnessPacket {
             obligation_identity: Some(obligation),
             occurrence_key: Some(payload.occurrence.clone()),
-            clause_node: Some(payload.frame),
+            clause_node: Some(payload.frame.clone()),
             replay_target: ReplayTargetMembers::frame_operation(frame_operation),
             profile_selections: Some(Vec::new()),
             run_limits: Some(run.accounting_limits),
