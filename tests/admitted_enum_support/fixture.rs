@@ -1,8 +1,8 @@
 //! Authentic public-facade enum fixture, shared by generator and generated native tests.
 
 use qsl_replay::{
-    compile_admitted, AdmittedCompilation, DependencyInput, ReplayLimits, SourceIdentity,
-    StageLimits,
+    compile_admitted, AdmittedCompilation, CompileUnit, DependencyInput, ReplayLimits,
+    SourceIdentity, StageLimits,
 };
 
 pub const SOURCE: &str = "language \"ix:native\" edition \"1-draft\";\n\
@@ -17,9 +17,12 @@ function other_same using v(a: Other,b: Other): Boolean pure { a = b }\n";
 
 pub fn compile(source: &str) -> AdmittedCompilation {
     compile_admitted(
-        SourceIdentity::new("test", "admitted-enums.native", "git", "fixture"),
-        "admitted-enums.native",
-        source.as_bytes(),
+        CompileUnit {
+            source: SourceIdentity::new("test", "admitted-enums.native", "git", "fixture"),
+            package_name: "admitted-enums".to_owned(),
+            path: "admitted-enums.native",
+            bytes: source.as_bytes(),
+        },
         [],
         &DependencyInput::default(),
         StageLimits::default(),
@@ -39,9 +42,12 @@ pub fn imported(transitive: bool) -> (AdmittedCompilation, Vec<(String, Admitted
     };
     let compile_library = |item: &qsl_replay::SuppliedLibrary, dependencies: &DependencyInput| {
         compile_admitted(
-            item.source.clone(),
-            &item.path,
-            &item.bytes,
+            CompileUnit {
+                source: item.source.clone(),
+                package_name: item.identity.clone(),
+                path: &item.path,
+                bytes: &item.bytes,
+            },
             [],
             dependencies,
             StageLimits::default(),
@@ -73,9 +79,12 @@ pub fn imported(transitive: bool) -> (AdmittedCompilation, Vec<(String, Admitted
         1,
     );
     let compiled = compile_admitted(
-        SourceIdentity::new("test", "admitted-enums.native", "git", "fixture"),
-        "admitted-enums.native",
-        text.as_bytes(),
+        CompileUnit {
+            source: SourceIdentity::new("test", "admitted-enums.native", "git", "fixture"),
+            package_name: "admitted-enums".to_owned(),
+            path: "admitted-enums.native",
+            bytes: text.as_bytes(),
+        },
         [],
         &DependencyInput::new(supplied).expect("real dependency provision"),
         StageLimits::default(),
