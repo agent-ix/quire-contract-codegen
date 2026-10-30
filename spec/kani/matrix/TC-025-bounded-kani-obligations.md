@@ -82,23 +82,27 @@ assumption. Compare its native result with QSL's public clause-evaluation
 facade once available; counterexample replay alone cannot classify true, false and incomplete
 evaluation across the admitted domain.
 For the collection postcondition, identify the selected model object and
-all fields the postcondition or any supported sibling precondition reads. Read each
+every admitted model field, including fields neither the postcondition nor
+any sibling precondition reads. Read each
 field's admitted type and domain; require the selected field's exact
 `CollectionType`, inclusive cardinality and element domain. Generate one
-`CgObjectState` struct with a `quire_exact::Value` field for each of those
-fields in declaration order, with generated names that remain distinct for two
+`CgObjectState` struct with a `quire_exact::Value` field for every admitted model field in checked declaration order, with generated names that remain distinct for two
 source spellings that would collide after naive Rust identifier conversion.
-Compare the persisted mapping of each generated name to its checked declaration
-and field ID before and after equal regeneration. Draw and validate all fields
+Compare the persisted mapping of each generated name to its checked declaring node ID
+and field name before and after equal regeneration. Draw and validate all fields
 for the whole-object
 prestate. Construct the selected collection field through the FR-392 checked
 builder with a caller-authenticated schema-aware element authority. Check both
 cardinality endpoints, inclusive Boolean/IntRange element endpoints, order and
-uniqueness in that field. Verify another contract-read field stays present in
-the generated state and participates in its declared domain assumptions.
-Copy the entire prestate, then call the customer subject at `subject_path` as
-`fn(&mut CgObjectState, P0, P1, ...) -> R`, with FR-025-ordered supported
-parameters and the admitted supported result type (`()` if absent). Verify the
+uniqueness in that field. Verify a nonselected contract-read field and an unread admitted field both
+stay present in the generated state, retain their identities, and participate
+in their declared domain assumptions.
+Copy every field value, then call the customer subject at `subject_path` as
+`fn(&mut quire_exact::Value, &mut quire_exact::Value, ..., P0, P1, ...) -> R`: one
+mutable exact-value reference per admitted field in checked declaration
+order, then FR-025-ordered supported parameters and the admitted supported
+result type (`()` if absent). Inspect the generated call and the retained
+prestate copy to verify FR-025-AC-8/TC-036 per-value semantics. Verify the
 call and result type in generated Rust. A selected-field-only state must fail
 this control and leaves FR-015-AC-96/99 partial. Refuse an unsupported
 parameter/result type, missing field/type mapping, any required field CG cannot
@@ -118,9 +122,9 @@ authored postcondition; then cover non-vacuity. Seed subjects that produce a
 duplicate, below-minimum or over-maximum count, out-of-range element, forged
 nested element or wrong exact collection type; each must falsify the
 poststate-domain assertion with in-domain whole-object prestate playback,
-without an assumption hiding it. Independently mutate a nonselected
-contract-read field beyond its admitted domain and require that field's domain
-assertion to fail. Separately author a postcondition requiring the selected
+without an assumption hiding it. Independently mutate a nonselected contract-read field and an unread admitted
+field beyond each admitted domain; require each field's domain assertion to
+fail. Separately author a postcondition requiring the selected
 OrderedSet's stored member order to match its prestate order and seed a subject
 that reorders distinct members. FR-392 inspection must admit that reordered
 set while the authored order postcondition falsifies; a mere permutation is
