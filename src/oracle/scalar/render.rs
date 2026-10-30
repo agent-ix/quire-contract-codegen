@@ -905,7 +905,7 @@ pub(super) fn render_exact_scalar_plan(
     }
 
     let claim_map = ClaimMap {
-        package_id: plan.package_id,
+        source: plan.source,
         // No blocker applies to every entry any more: a confirmed claim's
         // provenance is `IrConfirmed`, and an unconfirmed claim's
         // `CallerDeclared` provenance names
@@ -1030,7 +1030,7 @@ pub(super) fn build_contract_scalar_oracles(
         })
         .collect();
     let claim_map = ClaimMap {
-        package_id: package.wire().package.source.package_id.clone(),
+        source: package.wire().package.source.clone(),
         blocked: Vec::new(),
         items: claims,
     };
@@ -1101,12 +1101,13 @@ mod native_publication_tests {
     use super::*;
     use crate::oracle::scalar::{GeneratedScalarClaim, OperationClaim, OperationProvenance};
     use ix_trace_rs::trace;
-    use quire_contract_model::CheckedSemanticId;
+    use quire_contract_model::ContractSourceV1;
 
     fn node_id(digit: char) -> CheckedNodeId {
         serde_json::from_value(serde_json::json!({
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": digit.to_string().repeat(64),
+            "package": "test",
+            "path": [digit.to_string()],
+            "ordinal": 0,
         }))
         .expect("node id")
     }
@@ -1114,10 +1115,16 @@ mod native_publication_tests {
     #[trace("FR-015-AC-125")]
     #[test]
     fn grouped_native_publication_keeps_each_proof_body_and_source_map_aligned() {
-        let package_id: CheckedSemanticId = serde_json::from_value(serde_json::json!({
-            "domain": "quire.contract-ir.semantic/v1",
-            "algorithm": "sha256",
-            "digest": "a".repeat(64),
+        let package_id: ContractSourceV1 = serde_json::from_value(serde_json::json!({
+            "name": "test",
+            "lock": {
+                "sources": [],
+                "edition": {"role":"edition", "definition":{"authority":"test", "identity":"edition"}},
+                "profile_selections": [],
+                "definition_selections": [],
+                "required_features": [],
+                "dependency_selections": []
+            }
         }))
         .expect("package id");
         let symbols = ["oracle_integer_add_0", "oracle_integer_add_1"];
@@ -1160,7 +1167,7 @@ mod native_publication_tests {
             });
         }
         let mut claims = ClaimMap {
-            package_id,
+            source: package_id,
             blocked: Vec::new(),
             items,
         };

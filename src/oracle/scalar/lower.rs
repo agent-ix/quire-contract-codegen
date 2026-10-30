@@ -2243,9 +2243,13 @@ pub(super) fn plan_contract_scalar_oracles(
                                 identity,
                                 ClaimDisposition::Generated(Box::new(GeneratedScalarClaim {
                                     symbol: String::new(),
-                                    contract_package_identity: package.identity().clone(),
+                                    contract_package_identity: package
+                                        .wire()
+                                        .package
+                                        .source
+                                        .clone(),
                                     node_id: node_id.clone(),
-                                    package_id: package.wire().package.source.package_id.clone(),
+                                    package_id: package.wire().package.source.clone(),
                                     semantic_form: closure.root.semantic_form.to_string(),
                                     semantic_type: closure.root.semantic_type.clone(),
                                     quantity_conversion_target: conversion_target(
@@ -2378,10 +2382,17 @@ pub(super) fn plan_exact_scalar_oracles(
                                         .package
                                         .wire()
                                         .ok_or(OracleGenerationError::ContractPackageUnavailable)?
-                                        .identity()
+                                        .package
+                                        .source
                                         .clone(),
                                     node_id: node_id.clone(),
-                                    package_id: lowering.package.source_package_id().clone(),
+                                    package_id: lowering
+                                        .package
+                                        .wire()
+                                        .ok_or(OracleGenerationError::ContractPackageUnavailable)?
+                                        .package
+                                        .source
+                                        .clone(),
                                     semantic_form: node.node.semantic_form.to_string(),
                                     semantic_type: node.semantic_type.clone(),
                                     quantity_conversion_target: conversion_target(
@@ -2436,7 +2447,13 @@ pub(super) fn plan_exact_scalar_oracles(
         });
     }
     Ok(ExactScalarPlan {
-        package_id: lowering.package.source_package_id().clone(),
+        source: lowering
+            .package
+            .wire()
+            .ok_or(OracleGenerationError::ContractPackageUnavailable)?
+            .package
+            .source
+            .clone(),
         claims,
         pending,
     })

@@ -147,10 +147,10 @@ use crate::oracle::operator_catalog::IntegerOperator;
 use crate::oracle::{classify_lowering_failure, direct_unsupported_form, LoweringFailure};
 use quire_contract_model::{
     ApplicationOperator, CheckedNodeId, CheckedNodeKind, CheckedNodeTag, CheckedPackageIncomplete,
-    CheckedPackageReadLimits, CheckedPackageRefusal, CheckedPackageV2, CheckedSemanticId,
-    CheckedSemanticNodeV2, CheckedSourceMapEntry, CheckedTerm, CompleteLoweringProfileV2,
-    CompleteLoweringRecordV2, ContractDependencies, ContractFeatureRecordV1,
-    ContractPackageReadResult, ContractPackageV1, ContractPackageWireV1, ContractReachedClosureV1,
+    CheckedPackageReadLimits, CheckedPackageRefusal, CheckedPackageV2, CheckedSemanticNodeV2,
+    CheckedSourceMapEntry, CheckedTerm, CompleteLoweringProfileV2, CompleteLoweringRecordV2,
+    ContractDependencies, ContractFeatureRecordV1, ContractPackageReadResult, ContractPackageV1,
+    ContractPackageWireV1, ContractReachedClosureV1, ContractSourceV1,
     ContractUnsupportedSourceKindError, LiteralKind, TemporalForm,
 };
 use quire_contract_runtime::exact as rt;
@@ -1275,7 +1275,7 @@ pub enum ExactFunctionRefusal {
     /// Selected external targets require a separate resolver.
     SelectedDependencyUnsupported {
         /// Ordered `(package_id, target_node_id)` pairs from the admitted closure.
-        references: Vec<(CheckedSemanticId, CheckedNodeId)>,
+        references: Vec<(Box<str>, CheckedNodeId)>,
     },
     /// The item's `(call node id, function, argument node ids)` triple was
     /// requested more than once. The claim map records exactly one
@@ -1494,11 +1494,11 @@ pub struct GeneratedExactFunctionClaim {
     /// Generated oracle function name.
     pub oracle_symbol: String,
     /// Identity of the one Contract IR package that admitted this claim.
-    pub contract_package_identity: CheckedSemanticId,
+    pub contract_package_identity: ContractSourceV1,
     /// Exact requested node key.
     pub node_id: CheckedNodeId,
     /// Package id.
-    pub package_id: CheckedSemanticId,
+    pub package_id: ContractSourceV1,
     /// Semantic type key of the `call` expression node.
     pub semantic_type: CheckedNodeId,
     /// Exact source correspondence.
@@ -3188,7 +3188,7 @@ pub fn generate_exact_function_oracles(
     }
 
     let claim_map = ClaimMap {
-        package_id: package.wire().package.source.package_id.clone(),
+        source: package.wire().package.source.clone(),
         blocked: Vec::new(),
         items: claims,
     };
@@ -3427,9 +3427,9 @@ fn item_disposition<'a>(
         stem,
         GeneratedExactFunctionClaim {
             oracle_symbol: String::new(),
-            contract_package_identity: package.identity().clone(),
+            contract_package_identity: package.wire().package.source.clone(),
             node_id: item.call_node_id.clone(),
-            package_id: package.wire().package.source.package_id.clone(),
+            package_id: package.wire().package.source.clone(),
             semantic_type: node.semantic_type.clone(),
             source_map: occurrences.to_vec(),
             claims: closure.claims,
@@ -4195,15 +4195,22 @@ mod tests {
 
     #[test]
     fn generated_function_claim_serializes_package_identity_and_requested_key() {
-        let identity: CheckedSemanticId = serde_json::from_value(serde_json::json!({
-            "domain": "quire.contract-ir.semantic/v1",
-            "algorithm": "sha256",
-            "digest": "a".repeat(64),
+        let identity: ContractSourceV1 = serde_json::from_value(serde_json::json!({
+            "name": "test",
+            "lock": {
+                "sources": [],
+                "edition": {"role":"edition", "definition":{"authority":"test", "identity":"edition"}},
+                "profile_selections": [],
+                "definition_selections": [],
+                "required_features": [],
+                "dependency_selections": []
+            }
         }))
         .expect("package identity");
         let node_id: CheckedNodeId = serde_json::from_value(serde_json::json!({
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "b".repeat(64),
+            "package": "test",
+            "path": ["b"],
+            "ordinal": 0,
         }))
         .expect("requested key");
         let generated = GeneratedExactFunctionClaim {

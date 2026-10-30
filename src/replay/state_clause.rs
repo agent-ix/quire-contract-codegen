@@ -115,7 +115,7 @@ pub struct StateClauseReplayInputs<'a> {
     /// natively over the pre state.
     pub post_state: Vec<(String, i64)>,
     /// The identity of the obligation the counterexample falsified.
-    pub obligation_identity: [u8; 32],
+    pub obligation_identity: qsl_replay::ObligationIdentity,
 }
 
 /// Why the framed model declaration does not supply the requested field list.
@@ -608,7 +608,6 @@ impl StateClauseReplay {
             &clause,
         )
         .map_err(StateClauseReplayError::CallSite)?;
-        let package_id = located.package_id;
         let site = located.site;
         if checked_node_key(&clause_node).as_ref() != Some(&site.node) {
             return Err(StateClauseReplayError::ClauseSelectionMismatch);
@@ -685,10 +684,9 @@ impl StateClauseReplay {
             )
             .collect::<Vec<_>>();
         let wire = run.wire(
-            package_id,
             RequestTargetWire::state_clause(selected.clone()),
             ReplaySource::Witness(witness.clone()),
-            obligation_identity,
+            obligation_identity.clone(),
             &documents,
         );
         let packet = WitnessPacket {
@@ -696,8 +694,6 @@ impl StateClauseReplay {
             occurrence_key: Some(site.occurrence),
             clause_node: Some(site.node),
             replay_target: ReplayTargetMembers::state_clause(selected),
-            package_id: Some(wire.package_id.clone()),
-            source_digests: Some(wire.source_digests.clone()),
             profile_selections: Some(Vec::new()),
             run_limits: Some(run.accounting_limits),
             declared_domains: Some(domains),
