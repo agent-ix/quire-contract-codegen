@@ -449,6 +449,7 @@ struct DocumentIdentityRead {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct DocumentRefRead {
     authority: String,
     identity: String,
