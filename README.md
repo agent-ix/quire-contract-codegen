@@ -125,9 +125,9 @@ It is used by quire-driver (private) and quire-integration (private).
 
 ## Building and testing
 
-The Rust version is pinned in `rust-toolchain.toml` (1.98.1). The real-Kani tests
-need `make tools` once per machine, and the full gate reads checked-package
-fixtures from a `quire-specification` (private) checkout:
+The minimum Rust version is declared by `rust-version` in `Cargo.toml`. The
+real-Kani tests need `make tools` once per machine, and the full gate reads
+checked-package fixtures from a `quire-specification` (private) checkout:
 
 ```bash
 make ci QSPEC_DIR=/path/to/quire-specification
