@@ -17,6 +17,8 @@ pub(crate) mod checked_graph;
 pub(crate) mod equality;
 // Implements: FR-021
 pub(crate) mod function;
+// One typed direct-integer comparison lowerer for V2 consumers.
+pub(crate) mod integer_comparison;
 // Implements: FR-014
 pub(crate) mod scalar;
 // Shared typed identities for admitted V2 operator consumers.

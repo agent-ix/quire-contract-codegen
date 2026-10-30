@@ -2447,6 +2447,7 @@ pub(super) fn scalar_profile() -> CompleteLoweringProfileV2 {
             authority: "agent-ix".into(),
             identity: "quire.codegen.exact-scalar/v1".into(),
         },
+        required_source_selections: Vec::new(),
         supported_tags: BTreeSet::from(SCALAR_LOWERING_SUPPORTED_TAGS),
         require_bounds: true,
         work_limit: SCALAR_LOWERING_WORK_LIMIT,

@@ -216,6 +216,7 @@ pub(super) fn generate_items_with_libraries(
             authority: "agent-ix".into(),
             identity: "quire.codegen.composite-equality/v1".into(),
         },
+        required_source_selections: Vec::new(),
         supported_tags: [
             CheckedNodeTag::ScalarType,
             CheckedNodeTag::CompositeType,

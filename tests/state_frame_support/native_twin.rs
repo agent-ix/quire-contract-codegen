@@ -13,10 +13,11 @@
 use super::model;
 
 use qsl_replay::{
-    call_site, CallSiteRefusal, ClaimedChange, ClauseName, ClauseSite, DependencyInput,
-    DigestDomain, DigestRecord, DocumentRef, FrameReplayResult, Identifier, OccurrenceKey,
-    OperationName, OperationSite, ReplayLimits, ReplayRefusal, ScalarLimits, SelectedObject,
-    SourceIdentity, WitnessEnvelope, DEFAULT_REPLAY_INPUT_BYTES,
+    call_site, compile_package_with_execution_points, CallSiteRefusal, ClaimedChange, ClauseName,
+    ClauseSite, DependencyInput, DigestDomain, DigestRecord, DocumentRef, FrameReplayResult,
+    Identifier, OccurrenceKey, OperationName, OperationSite, ReplayLimits, ReplayRefusal,
+    ScalarLimits, SelectedObject, SourceIdentity, StageLimits, WitnessEnvelope,
+    DEFAULT_REPLAY_INPUT_BYTES,
 };
 use quire_contract_codegen::{
     parse_assertion_playback, DependencyLock, DocumentLabel, FrameReplay, FrameReplayError,
@@ -24,8 +25,8 @@ use quire_contract_codegen::{
     StateFrameIdentity, StateObjectAddress,
 };
 use quire_contract_model::{
-    CheckedNodeId, CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2,
-    CheckedPackageV2ReadResult,
+    CheckedNodeId, CheckedOccurrenceRole, CheckedPackageEvidence, CheckedPackageReadLimits,
+    CheckedPackageV2, CheckedPackageV2ReadResult, ExecutionPoint,
 };
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -730,6 +731,31 @@ impl Twin {
         Self { unit, domain }
     }
 
+    /// One QSL-authored numeric clause at the requested state-clause kind. Its condition has
+    /// valuations on both sides, so the V2 numeric runner can construct a broad population.
+    pub fn numeric_clause(kind: &str, name: &str) -> Self {
+        let mut twin = Self::build(&["balance"], &[(name, "deposit", "balance")], 0);
+        let source = String::from_utf8(twin.unit).expect("native unit");
+        let original = format!(
+            "post {name} using v on Bank::Account::deposit {{ self.balance >= pre(self.balance) }}"
+        );
+        let selected = match kind {
+            "invariant" => format!(
+                "invariant {name} using v on Bank::Account at current {{ self.balance >= 500 }}"
+            ),
+            "pre" => {
+                format!("pre {name} using v on Bank::Account::deposit {{ self.balance >= 500 }}")
+            }
+            "post" => {
+                format!("post {name} using v on Bank::Account::deposit {{ self.balance >= 500 }}")
+            }
+            other => panic!("unsupported test clause kind: {other}"),
+        };
+        assert_eq!(source.matches(&original).count(), 1, "one source clause");
+        twin.unit = source.replacen(&original, &selected, 1).into_bytes();
+        twin
+    }
+
     /// The `OperationSite` `qsl_replay::call_site` returns for `Bank::Account::<operation>`,
     /// read directly and not through the crate under test.
     pub fn operation_site(&self, operation: &str) -> Result<OperationSite, Box<CallSiteRefusal>> {
@@ -751,6 +777,92 @@ impl Twin {
     /// ids QSL itself names.
     pub fn emitted_package(&self, clause: &str) -> (CheckedPackageV2, CheckedNodeId) {
         self.emitted_package_with_model(clause, None)
+    }
+
+    /// Compile one package with QSL-accepted points and locate each authored clause by its
+    /// admitted claim source region. A point changes the clause node's identity, so an unpointed
+    /// `call_site` node id cannot be reused for this package.
+    pub fn emitted_package_with_execution_points(
+        &self,
+        points: &[(&str, ExecutionPoint)],
+    ) -> (CheckedPackageV2, Vec<CheckedNodeId>) {
+        let selected = points
+            .iter()
+            .map(|(name, point)| ((*name).to_owned(), point.clone()))
+            .collect();
+        let compiled = compile_package_with_execution_points(
+            SourceIdentity::new(AUTHORITY, IDENTITY, "git", "1"),
+            IDENTITY,
+            &self.unit,
+            [self.domain.as_slice()],
+            &DependencyInput::default(),
+            &selected,
+            StageLimits::default(),
+            ReplayLimits::default(),
+        )
+        .expect("QSL accepts the authored clause points");
+        let mut evidence = CheckedPackageEvidence::new();
+        evidence
+            .insert_domain_package_document(hex(&jcs_digest(&self.domain)), self.domain.clone())
+            .expect("retain emitted model document");
+        evidence.support_feature("quire.value.complete/v1");
+        let package = match CheckedPackageV2::read(
+            compiled.bytes(),
+            CheckedPackageReadLimits::bounded(),
+            &evidence,
+        ) {
+            CheckedPackageV2ReadResult::Admitted(package) => *package,
+            other => panic!("QSL's pointed package is admitted: {other:?}"),
+        };
+        let source = std::str::from_utf8(&self.unit).expect("native unit is UTF-8");
+        let clauses = points
+            .iter()
+            .map(|(name, _)| {
+                let authored = ["invariant", "pre", "post"]
+                    .into_iter()
+                    .filter_map(|kind| {
+                        let prefix = format!("{kind} {name} using");
+                        source.find(&prefix).map(|offset| (kind, offset))
+                    })
+                    .collect::<Vec<_>>();
+                assert_eq!(authored.len(), 1, "one authored clause named {name}");
+                let declaration = authored[0].1;
+                let body = source[declaration..]
+                    .find('{')
+                    .expect("authored clause body")
+                    + declaration
+                    + 1;
+                let body = body
+                    + source[body..]
+                        .find(|character: char| !character.is_whitespace())
+                        .expect("nonempty clause body");
+                let body = u64::try_from(body).expect("source offset fits wire domain");
+                let matches = package
+                    .source_map()
+                    .iter()
+                    .filter(|entry| {
+                        entry.role == CheckedOccurrenceRole::Claim
+                            && entry.regions.iter().any(|region| {
+                                region.source.authority.as_ref() == AUTHORITY
+                                    && region.source.identity.as_ref() == IDENTITY
+                                    && region.start <= body
+                                    && region.end > body
+                            })
+                    })
+                    .collect::<Vec<_>>();
+                assert_eq!(matches.len(), 1, "one QSL claim at {name}'s source region");
+                let clause = &matches[0].node_id;
+                let node = package
+                    .graph()
+                    .nodes
+                    .iter()
+                    .find(|node| &node.node_id == clause)
+                    .expect("source-map node in admitted graph");
+                assert_eq!(node.semantic_form.as_ref(), "state_clause");
+                clause.clone()
+            })
+            .collect();
+        (package, clauses)
     }
 
     /// Start with QSL's emitted graph and replace its selected model document. IR's public

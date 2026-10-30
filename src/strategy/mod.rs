@@ -12,3 +12,11 @@ pub(crate) mod campaign;
 // Tri-state harness generation; V1 input.
 // Implements: FR-002
 pub(crate) mod harness;
+// Typed V2 direct-comparison admission; independent of V1 bound projections.
+pub(crate) mod v2_comparison;
+// V2 constructive population and complete deterministic census.
+pub(crate) mod v2_population;
+// Atomic V2 numeric strategy generation and campaign runner source.
+pub(crate) mod v2_numeric;
+// Implements: FR-011-AC-13
+pub(crate) mod v2_selected_claim;

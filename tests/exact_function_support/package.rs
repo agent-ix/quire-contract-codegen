@@ -46,6 +46,7 @@ pub fn admitted_function_contract(
             authority: "agent-ix".into(),
             identity: "quire.codegen.exact-function/v1".into(),
         },
+        required_source_selections: Vec::new(),
         supported_tags: BTreeSet::from([
             CheckedNodeTag::ScalarType,
             CheckedNodeTag::CompositeType,

@@ -357,6 +357,7 @@ fn admitted_profile() -> CompleteLoweringProfileV2 {
             authority: "agent-ix".into(),
             identity: "quire.codegen.composite-equality/v1".into(),
         },
+        required_source_selections: Vec::new(),
         supported_tags: [
             CheckedNodeTag::ScalarType,
             CheckedNodeTag::CompositeType,
@@ -480,6 +481,7 @@ fn tc_029_ac32_direct_control_case_refusal_preserves_healthy_equality_sibling() 
                 authority: "agent-ix".into(),
                 identity: "quire.codegen.composite-equality/v1".into(),
             },
+            required_source_selections: Vec::new(),
             supported_tags: BTreeSet::from([
                 CheckedNodeTag::ScalarType,
                 CheckedNodeTag::CompositeType,
@@ -1772,6 +1774,7 @@ fn tc_029_ac13_declaration_keys_are_the_reached_v2_node_ids() {
                 authority: "agent-ix".into(),
                 identity: "quire.codegen.composite-equality/v1".into(),
             },
+            required_source_selections: Vec::new(),
             supported_tags: CheckedNodeTag::ALL.iter().copied().collect::<BTreeSet<_>>(),
             require_bounds: false,
             work_limit: 10_000,
