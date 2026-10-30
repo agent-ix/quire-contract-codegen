@@ -7,12 +7,47 @@ use quire_contract_codegen::{
     OracleGenerationError,
 };
 use quire_contract_model::{
-    CheckedNodeId, CheckedNodeTag, CheckedPackageEvidence, CheckedPackageReadLimits,
-    CheckedPackageV2, CheckedPackageV2ReadResult, CompleteLoweringProfileV2, ContractDependencies,
-    ContractPackageReadResult, ContractPackageWireV1, LoweringProfileRef,
+    CheckedNodeId, CheckedNodePathSegment, CheckedNodeTag, CheckedPackageEvidence,
+    CheckedPackageReadLimits, CheckedPackageV2, CheckedPackageV2ReadResult,
+    CompleteLoweringProfileV2, ContractDependencies, ContractPackageReadResult,
+    ContractPackageWireV1, LoweringProfileRef,
 };
+use quire_exact::{NodeKey, PathSegment};
 
 use super::admitted_enum_fixture as fixture;
+
+fn node_key(id: &CheckedNodeId) -> NodeKey {
+    let path = id
+        .path
+        .iter()
+        .map(|segment| match segment {
+            CheckedNodePathSegment::Name(name) => PathSegment::Text(name.to_string()),
+            CheckedNodePathSegment::Node(child) => PathSegment::Node(node_key(child)),
+        })
+        .collect();
+    NodeKey::new(id.package.to_string(), path, id.ordinal).expect("admitted structural node")
+}
+
+fn foreign_context() -> qsl_replay::AdmittedCompilation {
+    qsl_replay::compile_admitted(
+        qsl_replay::CompileUnit {
+            source: qsl_replay::SourceIdentity::new(
+                "test",
+                "foreign-enums.native",
+                "git",
+                "fixture",
+            ),
+            package_name: "foreign-enums".to_owned(),
+            path: "foreign-enums.native",
+            bytes: fixture::SOURCE.as_bytes(),
+        },
+        [],
+        &qsl_replay::DependencyInput::default(),
+        qsl_replay::StageLimits::default(),
+        qsl_replay::ReplayLimits::default(),
+    )
+    .expect("independent foreign enum source compiles")
+}
 
 const CASES: [(&str, &str, EqualityOperatorKind); 4] = [
     ("ordered_same", "Ordered", EqualityOperatorKind::Equal),
@@ -126,7 +161,7 @@ fn enum_items(
             .graph()
             .nodes
             .iter()
-            .find(|node| node.node_id.digest.as_ref() == admitted.key().to_string())
+            .find(|node| &node_key(&node.node_id) == admitted.key())
             .expect("IR retains that exact admitted enum declaration")
             .node_id
             .clone();
@@ -484,23 +519,20 @@ fn assert_no_oracle(oracles: &CompositeEqualityOracles) {
 #[test]
 fn public_generator_rejects_another_authentic_source_context() {
     let compiled = fixture::compile(INTEGER_SOURCE);
-    let other = fixture::compile(fixture::SOURCE);
+    let other = foreign_context();
     let package = checked(&compiled, &[]);
     let (item, _) = integer_item(&package);
-    let expected = compiled.context().package_id().record();
-    let actual = other.context().package_id().record();
+    let expected = compiled.context().package_name();
+    let actual = other.context().package_name();
     assert_ne!(expected, actual, "the two authentic source packages differ");
     let result = generate_items(&package, Some(other.context()), &[item], &[]);
     match result {
         Err(OracleGenerationError::ContextPackageMismatch {
             expected: found_expected,
-            actual_domain,
-            actual_digest,
+            actual: found_actual,
         }) => {
-            assert_eq!(found_expected.domain.as_ref(), expected.domain().as_str());
-            assert_eq!(found_expected.digest.as_ref(), expected.hex());
-            assert_eq!(actual_domain, actual.domain().as_str());
-            assert_eq!(actual_digest, actual.hex());
+            assert_eq!(found_expected.as_ref(), expected.as_str());
+            assert_eq!(found_actual, actual.to_string());
         }
         other => {
             panic!("expected whole-generation context refusal without artifacts, got {other:?}")

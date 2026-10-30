@@ -2547,9 +2547,12 @@ mod tests {
             "\nfunction integer_same using v(a: Integer,b: Integer): Boolean pure { a = b }\n"
         );
         let compiled = compile_admitted(
-            SourceIdentity::new("a", "u", "git", "1"),
-            "recursive.native",
-            source.as_bytes(),
+            qsl_replay::CompileUnit {
+                source: SourceIdentity::new("a", "u", "git", "1"),
+                package_name: "recursive".to_owned(),
+                path: "recursive.native",
+                bytes: source.as_bytes(),
+            },
             [],
             &DependencyInput::default(),
             StageLimits::default(),
@@ -2601,9 +2604,17 @@ mod tests {
             "function f using v(a: Pair,b: Pair): Boolean pure { a = b }\n",
         );
         let compiled = qsl_replay::compile_admitted(
-            qsl_replay::SourceIdentity::new("test", "numeric-member.native", "git", "fixture"),
-            "numeric-member.native",
-            source.as_bytes(),
+            qsl_replay::CompileUnit {
+                source: qsl_replay::SourceIdentity::new(
+                    "test",
+                    "numeric-member.native",
+                    "git",
+                    "fixture",
+                ),
+                package_name: "numeric-member".to_owned(),
+                path: "numeric-member.native",
+                bytes: source.as_bytes(),
+            },
             [],
             &qsl_replay::DependencyInput::default(),
             qsl_replay::StageLimits::default(),
@@ -2994,9 +3005,12 @@ mod tests {
             "genuine large fixture records={records}; optional={optional}; source_bytes={source_bytes}; token_bound={token_bound}; syntax_nodes={syntax_nodes}"
         );
         let admitted = compile_admitted(
-            SourceIdentity::new("test", "deep.native", "git", "fixture"),
-            "deep.native",
-            source.as_bytes(),
+            qsl_replay::CompileUnit {
+                source: SourceIdentity::new("test", "deep.native", "git", "fixture"),
+                package_name: "deep".to_owned(),
+                path: "deep.native",
+                bytes: source.as_bytes(),
+            },
             [],
             &DependencyInput::default(),
             stages,
@@ -3463,8 +3477,11 @@ mod tests {
         const DEPTH: usize = 2_048;
         let ids: Vec<CheckedNodeId> = (0..=DEPTH)
             .map(|index| CheckedNodeId {
-                domain: "quire.checked-semantic-node/v1".into(),
-                digest: format!("{:064x}", index + 1).into(),
+                package: "deep".into(),
+                path: vec![quire_contract_model::CheckedNodePathSegment::Name(
+                    format!("n{index:04}").into(),
+                )],
+                ordinal: 0,
             })
             .collect();
         let nodes: Vec<FixtureNode> = (0..=DEPTH)
@@ -4310,7 +4327,7 @@ fn deep_matches_shallow() {
     fn quantity() -> ValueType {
         ValueType::Quantity(
             quire_semantic_value::unit::compound_unit_id(
-                core::iter::empty::<([u8; 32], &exact::Integer)>(),
+                core::iter::empty::<(&exact::NodeKey, &exact::Integer)>(),
                 quire_semantic_value::semantic_node::IDENTITY_LIMITS,
             )
             .expect("the actual owner's empty compound unit is dimensionless"),
@@ -4318,7 +4335,10 @@ fn deep_matches_shallow() {
     }
 
     fn reference() -> ValueType {
-        ValueType::Reference(exact::EffectiveId::from_digest([7; 32]))
+        ValueType::Reference(exact::EffectiveId::new(
+            None,
+            exact::OriginalDeclarationKey::new("test", "reference"),
+        ))
     }
 
     fn node_id(digit: char) -> CheckedNodeId {
@@ -4507,9 +4527,12 @@ fn deep_matches_shallow() {
         let requests = [request('1'), request('2')];
         let mut claims = vec![generated_claim('1'), generated_claim('2')];
         let admitted = qsl_replay::compile_admitted(
-            qsl_replay::SourceIdentity::new("test", "render-boundary.native", "git", "fixture"),
-            "render-boundary.native",
-            b"language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\ndimension Length;\nunit m : Length = rational(1, 1);\nfunction same using v(a: Quantity<m>, b: Quantity<m>): Boolean pure { a = b }\n",
+            qsl_replay::CompileUnit {
+                source: qsl_replay::SourceIdentity::new("test", "render-boundary.native", "git", "fixture"),
+                package_name: "render-boundary".to_owned(),
+                path: "render-boundary.native",
+                bytes: b"language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\ndimension Length;\nunit m : Length = rational(1, 1);\nfunction same using v(a: Quantity<m>, b: Quantity<m>): Boolean pure { a = b }\n",
+            },
             [], &qsl_replay::DependencyInput::default(), qsl_replay::StageLimits::default(),
             qsl_replay::ReplayLimits::default(),
         ).expect("the render boundary has a genuine owner-admitted quantity unit");
@@ -4572,7 +4595,7 @@ fn deep_matches_shallow() {
             })
             .collect();
         let mut source = SourceBuilder {
-            expected_package: Some(package),
+            expected_package: Some(package.into()),
             ..SourceBuilder::default()
         };
         let result = render_and_emit(
