@@ -291,8 +291,28 @@ unsuccessfully exited process, and the success report with no cover property are
 inconclusive with their own reasons. The failed unwinding assertion is
 inconclusive as an exhausted bound and not falsified, and the succeeded
 unwinding check in a listing is verified. The run with zero successful checks is inconclusive
-with the vacuous-proof reason (FR-017-AC-13), unless it is a precondition harness, which its
-cover summary decides.
+with the vacuous-proof reason (FR-017-AC-13), unless it is a non-collection precondition harness with no assertion, which its
+cover summary decides. For a collection precondition identified by its typed V2 clause identity's
+precondition kind and admitted collection-quantifier marker, bind the generated
+source digest and the unique artifact-relative line of its FR-015-AC-99
+Boolean-completion assertion. Delete or replace that assertion at the same line
+while preserving the cover: an unchanged seal gives `HarnessNotInCrate` for
+zero byte-identical occurrences; a mutated retained seal gives
+`HarnessProvenanceMismatch`. Embed the intact artifact twice and require
+`BoundTotalityAssertionMismatch`. Through the in-crate generated-harness seam,
+construct two valid-seal cases with one byte-identical crate occurrence:
+one binds the wrong source digest while retaining the right assertion line,
+and the other binds the wrong assertion line while retaining the right digest.
+Each case returns `BoundTotalityAssertionMismatch` before launch. Exercise all
+these refusals through the single-run, readonly and batch entries before
+launch; the batch refuses the whole call. With intact source, compute the
+line offset of its sole occurrence in `src/lib.rs`. A satisfied cover and zero
+successful class-`assertion` checks at the converted `{ file: src/lib.rs, line }`
+is inconclusive with the vacuous-proof reason. An unrelated successful assertion
+at the same line number in another file, another check class at the right file
+and line, and an unrelated assertion elsewhere in `src/lib.rs` each fail to
+satisfy the bound check. A successful assertion at the exact file and converted
+line is required before the cover can classify the run as verified. This collection control is planned under IR-1091.
 
 For a caller Text-admission harness, the same classifications apply while the
 evidence remains bound to its caller identity and harness path, never a

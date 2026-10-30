@@ -134,7 +134,7 @@ warning naming its capability kind from `quire.capability-kind/v1` (QSpec FR-290
   | Outcome | Replay settlement | Result |
   |---|---|---|
   | `verified`, with `n` SUCCESS checks, `n` at least one | none | `Proved { success_checks: n }` |
-  | `inconclusive` with the vacuous-proof reason (zero SUCCESS checks) | none | `Proved { success_checks: 0 }` |
+  | `inconclusive` with the vacuous-proof reason (the required proof check absent, even if cover or unrelated SUCCESS checks are reported) | none | `Proved { success_checks: 0 }` |
   | `cover-unsatisfied` | none | `Proved { success_checks: 0 }` |
   | `falsified` | reproduced | `Refuted` |
   | `falsified` | disagreement | `Inconclusive(InconclusiveCause::ReplayParity)`, carrying the `DisagreementCause` |
@@ -247,7 +247,7 @@ while keeping the original backend classification:
 |---|---|---|
 | 1 | any outcome with `refinement_failed` / `Refinement::Disagreed` | `Failed`, with CG-owned `CgDefect` cause |
 | 2 | verified shadow with `CeilingReached` refinement | `Incomplete(ResourceExhausted)`, category incomplete |
-| 3 | vacuous-proof `inconclusive` or `cover-unsatisfied`, zero SUCCESS checks | ordinary `Proved { success_checks: 0 }`, category inconclusive with `KaniVacuousProof` |
+| 3 | vacuous-proof `inconclusive` or `cover-unsatisfied`, regardless of the evidence SUCCESS count | ordinary `Proved { success_checks: 0 }`, category inconclusive with `KaniVacuousProof` |
 | 4 | verified shadow, nonzero count n, `Exhausted` and every QSL-declared bound key covered | `Proved { success_checks: n }` |
 | 5 | remaining completed verified shadow with nonzero count | `Tested` |
 

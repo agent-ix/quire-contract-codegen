@@ -54,19 +54,46 @@ must not be reported as an IR `requires_bound`. Separately use an admitted,
 finite-cardinality field whose element type is unbounded `Integer`; require IR
 `requires_bound` naming the element type and no harness.
 
-For each supported collection claim, inspect the generated `kani::any()`
-draws and assumptions. Check both cardinality endpoints and every intervening
+For each supported function-body and invariant collection claim, inspect the
+generated `kani::any()` draws and assumptions. Check both cardinality endpoints and every intervening
 length, both inclusive `IntRange` endpoints and intervening values, both
-Boolean values, and preservation of declared order and uniqueness. Replay the
-same authored function with `qsl_replay::replay` as the independent native
-oracle and compare its result with the generated claim's assertion for the
-same input. Seed a claim or subject defect and require installed Kani to report
-`Falsified` with an in-domain playback; the healthy case must be `Verified`
-with its final cover satisfied. Refuse an unbounded cardinality, unbounded
+Boolean values, and preservation of declared order and uniqueness. For a function-body control, replay the same authored function with
+`qsl_replay::replay` as the independent native oracle and compare its result
+with the generated claim's assertion for the same input. For a falsified
+invariant, use `qsl_replay::replay_state_clause` with a snapshot observation. Seed a claim or subject defect and require installed Kani to report
+`Falsified` with an in-domain playback; the healthy direct-assertion case must
+be `Verified` with its final cover satisfied. Refuse an unbounded cardinality, unbounded
 element type, unsupported collection form or unsupported `forall`/`exists`
 body, malformed or absent selected declaration, and an over-ceiling domain.
 Check typed `requires_bound` versus `unsupported`, no emitted harness for each
 refusal, and one disposition per item in a mixed request.
+
+For FR-015-AC-96/99 (IR-1091), author precondition and postcondition
+collection clauses over the same QSL-emitted, IR-admitted OrderedSet field as a
+function-body and invariant control. Submit one item per clause through the
+public V2 request. Require the same inclusive cardinality, element, order and
+uniqueness assumptions for every drawn input kind, with no duplicate standalone
+proof. The precondition harness asserts that every drawn evaluation completes
+a Boolean, permitting both true and false, and separately covers a true case;
+an impossible but total precondition reports `CoverUnsatisfied`. Seed a
+precondition oracle mutant that yields `Undefined`, `Refused` or `Incomplete`
+on an in-domain draw and require a falsified totality assertion, never an
+assumption. Compare its native result with QSL's public clause-evaluation
+facade once available; counterexample replay alone cannot classify true, false and incomplete
+evaluation across the admitted domain.
+The postcondition harness draws the pre-state and operation parameters, assumes
+every supported sibling precondition and refuses if any sibling is unsupported,
+then calls the subject. It asserts produced post-state cardinality, element
+domain, order and uniqueness, as well as the authored postcondition, and covers
+non-vacuity. Seed subjects that produce a duplicate, misordered, below-minimum or
+over-maximum cardinality, or out-of-range collection; each must falsify with
+in-domain pre-state playback
+and none may be assumed away. The invariant keeps a direct assertion. Replay
+a falsified invariant through `qsl_replay::replay_state_clause` with a snapshot
+observation, and a falsified postcondition with an invocation plus pre/post
+snapshots. A healthy postcondition verifies; an authored postcondition or
+subject mutant falsifies with an in-domain playback. These
+pre/post controls are planned and receive no current proof credit.
 
 For FR-015-AC-128 (IR-1091), author a QSL invariant and a constraint clause
 with collection quantifiers over the same bounded field, emit the package through
@@ -291,6 +318,14 @@ expectation rejects a helper and oracle that agree on a wrong result
 Four distinct harnesses carry their bounds; no assumption
 excludes an undefined, refused or incomplete outcome; the unbounded, the
 unsatisfiable and the caller-declared obligations are refused with no harness.
+For collection claims, the function-body and invariant direct harnesses
+assert their authored bodies over the full symbolic domain. The precondition asserts Boolean completion on every draw and separately
+covers a true case; it does not assert universal truth. The postcondition calls
+the subject after all supported sibling preconditions (refusing unsupported
+siblings) and asserts produced post-state cardinality, element domain, order
+and uniqueness as well as its authored clause. These pre/post
+results remain planned under IR-1091 and are not credited by the current
+function-body evidence.
 For the collection claim, lower `0` with no finite upper bound is admitted by
 QSL and settles as IR `requires_bound`; lower greater than `0` with no finite
 upper bound is rejected by QSL assembly as `unknown_required_feature`/

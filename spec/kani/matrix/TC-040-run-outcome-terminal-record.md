@@ -67,7 +67,8 @@ with a reproduced replay. Composite parity uses a distinct typed input and plann
 
 1. `Proved { success_checks: 3 }` and `Refuted` (FR-029-AC-1).
 2. Both are `Proved { success_checks: 0 }`, category `inconclusive`, cause `KaniVacuousProof`
-   (FR-029-AC-2).
+   (FR-029-AC-2), including a vacuous collection-precondition run whose evidence records
+   cover or unrelated SUCCESS checks but no successful check at its bound totality line.
 3. `Incomplete(TimedOut)`, `Incomplete(ResourceExhausted)` and `Incomplete(ResourceExhausted)`
    (FR-029-AC-3).
 4. `Failed` (FR-029-AC-4).
