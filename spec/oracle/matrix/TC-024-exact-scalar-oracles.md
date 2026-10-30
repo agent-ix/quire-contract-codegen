@@ -24,8 +24,14 @@ byte-deterministic, and agree with direct runtime execution. Agreement with the 
    descriptor needs, plus unlowered, unbounded, mismatched, mis-bounded,
    duplicate and non-scalar nodes and unsupported and literal operands.
 2. Generate twice and with a permuted request; compare bytes with each other.
-3. Inspect each claim-map entry, its ordering, its checked bounds and its
-   `ir_confirmed` or `caller_declared` provenance, and each refusal; request a
+3. Inspect each claim-map entry for the exact requested structural
+   `CheckedNodeId`, the admitted `ContractSourceV1` package name and complete
+   lock, originating checked-package structural `package_id`, admitted
+   `source_map`, typed `claims` and `bounds`, operation identity and
+   `ir_confirmed` or `caller_declared` provenance. For quantity conversion,
+   assert the exact structural `type_argument` type node ID; assert no
+   generated scalar claim serializes `ir_id` or substitutes a digest
+   (FR-014-AC-56). Inspect ordering, checked bounds and each refusal; request a
    node under a descriptor naming a different catalogued operation; request a
    node under a
    descriptor naming a different law; request a node under a descriptor whose
@@ -368,7 +374,7 @@ by quire-integration IR-842.
 ## V2 clause integer literal construction
 
 This subsection verifies [FR-014](../functional/FR-014-exact-scalar-oracles.md)'s
-FR-014-AC-53. These controls are planned until implemented; this spec change
+FR-014-AC-57. These controls are planned until implemented; this spec change
 claims no executed coverage or Kani result.
 
 1. Through public CG generation over strict-reader-admitted V2 clause packages,
@@ -382,7 +388,7 @@ claims no executed coverage or Kani result.
    alone do not establish public-generation behavior. Use authentic QSL-emitted
    fixtures where its source checker admits the literal value and shape;
    separately identify controls admitted through the owner's public candidate
-   and reader APIs after rekeying a general literal. The latter establish CG
+   and reader APIs with a producer-assigned structural ID. The latter establish CG
    behavior for reader-admitted inputs, not QSL source emission of those values.
 2. Exercise i64 MIN-1 and MAX+1, i128 MIN and MAX, and exact integers beyond i128.
    A QSL source-checker refusal before CG does not test CG's fallback; use
@@ -394,9 +400,13 @@ claims no executed coverage or Kani result.
    `9223372036854775808`: only the former uses the primitive constructor; the
    latter retains its positive parsed child and the same owner negate call.
    No expression folding or conversion of the child's domain is permitted.
-3. Keep owner-reader refusals, including malformed-bound and stale literal
-   identity controls, distinct from admitted general integer leaves. Preserve
-   each existing refusal without adding a new reader or CG refusal. For any
+3. Keep owner-reader refusals, including malformed-bound controls, distinct
+   from admitted general integer leaves. Mutate a literal body while keeping
+   its valid producer-assigned structural key, then compare the changed body
+   with the expected admitted source body or checked shape at the authority
+   boundary; detect the mismatch without claiming a stale-key reader refusal.
+   Preserve each applicable reader refusal without adding a new reader or CG
+   refusal. For any
    general leaf admitted with an ineligible spelling, including `+1`, `01`,
    `-0`, surrounding whitespace or invalid digits where the owner reader
    admits them, assert that public CG retains the original runtime canonical

@@ -67,6 +67,20 @@ function node/model to confirm distinct producer ordinals, and replay a two-conj
 one kind to confirm one obligation. Perturb an unrelated declaration and parameter order with the
 selected structural identity held fixed, then independently change the selected node, model and
 ordinal. Corrupt the complete occurrence key under a held identity and verify refusal.
+Build a replay request for a proved unit importing two selected libraries.
+Inspect `package.dependencies` for exactly one `DependencyEntryWire { identity,
+sources }` per lock selection in ascending identity order, each with the
+selection's complete exact source references and corresponding supplied bytes;
+assert there is no dependency `package_id` or lock wire field (FR-016-AC-29).
+Retain the independently admitted package/dependency source selection. Hold
+its imported identity and proved unit fixed while changing one replay request
+source reference to another valid provisioned source. Also remove, add,
+reorder and change an identity in request entries independently. Compare every
+request entry's identity and complete `sources` list against the admitted
+selection before QSL dispatch. Assert a typed CG dependency-selection mismatch
+refusal and no QSL replay call or verdict for each mismatch, without any
+same-identity source substitution. The unchanged request passes the guard
+(FR-016-AC-30).
 Build a replay
 package from a lock that selects one library identity twice and has no other defect (AC-24).
 
@@ -97,6 +111,14 @@ comment, blank-line, source-span and unrelated-declaration edits preserving node
 preserve identity. Different producer ordinals distinguish obligations on one node/model.
 Changed kind, domain or occurrence under held identity refuses before replay; the two-conjunct
 function under one requested kind has one obligation (FR-016-AC-26 to AC-28).
+The two-dependency request has exactly the sorted lock-selected identities and
+source references, with provisioned bytes and no dependency `package_id` or
+lock wire member (FR-016-AC-29). CG matches each request dependency identity
+and complete source-reference list to the independent admitted selection
+before dispatch. Every request-only mismatch, including another valid
+provisioned source under the same imported identity, yields a typed CG
+selection-mismatch refusal without QSL dispatch or a replay verdict; the
+unchanged request passes the guard (FR-016-AC-30).
 A lock whose only defect is a repeated dependency identity is refused with
 `DependencyLockError::Input`, code `invalid_package`, cause `conflicting-definition`, and the
 error has no `Duplicate` variant (AC-24, planned).
@@ -193,15 +215,11 @@ Replay-layer propagation of an executor fault (AC-12) is covered by
 `tc_026_an_executor_fault_remains_a_typed_replay_refusal`; the terminal mapping is
 covered by FR-029-AC-10.
 
-FR-016-AC-14 through AC-20 are implemented and tested in the default suite
-(`tests/it/skeleton_spine.rs`): `ReplayPackage::new` hands the lock's dependency
-selections to `qsl_replay::call_site` as its dependency input, and
-`ReplayPackage::request` fills the request's `package.dependencies` from the same
-lock. A unit that imports a locked dependency replays through `qsl_replay::replay`
-to a reproduced violation, and the same unit at an input the imported function
-holds settles `inconclusive`, so the dependency is evaluated and not assumed. An
-import with no lock selection is refused at the call site, a lock recording another
-`package_id` is refused by QSL as a dependency identity mismatch, and a lock
-selecting a library the unit does not import is refused by QSL as unselected.
-Libraries sharing a source owner are refused before the call site, and a library
-sharing the unit's owner is refused by the call site.
+FR-016-AC-14, AC-16 and AC-18 through AC-20 have historical default-suite
+evidence in `tests/it/skeleton_spine.rs`: the selected dependency is compiled
+and evaluated, a missing selection and an unselected library refuse, and
+shared source-owner controls refuse. The old request's dependency `package_id`
+field and mismatch control do not qualify retired AC-15 or AC-17.
+Replacement AC-29 is planned for the selected QSL wire. AC-30 is planned for
+CG's independent pre-replay comparison with the admitted package/dependency
+source selection.

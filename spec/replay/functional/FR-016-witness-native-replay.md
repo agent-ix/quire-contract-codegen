@@ -21,7 +21,10 @@ relationships:
 When a FR-015 harness yields a counterexample, the code generator shall decode
 the witness into typed complete-V1 values, validate each value against its
 declared domain, and replay it through native runtime execution before any
-failure is reported.
+failure is reported. For an imported dependency, the replay request SHALL
+carry the lock-selected dependency identity and exact selected source
+references through QSL's `DependencyEntryWire { identity, sources }`; the
+wire entry has no dependency `package_id` or lock member.
 
 ## Inputs
 
@@ -122,6 +125,19 @@ failure is reported.
   category `violation` is the reproduced failure, a settlement of `inconclusive`
   is a mismatch, and an executor refusal is returned with its own cause.
 
+- For each lock-selected dependency, the generator SHALL retain one replay
+  `package.dependencies` entry in ascending identity order, with that
+  selection's exact `identity` and `sources` references. The generator SHALL
+  supply the bytes named by those references through the byte provision.
+  When it is about to call QSL, the generator SHALL compare every request
+  dependency `identity` and complete `sources` list with the corresponding
+  independently admitted package/dependency source selection. The generator SHALL
+  refuse any missing, extra, reordered or unequal selection with a typed CG
+  dependency-selection mismatch cause, without dispatching replay or
+  substituting another source.
+  QSL receives only the matched request; it treats its current source references
+  as input and cannot compare them with an earlier admitted selection.
+
 - The generator shall carry the producer's QSL structural `ObligationIdentity` for the
   function-contract obligation into the replay request unchanged (FR-016-AC-26 to AC-28).
   The identity is the function node's `NodeKey`, optional owning `ModelIdentity` and the
@@ -146,9 +162,9 @@ failure is reported.
 | FR-016-AC-12 | A `replay` call that returns `ReplayRefusal::Fault` is returned as `SpineReplayError::Refused` carrying that fault. | Test (TC-026) |
 | FR-016-AC-13 | A `Witness` arm that settles `reproduced-with-evaluated-witness` with a category other than `violation` yields a typed mismatch, and never a reproduced failure. | Test (TC-026) |
 | FR-016-AC-14 | A proved unit that imports a locked dependency is compiled by `qsl_replay::call_site` together with that dependency's lock source, and `qsl_replay::replay` settles the unit's falsification through the imported function. | Test (TC-026) |
-| FR-016-AC-15 | The replay request's `package.dependencies` carries one entry per lock dependency selection, in ascending identity order, with the lock's recorded `package_id`. | Test (TC-026) |
+| FR-016-AC-15 | RETIRED, replaced by FR-016-AC-29; the selected QSL dependency wire has no `package_id` member. | Inspection |
 | FR-016-AC-16 | A unit whose import no lock dependency selection supplies is refused at the call site. | Test (TC-026) |
-| FR-016-AC-17 | A lock recording another `package_id` for a dependency the unit imports is refused by QSL as a dependency identity mismatch. | Test (TC-026) |
+| FR-016-AC-17 | RETIRED, replaced by FR-016-AC-30; a dependency `package_id` mismatch cannot be represented by the selected QSL wire. | Inspection |
 | FR-016-AC-18 | A lock selecting a library the unit does not import is refused by QSL as unselected. | Test (TC-026) |
 | FR-016-AC-19 | Lock libraries whose sources share a source owner are refused as no dependency input, before the call site compiles anything. | Test (TC-026) |
 | FR-016-AC-20 | A lock library whose source has the unit's own source owner is refused by the call site. | Test (TC-026) |
@@ -160,6 +176,8 @@ failure is reported.
 | FR-016-AC-26 | PLANNED (IR-1079; replaces AC-21). The function replay request carries the producer's exact QSL `ObligationIdentity(NodeKey, Option<ModelIdentity>, ordinal)` unchanged, with no CG hash, preimage, rederivation or transcript-sourced identity. A function harness missing a parameter argument, declaring an unbounded integer or bounding a Boolean refuses before replay with no substituted domain. The selected function occurrence, obligation kind and complete parameter bindings with declared domains remain on the record, sorted by declared parameter identifier, and are compared exactly before replay. | Test, Inspection (TC-026) |
 | FR-016-AC-27 | PLANNED (IR-1079; replaces AC-22). Two function nodes with the same parameters have distinct structural obligation identities; comment, blank-line and source-span edits preserving node/model/ordinal leave identity unchanged. For two distinct obligations on one node/model, the producer assigns distinct ordinals. Changing kind or one argument domain with a held identity fails the field-by-field record/claim comparison before replay; one requested kind for a two-conjunct function remains one obligation, not one per conjunct. | Test (TC-026) |
 | FR-016-AC-28 | PLANNED (IR-1079; replaces AC-23). The function path obtains the producer's node/model/ordinal identity, without deriving one from package contents. Perturbing unrelated declarations or parameter order while the producer identity and sorted argument bindings stay equal leaves the carried identity and accepted comparison unchanged; changing the selected function node, model or assigned ordinal changes identity, while changing the occurrence key, kind or argument domain under the same identity refuses before replay. | Test (TC-026) |
+| FR-016-AC-29 | PLANNED (IR-1079; replaces AC-15). The replay request's `package.dependencies` carries exactly one `DependencyEntryWire { identity, sources }` per lock dependency selection, in ascending identity order. Each entry preserves that selection's exact dependency identity and complete selected source references; the byte provision supplies the bytes named by those references. The wire carries no dependency `package_id` or lock field. | Test (TC-026) |
+| FR-016-AC-30 | PLANNED (IR-1079; replaces AC-17). Before QSL replay, CG compares each replay request dependency's `identity` and complete exact `sources` references with the corresponding independently admitted package/dependency source selection. A missing, extra, reordered or unequal selection, including a changed but valid provisioned source under the same imported dependency identity, yields a typed CG dependency-selection mismatch refusal before dispatch and no replay verdict. CG never substitutes a same-identity source or fabricates a dependency `package_id` wire field; QSL's acceptance of a separately valid current source does not override the admitted selection. | Test (TC-026) |
 
 For FR-016-AC-26, inspection verifies that the function path carries the producer's typed
 identity without an identity encoder or transcript-derived member. TC-026 compares the
@@ -169,7 +187,7 @@ record's selected occurrence, kind and ordered domains and QSL admission.
 
 FR-016-AC-1 through AC-5 retain default-suite evidence through a
 direct test-only `KaniObligationIdentity` fixture and the surviving replay and identity APIs.
-That fixture is an input to those APIs, not a replacement V1 generator or a proof claim. Retired AC-21 through AC-23 no longer claim backing; replacement AC-26 through AC-28 are planned.
+That fixture is an input to those APIs, not a replacement V1 generator or a proof claim. Retired AC-15, AC-17 and AC-21 through AC-23 no longer claim backing; replacement AC-26 through AC-30 are planned.
 FR-016-AC-9 and AC-10 retain their default native replay tests, but the
 `skeleton_spine.rs` installed-prover E7-E9 control was removed with the V1 `BoundClause` generator.
 That installed path is Open and partially backed until IR-1047 supplies a genuine V2 generated
