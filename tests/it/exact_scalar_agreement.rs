@@ -6,8 +6,9 @@
 //! Nothing generated is committed. This module generates the corpus crate now,
 //! builds it as a scratch crate whose one integration test is
 //! `tests/exact_scalar_support/agreement_cases.rs`, and runs that test. The
-//! scratch-crate runner, [`run_agreement_cases`], is shared with the composite
-//! equality and function-application agreement modules.
+//! scratch-crate runner, [`run_agreement_cases`], also serves the function
+//! application agreement module. Composite equality uses the runner variant
+//! that assigns distinct test-only package names before sharing a target dir.
 
 use ix_trace_rs::trace;
 use std::{
