@@ -1,5 +1,7 @@
 //! Bounded cover harness for an admitted V2 parameter precondition (FR-015).
 
+use std::fmt::Write as _;
+
 use quire_contract_model::{CheckedNodeId, CheckedPackageV2, ContractSourceV1};
 use quote::ToTokens;
 
@@ -39,6 +41,26 @@ pub(in crate::kani::generate) struct LoweredV2Clause {
     symbolic_name: Option<String>,
     pub(super) module_symbol: String,
     pub(super) harness_symbol: String,
+}
+
+/// Encode the complete structural key for a generated message. Escaping `%` keeps
+/// this reversible even when a source name itself contains an escape-looking span.
+fn message_safe_node_label(node: &CheckedNodeId) -> String {
+    escape_message_label(&node_label(node).to_string())
+}
+
+fn escape_message_label(raw: &str) -> String {
+    let mut label = String::new();
+    for character in raw.chars() {
+        match character {
+            '%' | '"' | '\\' | '{' | '}' | '\n' | '\r' => {
+                write!(&mut label, "%{:02X}", u32::from(character))
+                    .expect("writing to a String cannot fail");
+            }
+            other => label.push(other),
+        }
+    }
+    label
 }
 
 pub(in crate::kani::generate) fn lower(
@@ -188,7 +210,10 @@ pub(in crate::kani::generate) fn render_clause(
     ];
     let path = harness_path(&lowered.module_symbol, &lowered.harness_symbol)?;
     let spec = HarnessSpec::new(
-        format!("V2 precondition {}", node_label(&lowered.node_id)),
+        format!(
+            "V2 precondition {}",
+            message_safe_node_label(&lowered.node_id)
+        ),
         path,
         lowered.oracle.source.clone(),
         ProofKind::Proof,
@@ -466,7 +491,10 @@ fn render_postcondition(
         },
     ]);
     let spec = HarnessSpec::new(
-        format!("V2 postcondition {}", node_label(&lowered.node_id)),
+        format!(
+            "V2 postcondition {}",
+            message_safe_node_label(&lowered.node_id)
+        ),
         harness_path(&lowered.module_symbol, &lowered.harness_symbol)?,
         lowered.oracle.source.clone(),
         ProofKind::Proof,
@@ -830,12 +858,20 @@ impl NativeTerm {
 
 #[cfg(test)]
 mod native_probe_tests {
-    use super::{bind_native_arithmetic_probes, ArithmeticProbe};
+    use super::{bind_native_arithmetic_probes, escape_message_label, ArithmeticProbe};
     use crate::core::native_integer::{
         NativeIntegerIntervalDecision as Interval, NativeIntegerOperationDecision as Decision,
         NativeIntegerSelection,
     };
     use ix_trace_rs::trace;
+
+    #[test]
+    fn structural_message_label_escapes_delimiters_and_percent_injectively() {
+        let label = escape_message_label("p%7B{\"q\"}\\\n\r");
+        assert_eq!(label, "p%257B%7B%22q%22%7D%5C%0A%0D");
+        assert_ne!(escape_message_label("%7B"), escape_message_label("{"));
+        assert!(!label.contains(['"', '\\', '{', '}', '\n', '\r']));
+    }
 
     #[trace("FR-015-AC-125", "TC-025")]
     #[test]
