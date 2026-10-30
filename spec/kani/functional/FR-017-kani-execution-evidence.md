@@ -217,10 +217,13 @@ Text-admission identity rather than claiming a checked node or contract role.
   for a non-collection precondition harness, which has no assertion, the generator shall
   instead classify the run by its cover summary alone, as verified, cover-unsatisfied or
   inconclusive under the cover rules above. A collection precondition is identified by its
-  obligation identity, even if its generated assertion is missing: its satisfied cover can
-  classify as verified only when the report attributes a successful non-cover property check
-  to its generated FR-015-AC-99 Boolean-completion assertion. A missing assertion or a
-  successful unrelated check does not discharge that requirement.
+  typed V2 clause identity's precondition kind and admitted collection-quantifier marker,
+  even if its generated assertion is missing. Its identity binds the generated source digest
+  and the unique line of the FR-015-AC-99 Boolean-completion assertion; the launcher checks
+  that source digest and that exact assertion at the bound line before classifying a report.
+  A satisfied cover classifies as verified only when a successful non-cover property check
+  reports that bound source line. A missing or replaced assertion is a typed artifact refusal;
+  a report with only an unrelated successful check is inconclusive, not verified.
 - The generator shall append `-Z`, `unstable-options`, `--export-json`, and `/proc/self/fd/N`, in
   that exact order after the unchanged harness options. `N` is the actual child-only mapped
   anonymous report-pipe writer descriptor, at least 5. Evidence records these actual argument bytes,
@@ -360,8 +363,8 @@ Text-admission identity rather than claiming a checked node or contract role.
   read the identity, the source artifact, the unwind bound, the solver
   and the option vector from whichever kind's identity the caller supplied,
   and none of those steps branches on which kind it is, except that the
-  classification applies the zero-checks rule to every harness except a non-collection
-  precondition harness with no assertion, as FR-017-AC-13 specifies.
+  classification applies the zero-checks and bound-assertion rules of FR-017-AC-13,
+  including the collection-precondition check even when other checks succeed.
 - When executing an FR-035 caller Text-admission harness, the generator shall
   retain its typed caller-ingress identity from the selected harness in the
   execution evidence, bind the outcome and any playback to that identity and
@@ -397,7 +400,7 @@ Text-admission identity rather than claiming a checked node or contract role.
 - The generator shall carry on the evidence and the classified run the SUCCESS-check count: the
   report's checks that are not covers and hold, plus satisfied covers for precondition harnesses.
   For a collection precondition, cover successes in this evidence count do not replace the
-  separately attributed successful non-cover Boolean-completion check required for verification.
+  successful non-cover Boolean-completion check at the bound source line required for verification.
 - The report carries no concrete playback. The generator shall take a falsifying playback from the
   console as a payload only, after the report names a failed property check, and pass it
   through verbatim as the counterexample, which FR-016 decodes. A playback printed for a cover is
@@ -782,7 +785,7 @@ The private observer is an isolated, unpublished resolver-2 package. Its explici
 | FR-017-AC-7 | A crate whose library source does not contain the harness source byte for byte is refused, and no backend runs. | Test (TC-027) |
 | FR-017-AC-11 | A routed FR-022/FR-014 exact-scalar harness (`KaniScalarObligationHarness`) runs through `execute_kani_obligation` and `kani_launch_command` the same way an FR-015 contract harness does: a crate whose library source lacks its generated source byte for byte is `HarnessNotInCrate`, its covers classify a run identically (all satisfied is verified, an unsatisfied one is cover-unsatisfied, none printed is inconclusive), and its evidence carries `None` for obligation kind, since an exact-scalar claim carries no contract role. | Test (TC-027) |
 | FR-017-AC-12 | Real Kani captures of a verified run, a falsified run with a playback, an exhausted unwind bound, a run whose only check is unreachable, a partly satisfied cover and a run with no cover each parse into the expected typed report of harness status, successful checks, cover counts and failed checks, and classify to the expected outcome; the falsifying playback block passes through verbatim. | Test (TC-027) |
-| FR-017-AC-13 | A run whose process exited successfully and whose backend reported success with zero successful checks is inconclusive with the vacuous-proof reason, never verified, except that a non-collection precondition harness with no assertion is decided by its cover summary. A collection precondition is identified by its obligation identity even if its assertion is missing: its satisfied cover can classify as verified only when the report attributes a successful non-cover property check to its generated FR-015-AC-99 Boolean-completion assertion. A missing assertion, zero non-cover successful checks or a successful unrelated check is inconclusive with the vacuous-proof reason, never verified. The collection control is planned under IR-1091. | Test (TC-027) |
+| FR-017-AC-13 | A run whose process exited successfully and whose backend reported success with zero successful checks is inconclusive with the vacuous-proof reason, never verified, except that a non-collection precondition harness with no assertion is decided by its cover summary. A collection precondition is identified by the typed V2 clause identity's precondition kind and admitted collection-quantifier marker even if its assertion is missing. The identity binds the generated source digest and unique Boolean-completion assertion line; a missing or replaced assertion is a typed artifact refusal. With intact source, a satisfied cover verifies only when the report has a successful non-cover property check at that bound line. Zero such checks, including a report with successful unrelated checks or only satisfied covers, is inconclusive with the vacuous-proof reason, never verified. The collection control is planned under IR-1091. | Test (TC-027) |
 | FR-017-AC-14 | A launcher whose stdout or stderr carries more than 8 MiB times its harness count is stopped, its process group is killed, and the run is refused with `kani_output_over_limit` naming the stream, the limit and the count, with no outcome and no retained text; a launcher whose stream is exactly the limit completes with its real exit status and the whole stream retained. No stream is ever truncated and then classified. | Test (TC-043) |
 | FR-017-AC-15 | A timeout too large to add to the current instant never elapses and does not panic. | Test (TC-027) |
 | FR-017-AC-16 | The launcher's capture threads are stopped and joined on every outcome: they return what the launcher wrote before it ended, stop while a write end is still held open, and stop within their drain limit while a straggler keeps writing, so a process holding a pipe open does not delay the return. | Test (TC-027) |

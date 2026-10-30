@@ -292,13 +292,15 @@ inconclusive with their own reasons. The failed unwinding assertion is
 inconclusive as an exhausted bound and not falsified, and the succeeded
 unwinding check in a listing is verified. The run with zero successful checks is inconclusive
 with the vacuous-proof reason (FR-017-AC-13), unless it is a non-collection precondition harness with no assertion, which its
-cover summary decides. For a collection precondition identified by its obligation identity, a
-satisfied cover with no successful non-cover check attributed to its generated
-FR-015-AC-99 Boolean-completion assertion is inconclusive with the vacuous-proof
-reason. Delete that assertion while preserving the cover, and replace it with
-an unrelated successful check; neither mutant may verify. A successful check
-attributed to the totality assertion is required before the cover can classify
-the run as verified. This collection control is planned under IR-1091.
+cover summary decides. For a collection precondition identified by its typed V2 clause identity's
+precondition kind and admitted collection-quantifier marker, bind the generated
+source digest and the unique line of its FR-015-AC-99 Boolean-completion
+assertion. Delete or replace that assertion at the same line while preserving
+the cover: source binding refuses the artifact, never verifies it. With intact
+source, a satisfied cover and zero successful non-cover checks at that bound
+line is inconclusive with the vacuous-proof reason, even when an unrelated
+check succeeds elsewhere. A successful non-cover check at the bound line is
+required before the cover can classify the run as verified. This collection control is planned under IR-1091.
 
 For a caller Text-admission harness, the same classifications apply while the
 evidence remains bound to its caller identity and harness path, never a
