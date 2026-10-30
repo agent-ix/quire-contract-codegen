@@ -68,7 +68,7 @@ body, malformed or absent selected declaration, and an over-ceiling domain.
 Check typed `requires_bound` versus `unsupported`, no emitted harness for each
 refusal, and one disposition per item in a mixed request.
 
-For FR-015-AC-96 (IR-1091), author a QSL invariant and a constraint clause
+For FR-015-AC-128 (IR-1091), author a QSL invariant and a constraint clause
 with collection quantifiers over the same bounded field, emit the package through
 QSL and admit it through Contract IR. Submit the invariant as one claim and the
 constraint as a separate claim. The constraint item must settle `unsupported` with
@@ -78,7 +78,8 @@ A constraint never supplies a missing cardinality or element bound or rescues a
 unique-capacity refusal. Constrained-method request identity, boundary-state
 evaluation, `Undefined`/`Refused`/`Incomplete` handling and Kani outcome mapping
 remain planned under IR-1157; no constrained proof is expected from this control.
-Separately, use QSL-emitted, IR-admitted unique Boolean and bounded `IntRange`
+
+For FR-015-AC-96, use QSL-emitted, IR-admitted unique Boolean and bounded `IntRange`
 fields after the applicable
 form, empty-domain, representation, unwind and memory checks pass. A feasible
 unique maximum equal to its distinct-value capacity retains both cardinality
@@ -137,7 +138,7 @@ flags in order, and that its solver kind and unwind equal the identity's. The
 collection-family tests exist and are tagged
 (IR-268, CG #396); the Kani-lane run is `Verified` (94 SUCCESS) with the
 mutant `Falsified` (93 SUCCESS and 1 FAILURE), per IR-268's close-out evidence.
-The graph family stays planned (IR-805). The collection-family AC-100 ordered-option comparison is covered by the AC-100/TC-025-tagged `collection_run_evidence_preserves_every_ordered_identity_option` test, which compares actual launched arguments and evidence with the identity options, solver kind and unwind; the graph-family clause remains planned. This is launcher evidence, not a new installed-Kani proof. The representational-ceiling clause has AC-101-tagged generator tests; selected-field boundary refusals still need source-located QSL and Contract IR tests. FR-015-AC-96 has tagged feasible OrderedSet uniqueness and Boolean/IntRange capacity-refusal controls; CG #616's installed-Kani controls verify an OrderedSet over IntRange lengths `[2,3]`, falsify and natively replay its claim mutant over that domain, and verify a Boolean OrderedSet at length `[2,2]` while falsifying the comparable Sequence on duplicate Boolean values. AC-96 remains PARTIAL: tagged generation tests cover function-body Sequence and OrderedSet symbolic domains, but precondition and postcondition collection bodies remain refused pending operation context (IR-1091), and constraint clauses remain typed unsupported as standalone proofs pending constrained-method semantics (IR-1157); deterministic capacity-boundary and refusal-precedence controls listed above remain incomplete (IR-1091). The installed controls exercise only the stated OrderedSet bounds. FR-015-AC-99 has tagged symbolic-draw and native replay controls, while its final reviewed-head Kani gate and graph family remain pending. The finite-input
+The graph family stays planned (IR-805). The collection-family AC-100 ordered-option comparison is covered by the AC-100/TC-025-tagged `collection_run_evidence_preserves_every_ordered_identity_option` test, which compares actual launched arguments and evidence with the identity options, solver kind and unwind; the graph-family clause remains planned. This is launcher evidence, not a new installed-Kani proof. The representational-ceiling clause has AC-101-tagged generator tests; selected-field boundary refusals still need source-located QSL and Contract IR tests. FR-015-AC-96 has tagged feasible OrderedSet uniqueness and Boolean/IntRange capacity-refusal controls; CG #616's installed-Kani controls verify an OrderedSet over IntRange lengths `[2,3]`, falsify and natively replay its claim mutant over that domain, and verify a Boolean OrderedSet at length `[2,2]` while falsifying the comparable Sequence on duplicate Boolean values. AC-96 remains PARTIAL: tagged generation tests cover function-body Sequence and OrderedSet symbolic domains, but invariant, precondition and postcondition collection bodies remain refused pending IR-1091, and constraint clauses remain typed unsupported as submitted standalone claims under FR-015-AC-128, with constrained-method semantics pending IR-1157; deterministic capacity-boundary and refusal-precedence controls listed above remain incomplete (IR-1091). The installed controls exercise only the stated OrderedSet bounds. FR-015-AC-99 has tagged symbolic-draw and native replay controls, while its final reviewed-head Kani gate and graph family remain pending. The finite-input
 corpus's Boolean and generation-time outcome do not satisfy these controls.
 
 For the graph family (IR-805), author a QSL unit whose model has an object
