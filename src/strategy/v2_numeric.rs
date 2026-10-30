@@ -288,22 +288,20 @@ struct SourceMap<'a> {
     runner_line: usize,
 }
 
-fn component(source: &str) -> String {
+fn component(source: &str) -> Option<String> {
     // The constructive core emits a standalone file header. The combined runner has its own
     // header, and map lines must address the component body rather than that inner header.
-    let source = source
-        .strip_prefix("// SPDX-License-Identifier: MIT OR Apache-2.0\n")
-        .and_then(|rest| rest.split_once("\n\n").map(|(_, body)| body))
-        .unwrap_or(source);
-    source
-        .lines()
-        .filter(|line| !line.starts_with("#!["))
-        .map(|line| {
-            line.strip_prefix("//!")
-                .map_or_else(|| line.to_owned(), |rest| format!("//{rest}"))
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
+    let body = crate::core::provenance::rust_body(source)?;
+    Some(
+        body.lines()
+            .filter(|line| !line.starts_with("#!["))
+            .map(|line| {
+                line.strip_prefix("//!")
+                    .map_or_else(|| line.to_owned(), |rest| format!("//{rest}"))
+            })
+            .collect::<Vec<_>>()
+            .join("\n"),
+    )
 }
 
 /// Generate the complete V2 numeric campaign source and map for one selected claim.
@@ -382,7 +380,14 @@ fn generate_with_control(
     source.push_str(&admitted.oracle.source);
     source.push('\n');
     let population_line = source.lines().count() + 1;
-    source.push_str(&component(&population.population.source));
+    let population_body = component(&population.population.source).ok_or_else(|| {
+        V2NumericDiagnostic::new(
+            key,
+            V2NumericErrorCode::InvalidGeneratedSyntax,
+            "generated.population",
+        )
+    })?;
+    source.push_str(&population_body);
     source.push('\n');
     let census_line = source.lines().count() + 1;
     source.push_str(&population.census_source);
