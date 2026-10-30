@@ -210,7 +210,7 @@ fn map_point(
 
 fn map_population(
     key: V2SelectedClaimKey<'_>,
-    population: Box<V2PopulationDiagnostic>,
+    population: V2PopulationDiagnostic,
 ) -> Box<V2NumericDiagnostic> {
     let code = match population.code {
         StrategyErrorCode::EmptyPopulation => V2NumericErrorCode::EmptyPopulation,
@@ -231,7 +231,7 @@ fn map_population(
     };
     let path = population.path.clone();
     let mut result = V2NumericDiagnostic::new(key, code, &path);
-    result.population = Some(*population);
+    result.population = Some(population);
     result
 }
 
@@ -330,7 +330,7 @@ fn generate_with_control(
     })
     .map_err(|diagnostic| map_point(key, diagnostic.refusal))?;
     let population = prepare_v2_numeric_population(&admitted, request.population)
-        .map_err(|cause| map_population(key, cause))?;
+        .map_err(|cause| map_population(key, *cause))?;
     if request
         .process_package_id
         .is_some_and(|id| id != request.package.package_id())
