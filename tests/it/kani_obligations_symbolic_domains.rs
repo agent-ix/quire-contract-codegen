@@ -2137,6 +2137,7 @@ fn collection_precondition_generated_oracle_agrees_with_native_clause_evaluation
         &wide,
         &[
             ([i64::MIN, i64::MAX, 0], 2, false),
+            ([4_294_967_299_i64, 0, 1], 2, false),
             ([i64::MIN, 3, i64::MAX], 2, true),
             ([i64::MAX, 3, i64::MIN], 3, true),
         ],
