@@ -553,9 +553,12 @@ fn integer_scalar(operation_identity: &str) -> KaniForm {
              profile v = \"quire.value.complete/v1\";\n\
              function f using v(a: Int[0, 9]): Int[0, 18] pure { a + a }\n";
         let compiled = compile_package(
-            SourceIdentity::new("test", "selected-add.native", "git", "fixture"),
-            "selected-add.native",
-            source.as_bytes(),
+            qsl_replay::CompileUnit {
+                source: SourceIdentity::new("test", "selected-add.native", "git", "fixture"),
+                package_name: "selected-add".to_owned(),
+                path: "selected-add.native",
+                bytes: source.as_bytes(),
+            },
             [],
             &DependencyInput::default(),
             StageLimits::default(),
