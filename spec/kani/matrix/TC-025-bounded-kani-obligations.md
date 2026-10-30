@@ -79,7 +79,8 @@ an impossible but total precondition reports `CoverUnsatisfied`. Seed a
 precondition oracle mutant that yields `Undefined`, `Refused` or `Incomplete`
 on an in-domain draw and require a falsified totality assertion, never an
 assumption. Compare its native result with QSL's public clause-evaluation
-facade once available; a false precondition is not a replayable violation.
+facade once available; counterexample replay alone cannot classify true, false and incomplete
+evaluation across the admitted domain.
 The postcondition harness draws the pre-state and operation parameters, assumes
 every supported sibling precondition and refuses if any sibling is unsupported,
 then calls the subject. It asserts produced post-state cardinality, element
