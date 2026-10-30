@@ -21,14 +21,64 @@ use quire_contract_codegen::{
     CompositeEqualityItem, EqualityOperandDescriptor, EqualityOperatorKind,
 };
 use quire_contract_model::{
-    CheckedNodeId, CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2,
-    CheckedPackageV2ReadResult,
+    CheckedNodeId, CheckedNodePathSegment, CheckedPackageEvidence, CheckedPackageReadLimits,
+    CheckedPackageV2, CheckedPackageV2ReadResult,
 };
 use serde_json::{json, Value};
 
 #[path = "../checked_package_support/rekey.rs"]
 mod rekey;
-pub use rekey::FixtureIds;
+
+/// Resolves the base fixture's authored paths under the imported package's name.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FixtureIds {
+    package_name: Box<str>,
+}
+
+impl FixtureIds {
+    fn for_wire(wire: &Value) -> Self {
+        Self {
+            package_name: wire["name"].as_str().expect("fixture package name").into(),
+        }
+    }
+
+    /// Resolve a fixture node while preserving IDs already owned by the imported package.
+    pub fn resolve(&self, node: &CheckedNodeId) -> CheckedNodeId {
+        let mut node = node.clone();
+        if node.package.as_ref() == BASE_PACKAGE_NAME {
+            node.package = self.package_name.clone();
+        }
+        for segment in &mut node.path {
+            if let CheckedNodePathSegment::Node(child) = segment {
+                **child = self.resolve(child);
+            }
+        }
+        node
+    }
+
+    /// Resolve fixture references in a JSON term submitted with the imported wire.
+    pub fn resolve_value(&self, value: &mut Value) {
+        match value {
+            Value::Object(object) => {
+                if object.get("package") == Some(&json!(BASE_PACKAGE_NAME))
+                    && object.contains_key("path")
+                    && object.contains_key("ordinal")
+                {
+                    object.insert("package".to_owned(), json!(self.package_name));
+                }
+                for child in object.values_mut() {
+                    self.resolve_value(child);
+                }
+            }
+            Value::Array(items) => {
+                for child in items {
+                    self.resolve_value(child);
+                }
+            }
+            _ => {}
+        }
+    }
+}
 
 #[path = "codes.rs"]
 mod codes;
@@ -443,8 +493,38 @@ impl Default for PackageBuilder {
 }
 
 impl PackageBuilder {
+    fn node_ref(&self, path: &str) -> Value {
+        json!({
+            "package": self.value["name"],
+            "path": path.split('/').collect::<Vec<_>>(),
+            "ordinal": 0,
+        })
+    }
+
+    fn repackage(&self, value: &mut Value) {
+        match value {
+            Value::Object(object) => {
+                if object.get("package") == Some(&json!(BASE_PACKAGE_NAME))
+                    && object.contains_key("path")
+                    && object.contains_key("ordinal")
+                {
+                    object.insert("package".to_owned(), self.value["name"].clone());
+                }
+                for child in object.values_mut() {
+                    self.repackage(child);
+                }
+            }
+            Value::Array(items) => {
+                for child in items {
+                    self.repackage(child);
+                }
+            }
+            _ => {}
+        }
+    }
+
     fn omit_code(&mut self, code: u32) {
-        let node_id = json!(code_id(code));
+        let node_id = self.node_ref(&key(code));
         let nodes = self.value["semantic_graph"]["nodes"]
             .as_array_mut()
             .expect("nodes");
@@ -467,16 +547,17 @@ impl PackageBuilder {
     /// The fixture assigns this model-owned node a stable source path.
     pub fn model_owned_object_type(&mut self, code: u32, identity: &str, node: &str) -> &mut Self {
         let path = key(code);
+        let node_id = self.node_ref(&path);
         let source = self.value["lock"]["sources"][0].clone();
         self.value["semantic_graph"]["nodes"]
             .as_array_mut()
             .expect("nodes")
             .push(json!({
-                "node_id": node_ref(&path),
+                "node_id": node_id,
                 "schema_version": "quire.checked-semantic-graph/v2",
                 "node_tag": "model",
                 "semantic_form": "object_type",
-                "semantic_type": node_ref(&path),
+                "semantic_type": node_id,
                 "dependencies": [],
                 "occurrences": [{"role": "type", "ordinal": 0}],
                 "body": aggregate(vec![]),
@@ -485,7 +566,7 @@ impl PackageBuilder {
         let source_map = self.value["source_map"].as_array_mut().expect("source map");
         let position = source_map.len();
         source_map.push(json!({
-            "node_id": node_ref(&path),
+            "node_id": node_id,
             "role": "type",
             "ordinal": 0,
             "regions": [{"source": source, "start": position, "end": position + 1}],
@@ -526,7 +607,7 @@ impl PackageBuilder {
         tag: &str,
         form: &str,
         semantic_type: &str,
-        body: Value,
+        mut body: Value,
         recursion_group: Option<&str>,
     ) -> &mut Self {
         // The schema's `BodyBindingRules` fix a parameter's occurrence role.
@@ -537,16 +618,19 @@ impl PackageBuilder {
         } else {
             "declaration"
         };
+        self.repackage(&mut body);
+        let node_id = self.node_ref(path);
+        let semantic_type_id = self.node_ref(semantic_type);
         let source = self.value["lock"]["sources"][0].clone();
         let nodes = self.value["semantic_graph"]["nodes"]
             .as_array_mut()
             .expect("nodes");
         let mut node = json!({
-            "node_id": node_ref(path),
+            "node_id": node_id,
             "schema_version": "quire.checked-semantic-graph/v2",
             "node_tag": tag,
             "semantic_form": form,
-            "semantic_type": node_ref(semantic_type),
+            "semantic_type": semantic_type_id,
             "dependencies": [],
             "occurrences": [{"role": role, "ordinal": 0}],
             "body": body,
@@ -574,7 +658,7 @@ impl PackageBuilder {
         let map = self.value["source_map"].as_array_mut().expect("source map");
         let start = map.len();
         map.push(json!({
-            "node_id": node_ref(path),
+            "node_id": node_id,
             "role": role,
             "ordinal": 0,
             "regions": [{
@@ -615,12 +699,12 @@ impl PackageBuilder {
         body: Value,
     ) -> &mut Self {
         let label = code.to_string();
-        let dependencies = application_dependencies(&body);
         self.node_in_group_labeled(&key(code), &label, tag, form, semantic_type, body, None);
         let node = self.value["semantic_graph"]["nodes"]
             .as_array_mut()
             .and_then(|nodes| nodes.last_mut())
             .expect("the node just added");
+        let dependencies = application_dependencies(&node["body"]);
         node["dependencies"] = Value::Array(
             dependencies
                 .iter()
@@ -763,7 +847,8 @@ impl PackageBuilder {
         &self,
         limits: CheckedPackageReadLimits,
     ) -> (CheckedPackageV2, FixtureIds) {
-        let rekey::ResolvedWire { outcome, ids, .. } = self.resolved_wire(limits);
+        let rekey::ResolvedWire { outcome, wire, .. } = self.resolved_wire(limits);
+        let ids = FixtureIds::for_wire(&wire);
         match outcome {
             CheckedPackageV2ReadResult::Admitted(package) => (*package, ids),
             other => panic!("expected V2 admission, got {other:?}"),
@@ -772,8 +857,9 @@ impl PackageBuilder {
 
     /// Returns the reader result and wire with the IDs used by that wire.
     pub fn read_resolved(&self) -> (CheckedPackageV2ReadResult, Value, FixtureIds) {
-        let rekey::ResolvedWire { wire, outcome, ids } =
+        let rekey::ResolvedWire { wire, outcome, .. } =
             self.resolved_wire(CheckedPackageReadLimits::bounded());
+        let ids = FixtureIds::for_wire(&wire);
         (outcome, wire, ids)
     }
 
@@ -809,11 +895,14 @@ impl PackageBuilder {
     /// Replaces the body of the node `code` built by [`Self::code`].
     pub fn set_body(&mut self, code: u32, body: Value) -> &mut Self {
         let path = key(code);
+        let node_id = self.node_ref(&path);
+        let mut body = body;
+        self.repackage(&mut body);
         let node = self.value["semantic_graph"]["nodes"]
             .as_array_mut()
             .expect("nodes")
             .iter_mut()
-            .find(|node| node["node_id"] == node_ref(&path))
+            .find(|node| node["node_id"] == node_id)
             .unwrap_or_else(|| panic!("no node for code {code}"));
         node["body"] = body;
         self
