@@ -976,7 +976,7 @@ fn negated_state_clause_quantifier_is_not_an_independent_collection_claim() {
     assert!(collection_harnesses.is_empty());
 }
 
-#[trace("FR-015-AC-96", "FR-015-AC-97", "TC-025")]
+#[trace("FR-015-AC-96", "FR-015-AC-97", "FR-015-AC-128", "TC-025")]
 #[test]
 fn operation_and_constraint_clauses_do_not_get_standalone_collection_proofs() {
     for (document, declaration) in [
