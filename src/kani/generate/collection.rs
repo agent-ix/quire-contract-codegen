@@ -42,7 +42,7 @@ pub(crate) enum CollectionElementDomain {
 /// The admitted selected model field and its inclusive collection bounds.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct CollectionFieldDomain {
-    /// Selected function or state clause whose body contains the quantifier.
+    /// Selected function or invariant state clause whose body contains the quantifier.
     pub(crate) function: CheckedNodeId,
     /// Quantifier node selected by the request.
     pub(crate) quantifier: CheckedNodeId,
@@ -552,7 +552,7 @@ fn invariant_clause_parts<'a>(
     Some((aggregate_members(parameters)?, term_target(body)?))
 }
 
-/// The authored parameters of a function or state clause, in their checked graph order.
+/// The authored parameters of a function or invariant state clause, in checked graph order.
 fn claim_parameters<'a>(
     graph: &'a CollectionNodeIndex<'_>,
     claim: &'a CheckedSemanticNodeV2,
@@ -575,7 +575,7 @@ fn claim_parameters<'a>(
     }
 }
 
-/// The checked Boolean body selected by a function or state clause.
+/// The checked Boolean body selected by a function or invariant state clause.
 fn claim_body(
     graph: &CollectionNodeIndex<'_>,
     claim: &CheckedSemanticNodeV2,
@@ -601,12 +601,11 @@ fn resolve_collection_field(
     function_id: &CheckedNodeId,
     quantifier: &CheckedSemanticNodeV2,
 ) -> Result<CollectionFieldDomain, CollectionDomainRefusal> {
-    let function = graph
+    let claim = graph
         .node(function_id)
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
-    let function_body =
-        claim_body(graph, function).ok_or(CollectionDomainRefusal::UnsupportedShape)?;
-    if !is_top_level_conjunct(graph, &function_body, &quantifier.node_id) {
+    let body = claim_body(graph, claim).ok_or(CollectionDomainRefusal::UnsupportedShape)?;
+    if !is_top_level_conjunct(graph, &body, &quantifier.node_id) {
         return Err(CollectionDomainRefusal::UnsupportedShape);
     }
     if CheckedNodeTag::from_wire(&quantifier.node_tag) != Some(CheckedNodeTag::Expression)
@@ -654,7 +653,7 @@ fn resolve_collection_field(
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
     let field_name = field_name.to_owned();
     let declaration = admitted_declaration(graph, &field_declaration.digest)?;
-    verify_claim_receiver(graph, function, collection, &declaration)?;
+    verify_claim_receiver(graph, claim, collection, &declaration)?;
     let fields = package.model_object_fields(&declaration);
     let field = declared_field(fields.as_ref(), |fields| fields.field(&field_name))?;
     let Some(CheckedMemberType::Collection {
@@ -696,7 +695,7 @@ fn resolve_collection_field(
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
     let predicate = resolve_predicate(
         graph,
-        function,
+        claim,
         binder_name,
         predicate_node,
         element,
@@ -740,7 +739,7 @@ fn binary_predicate_operation<'a>(
 
 fn resolve_predicate(
     graph: &CollectionNodeIndex<'_>,
-    function: &CheckedSemanticNodeV2,
+    claim: &CheckedSemanticNodeV2,
     binder_name: &str,
     predicate: &CheckedSemanticNodeV2,
     element: CollectionElementDomain,
@@ -752,7 +751,7 @@ fn resolve_predicate(
         .and_then(application_arguments)
         .filter(|arguments| arguments.len() == 2)
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
-    let parameter_count = claim_parameters(graph, function)
+    let parameter_count = claim_parameters(graph, claim)
         .map(<[CheckedTerm]>::len)
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
     let selected_parameter = arguments
@@ -830,12 +829,12 @@ fn collection_element_type(
 
 fn verify_claim_receiver(
     graph: &CollectionNodeIndex<'_>,
-    function: &CheckedSemanticNodeV2,
+    claim: &CheckedSemanticNodeV2,
     projection: &CheckedSemanticNodeV2,
     declaration: &CheckedNodeId,
 ) -> Result<(), CollectionDomainRefusal> {
     let parameters =
-        claim_parameters(graph, function).ok_or(CollectionDomainRefusal::UnsupportedShape)?;
+        claim_parameters(graph, claim).ok_or(CollectionDomainRefusal::UnsupportedShape)?;
     let parameter_ids = parameters
         .iter()
         .filter_map(term_target)

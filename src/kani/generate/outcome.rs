@@ -91,6 +91,7 @@ pub enum ObligationItem<'a> {
         result_selection: &'a ContractDriverResultSelection,
     },
     /// One selected forall/exists occurrence in an admitted V2 function or state-clause body.
+    /// Only invariant state clauses currently have standalone collection proofs.
     CollectionClaim {
         /// The admitted package.
         package: &'a CheckedPackageV2,

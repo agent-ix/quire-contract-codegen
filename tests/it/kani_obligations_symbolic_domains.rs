@@ -907,6 +907,46 @@ fn admitted_state_clause_collection_preserves_order_and_uniqueness() {
         .contains("selected_items[index as usize]"));
 }
 
+#[trace("FR-015-AC-96", "TC-025")]
+#[test]
+fn admitted_state_clause_sequence_uses_its_full_symbolic_domain() {
+    let fixture = try_emitted_from_document_and_clause(
+        model_document(),
+        "invariant CollectionReady using v on M::Node at current",
+        "forall(item in self.items: item >= 0)",
+    )
+    .expect("admitted Sequence clause");
+    let harness = collection_harness(&fixture, "quire.op.collection.forall");
+    assert_eq!(
+        harness.identity.collection_kind,
+        CollectionKindIdentity::Sequence
+    );
+    assert_eq!(
+        (
+            harness.identity.minimum_length,
+            harness.identity.maximum_length
+        ),
+        (0, 3)
+    );
+    assert_eq!(
+        harness.identity.element,
+        CollectionElementIdentity::Integer {
+            minimum: 0,
+            maximum: 3,
+        }
+    );
+    assert!(harness
+        .rust
+        .contents
+        .contains("selected_items_len >= 0 && selected_items_len <= 3"));
+    assert!(harness.rust.contents.contains("item >= 0 && item <= 3"));
+    assert!(harness
+        .rust
+        .contents
+        .contains("selected_items[index as usize]"));
+    assert!(!harness.rust.contents.contains("for prior in 0..index"));
+}
+
 #[trace("FR-015-AC-96", "FR-015-AC-97", "TC-025")]
 #[test]
 fn negated_state_clause_quantifier_is_not_an_independent_collection_claim() {
