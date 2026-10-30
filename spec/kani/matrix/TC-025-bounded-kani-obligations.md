@@ -127,9 +127,7 @@ flags in order, and that its solver kind and unwind equal the identity's. The
 collection-family tests exist and are tagged
 (IR-268, CG #396 fe20ecc); the Kani-lane run is `Verified` (94 SUCCESS) with the
 mutant `Falsified` (93 SUCCESS and 1 FAILURE), per IR-268's close-out at PR head f43adca.
-The graph family stays planned (IR-805). The AC-100 run-evidence ordered-option
-comparison remains planned; `KaniExecutionEvidence` already carries the
-complete argument vector, solver kind and unwind. The representational-ceiling and selected-field boundary refusals have no tagged test. FR-015-AC-96 (uniqueness) and FR-015-AC-99 (symbolic-draw, cover and no-`Vec<i128>` clauses) are backed only by tests tagged for other ACs, so they are partial. The finite-input
+The graph family stays planned (IR-805). The collection-family AC-100 ordered-option comparison is covered by the AC-100/TC-025-tagged `collection_run_evidence_preserves_every_ordered_identity_option` test, which compares actual launched arguments and evidence with the identity options, solver kind and unwind; the graph-family clause remains planned. This is launcher evidence, not a new installed-Kani proof. The representational-ceiling clause has AC-101-tagged generator tests; selected-field boundary refusals still need source-located QSL and Contract IR tests. FR-015-AC-96 (uniqueness) and FR-015-AC-99 (symbolic-draw, cover and no-`Vec<i128>` clauses) are backed only by tests tagged for other ACs, so they are partial. The finite-input
 corpus's Boolean and generation-time outcome do not satisfy these controls.
 
 For the graph family (IR-805), author a QSL unit whose model has an object

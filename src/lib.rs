@@ -64,9 +64,6 @@ pub use kani::generate::corpus::bounded_kani_corpus::{
     BoundedCorpusExpectation, BoundedCorpusFamily, BoundedCorpusRequest,
     CorpusProofDependencyGraph, EmittedCorpusIdentities, CORPUS_PROOF_GRAPH_SCHEMA,
 };
-pub use kani::generate::lower::bounded_collections::{
-    prepare_bounded_collection_query, CollectionLowering, CollectionQuery, QueryKind,
-};
 pub use kani::generate::lower::bounded_kani_profile::{
     classify_bounded_kani_profile, BoundedKaniProfile,
 };

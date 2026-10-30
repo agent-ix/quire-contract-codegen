@@ -411,7 +411,6 @@ const MODULE_FILES: &[&str] = &[
     "kani/generate/collection.rs",
     "kani/generate/corpus/bounded_kani_corpus.rs",
     "kani/generate/frame.rs",
-    "kani/generate/lower/bounded_collections.rs",
     "kani/generate/lower/bounded_kani_profile.rs",
     "kani/generate/lower/finite_reference_graphs.rs",
     "kani/generate/negotiate.rs",

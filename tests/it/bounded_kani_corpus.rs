@@ -1,11 +1,7 @@
 //! Public integration coverage for the bounded Kani corpus API.
 //!
-//! `--harness <name>` below is a substring filter over the fully qualified harness name, not an
-//! exact match (`--exact` is not passed), so e.g. `--harness corpus_case_collection` matches the
-//! generated `corpus_case_collection_<digest>` symbol. Each temporary crate here writes exactly
-//! one harness, so the filter is effectively exact in this file today, but read literally it is a
-//! prefix over the whole `graph`/`collection` family: a crate containing more than one
-//! case of the same family would have every one of them selected by this same filter.
+//! `--harness <name>` below is a substring filter over the fully qualified harness name.
+//! Each temporary crate writes exactly one graph harness.
 
 use std::{fs, process::Command};
 
@@ -14,11 +10,10 @@ use ix_trace_rs::trace;
 use jsonschema::{Draft, JSONSchema};
 use quire_contract_codegen::{
     classify_kani_run, generate_bounded_kani_corpus_case, parse_assertion_playback,
-    prepare_bounded_collection_query, prepare_finite_graph_reaches, select_counterexample,
-    BoundedCorpusCase, BoundedCorpusRequest, CollectionLowering, CollectionQuery,
+    prepare_finite_graph_reaches, select_counterexample, BoundedCorpusCase, BoundedCorpusRequest,
     CorpusProofDependencyGraph, EmittedCorpusIdentities, GraphLowering, GraphRequest,
     KaniInconclusiveReason, KaniRunOutcome, Playback, ProofDependencyKind, ProofDependencyRequest,
-    ProofDependencyState, ProofReadiness, QueryKind, ReplayVerdict, WitnessDecodeLimits,
+    ProofDependencyState, ProofReadiness, ReplayVerdict, WitnessDecodeLimits,
     CORPUS_PROOF_GRAPH_SCHEMA,
 };
 use quire_contract_ir::kani::{
@@ -64,36 +59,20 @@ fn fixture() -> (
     };
     let profile = KaniProfile::new(
         selection.clone(),
-        vec![
-            CapabilityEntry {
-                construct: "bounded-collection-query".to_owned(),
-                disposition: CapabilityDisposition::Supported {
-                    module: "collections".to_owned(),
-                },
+        vec![CapabilityEntry {
+            construct: "finite-reference-graph".to_owned(),
+            disposition: CapabilityDisposition::Supported {
+                module: "graphs".to_owned(),
             },
-            CapabilityEntry {
-                construct: "finite-reference-graph".to_owned(),
-                disposition: CapabilityDisposition::Supported {
-                    module: "graphs".to_owned(),
-                },
-            },
-        ],
+        }],
     )
     .unwrap();
-    let dispatch = DispatchIndex::new(vec![
-        ModuleDescriptor {
-            module_id: "collections".to_owned(),
-            family: SemanticFamily::CollectionsQueries,
-            abi_revision: "abi".to_owned(),
-            constructs: vec!["bounded-collection-query".to_owned()],
-        },
-        ModuleDescriptor {
-            module_id: "graphs".to_owned(),
-            family: SemanticFamily::ObjectsReferencesGraphs,
-            abi_revision: "abi".to_owned(),
-            constructs: vec!["finite-reference-graph".to_owned()],
-        },
-    ])
+    let dispatch = DispatchIndex::new(vec![ModuleDescriptor {
+        module_id: "graphs".to_owned(),
+        family: SemanticFamily::ObjectsReferencesGraphs,
+        abi_revision: "abi".to_owned(),
+        constructs: vec!["finite-reference-graph".to_owned()],
+    }])
     .unwrap();
     let input = FiniteInput {
         model_id: "model".to_owned(),
@@ -127,88 +106,6 @@ fn fixture() -> (
     .validate()
     .unwrap();
     (profile, dispatch, input)
-}
-
-#[trace("TC-023", "TC-001", "NFR-002-AC-1", "NFR-002-AC-2")]
-#[test]
-fn tc_023_public_corpus_uses_the_validated_profile_boundary() {
-    let (profile, dispatch, input) = fixture();
-    let mut emitted = EmittedCorpusIdentities::new();
-    let collection = generate_bounded_kani_corpus_case(
-        crate::common::proof_ceilings::proof_ceilings(),
-        &profile,
-        &dispatch,
-        &input,
-        BoundedCorpusRequest::Collection(CollectionQuery {
-            source_id: "source".to_owned(),
-            values: vec![1, 2],
-            max_items: 2,
-            kind: QueryKind::ForAllNonNegative,
-        }),
-        &[],
-        &mut emitted,
-    )
-    .unwrap();
-    assert!(collection.expectation.expected_assertion_holds());
-    for artifact in [
-        &collection.artifacts.oracle,
-        &collection.artifacts.strategy,
-        &collection.artifacts.kani_harness,
-    ] {
-        let case = artifact
-            .path
-            .strip_prefix("corpus/")
-            .unwrap()
-            .split('.')
-            .next()
-            .unwrap();
-        crate::generated_headers::assert_header(&artifact.path, &artifact.contents, &[case]);
-    }
-    assert!(collection
-        .artifacts
-        .oracle
-        .contents
-        .contains("values.iter().all(|value| *value >= 0i128)"));
-    assert!(!collection
-        .artifacts
-        .kani_harness
-        .contents
-        .contains("kani::assume"));
-
-    let exhausted = generate_bounded_kani_corpus_case(
-        crate::common::proof_ceilings::proof_ceilings(),
-        &profile,
-        &dispatch,
-        &input,
-        BoundedCorpusRequest::Collection(CollectionQuery {
-            source_id: "source".to_owned(),
-            values: vec![1, 2],
-            max_items: 1,
-            kind: QueryKind::ForAllNonNegative,
-        }),
-        &[],
-        &mut emitted,
-    )
-    .unwrap_err();
-    assert_eq!(exhausted.kind(), KaniOutcomeKind::ResourceExhausted);
-    assert_eq!(exhausted.boolean_claim(), None);
-
-    let counterexample = generate_bounded_kani_corpus_case(
-        crate::common::proof_ceilings::proof_ceilings(),
-        &profile,
-        &dispatch,
-        &input,
-        BoundedCorpusRequest::Collection(CollectionQuery {
-            source_id: "source".to_owned(),
-            values: vec![2, 2],
-            max_items: 2,
-            kind: QueryKind::ExistsEqual(7),
-        }),
-        &[],
-        &mut emitted,
-    )
-    .unwrap();
-    assert!(!counterexample.expectation.expected_assertion_holds());
 }
 
 #[trace("FR-015-AC-57", "TC-023")]
@@ -359,32 +256,12 @@ fn tc_023_escaped_graph_identity_keeps_native_and_oracle_order() {
     );
 }
 
-/// A true collection case classifies `Verified`, and a false graph case is `Falsified` with the
-/// assertion's playback, which draws no value, so it is empty-valued.
+/// A false graph case is `Falsified` with empty-valued assertion playback.
 #[trace("FR-015-AC-57", "TC-023")]
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
-fn tc_023_kani_verifies_a_true_collection_and_falsifies_a_false_graph_harness() {
+fn tc_023_kani_falsifies_a_false_graph_harness() {
     let (profile, dispatch, input) = fixture();
-    let true_collection = generate_bounded_kani_corpus_case(
-        crate::common::proof_ceilings::proof_ceilings(),
-        &profile,
-        &dispatch,
-        &input,
-        BoundedCorpusRequest::Collection(CollectionQuery {
-            source_id: "source".to_owned(),
-            values: vec![2, 2, 7],
-            max_items: 3,
-            kind: QueryKind::ExistsEqual(7),
-        }),
-        &[],
-        &mut EmittedCorpusIdentities::new(),
-    )
-    .unwrap();
-    assert_eq!(
-        classify_corpus(&true_collection, "corpus_case_collection"),
-        KaniRunOutcome::Verified
-    );
     let false_graph = generate_bounded_kani_corpus_case(
         crate::common::proof_ceilings::proof_ceilings(),
         &profile,
@@ -417,11 +294,12 @@ fn tc_023_kani_reads_a_corpus_harness_without_its_cover_as_missing_the_cover_sum
         &profile,
         &dispatch,
         &input,
-        BoundedCorpusRequest::Collection(CollectionQuery {
+        BoundedCorpusRequest::Graph(GraphRequest {
             source_id: "source".to_owned(),
-            values: vec![1, 2],
-            max_items: 2,
-            kind: QueryKind::ForAllNonNegative,
+            start_id: "a".to_owned(),
+            target_id: "b".to_owned(),
+            field_id: "next".to_owned(),
+            max_expansions: 2,
         }),
         &[],
         &mut EmittedCorpusIdentities::new(),
@@ -436,34 +314,11 @@ fn tc_023_kani_reads_a_corpus_harness_without_its_cover_as_missing_the_cover_sum
         .collect::<Vec<_>>()
         .join("\n");
     assert_eq!(
-        classify_corpus(&generated, "corpus_case_collection"),
+        classify_corpus(&generated, "corpus_case_graph"),
         KaniRunOutcome::Inconclusive {
             reason: KaniInconclusiveReason::MissingCoverSummary
         }
     );
-}
-
-#[trace("FR-015-AC-57", "TC-023")]
-#[test]
-#[ignore = "kani lane: run serially through `make kani`"]
-fn tc_023_kani_falsifies_the_generated_false_collection_harness() {
-    let (profile, dispatch, input) = fixture();
-    let generated = generate_bounded_kani_corpus_case(
-        crate::common::proof_ceilings::proof_ceilings(),
-        &profile,
-        &dispatch,
-        &input,
-        BoundedCorpusRequest::Collection(CollectionQuery {
-            source_id: "source".to_owned(),
-            values: vec![2, 2],
-            max_items: 2,
-            kind: QueryKind::ExistsEqual(7),
-        }),
-        &[],
-        &mut EmittedCorpusIdentities::new(),
-    )
-    .unwrap();
-    assert_empty_valued_falsification(classify_corpus(&generated, "corpus_case_collection"));
 }
 
 /// Captured Kani counterexamples for false corpus cases reproduce through each case's QSL source.
@@ -488,38 +343,16 @@ fn tc_023_real_corpus_playback_replays_through_its_qsl_source() {
         &mut EmittedCorpusIdentities::new(),
     )
     .unwrap();
-    let collection = generate_bounded_kani_corpus_case(
-        crate::common::proof_ceilings::proof_ceilings(),
-        &profile,
-        &dispatch,
-        &input,
-        BoundedCorpusRequest::Collection(CollectionQuery {
-            source_id: "source".to_owned(),
-            values: vec![2, 2],
-            max_items: 2,
-            kind: QueryKind::ExistsEqual(7),
-        }),
-        &[],
-        &mut EmittedCorpusIdentities::new(),
-    )
-    .unwrap();
-
-    for (case, harness_filter) in [
-        (graph, "corpus_case_graph"),
-        (collection, "corpus_case_collection"),
-    ] {
-        let playback = falsification_playback(classify_corpus(&case, harness_filter));
-        let limits = WitnessDecodeLimits {
-            bytes: playback.len(),
-            values: 0,
-        };
-        let parsed = typed_playback(&playback, limits);
-        assert_eq!(
-            case.replay_counterexample(&parsed, limits).unwrap(),
-            ReplayVerdict::Reproduced,
-            "{harness_filter} counterexample should replay through its source"
-        );
-    }
+    let playback = falsification_playback(classify_corpus(&graph, "corpus_case_graph"));
+    let limits = WitnessDecodeLimits {
+        bytes: playback.len(),
+        values: 0,
+    };
+    let parsed = typed_playback(&playback, limits);
+    assert_eq!(
+        graph.replay_counterexample(&parsed, limits).unwrap(),
+        ReplayVerdict::Reproduced,
+    );
 }
 
 /// The caller parses the complete captured text; the public corpus replay entry rechecks its
@@ -534,17 +367,18 @@ fn tc_026_corpus_replay_refuses_poisoned_suffixes_at_both_decode_bounds() {
         &profile,
         &dispatch,
         &input,
-        BoundedCorpusRequest::Collection(CollectionQuery {
+        BoundedCorpusRequest::Graph(GraphRequest {
             source_id: "source".to_owned(),
-            values: vec![2, 2],
-            max_items: 2,
-            kind: QueryKind::ExistsEqual(7),
+            start_id: "b".to_owned(),
+            target_id: "a".to_owned(),
+            field_id: "next".to_owned(),
+            max_expansions: 2,
         }),
         &[],
         &mut EmittedCorpusIdentities::new(),
     )
     .unwrap();
-    let playback = falsification_playback(classify_corpus(&case, "corpus_case_collection"));
+    let playback = falsification_playback(classify_corpus(&case, "corpus_case_graph"));
     let limits = WitnessDecodeLimits {
         bytes: playback.len(),
         values: 0,
@@ -716,10 +550,10 @@ fn falsification_playback(outcome: KaniRunOutcome) -> String {
     counterexample
 }
 
-/// Every corpus family's harness ends with exactly one cover, after the oracle's assertion.
+/// The graph corpus harness ends with exactly one cover, after the oracle's assertion.
 #[trace("FR-015-AC-55", "TC-023")]
 #[test]
-fn tc_023_every_corpus_family_ends_its_harness_with_one_cover_after_its_assertion() {
+fn tc_023_graph_corpus_ends_its_harness_with_one_cover_after_its_assertion() {
     for (family, harness) in guard_sources() {
         let assertion = harness.find("assert!(corpus_oracle());");
         let cover = harness.find("kani::cover!(");
@@ -733,56 +567,14 @@ fn tc_023_every_corpus_family_ends_its_harness_with_one_cover_after_its_assertio
     }
 }
 
-/// The harness of one true case of each corpus family, for the cover-last guard (FR-015-AC-58).
+/// The harness of one true graph case, for the cover-last guard (FR-015-AC-58).
 pub(crate) fn guard_sources() -> Vec<(&'static str, String)> {
     let (profile, dispatch, input) = fixture();
-    let requests = [
-        (
-            "corpus graph",
-            BoundedCorpusRequest::Graph(GraphRequest {
-                source_id: "source".to_owned(),
-                start_id: "a".to_owned(),
-                target_id: "b".to_owned(),
-                field_id: "next".to_owned(),
-                max_expansions: 2,
-            }),
-        ),
-        (
-            "corpus collection",
-            BoundedCorpusRequest::Collection(CollectionQuery {
-                source_id: "source".to_owned(),
-                values: vec![2, 2, 7],
-                max_items: 3,
-                kind: QueryKind::ExistsEqual(7),
-            }),
-        ),
-    ];
-    requests
-        .into_iter()
-        .map(|(family, request)| {
-            let generated = generate_bounded_kani_corpus_case(
-                crate::common::proof_ceilings::proof_ceilings(),
-                &profile,
-                &dispatch,
-                &input,
-                request,
-                &[],
-                &mut EmittedCorpusIdentities::new(),
-            )
-            .unwrap();
-            (family, generated.artifacts.kani_harness.contents)
-        })
-        .collect()
-}
-
-/// Every supported family's emitted `proof_graph` artifact is a real `CORPUS_PROOF_GRAPH_SCHEMA`
-/// document -- not merely a JSON blob this crate's own `CorpusProofDependencyGraph` type happens
-/// to deserialize -- validated against the published corpus schema file.
-#[trace("TC-023", "FR-028-AC-1")]
-#[test]
-fn tc_023_proof_graph_artifact_validates_against_its_published_schema() {
-    let (profile, dispatch, input) = fixture();
-    let cases = [
+    let generated = generate_bounded_kani_corpus_case(
+        crate::common::proof_ceilings::proof_ceilings(),
+        &profile,
+        &dispatch,
+        &input,
         BoundedCorpusRequest::Graph(GraphRequest {
             source_id: "source".to_owned(),
             start_id: "a".to_owned(),
@@ -790,47 +582,105 @@ fn tc_023_proof_graph_artifact_validates_against_its_published_schema() {
             field_id: "next".to_owned(),
             max_expansions: 2,
         }),
-        BoundedCorpusRequest::Collection(CollectionQuery {
-            source_id: "source".to_owned(),
-            values: vec![2, 2, 7],
-            max_items: 3,
-            kind: QueryKind::ExistsEqual(7),
-        }),
-    ];
-    for request in cases {
-        let generated = generate_bounded_kani_corpus_case(
-            crate::common::proof_ceilings::proof_ceilings(),
-            &profile,
-            &dispatch,
-            &input,
-            request,
-            &[],
-            &mut EmittedCorpusIdentities::new(),
-        )
+        &[],
+        &mut EmittedCorpusIdentities::new(),
+    )
+    .unwrap();
+    vec![("corpus graph", generated.artifacts.kani_harness.contents)]
+}
+
+/// The graph family's emitted `proof_graph` artifact is a real `CORPUS_PROOF_GRAPH_SCHEMA`
+/// document -- not merely a JSON blob this crate's own `CorpusProofDependencyGraph` type happens
+/// to deserialize -- validated against the published corpus schema file.
+#[trace("TC-023", "FR-028-AC-1")]
+#[test]
+fn tc_023_proof_graph_artifact_validates_against_its_published_schema() {
+    let (profile, dispatch, input) = fixture();
+    let request = BoundedCorpusRequest::Graph(GraphRequest {
+        source_id: "source".to_owned(),
+        start_id: "a".to_owned(),
+        target_id: "b".to_owned(),
+        field_id: "next".to_owned(),
+        max_expansions: 2,
+    });
+    let generated = generate_bounded_kani_corpus_case(
+        crate::common::proof_ceilings::proof_ceilings(),
+        &profile,
+        &dispatch,
+        &input,
+        request,
+        &[],
+        &mut EmittedCorpusIdentities::new(),
+    )
+    .unwrap();
+    let instance: serde_json::Value =
+        serde_json::from_str(&generated.artifacts.proof_graph.contents)
+            .expect("the corpus proof-dependency graph must parse as JSON");
+    // The old struct-order encoder wrote `schemaVersion`
+    // second; canonical bytes sort `dependencies` before it and end with one newline.
+    let graph_text = &generated.artifacts.proof_graph.contents;
+    assert!(
+        graph_text.find("\"dependencies\"").unwrap()
+            < graph_text.find("\"schemaVersion\"").unwrap()
+    );
+    assert!(graph_text.ends_with("}\n"));
+    assert!(!graph_text.ends_with("}\n\n"));
+    validate(
+        include_str!("../../schemas/kani-corpus-proof-graph-v1.schema.json"),
+        &instance,
+    );
+    let graph: CorpusProofDependencyGraph = serde_json::from_str(
+        &generated.artifacts.proof_graph.contents,
+    )
+    .expect("the corpus proof-dependency graph must deserialize as CorpusProofDependencyGraph");
+    assert_eq!(graph.schema_version, CORPUS_PROOF_GRAPH_SCHEMA);
+    assert!(graph.dependencies.is_empty());
+    assert_eq!(graph.readiness, ProofReadiness::Ready);
+}
+
+/// The published finite corpus schema accepts graph cases and rejects retired families.
+#[trace("FR-015-AC-110", "FR-028-AC-1", "TC-023")]
+#[test]
+fn tc_023_proof_graph_schema_rejects_retired_corpus_families() {
+    let schema: serde_json::Value = serde_json::from_str(include_str!(
+        "../../schemas/kani-corpus-proof-graph-v1.schema.json"
+    ))
+    .unwrap();
+    let validator = JSONSchema::options()
+        .with_draft(Draft::Draft7)
+        .compile(&schema)
         .unwrap();
-        let instance: serde_json::Value =
-            serde_json::from_str(&generated.artifacts.proof_graph.contents)
-                .expect("the corpus proof-dependency graph must parse as JSON");
-        // The old struct-order encoder wrote `schemaVersion`
-        // second; canonical bytes sort `dependencies` before it and end with one newline.
-        let graph_text = &generated.artifacts.proof_graph.contents;
-        assert!(
-            graph_text.find("\"dependencies\"").unwrap()
-                < graph_text.find("\"schemaVersion\"").unwrap()
-        );
-        assert!(graph_text.ends_with("}\n"));
-        assert!(!graph_text.ends_with("}\n\n"));
-        validate(
-            include_str!("../../schemas/kani-corpus-proof-graph-v1.schema.json"),
-            &instance,
-        );
-        let graph: CorpusProofDependencyGraph = serde_json::from_str(
-            &generated.artifacts.proof_graph.contents,
-        )
-        .expect("the corpus proof-dependency graph must deserialize as CorpusProofDependencyGraph");
-        assert_eq!(graph.schema_version, CORPUS_PROOF_GRAPH_SCHEMA);
-        assert!(graph.dependencies.is_empty());
-        assert_eq!(graph.readiness, ProofReadiness::Ready);
+    let (profile, dispatch, input) = fixture();
+    let generated = generate_bounded_kani_corpus_case(
+        crate::common::proof_ceilings::proof_ceilings(),
+        &profile,
+        &dispatch,
+        &input,
+        BoundedCorpusRequest::Graph(GraphRequest {
+            source_id: "source".to_owned(),
+            start_id: "a".to_owned(),
+            target_id: "b".to_owned(),
+            field_id: "next".to_owned(),
+            max_expansions: 2,
+        }),
+        &[],
+        &mut EmittedCorpusIdentities::new(),
+    )
+    .unwrap();
+    let graph: serde_json::Value =
+        serde_json::from_str(&generated.artifacts.proof_graph.contents).unwrap();
+    assert!(validator.is_valid(&graph));
+    for (field, retired) in [
+        ("family", "collection"),
+        ("family", "arithmetic"),
+        ("construct", "bounded-collection-query"),
+        ("construct", "checked-arithmetic"),
+        ("identity", "collection_0000000000000000000000000000000000000000000000000000000000000000"),
+        ("proofId", "corpus_case_arithmetic_0000000000000000000000000000000000000000000000000000000000000000"),
+    ] {
+        let mut retired_graph = graph.clone();
+        retired_graph[field] = serde_json::json!(retired);
+        assert!(!validator.is_valid(&retired_graph), "{field}={retired} remained admitted");
     }
 }
 
@@ -852,11 +702,12 @@ fn tc_023_proof_graph_with_a_declared_dependency_validates_against_its_published
         &profile,
         &dispatch,
         &input,
-        BoundedCorpusRequest::Collection(CollectionQuery {
+        BoundedCorpusRequest::Graph(GraphRequest {
             source_id: "source".to_owned(),
-            values: vec![1, 2],
-            max_items: 2,
-            kind: QueryKind::ForAllNonNegative,
+            start_id: "a".to_owned(),
+            target_id: "b".to_owned(),
+            field_id: "next".to_owned(),
+            max_expansions: 2,
         }),
         &[dependency],
         &mut EmittedCorpusIdentities::new(),
@@ -886,15 +737,6 @@ fn validate(schema: &str, instance: &serde_json::Value) {
     assert!(errors.is_empty(), "schema errors: {errors:?}");
 }
 
-fn direct_query(max_items: usize) -> CollectionQuery {
-    CollectionQuery {
-        source_id: "source:direct".into(),
-        values: vec![2, 2, 7],
-        max_items,
-        kind: QueryKind::ExistsEqual(7),
-    }
-}
-
 fn direct_graph(max_expansions: usize) -> GraphRequest {
     GraphRequest {
         source_id: "source:direct".into(),
@@ -918,16 +760,16 @@ fn assert_direct_refusal(
     assert_eq!(outcome.boolean_claim(), None);
 }
 
-#[trace("FR-015-AC-123", "FR-015-AC-124")]
+#[trace(
+    "FR-015-AC-123",
+    "FR-015-AC-124",
+    "TC-001",
+    "NFR-002-AC-1",
+    "NFR-002-AC-2"
+)]
 #[test]
 fn public_family_and_corpus_results_have_direct_ir_errors_and_unchanged_successes() {
     let (profile, dispatch, input) = fixture();
-    let collection: Result<CollectionLowering, KaniOutcome> =
-        prepare_bounded_collection_query(&profile, &dispatch, &input, direct_query(3));
-    let collection = collection.expect("admitted collection result");
-    assert!(collection.value);
-    assert_eq!(collection.examined, 3);
-    assert_eq!(collection.query.values, [2, 2, 7]);
     let graph: Result<GraphLowering, KaniOutcome> =
         prepare_finite_graph_reaches(&profile, &dispatch, &input, direct_graph(1));
     let graph = graph.expect("the target edge needs only its source expansion");
@@ -939,20 +781,29 @@ fn public_family_and_corpus_results_have_direct_ir_errors_and_unchanged_successe
         &profile,
         &dispatch,
         &input,
-        BoundedCorpusRequest::Collection(direct_query(3)),
+        BoundedCorpusRequest::Graph(direct_graph(2)),
         &[],
         &mut emitted,
     );
     let corpus = corpus.expect("all corpus artifacts are retained");
+    for artifact in [
+        &corpus.artifacts.oracle,
+        &corpus.artifacts.strategy,
+        &corpus.artifacts.kani_harness,
+    ] {
+        let case = artifact
+            .path
+            .strip_prefix("corpus/")
+            .unwrap()
+            .split('.')
+            .next()
+            .unwrap();
+        crate::generated_headers::assert_header(&artifact.path, &artifact.contents, &[case]);
+    }
     assert!(corpus.expectation.expected_assertion_holds());
     assert_eq!(corpus.expectation.expected_success_checks(), 1);
     assert_eq!(corpus.expectation.source_id(), "source:direct");
     assert_eq!(corpus.expectation.context(), "r1");
-    assert!(corpus
-        .artifacts
-        .oracle
-        .contents
-        .contains("let values = [2i128, 2i128, 7i128]"));
     assert!(corpus
         .artifacts
         .strategy
@@ -966,7 +817,7 @@ fn public_family_and_corpus_results_have_direct_ir_errors_and_unchanged_successe
         &profile,
         &dispatch,
         &input,
-        BoundedCorpusRequest::Collection(direct_query(3)),
+        BoundedCorpusRequest::Graph(direct_graph(2)),
         &[],
         &mut emitted,
     );
@@ -980,86 +831,51 @@ fn public_family_and_corpus_results_have_direct_ir_errors_and_unchanged_successe
 
 #[trace("FR-015-AC-124")]
 #[test]
-fn direct_family_errors_preserve_profile_dispatch_and_bound_precedence() {
+fn direct_graph_errors_preserve_profile_dispatch_and_bound_precedence() {
     let (profile, dispatch, input) = fixture();
     let refused = KaniProfile::new(
         profile.selection().clone(),
-        vec![
-            CapabilityEntry {
-                construct: "bounded-collection-query".into(),
-                disposition: CapabilityDisposition::Refused {
-                    code: std001_code!("collection_not_qualified"),
-                },
+        vec![CapabilityEntry {
+            construct: "finite-reference-graph".into(),
+            disposition: CapabilityDisposition::Refused {
+                code: std001_code!("graph_not_qualified"),
             },
-            CapabilityEntry {
-                construct: "finite-reference-graph".into(),
-                disposition: CapabilityDisposition::Refused {
-                    code: std001_code!("graph_not_qualified"),
-                },
-            },
-        ],
+        }],
     )
     .unwrap();
     let empty = DispatchIndex::new(vec![]).unwrap();
-    // Both requests are also malformed or over-bound; profile refusal must win.
-    assert_direct_refusal(
-        &prepare_bounded_collection_query(&refused, &empty, &input, direct_query(0)).unwrap_err(),
-        KaniOutcomeKind::Refused,
-        std001_code!("collection_not_qualified"),
-        "source:direct",
-    );
     assert_direct_refusal(
         &prepare_finite_graph_reaches(&refused, &empty, &input, direct_graph(0)).unwrap_err(),
         KaniOutcomeKind::Refused,
         std001_code!("graph_not_qualified"),
         "source:direct",
     );
-    for outcome in [
-        prepare_bounded_collection_query(&profile, &empty, &input, direct_query(0)).unwrap_err(),
-        prepare_finite_graph_reaches(&profile, &empty, &input, direct_graph(0)).unwrap_err(),
-    ] {
-        assert_direct_refusal(
-            &outcome,
-            KaniOutcomeKind::Refused,
-            std001_code!("kani_dispatch_unowned"),
-            "source:direct",
-        );
-    }
+    assert_direct_refusal(
+        &prepare_finite_graph_reaches(&profile, &empty, &input, direct_graph(0)).unwrap_err(),
+        KaniOutcomeKind::Refused,
+        std001_code!("kani_dispatch_unowned"),
+        "source:direct",
+    );
     let mismatched = KaniProfile::new(
         profile.selection().clone(),
-        vec![
-            CapabilityEntry {
-                construct: "bounded-collection-query".into(),
-                disposition: CapabilityDisposition::Supported {
-                    module: "foreign".into(),
-                },
+        vec![CapabilityEntry {
+            construct: "finite-reference-graph".into(),
+            disposition: CapabilityDisposition::Supported {
+                module: "foreign".into(),
             },
-            CapabilityEntry {
-                construct: "finite-reference-graph".into(),
-                disposition: CapabilityDisposition::Supported {
-                    module: "foreign".into(),
-                },
-            },
-        ],
+        }],
     )
     .unwrap();
-    for outcome in [
-        prepare_bounded_collection_query(&mismatched, &dispatch, &input, direct_query(0))
-            .unwrap_err(),
-        prepare_finite_graph_reaches(&mismatched, &dispatch, &input, direct_graph(0)).unwrap_err(),
-    ] {
-        assert_direct_refusal(
-            &outcome,
-            KaniOutcomeKind::Refused,
-            std001_code!("kani_dispatch_profile_mismatch"),
-            "source:direct",
-        );
-    }
     assert_direct_refusal(
-        &prepare_bounded_collection_query(&profile, &dispatch, &input, direct_query(2))
-            .unwrap_err(),
-        KaniOutcomeKind::ResourceExhausted,
-        std001_code!("kani_collection_bound_exhausted"),
+        &prepare_finite_graph_reaches(&mismatched, &dispatch, &input, direct_graph(0)).unwrap_err(),
+        KaniOutcomeKind::Refused,
+        std001_code!("kani_dispatch_profile_mismatch"),
+        "source:direct",
+    );
+    assert_direct_refusal(
+        &prepare_finite_graph_reaches(&profile, &dispatch, &input, direct_graph(0)).unwrap_err(),
+        KaniOutcomeKind::InvalidInput,
+        std001_code!("kani_graph_bound_invalid"),
         "source:direct",
     );
     let unknown = GraphRequest {
@@ -1087,7 +903,6 @@ fn direct_family_errors_preserve_profile_dispatch_and_bound_precedence() {
         std001_code!("kani_graph_identity_invalid"),
         "source:direct",
     );
-    // A positive-length search back to a has to expand b, exceeding the one-expansion limit.
     assert_direct_refusal(
         &prepare_finite_graph_reaches(
             &profile,
@@ -1123,7 +938,7 @@ fn direct_corpus_refusals_preserve_earliest_failure_and_identity_transactions() 
         &profile,
         &empty,
         &input,
-        BoundedCorpusRequest::Collection(direct_query(0)),
+        BoundedCorpusRequest::Graph(direct_graph(0)),
         &[dependency, dependency],
         &mut emitted,
     );
@@ -1146,7 +961,7 @@ fn direct_corpus_refusals_preserve_earliest_failure_and_identity_transactions() 
         &mismatch,
         &empty,
         &input,
-        BoundedCorpusRequest::Collection(direct_query(0)),
+        BoundedCorpusRequest::Graph(direct_graph(0)),
         &[dependency, dependency],
         &mut emitted,
     )
@@ -1165,9 +980,12 @@ fn direct_corpus_refusals_preserve_earliest_failure_and_identity_transactions() 
         &profile,
         &empty,
         &input,
-        BoundedCorpusRequest::Collection(CollectionQuery {
+        BoundedCorpusRequest::Graph(GraphRequest {
             source_id: oversized_source.clone(),
-            ..direct_query(0)
+            start_id: "a".to_owned(),
+            target_id: "b".to_owned(),
+            field_id: "next".to_owned(),
+            max_expansions: 2,
         }),
         &[],
         &mut emitted,
@@ -1184,7 +1002,11 @@ fn direct_corpus_refusals_preserve_earliest_failure_and_identity_transactions() 
         &profile,
         &dispatch,
         &input,
-        BoundedCorpusRequest::Collection(direct_query(2)),
+        BoundedCorpusRequest::Graph(GraphRequest {
+            target_id: "a".into(),
+            max_expansions: 1,
+            ..direct_graph(2)
+        }),
         &[],
         &mut emitted,
     )
@@ -1192,7 +1014,7 @@ fn direct_corpus_refusals_preserve_earliest_failure_and_identity_transactions() 
     assert_direct_refusal(
         &bound,
         KaniOutcomeKind::ResourceExhausted,
-        std001_code!("kani_collection_bound_exhausted"),
+        std001_code!("kani_graph_expansion_exhausted"),
         "source:direct",
     );
     // Dispatch is not part of the case identity: retrying the exact request with
@@ -1202,7 +1024,7 @@ fn direct_corpus_refusals_preserve_earliest_failure_and_identity_transactions() 
         &profile,
         &empty,
         &input,
-        BoundedCorpusRequest::Collection(direct_query(3)),
+        BoundedCorpusRequest::Graph(direct_graph(2)),
         &[],
         &mut emitted,
     )
@@ -1218,7 +1040,7 @@ fn direct_corpus_refusals_preserve_earliest_failure_and_identity_transactions() 
         &profile,
         &dispatch,
         &input,
-        BoundedCorpusRequest::Collection(direct_query(3)),
+        BoundedCorpusRequest::Graph(direct_graph(2)),
         &[],
         &mut emitted,
     )
@@ -1228,7 +1050,7 @@ fn direct_corpus_refusals_preserve_earliest_failure_and_identity_transactions() 
         &profile,
         &dispatch,
         &input,
-        BoundedCorpusRequest::Collection(direct_query(3)),
+        BoundedCorpusRequest::Graph(direct_graph(2)),
         &[],
         &mut EmittedCorpusIdentities::new(),
     )

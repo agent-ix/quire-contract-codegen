@@ -1258,6 +1258,7 @@ mod tests {
         ));
     }
 
+    #[trace("FR-015-AC-101", "TC-025")]
     #[test]
     fn domain_representability_failures_keep_the_typed_reason() {
         let node_id = CheckedNodeId {
@@ -1280,6 +1281,32 @@ mod tests {
                 }) if rejected == node_id
             ));
         }
+    }
+
+    #[trace("FR-015-AC-101", "TC-025")]
+    #[test]
+    fn rendering_refuses_an_unrepresentable_element_domain_without_a_harness() {
+        let mut claim = base_claim();
+        claim.field.element = CollectionElementDomain::Integer {
+            minimum: 0,
+            maximum: i128::from(i64::MAX) + 1,
+        };
+        let request = KaniObligationRequest {
+            ceilings: crate::kani::identity::ProofCeilings {
+                memory_bytes: std::num::NonZeroU64::new(1 << 30).unwrap(),
+                wall_clock: std::time::Duration::from_secs(60),
+            },
+            items: &[],
+            subject_path: "crate::subject",
+            unwind: 8,
+        };
+        assert!(matches!(
+            render_collection(&request, &claim),
+            Err(UnsupportedObligation::CollectionClaimNotRendered {
+                node_id,
+                reason: CollectionUnsupportedReason::DomainNotRepresentableInI64,
+            }) if node_id == claim.field.quantifier
+        ));
     }
 
     /// A quantity conversion is not a `binary` expression, so the collection predicate reader
