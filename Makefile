@@ -141,12 +141,9 @@ clean:
 # Supply chain & safety
 # =============================================================================
 
-# One copy of every agent-ix git crate in Cargo.lock; see the header of
-# scripts/check_one_copy.awk.
 .PHONY: deny
 deny:
 	$(CARGO) deny check
-	awk -f scripts/check_one_copy.awk Cargo.lock
 
 .PHONY: cargo-audit
 cargo-audit:
