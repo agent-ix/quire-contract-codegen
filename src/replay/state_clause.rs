@@ -29,8 +29,8 @@ use qsl_replay::{
     EmptyQualifiedName, EnvelopeSource, FiniteBound, Integer, MalformedTranscript, OperationName,
     ProofBound, ProofBoundRefusal, QualifiedName, ReplayRefusal, ReplayRequestWire, ReplayResult,
     ReplaySource, ReplayTargetMembers, RequestTargetWire, StateClauseCounterexample,
-    StateClauseReplayResult, WireNodeId, WitnessEnvelope, WitnessPacket, WitnessRefusal,
-    WitnessSettlement, WitnessValue,
+    StateClauseReplayResult, WitnessEnvelope, WitnessPacket, WitnessRefusal, WitnessSettlement,
+    WitnessValue,
 };
 use quire_canonical::{Encode, FixedShape};
 use quire_contract_model::{CheckedModelFieldsError, CheckedNodeId, CheckedPackageV2};
@@ -39,7 +39,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     core::canonical::{content_bytes, content_digest, DigestError},
-    core::ir::clause::ClauseGraphView,
+    core::ir::{clause::ClauseGraphView, node_key::checked_node_key},
     kani::{
         abi::{KaniBindingRole, KaniPrimitiveType},
         generate::{
@@ -610,7 +610,7 @@ impl StateClauseReplay {
         .map_err(StateClauseReplayError::CallSite)?;
         let package_id = located.package_id;
         let site = located.site;
-        if WireNodeId::from_hex(&clause_node.digest) != Some(site.node) {
+        if checked_node_key(&clause_node).as_ref() != Some(&site.node) {
             return Err(StateClauseReplayError::ClauseSelectionMismatch);
         }
 
@@ -1126,8 +1126,7 @@ fn declared_domains(
     let Some(self_parameter) = shape.parameters.first() else {
         return Err(unreadable(&shape.scope.anchor));
     };
-    let parameter =
-        WireNodeId::from_hex(&self_parameter.digest).ok_or_else(|| unreadable(self_parameter))?;
+    let parameter = checked_node_key(self_parameter).ok_or_else(|| unreadable(self_parameter))?;
     let mut domains = Vec::new();
     for (position, field) in fields.iter().enumerate() {
         let Some((minimum, maximum)) = field.range else {
