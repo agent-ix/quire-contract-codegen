@@ -656,6 +656,7 @@ mod tests {
         let result = generate_composite_equality_oracles(
             &admitted,
             None,
+            None,
             &positions,
             &[1],
             &[CompositeEqualityItem {
@@ -3056,6 +3057,7 @@ mod tests {
         ));
         let equality = generate_composite_equality_oracles(
             &admitted,
+            Some(&checked),
             Some(genuine.context()),
             &drivers(&requested),
             &[2],

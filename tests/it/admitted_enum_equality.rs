@@ -291,7 +291,15 @@ pub(super) fn generate_items_with_libraries(
             .cloned()
             .map(|node_id| ContractRequestPosition::ContextRoot { node_id }),
     );
-    generate_composite_equality_oracles(&package, context, &requested, &positions, items, limits)
+    generate_composite_equality_oracles(
+        &package,
+        Some(checked),
+        context,
+        &requested,
+        &positions,
+        items,
+        limits,
+    )
 }
 
 #[trace(
@@ -538,6 +546,31 @@ fn public_generator_rejects_another_authentic_source_context() {
             panic!("expected whole-generation context refusal without artifacts, got {other:?}")
         }
     }
+}
+
+#[trace("FR-018-AC-33", "TC-029")]
+#[test]
+fn primitive_only_generation_rejects_same_name_context_with_different_checked_body() {
+    let compiled = fixture::compile(INTEGER_SOURCE);
+    let changed = fixture::compile(&format!(
+        "{INTEGER_SOURCE}\nfunction extra using v(): Boolean pure {{ true }}\n"
+    ));
+    let package = checked(&compiled, &[]);
+    let (item, _) = integer_item(&package);
+    assert_eq!(
+        compiled.context().package_name(),
+        changed.context().package_name(),
+        "the negative control retains the same library name"
+    );
+    assert_ne!(
+        compiled.context().package_bytes(),
+        changed.context().package_bytes(),
+        "the independently emitted checked bodies differ"
+    );
+    assert!(matches!(
+        generate_items(&package, Some(changed.context()), &[item], &[]),
+        Err(OracleGenerationError::ContextPackageContentMismatch)
+    ));
 }
 
 pub(super) fn direct_source_item(

@@ -79,6 +79,14 @@ pub enum OracleGenerationError {
         /// Actual owner-issued context's package name.
         actual: String,
     },
+    /// The supplied context's exact checked-package bytes differ from the original source.
+    ContextPackageContentMismatch,
+    /// A context was supplied without the original admitted checked package for comparison.
+    MissingOriginalCheckedPackage,
+    /// The lowered contract package names a different original checked package or source lock.
+    ContractSourceMismatch,
+    /// The original checked package could not be canonically re-encoded for an exact comparison.
+    CheckedPackageEncoding,
     /// Genuine enum lookup succeeded but semantic reconstruction did not.
     EnumReconstruction(quire_semantic_value::semantic_node::InvalidSemanticGraph),
     /// Bounded declaration admission failed before an equality plan could be checked.

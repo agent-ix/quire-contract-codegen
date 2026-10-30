@@ -291,6 +291,7 @@ fn generate_with_context(
     // its original positive/precise assertions are intentionally not replaced by Missing.
     let output = generate_composite_equality_oracles(
         &admitted,
+        Some(&package.checked),
         None,
         &roots,
         &positions,
@@ -400,6 +401,7 @@ fn invalid_type_resolution_work_limit_refuses_before_lowering() {
     // The invalid setting precedes traversal and needs no identity capability.
     let result = generate_composite_equality_oracles(
         &admitted,
+        Some(&package.checked),
         None,
         &[],
         &[],
@@ -531,6 +533,7 @@ fn tc_029_ac32_direct_control_case_refusal_preserves_healthy_equality_sibling() 
         });
     let combined = generate_composite_equality_oracles(
         &contract,
+        Some(&package),
         None,
         &requests,
         &[0, 1],
@@ -540,6 +543,7 @@ fn tc_029_ac32_direct_control_case_refusal_preserves_healthy_equality_sibling() 
     .unwrap();
     let equality_only = generate_composite_equality_oracles(
         &contract,
+        Some(&package),
         None,
         &requests,
         &[1],

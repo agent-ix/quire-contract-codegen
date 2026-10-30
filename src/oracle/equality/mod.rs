@@ -82,10 +82,9 @@ use crate::core::profile::equality_oracle_crate_manifest;
 use crate::oracle::checked_graph::{CheckedGraph as Graph, GraphBody};
 use crate::oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
 use crate::oracle::direct_unsupported_form;
-#[cfg(test)]
-use quire_contract_model::CheckedPackageV2;
 use quire_contract_model::{
-    ApplicationOperator, CheckedNodeId, CheckedNodeTag, CheckedSemanticNodeV2,
+    encode_checked_package_v2, ApplicationOperator, CheckedNodeId, CheckedNodeTag,
+    CheckedPackageSourceCorrespondenceRef, CheckedPackageV2, CheckedSemanticNodeV2,
     CheckedSourceMapEntry, CheckedTerm, ContractFeatureRecordV1, ContractPackageV1,
     ContractSourceV1,
 };
@@ -650,7 +649,8 @@ pub struct CompositeEqualityClaim {
 /// by.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CompositeEqualityOracles {
-    /// `Cargo.toml`, `src/lib.rs` and `claim-map.json`, in that order.
+    /// `Cargo.toml`, generated Rust, the original checked-package bytes when supplied,
+    /// and `claim-map.json`, in that order.
     pub artifacts: Vec<Artifact>,
     /// Typed claim map, identical to `claim-map.json`. Items are ordered by
     /// the descriptor key. `blocked` lists the upstream gaps every entry is
@@ -662,6 +662,9 @@ pub struct CompositeEqualityOracles {
 }
 
 /// Generate composite equality oracles for `items` from one admitted FR-330 package.
+/// `original` is the reader-admitted source package retained before lowering. When an owner
+/// context is supplied, its complete checked bytes must equal that original package before
+/// any requested item is classified.
 ///
 /// Each `positions` entry names the matching item in `requested`; accounting
 /// and source occurrences are read at that exact index. A mismatch refuses
@@ -673,6 +676,7 @@ pub struct CompositeEqualityOracles {
 /// claim map.
 pub fn generate_composite_equality_oracles(
     package: &ContractPackageV1,
+    original: Option<&CheckedPackageV2>,
     admitted: Option<&qsl_replay::AdmittedContext>,
     requested: &[ContractRequestPosition],
     positions: &[usize],
@@ -681,6 +685,49 @@ pub fn generate_composite_equality_oracles(
 ) -> Result<CompositeEqualityOracles, OracleGenerationError> {
     if limits.type_resolution_work_units == u64::MAX {
         return Err(OracleGenerationError::InvalidTypeResolutionWorkLimit);
+    }
+    let expected_package = &package.wire().package.source.name;
+    let original_bytes = match original {
+        Some(original) => {
+            if expected_package.as_ref() != original.name()
+                || package.wire().package.source.lock != *original.lock()
+            {
+                return Err(OracleGenerationError::ContractSourceMismatch);
+            }
+            let bytes = encode_checked_package_v2(
+                original.name(),
+                original.lock(),
+                original.graph(),
+                CheckedPackageSourceCorrespondenceRef {
+                    source_map: original.source_map(),
+                    refinement_step_rows: original.refinement_step_rows(),
+                },
+                original.capability_report(),
+                original.diagnostics(),
+                quire_canonical::Limits::new(u64::MAX),
+            )
+            .map_err(|_| OracleGenerationError::CheckedPackageEncoding)?;
+            Some(
+                String::from_utf8(bytes)
+                    .map_err(|_| OracleGenerationError::CheckedPackageEncoding)?,
+            )
+        }
+        None => None,
+    };
+    if let Some(admitted) = admitted {
+        let actual_package = admitted.package_name().to_string();
+        if expected_package.as_ref() != actual_package {
+            return Err(OracleGenerationError::ContextPackageMismatch {
+                expected: expected_package.clone(),
+                actual: actual_package,
+            });
+        }
+        let bytes = original_bytes
+            .as_ref()
+            .ok_or(OracleGenerationError::MissingOriginalCheckedPackage)?;
+        if admitted.package_bytes() != bytes.as_bytes() {
+            return Err(OracleGenerationError::ContextPackageContentMismatch);
+        }
     }
     let accounting =
         PackageItems::new(package, requested).map_err(OracleGenerationError::PackageRequest)?;
@@ -731,18 +778,9 @@ pub fn generate_composite_equality_oracles(
         by_key.entry(key).or_insert((request_index, item));
     }
 
-    let expected_package = &package.wire().package.source.name;
-    if let Some(admitted) = admitted {
-        let actual_package = admitted.package_name().to_string();
-        if expected_package.as_ref() != actual_package {
-            return Err(OracleGenerationError::ContextPackageMismatch {
-                expected: expected_package.clone(),
-                actual: actual_package,
-            });
-        }
-    }
     let mut source = SourceBuilder::new(limits.source_bytes)?;
     source.expected_package = Some(expected_package.clone());
+    source.expected_package_bytes = original_bytes;
     let mut claims = Vec::with_capacity(by_key.len());
     // Generated claims as (claim position, key, item, checked item), rendered once every
     // generated oracle is named.
@@ -910,12 +948,15 @@ pub fn generate_composite_equality_oracles(
     map_bytes.push(b'\n');
     let map_text =
         String::from_utf8(map_bytes).map_err(|_| OracleGenerationError::ClaimMapSerialization)?;
-    let mut artifacts = Vec::with_capacity(source_artifacts.len() + 2);
+    let mut artifacts = Vec::with_capacity(source_artifacts.len() + 3);
     artifacts.push(Artifact::new(
         "Cargo.toml",
         equality_oracle_crate_manifest(COMPOSITE_EQUALITY_CRATE_NAME),
     ));
     artifacts.extend(source_artifacts);
+    if let Some(bytes) = source.expected_package_bytes {
+        artifacts.push(Artifact::new("checked-package.json", bytes));
+    }
     artifacts.push(Artifact::new("claim-map.json", map_text));
     if artifacts.len() > MAX_ARTIFACTS {
         return Err(OracleGenerationError::ArtifactCountExceeded {
@@ -1553,7 +1594,7 @@ fn render_node_key(key: &NodeKey) -> Result<String, RenderError> {
 // Rendering
 // ---------------------------------------------------------------------------
 
-const SOURCE_HEADER: &str = "// @generated by quire-contract-codegen composite equality oracles. Do not edit.\n// The prepared capability retains genuine owner context and an admitted private enum index.\n// The oracle remains the implementation under test: it calls QSV checking/evaluation directly.\nuse quire_semantic_value::declaration as sv;\nuse quire_exact as exact;\n\n/// A generated numeric, text, cardinality or enum descriptor failed reconstruction.\n#[derive(Clone, Copy, Debug, Eq, PartialEq)]\npub enum ReconstructionError {\n    /// Canonical integer spelling failed to parse.\n    Integer,\n    /// Interval endpoints are invalid.\n    Interval,\n    /// Rational bounds are invalid.\n    Rational,\n    /// Decimal bounds are invalid.\n    Decimal,\n    /// Text bounds are invalid.\n    Text,\n    /// Cardinality endpoints are invalid.\n    Cardinality,\n    /// Genuine enum keys could not reconstruct the declared enum.\n    Enum,\n    /// Genuine composite metadata disagrees with its retained lookup recipe.\n    Composite,\n}\n\n/// A constructor failed without publishing a partial prepared capability.\n#[derive(Clone, Debug, Eq, PartialEq)]\npub enum EnvironmentError {\n    /// Reached nominal declaration requires its genuine owner capability.\n    MissingAdmittedContext {\n        /// Structural declaration identity awaiting lookup.\n        declaration: exact::NodeKey,\n    },\n    /// The immutable context does not name the original checked package.\n    ContextPackageMismatch {\n        /// Expected original package name.\n        expected_name: &'static str,\n        /// Actual context package name.\n        actual_name: String,\n    },\n    /// Genuine lookup retained the owner's Unknown/Foreign/WrongKind distinction.\n    Lookup(qsl_replay::AdmittedLookupRefusal),\n    /// Semantic refusal and resource failure remain owner-typed and distinct.\n    Declaration(sv::EnvironmentFailure),\n    /// A non-lookup descriptor reconstruction failed.\n    Reconstruction(ReconstructionError),\n}\n\nimpl From<ReconstructionError> for EnvironmentError {\n    fn from(cause: ReconstructionError) -> Self { Self::Reconstruction(cause) }\n}\n\n/// An opaque item-bound environment prepared from a genuine admitted context.\npub struct PreparedEqualityEnvironment<'ctx> {\n    context: Option<&'ctx qsl_replay::AdmittedContext>,\n    expected_name: &'static str,\n    binding: &'static str,\n    requires_context: bool,\n    environment: sv::TypeEnvironment,\n    enum_members: quire_semantic_value::enumeration::EnumMemberIndex,\n    left_source: exact::ValueType,\n    left_target: Option<exact::ValueType>,\n    right_source: exact::ValueType,\n    right_target: Option<exact::ValueType>,\n}\n";
+const SOURCE_HEADER: &str = "// @generated by quire-contract-codegen composite equality oracles. Do not edit.\n// The prepared capability retains genuine owner context and an admitted private enum index.\n// The oracle remains the implementation under test: it calls QSV checking/evaluation directly.\nuse quire_semantic_value::declaration as sv;\nuse quire_exact as exact;\n\n/// A generated numeric, text, cardinality or enum descriptor failed reconstruction.\n#[derive(Clone, Copy, Debug, Eq, PartialEq)]\npub enum ReconstructionError {\n    /// Canonical integer spelling failed to parse.\n    Integer,\n    /// Interval endpoints are invalid.\n    Interval,\n    /// Rational bounds are invalid.\n    Rational,\n    /// Decimal bounds are invalid.\n    Decimal,\n    /// Text bounds are invalid.\n    Text,\n    /// Cardinality endpoints are invalid.\n    Cardinality,\n    /// Genuine enum keys could not reconstruct the declared enum.\n    Enum,\n    /// Genuine composite metadata disagrees with its retained lookup recipe.\n    Composite,\n}\n\n/// A constructor failed without publishing a partial prepared capability.\n#[derive(Clone, Debug, Eq, PartialEq)]\npub enum EnvironmentError {\n    /// Reached nominal declaration requires its genuine owner capability.\n    MissingAdmittedContext {\n        /// Structural declaration identity awaiting lookup.\n        declaration: exact::NodeKey,\n    },\n    /// The immutable context does not name the original checked package.\n    ContextPackageMismatch {\n        /// Expected original package name.\n        expected_name: &'static str,\n        /// Actual context package name.\n        actual_name: String,\n    },\n    /// The admitted context differs from the complete original checked package.\n    ContextPackageContentMismatch,\n    /// Genuine lookup retained the owner's Unknown/Foreign/WrongKind distinction.\n    Lookup(qsl_replay::AdmittedLookupRefusal),\n    /// Semantic refusal and resource failure remain owner-typed and distinct.\n    Declaration(sv::EnvironmentFailure),\n    /// A non-lookup descriptor reconstruction failed.\n    Reconstruction(ReconstructionError),\n}\n\nimpl From<ReconstructionError> for EnvironmentError {\n    fn from(cause: ReconstructionError) -> Self { Self::Reconstruction(cause) }\n}\n\n/// An opaque item-bound environment prepared from a genuine admitted context.\npub struct PreparedEqualityEnvironment<'ctx> {\n    context: Option<&'ctx qsl_replay::AdmittedContext>,\n    expected_name: &'static str,\n    binding: &'static str,\n    requires_context: bool,\n    environment: sv::TypeEnvironment,\n    enum_members: quire_semantic_value::enumeration::EnumMemberIndex,\n    left_source: exact::ValueType,\n    left_target: Option<exact::ValueType>,\n    right_source: exact::ValueType,\n    right_target: Option<exact::ValueType>,\n}\n";
 
 /// One emitted reconstruction helper: its name, its source, and the names of the helpers its
 /// source calls. A helper is emitted only when the rendered functions call it, or when an
@@ -1848,6 +1889,7 @@ fn settle_render(
 
 struct SourceBuilder {
     expected_package: Option<Box<str>>,
+    expected_package_bytes: Option<String>,
     functions: String,
     modules: Vec<(String, String)>,
     module_declarations: String,
@@ -1875,6 +1917,7 @@ impl SourceBuilder {
         }
         Ok(Self {
             expected_package: None,
+            expected_package_bytes: None,
             functions: String::new(),
             modules: Vec::new(),
             module_declarations: String::new(),
@@ -2002,9 +2045,9 @@ impl SourceBuilder {
             .ok_or(OracleGenerationError::InvalidPlanState)?;
         let package_name = package.as_ref();
         self.append_function(format!(
-"\n/// Prepare this item's descriptors and environment from the original package context.\npub fn environment_{symbol}<'ctx>(context: Option<&'ctx qsl_replay::AdmittedContext>) -> Result<PreparedEqualityEnvironment<'ctx>, EnvironmentError> {{\n    if let Some(context) = context {{\n    let actual = context.package_name();\n    if actual.as_str() != {package_name:?} {{\n        return Err(EnvironmentError::ContextPackageMismatch {{\n            expected_name: {package_name:?}, actual_name: actual.to_string(),\n        }});\n    }}\n    }}\n    let mut enum_members = quire_semantic_value::enumeration::EnumMemberIndex::default();\n    let composites = composites_{symbol}(context, &mut enum_members)?;\n    let environment = sv::TypeEnvironment::new(composites, core::iter::empty::<sv::ObjectTypeDeclaration>())\n        .map_err(EnvironmentError::Declaration)?;\n    let environment = match context {{\n        Some(context) => environment.with_units(context.unit_table().clone()),\n        None => environment,\n    }};\n{union_seals}    let left_source = left_source_{symbol}(context, &mut enum_members)?;\n    let left_target = left_target_{symbol}(context, &mut enum_members)?;\n    let right_source = right_source_{symbol}(context, &mut enum_members)?;\n    let right_target = right_target_{symbol}(context, &mut enum_members)?;\n    Ok(PreparedEqualityEnvironment {{\n        context, expected_name: {package_name:?},\n        binding: {symbol:?}, requires_context: {requires_context}, environment, enum_members,\n        left_source, left_target, right_source, right_target,\n    }})\n}}\n", package_name = package_name))?;
+"\n/// Prepare this item's descriptors and environment from the original package context.\npub fn environment_{symbol}<'ctx>(context: Option<&'ctx qsl_replay::AdmittedContext>) -> Result<PreparedEqualityEnvironment<'ctx>, EnvironmentError> {{\n    if let Some(context) = context {{\n    let actual = context.package_name();\n    if actual.as_str() != {package_name:?} {{\n        return Err(EnvironmentError::ContextPackageMismatch {{\n            expected_name: {package_name:?}, actual_name: actual.to_string(),\n        }});\n    }}\n    if EXPECTED_PACKAGE_BYTES != Some(context.package_bytes()) {{\n        return Err(EnvironmentError::ContextPackageContentMismatch);\n    }}\n    }}\n    let mut enum_members = quire_semantic_value::enumeration::EnumMemberIndex::default();\n    let composites = composites_{symbol}(context, &mut enum_members)?;\n    let environment = sv::TypeEnvironment::new(composites, core::iter::empty::<sv::ObjectTypeDeclaration>())\n        .map_err(EnvironmentError::Declaration)?;\n    let environment = match context {{\n        Some(context) => environment.with_units(context.unit_table().clone()),\n        None => environment,\n    }};\n{union_seals}    let left_source = left_source_{symbol}(context, &mut enum_members)?;\n    let left_target = left_target_{symbol}(context, &mut enum_members)?;\n    let right_source = right_source_{symbol}(context, &mut enum_members)?;\n    let right_target = right_target_{symbol}(context, &mut enum_members)?;\n    Ok(PreparedEqualityEnvironment {{\n        context, expected_name: {package_name:?},\n        binding: {symbol:?}, requires_context: {requires_context}, environment, enum_members,\n        left_source, left_target, right_source, right_target,\n    }})\n}}\n", package_name = package_name))?;
         self.append_function(format!(
-"\n/// Environment-checked oracle for `{operation}`.\npub fn oracle_{symbol}(\n    prepared: &PreparedEqualityEnvironment<'_>, left: &exact::Value,\n    right: &exact::Value, meter: &mut exact::Meter,\n) -> exact::Outcome<bool> {{\n    let context_mismatch = match prepared.context {{\n        Some(context) => {{ let actual = context.package_name();\n            actual.as_str() != {package_name:?} }},\n        None => prepared.requires_context,\n    }};\n    if prepared.binding != {symbol:?} || prepared.expected_name != {package_name:?}\n        || prepared.requires_context != {requires_context} || context_mismatch\n    {{\n        return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedDescriptorReconstructionFailed }});\n    }}\n    let environment = &prepared.environment;\n    let left_comparison = match &prepared.left_target {{ Some(target) => target, None => &prepared.left_source }};\n    let right_comparison = match &prepared.right_target {{ Some(target) => target, None => &prepared.right_source }};\n    if let Err(error) = environment.check_type(left_comparison) {{\n        return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedTypeCheckRejected {{ cause: error.cause }} }});\n    }}\n    if let Err(error) = environment.check_type(right_comparison) {{\n        return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedTypeCheckRejected {{ cause: error.cause }} }});\n    }}\n    let left_operand = match prepared.left_target.clone() {{\n        Some(target) => sv::EqualityOperand::converted(prepared.left_source.clone(), target),\n        None => sv::EqualityOperand::typed(prepared.left_source.clone()),\n    }};\n    let right_operand = match prepared.right_target.clone() {{\n        Some(target) => sv::EqualityOperand::converted(prepared.right_source.clone(), target),\n        None => sv::EqualityOperand::typed(prepared.right_source.clone()),\n    }};\n    let checked = match environment.check_equality({operator}, left_operand, right_operand, &prepared.enum_members) {{\n        Ok(checked) => checked,\n        Err(error) => return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedEqualityCheckRejected {{ cause: error.cause }} }}),\n    }};\n    checked.evaluate(environment, left, right, meter)\n}}\n", operation = item.operator.identity(), operator = item.operator.path(), package_name = package_name))?;
+"\n/// Environment-checked oracle for `{operation}`.\npub fn oracle_{symbol}(\n    prepared: &PreparedEqualityEnvironment<'_>, left: &exact::Value,\n    right: &exact::Value, meter: &mut exact::Meter,\n) -> exact::Outcome<bool> {{\n    let context_mismatch = match prepared.context {{\n        Some(context) => {{ let actual = context.package_name();\n            actual.as_str() != {package_name:?}\n                || EXPECTED_PACKAGE_BYTES != Some(context.package_bytes()) }},\n        None => prepared.requires_context,\n    }};\n    if prepared.binding != {symbol:?} || prepared.expected_name != {package_name:?}\n        || prepared.requires_context != {requires_context} || context_mismatch\n    {{\n        return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedDescriptorReconstructionFailed }});\n    }}\n    let environment = &prepared.environment;\n    let left_comparison = match &prepared.left_target {{ Some(target) => target, None => &prepared.left_source }};\n    let right_comparison = match &prepared.right_target {{ Some(target) => target, None => &prepared.right_source }};\n    if let Err(error) = environment.check_type(left_comparison) {{\n        return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedTypeCheckRejected {{ cause: error.cause }} }});\n    }}\n    if let Err(error) = environment.check_type(right_comparison) {{\n        return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedTypeCheckRejected {{ cause: error.cause }} }});\n    }}\n    let left_operand = match prepared.left_target.clone() {{\n        Some(target) => sv::EqualityOperand::converted(prepared.left_source.clone(), target),\n        None => sv::EqualityOperand::typed(prepared.left_source.clone()),\n    }};\n    let right_operand = match prepared.right_target.clone() {{\n        Some(target) => sv::EqualityOperand::converted(prepared.right_source.clone(), target),\n        None => sv::EqualityOperand::typed(prepared.right_source.clone()),\n    }};\n    let checked = match environment.check_equality({operator}, left_operand, right_operand, &prepared.enum_members) {{\n        Ok(checked) => checked,\n        Err(error) => return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedEqualityCheckRejected {{ cause: error.cause }} }}),\n    }};\n    checked.evaluate(environment, left, right, meter)\n}}\n", operation = item.operator.identity(), operator = item.operator.path(), package_name = package_name))?;
         Ok(())
     }
 
@@ -2037,6 +2080,12 @@ impl SourceBuilder {
     fn finish(&self, limit: usize) -> Result<Vec<Artifact>, OracleGenerationError> {
         let mut source = String::new();
         append_source(&mut source, SOURCE_HEADER, limit)?;
+        let expected = if self.expected_package_bytes.is_some() {
+            "\nconst EXPECTED_PACKAGE_BYTES: Option<&[u8]> = Some(include_bytes!(\"../checked-package.json\"));\n"
+        } else {
+            "\nconst EXPECTED_PACKAGE_BYTES: Option<&[u8]> = None;\n"
+        };
+        append_source(&mut source, expected, limit)?;
         append_source(&mut source, &self.module_declarations, limit)?;
         // A helper is needed when the item functions call it or a needed helper does. The table
         // lists callees first, so one pass from the last helper to the first settles the

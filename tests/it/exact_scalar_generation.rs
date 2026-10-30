@@ -4068,6 +4068,7 @@ fn tc_024_equality_generator_refuses_a_quantity_conversion_node_before_any_artif
     let (contract, positions) = contract_request(&package, std::slice::from_ref(&node));
     let output = generate_composite_equality_oracles(
         &contract,
+        Some(&package),
         None,
         &positions,
         &[0],
@@ -4288,6 +4289,7 @@ fn tc_024_equality_over_a_conversion_operand_is_refused_as_an_unsupported_quanti
     let (contract, positions) = contract_request(&package, std::slice::from_ref(&node));
     let output = generate_composite_equality_oracles(
         &contract,
+        Some(&package),
         None,
         &positions,
         &[0],
