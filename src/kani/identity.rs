@@ -374,7 +374,7 @@ pub struct CollectionObligationIdentity {
     pub package_digest: String,
     /// Caller-selected function subject whose body contains this claim.
     pub subject_path: String,
-    /// Selected function identity.
+    /// Selected function or state-clause identity.
     pub function_id: CheckedNodeId,
     /// Selected quantifier identity.
     pub quantifier_id: CheckedNodeId,
