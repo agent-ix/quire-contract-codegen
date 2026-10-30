@@ -1926,16 +1926,12 @@ fn native_collection_precondition(
         "maybe": {"absent": {}},
         "many": {"sequence": []},
     });
-    let model_digest = fixture
-        .model_digest
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<String>();
+    let model_digest = DigestRecord::mint(DigestDomain::Sha256Jcs, fixture.model_digest);
     let snapshot = json!({
         "format": "quire.state.snapshot/v1",
         "identity": {"authority": "agent-ix", "identity": "ix://ir268.test/collection/prestate", "revision_namespace": "git", "revision": "fixture"},
         "observation": "pre",
-        "model": {"identity": "ir268.test/domain", "version": "1.0.0", "digest": format!("sha256-jcs:{model_digest}")},
+        "model": {"identity": "ir268.test/domain", "version": "1.0.0", "digest": format!("sha256-jcs:{}", model_digest.hex())},
         "populations": [{"population": POPULATION_ID, "complete": true, "objects": [{"key": object.key, "type": NODE_ID, "fields": fields}]}],
     });
     evaluate_clause(ClauseEvaluationRequest {
@@ -1956,11 +1952,8 @@ fn native_collection_precondition(
     })
 }
 
-#[trace("FR-015-AC-99", "TC-025")]
-#[test]
-fn collection_precondition_generated_oracle_agrees_with_native_clause_evaluation() {
-    let fixture = precondition_collection_fixture("exists(item in self.items: item = 3)");
-    let harness = precondition_collection_harness(&fixture);
+fn assert_collection_precondition_equivalence(fixture: &Emitted, cases: &[([i64; 3], i64, bool)]) {
+    let harness = precondition_collection_harness(fixture);
     let marker = harness
         .identity
         .collection_precondition
@@ -2006,11 +1999,7 @@ fn collection_precondition_generated_oracle_agrees_with_native_clause_evaluation
         .map(|tokens| tokens.to_string())
         .collect::<Vec<_>>()
         .join("\n");
-    let cases = [
-        ([0_i64, 1, 0], 2_i64, false),
-        ([2, 3, 0], 2, true),
-        ([0, 1, 3], 3, true),
-    ];
+    let count = cases.len();
     let case_source = cases
         .iter()
         .map(|(items, length, _)| format!("([{}, {}, {}], {length})", items[0], items[1], items[2]))
@@ -2018,7 +2007,7 @@ fn collection_precondition_generated_oracle_agrees_with_native_clause_evaluation
         .join(", ");
     let scratch = TemporaryDirectory::new("ir1091-native-clause-equivalence");
     let program = format!(
-        "mod generated {{ {oracle_source}\n pub fn observations() -> [bool; 3] {{\n  let cases: [([i64; 3], i64); 3] = [{case_source}];\n  cases.map(|(items, len)| match oracle_clause(&items, len) {{ ClauseEvaluation::Completed(value) => value, _ => panic!(\"generated clause did not complete\") }})\n }} }}\nfn main() {{ for value in generated::observations() {{ println!(\"{{value}}\"); }} }}\n"
+        "mod generated {{ {oracle_source}\n pub fn observations() -> [bool; {count}] {{\n  let cases: [([i64; 3], i64); {count}] = [{case_source}];\n  cases.map(|(items, len)| match oracle_clause(&items, len) {{ ClauseEvaluation::Completed(value) => value, _ => panic!(\"generated clause did not complete\") }})\n }} }}\nfn main() {{ for value in generated::observations() {{ println!(\"{{value}}\"); }} }}\n"
     );
     let source = scratch.path.join("oracle.rs");
     let executable = scratch.path.join("oracle");
@@ -2048,19 +2037,34 @@ fn collection_precondition_generated_oracle_agrees_with_native_clause_evaluation
         .map(str::parse::<bool>)
         .collect::<Result<Vec<_>, _>>()
         .expect("Boolean output lines");
-    assert_eq!(generated.len(), 3);
-    for (index, (draw, length, expected)) in cases.into_iter().enumerate() {
-        let items = &draw[..usize::try_from(length).expect("bounded collection length")];
-        let native = native_collection_precondition(&fixture, items, replay_scalar_limits());
+    assert_eq!(generated.len(), count);
+    for (index, (draw, length, expected)) in cases.iter().enumerate() {
+        let items = &draw[..usize::try_from(*length).expect("bounded collection length")];
+        let native = native_collection_precondition(fixture, items, replay_scalar_limits());
         assert!(
-            matches!(&native, ClauseEvaluation::Completed(value) if *value == expected),
+            matches!(&native, ClauseEvaluation::Completed(value) if value == expected),
             "native clause at {items:?}: {native:?}"
         );
         assert_eq!(
-            generated[index], expected,
+            generated[index], *expected,
             "generated and native clauses agree at {items:?}"
         );
     }
+}
+
+#[trace("FR-015-AC-96", "FR-015-AC-99", "TC-025")]
+#[test]
+fn collection_precondition_generated_oracle_agrees_with_native_clause_evaluation() {
+    let fixture = precondition_collection_fixture("exists(item in self.items: item = 3)");
+    assert_collection_precondition_equivalence(
+        &fixture,
+        &[
+            ([0, 1, 0], 2, false),
+            ([2, 3, 0], 2, true),
+            ([0, 1, 3], 2, false),
+            ([0, 1, 3], 3, true),
+        ],
+    );
 
     let incomplete = native_collection_precondition(
         &fixture,
@@ -2081,9 +2085,61 @@ fn collection_precondition_generated_oracle_agrees_with_native_clause_evaluation
     assert!(
         matches!(
             &refused,
-            ClauseEvaluation::Refused(ClauseRefusal::Coded { .. })
+            ClauseEvaluation::Refused(ClauseRefusal::Coded {
+                code: "invalid_runtime_input",
+                cause: "duplicate-member",
+                ..
+            })
         ),
         "{refused:?}"
+    );
+
+    let mut wide_document = model_document_with_step();
+    let node = wide_document["types"]
+        .as_array_mut()
+        .expect("model types")
+        .iter_mut()
+        .find(|ty| ty.get("identity").and_then(Value::as_str) == Some(NODE_ID))
+        .expect("selected node");
+    let items = node["fields"]
+        .as_array_mut()
+        .expect("model fields")
+        .iter_mut()
+        .find(|field| field.get("name").and_then(Value::as_str) == Some("items"))
+        .expect("selected field");
+    items["multiplicity"]["lower"] = json!(2);
+    items["multiplicity"]["unique"] = json!(true);
+    let small_int = wide_document["types"]
+        .as_array_mut()
+        .expect("model types")
+        .iter_mut()
+        .find(|ty| ty.get("identity").and_then(Value::as_str) == Some(SMALL_ID))
+        .expect("selected integer type");
+    small_int["constraints"][0]["operands"]["value"] = json!(i64::MIN.to_string());
+    small_int["constraints"][1]["operands"]["value"] = json!(i64::MAX.to_string());
+    let wide =
+        precondition_fixture_with_model(wide_document, "exists(item in self.items: item = 3)");
+    let wide_harness = precondition_collection_harness(&wide);
+    assert_eq!(
+        wide_harness
+            .identity
+            .collection_precondition
+            .as_ref()
+            .expect("wide collection identity")
+            .collection
+            .element,
+        CollectionElementIdentity::Integer {
+            minimum: i64::MIN,
+            maximum: i64::MAX,
+        }
+    );
+    assert_collection_precondition_equivalence(
+        &wide,
+        &[
+            ([i64::MIN, i64::MAX, 0], 2, false),
+            ([i64::MIN, 3, i64::MAX], 2, true),
+            ([i64::MAX, 3, i64::MIN], 3, true),
+        ],
     );
 }
 
