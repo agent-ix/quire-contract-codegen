@@ -13,11 +13,11 @@ use std::{collections::BTreeMap, fmt};
 use qsl_replay::{
     call_site, replay, CallSite, CallSiteRefusal, DeclaredDomain, DependencyEntryWire,
     DependencyInput, DependencyInputRefusal, DigestRecord, DisagreementCause, EnvelopeSource,
-    FunctionSite, Identifier, MalformedTranscript, NoPayload, ObligationIdentity, OccurrenceKey,
-    QualifiedName, ReplayLimits, ReplayRefusal, ReplayRequestWire, ReplayResult, ReplaySource,
-    ReplayTarget, RequestTargetWire, ScalarLimits, SourceIdentity, StateEnvironment,
-    SuppliedLibrary, WireNodeId, Witness, WitnessArmResult, WitnessEnvelope, WitnessPacket,
-    WitnessRefusal, WitnessSettlement, WitnessValue,
+    FunctionSite, Identifier, MalformedTranscript, NoPayload, NodeKey, ObligationIdentity,
+    OccurrenceKey, QualifiedName, ReplayLimits, ReplayRefusal, ReplayRequestWire, ReplayResult,
+    ReplaySource, ReplayTarget, RequestTargetWire, ScalarLimits, SourceIdentity, StateEnvironment,
+    SuppliedLibrary, Witness, WitnessArmResult, WitnessEnvelope, WitnessPacket, WitnessRefusal,
+    WitnessSettlement, WitnessValue,
 };
 use quire_semantic_value::catalog::Category;
 
@@ -51,7 +51,7 @@ pub(crate) struct ReplayHarnessIdentity {
     package_name: String,
     package_bytes: Vec<u8>,
     source_identity: SourceIdentity,
-    function: WireNodeId,
+    function: NodeKey,
     declaration: OccurrenceKey,
 }
 
@@ -517,7 +517,7 @@ struct KaniProofBinding {
     package_name: String,
     package_bytes: Vec<u8>,
     source_identity: SourceIdentity,
-    function: WireNodeId,
+    function: NodeKey,
     declaration: OccurrenceKey,
 }
 
@@ -906,7 +906,7 @@ impl ReplayPackage {
 fn backend_function_packet(
     package: &ReplayPackage,
     obligation: ObligationIdentity,
-    subject: WireNodeId,
+    subject: NodeKey,
     occurrence: OccurrenceKey,
     source: EnvelopeSource,
 ) -> WitnessPacket<NoPayload> {
@@ -1418,8 +1418,8 @@ mod tests {
     };
     use ix_trace_rs::trace;
     use qsl_replay::{
-        NoPayload, OccurrenceKey, ReplayRequest, ReplayRequestRefusal, ReplayTargetMembers,
-        WireNodeId, WitnessPacket,
+        NoPayload, NodeKey, OccurrenceKey, ReplayRequest, ReplayRequestRefusal,
+        ReplayTargetMembers, WitnessPacket,
     };
     use quire_contract_model::{IntegerDomain, OverflowPolicy};
     use quire_exact::PathSegment;
@@ -1428,9 +1428,8 @@ mod tests {
         profile v = \"quire.value.complete/v1\";\n\
         function f using v(a: Int[0, 9], b: Int[0, 9]): Boolean pure { a <= b }\n";
 
-    fn fixture_node(name: &str) -> WireNodeId {
-        WireNodeId::new("fixture", vec![PathSegment::Text(name.to_owned())], 0)
-            .expect("fixture node")
+    fn fixture_node(name: &str) -> NodeKey {
+        NodeKey::new("fixture", vec![PathSegment::Text(name.to_owned())], 0).expect("fixture node")
     }
 
     /// A source-bound typed identity rejects a different case package and a transcript naming
