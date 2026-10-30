@@ -46,7 +46,7 @@ for package meaning or a source of native bounds.
   supplies the exact admitted selected dependency packages required by the
   source lock to that reader. The package holds its explicit lowering profile,
   key-ordered semantic graph, ordered typed feature accounting, total source
-  map and semantic identity.
+  map and structural package name plus immutable lock identity.
 - Requested items identified by their exact `CheckedNodeId` and request
   index, plus the existing FR-019 routing envelope and backend descriptors.
   The package's `feature_accounting` order is the lowering call's request
@@ -75,8 +75,8 @@ for package meaning or a source of native bounds.
 - A whole-request refusal with no artifact if the FR-330 reader refuses or
   stops incomplete before CG receives an admitted package.
 - For each generated scalar, composite equality or exact function item, a
-  public claim identified by the admitted FR-330 `identity` together with the
-  exact requested `CheckedNodeId`.
+  public claim identified by the admitted FR-330 package's structural name
+  and complete lock together with the exact requested structural `CheckedNodeId`.
 
 ## Behavior
 
@@ -116,15 +116,16 @@ for package meaning or a source of native bounds.
 - CG SHALL settle and generate each `lowered` bound driver item from its represented typed
   node, type, operation, bounds, clause or function and reached local
   dependencies in that same package. It SHALL use the package's exact source
-  lock, selected profile and identity when forming an artifact or proof claim.
+  lock, selected profile and structural source package name when forming an artifact or proof claim.
   The original `CheckedPackageV2` graph, a separate
   `CompleteLoweringResultV2.records` slice, display text and reconstructed
   body shape SHALL NOT decide the same item's capability, bounds, source
   location or generated expression.
 - In each public `GeneratedScalarClaim`, `GeneratedCompositeEqualityClaim` and
   `GeneratedExactFunctionClaim`, CG SHALL serialize `contract_package_identity`
-  as the exact admitted FR-330 `identity` and `node_id` as the exact requested
-  `CheckedNodeId`. The pair identifies the claim; request index distinguishes
+  as the exact admitted FR-330 `package.source` structural identity (source
+  package `name` plus complete immutable `lock`) and `node_id` as the exact
+  requested structural `CheckedNodeId`. The pair identifies the claim; request index distinguishes
   repeated positions in the surrounding decision, not the claim's semantic
   identity. CG SHALL retire the generated claim's `ir_id` member, including its
   serialized `ir_id` key: FR-330 supplies no per-node IR semantic identity.
@@ -133,7 +134,7 @@ for package meaning or a source of native bounds.
   descriptor, schedule, origin and checked bounds SHALL retain their admitted
   or request-defined provenance. The existing `package_id` provenance on
   equality and function claims SHALL remain the originating checked-package
-  identity, distinct from `contract_package_identity`; the scalar claim SHALL
+  structural identity, distinct from `contract_package_identity`; the scalar claim SHALL
   expose that same originating `package_id`. In all three generated claims,
   `claims`, `bounds` and `dependencies` SHALL serialize as typed
   `CheckedNodeId` lists. Generated scalar claims SHALL retain `checked_bounds`,
@@ -213,10 +214,11 @@ for package meaning or a source of native bounds.
 | FR-039-AC-4 | For a genuinely admitted FR-330 package, CG binds a `protocol`/`protocol_reference` carrier's exact `body.target` to the local `protocol` node, retaining its typed key, requested identity and source occurrences; changing that local target and recomputing the admitted carrier and package identities changes the selected target and package identity. A matching key only in a selected dependency does not bind locally. An absent local target, a present non-`protocol` target and a target with unequal `semantic_type` are refused by the FR-322 reader before CG with the respective `missing_declaration`/`missing-name` or `ill_typed`/`operator-ineligible` cause at `/body/target`; no artifact is emitted. An ordinary local reference or display text does not supply protocol-target binding. A backend that cannot encode an admitted protocol form returns its typed refusal and no artifact. | Test |
 | FR-039-AC-5 | A malformed or noncanonical FR-330 wire, wrong version, invalid accounting/source map, stale semantic identity or incomplete reader result reaches no CG consumer and emits no artifact. CG preserves the reader's typed refusal or limit result and performs no second parse or checked-graph fallback. | Analysis |
 | FR-039-AC-6 | An item whose admitted package accounting is `failed`, `invalid_body` or `body_incomplete`, or whose `lowered` form is unrepresentable by the selected backend, emits no artifact and retains a distinct typed cause; the package byte-ceiling case emits no artifact for any sibling. | Test |
-| FR-039-AC-7 | Generated scalar, composite equality and exact function claims each serialize `contract_package_identity` equal to the admitted FR-330 `identity` and `node_id` equal to the requested `CheckedNodeId`, with no generated-claim `ir_id` key. Each retains exact `semantic_type`, admitted `source_map`, family-specific provenance, and `package_id` denoting the originating checked package; each serializes typed `claims`, `bounds` and `dependencies`. For the same requested node in two genuinely admitted packages with different identities, the claim identity differs; for two different requested nodes in one admitted package, it also differs. A downstream consumer can join a claim to its admitted meaning by this pair and can use request index only to distinguish repeated request positions. | Test |
+| FR-039-AC-7 | RETIRED, replaced by FR-039-AC-11; the former `ContractPackageV1.identity()` and digest-shaped source assumption is obsolete and earns no implementation credit. | Inspection |
 | FR-039-AC-8 | For each admitted `lowered` bound driver item, Contract IR's authoritative traversal is total over the required root, bounds and selected dependencies, and the generated claim's reached claim, bound and dependency keys and dependent declaration closure equal its output. An unresolved required reference cannot reach CG as an admitted `lowered` item: Contract IR records a typed item refusal or its strict reader refuses the package; a refused or incomplete reader result yields no item claim or artifact. Inspection finds no per-node ID from a second lowering or wire-fragment hash. | Test |
 | FR-039-AC-9 | In an admitted package with a bound driver item, an excluded accounting-only position and another bound driver item, CG matches all three positions and exact `node_id` values to `feature_accounting`; the excluded position keeps its driver index but has no claim or generated artifact, and the following bound item keeps its original driver index. An interleaved context-only root has accounting but advances neither driver nor envelope item indexes. Removing the excluded position, adding an extra one or changing its `node_id` causes a typed whole-request correspondence refusal before any artifact. | Test |
 | FR-039-AC-10 | Given a bound driver item followed by an excluded accounting-only position, a selected conversion context root outside the preceding item's contiguous span yields typed `IncompleteContext` for that item when the complete root sequence is otherwise valid. A context-only root directly after the excluded position and before the next bound driver item is orphaned and causes a typed whole-request correspondence refusal before any artifact, even when its accounting position and `node_id` match. A conversion root immediately before the excluded position remains in the preceding item's span. | Test |
+| FR-039-AC-11 | Generated scalar, composite equality and exact function claims each serialize `contract_package_identity` equal to the admitted FR-330 `package.source` structural package name plus complete lock, replacing the removed `ContractPackageV1.identity()` accessor, and `node_id` equal to the requested structural `CheckedNodeId`, with no generated-claim `ir_id` key. Each retains exact `semantic_type`, admitted `source_map`, family-specific provenance, and `package_id` denoting the originating checked package; each serializes typed `claims`, `bounds` and `dependencies`. The same requested node in two genuinely admitted source packages with different names or locks has a different claim identity; two different nodes in one admitted source package also differ. A body-only change under the same structural identity is still checked against the admitted body. A downstream consumer joins a claim to its admitted meaning by the pair and uses request index only to distinguish repeated positions. | Test |
 
 ## Verification
 

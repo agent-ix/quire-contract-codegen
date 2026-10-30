@@ -60,10 +60,9 @@ exact rates.
 9. From a QSL driver-bound FR-331 claim and matching admitted Contract IR package, generate a
    numeric runner twice and compare source and map bytes. Inspect runtime `RequirementId` and
    `RevisionId`, header, source map, and symbol suffix against FR-011's `qocc2_`/`qpkg2_` grammar.
-   Independently change the authentic occurrence's node, role, and ordinal and each package-id
-   field using separate accepted matching request/package pairs; compare identity text.
+   Independently change the authentic occurrence's structural node package, nested path or ordinal, its role or occurrence ordinal, and the admitted package name or one lock field using separate accepted matching request/package pairs; compare identity text. Compare a body-only edit with unchanged structural identity through the admitted-body check.
 10. For the process form, pair a bound FR-331 request item's `request.package_id` with a different
-    admitted Contract IR package, then vary only its domain, algorithm, or digest. Separately keep
+    admitted Contract IR package, then vary only its package name or one lock member. Separately keep
     a linked driver's E4 emitted package id with its `export_bindings`-accepted item and E5
     admission from the same emitted bytes. Attempt an E4/E5 id mismatch and verify the driver
     refuses before CG. Supply a foreign claim occurrence absent from the held linked package and
@@ -73,8 +72,7 @@ exact rates.
     absent from the admitted V2 relation. Inspect refusal, artifact output, verdict construction,
     and report counters; keep a matched sibling selection in the batch. Verify separately that QSL
     keeps `UnknownItem`, `Unbound`, and `Fault` export refusals on the driver side.
-11. At each generated identity text comparison boundary, corrupt one `qocc2_` or `qpkg2_` field,
-    truncate it, uppercase hex, or add a leading-zero count. Compare against the exact typed pair
+11. At each generated identity text comparison boundary, corrupt one structural `qocc2_` or `qpkg2_` field, including a nested path, name or lock member, truncate it, uppercase hex, or add a leading-zero count. Compare against the exact typed pair
     and inspect any artifact, verdict, or report mutation.
 12. Independently of runner generation, call the public V2 selected-claim entry with one admitted
     package containing two distinct checked state clauses, each with an authentic `claim`

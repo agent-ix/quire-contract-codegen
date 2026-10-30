@@ -160,9 +160,9 @@ until specified.
   `StrategyErrorCode::MissingClaimOccurrence`; a referenced model element absent from the admitted
   relation returns `StrategyErrorCode::UnboundModelElement` naming that element. Neither publishes
   an artifact.
-- For a process-provider request, CG shall compare FR-331 `request.package_id` with the separately
-  admitted `CheckedPackageV2::package_id()` over exact domain, algorithm, and digest fields. If any
-  field differs, then CG shall return `StrategyErrorCode::OwnerIdentityMismatch` with no artifact
+- For a process-provider request, CG shall compare the FR-331 request's structural package name
+  and complete immutable lock with the separately admitted `CheckedPackageV2::name()` and `lock()`.
+  If either differs, then CG shall return `StrategyErrorCode::OwnerIdentityMismatch` with no artifact
   or verdict. A request id unequal to its package bytes remains the FR-331 reader's
   `stale_dependency`/`content-mismatch` refusal and shall not be relabelled by CG. For linked
   generation, CG shall use the driver's one E5-admitted package; a foreign or non-claim occurrence
@@ -193,9 +193,9 @@ until specified.
 - The runner shall construct each verdict through the runtime `construct_verdict` operation
   (quire-contract-runtime interface-001) with the selected driver-bound FR-331 claim's complete
   occurrence key as requirement identity, the same admitted
-  `CheckedPackageV2::package_id()` as revision identity, the runtime execution point rendered from
+  structural package name and complete immutable lock as revision identity, the runtime execution point rendered from
   the selected occurrence's accepted binding, and the clause observations. The runner shall retain
-  the occurrence's node, role, and ordinal and the package id's domain, algorithm, and digest via
+  the occurrence's structural node, role, and ordinal and the package's name and full lock via
   the canonical V2 rendering below. CG shall create no separate requirement-revision artifact.
 - For a false invariant, the runner shall use the failure detail the runtime
   provides for a contract clause, because quire-contract-runtime's specification does not yet state
@@ -236,19 +236,23 @@ until specified.
 
 ### Canonical V2 identity rendering
 
-For the driver's selected FR-331 bound `claim`, CG shall render its `OccurrenceKey` as
-`qocc2_<node>_<role-byte-count>_<role-hex>_<ordinal>`. `<node>` is the `WireNodeId`'s exactly 64
-lowercase hexadecimal digits. `<role-hex>` is the lowercase hexadecimal encoding of every UTF-8
-byte of `occurrence.origin().role().as_str()`, with two digits per byte; `<role-byte-count>` is the
-UTF-8 byte length in base-10 without leading zeroes except `0`. `<ordinal>` is the occurrence
-ordinal in base-10 without leading zeroes except `0`.
+For the driver's selected FR-331 bound `claim`, CG shall render its occurrence as
+`qocc2_<node-byte-count>_<node-hex>_<role-byte-count>_<role-hex>_<ordinal>`.
+`<node-hex>` encodes the exact UTF-8 bytes of canonical RFC 8785 JSON for the admitted structural
+`CheckedNodeId` (`package`, nonempty `path`, `ordinal`); a path segment is either its exact text
+or the complete nested structural node object. The canonical JSON is formed from the typed node,
+never by parsing a display string. `<role-hex>` encodes every UTF-8 byte of the exact admitted
+role, with two lowercase hexadecimal digits per byte. Each byte count is base-10 without leading
+zeroes except `0`; `<ordinal>` is the occurrence ordinal under the same decimal rule.
 
-CG shall render the admitted `CheckedPackageV2::package_id()` as
-`qpkg2_<domain-byte-count>_<domain-hex>_<algorithm-byte-count>_<algorithm-hex>_<digest-byte-count>_<digest-hex>`.
-Each count and hex field follows the role rule, using the exact UTF-8 bytes of the
-`CheckedSemanticId`'s `domain`, `algorithm`, and `digest` fields in that order. These encodings
-are injective and reversible. CG shall not truncate, case-fold, or substitute any field, compute
-a new identity digest, or treat the digest field alone as the revision. `qocc2_` and `qpkg2_`
+CG shall render the admitted package as
+`qpkg2_<name-byte-count>_<name-hex>_<lock-byte-count>_<lock-hex>`.
+`<name-hex>` encodes the exact UTF-8 bytes of `CheckedPackageV2::name()`;
+`<lock-hex>` encodes the canonical RFC 8785 JSON bytes of its complete immutable `lock()`.
+Each count and hex field follows the occurrence rule. These structural encodings are injective
+and reversible; the complete lock, including its own source and selection fields, is retained.
+CG shall not truncate, case-fold, or substitute any field, compute a new identity digest, or
+use one lock member alone as the revision. `qocc2_` and `qpkg2_`
 separate the two identity domains. The rendered strings are the runtime `RequirementId` and `RevisionId` values. Generated headers and source maps shall carry
 these same strings; generated symbol identity suffixes shall be
 `cg_<qocc2-string>_<qpkg2-string>`, where both components follow the grammar above.
@@ -270,10 +274,10 @@ producer and artifact association required by FR-004.
 | FR-011-AC-5 | PLANNED (IR-364). A fresh 10,000-case `Broad` campaign for each fixture returns `discard_rate() == Some((0, attempted))` with `attempted > 0`, passes a zero discard ceiling, and does not end `Exhausted`. | Test (TC-020) |
 | FR-011-AC-6 | SUPERSEDED by FR-011-AC-14 under QSpec #449 / IR-1070; no implementation credit. Original planned text: For a selected checked clause id and authentic `claim` occurrence in one admitted V2 package, every constructed verdict carries the runtime point rendered from the accepted QSL `ClauseBinding.execution_point` of that exact tuple, with variant and anchor name preserved. Invariant fixtures at both initialization and handler anchors, and two distinct handler anchors, produce distinct runtime point strings; `Precondition` and `Postcondition` fixtures preserve their own binding points. Two authentic claim occurrences on one invariant node with identical clause kind and body anchor but different accepted points yield their distinct rendered points. The last case is infeasible because the point contributes to node identity (QSpec FR-322-AC-131, FR-341-AC-14). | Test (TC-020) |
 | FR-011-AC-7 | SUPERSEDED by FR-011-AC-15 under QSpec #449 / IR-1070; no implementation credit. Original planned text: An absent checked clause maps Contract IR FR-058 `UnknownClause` to `StrategyErrorCode::UnknownClause`; a non-state-clause maps `NotStateClause` to `StrategyErrorCode::UnsupportedClauseKind`, before occurrence checks and with no artifact. A wrong-role, wrong-ordinal, or other-node `claim` occurrence returns `StrategyErrorCode::MissingClaimOccurrence` and no artifact, even when another authentic occurrence of the selected node has a point. An authentic selected tuple lacking an accepted binding point returns `StrategyErrorCode::MissingExecutionPoint` and no artifact, even when another authentic occurrence of that node has a point. A render mutant that changes only the generated runner's execution point returns `StrategyErrorCode::ExecutionPointMismatch` and no artifact before publication. An invariant's clause kind supplies no point: two otherwise equivalent invariant bindings at distinct anchors produce their distinct bound runtime points. The pointed/unpointed sibling case is infeasible because an optional point is a node member, not an occurrence sidecar (QSpec FR-322-AC-131, FR-341-AC-14). | Test (TC-020) |
-| FR-011-AC-8 | PLANNED. The numeric runner's `RequirementId`, `RevisionId`, generated header, source map, and symbol suffix retain the selected driver-bound FR-331 claim's complete occurrence and the same-owner admitted package's full id through exact `qocc2_`/`qpkg2_` renderings. Changing one occurrence component or package-id field changes the corresponding text. | Test (TC-020) |
-| FR-011-AC-9 | PLANNED. For a process request, if FR-331 `request.package_id` differs from the separately admitted Contract IR package's full domain, algorithm, or digest, CG returns `StrategyErrorCode::OwnerIdentityMismatch` before any bundle, verdict, or report mutation, while an unrelated matched selection retains its disposition. A package-byte/id mismatch stays the FR-331 reader's `stale_dependency`/`content-mismatch` refusal. For a linked request, the driver exports, emits, and admits one package; an E4/E5 id mismatch stays the driver's handoff refusal, and CG verifies the selected claim belongs to its held admitted package without a second owner field. | Test (TC-020) |
+| FR-011-AC-8 | RETIRED, replaced by FR-011-AC-19; the former digest-shaped rendering is obsolete and earns no implementation credit. | Inspection |
+| FR-011-AC-9 | RETIRED, replaced by FR-011-AC-20; the former domain/algorithm/digest owner comparison is obsolete and earns no implementation credit. | Inspection |
 | FR-011-AC-10 | PLANNED. The QSL driver forwards only FR-331 items accepted by `export_bindings`; its `UnknownItem`, `Unbound`, and `Fault` results stay driver-side. An out-of-driver non-claim or absent occurrence returns CG `StrategyErrorCode::MissingClaimOccurrence`, and a selected claim with an unbound referenced model element returns `StrategyErrorCode::UnboundModelElement` naming it. Neither produces an artifact or verdict, and a matched sibling remains unaffected. | Test (TC-020) |
-| FR-011-AC-11 | PLANNED. Malformed, truncated, case-folded, or otherwise noncanonical `qocc2_`/`qpkg2_` text yields `StrategyErrorCode::InvalidIdentityRendering` before bundle publication or verdict/report mutation, without normalization; exact typed or canonical-text comparisons agree on the accepted pair. | Test (TC-020) |
+| FR-011-AC-11 | RETIRED, replaced by FR-011-AC-21; the former digest-shaped text control is obsolete and earns no implementation credit. | Inspection |
 | FR-011-AC-12 | PLANNED. Repeated numeric runner generation with the same admitted package, selected driver-bound FR-331 claim, checked clause, and campaign policy yields byte-identical source and map. | Test (TC-020) |
 | FR-011-AC-13 | PLANNED (IR-1072). The public V2 selected-claim entry accepts an admitted `CheckedPackageV2` and a typed complete claim key (checked clause id, claim owner node id, authentic `claim` `CheckedOccurrence`) without a second caller-supplied owner; a matching key selects only that claim and its exact checked point. With the same clause and occurrence but a different claim owner, the entry returns a distinct typed V2 diagnostic retaining Contract IR `CheckedExecutionPointRefusal::MissingClaimOccurrence` and the supplied clause, owner, and occurrence, and publishes no artifact. The V1 `BoundPackage` entry and `StrategyDiagnostic` are unchanged. | Test |
 | FR-011-AC-14 | PLANNED (IR-1070). For selected authentic `claim` occurrences of distinct V2 invariant clause nodes whose condition and anchor are equal but whose accepted points are respectively `initialization{name: "startup"}` and `handler{name: "tick"}`, each constructed verdict carries the exact point of its selected node through the FR-058 accessor and injective runtime rendering. The nodes and otherwise identical packages have distinct identities; changing only the accepted handler name changes its rederived node and package identities and runtime point. Precondition and postcondition claims preserve their accepted `pre` and `post` points, including their operation names (QSpec FR-322-AC-131, FR-341-AC-14, FR-342-AC-10; IR FR-058-AC-9). Two authentic claims of one pointed node return its one identical point; no claim occurrence supplies a second point. | Test (TC-020) |
@@ -281,13 +285,15 @@ producer and artifact association required by FR-004.
 | FR-011-AC-16 | PLANNED (IR-1124; depends on IR-1072 and FR-008). A public V2 strategy request over an admitted checked package and one authentic selected claim produces a complete source, map, census and numeric runner bundle whose selected clause, owner, occurrence, package revision, comparison and runner identities agree exactly. The runner executes the FR-009 constructive population and FR-010 census with the selected V2 oracle; source inspection finds no V1 `BoundPackage`, V1 `ClauseRef`, `generate_bound_strategy` call or V1-to-V2 adapter in this V2 path, while the selected V2 checked clause key is retained. | Test |
 | FR-011-AC-17 | PLANNED (IR-1124). Independently injected unknown clause, unsupported kind, wrong owner/role/ordinal, missing accepted point, FR-008 comparison refusal, empty population, identity mismatch, point-render mutant, invalid generated syntax and resource overflow each return a typed diagnostic with the selected key and available structural locus, publish zero artifacts and start no campaign. Pairwise overlapping defects return the first cause in Behavior order; a valid sibling still publishes its complete bundle. | Test |
 | FR-011-AC-18 | PLANNED (IR-1124; FR-004 live binding remains separate). A campaign run from the emitted V2 runner retains the selected claim and package identity with its own source/map and result for same-invocation producer binding. Published bytes or a detached/copied result alone yield no authenticated campaign, measured coverage or proof credit. A refused selection yields no campaign evidence, including when another claim of the same package succeeds. | Test |
+| FR-011-AC-19 | PLANNED (IR-1079; replaces AC-8). The numeric runner's `RequirementId`, `RevisionId`, generated header, source map and symbol suffix retain the selected driver-bound FR-331 claim's complete structural node, role and ordinal and the same-owner admitted package's complete name and lock through the canonical `qocc2_`/`qpkg2_` renderings. Changing any one admitted identity component changes the corresponding text; a body-only edit retaining the same structural node and lock leaves that identity text unchanged and is still compared through the admitted body. | Test (TC-020) |
+| FR-011-AC-20 | PLANNED (IR-1079; replaces AC-9). For a process request, a FR-331 request whose package name or complete lock differs from the separately admitted package returns `StrategyErrorCode::OwnerIdentityMismatch` before any bundle, verdict or report mutation, while a matched sibling retains its disposition. A package-byte/lock mismatch stays the FR-331 reader's typed refusal. For a linked request, E4/E5 package disagreement stays the driver's handoff refusal; CG checks the selected claim against the one held E5-admitted package without a second owner field. | Test (TC-020) |
+| FR-011-AC-21 | PLANNED (IR-1079; replaces AC-11). Malformed, truncated, case-folded or otherwise noncanonical structural `qocc2_`/`qpkg2_` text, including a wrong byte count, nested node path or lock member, yields `StrategyErrorCode::InvalidIdentityRendering` before bundle publication or verdict/report mutation, without normalization; exact typed and canonical-text comparisons agree on the accepted pair. | Test (TC-020) |
 
 ## Open Questions
 
 - OQ-2 (resolved, requirement and revision identity): the QSL driver's selected FR-331 bound
   `claim` supplies its authentic occurrence key; after process-owner comparison or linked
-  single-package admission, the same admitted `CheckedPackageV2::package_id()` supplies the revision. A rebinding of the V2
-  abstraction relation changes the package id (QSL ADR-017 AR-4). QSL supplies no separate
+  single-package admission, the same admitted `CheckedPackageV2::name()` plus complete `lock()` supplies the revision. A changed name or lock changes the structural package identity; an unchanged identity still requires the admitted-body comparison. QSL supplies no separate
   requirement-revision artifact, and CG creates none. These identities do not authenticate the
   producer/run/artifact association of FR-004-AC-10 and AC-14.
 
