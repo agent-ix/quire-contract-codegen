@@ -1461,8 +1461,8 @@ fn tc_024_catalog_consumer_negative_cases_refuse_wrong_shapes_and_preserve_order
         }
     );
     let golden_source = contents(&golden, "src/lib.rs");
-    assert!(!golden_source.contains(code_id(WRONG_ARITY).digest.as_ref()));
-    assert!(!golden_source.contains(code_id(WRONG_RESULT).digest.as_ref()));
+    assert!(!golden_source.contains(&format!("{:?}", code_id(WRONG_ARITY))));
+    assert!(!golden_source.contains(&format!("{:?}", code_id(WRONG_RESULT))));
 }
 
 /// The scalar nodes shared by the admitted work-exhaustion fixture and its
@@ -1611,7 +1611,7 @@ fn tc_024_lowering_work_exhaustion_is_a_typed_refusal() {
     };
     assert_eq!(*limit, quire_contract_codegen::SCALAR_LOWERING_WORK_LIMIT);
     assert!(consumed > limit);
-    assert!(!contents(&oracles, "src/lib.rs").contains(code_id(3001).digest.as_ref()));
+    assert!(!contents(&oracles, "src/lib.rs").contains(&format!("{:?}", code_id(3001))));
 }
 
 /// A call whose lowered contract package is longer than the checked package, read under a ceiling
@@ -2207,7 +2207,7 @@ fn tc_024_literal_operands_are_classified_by_value_kind_and_constants_stop_typed
                 reference(&key(V_INTEGER)),
                 json!({
                     "term": "literal",
-                    "type": {"domain": NODE_DOMAIN, "digest": key(T_INTEGER)},
+                    "type": code_id(T_INTEGER),
                     "value_kind": "text",
                     "value": "3",
                 }),
@@ -2436,7 +2436,7 @@ fn tc_024_admitted_protocol_node_is_unsupported() {
         panic!("expected typed protocol refusal, got {:?}", claim.result);
     };
     assert_eq!(unsupported_node_id, &requested_id);
-    assert!(!contents(&oracles, "src/lib.rs").contains(requested_id.digest.as_ref()));
+    assert!(!contents(&oracles, "src/lib.rs").contains(&format!("{requested_id:?}")));
 }
 
 fn qspec_package(fixture: &str) -> CheckedPackageV2 {
@@ -3506,7 +3506,7 @@ fn tc_024_boolean_oracle_source_map_probes_the_entry_and_implication_consequent(
             own_entries.len(),
             1,
             "one entry for {}",
-            claim.node_id.digest
+            format!("{:?}", claim.node_id)
         );
         let entry = own_entries[0];
         let ClaimDisposition::Generated(generated) = &claim.result else {
@@ -3534,13 +3534,13 @@ fn tc_024_boolean_oracle_source_map_probes_the_entry_and_implication_consequent(
                 .expect("declared consequent count") as usize,
             expected_consequents,
             "the admitted node fixes the consequent count for {}",
-            claim.node_id.digest
+            format!("{:?}", claim.node_id)
         );
         assert_eq!(
             claim_regions.len(),
             expected_consequents,
             "no consequent region is dropped or duplicated for {}",
-            claim.node_id.digest
+            format!("{:?}", claim.node_id)
         );
         for region in claim_regions {
             assert_eq!(probe_token(all_source, region), "right");
