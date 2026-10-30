@@ -446,19 +446,10 @@ fn reference_model_document() -> Value {
 impl Default for PackageBuilder {
     fn default() -> Self {
         let mut value = base_package();
-        let document = reference_model_document();
-        let digest = quire_canonical::sha256(
-            &document,
-            quire_canonical::Limits::new(CheckedPackageReadLimits::bounded().bytes),
-        )
-        .expect("canonical model document")
-        .to_string();
-        let selection = json!({
-            "identity": REFERENCE_MODEL,
-            "digest_domain": "sha256-jcs",
-            "digest": digest.clone(),
-        });
-        value["lock"]["model_selections"] = json!([selection]);
+        value["lock"]
+            .as_object_mut()
+            .expect("fixture lock")
+            .remove("model_selections");
         let mut builder = Self { value };
         let root_id = key(REFERENCE_MODEL_ROOT);
         let source = builder.value["lock"]["sources"][0].clone();
@@ -474,7 +465,7 @@ impl Default for PackageBuilder {
                 "dependencies": [],
                 "occurrences": [{"role": "generated", "ordinal": 0}],
                 "body": aggregate(vec![]),
-                "owner": {"kind": "model_root", "identity": REFERENCE_MODEL, "digest": digest},
+                "owner": {"kind": "model_root", "identity": REFERENCE_MODEL},
             }));
         let position = builder.value["source_map"]
             .as_array()
@@ -927,20 +918,22 @@ impl PackageBuilder {
 fn evidence_for_wire(wire: &Value) -> CheckedPackageEvidence {
     let mut evidence = CheckedPackageEvidence::new();
     evidence.support_feature("quire.value.complete/v1");
-    if wire["lock"]["model_selections"]
-        .as_array()
-        .is_some_and(|rows| rows.iter().any(|row| row["identity"] == REFERENCE_MODEL))
-    {
+    let selected_model = |identity: &str| {
+        wire["semantic_graph"]["nodes"]
+            .as_array()
+            .is_some_and(|nodes| {
+                nodes.iter().any(|node| {
+                    node["semantic_form"] == "model_root"
+                        && node["owner"]["kind"] == "model_root"
+                        && node["owner"]["identity"] == identity
+                })
+            })
+    };
+    if selected_model(REFERENCE_MODEL) {
         let document = reference_model_document();
-        let digest = quire_canonical::sha256(
-            &document,
-            quire_canonical::Limits::new(CheckedPackageReadLimits::bounded().bytes),
-        )
-        .expect("canonical model document")
-        .to_string();
         evidence
             .insert_domain_package_document(
-                digest,
+                REFERENCE_MODEL,
                 serde_json::to_vec(&document).expect("fixture model bytes"),
             )
             .expect("retain fixture model document");
@@ -949,13 +942,10 @@ fn evidence_for_wire(wire: &Value) -> CheckedPackageEvidence {
         let qspec = std::path::PathBuf::from(qspec_dir);
         crate::checked_package_evidence::retain_selected_extensions(&qspec, wire, &mut evidence);
         let root = qspec.join("proposals/checked-package-v2");
-        if let Some(selection) = wire["lock"]["model_selections"]
-            .as_array()
-            .and_then(|rows| rows.iter().find(|row| row["identity"] == "acme/orders"))
-        {
+        if selected_model("acme/orders") {
             evidence
                 .insert_domain_package_document(
-                    selection["digest"].as_str().expect("model digest"),
+                    "acme/orders",
                     std::fs::read(root.join("domain-package-acme-orders.json"))
                         .expect("read published selected QSpec model package"),
                 )
