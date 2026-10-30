@@ -260,7 +260,11 @@ fn fixture() -> Fixture {
                 .expect("selected scalar expression belongs to corpus")
         })
         .collect::<Vec<_>>();
-    let mut builder = package::corpus_package();
+    let selected_codes = selected
+        .iter()
+        .map(|expression| expression.code)
+        .collect::<Vec<_>>();
+    let mut builder = package::corpus_package_for_codes(&selected_codes);
     for (index, expression) in selected.iter().enumerate() {
         let bound = expression
             .bounds
@@ -277,6 +281,11 @@ fn fixture() -> Fixture {
     let (package, ids) = builder.admit_resolved();
     let items = package::golden_items()
         .into_iter()
+        .filter(|item| {
+            selected
+                .iter()
+                .any(|expression| package::code_id(expression.code) == item.node_id)
+        })
         .map(|mut item| {
             item.node_id = ids.resolve(&item.node_id);
             item
