@@ -217,9 +217,9 @@ CG's solver invocation and handoff records using synthetic proof output. A
 production FR-315 query driver is still absent. TC-059 step 5 still needs an
 authentic zero-step refinement control, and step 8 still needs FR-315 refusal,
 `Sat`, failed-process and reached-limit no-handoff controls. The merged
-IR-1139 congruence fix removes one live cvc5 proof rejection, but QSL still
-returns `Unverifiable` at the first unsupported `rare_rewrite` command.
+IR-1139 congruence fix removes one live cvc5 proof rejection. On QSL main
+`5f3bef7b`, the measured Step row 1 still returns `Unverifiable` at its first
+unsupported `rare_rewrite` command.
 QSL-1306 owns FR-315 query normalization for that remaining TC-059 step 6
-blocker. CG SHALL
-pass the exact extracted interior bytes through that reader before claiming
-AC-5 or TC-059 step 6 covered.
+blocker. CG SHALL pass the exact extracted interior bytes through QSL's
+FR-314 reader before claiming AC-5 or TC-059 step 6 covered.
