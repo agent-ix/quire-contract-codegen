@@ -163,7 +163,6 @@ fn tc_029_generated_composite_equality_crate_agrees_with_direct_runtime() {
             "{case}: scratch package identity repeated"
         );
     }
-    assert_eq!(package_names.len(), fixture::CASES.len());
 }
 
 #[path = "../composite_equality_support/authentic_native.rs"]

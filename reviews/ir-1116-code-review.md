@@ -74,3 +74,22 @@ acceptance text found FND-003.
 | FND-003 | medium   | Ticket's time attribution and aggregate before/after are unrecorded while other corpora keep cold per-crate dependency builds                    | tests/it/exact_scalar_agreement.rs:102 |
 | FND-004 | low      | Isolation regression calls the rename helper directly, so runner wiring and per-case name uniqueness stay untested                               | tests/it/exact_scalar_agreement.rs:209 |
 | FND-005 | low      | Module doc still names run_agreement_cases as the runner composite equality shares, and the new doc omits that the label becomes the package name | tests/it/exact_scalar_agreement.rs:9  |
+
+## New findings (disposition pass 1)
+
+Reviewed head: 999f2b1ff2fd3d3331da4db55ce88d3035e44383, fix commits 75a60b0f and 999f2b1f.
+
+| ID      | Severity | Summary                                                                                                  | Refs                                      |
+| ------- | -------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| FND-006 | low      | Final package_names length assertion cannot fail: every prior insert was asserted to add one distinct entry | tests/it/composite_equality_agreement.rs:166 |
+
+## Dispositions
+
+| FND     | outcome                  | reason |
+| ------- | ------------------------ | ------ |
+| FND-001 | fixed                    | Both helper strings and the fixture now derive from COMPOSITE_EQUALITY_CRATE_NAME; a grep of src and tests finds the literal only at its definition and in one unrelated scratch-directory prefix. |
+| FND-002 | fixed                    | The trace attribute is gone and only a Provenance line remains, matching the untagged harness tests in scratch_crate.rs. |
+| FND-003 | still-open               | The historical baselines (4321.21 s, 4594.44 s, 745 passed) and focused figures match their logs, and the PR states the limits honestly, but a promised measurement is not a measurement. Closes when IR-1116 records, from the one final gate on the final head, the aggregate elapsed time, pass counts and remaining slowest tests. This blocks merge only; it does not block starting the final gate, and no code change is needed. |
+| FND-004 | fixed                    | tc_029 now reads each scratch manifest after the real runner and requires its own label as package name, so a fixed name or a dropped composite path now fails. |
+| FND-005 | fixed                    | The module doc describes the runner split and the new doc states that the label is the package identity and must be a distinct valid name. |
+| FND-006 | still-open               | New this round; no fix exists yet. Delete the assertion at composite_equality_agreement.rs:166. |
