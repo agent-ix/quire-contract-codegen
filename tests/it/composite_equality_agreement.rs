@@ -12,7 +12,7 @@
 
 use ix_trace_rs::trace;
 
-use super::exact_scalar_agreement::run_agreement_cases;
+use super::exact_scalar_agreement::run_composite_agreement_cases;
 
 /// The crate the generator emits now for the corpus request compiles and every
 /// agreement case passes against it. Each case drives the generated oracle and
@@ -136,7 +136,7 @@ fn tc_029_generated_composite_equality_crate_agrees_with_direct_runtime() {
                 generated.environment_symbol, generated.oracle_symbol
             ));
         }
-        run_agreement_cases(
+        run_composite_agreement_cases(
             &format!("composite-equality-agreement-{case}"),
             oracles
                 .artifacts

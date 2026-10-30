@@ -42,7 +42,18 @@ pub(super) fn run_agreement_cases<'a>(
     extra_files: &[(&'a str, &'a str)],
     cases: &str,
 ) {
-    run_agreement_cases_with_expectation(label, artifacts, extra_files, cases, None);
+    run_agreement_cases_with_expectation(label, artifacts, extra_files, cases, None, None);
+}
+
+/// Composite equality's fixed corpus uses distinct test-only package identities so its
+/// scratch crates can reuse compiled dependencies without linking a sibling's library.
+pub(super) fn run_composite_agreement_cases<'a>(
+    label: &str,
+    artifacts: impl IntoIterator<Item = (&'a str, &'a str)>,
+    extra_files: &[(&'a str, &'a str)],
+    cases: &str,
+) {
+    run_agreement_cases_with_expectation(label, artifacts, extra_files, cases, None, Some(label));
 }
 
 /// Require a named native assertion failure, never a setup or compiler failure.
@@ -53,7 +64,14 @@ pub(super) fn run_agreement_mutant<'a>(
     cases: &str,
     failed_test: &str,
 ) {
-    run_agreement_cases_with_expectation(label, artifacts, extra_files, cases, Some(failed_test));
+    run_agreement_cases_with_expectation(
+        label,
+        artifacts,
+        extra_files,
+        cases,
+        Some(failed_test),
+        None,
+    );
 }
 
 fn run_agreement_cases_with_expectation<'a>(
@@ -62,6 +80,7 @@ fn run_agreement_cases_with_expectation<'a>(
     extra_files: &[(&'a str, &'a str)],
     cases: &str,
     failed_test: Option<&str>,
+    composite_package: Option<&str>,
 ) {
     let scratch = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
     let root = scratch.join(label);
@@ -80,6 +99,12 @@ fn run_agreement_cases_with_expectation<'a>(
     let cases_path = repository.join(cases);
     let manifest_path = root.join("Cargo.toml");
     let mut manifest = fs::read_to_string(&manifest_path).expect("read generated manifest");
+    let target_dir = if let Some(package_name) = composite_package {
+        manifest = composite_manifest_for_shared_target(&manifest, package_name);
+        scratch.join("composite-equality-agreement-target")
+    } else {
+        root.join("target")
+    };
     write!(
         manifest,
         "\n[[test]]\nname = \"agreement\"\npath = {:?}\n\n[dev-dependencies]\n{AGREEMENT_DEV_DEPENDENCIES}",
@@ -91,7 +116,7 @@ fn run_agreement_cases_with_expectation<'a>(
 
     let output = Command::new(env!("CARGO"))
         .args(["test", "--locked", "--offline", "--test", "agreement"])
-        .env("CARGO_TARGET_DIR", root.join("target"))
+        .env("CARGO_TARGET_DIR", target_dir)
         .env_remove("RUSTFLAGS")
         .env_remove("CARGO_ENCODED_RUSTFLAGS")
         .current_dir(&root)
@@ -143,6 +168,75 @@ fn run_agreement_cases_with_expectation<'a>(
     assert_eq!(
         passed, declared,
         "{label}: every agreement case must run and pass:\n{stdout}"
+    );
+}
+
+fn composite_manifest_for_shared_target(manifest: &str, package_name: &str) -> String {
+    const ORIGINAL: &str = "[package]\nname = \"quire-composite-equality-oracles\"\n";
+    assert_eq!(
+        manifest.matches(ORIGINAL).count(),
+        1,
+        "composite corpus must retain its generated package manifest"
+    );
+    assert!(
+        !manifest.contains("\nname = ") || manifest.matches("\nname = ").count() == 1,
+        "composite corpus must not declare an explicit library name"
+    );
+    manifest.replacen(
+        ORIGINAL,
+        &format!("[package]\nname = \"{package_name}\"\n"),
+        1,
+    )
+}
+
+/// A common target must never cause Cargo to run a sibling crate's compiled library.
+#[trace("FR-018-AC-2", "TC-029")]
+#[test]
+fn composite_shared_target_keeps_generated_libraries_distinct() {
+    let scratch = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
+    let root = scratch.join("composite-shared-target-isolation");
+    let _ = fs::remove_dir_all(&root);
+    let target = root.join("target");
+    let original = "[package]\nname = \"quire-composite-equality-oracles\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[lib]\npath = \"src/lib.rs\"\n\n[workspace]\n";
+
+    for (case, value) in [("alpha", 11), ("beta", 29), ("alpha", 11)] {
+        let package_name = format!("quire-composite-equality-oracles-{case}");
+        let crate_name = package_name.replace('-', "_");
+        let directory = root.join(case);
+        fs::create_dir_all(directory.join("src")).expect("create isolated scratch library");
+        fs::create_dir_all(directory.join("tests")).expect("create isolated scratch tests");
+        let manifest = composite_manifest_for_shared_target(original, &package_name);
+        fs::write(directory.join("Cargo.toml"), manifest).expect("write isolated manifest");
+        fs::write(
+            directory.join("src/lib.rs"),
+            format!("pub fn source_value() -> u32 {{ {value} }}\n"),
+        )
+        .expect("write isolated library");
+        fs::write(
+            directory.join("tests/agreement.rs"),
+            format!(
+                "#[test] fn source_is_this_case() {{ assert_eq!({crate_name}::source_value(), {value}); }}\n"
+            ),
+        )
+        .expect("write isolated test");
+        let output = Command::new(env!("CARGO"))
+            .args(["test", "--offline", "--test", "agreement"])
+            .env("CARGO_TARGET_DIR", &target)
+            .env_remove("RUSTFLAGS")
+            .env_remove("CARGO_ENCODED_RUSTFLAGS")
+            .current_dir(&directory)
+            .output()
+            .expect("run isolated test");
+        assert!(
+            output.status.success(),
+            "{case} linked a sibling artifact: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    assert_eq!(
+        original.matches("quire-composite-equality-oracles").count(),
+        1,
+        "the generator's original manifest remains unchanged"
     );
 }
 
