@@ -247,7 +247,7 @@ macro_rules! shared_helpers {
 
         impl Fixture {
             pub fn key(&self, name: &str) -> NodeKey {
-                self.keys[name]
+                self.keys[name].clone()
             }
 
             pub fn unit(&self, name: &str) -> IdentifiedUnit {
@@ -533,7 +533,7 @@ pub mod rt_side {
                     .dimensions()
                     .find(|a| a.qualified_name().last().unwrap().as_str() == d.declaration)
                     .expect("owner dimension");
-                keys.insert(d.name, admitted.node());
+                keys.insert(d.name, admitted.node().clone());
             }
             for u in owned {
                 let admitted = context
@@ -543,7 +543,7 @@ pub mod rt_side {
                 let identified = IdentifiedUnit::new(admitted.quantity_unit().clone())
                     .expect("admitted unit identity");
                 assert_eq!(identified.id(), admitted.id());
-                keys.insert(u.name, admitted.node());
+                keys.insert(u.name, admitted.node().clone());
                 named_units.insert(u.name, identified);
             }
             units.append(context.unit_table().clone());
@@ -566,14 +566,19 @@ pub mod rt_side {
             .iter()
             .map(|d| d.name)
             .chain(spec.units.iter().map(|u| u.name))
-            .enumerate()
-            .map(|(index, name)| {
-                let mut bytes = [0; 32];
-                bytes[31] = u8::try_from(index + 1).unwrap();
-                (name, NodeKey::from_digest(bytes))
+            .map(|name| {
+                (
+                    name,
+                    NodeKey::new(
+                        "agreement-fixture",
+                        vec![PathSegment::Text(name.to_owned())],
+                        0,
+                    )
+                    .unwrap(),
+                )
             })
             .collect::<BTreeMap<_, _>>();
-        let key = |name: &str| labels[name];
+        let key = |name: &str| labels[name].clone();
         let dimensions = spec
             .dimensions
             .iter()
@@ -581,9 +586,9 @@ pub mod rt_side {
                 let mut terms = d
                     .terms
                     .iter()
-                    .map(|(name, exponent)| (*key(name).as_bytes(), Integer::from(*exponent)))
+                    .map(|(name, exponent)| (key(name), Integer::from(*exponent)))
                     .collect::<Vec<_>>();
-                terms.sort_by_key(|(term, _)| *term);
+                terms.sort_by(|(left, _), (right, _)| left.cmp(right));
                 let node = DimensionNode::checked(terms, NominalDeclaration::default())
                     .map_err(|cause| InvalidSemanticGraph { cause })?;
                 Ok((key(d.name), node))
@@ -594,8 +599,8 @@ pub mod rt_side {
             .iter()
             .map(|u| {
                 let node = UnitNode::checked(
-                    *key(u.dimension).as_bytes(),
-                    u.target.map(|target| *key(target).as_bytes()),
+                    key(u.dimension),
+                    u.target.map(key),
                     rational(u.scale),
                     rational(u.offset),
                     NominalDeclaration::default(),
@@ -650,7 +655,7 @@ pub mod rt_side {
             admitted
         });
         let declaration = EnumDeclaration::new(
-            admitted.key(),
+            admitted.key().clone(),
             admitted.is_ordered(),
             admitted
                 .cases()
@@ -661,14 +666,14 @@ pub mod rt_side {
         let cases = admitted
             .cases()
             .iter()
-            .map(|case| (case.case().as_str().to_owned(), case.key()))
+            .map(|case| (case.case().as_str().to_owned(), case.key().clone()))
             .collect();
         Ok(Enum { declaration, cases })
     }
 
     impl Enum {
         pub fn value(&self, case: &str) -> Result<EnumValue, InvalidSemanticGraph> {
-            self.declaration.member(case, self.cases[case])
+            self.declaration.member(case, self.cases[case].clone())
         }
     }
 }

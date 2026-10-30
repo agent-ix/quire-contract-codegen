@@ -731,7 +731,7 @@ fn arithmetic_outcome(run: &QuantityArithmeticRun) -> Result<Outcome<Quantity>, 
         if let Outcome::Completed(value) = &outcome {
             assert_eq!(
                 value.unit(),
-                unit.id(),
+                &unit.id(),
                 "result carries its paired owner unit"
             );
         }
@@ -856,7 +856,7 @@ fn expected_terms(f: &rt::Fixture, terms: &[(&str, i64)]) -> Vec<(rt::NodeKey, I
         .iter()
         .map(|(name, exponent)| (f.key(name), Integer::from(*exponent)))
         .collect();
-    expected.sort_by_key(|(key, _)| *key);
+    expected.sort_by(|(left, _), (right, _)| left.cmp(right));
     expected
 }
 
@@ -983,7 +983,7 @@ fn tc_024_tc187_u02_dimension_normalization_agrees() {
     let Some(Ok((Outcome::Completed(quantity), unit))) = quotient else {
         panic!("(1 m * 1 s) / 1 s must complete");
     };
-    assert_eq!(quantity.unit(), unit.id());
+    assert_eq!(quantity.unit(), &unit.id());
     assert_eq!(unit.unit().dimension(), l);
     assert_eq!(compound_terms(&unit), expected_terms(&f, &[("m", 1)]));
 
@@ -1144,9 +1144,12 @@ fn admission_refusal(
 }
 
 fn node(n: u8) -> rt::NodeKey {
-    let mut bytes = [0; 32];
-    bytes[31] = n;
-    rt::NodeKey::from_digest(bytes)
+    rt::NodeKey::new(
+        "agreement-control",
+        vec![rt::PathSegment::Text(n.to_string())],
+        0,
+    )
+    .unwrap()
 }
 
 fn declaration(
@@ -1155,8 +1158,8 @@ fn declaration(
     scale: rt::Rational,
 ) -> rt::UnitNode {
     rt::UnitNode::checked(
-        *dimension.as_bytes(),
-        target.map(|key| *key.as_bytes()),
+        dimension,
+        target,
         scale,
         rt::ratio(0, 1),
         rt::NominalDeclaration::default(),
@@ -1195,11 +1198,11 @@ fn tc_024_tc187_u06_u11_unit_graph_admission_refuses_each_malformed_graph() {
     let dimensions = || {
         std::collections::BTreeMap::from([
             (
-                length,
+                length.clone(),
                 rt::DimensionNode::checked(vec![], rt::NominalDeclaration::default()).unwrap(),
             ),
             (
-                time,
+                time.clone(),
                 rt::DimensionNode::checked(vec![], rt::NominalDeclaration::default()).unwrap(),
             ),
         ])
@@ -1209,8 +1212,8 @@ fn tc_024_tc187_u06_u11_unit_graph_admission_refuses_each_malformed_graph() {
     let cause = admission_refusal(rt::UnitGraph::from_checked_nodes(
         &dimensions(),
         &std::collections::BTreeMap::from([
-            (a, declaration(length, Some(b), one())),
-            (b, declaration(length, Some(a), one())),
+            (a.clone(), declaration(length.clone(), Some(b.clone()), one())),
+            (b.clone(), declaration(length.clone(), Some(a.clone()), one())),
         ]),
     ));
     assert_eq!(cause, rt::SemanticGraphCause::MissingRoot);
@@ -1218,8 +1221,8 @@ fn tc_024_tc187_u06_u11_unit_graph_admission_refuses_each_malformed_graph() {
     let cause = admission_refusal(rt::UnitGraph::from_checked_nodes(
         &dimensions(),
         &std::collections::BTreeMap::from([
-            (root, declaration(length, None, one())),
-            (a, declaration(length, Some(b), one())),
+            (root.clone(), declaration(length.clone(), None, one())),
+            (a.clone(), declaration(length.clone(), Some(b.clone()), one())),
         ]),
     ));
     assert_eq!(cause, rt::SemanticGraphCause::UnknownTarget);
@@ -1227,9 +1230,9 @@ fn tc_024_tc187_u06_u11_unit_graph_admission_refuses_each_malformed_graph() {
     let cause = admission_refusal(rt::UnitGraph::from_checked_nodes(
         &dimensions(),
         &std::collections::BTreeMap::from([
-            (root, declaration(time, None, one())),
-            (b, declaration(length, None, one())),
-            (a, declaration(length, Some(root), one())),
+            (root.clone(), declaration(time.clone(), None, one())),
+            (b.clone(), declaration(length.clone(), None, one())),
+            (a.clone(), declaration(length.clone(), Some(root.clone()), one())),
         ]),
     ));
     assert_eq!(cause, rt::SemanticGraphCause::CrossDimensionTarget);
@@ -1237,8 +1240,8 @@ fn tc_024_tc187_u06_u11_unit_graph_admission_refuses_each_malformed_graph() {
     let cause = admission_refusal(rt::UnitGraph::from_checked_nodes(
         &dimensions(),
         &std::collections::BTreeMap::from([
-            (root, declaration(length, None, one())),
-            (a, declaration(length, Some(a), one())),
+            (root.clone(), declaration(length.clone(), None, one())),
+            (a.clone(), declaration(length.clone(), Some(a.clone()), one())),
         ]),
     ));
     assert_eq!(cause, rt::SemanticGraphCause::TargetCycle);
@@ -1967,7 +1970,7 @@ fn quantity_paired_result_units_survive_stops_and_feed_following_operations() {
     ))
     .unwrap();
     let product = product.completed().expect("genuine product completes");
-    assert_eq!(product.unit(), product_unit.id());
+    assert_eq!(product.unit(), &product_unit.id());
     assert!(
         scope.resolve(&product).is_none(),
         "the compound result needs its returned metadata"
@@ -1981,7 +1984,7 @@ fn quantity_paired_result_units_survive_stops_and_feed_following_operations() {
     .unwrap();
     let quotient = quotient.completed().unwrap();
     assert_eq!(*quotient.magnitude(), rt::ratio(2, 1));
-    assert_eq!(quotient.unit(), quotient_unit.id());
+    assert_eq!(quotient.unit(), &quotient_unit.id());
     scope.form(quotient_unit);
     let (square, square_unit) = quantity_typed(quantity_power(
         scope.resolve(&quotient).unwrap(),
@@ -1991,7 +1994,7 @@ fn quantity_paired_result_units_survive_stops_and_feed_following_operations() {
     .unwrap();
     let square = square.completed().unwrap();
     assert_eq!(*square.magnitude(), rt::ratio(4, 1));
-    assert_eq!(square.unit(), square_unit.id());
+    assert_eq!(square.unit(), &square_unit.id());
     scope.form(square_unit);
     assert!(scope.resolve(&square).is_some());
 
