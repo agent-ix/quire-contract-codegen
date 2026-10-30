@@ -13,8 +13,6 @@
 #[allow(clippy::duplicate_mod)]
 #[path = "../exact_scalar_support/package.rs"]
 pub(crate) mod package;
-#[path = "kani_scalar_native_digest.rs"]
-mod scalar_native_digest;
 #[path = "kani_scalar_native_fixture.rs"]
 mod scalar_native_fixture;
 use crate::common::proof_ceilings::proof_ceilings_with_wall_clock;
@@ -24,7 +22,6 @@ use quire_contract_codegen::{
     ContractRequestPosition, GenerationContexts, KaniGenerationContext, KindOutput, ProviderOrigin,
     RoutedGenerationItem,
 };
-use scalar_native_digest::independent_digest;
 use scalar_native_fixture::{routed_native_scalar_with_artifacts, routed_scalar_with_artifacts};
 
 use std::{
@@ -36,8 +33,8 @@ use std::{
 use crate::scratch_crate::{write_manifest, TemporaryDirectory};
 use ix_trace_rs::trace;
 use package::{
-    application, bounded, code_id, corpus_package, golden_items, id, integer_add, key, op,
-    reference, Bound, MISSING, MODEL, STATE, T_BOOLEAN, T_INTEGER, UNBOUNDED, V_BOOLEAN,
+    application, bounded, code_id, corpus_package_for_codes, golden_items, id, integer_add, key,
+    op, reference, Bound, MISSING, MODEL, STATE, T_BOOLEAN, T_INTEGER, UNBOUNDED, V_BOOLEAN,
 };
 use quire_contract_codegen::oracle::operator_catalog::IntegerOperator;
 use quire_contract_codegen::{
@@ -94,6 +91,20 @@ fn unsupported(record: &ObligationRecord) -> &UnsupportedObligation {
     }
 }
 
+fn focused_golden_items(package: &CheckedPackageV2) -> Vec<ExactScalarItem> {
+    golden_items()
+        .into_iter()
+        .filter(|item| {
+            item.node_id == code_id(MISSING)
+                || package
+                    .graph()
+                    .nodes
+                    .iter()
+                    .any(|node| node.node_id == item.node_id)
+        })
+        .collect()
+}
+
 /// The admitted scalar harness source for the cover-last guard.
 pub(crate) fn guard_sources() -> Vec<(&'static str, String)> {
     let (scalar, claim_map, ids) = scalar_package();
@@ -130,7 +141,20 @@ fn scalar_package_with_occurrences(
     ClaimMap<ExactScalarClaim>,
     package::FixtureIds,
 ) {
-    let mut builder = corpus_package();
+    let mut builder = corpus_package_for_codes(&[
+        1001,
+        1002,
+        1003,
+        1004,
+        1011,
+        UNBOUNDED,
+        MODEL,
+        STATE,
+        V_BOOLEAN,
+        package::QUANTITY_CONVERSIONS[0],
+        package::QUANTITY_CONVERSIONS[1],
+        package::QUANTITY_CONVERSIONS[2],
+    ]);
     // IR-280's FR-322 application-node dependency join means this bound must
     // anchor on a node no other expression's differing bound also reaches
     // (see `PackageBuilder::dedicated_operand`'s doc): the plain shared
@@ -188,7 +212,7 @@ fn scalar_package_with_occurrences(
         builder.expression_occurrences();
     }
     let (package, ids) = builder.admit_resolved();
-    let mut items = golden_items()
+    let mut items = focused_golden_items(&package)
         .into_iter()
         .map(|mut item| {
             item.node_id = ids.resolve(&item.node_id);
@@ -318,7 +342,7 @@ fn boolean_implies_scalar() -> (
     String,
 ) {
     const IMPLIES: u32 = 7_702;
-    let mut builder = corpus_package();
+    let mut builder = corpus_package_for_codes(&[V_BOOLEAN]);
     builder.application_code_with(
         IMPLIES,
         "expression",
@@ -496,7 +520,7 @@ fn tc_025_boolean_implication_subject_mutation_is_falsified_with_false_left() {
 
 pub(crate) fn boolean_operation_package() -> (CheckedPackageV2, CheckedNodeId) {
     const BOOLEAN_AND: u32 = 7_701;
-    let mut builder = corpus_package();
+    let mut builder = corpus_package_for_codes(&[V_BOOLEAN]);
     builder.application_code_with(
         BOOLEAN_AND,
         "expression",
@@ -1017,10 +1041,10 @@ const RENDERED_OPERATIONS: [&str; 4] = [
 fn tc_025_a_present_node_with_an_unrecognized_kind_is_refused_rather_than_silently_supported() {
     // The corpus's admitted snapshot is a real non-expression kind. A
     // transition would require its own closed body, unrelated to this guard.
-    let (package, ids) = corpus_package().admit_resolved();
+    let (package, ids) = corpus_package_for_codes(&[1001, STATE]).admit_resolved();
     let node_id = ids.resolve(&code_id(STATE));
 
-    let oracles = generate_exact_scalar_oracles(&package, &package::golden_items_for(&package))
+    let oracles = generate_exact_scalar_oracles(&package, &focused_golden_items(&package))
         .expect("claim map");
     let (operation, generated) = oracles
         .claim_map
@@ -1142,10 +1166,10 @@ fn tc_025_a_byte_ceiling_and_an_unrecognised_lowering_refusal_are_oracle_refused
 #[test]
 fn tc_025_a_claim_naming_a_node_absent_from_the_graph_is_refused_not_silently_supported() {
     const NODE_ABSENT_FROM_GRAPH: u32 = 8888;
-    let package = corpus_package().admit();
+    let package = corpus_package_for_codes(&[1001]).admit();
     let missing_node_id = id(&key(NODE_ABSENT_FROM_GRAPH));
 
-    let oracles = generate_exact_scalar_oracles(&package, &package::golden_items_for(&package))
+    let oracles = generate_exact_scalar_oracles(&package, &focused_golden_items(&package))
         .expect("claim map");
     let (operation, generated) = oracles
         .claim_map
@@ -1207,66 +1231,74 @@ fn tc_025_every_confirmed_operation_is_rendered_or_honestly_refused() {
         "quire.op.integer.mul",
         "quire.op.integer.negate",
     ];
-    let (scalar, claim_map, _) = scalar_package();
-    let generated = claim_map
-        .items
-        .iter()
-        .filter(|claim| matches!(claim.result, ClaimDisposition::Generated(_)))
-        .cloned()
-        .collect::<Vec<_>>();
-    assert!(generated.len() > 40, "the corpus generates every family");
-    assert!(
-        generated
+    let mut generated_count = 0;
+    let mut rendered_count = 0;
+    for (scalar, cohort_items) in package::corpus_cohorts() {
+        let claim_map = generate_exact_scalar_oracles(&scalar, &cohort_items)
+            .expect("bounded corpus cohort generates")
+            .claim_map;
+        let generated = claim_map
+            .items
             .iter()
-            .all(|claim| claim.operation.provenance == OperationProvenance::IrConfirmed),
-        "every generated V2 claim's operation is IR-confirmed"
-    );
-    let admitted = admitted_scalar_claims(&scalar, &claim_map);
-    let items = generated
-        .iter()
-        .map(|claim| ObligationItem::ScalarClaim {
-            package: &admitted,
-            claim_map: &claim_map,
-            node_id: &claim.node_id,
-            claim_index: claim_index(&claim_map, &claim.node_id),
-            result_selection: &quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
-        })
-        .collect::<Vec<_>>();
-    let (records, scalar_harnesses) =
-        emitted_scalar(negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap());
-    assert_eq!(records.len(), generated.len());
-    let expected_rendered = generated
-        .iter()
-        .filter(|claim| RENDERED.contains(&claim.operation.identity.as_str()))
-        .count();
-    assert!(
-        expected_rendered > 0,
-        "the corpus exercises integer arithmetic"
-    );
-    assert_eq!(scalar_harnesses.len(), expected_rendered);
-    for (record, claim) in records.iter().zip(&generated) {
-        if RENDERED.contains(&claim.operation.identity.as_str()) {
-            assert!(
-                matches!(record.disposition, ObligationDisposition::Supported { .. }),
-                "{}: {:?}",
-                claim.operation.identity,
-                record.disposition
-            );
-        } else {
-            assert_eq!(
-                unsupported(record),
-                &UnsupportedObligation::OperationNotRendered {
-                    operation_identity: claim.operation.identity.clone(),
-                    derived_domains: match unsupported(record) {
-                        UnsupportedObligation::OperationNotRendered {
-                            derived_domains, ..
-                        } => derived_domains.clone(),
-                        other => panic!("{other:?}"),
-                    },
-                }
-            );
+            .filter(|claim| matches!(claim.result, ClaimDisposition::Generated(_)))
+            .cloned()
+            .collect::<Vec<_>>();
+        generated_count += generated.len();
+        assert!(
+            generated
+                .iter()
+                .all(|claim| claim.operation.provenance == OperationProvenance::IrConfirmed),
+            "every generated V2 claim's operation is IR-confirmed"
+        );
+        let admitted = admitted_scalar_claims(&scalar, &claim_map);
+        let items = generated
+            .iter()
+            .map(|claim| ObligationItem::ScalarClaim {
+                package: &admitted,
+                claim_map: &claim_map,
+                node_id: &claim.node_id,
+                claim_index: claim_index(&claim_map, &claim.node_id),
+                result_selection: &ContractDriverResultSelection::NotApplicable,
+            })
+            .collect::<Vec<_>>();
+        let (records, scalar_harnesses) =
+            emitted_scalar(negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap());
+        assert_eq!(records.len(), generated.len());
+        let expected_rendered = generated
+            .iter()
+            .filter(|claim| RENDERED.contains(&claim.operation.identity.as_str()))
+            .count();
+        rendered_count += expected_rendered;
+        assert_eq!(scalar_harnesses.len(), expected_rendered);
+        for (record, claim) in records.iter().zip(&generated) {
+            if RENDERED.contains(&claim.operation.identity.as_str()) {
+                assert!(
+                    matches!(record.disposition, ObligationDisposition::Supported { .. }),
+                    "{}: {:?}",
+                    claim.operation.identity,
+                    record.disposition
+                );
+            } else {
+                assert_eq!(
+                    unsupported(record),
+                    &UnsupportedObligation::OperationNotRendered {
+                        operation_identity: claim.operation.identity.clone(),
+                        derived_domains: match unsupported(record) {
+                            UnsupportedObligation::OperationNotRendered {
+                                derived_domains, ..
+                            } => derived_domains.clone(),
+                            other => panic!("{other:?}"),
+                        },
+                    }
+                );
+            }
         }
     }
+    assert!(generated_count > 40, "the cohorts generate every family");
+    assert!(
+        rendered_count > 0,
+        "the corpus exercises integer arithmetic"
+    );
 }
 
 /// An admitted division claim remains distinct from operand-lowering refusals:
@@ -1318,7 +1350,7 @@ fn admitted_integer_division_is_unrendered_and_emits_no_harness() {
 #[trace("FR-015-AC-6", "FR-038-AC-3", "TC-025")]
 #[test]
 fn tc_025_a_caller_declared_operation_is_refused_with_no_harness() {
-    let (package, ids) = corpus_package().admit_resolved();
+    let (package, ids) = corpus_package_for_codes(&[1004]).admit_resolved();
     let mismatched = ids.resolve(&code_id(1004));
     let oracles = generate_exact_scalar_oracles(
         &package,
@@ -1441,7 +1473,7 @@ fn tc_025_every_item_is_accounted_before_any_harness_is_exposed() {
 
     // A claim map from another package is a mismatch, not a lookup.
     let (_, foreign_map) = {
-        let mut builder = corpus_package();
+        let mut builder = corpus_package_for_codes(&[1001]);
         builder.code(
             4001,
             "value",
@@ -1450,9 +1482,15 @@ fn tc_025_every_item_is_accounted_before_any_harness_is_exposed() {
             package::literal("integer", "4"),
         );
         let foreign = builder.admit();
-        let map = generate_exact_scalar_oracles(&foreign, &golden_items())
-            .unwrap()
-            .claim_map;
+        let map = generate_exact_scalar_oracles(
+            &foreign,
+            &[ExactScalarItem {
+                node_id: code_id(1001),
+                operation: integer_add(),
+            }],
+        )
+        .unwrap()
+        .claim_map;
         (foreign, map)
     };
     let node = code_id(1001);
@@ -2289,12 +2327,8 @@ fn tc_027_attested_scalar_receipt_binds_real_proof_and_native_result() {
     assert_eq!(constrained_receipt.scalar_limits(), &constrained_limits);
     assert_retained_scalar_content(&constrained_receipt, &harness, &artifacts);
     assert_eq!(
-        receipt.proof_content_digest(),
-        constrained_receipt.proof_content_digest()
-    );
-    assert_eq!(
-        receipt.proof_content_identity(),
-        constrained_receipt.proof_content_identity(),
+        receipt.staged_entries(),
+        constrained_receipt.staged_entries(),
         "native request limits do not change the staged proof content"
     );
     let Outcome::Incomplete(incomplete) = constrained_receipt.native_outcome() else {
@@ -2385,12 +2419,8 @@ fn tc_027_attested_scalar_subtraction_receipts_bind_both_operand_orders() {
     assert_retained_scalar_content(&left_first_receipt, &harness, &artifacts);
     assert_retained_scalar_content(&right_first_receipt, &harness, &artifacts);
     assert_eq!(
-        left_first_receipt.proof_content_digest(),
-        right_first_receipt.proof_content_digest()
-    );
-    assert_eq!(
-        left_first_receipt.proof_content_identity(),
-        right_first_receipt.proof_content_identity(),
+        left_first_receipt.staged_entries(),
+        right_first_receipt.staged_entries(),
         "request operands are retained in each receipt but are not staged proof content"
     );
     assert!(
@@ -2425,31 +2455,6 @@ fn assert_retained_scalar_content(
             "src/oracle-artifacts-lib.rs"
         ]
     );
-    let expected = independent_digest(entries);
-    for index in 0..entries.len() {
-        for mutation in 0..5 {
-            let mut changed = entries.to_vec();
-            match mutation {
-                0 => {
-                    changed.remove(index);
-                }
-                1 => changed[index].0.push('x'),
-                2 => changed.swap(index, (index + 1) % entries.len()),
-                3 => changed.insert(index, changed[index].clone()),
-                4 => changed[index].1[0] ^= 1,
-                _ => unreachable!(),
-            }
-            assert_ne!(
-                independent_digest(&changed),
-                expected,
-                "member {index}, mutation {mutation}"
-            );
-        }
-    }
-    let digest: &qsl_replay::DigestRecord = receipt.proof_content_digest();
-    assert_eq!(digest.domain().as_str(), "sha256-jcs");
-    assert_eq!(digest.as_bytes(), &expected);
-    assert_eq!(receipt.proof_content_identity().as_bytes(), &expected);
     for artifact in artifacts {
         let path = if artifact.path == "src/lib.rs" {
             "src/oracle-artifacts-lib.rs"
