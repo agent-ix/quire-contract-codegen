@@ -296,8 +296,11 @@ cover summary decides. For a collection precondition identified by its typed V2 
 precondition kind and admitted collection-quantifier marker, bind the generated
 source digest and the unique artifact-relative line of its FR-015-AC-99
 Boolean-completion assertion. Delete or replace that assertion at the same line
-while preserving the cover, or embed the artifact twice: batch admission returns
-`BoundTotalityAssertionMismatch` before launch. With intact source, compute the
+while preserving the cover: an unchanged seal gives `HarnessNotInCrate` for
+zero byte-identical occurrences; a mutated retained seal gives
+`HarnessProvenanceMismatch`. Embed the intact artifact twice and require
+`BoundTotalityAssertionMismatch`. Exercise these refusals through the single-run,
+readonly and batch entries before launch; the batch refuses the whole call. With intact source, compute the
 line offset of its sole occurrence in `src/lib.rs`. A satisfied cover and zero
 successful class-`assertion` checks at the converted `{ file: src/lib.rs, line }`
 is inconclusive with the vacuous-proof reason. An unrelated successful assertion
