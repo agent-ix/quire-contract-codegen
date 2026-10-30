@@ -25,9 +25,9 @@ use quire_contract_codegen::{
     ProofReadiness, UnsupportedObligation,
 };
 use quire_contract_model::{
-    CheckedMemberType, CheckedModelObjectFields, CheckedNodeId, CheckedPackageEvidence,
-    CheckedPackageReadLimits, CheckedPackageV2, CheckedPackageV2ReadResult, CheckedSemanticNodeV2,
-    CheckedTerm,
+    CheckedMemberType, CheckedModelObjectFields, CheckedNodeId, CheckedNodePathSegment,
+    CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2, CheckedPackageV2ReadResult,
+    CheckedSemanticNodeV2, CheckedTerm,
 };
 use quire_exact::CollectionKind;
 use quire_semantic_value::catalog::Category;
@@ -55,6 +55,30 @@ fn argument_target(node: &CheckedSemanticNodeV2, index: usize) -> Option<&Checke
         CheckedTerm::Reference { target } => Some(target),
         _ => None,
     }
+}
+
+fn node_key_matches(id: &CheckedNodeId, key: quire_exact::NodeKeyView<'_>) -> bool {
+    if id.package.as_ref() != key.package() || id.ordinal != key.ordinal() {
+        return false;
+    }
+    let mut path = key.path();
+    for segment in &id.path {
+        let matches = match (segment, path.next()) {
+            (
+                CheckedNodePathSegment::Name(left),
+                Some(quire_exact::PathSegmentView::Text(right)),
+            ) => left.as_ref() == right,
+            (
+                CheckedNodePathSegment::Node(left),
+                Some(quire_exact::PathSegmentView::Node(right)),
+            ) => node_key_matches(left, right),
+            _ => false,
+        };
+        if !matches {
+            return false;
+        }
+    }
+    path.next().is_none()
 }
 
 fn named_member<'a>(node: &'a CheckedSemanticNodeV2, name: &str) -> Option<&'a CheckedTerm> {
@@ -251,7 +275,7 @@ fn source_unit_with_clause(model_digest: &str, declaration: &str, body: &str) ->
 
 struct Emitted {
     package: CheckedPackageV2,
-    function_digest: String,
+    function_key: quire_exact::NodeKey,
     object_type: CheckedNodeId,
     fields: CheckedModelObjectFields,
     model_bytes: Vec<u8>,
@@ -282,7 +306,7 @@ fn collection_identity(
         .graph()
         .nodes
         .iter()
-        .find(|node| node.node_id.digest.as_ref() == fixture.function_digest)
+        .find(|node| node_key_matches(&node.node_id, fixture.function_key.view()))
         .unwrap()
         .node_id
         .clone();
@@ -336,7 +360,7 @@ fn collection_harness_with_ceilings(
         .graph()
         .nodes
         .iter()
-        .find(|node| node.node_id.digest.as_ref() == fixture.function_digest)
+        .find(|node| node_key_matches(&node.node_id, fixture.function_key.view()))
         .unwrap()
         .node_id
         .clone();
@@ -395,7 +419,7 @@ fn collection_item_outcome(
         .graph()
         .nodes
         .iter()
-        .find(|node| node.node_id.digest.as_ref() == fixture.function_digest)
+        .find(|node| node_key_matches(&node.node_id, fixture.function_key.view()))
         .expect("selected function exists")
         .node_id
         .clone();
@@ -770,7 +794,7 @@ fn try_emitted_from_document_and_body(document: Value, body: &str) -> Result<Emi
         model_digest_bytes,
         unit,
         site.package,
-        site.site.function.to_string(),
+        site.site.function,
     )
 }
 
@@ -804,7 +828,7 @@ fn try_emitted_from_document_and_clause(
         model_digest_bytes,
         unit,
         site.package,
-        site.site.node.to_string(),
+        site.site.node,
     )
 }
 
@@ -814,7 +838,7 @@ fn admit_emitted(
     model_digest_bytes: [u8; 32],
     unit: String,
     package_bytes: Vec<u8>,
-    function_digest: String,
+    function_key: quire_exact::NodeKey,
 ) -> Result<Emitted, String> {
     let mut evidence = CheckedPackageEvidence::new();
     evidence.support_feature("quire.value.complete/v1");
@@ -851,12 +875,12 @@ fn admit_emitted(
         ));
     };
     assert!(
-        !package.package_id().digest.is_empty(),
-        "the admitted package has a semantic identity"
+        !package.name().is_empty(),
+        "the admitted package has a name"
     );
     Ok(Emitted {
         package,
-        function_digest,
+        function_key,
         object_type: object_type.clone(),
         fields: fields.clone(),
         model_bytes: document_bytes,
@@ -879,7 +903,7 @@ fn admitted_state_clause_collection_preserves_order_and_uniqueness() {
         .graph()
         .nodes
         .iter()
-        .find(|node| node.node_id.digest.as_ref() == fixture.function_digest)
+        .find(|node| node_key_matches(&node.node_id, fixture.function_key.view()))
         .expect("selected QSL clause");
     assert_eq!(clause.semantic_form.as_ref(), "state_clause");
     let harness = collection_harness(&fixture, "quire.op.collection.forall");
@@ -1031,7 +1055,7 @@ fn operation_and_constraint_clauses_do_not_get_standalone_collection_proofs() {
 #[test]
 fn qsl_emits_and_ir_admits_the_authored_collection_and_reference_shapes() {
     let fixture = emitted();
-    assert!(!fixture.package.package_id().digest.is_empty());
+    assert!(!fixture.package.name().is_empty());
     let forall = fixture
         .package
         .graph()
@@ -1046,16 +1070,13 @@ fn qsl_emits_and_ir_admits_the_authored_collection_and_reference_shapes() {
         .iter()
         .find(|node| application_identity(node) == Some("quire.op.collection.exists"))
         .expect("QSL lowered the source exists to its catalogued operation");
-    let collection_digest = argument_target(forall, 0)
-        .expect("forall collection operand identity")
-        .digest
-        .as_ref();
+    let collection_id = argument_target(forall, 0).expect("forall collection operand identity");
     let collection_node = fixture
         .package
         .graph()
         .nodes
         .iter()
-        .find(|node| node.node_id.digest.as_ref() == collection_digest)
+        .find(|node| &node.node_id == collection_id)
         .expect("the collection operand resolves in the admitted graph");
     let type_node = fixture
         .package
@@ -1064,16 +1085,14 @@ fn qsl_emits_and_ir_admits_the_authored_collection_and_reference_shapes() {
         .iter()
         .find(|node| node.node_id == collection_node.semantic_type)
         .expect("the collection operand type resolves in the admitted graph");
-    let exists_collection_digest = argument_target(exists, 0)
-        .expect("exists collection operand identity")
-        .digest
-        .as_ref();
+    let exists_collection_id =
+        argument_target(exists, 0).expect("exists collection operand identity");
     let exists_collection = fixture
         .package
         .graph()
         .nodes
         .iter()
-        .find(|node| node.node_id.digest.as_ref() == exists_collection_digest)
+        .find(|node| &node.node_id == exists_collection_id)
         .expect("exists collection operand resolves in admitted graph");
     assert_eq!(forall.node_tag.as_ref(), "expression");
     assert_eq!(forall.semantic_form.as_ref(), "quantify");
@@ -1102,31 +1121,24 @@ fn qsl_emits_and_ir_admits_the_authored_collection_and_reference_shapes() {
         .expect("admitted field projection");
     assert_eq!(name, "items");
     assert_eq!(
-        declaration.digest.as_ref(),
-        fixture.object_type.digest.as_ref(),
+        declaration, &fixture.object_type,
         "projection declaration is the admitted model object containing items"
     );
-    let receiver_digest = argument_target(collection_node, 0)
-        .expect("projection receiver identity")
-        .digest
-        .as_ref();
+    let receiver_id = argument_target(collection_node, 0).expect("projection receiver identity");
     let receiver = fixture
         .package
         .graph()
         .nodes
         .iter()
-        .find(|node| node.node_id.digest.as_ref() == receiver_digest)
+        .find(|node| &node.node_id == receiver_id)
         .expect("projection receiver resolves in admitted graph");
-    let parameter_digest = argument_target(receiver, 0)
-        .expect("deref receiver parameter identity")
-        .digest
-        .as_ref();
+    let parameter_id = argument_target(receiver, 0).expect("deref receiver parameter identity");
     let parameter = fixture
         .package
         .graph()
         .nodes
         .iter()
-        .find(|node| node.node_id.digest.as_ref() == parameter_digest)
+        .find(|node| &node.node_id == parameter_id)
         .expect("deref receiver parameter resolves in admitted graph");
     assert_eq!(parameter.node_tag.as_ref(), "value");
     assert_eq!(parameter.semantic_form.as_ref(), "parameter");
@@ -1157,18 +1169,17 @@ fn qsl_emits_and_ir_admits_the_authored_collection_and_reference_shapes() {
         .graph()
         .nodes
         .iter()
-        .find(|node| node.node_id.digest.as_ref() == fixture.function_digest)
+        .find(|node| node_key_matches(&node.node_id, fixture.function_key.view()))
         .expect("QSL FunctionSite identity names an admitted function node");
     let Some(CheckedTerm::Reference { target }) = named_member(function, "body") else {
         panic!("the admitted function body has a target identity");
     };
-    let function_body = target.digest.as_ref();
     let body_node = fixture
         .package
         .graph()
         .nodes
         .iter()
-        .find(|node| node.node_id.digest.as_ref() == function_body)
+        .find(|node| &node.node_id == target)
         .expect("the admitted function body target resolves");
     assert!(body_node.dependencies.contains(&forall.node_id));
     assert!(body_node.dependencies.contains(&exists.node_id));
@@ -1240,7 +1251,7 @@ fn negotiation_renders_the_selected_sequence_claims_deterministically() {
         .graph()
         .nodes
         .iter()
-        .find(|node| node.node_id.digest.as_ref() == fixture.function_digest)
+        .find(|node| node_key_matches(&node.node_id, fixture.function_key.view()))
         .expect("the selected function exists")
         .node_id
         .clone();
@@ -1298,8 +1309,8 @@ fn negotiation_renders_the_selected_sequence_claims_deterministically() {
             &harness.rust.path,
             &harness.rust.contents,
             &[
-                &format!("{}/{}", function_id.domain, function_id.digest),
-                &format!("{}/{}", quantifier.domain, quantifier.digest),
+                &format!("// Subject: {}", format!("{function_id:?}").escape_debug()),
+                &format!("// Subject: {}", format!("{quantifier:?}").escape_debug()),
             ],
         );
         for node in [
@@ -1311,16 +1322,20 @@ fn negotiation_renders_the_selected_sequence_claims_deterministically() {
             crate::generated_headers::assert_header(
                 &harness.rust.path,
                 &harness.rust.contents,
-                &[&format!("{}/{}", node.domain, node.digest)],
+                &[&format!(
+                    "// Subject: {}",
+                    format!("{node:?}").escape_debug()
+                )],
             );
         }
         assert_eq!(harness.identity.function_id, function_id);
         assert_eq!(harness.identity.quantifier_id, quantifier);
         assert_eq!(
-            harness.identity.package_digest,
-            fixture.package.package_id().digest.to_string()
+            harness.identity.package.name.as_ref(),
+            fixture.package.name()
         );
-        assert_eq!(harness.identity.quantifier_id.digest.len(), 64);
+        assert_eq!(&harness.identity.package.lock, fixture.package.lock());
+        assert!(!harness.identity.quantifier_id.path.is_empty());
         let module = harness.identity.module_symbol.as_str();
         let harness_name = harness.identity.harness_symbol.as_str();
         assert!(module.len() < 255, "module filename component: {module}");
@@ -1573,7 +1588,7 @@ fn boolean_sequence_uses_symbolic_slots_for_both_boolean_values() {
         .graph()
         .nodes
         .iter()
-        .find(|node| node.node_id.digest.as_ref() == fixture.function_digest)
+        .find(|node| node_key_matches(&node.node_id, fixture.function_key.view()))
         .unwrap()
         .node_id
         .clone();
@@ -1871,7 +1886,7 @@ fn precondition_collection_outcome(
         .graph()
         .nodes
         .iter()
-        .find(|node| node.node_id.digest.as_ref() == fixture.function_digest)
+        .find(|node| node_key_matches(&node.node_id, fixture.function_key.view()))
         .expect("source-authored clause")
         .node_id
         .clone();
@@ -1997,7 +2012,7 @@ fn precondition_collection_source_is_admitted() {
             .graph()
             .nodes
             .iter()
-            .find(|node| node.node_id.digest.as_ref() == fixture.function_digest)
+            .find(|node| node_key_matches(&node.node_id, fixture.function_key.view()))
             .unwrap()
             .semantic_form
             .as_ref(),
@@ -2008,7 +2023,7 @@ fn precondition_collection_source_is_admitted() {
         .graph()
         .nodes
         .iter()
-        .find(|node| node.node_id.digest.as_ref() == fixture.function_digest)
+        .find(|node| node_key_matches(&node.node_id, fixture.function_key.view()))
         .unwrap()
         .node_id
         .clone();
@@ -2853,7 +2868,7 @@ fn assert_ordered_set_capacity_refusal(
         .graph()
         .nodes
         .iter()
-        .find(|node| node.node_id.digest.as_ref() == fixture.function_digest)
+        .find(|node| node_key_matches(&node.node_id, fixture.function_key.view()))
         .unwrap()
         .node_id
         .clone();
@@ -2915,7 +2930,7 @@ fn unsupported_collection_predicate_is_refused_without_harness() {
         .graph()
         .nodes
         .iter()
-        .find(|node| node.node_id.digest.as_ref() == fixture.function_digest)
+        .find(|node| node_key_matches(&node.node_id, fixture.function_key.view()))
         .unwrap()
         .node_id
         .clone();
@@ -2970,7 +2985,7 @@ fn collection_domain_larger_than_the_request_memory_ceiling_is_refused_without_h
         .graph()
         .nodes
         .iter()
-        .find(|node| node.node_id.digest.as_ref() == fixture.function_digest)
+        .find(|node| node_key_matches(&node.node_id, fixture.function_key.view()))
         .unwrap()
         .node_id
         .clone();
@@ -3081,7 +3096,7 @@ fn qsl_admitted_collection_without_an_upper_bound_requires_bound_without_harness
         .graph()
         .nodes
         .iter()
-        .find(|node| node.node_id.digest.as_ref() == fixture.function_digest)
+        .find(|node| node_key_matches(&node.node_id, fixture.function_key.view()))
         .unwrap()
         .node_id
         .clone();
@@ -3249,7 +3264,7 @@ fn finite_sequence_of_unbounded_integer_elements_requires_bound_when_qsl_admits_
         .graph()
         .nodes
         .iter()
-        .find(|node| node.node_id.digest.as_ref() == fixture.function_digest)
+        .find(|node| node_key_matches(&node.node_id, fixture.function_key.view()))
         .unwrap()
         .node_id
         .clone();
@@ -3614,7 +3629,7 @@ fn collection_negotiation_accounts_for_each_supported_or_refused_item() {
         .graph()
         .nodes
         .iter()
-        .find(|node| node.node_id.digest.as_ref() == fixture.function_digest)
+        .find(|node| node_key_matches(&node.node_id, fixture.function_key.view()))
         .expect("the selected function exists")
         .node_id
         .clone();
@@ -3628,8 +3643,9 @@ fn collection_negotiation_accounts_for_each_supported_or_refused_item() {
         .node_id
         .clone();
     let bad_function = CheckedNodeId {
-        domain: function_id.domain.clone(),
-        digest: "unadmitted-function".into(),
+        package: function_id.package.clone(),
+        path: vec![CheckedNodePathSegment::Name("unadmitted-function".into())],
+        ordinal: 0,
     };
     let items = [
         ObligationItem::CollectionClaim {
