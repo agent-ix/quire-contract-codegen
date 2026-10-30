@@ -76,13 +76,8 @@ fn assert_sibling_isolation(mixed: &CompositeEqualityOracles, isolated: &Composi
         else {
             panic!("both isolated and mixed siblings must generate");
         };
-        // The public lowering includes the selected request roots in the Contract IR
-        // package identity. Isolating siblings therefore changes that identity;
-        // every field about their source owner, descriptors and generated code stays equal.
-        let mut comparable = mixed_claim.clone();
-        comparable.contract_package_identity = claim.contract_package_identity.clone();
         assert_eq!(
-            comparable, *claim,
+            mixed_claim, claim,
             "a refused item must not alter sibling generation"
         );
         expected_symbols.insert(claim.environment_symbol.clone());

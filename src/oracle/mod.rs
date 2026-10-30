@@ -168,8 +168,11 @@ pub(crate) mod failed_records {
     ) -> CompleteLoweringRecordV2 {
         CompleteLoweringRecordV2::Failed {
             node_id: CheckedNodeId {
-                domain: "quire.checked-semantic-node/v1".into(),
-                digest: "a".repeat(64).into(),
+                package: "fixture".into(),
+                path: vec![quire_contract_model::CheckedNodePathSegment::Name(
+                    "a".into(),
+                )],
+                ordinal: 0,
             },
             limit_kind,
             limit,

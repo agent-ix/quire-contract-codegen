@@ -1914,7 +1914,7 @@ mod ir988_admitted_generation_tests {
                     "term":"application","operator":"call",
                     "operation":{"identity":"quire.op.function.call","laws":[],"mode":null,
                         "member":null,"leaves":[]},
-                    "result_type":{"domain":NODE_DOMAIN,"digest":key(T_INTEGER)},
+                    "result_type":code_id(T_INTEGER),
                     "arguments":[source_reference(SOURCE_FUNCTION),
                         source_reference(left),source_reference(right)]
                 }),

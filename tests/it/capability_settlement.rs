@@ -4,8 +4,8 @@
 
 use ix_trace_rs::trace;
 use qsl_replay::{
-    compile_package, DependencyInput, DomainKey, DomainKind, FiniteBound, Integer, ProofBound,
-    ReplayLimits, SourceIdentity, StageLimits, WireNodeId,
+    compile_package, DependencyInput, DomainKey, DomainKind, FiniteBound, Integer, NodeKey,
+    ProofBound, ReplayLimits, SourceIdentity, StageLimits,
 };
 use quire_contract_codegen::{
     negotiate_backend_provider, routed_contract_lowering_profile, BackendDescriptor, BackendKind,
@@ -20,6 +20,7 @@ use quire_contract_model::{
     CheckedPackageV2, CheckedPackageV2ReadResult, CheckedTerm, ContractDependencies,
     ContractOccurrenceKeyV1, ContractPackageReadResult, ContractPackageWireV1, JsonPointer,
 };
+use quire_exact::PathSegment;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
@@ -633,6 +634,31 @@ fn process(id: &str, modes: &[Mode], domains: &[DomainKind]) -> BackendDescripto
     }
 }
 
+fn fixture_node(seed: u8) -> NodeKey {
+    NodeKey::new(
+        "fixture",
+        vec![PathSegment::Text(format!("bound-{seed}"))],
+        0,
+    )
+    .expect("fixture structural node")
+}
+
+fn checked_node_key(id: &CheckedNodeId) -> NodeKey {
+    let path = id
+        .path
+        .iter()
+        .map(|segment| match segment {
+            quire_contract_model::CheckedNodePathSegment::Name(name) => {
+                PathSegment::Text(name.to_string())
+            }
+            quire_contract_model::CheckedNodePathSegment::Node(node) => {
+                PathSegment::Node(checked_node_key(node))
+            }
+        })
+        .collect();
+    NodeKey::new(id.package.to_string(), path, id.ordinal).expect("admitted structural node")
+}
+
 fn proof_bound(kind: DomainKind, maximum: i64) -> ProofBound {
     let bound = match kind {
         DomainKind::Integer => {
@@ -645,23 +671,13 @@ fn proof_bound(kind: DomainKind, maximum: i64) -> ProofBound {
     };
     ProofBound::new(
         DomainKey::Node {
-            node: WireNodeId::from_digest([1; 32]),
+            node: fixture_node(1),
             path: Vec::new(),
         },
         Some(kind),
         bound,
     )
     .unwrap()
-}
-
-fn wire_node_id_from_hex(digest: &str) -> WireNodeId {
-    assert_eq!(digest.len(), 64, "checked node digest is SHA-256 hex");
-    let mut bytes = [0_u8; 32];
-    for (index, byte) in bytes.iter_mut().enumerate() {
-        *byte = u8::from_str_radix(&digest[index * 2..index * 2 + 2], 16)
-            .expect("checked node digest is canonical hex");
-    }
-    WireNodeId::from_digest(bytes)
 }
 
 /// A bounded Kani request retains its caller-supplied source bound in the borrowed request
@@ -697,7 +713,7 @@ fn kani_supported_bounded_request_keeps_exact_proof_bound_input() {
         .expect("integer addition has one source-derived bound");
     let source_bound = ProofBound::new(
         DomainKey::Node {
-            node: wire_node_id_from_hex(&checked_bound.digest),
+            node: checked_node_key(checked_bound),
             path: Vec::new(),
         },
         Some(DomainKind::Integer),
@@ -753,7 +769,7 @@ fn kani_bounded_settlements_correlate_each_request_bound_by_index() {
         };
         ProofBound::new(
             DomainKey::Node {
-                node: WireNodeId::from_digest([seed; 32]),
+                node: fixture_node(seed),
                 path,
             },
             Some(kind),
@@ -808,7 +824,7 @@ fn kani_bounded_settlements_correlate_each_request_bound_by_index() {
 fn extent_domain(kind: DomainKind) -> ExtentDomain {
     ExtentDomain {
         domain: DomainKey::Node {
-            node: WireNodeId::from_digest([1; 32]),
+            node: fixture_node(1),
             path: Vec::new(),
         },
         kind,
@@ -2127,11 +2143,7 @@ fn kani_selected_division_preserves_exact_renderer_refusal() {
         &[],
     );
     let division_bound = builder.bound(&package::Bound::Integer(0, 10));
-    builder.narrow(
-        DIVISION_NARROW,
-        &package::code_id(DIVISION).digest,
-        &division_bound,
-    );
+    builder.narrow(DIVISION_NARROW, &package::key(DIVISION), &division_bound);
     builder.expression_occurrences();
     let (checked, ids) = builder.admit_resolved();
     let plain_source = checked.clone();
