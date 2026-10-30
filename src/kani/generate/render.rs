@@ -83,7 +83,10 @@ pub(super) fn render(spec: &HarnessSpec) -> Result<Artifact, UnsupportedObligati
             proof,
             body,
         } => render_statements(spec, label, oracle_source, *proof, body),
-        HarnessShape::Collection(collection) => render_collection(spec, collection),
+        HarnessShape::Collection {
+            collection,
+            precondition,
+        } => render_collection(spec, collection, *precondition),
         HarnessShape::Frame(frame) => render_frame(spec, frame),
     }
 }
@@ -271,6 +274,7 @@ fn render_statements(
 fn render_collection(
     spec: &HarnessSpec,
     collection: &CollectionSpec,
+    precondition: bool,
 ) -> Result<Artifact, UnsupportedObligation> {
     let path = spec.path();
     let quantifier = collection.quantifier.name();
@@ -296,11 +300,39 @@ fn render_collection(
         ),
     };
     let predicate = collection.predicate_expression();
+    let claim_loop = format!(
+        "let claim = (0..{length_name}).{collection_call}(|index| {{\n\
+         let item = {item_name}[index as usize];\n\
+         {predicate}\n\
+         }});"
+    );
+    let (oracle_source, claim_source, evaluation, assertion) = if precondition {
+        (
+            format!(
+                "             #[allow(dead_code)] enum ClauseEvaluation {{ Completed(bool), Undefined, Refused, Incomplete }}\n\
+                 fn oracle_clause({item_name}: &[{element_type}; {array_len}], {length_name}: i64) -> ClauseEvaluation {{\n\
+                     {claim_loop}\n\
+                     ClauseEvaluation::Completed(claim)\n\
+                 }}\n"
+            ),
+            String::new(),
+            format!("                 let outcome = oracle_clause(&{item_name}, {length_name});\n"),
+            crate::kani::identity::collection_precondition_totality_assertion(),
+        )
+    } else {
+        (
+            String::new(),
+            format!("                 {claim_loop}\n"),
+            String::new(),
+            format!("assert!(claim, \"the symbolic collection satisfies the selected QSL {quantifier} body\");"),
+        )
+    };
     let source = format!(
         "// SPDX-License-Identifier: MIT OR Apache-2.0\n\
          // Claim: {quantifier} over admitted model field `{}`\n\
          #[cfg(kani)]\n\
          mod {} {{\n\
+{oracle_source}\
              #[kani::proof]\n\
              fn {}() {{\n\
                  let {length_name}: i64 = kani::any();\n\
@@ -311,11 +343,9 @@ fn render_collection(
 {element_assumption}\
 {uniqueness_assumption}\
                  }}\n\
-                 let claim = (0..{length_name}).{collection_call}(|index| {{\n\
-                     let item = {item_name}[index as usize];\n\
-                     {predicate}\n\
-                 }});\n\
-                 assert!(claim, \"the symbolic collection satisfies the selected QSL {quantifier} body\");\n\
+{claim_source}\
+{evaluation}\
+                 {assertion}\n\
                  kani::cover!({}, \"{}\");\n\
              }}\n\
          }}\n",

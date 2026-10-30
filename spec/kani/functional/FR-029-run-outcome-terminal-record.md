@@ -47,7 +47,7 @@ The replay settlement is the result of replaying the falsified run's counterexam
 - refused: `qsl_replay::replay` returned a `ReplayRefusal` that is not a fault, carrying that
   refusal's QSL catalog code (`ReplayRefusal::code()`);
 - fault: an `InternalFault` anywhere in the error the replay path returned;
-- CG defect: exactly the errors FR-029-AC-11 and FR-029-AC-16 list, which this repository raised
+- CG defect: exactly the errors FR-029-AC-11 and FR-029-AC-16 list, including a decoded collection precondition totality falsification awaiting independent native evaluation, which this repository raised
   and which carry no QSL catalog code, including `ReplayPackageError::InvalidFunction`,
   `FrameReplayError::Name` and the `StateClauseReplayError` variants `Name`, `Transcript`,
   `Envelope`, `Document`, `MissingField`, `UndeclaredField`, `DuplicateField`, `OutOfDomain` and
@@ -329,7 +329,8 @@ AC-15 cannot reject that input as an ordinary unexpected replay settlement.
   WrongArm, Identity}`, `FrameReplayError::{Transcript, Envelope, Name, NotAFrame, FieldSetMismatch,
   Decode, OutOfDomain, PreState, ScopeMismatch, Identity}`, `ReplayPackageError::InvalidFunction`, a
   Kani playback outside the harness proof bound, a decode failure (`DecodeFailure`), which is a
-  playback that does not type against the bindings this repository persisted, and a replay
+  playback that does not type against the bindings this repository persisted, a decoded collection
+  precondition totality falsification awaiting independent native evaluation, and a replay
   reproduced in a category other than `violation`. `ReplayPackageError::InvalidFunction` wraps a
   discarded `InvalidIdentifier` from `Identifier::new`, which has no code. `FrameReplayError::Name`
   wraps QSL's `EmptyQualifiedName`, which has no code; as built, no call reaches it, because every
@@ -375,7 +376,7 @@ retain the partial/planned statuses below; falsified native/generated-family wor
 | FR-029-AC-8 | `falsified` with a replay disagreement of each `DisagreementCause` (`Verdicts`, `Witness` and `NoValue`) maps to `Inconclusive(ReplayParity)` carrying that `DisagreementCause`. | Test (TC-040) |
 | FR-029-AC-9 | `falsified` with a non-fault `ReplayRefusal` maps to `Inconclusive(ReplayRefused)` carrying `ReplayRefusal::code()` of that refusal. | Test (TC-040) |
 | FR-029-AC-10 | `falsified` with a fault maps to `Failed` for each of: the call-site fault's own reading (`ReplaySettlement::Fault`, which QSL's replay result does not carry: QSL reports a fault as an error); `ReplayRefusal::Fault` and `ReplayRefusal::Admission(AdmissionFailure::Fault)`, each bare and as the cause of `SpineReplayError::Refused`, `FrameReplayError::Refused` and `StateClauseReplayError::Refused`; and `CallSiteRefusal::Fault` bare and wrapped in `ReplayPackageError::CallSite`, `FrameReplayError::CallSite` and `StateClauseReplayError::CallSite`. | Test (TC-040) |
-| FR-029-AC-11 | `falsified` with each CG-raised failure that carries no QSL code maps to `Failed`: `SpineReplayError::UnboundArgument`, `FieldDelimiter`, `Transcript`, `WrongArm` and `Identity`; `FrameReplayError::Transcript`, `Envelope`, `Name`, `NotAFrame`, `FieldSetMismatch`, `Decode`, `OutOfDomain`, `PreState` (a pre state the generator cannot read from the driver's documents, or one that differs from the playback; a document whose bytes do not match its digest is QSL's `Refused`, read by its code), `ScopeMismatch` and `Identity`; `ReplayPackageError::InvalidFunction`; a playback outside the harness proof bound; a decode failure; and a replay reproduced in a category other than `violation`. No `Inconclusive(ReplayRefused)` value carries a code that no QSL refusal value supplied. | Test (TC-040) |
+| FR-029-AC-11 | `falsified` with each CG-raised failure that carries no QSL code maps to `Failed`: `SpineReplayError::UnboundArgument`, `FieldDelimiter`, `Transcript`, `WrongArm` and `Identity`; `FrameReplayError::Transcript`, `Envelope`, `Name`, `NotAFrame`, `FieldSetMismatch`, `Decode`, `OutOfDomain`, `PreState` (a pre state the generator cannot read from the driver's documents, or one that differs from the playback; a document whose bytes do not match its digest is QSL's `Refused`, read by its code), `ScopeMismatch` and `Identity`; `ReplayPackageError::InvalidFunction`; a playback outside the harness proof bound; a decode failure; a decoded collection precondition totality falsification awaiting independent native evaluation; and a replay reproduced in a category other than `violation`. No `Inconclusive(ReplayRefused)` value carries a code that no QSL refusal value supplied. | Test (TC-040) |
 | FR-029-AC-12 | Across every replay settlement other than reproduced, `falsified` maps to a value other than `Refuted`. | Test (TC-040) |
 | FR-029-AC-13 | `falsified` with a non-fault `CallSiteRefusal` or a `DependencyLockError::Input`, each bare and wrapped in `ReplayPackageError` and `FrameReplayError`, maps to `Inconclusive(ReplayRefused)` carrying `CallSiteRefusal::code()` or `DependencyInputRefusal::code()` of that refusal, and never to `Declined`. | Test (TC-040) |
 | FR-029-AC-14 | `falsified` with a `DependencyLockError::Input` that carries QSL's `DuplicateIdentity` refusal (code `invalid_package`), as a lock whose only defect is a repeated library identity produces it (FR-016-AC-24), maps to `Inconclusive(ReplayRefused)` carrying `invalid_package`. | Test (TC-040) |

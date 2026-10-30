@@ -178,6 +178,9 @@ pub struct V2ClauseObligationIdentity {
     pub package: CheckedSemanticId,
     /// Selected state-clause node.
     pub clause: CheckedNodeId,
+    /// Exact selected collection and bound totality check for a collection precondition.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub collection_precondition: Option<CollectionPreconditionIdentity>,
     /// Contract role read from the checked node.
     pub kind: ObligationKind,
     /// Embedded oracle symbol.
@@ -196,6 +199,39 @@ pub struct V2ClauseObligationIdentity {
     pub unwind: u32,
     /// Exact backend options.
     pub options: Vec<String>,
+}
+
+/// The source-backed collection field and assertion that make a precondition proof nonvacuous.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CollectionPreconditionIdentity {
+    /// The admitted collection's complete typed symbolic identity.
+    pub collection: CollectionObligationIdentity,
+    /// SHA-256 of the exact generated Rust artifact, before it is staged in a crate.
+    pub source_digest: String,
+    /// Unique one-based line of the Boolean-completion assertion in generated Rust.
+    pub totality_assertion_line: u32,
+}
+
+pub(crate) fn collection_source_digest(source: &str) -> String {
+    let digest = qsl_replay::ByteDigest::of(source.as_bytes());
+    digest
+        .as_bytes()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+/// The one message identifying a collection precondition's totality assertion in Kani output.
+pub(crate) const COLLECTION_PRECONDITION_TOTALITY_MESSAGE: &str =
+    "the selected precondition completes a Boolean";
+
+/// Exact generated assertion bound to a collection precondition's Kani check location.
+pub(crate) fn collection_precondition_totality_assertion() -> String {
+    format!(
+        "assert!(matches!(outcome, ClauseEvaluation::Completed(_)), {:?});",
+        COLLECTION_PRECONDITION_TOTALITY_MESSAGE
+    )
 }
 
 /// Generated V2 clause harness, sealed against caller edits before execution.
@@ -374,7 +410,7 @@ pub struct CollectionObligationIdentity {
     pub package_digest: String,
     /// Caller-selected subject label recorded in the harness identity.
     pub subject_path: String,
-    /// Selected function or invariant state-clause identity.
+    /// Selected function or state-clause identity.
     pub function_id: CheckedNodeId,
     /// Selected quantifier identity.
     pub quantifier_id: CheckedNodeId,

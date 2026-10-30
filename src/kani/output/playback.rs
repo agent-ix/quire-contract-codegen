@@ -210,6 +210,13 @@ pub struct Playback<'a> {
 }
 
 impl Playback<'_> {
+    /// Whether Kani printed the generated assertion with this literal message.
+    /// Kani wraps the message in two quoted layers and leaves the decoded check text empty.
+    pub(crate) fn matches_generated_assertion_message(&self, message: &str) -> bool {
+        let clause = format!(": \"\"{message}\"\"\n");
+        self.check_clause.starts_with(&clause)
+    }
+
     /// Whether Kani printed the generated postcondition assertion for `message`.
     /// The output reader owns Kani's quoting and format-argument syntax.
     pub(crate) fn matches_generated_postcondition(&self, message: &str) -> bool {

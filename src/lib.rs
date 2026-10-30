@@ -248,13 +248,13 @@ pub use kani::generate::outcome::{
 };
 pub use kani::identity::{
     CollectionElementIdentity, CollectionKindIdentity, CollectionObligationIdentity,
-    CollectionPredicateIdentity, EmbeddedOracle, KaniCollectionObligationHarness,
-    KaniObligationHarness, KaniObligationIdentity, KaniScalarObligationHarness,
-    KaniV2ClauseObligationHarness, ObligationBinding, ObligationKind, ScalarIntegerRepresentation,
-    ScalarObligationArgument, ScalarObligationIdentity, ScalarOriginalLimitsError, StateComparison,
-    StateFieldDomain, StateFrameHarness, StateFrameIdentity, StateFrameProperty,
-    StateFrameRecordError, StateFrameScope, StateUnrangedField, StateUnrangedReason,
-    V2ClauseObligationIdentity,
+    CollectionPreconditionIdentity, CollectionPredicateIdentity, EmbeddedOracle,
+    KaniCollectionObligationHarness, KaniObligationHarness, KaniObligationIdentity,
+    KaniScalarObligationHarness, KaniV2ClauseObligationHarness, ObligationBinding, ObligationKind,
+    ScalarIntegerRepresentation, ScalarObligationArgument, ScalarObligationIdentity,
+    ScalarOriginalLimitsError, StateComparison, StateFieldDomain, StateFrameHarness,
+    StateFrameIdentity, StateFrameProperty, StateFrameRecordError, StateFrameScope,
+    StateUnrangedField, StateUnrangedReason, V2ClauseObligationIdentity,
 };
 pub use kani::output::playback::{
     parse_assertion_playback, select_counterexample, CounterexamplePlayback, Playback,
@@ -285,7 +285,10 @@ pub use replay::state_clause::{
     StateClauseModelFieldsCause, StateClauseReplay, StateClauseReplayError,
     StateClauseReplayInputs, StateObjectAddress,
 };
-pub use replay::witness::{decode_falsification, decode_v2_clause_falsification, DecodeFailure};
+pub use replay::witness::{
+    decode_falsification, decode_v2_clause_falsification,
+    settle_v2_collection_precondition_falsification, DecodeFailure,
+};
 pub use strategy::campaign::{
     generate_enum_strategy, generate_i64_strategy, EnumStrategyCampaign, EnumStrategyRequest,
     StrategyCampaign, StrategyConstraint, StrategyDiagnostic, StrategyErrorCode, StrategyRequest,

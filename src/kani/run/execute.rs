@@ -31,8 +31,8 @@ use crate::kani::{
         diagnostics::{KaniNoVerdictDiagnostics, KnownDirectories, ProcessOutput},
         playback::{counterexample_from_blocks, playback_blocks, select_counterexample},
         report::{
-            members_in_request_order, KaniCheckResult, KaniFailureCause, KaniHarnessReport,
-            KaniHarnessStatus, KaniReportRefusal,
+            members_in_request_order, KaniCheckClass, KaniCheckResult, KaniCheckStatus,
+            KaniFailureCause, KaniHarnessReport, KaniHarnessStatus, KaniReportRefusal,
         },
     },
     run::{
@@ -107,8 +107,14 @@ pub enum KaniExecutionRefusal {
         /// The generated artifact path.
         harness_path: String,
     },
-    /// The collection harness source, identity or record changed after generation.
+    /// A sealed generated harness's source, identity or record changed after generation.
     HarnessProvenanceMismatch {
+        /// The generated artifact path.
+        harness_path: String,
+    },
+    /// The sealed collection-precondition totality assertion or its unique source binding
+    /// disagrees with the crate supplied for execution.
+    BoundTotalityAssertionMismatch {
         /// The generated artifact path.
         harness_path: String,
     },
@@ -165,6 +171,7 @@ impl KaniExecutionRefusal {
             | Self::Tool(_)
             | Self::HarnessNotInCrate { .. }
             | Self::HarnessProvenanceMismatch { .. }
+            | Self::BoundTotalityAssertionMismatch { .. }
             | Self::Report(_)
             | Self::BatchTimedOut { .. }
             | Self::MemoryMechanismUnavailable { .. }
@@ -205,6 +212,10 @@ impl fmt::Display for KaniExecutionRefusal {
             Self::HarnessProvenanceMismatch { harness_path } => write!(
                 formatter,
                 "the generated source or identity for {harness_path} changed after generation"
+            ),
+            Self::BoundTotalityAssertionMismatch { harness_path } => write!(
+                formatter,
+                "the bound totality assertion for {harness_path} is inconsistent or duplicated"
             ),
             Self::Report(refusal) => write!(formatter, "{refusal}"),
             Self::OutputOverLimit {
@@ -275,7 +286,8 @@ pub struct KaniExecutionEvidence {
     /// Backend-reported outcome.
     pub outcome: KaniRunOutcome,
     /// How many checks the report lists as holding: the non-cover checks with status success,
-    /// plus, for a precondition harness, whose one property is its cover, the satisfied covers.
+    /// plus, for a precondition harness, its satisfied covers. A collection precondition also needs
+    /// its bound totality assertion to succeed before verification.
     /// Zero when the run produced no report. It is the SUCCESS-check count FR-017 defines, which
     /// FR-029 reads from this evidence; FR-030 takes it as an explicit input.
     pub success_checks: u32,
@@ -370,8 +382,8 @@ pub struct KaniBatchInvocation {
 pub fn execute_kani_obligation(
     request: &KaniExecutionRequest<'_>,
 ) -> Result<KaniExecutionEvidence, KaniExecutionRefusal> {
-    require_in_crate(request)?;
-    run_single(request, None)
+    let totality_line = require_in_crate(request)?;
+    run_single(request, None, totality_line)
 }
 
 /// Runs a harness from a prepared source tree that must remain read-only for the backend.
@@ -379,13 +391,15 @@ pub(crate) fn execute_kani_obligation_readonly(
     request: &KaniExecutionRequest<'_>,
     source_directory: &Path,
 ) -> Result<KaniExecutionEvidence, KaniExecutionRefusal> {
-    require_in_crate(request)?;
-    run_single(request, Some(source_directory))
+    let totality_line = require_in_crate(request)?;
+    run_single(request, Some(source_directory), totality_line)
 }
 
 /// Refuses a request whose crate's library source does not contain its harness's generated
 /// source byte for byte.
-fn require_in_crate(request: &KaniExecutionRequest<'_>) -> Result<(), KaniExecutionRefusal> {
+fn require_in_crate(
+    request: &KaniExecutionRequest<'_>,
+) -> Result<Option<u32>, KaniExecutionRefusal> {
     let harness = request.harness.view();
     if !request.harness.has_valid_provenance() {
         return Err(KaniExecutionRefusal::HarnessProvenanceMismatch {
@@ -398,12 +412,54 @@ fn require_in_crate(request: &KaniExecutionRequest<'_>) -> Result<(), KaniExecut
             harness_path: harness.rust.path.clone(),
         }
     })?;
-    if !String::from_utf8_lossy(&library).contains(&harness.rust.contents) {
+    let library = String::from_utf8_lossy(&library);
+    if !library.contains(&harness.rust.contents) {
         return Err(KaniExecutionRefusal::HarnessNotInCrate {
             harness_path: harness.rust.path.clone(),
         });
     }
-    Ok(())
+    let totality_line = if let Some(marker) = request.harness.collection_precondition() {
+        let digest_matches =
+            crate::kani::identity::collection_source_digest(&harness.rust.contents)
+                == marker.source_digest;
+        if !digest_matches {
+            return Err(KaniExecutionRefusal::BoundTotalityAssertionMismatch {
+                harness_path: harness.rust.path.clone(),
+            });
+        }
+        Some(
+            bound_totality_line(
+                &library,
+                &harness.rust.contents,
+                marker.totality_assertion_line,
+            )
+            .ok_or_else(|| KaniExecutionRefusal::BoundTotalityAssertionMismatch {
+                harness_path: harness.rust.path.clone(),
+            })?,
+        )
+    } else {
+        None
+    };
+    Ok(totality_line)
+}
+
+fn bound_totality_line(library: &str, source: &str, artifact_line: u32) -> Option<u32> {
+    let source_line = usize::try_from(artifact_line.checked_sub(1)?).ok()?;
+    if source.lines().nth(source_line)?.trim()
+        != crate::kani::identity::collection_precondition_totality_assertion()
+    {
+        return None;
+    }
+    let mut occurrences = library.match_indices(source);
+    let (start, _) = occurrences.next()?;
+    if occurrences.next().is_some() {
+        return None;
+    }
+    let prefix_lines = library[..start]
+        .bytes()
+        .filter(|byte| *byte == b'\n')
+        .count();
+    u32::try_from(prefix_lines).ok()?.checked_add(artifact_line)
 }
 
 /// Starts `command` with the launcher's output captured for `harnesses` harnesses, and maps a
@@ -466,10 +522,19 @@ fn evidence_of(
     harness: &HarnessView<'_>,
     arguments: Vec<String>,
     exit_code: Option<i32>,
-    run: ClassifiedRun,
+    mut run: ClassifiedRun,
     batch: Option<KaniBatchInvocation>,
     record: Record,
+    totality_line: Option<u32>,
 ) -> ReportedExecution {
+    if matches!(run.outcome, KaniRunOutcome::Verified)
+        && request.harness.collection_precondition().is_some()
+        && !totality_line.is_some_and(|line| totality_check_succeeded(&run.checks, line))
+    {
+        run.outcome = KaniRunOutcome::Inconclusive {
+            reason: KaniInconclusiveReason::VacuousProof,
+        };
+    }
     ReportedExecution {
         ceilings: harness.ceilings,
         symbolic_arguments: request.harness.symbolic_arguments(),
@@ -487,6 +552,15 @@ fn evidence_of(
         diagnostics: record.diagnostics,
         failure_cause: record.failure_cause,
     }
+}
+
+fn totality_check_succeeded(checks: &[KaniCheckResult], line: u32) -> bool {
+    checks.iter().any(|check| {
+        matches!(&check.class, KaniCheckClass::Other(class) if class.as_str() == "assertion")
+            && check.status == KaniCheckStatus::Success
+            && check.location.file == "src/lib.rs"
+            && check.location.line == Some(line)
+    })
 }
 
 /// What the evidence retains beyond the classified run: the diagnostic record of a `NoVerdict`
@@ -538,6 +612,7 @@ fn directories_of<'a>(request: &'a KaniExecutionRequest<'_>) -> KnownDirectories
 fn run_single(
     request: &KaniExecutionRequest<'_>,
     read_only_source: Option<&Path>,
+    totality_line: Option<u32>,
 ) -> Result<KaniExecutionEvidence, KaniExecutionRefusal> {
     let report_path = fresh_report_path(request.target_directory);
     remove_stale_report(&report_path)?;
@@ -553,7 +628,7 @@ fn run_single(
         NonZeroUsize::MIN,
     )?;
     let report = take_report(&launch.outcome, &report_path);
-    finish_single(request, arguments, launch.outcome, report?)
+    finish_single(request, arguments, launch.outcome, report?, totality_line)
         .map(|reported| reported.with_memory(launch.memory))
 }
 
@@ -563,6 +638,7 @@ fn finish_single(
     arguments: Vec<String>,
     outcome: LaunchOutcome,
     report: Option<Vec<u8>>,
+    totality_line: Option<u32>,
 ) -> Result<ReportedExecution, KaniExecutionRefusal> {
     let harness = request.harness.view();
     let (run, exit_code, streams) = launch_evidence(outcome, report.as_deref(), harness.kind)?;
@@ -585,7 +661,14 @@ fn finish_single(
         },
     );
     Ok(evidence_of(
-        request, &harness, arguments, exit_code, run, None, record,
+        request,
+        &harness,
+        arguments,
+        exit_code,
+        run,
+        None,
+        record,
+        totality_line,
     ))
 }
 
@@ -674,16 +757,19 @@ pub struct KaniGroupRun {
 pub fn execute_kani_obligations(
     requests: &[KaniExecutionRequest<'_>],
 ) -> Result<Vec<KaniGroupRun>, KaniExecutionRefusal> {
-    for request in requests {
-        require_in_crate(request)?;
-    }
+    let totality_lines = requests
+        .iter()
+        .map(require_in_crate)
+        .collect::<Result<Vec<_>, _>>()?;
     Ok(plan_groups(requests)
         .into_iter()
         .map(|group| KaniGroupRun {
             members: group.iter().map(|(position, _)| *position).collect(),
             evidence: match group.as_slice() {
-                [(_, only)] => run_single(only, None).map(|evidence| vec![evidence]),
-                _ => run_group(&group),
+                [(position, only)] => {
+                    run_single(only, None, totality_lines[*position]).map(|evidence| vec![evidence])
+                }
+                _ => run_group(&group, &totality_lines),
             },
         })
         .collect())
@@ -791,6 +877,7 @@ fn batch_launch_command(
 /// The run of a group of more than one harness, in one process.
 fn run_group(
     group: &[(usize, &KaniExecutionRequest<'_>)],
+    totality_lines: &[Option<u32>],
 ) -> Result<Vec<KaniExecutionEvidence>, KaniExecutionRefusal> {
     let (Some((_, first)), Some(count)) = (group.first(), NonZeroUsize::new(group.len())) else {
         return Ok(Vec::new());
@@ -843,6 +930,7 @@ fn run_group(
         exit_code,
         &streams,
         report?,
+        totality_lines,
     )
     .map(|reported| {
         reported
@@ -860,6 +948,7 @@ fn finish_group(
     exit_code: Option<i32>,
     streams: &CapturedStreams,
     report: Option<Vec<u8>>,
+    totality_lines: &[Option<u32>],
 ) -> Result<Vec<ReportedExecution>, KaniExecutionRefusal> {
     let Some((_, first)) = group.first() else {
         return Ok(Vec::new());
@@ -882,7 +971,7 @@ fn finish_group(
             .iter()
             .zip(&views)
             .zip(run)
-            .map(|(((_, request), view), (run, exit_status))| {
+            .map(|(((position, request), view), (run, exit_status))| {
                 let record = Record::of(
                     &run,
                     exit_status,
@@ -902,6 +991,7 @@ fn finish_group(
                     run,
                     Some(invocation.clone()),
                     record,
+                    totality_lines.get(*position).copied().flatten(),
                 )
             })
             .collect()
@@ -1184,7 +1274,7 @@ mod report_fixture {
             error,
         })?;
         let report = take_report(&outcome, &report_path);
-        finish_single(request, arguments, outcome, report?)
+        finish_single(request, arguments, outcome, report?, None)
     }
 
     #[cfg(not(target_os = "linux"))]
@@ -1244,6 +1334,7 @@ mod report_fixture {
             exit_code,
             &streams,
             report?,
+            &vec![None; group.len()],
         )
     }
 }
@@ -1264,9 +1355,45 @@ mod tests {
         },
     };
 
-    /// A precondition harness asserts nothing; its only property is its cover. The same report
-    /// that is a vacuous proof for any other harness therefore decides by the cover alone for a
-    /// precondition harness, whose satisfied cover is its one successful check.
+    /// FR-017-AC-13 (TC-027): only the unique bound assertion's successful check can turn a
+    /// collection precondition's satisfied cover into proof evidence.
+    #[trace("FR-017-AC-13", "TC-027")]
+    #[test]
+    fn collection_totality_binding_rejects_foreign_or_missing_checks() {
+        let assertion = crate::kani::identity::collection_precondition_totality_assertion();
+        let source = format!("mod proof {{\n    {assertion}\n}}\n");
+        let library = format!("// prefix\n{source}");
+        assert_eq!(bound_totality_line(&library, &source, 2), Some(3));
+        assert_eq!(bound_totality_line(&library, &source, 1), None);
+        assert_eq!(
+            bound_totality_line(&format!("{library}{source}"), &source, 2),
+            None
+        );
+
+        let check = KaniCheckResult {
+            id: 1,
+            class: KaniCheckClass::from("assertion".to_owned()),
+            location: crate::kani::output::report::KaniCheckLocation {
+                file: "src/lib.rs".to_owned(),
+                line: Some(3),
+            },
+            status: KaniCheckStatus::Success,
+        };
+        assert!(totality_check_succeeded(std::slice::from_ref(&check), 3));
+        assert!(!totality_check_succeeded(std::slice::from_ref(&check), 2));
+        let mut cover = check.clone();
+        cover.class = KaniCheckClass::Cover;
+        assert!(!totality_check_succeeded(&[cover], 3));
+        let mut foreign = check.clone();
+        foreign.location.file = "src/other.rs".to_owned();
+        assert!(!totality_check_succeeded(&[foreign], 3));
+        let mut failed = check;
+        failed.status = KaniCheckStatus::Unreachable;
+        assert!(!totality_check_succeeded(&[failed], 3));
+    }
+
+    /// A parameter precondition harness has only its cover. This classifier decides it by the
+    /// cover; collection preconditions additionally pass the bound totality check in `evidence_of`.
     #[trace("FR-017-AC-13", "TC-027")]
     #[test]
     fn a_precondition_harness_with_no_checks_is_decided_by_its_cover_not_the_zero_checks_rule() {
@@ -2196,6 +2323,313 @@ exit 0
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.directory);
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[trace("FR-017-AC-13", "TC-027")]
+    #[test]
+    fn collection_totality_controls_single_readonly_and_batch_evidence() {
+        use crate::kani::generate::collection::tests::runner_precondition_fixture;
+        use crate::kani::identity::KaniV2ClauseObligationHarness;
+        use serde_json::json;
+
+        let harness = runner_precondition_fixture("quire.op.collection.forall");
+        let marker = harness.identity.collection_precondition.as_ref().unwrap();
+        assert_eq!(
+            marker.source_digest,
+            crate::kani::identity::collection_source_digest(&harness.rust.contents)
+        );
+        assert!(harness.record.contents.contains(&marker.source_digest));
+        let path = format!(
+            "{}::{}",
+            harness.identity.module_symbol, harness.identity.harness_symbol
+        );
+        let check = |category: &str, file: &str, line: u32| {
+            json!({
+                "id": 1, "status": "Success", "category": category,
+                "location": { "file": file, "line": line.to_string(), "column": "1" }
+            })
+        };
+        let cover = || {
+            json!({
+                "id": 2, "status": "Satisfied", "category": "cover",
+                "location": { "file": "src/lib.rs", "line": "1", "column": "1" }
+            })
+        };
+        let report = |path: &str, checks: Vec<serde_json::Value>| {
+            serde_json::to_vec(&json!({
+                "metadata": { "version": "1.0" },
+                "verification_results": { "results": [{
+                    "harness_id": path, "status": "Success", "checks": checks
+                }] }
+            }))
+            .unwrap()
+        };
+        let run = |name: &str, checks: Vec<serde_json::Value>, read_only: bool| {
+            let stand_in = StandIn::replaying(name, Some(&report(&path, checks)), "", 0);
+            fs::write(
+                stand_in.crate_directory.join("src/lib.rs"),
+                &harness.rust.contents,
+            )
+            .unwrap();
+            let request = KaniExecutionRequest {
+                cancel: &stand_in.cancel,
+                installation: &stand_in.installation,
+                harness: (&harness).into(),
+                crate_directory: &stand_in.crate_directory,
+                target_directory: &stand_in.target_directory,
+                home_directory: None,
+            };
+            if read_only {
+                execute_kani_obligation_readonly(&request, &stand_in.crate_directory)
+                    .unwrap()
+                    .outcome
+            } else {
+                execute_kani_obligation(&request).unwrap().outcome
+            }
+        };
+        let vacuous = KaniRunOutcome::Inconclusive {
+            reason: KaniInconclusiveReason::VacuousProof,
+        };
+        let line = marker.totality_assertion_line;
+        assert_eq!(
+            run("collection-no-bound-check", vec![cover()], false),
+            vacuous
+        );
+        assert_eq!(
+            run(
+                "collection-wrong-class",
+                vec![check("other", "src/lib.rs", line), cover()],
+                false
+            ),
+            vacuous
+        );
+        assert_eq!(
+            run(
+                "collection-wrong-file",
+                vec![check("assertion", "src/other.rs", line), cover()],
+                false
+            ),
+            vacuous
+        );
+        assert_eq!(
+            run(
+                "collection-unrelated-assertion",
+                vec![check("assertion", "src/lib.rs", line + 1), cover()],
+                false
+            ),
+            vacuous
+        );
+        assert_eq!(
+            run(
+                "collection-right-bound-check",
+                vec![check("assertion", "src/lib.rs", line), cover()],
+                false
+            ),
+            KaniRunOutcome::Verified
+        );
+        assert_eq!(
+            run("collection-readonly-no-check", vec![cover()], true),
+            vacuous
+        );
+
+        let stand_in = StandIn::scaffold("collection-duplicate-source");
+        fs::write(
+            stand_in.crate_directory.join("src/lib.rs"),
+            format!("{}{}", harness.rust.contents, harness.rust.contents),
+        )
+        .unwrap();
+        let request = KaniExecutionRequest {
+            cancel: &stand_in.cancel,
+            installation: &stand_in.installation,
+            harness: (&harness).into(),
+            crate_directory: &stand_in.crate_directory,
+            target_directory: &stand_in.target_directory,
+            home_directory: None,
+        };
+        assert!(matches!(
+            execute_kani_obligation(&request),
+            Err(KaniExecutionRefusal::BoundTotalityAssertionMismatch { .. })
+        ));
+        assert!(matches!(
+            execute_kani_obligation_readonly(&request, &stand_in.crate_directory),
+            Err(KaniExecutionRefusal::BoundTotalityAssertionMismatch { .. })
+        ));
+        assert!(matches!(
+            execute_kani_obligations(&[request]),
+            Err(KaniExecutionRefusal::BoundTotalityAssertionMismatch { .. })
+        ));
+
+        let mut bad_identity = harness.identity.clone();
+        bad_identity
+            .collection_precondition
+            .as_mut()
+            .unwrap()
+            .source_digest = "0".repeat(64);
+        let bad = KaniV2ClauseObligationHarness::generated(
+            bad_identity,
+            harness.rust.clone(),
+            harness.record.clone(),
+        );
+        let stand_in = StandIn::scaffold("collection-wrong-digest-valid-seal");
+        fs::write(
+            stand_in.crate_directory.join("src/lib.rs"),
+            &bad.rust.contents,
+        )
+        .unwrap();
+        let request = KaniExecutionRequest {
+            cancel: &stand_in.cancel,
+            installation: &stand_in.installation,
+            harness: (&bad).into(),
+            crate_directory: &stand_in.crate_directory,
+            target_directory: &stand_in.target_directory,
+            home_directory: None,
+        };
+        assert!(matches!(
+            execute_kani_obligation(&request),
+            Err(KaniExecutionRefusal::BoundTotalityAssertionMismatch { .. })
+        ));
+        assert!(matches!(
+            execute_kani_obligation_readonly(&request, &stand_in.crate_directory),
+            Err(KaniExecutionRefusal::BoundTotalityAssertionMismatch { .. })
+        ));
+        assert!(matches!(
+            execute_kani_obligations(&[request]),
+            Err(KaniExecutionRefusal::BoundTotalityAssertionMismatch { .. })
+        ));
+
+        let mut bad_identity = harness.identity.clone();
+        bad_identity
+            .collection_precondition
+            .as_mut()
+            .unwrap()
+            .totality_assertion_line += 1;
+        let bad = KaniV2ClauseObligationHarness::generated(
+            bad_identity,
+            harness.rust.clone(),
+            harness.record.clone(),
+        );
+        let request = KaniExecutionRequest {
+            cancel: &stand_in.cancel,
+            installation: &stand_in.installation,
+            harness: (&bad).into(),
+            crate_directory: &stand_in.crate_directory,
+            target_directory: &stand_in.target_directory,
+            home_directory: None,
+        };
+        assert!(matches!(
+            execute_kani_obligation(&request),
+            Err(KaniExecutionRefusal::BoundTotalityAssertionMismatch { .. })
+        ));
+        assert!(matches!(
+            execute_kani_obligation_readonly(&request, &stand_in.crate_directory),
+            Err(KaniExecutionRefusal::BoundTotalityAssertionMismatch { .. })
+        ));
+        assert!(matches!(
+            execute_kani_obligations(&[request]),
+            Err(KaniExecutionRefusal::BoundTotalityAssertionMismatch { .. })
+        ));
+
+        let stand_in = StandIn::scaffold("collection-missing-source");
+        let request = KaniExecutionRequest {
+            cancel: &stand_in.cancel,
+            installation: &stand_in.installation,
+            harness: (&harness).into(),
+            crate_directory: &stand_in.crate_directory,
+            target_directory: &stand_in.target_directory,
+            home_directory: None,
+        };
+        assert!(matches!(
+            execute_kani_obligation(&request),
+            Err(KaniExecutionRefusal::HarnessNotInCrate { .. })
+        ));
+        assert!(matches!(
+            execute_kani_obligation_readonly(&request, &stand_in.crate_directory),
+            Err(KaniExecutionRefusal::HarnessNotInCrate { .. })
+        ));
+        assert!(matches!(
+            execute_kani_obligations(&[request]),
+            Err(KaniExecutionRefusal::HarnessNotInCrate { .. })
+        ));
+
+        let mut unsealed = harness.clone();
+        unsealed
+            .identity
+            .collection_precondition
+            .as_mut()
+            .unwrap()
+            .source_digest = "0".repeat(64);
+        let stand_in = StandIn::scaffold("collection-unsealed-source");
+        fs::write(
+            stand_in.crate_directory.join("src/lib.rs"),
+            &unsealed.rust.contents,
+        )
+        .unwrap();
+        let request = KaniExecutionRequest {
+            cancel: &stand_in.cancel,
+            installation: &stand_in.installation,
+            harness: (&unsealed).into(),
+            crate_directory: &stand_in.crate_directory,
+            target_directory: &stand_in.target_directory,
+            home_directory: None,
+        };
+        assert!(matches!(
+            execute_kani_obligation(&request),
+            Err(KaniExecutionRefusal::HarnessProvenanceMismatch { .. })
+        ));
+        assert!(matches!(
+            execute_kani_obligation_readonly(&request, &stand_in.crate_directory),
+            Err(KaniExecutionRefusal::HarnessProvenanceMismatch { .. })
+        ));
+        assert!(matches!(
+            execute_kani_obligations(&[request]),
+            Err(KaniExecutionRefusal::HarnessProvenanceMismatch { .. })
+        ));
+
+        let other = runner_precondition_fixture("quire.op.collection.exists");
+        let other_path = format!(
+            "{}::{}",
+            other.identity.module_symbol, other.identity.harness_symbol
+        );
+        let batch_report = serde_json::to_vec(&json!({
+            "metadata": { "version": "1.0" },
+            "error_details": [
+                { "harness_id": path, "has_errors": false },
+                { "harness_id": other_path, "has_errors": false }
+            ],
+            "verification_results": { "results": [
+                { "harness_id": path, "status": "Success", "checks": [check("assertion", "src/lib.rs", line), cover()] },
+                { "harness_id": other_path, "status": "Success", "checks": [cover()] }
+            ] }
+        })).unwrap();
+        let stand_in =
+            StandIn::replaying("collection-batch-bound-check", Some(&batch_report), "", 0);
+        fs::write(
+            stand_in.crate_directory.join("src/lib.rs"),
+            format!("{}\n{}", harness.rust.contents, other.rust.contents),
+        )
+        .unwrap();
+        let first = KaniExecutionRequest {
+            cancel: &stand_in.cancel,
+            installation: &stand_in.installation,
+            harness: (&harness).into(),
+            crate_directory: &stand_in.crate_directory,
+            target_directory: &stand_in.target_directory,
+            home_directory: None,
+        };
+        let second = KaniExecutionRequest {
+            cancel: &stand_in.cancel,
+            installation: &stand_in.installation,
+            harness: (&other).into(),
+            crate_directory: &stand_in.crate_directory,
+            target_directory: &stand_in.target_directory,
+            home_directory: None,
+        };
+        let runs = execute_kani_obligations(&[first, second]).unwrap();
+        assert_eq!(runs.len(), 1, "both clauses share one backend process");
+        let evidence = runs.into_iter().next().unwrap().evidence.unwrap();
+        assert_eq!(evidence[0].outcome, KaniRunOutcome::Verified);
+        assert_eq!(evidence[1].outcome, vacuous);
     }
 
     /// Incomplete capture refuses the real public run even when a cancellation follows its bytes.
@@ -5404,6 +5838,7 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
                         Vec::new(),
                         launch,
                         Some(failing_with("exit_code_64")),
+                        None,
                     )
                     .unwrap();
                     assert_eq!(

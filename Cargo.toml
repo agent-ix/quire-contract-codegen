@@ -56,11 +56,11 @@ quire-contract-model = { version = "=0.1.0", git = "https://github.com/agent-ix/
 proc-macro2 = { version = "1.0.107", features = ["span-locations"] }
 jsonschema = { version = "=0.17.1", default-features = false, features = ["draft202012"] }
 proptest = { version = "=1.5.0", default-features = false, features = ["std"] }
+sha2 = "=0.10.9"
 quire-contract-runtime = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-runtime", branch = "main", features = ["proptest", "exact"] }
 # The home of the checked-operation catalog Contract IR validates against; tests select law
 # definitions from it instead of copying them.
 quire-verification-contracts = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-verification-contracts", branch = "main" }
-sha2 = "=0.10.9"
 
 [profile.release]
 lto = "thin"

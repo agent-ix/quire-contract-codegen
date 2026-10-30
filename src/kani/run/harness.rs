@@ -5,9 +5,10 @@ use crate::{
     core::artifact::Artifact,
     kani::abi::KaniSolver,
     kani::identity::{
-        CollectionElementIdentity, KaniCollectionObligationHarness, KaniObligationHarness,
-        KaniScalarObligationHarness, KaniV2ClauseObligationHarness, ObligationKind,
-        StateFrameHarness, StateFrameProperty, SymbolicArgumentBounds, SymbolicBounds,
+        CollectionElementIdentity, CollectionObligationIdentity, KaniCollectionObligationHarness,
+        KaniObligationHarness, KaniScalarObligationHarness, KaniV2ClauseObligationHarness,
+        ObligationKind, StateFrameHarness, StateFrameProperty, SymbolicArgumentBounds,
+        SymbolicBounds,
     },
 };
 
@@ -25,7 +26,7 @@ pub enum KaniExecutableHarness<'a> {
     StateFrame(&'a StateFrameHarness),
     /// A V2 admitted symbolic collection claim.
     Collection(&'a KaniCollectionObligationHarness),
-    /// A V2 parameter precondition cover harness.
+    /// A V2 operation-clause precondition harness, including admitted collection clauses.
     V2Clause(&'a KaniV2ClauseObligationHarness),
 }
 
@@ -73,6 +74,14 @@ pub(super) struct HarnessView<'a> {
 }
 
 impl<'a> KaniExecutableHarness<'a> {
+    pub(super) fn collection_precondition(
+        self,
+    ) -> Option<&'a crate::kani::identity::CollectionPreconditionIdentity> {
+        match self {
+            Self::V2Clause(harness) => harness.identity.collection_precondition.as_ref(),
+            Self::Contract(_) | Self::Scalar(_) | Self::StateFrame(_) | Self::Collection(_) => None,
+        }
+    }
     pub(super) fn has_valid_provenance(self) -> bool {
         match self {
             Self::Collection(harness) => harness.has_valid_provenance(),
@@ -155,40 +164,25 @@ impl<'a> KaniExecutableHarness<'a> {
                     })
                     .collect()
             }
-            Self::Collection(harness) => {
-                let identity = &harness.identity;
-                let element = match identity.element {
-                    CollectionElementIdentity::Boolean => SymbolicBounds::Boolean,
-                    CollectionElementIdentity::Integer { minimum, maximum } => {
-                        SymbolicBounds::Integer { minimum, maximum }
-                    }
-                };
-                vec![SymbolicArgumentBounds {
-                    identifier: format!(
-                        "{}::{}::{}",
-                        identity.declaration_id.digest,
-                        identity.function_id.digest,
-                        identity.field_name
-                    ),
-                    bounds: SymbolicBounds::Sequence {
-                        minimum_length: identity.minimum_length,
-                        maximum_length: identity.maximum_length,
-                        element: Box::new(element),
-                    },
-                }]
+            Self::Collection(harness) => collection_arguments(&harness.identity),
+            Self::V2Clause(harness) => {
+                if let Some(marker) = &harness.identity.collection_precondition {
+                    collection_arguments(&marker.collection)
+                } else {
+                    harness
+                        .identity
+                        .arguments
+                        .iter()
+                        .map(|argument| SymbolicArgumentBounds {
+                            identifier: argument.identifier.clone(),
+                            bounds: SymbolicBounds::Integer {
+                                minimum: argument.minimum,
+                                maximum: argument.maximum,
+                            },
+                        })
+                        .collect()
+                }
             }
-            Self::V2Clause(harness) => harness
-                .identity
-                .arguments
-                .iter()
-                .map(|argument| SymbolicArgumentBounds {
-                    identifier: argument.identifier.clone(),
-                    bounds: SymbolicBounds::Integer {
-                        minimum: argument.minimum,
-                        maximum: argument.maximum,
-                    },
-                })
-                .collect(),
         }
     }
 
@@ -259,6 +253,26 @@ impl<'a> KaniExecutableHarness<'a> {
             }
         }
     }
+}
+
+fn collection_arguments(identity: &CollectionObligationIdentity) -> Vec<SymbolicArgumentBounds> {
+    let element = match identity.element {
+        CollectionElementIdentity::Boolean => SymbolicBounds::Boolean,
+        CollectionElementIdentity::Integer { minimum, maximum } => {
+            SymbolicBounds::Integer { minimum, maximum }
+        }
+    };
+    vec![SymbolicArgumentBounds {
+        identifier: format!(
+            "{}::{}::{}",
+            identity.declaration_id.digest, identity.function_id.digest, identity.field_name
+        ),
+        bounds: SymbolicBounds::Sequence {
+            minimum_length: identity.minimum_length,
+            maximum_length: identity.maximum_length,
+            element: Box::new(element),
+        },
+    }]
 }
 
 #[cfg(test)]

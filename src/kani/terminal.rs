@@ -44,7 +44,9 @@ pub enum ReplaySettlement<'a> {
     /// A failure this repository raised that carries no QSL catalog code: the replay could not
     /// be built or read, its result cannot be read as a reproduction or a disagreement, the
     /// playback lacks a state field or lies outside its declared range, or the operation has a
-    /// shape the state-clause replay does not support (FR-029-AC-16). None is a QSL data refusal,
+    /// shape the state-clause replay does not support (FR-029-AC-16), or a decoded collection
+    /// precondition totality falsification awaiting independent native evaluation (FR-029-AC-11).
+    /// None is a QSL data refusal,
     /// so none is `Incomplete` or `Inconclusive(ReplayRefused)`.
     CgDefect,
 }

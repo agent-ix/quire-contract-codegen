@@ -6,7 +6,8 @@
 
 use quire_contract_model::{
     ApplicationOperator, CheckedCollectionKind, CheckedMemberType, CheckedNodeId, CheckedNodeTag,
-    CheckedPackageV2, CheckedSemanticNodeV2, CheckedTerm, LiteralKind, StateClauseKind,
+    CheckedPackageV2, CheckedSemanticId, CheckedSemanticNodeV2, CheckedTerm, LiteralKind,
+    StateClauseKind,
 };
 use std::{borrow::Borrow, collections::BTreeMap};
 
@@ -14,6 +15,7 @@ use crate::{
     core::artifact::MAX_GENERATED_SOURCE_BYTES,
     kani::{
         abi::{adapter_options, readable_component, KaniSolver},
+        census::{dependency_readiness, ProofDependencyEdge, ProofExecutionState},
         generate::{
             outcome::{CollectionUnsupportedReason, KaniObligationRequest, UnsupportedObligation},
             record::{harness_path, record},
@@ -25,7 +27,9 @@ use crate::{
         },
         identity::{
             CollectionElementIdentity, CollectionKindIdentity, CollectionObligationIdentity,
-            CollectionPredicateIdentity, KaniCollectionObligationHarness,
+            CollectionPreconditionIdentity, CollectionPredicateIdentity,
+            KaniCollectionObligationHarness, KaniV2ClauseObligationHarness, ObligationKind,
+            ScalarIntegerRepresentation, V2ClauseObligationIdentity,
         },
     },
 };
@@ -42,7 +46,7 @@ pub(crate) enum CollectionElementDomain {
 /// The admitted selected model field and its inclusive collection bounds.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct CollectionFieldDomain {
-    /// Selected function or invariant state clause whose body contains the quantifier.
+    /// Selected function or state clause whose body contains the quantifier.
     pub(crate) function: CheckedNodeId,
     /// Quantifier node selected by the request.
     pub(crate) quantifier: CheckedNodeId,
@@ -87,6 +91,8 @@ pub(crate) enum CollectionDomainRefusal {
 
 /// A completely checked collection claim ready for deterministic rendering.
 pub(super) struct LoweredCollectionClaim {
+    pub(super) dependencies: Vec<ProofDependencyEdge>,
+    pub(super) package: CheckedSemanticId,
     pub(super) package_digest: String,
     pub(super) field: CollectionFieldDomain,
 }
@@ -224,11 +230,62 @@ pub(super) fn lower_collection_claim(
         .index
         .node(quantifier_id)
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
-    let field = resolve_collection_field(graph.package, &graph.index, function_id, quantifier)?;
+    let field = resolve_collection_field(
+        graph.package,
+        &graph.index,
+        function_id,
+        quantifier,
+        CollectionClaimRole::Direct,
+    )?;
     Ok(LoweredCollectionClaim {
+        dependencies: Vec::new(),
+        package: graph.package.package_id().clone(),
         package_digest: graph.package.package_id().digest.to_string(),
         field,
     })
+}
+
+/// Resolve a whole authored precondition quantifier for its operation-clause harness.
+/// A conjunct is never promoted into a separate precondition: the selected quantifier must
+/// be the clause body itself, so the cover keeps the authored clause's complete meaning.
+pub(super) fn lower_collection_precondition(
+    graph: &CollectionGraph<'_>,
+    clause_id: &CheckedNodeId,
+) -> Result<LoweredCollectionClaim, CollectionDomainRefusal> {
+    let claim = graph
+        .index
+        .node(clause_id)
+        .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
+    let (kind, parameters, body) =
+        state_clause_parts(&graph.index, claim).ok_or(CollectionDomainRefusal::UnsupportedShape)?;
+    // The collection renderer currently binds the receiver state alone. Refuse an operation
+    // with additional parameters rather than silently omitting its symbolic arguments.
+    if kind != StateClauseKind::Precondition || parameters.len() != 1 {
+        return Err(CollectionDomainRefusal::UnsupportedShape);
+    }
+    let quantifier = graph
+        .index
+        .node(&body)
+        .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
+    let field = resolve_collection_field(
+        graph.package,
+        &graph.index,
+        clause_id,
+        quantifier,
+        CollectionClaimRole::Precondition,
+    )?;
+    Ok(LoweredCollectionClaim {
+        dependencies: Vec::new(),
+        package: graph.package.package_id().clone(),
+        package_digest: graph.package.package_id().digest.to_string(),
+        field,
+    })
+}
+
+impl LoweredCollectionClaim {
+    pub(super) fn set_dependencies(&mut self, dependencies: Vec<ProofDependencyEdge>) {
+        self.dependencies = dependencies;
+    }
 }
 
 /// Render one supported admitted collection claim as a symbolic Kani harness.
@@ -236,6 +293,22 @@ pub(super) fn render_collection(
     request: &KaniObligationRequest<'_>,
     lowered: &LoweredCollectionClaim,
 ) -> Result<KaniCollectionObligationHarness, UnsupportedObligation> {
+    let (spec, identity) = prepare_collection(request, lowered)?;
+    let rust = render_collection_artifact(&spec, &identity)?;
+    let record = record(&spec.path().module.to_string(), &identity, &rust)?;
+    let harness = KaniCollectionObligationHarness::generated(identity, rust, record);
+    if !harness.has_valid_provenance() {
+        return Err(UnsupportedObligation::RenderFailed);
+    }
+    Ok(harness)
+}
+
+/// Validate the admitted symbolic domain and construct the one source-backed layout shared by
+/// direct claims and precondition clauses. Neither caller renders an unused second harness.
+fn prepare_collection(
+    request: &KaniObligationRequest<'_>,
+    lowered: &LoweredCollectionClaim,
+) -> Result<(HarnessSpec, CollectionObligationIdentity), UnsupportedObligation> {
     let field = &lowered.field;
     let minimum_length = collection_i64(i128::from(field.minimum_length), &field.quantifier)?;
     let maximum_length = collection_i64(i128::from(field.maximum_length), &field.quantifier)?;
@@ -405,7 +478,14 @@ pub(super) fn render_collection(
             error: error.to_string(),
         },
     })?;
-    let rendered = render::render(&spec)?;
+    Ok((spec, identity))
+}
+
+fn render_collection_artifact(
+    spec: &HarnessSpec,
+    identity: &CollectionObligationIdentity,
+) -> Result<crate::core::artifact::Artifact, UnsupportedObligation> {
+    let rendered = render::render(spec)?;
     let subjects = [
         crate::core::provenance::node_subject(&identity.function_id),
         crate::core::provenance::node_subject(&identity.quantifier_id),
@@ -428,13 +508,58 @@ pub(super) fn render_collection(
             error: error.to_string(),
         });
     }
-    let rust = crate::core::artifact::Artifact::new(rendered.path, source);
-    let record = record(&path.module.to_string(), &identity, &rust)?;
-    let harness = KaniCollectionObligationHarness::generated(identity, rust, record);
-    if !harness.has_valid_provenance() {
+    Ok(crate::core::artifact::Artifact::new(rendered.path, source))
+}
+
+/// Render a source-backed collection precondition as its one V2 operation-clause harness.
+/// The shared collection domain is validated before the operation-clause source is rendered.
+pub(super) fn render_collection_precondition(
+    request: &KaniObligationRequest<'_>,
+    lowered: &LoweredCollectionClaim,
+) -> Result<KaniV2ClauseObligationHarness, UnsupportedObligation> {
+    let (spec, collection) = prepare_collection(request, lowered)?;
+    let spec = spec.into_collection_precondition()?;
+    let rust = render_collection_artifact(&spec, &collection)?;
+    let assertion = crate::kani::identity::collection_precondition_totality_assertion();
+    let lines = rust
+        .contents
+        .lines()
+        .enumerate()
+        .filter(|(_, line)| line.trim() == assertion)
+        .map(|(index, _)| u32::try_from(index + 1))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| UnsupportedObligation::RenderFailed)?;
+    let [totality_assertion_line] = lines.as_slice() else {
         return Err(UnsupportedObligation::RenderFailed);
-    }
-    Ok(harness)
+    };
+    let identity = V2ClauseObligationIdentity {
+        dependencies: lowered.dependencies.clone(),
+        readiness: dependency_readiness(&lowered.dependencies),
+        proof_execution_state: ProofExecutionState::NotRun,
+        integer_representation: ScalarIntegerRepresentation::General,
+        native_integer_selection: None,
+        ceilings: request.ceilings,
+        package: lowered.package.clone(),
+        clause: collection.function_id.clone(),
+        collection_precondition: Some(CollectionPreconditionIdentity {
+            collection,
+            source_digest: crate::kani::identity::collection_source_digest(&rust.contents),
+            totality_assertion_line: *totality_assertion_line,
+        }),
+        kind: ObligationKind::Precondition,
+        oracle_symbol: "oracle_clause".to_owned(),
+        subject_path: request.subject_path.to_owned(),
+        arguments: Vec::new(),
+        module_symbol: spec.path().module.clone(),
+        harness_symbol: spec.path().harness.clone(),
+        solver: spec.solver(),
+        unwind: spec.unwind(),
+        options: spec.options().to_vec(),
+    };
+    let record = record(&spec.path().module.to_string(), &identity, &rust)?;
+    Ok(KaniV2ClauseObligationHarness::generated(
+        identity, rust, record,
+    ))
 }
 
 fn unique_element_capacity(element: CollectionElement) -> u128 {
@@ -521,12 +646,12 @@ fn finite_element_domain(
     }
 }
 
-/// Invariants assert their body over a drawn state. Other state-clause kinds need the
-/// operation-contract context and cannot be emitted as standalone collection proofs.
-fn invariant_clause_parts<'a>(
+/// Read the admitted state-clause kind, parameters and Boolean body. The direct renderer
+/// admits only invariants; a precondition reaches its operation-clause renderer separately.
+fn state_clause_parts<'a>(
     graph: &'a CollectionNodeIndex<'_>,
     claim: &'a CheckedSemanticNodeV2,
-) -> Option<(&'a [CheckedTerm], CheckedNodeId)> {
+) -> Option<(StateClauseKind, &'a [CheckedTerm], CheckedNodeId)> {
     if CheckedNodeTag::from_wire(&claim.node_tag) != Some(CheckedNodeTag::State)
         || claim.semantic_form.as_ref() != "state_clause"
     {
@@ -541,18 +666,23 @@ fn invariant_clause_parts<'a>(
     else {
         return None;
     };
-    if operation.identity() != Some("quire.op.state.clause")
-        || operation.state_clause_kind().ok()? != Some(StateClauseKind::Invariant)
-    {
+    if operation.identity() != Some("quire.op.state.clause") {
         return None;
     }
+    let kind = operation.state_clause_kind().ok()??;
     let [parameters, _anchor, body] = arguments.as_slice() else {
         return None;
     };
-    Some((aggregate_members(parameters)?, term_target(body)?))
+    Some((kind, aggregate_members(parameters)?, term_target(body)?))
 }
 
-/// The authored parameters of a function or invariant state clause, in checked graph order.
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum CollectionClaimRole {
+    Direct,
+    Precondition,
+}
+
+/// The authored parameters of a function or supported state clause, in checked graph order.
 fn claim_parameters<'a>(
     graph: &'a CollectionNodeIndex<'_>,
     claim: &'a CheckedSemanticNodeV2,
@@ -569,13 +699,13 @@ fn claim_parameters<'a>(
                 _ => None,
             }),
         CheckedNodeTag::State => {
-            invariant_clause_parts(graph, claim).map(|(parameters, _)| parameters)
+            state_clause_parts(graph, claim).map(|(_, parameters, _)| parameters)
         }
         _ => None,
     }
 }
 
-/// The checked Boolean body selected by a function or invariant state clause.
+/// The checked Boolean body selected by a function or supported state clause.
 fn claim_body(
     graph: &CollectionNodeIndex<'_>,
     claim: &CheckedSemanticNodeV2,
@@ -586,7 +716,7 @@ fn claim_body(
             .and_then(aggregate_members)
             .and_then(|members| binding(members, "body"))
             .and_then(term_target),
-        CheckedNodeTag::State => invariant_clause_parts(graph, claim).map(|(_, body)| body),
+        CheckedNodeTag::State => state_clause_parts(graph, claim).map(|(_, _, body)| body),
         _ => None,
     }
 }
@@ -600,10 +730,24 @@ fn resolve_collection_field(
     graph: &CollectionNodeIndex<'_>,
     function_id: &CheckedNodeId,
     quantifier: &CheckedSemanticNodeV2,
+    role: CollectionClaimRole,
 ) -> Result<CollectionFieldDomain, CollectionDomainRefusal> {
     let claim = graph
         .node(function_id)
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
+    if CheckedNodeTag::from_wire(&claim.node_tag) == Some(CheckedNodeTag::State) {
+        let (kind, _, _) =
+            state_clause_parts(graph, claim).ok_or(CollectionDomainRefusal::UnsupportedShape)?;
+        let expected = match role {
+            CollectionClaimRole::Direct => StateClauseKind::Invariant,
+            CollectionClaimRole::Precondition => StateClauseKind::Precondition,
+        };
+        if kind != expected {
+            return Err(CollectionDomainRefusal::UnsupportedShape);
+        }
+    } else if role != CollectionClaimRole::Direct {
+        return Err(CollectionDomainRefusal::UnsupportedShape);
+    }
     let body = claim_body(graph, claim).ok_or(CollectionDomainRefusal::UnsupportedShape)?;
     if !is_top_level_conjunct(graph, &body, &quantifier.node_id) {
         return Err(CollectionDomainRefusal::UnsupportedShape);
@@ -1047,7 +1191,7 @@ fn term_target(term: &CheckedTerm) -> Option<CheckedNodeId> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     use ix_trace_rs::trace;
@@ -1316,6 +1460,12 @@ mod tests {
 
     fn base_claim() -> LoweredCollectionClaim {
         LoweredCollectionClaim {
+            dependencies: Vec::new(),
+            package: CheckedSemanticId {
+                domain: "test".into(),
+                algorithm: "sha256".into(),
+                digest: "package-a".into(),
+            },
             package_digest: "package-a".to_owned(),
             field: CollectionFieldDomain {
                 function: node("function"),
@@ -1336,6 +1486,21 @@ mod tests {
                 predicate_id: node("predicate"),
             },
         }
+    }
+
+    pub(crate) fn runner_precondition_fixture(quantifier: &str) -> KaniV2ClauseObligationHarness {
+        let request = KaniObligationRequest {
+            ceilings: crate::kani::identity::ProofCeilings {
+                memory_bytes: std::num::NonZeroU64::new(1 << 30).expect("nonzero"),
+                wall_clock: std::time::Duration::from_secs(30),
+            },
+            items: &[],
+            subject_path: "crate::subject",
+            unwind: 8,
+        };
+        let mut claim = base_claim();
+        claim.field.quantifier_operation = quantifier.to_owned();
+        render_collection_precondition(&request, &claim).expect("runner fixture")
     }
 
     fn rendered_module(
