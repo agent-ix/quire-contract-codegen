@@ -739,7 +739,14 @@ impl Twin {
             .find(|constraint| constraint["keyword"] == "max")
             .expect("maximum bound");
         maximum["operands"]["value"] = json!("9223372036854775808");
-        self.emitted_package_with_model(clause, Some(document.to_string().into_bytes()))
+        // QSL rejects an authored integer operand above 2^53. The clause graph is
+        // unchanged; IR reads this selected model document to test the wider bound.
+        self.admit_emitted_package(
+            clause,
+            &self.unit,
+            &self.domain,
+            document.to_string().into_bytes(),
+        )
     }
 
     /// A twin whose operations' frames modify `granted`, whose unit holds `clauses` and has
@@ -823,7 +830,7 @@ impl Twin {
         .expect("QSL accepts the authored clause points");
         let mut evidence = CheckedPackageEvidence::new();
         evidence
-            .insert_domain_package_document(hex(&jcs_digest(&self.domain)), self.domain.clone())
+            .insert_domain_package_document(PACKAGE, self.domain.clone())
             .expect("retain emitted model document");
         evidence.support_feature("quire.value.complete/v1");
         let package = match CheckedPackageV2::read(
@@ -966,20 +973,30 @@ impl Twin {
             assert_eq!(source.matches(&previous).count(), 1, "one model selection");
             source.replacen(&previous, &selected, 1).into_bytes()
         };
+        self.admit_emitted_package(clause, &unit, &document, document.clone())
+    }
+
+    fn admit_emitted_package(
+        &self,
+        clause: &str,
+        unit: &[u8],
+        qsl_document: &[u8],
+        selected_document: Vec<u8>,
+    ) -> (CheckedPackageV2, CheckedNodeId) {
         let name = ClauseName(Identifier::new(clause).expect("identifier"));
         let located = call_site(
             SourceIdentity::new(AUTHORITY, IDENTITY, "git", "1"),
             IDENTITY.to_owned(),
             IDENTITY,
-            &unit,
-            [document.as_slice()],
+            unit,
+            [qsl_document],
             &DependencyInput::default(),
             &name,
         )
         .expect("the clause is located");
         let mut evidence = CheckedPackageEvidence::new();
         evidence
-            .insert_domain_package_document(hex(&jcs_digest(&document)), document)
+            .insert_domain_package_document(PACKAGE, selected_document)
             .expect("retain emitted model document");
         evidence.support_feature("quire.value.complete/v1");
         let package = match CheckedPackageV2::read(
