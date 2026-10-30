@@ -1408,9 +1408,17 @@ fn tc_029_ac8_a_duplicate_field_is_refused_with_its_declaration_cause() {
         "function f using v(a: Point,b: Point): Boolean pure { a = b }\n",
     );
     let result = qsl_replay::compile_admitted(
-        qsl_replay::SourceIdentity::new("test", "duplicate-field.native", "git", "fixture"),
-        "duplicate-field.native",
-        source.as_bytes(),
+        qsl_replay::CompileUnit {
+            source: qsl_replay::SourceIdentity::new(
+                "test",
+                "duplicate-field.native",
+                "git",
+                "fixture",
+            ),
+            package_name: "duplicate-field".to_owned(),
+            path: "duplicate-field.native",
+            bytes: source.as_bytes(),
+        },
         [],
         &qsl_replay::DependencyInput::default(),
         qsl_replay::StageLimits::default(),
