@@ -838,30 +838,15 @@ impl Twin {
         .expect("the clause is located");
         let overridden = model_override.is_some();
         let document = model_override.unwrap_or_else(|| self.domain.clone());
-        let mut wire: Value = serde_json::from_slice(&located.package).expect("emitted package");
-        if document != self.domain {
-            let digest = hex(&jcs_digest(&document));
-            wire["lock"]["model_selections"][0]["digest"] = json!(digest);
-            wire["identity_preimage"]["model_selections"] =
-                wire["lock"]["model_selections"].clone();
-            for node in wire["semantic_graph"]["nodes"]
-                .as_array_mut()
-                .expect("emitted graph nodes")
-            {
-                if node["owner"]["kind"] == "model_root" {
-                    node["owner"]["digest"] = json!(digest);
-                }
-            }
-        }
+        let wire: Value = serde_json::from_slice(&located.package).expect("emitted package");
+        // Document evidence changes independently of the graph's model identity.
         let mut evidence = CheckedPackageEvidence::new();
         evidence
-            .insert_domain_package_document(hex(&jcs_digest(&document)), document)
+            .insert_domain_package_document(PACKAGE, document)
             .expect("retain emitted model document");
         evidence.support_feature("quire.value.complete/v1");
         let (outcome, ids) = if overridden {
-            // A changed model selection also changes its generated model-root
-            // identity and every node that refers to it. Ask IR's public
-            // candidate API to settle those fixture identities before read.
+            // Resolve fixture identities after replacing the model evidence.
             let resolved =
                 rekey::resolve_wire(&wire, &evidence, CheckedPackageReadLimits::bounded());
             (resolved.outcome, Some(resolved.ids))

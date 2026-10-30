@@ -110,13 +110,9 @@ fn reader_variant(
     let [document] = inputs.packages.as_slice() else {
         panic!("one original model document")
     };
-    let digest = wire["lock"]["model_selections"][0]["digest"]
-        .as_str()
-        .unwrap()
-        .to_owned();
     let mut evidence = CheckedPackageEvidence::new();
     evidence
-        .insert_domain_package_document(digest, document.bytes.clone())
+        .insert_domain_package_document("test/bank", document.bytes.clone())
         .unwrap();
     evidence.support_feature("quire.value.complete/v1");
     if !rekey_nodes {

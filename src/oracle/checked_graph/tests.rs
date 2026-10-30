@@ -22,18 +22,20 @@ fn published_package(fixture: &str) -> CheckedPackageV2 {
     let document: serde_json::Value = serde_json::from_slice(&bytes).expect("published JSON");
     let mut evidence = CheckedPackageEvidence::new();
     evidence.support_feature("quire.value.complete/v1");
-    for selection in document["lock"]["model_selections"]
+    for node in document["semantic_graph"]["nodes"]
         .as_array()
-        .expect("published model selections")
+        .expect("published graph nodes")
+        .iter()
+        .filter(|node| node["owner"]["kind"] == "model_root")
     {
-        let identity = selection["identity"].as_str().expect("model identity");
+        let identity = node["owner"]["identity"].as_str().expect("model identity");
         let document = match identity {
             "acme/orders" => "domain-package-acme-orders.json",
             other => panic!("no published evidence document for {other}"),
         };
         evidence
             .insert_domain_package_document(
-                selection["digest"].as_str().expect("selected model digest"),
+                identity,
                 fs::read(root.join(document)).expect("published domain package bytes"),
             )
             .expect("retain published evidence");

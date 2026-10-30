@@ -241,7 +241,6 @@ pub(super) fn refresh_identity(wire: &mut Value) {
         edition: &selections.edition,
         profile_selections: &selections.profile_selections,
         definition_selections: &selections.definition_selections,
-        model_selections: &selections.model_selections,
         required_features: &selections.required_features,
         dependency_selections: &selections.dependency_selections,
         identity_projection: &nodes,

@@ -77,14 +77,17 @@ mod tests {
     fn model_evidence(root: &Path, wire: &Value) -> CheckedPackageEvidence {
         let mut evidence = CheckedPackageEvidence::new();
         evidence.support_feature("quire.value.complete/v1");
-        for selected in wire["lock"]["model_selections"]
+        for node in wire["semantic_graph"]["nodes"]
             .as_array()
-            .expect("model selections")
+            .expect("graph nodes")
+            .iter()
+            .filter(|node| node["owner"]["kind"] == "model_root")
         {
-            assert_eq!(selected["identity"], "acme/orders");
+            let identity = node["owner"]["identity"].as_str().expect("model identity");
+            assert_eq!(identity, "acme/orders");
             evidence
                 .insert_domain_package_document(
-                    selected["digest"].as_str().expect("selected model digest"),
+                    identity,
                     fs::read(
                         root.join("proposals/checked-package-v2/domain-package-acme-orders.json"),
                     )

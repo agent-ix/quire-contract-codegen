@@ -84,21 +84,18 @@ fn base_node_ids() -> BaseNodeIds {
 /// `OPEN` member, a `Distance` dimension and a `pace` unit of it, each keyed by the digest of its
 /// nominal identity preimage. The builder appends its own nodes and re-derives
 /// `package_id` from the finished graph (`wire()`); the IR reader derives the graph projection
-/// from those nodes, so the preimage retains only its seven selections.
+/// from those nodes, so the preimage retains only its six selections.
 fn base_package() -> serde_json::Value {
     const GRAPH: &str = "quire.checked-semantic-graph/v2";
     let ids = base_node_ids();
     let node_ref = |digest: &str| base_node_ref(digest);
-    // A definition is named by `{authority, identity}` alone; a raw source by
-    // `{authority, identity, digest_domain, digest}` (IR `CheckedArtifactRef`, `CheckedSourceRef`).
+    // Definitions and raw sources are named by `{authority, identity}`.
     let definition =
         |identity: &str| serde_json::json!({"authority": "agent-ix", "identity": identity});
-    let source_ref = |identity: &str, digest: char| {
+    let source_ref = |identity: &str| {
         serde_json::json!({
             "authority": "agent-ix",
             "identity": identity,
-            "digest_domain": "quire.source.bytes/v1",
-            "digest": digest.to_string().repeat(64),
         })
     };
     let edition = serde_json::json!({
@@ -165,17 +162,15 @@ fn base_package() -> serde_json::Value {
             "edition": edition,
             "profile_selections": [],
             "definition_selections": [model],
-            "model_selections": [],
             "required_features": ["quire.value.complete/v1"],
             "dependency_selections": [],
         },
         "package_id": {"domain": "quire.package.semantic/v2", "algorithm": "sha256", "digest": ""},
         "lock": {
-            "sources": [source, source_ref("example-units", '6')],
+            "sources": [source, source_ref("example-units")],
             "edition": edition,
             "profile_selections": [],
             "definition_selections": [model],
-            "model_selections": [],
             "required_features": ["quire.value.complete/v1"],
             "dependency_selections": [],
         },

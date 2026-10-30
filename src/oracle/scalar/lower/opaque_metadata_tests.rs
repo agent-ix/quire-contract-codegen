@@ -73,7 +73,6 @@ fn encode_draft(wire: &Value) -> Vec<u8> {
         edition: &preimage.edition,
         profile_selections: &preimage.profile_selections,
         definition_selections: &preimage.definition_selections,
-        model_selections: &preimage.model_selections,
         required_features: &preimage.required_features,
         dependency_selections: &preimage.dependency_selections,
         identity_projection: &graph.nodes,
@@ -124,11 +123,16 @@ fn opaque_operation_member_does_not_add_a_consumer_to_true_narrowing() {
     .unwrap();
     let mut evidence = CheckedPackageEvidence::new();
     evidence.support_feature("quire.value.complete/v1");
-    for selection in wire["lock"]["model_selections"].as_array().unwrap() {
-        assert_eq!(selection["identity"], "acme/orders");
+    for node in wire["semantic_graph"]["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|node| node["owner"]["kind"] == "model_root")
+    {
+        assert_eq!(node["owner"]["identity"], "acme/orders");
         evidence
             .insert_domain_package_document(
-                selection["digest"].as_str().unwrap(),
+                "acme/orders",
                 fs::read(root.join("domain-package-acme-orders.json")).unwrap(),
             )
             .unwrap();

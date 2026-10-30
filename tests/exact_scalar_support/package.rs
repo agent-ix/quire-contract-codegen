@@ -480,26 +480,13 @@ include!("../checked_package_support/base.rs");
 
 impl Default for PackageBuilder {
     fn default() -> Self {
-        let mut value = base_package();
-        let document = fixture_model_document();
-        let selection = json!({
-            "identity": FIXTURE_MODEL,
-            "digest_domain": "sha256-jcs",
-            "digest": quire_canonical::sha256(
-                &document,
-                quire_canonical::Limits::new(CheckedPackageReadLimits::bounded().bytes),
-            )
-            .expect("canonical model document")
-            .to_string(),
-        });
-        value["lock"]["model_selections"] = json!([selection]);
-        value["identity_preimage"]["model_selections"] = value["lock"]["model_selections"].clone();
+        let value = base_package();
         let mut builder = Self {
             value,
             bounds: BTreeSet::new(),
             dedicated_operands: BTreeSet::new(),
         };
-        // The selected package has one authenticated, generated model root.
+        // The selected package has one generated model root.
         let root = key(SELECTED_MODEL_ROOT);
         builder.node_with(&root, "model", "model_root", &root, aggregate(), &[]);
         builder.value["semantic_graph"]["nodes"]
@@ -509,7 +496,6 @@ impl Default for PackageBuilder {
             .expect("selected model root")["owner"] = json!({
             "kind": "model_root",
             "identity": FIXTURE_MODEL,
-            "digest": builder.value["lock"]["model_selections"][0]["digest"],
         });
         builder
     }
@@ -1122,14 +1108,8 @@ fn evidence() -> CheckedPackageEvidence {
     evidence.support_feature("quire.value.complete/v1");
     let document = fixture_model_document();
     let bytes = serde_json::to_vec(&document).expect("model document");
-    let digest = quire_canonical::sha256(
-        &document,
-        quire_canonical::Limits::new(CheckedPackageReadLimits::bounded().bytes),
-    )
-    .expect("canonical model document")
-    .to_string();
     evidence
-        .insert_domain_package_document(digest, bytes)
+        .insert_domain_package_document(FIXTURE_MODEL, bytes)
         .expect("retain fixture model document");
     evidence
 }
@@ -3452,8 +3432,6 @@ pub fn source_backed_byte_chain(count: u32) -> (PackageBuilder, String, SourceTo
     let source_ref = json!({
         "authority": "agent-ix",
         "identity": "ir764-ac40-source",
-        "digest_domain": "quire.source.bytes/v1",
-        "digest": format!("{:x}", Sha256::digest(source.as_bytes())),
     });
     builder.value["lock"]["sources"]
         .as_array_mut()

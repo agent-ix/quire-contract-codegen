@@ -222,8 +222,6 @@ impl OriginalCompositeEqContext {
         let source_ref = CheckedSourceRef {
             authority: source.authority.clone().into_boxed_str(),
             identity: source.identity.clone().into_boxed_str(),
-            digest_domain: source.digest().domain().as_str().into(),
-            digest: source.digest().hex().into_boxed_str(),
         };
         if !original.lock().sources.contains(&source_ref) {
             return Err(CompositeBuildError::SourceMismatch);

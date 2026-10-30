@@ -390,7 +390,7 @@ impl Twin {
         .expect("authored clause is located");
         let mut evidence = CheckedPackageEvidence::new();
         evidence
-            .insert_domain_package_document(hex(&jcs_digest(&self.domain)), self.domain.clone())
+            .insert_domain_package_document("test/bank", self.domain.clone())
             .expect("retain authored domain document");
         evidence.support_feature("quire.value.complete/v1");
         let package = match CheckedPackageV2::read(

@@ -126,23 +126,21 @@ fn named_refusal_adapter_preserves_unknown_version() {
 #[trace("TC-030", "FR-019-AC-48")]
 #[test]
 fn refusal_adapter_preserves_selected_document_pointer() {
-    use exact_function_fixture::{source_bound_call_package, PackageBuilder};
+    use exact_function_fixture::source_bound_call_package;
     use quire_contract_model::{CheckedPackageRefusalCause, CheckedPackageRefusalCode};
-    let digest = "ab".repeat(32);
-    let selection = serde_json::json!([{
-        "identity": "acme/orders",
-        "digest_domain": "sha256-jcs",
-        "digest": digest,
-    }]);
-    let mut wire = source_bound_call_package().wire();
-    wire["lock"]["model_selections"] = selection.clone();
-    wire["identity_preimage"]["model_selections"] = selection;
-    let (_, resolved, _) = PackageBuilder::from_wire(wire).read_resolved();
+    let resolved = source_bound_call_package().wire();
+    let identity = resolved["semantic_graph"]["nodes"]
+        .as_array()
+        .expect("graph nodes")
+        .iter()
+        .find(|node| node["owner"]["kind"] == "model_root")
+        .and_then(|node| node["owner"]["identity"].as_str())
+        .expect("selected model root identity");
     let mut evidence = CheckedPackageEvidence::new();
     evidence.support_feature("quire.value.complete/v1");
     evidence
         .insert_domain_package_document(
-            digest,
+            identity,
             br#"{"package":{"count":9007199254740993}}"#.to_vec(),
         )
         .expect("selected document evidence");

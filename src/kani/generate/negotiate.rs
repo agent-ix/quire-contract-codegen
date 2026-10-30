@@ -1317,13 +1317,9 @@ mod tests {
                 &qsl_replay::ClauseName(qsl_replay::Identifier::new(&names[0]).unwrap()),
             )
             .expect("distinct authored QSL clauses compile through the owner");
-            let wire: serde_json::Value = serde_json::from_slice(&located.package).unwrap();
-            let digest = wire["lock"]["model_selections"][0]["digest"]
-                .as_str()
-                .unwrap();
             let mut evidence = quire_contract_model::CheckedPackageEvidence::new();
             evidence
-                .insert_domain_package_document(digest.to_owned(), twin.domain.clone())
+                .insert_domain_package_document("test/bank", twin.domain.clone())
                 .unwrap();
             evidence.support_feature("quire.value.complete/v1");
             let package = match CheckedPackageV2::read(
@@ -1461,7 +1457,7 @@ mod tests {
         .expect("public QSL admission of authored finite collection predicate");
         let mut evidence = quire_contract_model::CheckedPackageEvidence::new();
         evidence
-            .insert_domain_package_document(digest, domain)
+            .insert_domain_package_document("test/bank", domain)
             .unwrap();
         evidence.support_feature("quire.value.complete/v1");
         let package = match CheckedPackageV2::read(

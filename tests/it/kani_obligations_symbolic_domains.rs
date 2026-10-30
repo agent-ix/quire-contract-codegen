@@ -678,7 +678,7 @@ fn try_emitted_from_document_and_body(document: Value, body: &str) -> Result<Emi
     let mut evidence = CheckedPackageEvidence::new();
     evidence.support_feature("quire.value.complete/v1");
     evidence
-        .insert_domain_package_document(model_digest.clone(), document_bytes.clone())
+        .insert_domain_package_document("ir268.test/domain", document_bytes.clone())
         .expect("the exact selected model document is admitted as evidence");
     let package = match CheckedPackageV2::read(
         &site.package,

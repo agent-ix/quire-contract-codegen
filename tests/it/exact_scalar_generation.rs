@@ -1589,7 +1589,6 @@ fn tc_024_a_byte_ceiling_lowering_failure_is_refused_per_item_as_its_own_refusal
     use crate::common::byte_ceiling::{
         limits_under, lowered_package_length, measuring_profile, LARGEST_CEILING,
     };
-    use sha2::{Digest, Sha256};
 
     const REQUESTS: u32 = 16;
     let (builder, source, sites) = source_backed_byte_chain(REQUESTS);
@@ -1600,10 +1599,7 @@ fn tc_024_a_byte_ceiling_lowering_failure_is_refused_per_item_as_its_own_refusal
         .iter()
         .find(|item| item["identity"] == "ir764-ac40-source")
         .expect("authored source is locked");
-    assert_eq!(
-        source_ref["digest"],
-        format!("{:x}", Sha256::digest(source.as_bytes()))
-    );
+    assert_eq!(source_ref["authority"], "agent-ix");
     for (code, spans) in &sites {
         let entries = raw["source_map"]
             .as_array()
@@ -2407,23 +2403,22 @@ fn qspec_package(fixture: &str) -> CheckedPackageV2 {
     let mut evidence = CheckedPackageEvidence::new();
     evidence.support_feature("quire.value.complete/v1");
     crate::checked_package_evidence::retain_selected_extensions(&root, &wire, &mut evidence);
-    if let Some(selection) = wire["lock"]["model_selections"]
+    for node in wire["semantic_graph"]["nodes"]
         .as_array()
-        .and_then(|rows| rows.first())
+        .expect("published graph nodes")
+        .iter()
+        .filter(|node| node["owner"]["kind"] == "model_root")
     {
-        let identity = selection["identity"]
+        let identity = node["owner"]["identity"]
             .as_str()
-            .expect("model selection identity");
-        let digest = selection["digest"]
-            .as_str()
-            .expect("model selection digest");
+            .expect("model root identity");
         let document = match identity {
             "acme/orders" => "domain-package-acme-orders.json",
             other => panic!("no published model document for QSpec selection {other}"),
         };
         evidence
             .insert_domain_package_document(
-                digest,
+                identity,
                 fs::read(root.join("proposals/checked-package-v2").join(document))
                     .expect("read selected QSpec model package"),
             )
