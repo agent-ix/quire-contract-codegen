@@ -88,12 +88,10 @@ success.
 
 ### Versioned contracts and how identity is asserted
 
-- CG mints the O-09 `ObligationIdentity` over the exact claim preimage and carries it in QSL's
-  owning type (E-1). It identifies the claim and harness domains, not every byte or evidence field
-  of the generated artifact. The full CG identity/evidence record remains a separate record.
+- For scalar and composite parity, CG carries the admitted IR reader's structural application identity and retains the complete checked claim body for comparison (E-1). The identity names the application; the body comparison binds the claim and harness domains. Neither alone binds every byte or evidence field of the generated artifact. The full CG identity/evidence record remains a separate record.
 - Planned composite parity also requires the separate canonical proved-content tie of
   [FR-033](../replay/functional/FR-033-composite-parity-replay-binding.md): the driver's actual
-  observation must belong to the same proved generated artifact and original context. O-09 alone
+  observation must belong to the same proved generated artifact and original context. Structural node identity alone
   cannot establish that tie. QSL's supplied content-identity API is delivered; CG's retained
   proving-record representation, driver authentication and consumer conformance remain CODE-gated
   under the repository's canonical proof-content exception. This AD does not
@@ -141,8 +139,7 @@ success.
 
 ## Decisions
 
-CG owns the map into QSL's terminal value and the preimage of the obligation identity; QSL owns
-both types. The statements below are ones a test can check, followed by the three questions
+CG owns the map into QSL's terminal value and the retained parity claim body; IR owns the structural application identity. QSL owns the terminal and replay types. The statements below are ones a test can check, followed by the three questions
 raised in IR-324 from parked CG PR 210 and their recommendations. PR 210 (draft, open, laid out
 before the subsystem restructure) is input here and is not at this base.
 
@@ -151,7 +148,7 @@ before the subsystem restructure) is input here and is not at this base.
 [FR-032](../replay/functional/FR-032-routed-scalar-replay-binding.md) owns scalar producer,
 context-retention, driver and consumer duties;
 [FR-033](../replay/functional/FR-033-composite-parity-replay-binding.md) owns those duties for
-composite parity. Their positional O-09 preimages and full report claims have separate roles.
+composite parity. Their positional checked claim bodies and full report claims have separate roles.
 Repeated operand positions remain separate even when they name the same node; literal operands
 retain their route's authentic identity/domain. Function/frame preimages remain unchanged.
 
@@ -178,8 +175,8 @@ authored).
   `serde_json`;
   the value changes when any included member changes and does not when the span changes. The
   V1 contract and frame paths (`StateFrameIdentity`) use this parameter-domain shape; the scalar
-  operation-application path uses the positional allocation below through the same canonical
-  encoding authority. The function path (`call_site` over a `QualifiedName`, ADR-013 O-09 as amended by QSL-352) uses it
+  parity operation-application path instead uses the IR-read structural identity and positional
+  checked-body comparison specified below; it does not use this canonical encoder. The function path (`call_site` over a `QualifiedName`, ADR-013 O-09 as amended by QSL-352) uses it
   too, with the checked function node id and its `declaration` occurrence key in place of the
   clause's, both read from `FunctionSite` and never derived by CG, and the existing `ObligationKind` of the
   harness replayed (O-09 adds no subject tag and no new kind: one identity per kind the function
@@ -251,111 +248,50 @@ authored).
   pair even with different hypotheses. A refusal has no content identity or
   proof credit. The existing V1 clause identity rule above does not define
   this per-step record shape; FR-015-AC-120 through AC-122 own its tests.
-- E-1 scalar allocation (PLANNED/CODE-GATED, IR-631). CG owns and mints the scalar
-  operation-application preimage under measured merged QSL change #650. ADR-013 O-09,
-  FR-357 and `qsl-replay/src/execute/parity_identity.rs` agree on tagged `domain` entries.
-  CG shall construct the owning `ParityPreimage` and call public `parity_obligation`, the
-  shared scalar/composite mint function using ADR-013 section 2's `quire-canonical` encoder.
-  QSL owns that sole parity encoder; CG calls it through its existing dependency and adds
-  no obligation-canonical-byte encoder. Current-run conformance checks use the authoritative
-  scalar metadata and the actual QSL operator route.
-  `operator_parity.rs` authenticates application/operator/function membership, occurrence
-  and positional operands before verifying the digest. Mismatch refuses
-  `ScalarIdentity::Obligation` with claimed/recomputed digests; encoder refusal returns
-  `ScalarIdentity::Encoding` without an identity (`stale_dependency`/`revision-mismatch`).
-  The driver calls `replay_operator_parity(wire, claim, replay_limits)`, `ReplayLimits` last
-  under merged change #645; this byte guard is distinct from claim `ScalarLimits` and is
-  not a full-claim identity member. Both contexts must be retained.
-  This is source inspection, not passing-test evidence; actual CG conformance remains gated.
-  Function/clause carry-only contracts and existing function/frame encoding remain unchanged.
-  The subject is the claimed operator's FR-322 application node id with its authentic O-07
-  `CheckedOccurrence` key (node, `expression` role, ordinal), the scalar kind allocated once
-  by FR-032 (typed generation source CODE-gated), and one argument per operand position in operand/harness draw order. Each entry is its position
-  ordinal, typed `OperandIdentity` and actual harness operand range. Its tagged representation
-  is `GraphChild { node_id }` for an actual graph reference (parameter, subterm or an existing
-  literal node), or `InlineLiteral { node_id, occurrence_key, position }` using the authentic
-  application node id, selected occurrence key and position ordinal. The inline literal's value
-  is carried by its singleton range (FR-015 AC-16); QSL emits no extra literal node for it.
-  The typed identifier member holds this representation without fabricating a checked node id.
-  Repeated independent draws of one parameter remain distinct positional
-  entries. Scalar entries are neither identifier-sorted nor deduplicated by node id; unrelated
-  enclosing-function parameters are absent. Function/frame preimages and identifier ordering
-  remain unchanged. The exact scalar preimage, minted through the shared owning function, is
-  `{arguments, node, obligation_kind, occurrence_key}`; occurrence is `{ordinal, role}`, and
-  ordered arguments are `{domain, operand, position}` with scalar domain
-  `{lower, tag: "range", upper}`, both inclusive bounds as decimal strings.
-  Operand is `{node_id, tag: "graph_child"}` or
-  `{node_id, occurrence_key, position, tag: "inline_literal"}` using the application id/key in
-  the inline arm. Node ids are lowercase hex; ordinals/positions numeric; SHA-256 hashes the
-  RFC 8785 bytes with no added digest-label preimage member. Independent CG conformance checks must match that QSL
-  encoding; no copied encoder or additional CG member enters it. Source spans, native
-  outcomes, transcript, operator label, renderer counters and
-  build/tool/version fields remain excluded.
-  [FR-032](../replay/functional/FR-032-routed-scalar-replay-binding.md) owns acceptance criteria
-  and the metadata/accessor gate. IR's `CheckedPackageV2::graph()` exposes authentic node ids
-  and occurrences, and `source_map()` the source map, but the public node body remains JSON;
-  no public typed scalar ordered-operand identity/range accessor was measured. IR-648 in
-  Contract IR owns that `CheckedPackageV2` accessor and blocks IR-631 CODE admission; its
-  specification and implementation remain to be measured. The model-field
-  accessor and wrapped optional leaf walk do not provide one. CG must retain the sole authentic
-  expression occurrence and operand metadata. Zero/multiple
-  expression occurrences refuse without a chosen ordinal; multi-occurrence replay awaits
-  generation-owned selection/retention. Current clause-role `ObligationKind` supplies no
-  scalar wire kind: FR-032 owns its sole allocation; typed generation source/retention
-  remains CODE-gated. IR-648 must expose that same tagged
-  identity; the inline arm names application/occurrence/position and needs no literal node.
-  Missing or ambiguous metadata/kind refuses without minting an identity.
-  Merged QSL authenticates the occurrence, operand count, each graph-child reference and
-  inline literal value/singleton range before digest verification, and encoding errors refuse
-  without an identity. Graph-child range correspondence to the declared proving domain remains
-  a CG validation obligation with positional provenance: own bounded-domain parameters or
-  subterms use the checked derived interval, literals use the actual singleton, and untyped
-  nonliteral subterms use the enclosing scalar claim's first checked result bound as current
-  generation does. Missing provenance or a widened range refuses; QSL's child-identity check
-  alone does not establish it.
-  Literal and repeated-parameter semantics are resolved; authentic metadata access, retention
-  and actual consumer conformance remain CODE gates. Decoder/context work is independent.
-  The driver executes the same proved generated artifact at decoded operands and retained
-  renderer limits, compares the receipt's staged artifacts, harness and record byte for byte
-  against its originals, then completes CG's checked plan. This trusts the driver's actual
-  execution/authentication; an unchecked outcome echo or regenerated oracle is insufficient.
-  QSL never sees the artifact and does not authenticate it; it evaluates exact semantics. Before any scalar settlement, CG compares every member of the report's full claim
-  with the retained sent claim at the immutable-report/retained-binding converter boundary,
-  plus checked driver completion's actual wire/run context against the original proving
-  package/function/source/dependencies/limits. The report and O-09 do not bind that wire;
-  an equal echoed claim is insufficient. This independent R-7 retention/check is CODE-gated
-  and applies on every outcome, including refusal, exact `Incomplete`,
-  generated fault and divergence. Report `claim()` on every outcome is measured in merged
-  change #650; actual CG conformance remains CODE-gated; agreement-only claim identity and opaque obligation-digest equality are insufficient.
-- E-1 composite extension (PARTIAL: IR-635 delivered the Eq graph-child positional O-09 and Ne parameter/parameter and parameter/literal controls of FR-033-AC-11; Ne literal/literal, Ne self-comparison and the inline-literal refusals (FR-033-AC-14 to AC-17) are PLANNED under IR-814; UNRUN CG CONSUMER, QSL-640). CG's
-  composite O-09 preimage contains only the exact claimed equality/inequality application
-  node, its authentic occurrence key from the recompiled original package, the obligation
-  kind and one argument per operand position in operand order. A self-comparison contributes
-  two graph-child argument entries for the same actual parameter, each with only its actual
-  Node-keyed harness bounds naming that parameter. Population-keyed metadata remains only in the full
-  CG proving record, outside the admitted QSL composite claim and O-09 arguments. A QSL request
-  carrying a Population-keyed harness bound receives typed `HarnessUnknownKey` during `prepare`,
-  before identity tying; its binding-checked `Refused` report retains ReplayRefused terminal mapping.
-  CG pre-invocation refusal still produces no report or terminal value. Repeated positions are not a distinct-node set.
-  A composite literal uses its own actual graph-child node with empty Bounds. The owning operand projection
-  refuses every top-level inline literal, so CG builds no inline argument and returns that
-  refusal without a report. Within each Bounds argument, keys sort by canonical encoded
-  key bytes, not DomainKey ordering, and duplicate keys refuse within that argument.
-  Repeated parameter positions retain separate argument entries with the same admitted
-  bounds; they are not duplicate keys inside one Bounds argument.
-  CG shall construct the owning typed preimage and use the public shared `parity_obligation`
-  mint, with no copied or second parity encoder. The full FR-015 AC-76 CG record keeps
-  abstractions, size budget, static closure pair-node count and unexercised behaviours outside
-  this preimage. The static record count is distinct from QSL's runtime occurrence-pair count.
-  Existing function/frame member spelling, domain encoding and digest preimages stay
-  unchanged. QSL's owning composite identity/parity interfaces are delivered; actual CG
-  metadata retention, typed consumer conformance and generated-family evidence remain
-  CODE-gated and UNRUN. The request's O-09 identity is checked against actual original
-  node/occurrence/operand membership before settlement, including Disagreed. Full retained
-  sent-claim comparison on every report outcome and independent same-proved-artifact/context
-  authentication remain required under E-2 and FR-033. O-09 or an echoed content identity
-  alone cannot establish that artifact tie; no operator/native/content/refinement/counter
-  top-level O-09 member or tracking digest is added.
+- E-1 scalar allocation (PLANNED/CODE-GATED, IR-631; replacement for the retired parity
+  preimage). CG takes the original application `NodeKey`/`CheckedNodeId` and authentic `expression`
+  occurrence from the admitted IR reader. CG typed generation supplies and retains the scalar
+  kind and one argument per operand position in original draw order as the checked claim body. Every argument retains
+  its position, typed `GraphChild` or `InlineLiteral` identity and actual harness range.
+  An inline literal uses the application node/occurrence/position and its singleton range;
+  an existing literal node is a graph child. Two independent draws of one parameter remain
+  two entries, with no identifier sorting or node-id deduplication. Unrelated enclosing
+  parameters are excluded. The scalar kind `operator_parity` comes from typed generation,
+  not a caller-chosen string. Missing or ambiguous occurrence, positional provenance, kind
+  or checked identity refuses before replay. CG validates graph-child ranges against the
+  original proving schema and retains the original limits. A package/path/producer-ordinal
+  change changes the structural identity; a body-only change keeps that identity but is
+  detected by full retained-body comparison and refuses before scalar comparison. CG does
+  not call `parity_obligation`, construct `ParityPreimage`, derive an obligation hash or copy
+  an encoder. The actual QSL operator route must accept the matching original claim and
+  refuse membership or body mismatch. The driver executes the same proved generated artifact
+  at decoded operands and original renderer limits and compares the receipt's staged artifacts,
+  harness and record byte for byte against the retained originals before checked completion.
+  An outcome echo or freshly regenerated oracle cannot authenticate it. Before settlement CG
+  compares every member of the report's full claim with the retained sent claim and the
+  completed wire/run context against the original proving package, source, dependencies and
+  limits, on every outcome including refusal and fault. QSL does not authenticate the artifact.
+  Full-report binding and same-artifact observation remain separate obligations. [FR-032](../replay/functional/FR-032-routed-scalar-replay-binding.md)
+  AC-15 through AC-18 replace the retired hash-specific AC-9/10/11/13 without dropping
+  their member-change, negative-path and no-fabricated-identity controls.
+- E-1 composite extension (PARTIAL: IR-635 Eq and some Ne controls; IR-814 and IR-806
+  retain their planned controls). CG takes the original equality/inequality application
+  structural identity from IR admission and retains its authentic occurrence, kind and one
+  argument per operand position. A self-comparison contributes two graph-child entries for
+  the same actual parameter, each with the drawn Node-keyed bounds. Distinct parameters and
+  composite literal nodes retain separate graph-child entries; literals have empty Bounds.
+  The owning operand projection refuses top-level inline literals before QSL invocation.
+  Within each Bounds argument, canonical key order and duplicate-key refusal remain; repeated
+  positions are not duplicate keys in one argument. Population-keyed metadata remains in
+  the full CG proving record and a QSL claim carrying it refuses as `HarnessUnknownKey` during
+  prepare, before structural identity/body comparison. CG pre-invocation refusal has no QSL
+  report or terminal value. Full report-claim comparison and independent proved-content,
+  original-context and same-artifact authentication remain required on every outcome.
+  A package/path/producer-ordinal change changes the structural identity; an included body
+  change under the same identity refuses by full body comparison. No CG or QSL parity
+  preimage mint or obligation digest is needed. [FR-033](../replay/functional/FR-033-composite-parity-replay-binding.md)
+  AC-18 replaces the retired hash-specific AC-11 while preserving its positional, adverse,
+  membership and evidence controls.
 - E-2. Two obligations with identical identity members have the same `ObligationIdentity`;
   regeneration is byte-identical (NFR-001).
 - E-3. Every run item that reaches the map has exactly one terminal value, and the map from
@@ -490,13 +426,13 @@ crate CG's lock selects.
   the harness's `StateFrameIdentity` (FR-024-AC-20 to FR-024-AC-24, IR-459). The V1 contract and
   scalar paths still compute none, and the rest of this entry describes them.
   No code on those paths computes `ObligationIdentity`. QSL's type says QSL never hashes it.
-  ADR-013 O-09 defines the preimage: the clause (or application) node id, its occurrence key,
-  the obligation kind and the arguments (parameter node id and declared domain), source span
-  excluded. The postcondition state-clause path takes a caller `[u8; 32]`
+  ADR-013 O-09 defines the function/frame preimage from its subject, occurrence, kind and
+  arguments, excluding source span. The retired parity extension does not use this preimage. The postcondition state-clause path takes a caller `[u8; 32]`
   (`StateClauseReplayInputs::obligation_identity`); the function path's transcript digest in the
   request's slot is gone (AD-002), replaced by the function-contract identity. The scalar path's
   positional allocation and driver observation boundary are now specified
-  by FR-032/E-1, but its authoritative metadata and full-report claim API remain CODE-gated.
+  by FR-032/E-1 using structural identity and complete body comparison, but its authoritative
+  metadata and full-report claim API remain CODE-gated.
   The state-clause path's is open (FR-024, Open questions Q-1).
   The work is larger than one missing field. Three identity structs exist and none carries what
   O-09 needs. `KaniObligationIdentity` holds a `ClauseRef`, not the clause node id, and no
@@ -508,7 +444,7 @@ crate CG's lock selects.
   counterexample goes into an envelope (`src/replay/frame.rs`). It needs no occurrence key of its
   own, because `OperationSite` carries the frame's, but it records no draw order for the state
   fields, which the playback decode needs (FR-024-AC-23). The other
-  two must gain the missing members before one function can compute the O-09 value.
+  V1 clause route still needs its own missing members; parity no longer joins that O-09 mint.
   Recommendation below.
 - Encoder gap (closed for the obligation and corpus case identities: `core::canonical` is the one
   caller of `quire-canonical`; the rest of this entry records what was measured when the gap was
@@ -527,7 +463,8 @@ crate CG's lock selects.
   place (`core::canonical`, CG layout AD step 1a) depends on `quire-canonical` directly (its own
   repository, `agent-ix/quire-canonical`, spelled `branch = "main"`; `to_vec(v, Limits)` and
   `sha256`, RFC 8785), with no `qsl-replay` re-export. The O-09 preimage is encoded there, never
-  by `serde_json`, and the corpus case digest moves to the same place. `ByteDigest` stays only
+  by `serde_json`, and the corpus case digest moves to the same place. This historical
+  encoder target applies to function/frame and corpus identities, not parity. `ByteDigest` stays only
   where QSL's own types require it (`qsl-replay` API surfaces such as source digests). This is a
   CG-owned decision, not a routed need. The CG layout AD (CG PR 215, open)
   already adopts this target: `core/canonical.rs` is the one caller of `quire-canonical`, both
@@ -574,7 +511,7 @@ crate CG's lock selects.
 
 | Question | Owner | Recommendation |
 | --- | --- | --- |
-| What is the obligation-identity preimage, now that three CG identity structs exist and none carries the O-09 members? | CG proposes, QSL and QSpec confirm | State it by ADR-013 O-09's member list, not by struct name: the node id, occurrence key, kind and arguments (parameter node id and domain), source span excluded, RFC 8785 encoded by `quire_canonical`, one implementation in CG used by all three identities. This is the O-09 claim digest, not a digest of the full FR-015-AC-76 record or proved artifact. Composite parity separately requires the canonical same-artifact content tie in FR-033; the owning representation remains gated, with no additional CG tracking hash authorized. QSL's `ObligationIdentity` stays opaque (it carries 32 bytes). CG writes E-1. QSL's doc says the digest domain is not in the closed FR-201 set; QSpec decides whether it needs a domain name (R-S3). |
+| ~~Retired parity obligation-preimage decision~~ | IR FR-322 structural identity; QSL-1293 removes parity preimages | The earlier O-09 parity digest decision is historical and no longer authorizes a parity mint. CG obtains the application `NodeKey`/`CheckedNodeId` from IR admission, retains the authentic occurrence, kind and ordered arguments, and compares the complete body even when structural identity is unchanged. Full FR-015-AC-76 evidence and FR-033 same-artifact authentication remain separate. Function/frame identity is outside this replacement. |
 | Replace IR's `KaniProviderResult` map | IR | Delete the type and its map as FR-039 already says, together with the CG import change above (IR-347). |
 | IR cause codes as strings | IR | Resolved for the code type: IR exports `Std001Code` with constants for the registered codes (IR FR-044). The family lowerings' own codes are typed `std001_code!` values that STD-001 does not register; they leave with the lowerings (IR-347). |
 | One map instead of two | CG after QSL | After the pending inconclusive types of (a) land. |
