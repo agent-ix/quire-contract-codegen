@@ -1407,17 +1407,24 @@ mod tests {
         }
     }
 
-    fn replace_exact_digest(value: &mut serde_json::Value, old: &str, new: &str) {
+    fn replace_exact_node(
+        value: &mut serde_json::Value,
+        old: &serde_json::Value,
+        new: &serde_json::Value,
+    ) {
+        if value == old {
+            *value = new.clone();
+            return;
+        }
         match value {
-            serde_json::Value::String(text) if text == old => *text = new.to_owned(),
             serde_json::Value::Array(items) => {
                 for item in items {
-                    replace_exact_digest(item, old, new);
+                    replace_exact_node(item, old, new);
                 }
             }
             serde_json::Value::Object(members) => {
                 for member in members.values_mut() {
-                    replace_exact_digest(member, old, new);
+                    replace_exact_node(member, old, new);
                 }
             }
             serde_json::Value::Null
@@ -1687,7 +1694,7 @@ mod tests {
                 }
                 PackageItem::Refused { record, .. } => panic!("comparison must lower: {record:?}"),
             }
-            identities.push(admitted.identity().clone());
+            identities.push(admitted.wire().package.source.clone());
         }
         assert_ne!(
             identities[0], identities[1],
@@ -1812,7 +1819,7 @@ mod tests {
                 source.contents.contains(rendered),
                 "the admitted operation is rendered"
             );
-            emitted.push((admitted.identity().clone(), source.contents));
+            emitted.push((admitted.wire().package.source.clone(), source.contents));
         }
         assert_ne!(emitted[0].0, emitted[1].0, "the source packages differ");
         assert_ne!(
@@ -1879,7 +1886,7 @@ mod tests {
             .iter()
             .find(|artifact| artifact.path == "src/lib.rs")
             .expect("contract scalar library");
-        let subject = format!("{}/{}", expression.domain, expression.digest);
+        let subject = format!("{expression:?}");
         let header = lib
             .contents
             .lines()
@@ -2508,7 +2515,7 @@ mod tests {
         );
         assert_eq!(
             generated_claim.contract_package_identity,
-            *admitted.identity()
+            admitted.wire().package.source
         );
         assert!(generated
             .artifacts
@@ -2664,8 +2671,8 @@ mod tests {
             "shared application identity"
         );
         assert_ne!(
-            first.identity(),
-            second.identity(),
+            first.wire().package.source,
+            second.wire().package.source,
             "distinct admitted authorities"
         );
         let generate = |package: &quire_contract_model::ContractPackageV1,
@@ -2676,7 +2683,10 @@ mod tests {
             let ClaimDisposition::Generated(value) = &claim.result else {
                 panic!("package-local scalar must generate: {:?}", claim.result);
             };
-            assert_eq!(&value.contract_package_identity, package.identity());
+            assert_eq!(
+                &value.contract_package_identity,
+                &package.wire().package.source
+            );
             assert_eq!(value.node_id, first_expression);
             assert_eq!(
                 value.source_map,
@@ -2858,7 +2868,10 @@ mod tests {
                 generated.claim_map.items[0].result
             );
         };
-        assert_eq!(claim.contract_package_identity, *admitted.identity());
+        assert_eq!(
+            claim.contract_package_identity,
+            admitted.wire().package.source
+        );
         assert_eq!(claim.node_id, requested[1]);
         let ContractRootViewV1::Lowered(closure) = admitted
             .reached_closure(&requested[1])
@@ -3364,7 +3377,7 @@ mod tests {
             &[0],
         )
         .expect("extra unselected package does not redirect CG");
-        assert_eq!(extra.identity(), admitted.identity());
+        assert_eq!(extra.wire().package.source, admitted.wire().package.source);
         assert_eq!(extra_generated, generated);
     }
 
@@ -3399,39 +3412,24 @@ mod tests {
         assert_ne!(local, target);
         let mut collision: serde_json::Value =
             serde_json::from_slice(&checked_bytes).expect("QSL checked wire");
-        replace_exact_digest(&mut collision, &local.digest, &target.digest);
+        replace_exact_node(
+            &mut collision,
+            &serde_json::to_value(&local).expect("local key"),
+            &serde_json::to_value(&target).expect("selected target key"),
+        );
         for pointer in ["/semantic_graph/nodes", "/source_map"] {
             collision
                 .pointer_mut(pointer)
                 .and_then(serde_json::Value::as_array_mut)
                 .expect("checked wire array")
                 .sort_by(|left, right| {
-                    left["node_id"]["digest"]
-                        .as_str()
-                        .cmp(&right["node_id"]["digest"].as_str())
+                    let left: CheckedNodeId =
+                        serde_json::from_value(left["node_id"].clone()).expect("left key");
+                    let right: CheckedNodeId =
+                        serde_json::from_value(right["node_id"].clone()).expect("right key");
+                    left.cmp(&right)
                 });
         }
-        let selections: quire_contract_model::CheckedPackageIdentityPreimageV2 =
-            serde_json::from_value(collision["identity_preimage"].clone())
-                .expect("typed identity selections");
-        let nodes: Vec<quire_contract_model::CheckedSemanticNodeV2> =
-            serde_json::from_value(collision["semantic_graph"]["nodes"].clone())
-                .expect("typed graph nodes");
-        let preimage = quire_contract_model::CheckedPackageIdentityPreimageRefV2 {
-            version: &selections.version,
-            edition: &selections.edition,
-            profile_selections: &selections.profile_selections,
-            definition_selections: &selections.definition_selections,
-            model_selections: &selections.model_selections,
-            required_features: &selections.required_features,
-            dependency_selections: &selections.dependency_selections,
-            identity_projection: &nodes,
-        };
-        collision["package_id"]["digest"] = serde_json::Value::String(
-            quire_canonical::sha256(&preimage, quire_canonical::Limits::new(1 << 24))
-                .expect("identity preimage canonicalizes")
-                .to_string(),
-        );
         let collision_bytes =
             quire_canonical::to_vec(&collision, quire_canonical::Limits::new(1 << 24))
                 .expect("checked wire canonicalizes");
