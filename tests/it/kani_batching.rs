@@ -30,8 +30,9 @@ const REAL_KANI_TIMEOUT: Duration = Duration::from_secs(600);
 
 fn node_id(digit: &str) -> CheckedNodeId {
     serde_json::from_value(json!({
-        "domain": "quire.checked-semantic-node/v1",
-        "digest": digit.repeat(64),
+        "package": "test-kani-batching",
+        "path": [digit],
+        "ordinal": 0,
     }))
     .expect("a node id")
 }
@@ -72,6 +73,18 @@ fn harness(name: &str, body: &str, unwind: u32) -> StateFrameHarness {
             ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(
                 REAL_KANI_TIMEOUT,
             ),
+            package: serde_json::from_value(json!({
+                "name": "test-kani-batching",
+                "lock": {
+                    "sources": [],
+                    "edition": {"role": "edition", "definition": {"authority": "test", "identity": "edition"}},
+                    "profile_selections": [],
+                    "definition_selections": [],
+                    "required_features": [],
+                    "dependency_selections": []
+                }
+            }))
+            .expect("test package source"),
             clause: node_id("1"),
             scope: StateFrameScope {
                 operation: "check".to_owned(),
