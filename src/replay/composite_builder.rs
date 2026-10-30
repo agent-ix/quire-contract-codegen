@@ -16,7 +16,7 @@ use qsl_replay::{
     DomainKey, EnvelopeSource, EqualityOperator, Identifier, IdentityEncodeError, NoPayload,
     OccurrenceKey, OperandIdentity, Origin, ParityArgument, ParityPreimage, ProofBound,
     QualifiedName, ReplayRequest, ReplayRequestRefusal, ReplayRequestWire, ReplayTarget,
-    ReplayTargetMembers, RequestTargetWire, Role, VerifiedShadow, VerifiedShadowReport, WireNodeId,
+    ReplayTargetMembers, RequestTargetWire, Role, VerifiedShadow, VerifiedShadowReport,
     WitnessEnvelope, WitnessPacket, WitnessRefusal,
 };
 use quire_contract_model::{
@@ -26,7 +26,7 @@ use quire_contract_model::{
     CheckedPackageV2ReadResult, CheckedScalarOperandChild, CheckedSourceRef,
 };
 
-use crate::core::ir::frame::application_identity;
+use crate::core::ir::{frame::application_identity, node_key::checked_node_key};
 
 use super::{
     composite::{verified_shadow_terminal_value, CompositeReportError, VerifiedShadowSettlement},
@@ -222,10 +222,9 @@ impl OriginalCompositeEqContext {
         let source_ref = CheckedSourceRef {
             authority: source.authority.clone().into_boxed_str(),
             identity: source.identity.clone().into_boxed_str(),
-            digest_domain: source.digest().domain().as_str().into(),
-            digest: source.digest().hex().into_boxed_str(),
         };
-        if !original.lock().sources.contains(&source_ref) {
+        if original.name() != inputs.package_name || !original.lock().sources.contains(&source_ref)
+        {
             return Err(CompositeBuildError::SourceMismatch);
         }
         let (inputs, dependencies) = inputs.admit().map_err(CompositeBuildError::Dependencies)?;
@@ -234,12 +233,7 @@ impl OriginalCompositeEqContext {
             || selections
                 .iter()
                 .zip(&inputs.dependencies)
-                .any(|(original, retained)| {
-                    original.identity.as_ref() != retained.identity
-                        || original.package_id.domain.as_ref()
-                            != retained.package_id.domain().as_str()
-                        || original.package_id.digest.as_ref() != retained.package_id.hex()
-                })
+                .any(|(original, retained)| original.identity.as_ref() != retained.identity)
         {
             return Err(CompositeBuildError::ContextMismatch);
         }
@@ -560,8 +554,8 @@ impl OriginalCompositeEqContext {
 
 // The 192-byte refusal is retained inline to preserve the public PackageRead payload.
 #[allow(clippy::result_large_err)]
-fn wire_node(node: &CheckedNodeId) -> Result<WireNodeId, CompositeBuildError> {
-    WireNodeId::from_hex(&node.digest).ok_or(CompositeBuildError::NodeIdentity)
+fn wire_node(node: &CheckedNodeId) -> Result<quire_exact::NodeKey, CompositeBuildError> {
+    checked_node_key(node).ok_or(CompositeBuildError::NodeIdentity)
 }
 
 fn origin(occurrence: &CheckedOccurrence) -> Origin {
