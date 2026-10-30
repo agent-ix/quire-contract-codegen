@@ -5,7 +5,7 @@
 
 use std::fmt;
 
-use qsl_replay::{Identifier, ObligationIdentity, OccurrenceKey, OperationSite, WireNodeId};
+use qsl_replay::{Identifier, NodeKey, ObligationIdentity, OccurrenceKey, OperationSite};
 
 use crate::kani::{
     abi::KaniPrimitiveType,
@@ -122,7 +122,7 @@ pub(crate) struct ContractArgument {
     /// The parameter's declared identifier.
     pub(crate) identifier: String,
     /// The parameter's node id, from the `FunctionSite`.
-    pub(crate) parameter: WireNodeId,
+    pub(crate) parameter: NodeKey,
     /// The declared domain.
     pub(crate) domain: ArgumentDomain,
 }
@@ -137,7 +137,7 @@ pub(crate) struct ContractArgument {
 /// [`ObligationIdentityError::UnboundParameter`] when a parameter has no binding, and the
 /// domain refusals of [`ArgumentDomain::of`].
 pub(crate) fn contract_arguments(
-    parameters: &[(Identifier, WireNodeId)],
+    parameters: &[(Identifier, NodeKey)],
     bindings: &[ObligationBinding],
 ) -> Result<Vec<ContractArgument>, ObligationIdentityError> {
     let arguments = bindings
@@ -181,7 +181,7 @@ pub(crate) fn contract_arguments(
 /// [`ObligationIdentityError::ProducerIdentityUnavailable`] until QSL exposes the producer's
 /// exact identity on the selected site.
 pub(crate) fn function_contract_identity(
-    _function: WireNodeId,
+    _function: NodeKey,
     declaration: &OccurrenceKey,
     _kind: ObligationKind,
     _arguments: &[ContractArgument],
@@ -221,12 +221,11 @@ mod tests {
     use qsl_replay::{Origin, Role};
     use quire_exact::PathSegment;
 
-    fn node(name: &str) -> WireNodeId {
-        WireNodeId::new("fixture", vec![PathSegment::Text(name.to_owned())], 0)
-            .expect("fixture node")
+    fn node(name: &str) -> NodeKey {
+        NodeKey::new("fixture", vec![PathSegment::Text(name.to_owned())], 0).expect("fixture node")
     }
 
-    fn occurrence(node: WireNodeId, ordinal: u64) -> OccurrenceKey {
+    fn occurrence(node: NodeKey, ordinal: u64) -> OccurrenceKey {
         OccurrenceKey::new(node, Origin::new(Role::new("declaration"), ordinal))
     }
 
