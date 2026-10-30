@@ -11,6 +11,7 @@
 //! against their own genuine source contexts through the scratch-crate runner.
 
 use ix_trace_rs::trace;
+use std::{collections::BTreeSet, fs, path::PathBuf};
 
 use super::exact_scalar_agreement::run_composite_agreement_cases;
 
@@ -29,6 +30,8 @@ use super::exact_scalar_agreement::run_composite_agreement_cases;
 )]
 #[test]
 fn tc_029_generated_composite_equality_crate_agrees_with_direct_runtime() {
+    assert_eq!(fixture::CASES.len(), 15, "keep the complete source corpus");
+    let mut package_names = BTreeSet::new();
     for case in fixture::CASES {
         let compiled = fixture::compile(case);
         let package = super::admitted_enum_equality::checked(&compiled, &[]);
@@ -136,8 +139,9 @@ fn tc_029_generated_composite_equality_crate_agrees_with_direct_runtime() {
                 generated.environment_symbol, generated.oracle_symbol
             ));
         }
+        let label = format!("composite-equality-agreement-{case}");
         run_composite_agreement_cases(
-            &format!("composite-equality-agreement-{case}"),
+            &label,
             oracles
                 .artifacts
                 .iter()
@@ -145,7 +149,21 @@ fn tc_029_generated_composite_equality_crate_agrees_with_direct_runtime() {
             &[("names.rs", names.as_str()), ("case-mode", case)],
             &format!("tests/composite_equality_support/cases/{case}.rs"),
         );
+        let manifest_path = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+            .join(&label)
+            .join("Cargo.toml");
+        let manifest = fs::read_to_string(&manifest_path)
+            .unwrap_or_else(|error| panic!("{case}: read generated scratch manifest: {error}"));
+        assert!(
+            manifest.starts_with(&format!("[package]\nname = \"{label}\"\n")),
+            "{case}: scratch package did not use its distinct test-local identity"
+        );
+        assert!(
+            package_names.insert(label),
+            "{case}: scratch package identity repeated"
+        );
     }
+    assert_eq!(package_names.len(), fixture::CASES.len());
 }
 
 #[path = "../composite_equality_support/authentic_native.rs"]

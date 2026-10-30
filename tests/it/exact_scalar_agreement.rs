@@ -34,8 +34,9 @@ const AGREEMENT_DEV_DEPENDENCIES: &str = concat!(
 /// offline, and asserts that it succeeded and that every `#[test]` in `cases`
 /// ran and passed.
 ///
-/// Each scratch crate has its own target directory: different generated corpora can have the
-/// same package name and version, so sharing artifacts can link a sibling corpus's library.
+/// By default each scratch crate has its own target directory: generated corpora may share a
+/// package identity, which makes a common target unsafe. The composite corpus has its own
+/// identity-aware runner below.
 pub(super) fn run_agreement_cases<'a>(
     label: &str,
     artifacts: impl IntoIterator<Item = (&'a str, &'a str)>,
@@ -45,8 +46,9 @@ pub(super) fn run_agreement_cases<'a>(
     run_agreement_cases_with_expectation(label, artifacts, extra_files, cases, None, None);
 }
 
-/// Composite equality's fixed corpus uses distinct test-only package identities so its
-/// scratch crates can reuse compiled dependencies without linking a sibling's library.
+/// Composite equality's fixed corpus uses `label` as each scratch crate's test-only package
+/// identity. The labels must be distinct valid Cargo package names; each generated manifest
+/// retains its original identity in `artifacts`, while these test copies reuse one target dir.
 pub(super) fn run_composite_agreement_cases<'a>(
     label: &str,
     artifacts: impl IntoIterator<Item = (&'a str, &'a str)>,
@@ -172,9 +174,12 @@ fn run_agreement_cases_with_expectation<'a>(
 }
 
 fn composite_manifest_for_shared_target(manifest: &str, package_name: &str) -> String {
-    const ORIGINAL: &str = "[package]\nname = \"quire-composite-equality-oracles\"\n";
+    let original = format!(
+        "[package]\nname = \"{}\"\n",
+        quire_contract_codegen::COMPOSITE_EQUALITY_CRATE_NAME
+    );
     assert_eq!(
-        manifest.matches(ORIGINAL).count(),
+        manifest.matches(&original).count(),
         1,
         "composite corpus must retain its generated package manifest"
     );
@@ -184,29 +189,35 @@ fn composite_manifest_for_shared_target(manifest: &str, package_name: &str) -> S
         "composite corpus must not declare an explicit library name"
     );
     manifest.replacen(
-        ORIGINAL,
+        &original,
         &format!("[package]\nname = \"{package_name}\"\n"),
         1,
     )
 }
 
 /// A common target must never cause Cargo to run a sibling crate's compiled library.
-#[trace("FR-018-AC-2", "TC-029")]
+/// Provenance: IR-1116.
 #[test]
 fn composite_shared_target_keeps_generated_libraries_distinct() {
     let scratch = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
     let root = scratch.join("composite-shared-target-isolation");
     let _ = fs::remove_dir_all(&root);
     let target = root.join("target");
-    let original = "[package]\nname = \"quire-composite-equality-oracles\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[lib]\npath = \"src/lib.rs\"\n\n[workspace]\n";
+    let original = format!(
+        "[package]\nname = \"{}\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[lib]\npath = \"src/lib.rs\"\n\n[workspace]\n",
+        quire_contract_codegen::COMPOSITE_EQUALITY_CRATE_NAME
+    );
 
     for (case, value) in [("alpha", 11), ("beta", 29), ("alpha", 11)] {
-        let package_name = format!("quire-composite-equality-oracles-{case}");
+        let package_name = format!(
+            "{}-{case}",
+            quire_contract_codegen::COMPOSITE_EQUALITY_CRATE_NAME
+        );
         let crate_name = package_name.replace('-', "_");
         let directory = root.join(case);
         fs::create_dir_all(directory.join("src")).expect("create isolated scratch library");
         fs::create_dir_all(directory.join("tests")).expect("create isolated scratch tests");
-        let manifest = composite_manifest_for_shared_target(original, &package_name);
+        let manifest = composite_manifest_for_shared_target(&original, &package_name);
         fs::write(directory.join("Cargo.toml"), manifest).expect("write isolated manifest");
         fs::write(
             directory.join("src/lib.rs"),
