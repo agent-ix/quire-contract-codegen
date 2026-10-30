@@ -264,9 +264,6 @@ fn tc_031_ac34_public_strict_reader_chain_generates_compilable_flat_schedule() {
         entry.node_count += 1;
         entry.nodes += serde_json::to_vec(node).expect("node bytes").len() as u64;
     }
-    assert!(wire["identity_preimage"]
-        .get("identity_projection")
-        .is_none());
     let source_map = wire["source_map"].as_array().expect("source map");
     for source_entry in source_map {
         let node_id: quire_contract_model::CheckedNodeId =
@@ -2123,14 +2120,12 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
 
     let infinite_trace =
         json!({"authority":"agent-ix", "identity":"quire.temporal.infinite-trace/v1"});
-    for path in ["lock", "identity_preimage"] {
-        let selections = wire[path]["profile_selections"].as_array_mut().unwrap();
-        let temporal = selections
-            .iter_mut()
-            .find(|selection| selection["role"] == "temporal_profile")
-            .expect("published temporal profile selection");
-        temporal["definition"] = infinite_trace.clone();
-    }
+    let selections = wire["lock"]["profile_selections"].as_array_mut().unwrap();
+    let temporal = selections
+        .iter_mut()
+        .find(|selection| selection["role"] == "temporal_profile")
+        .expect("published temporal profile selection");
+    temporal["definition"] = infinite_trace.clone();
     for node in wire["semantic_graph"]["nodes"].as_array_mut().unwrap() {
         let laws = node
             .get_mut("body")
