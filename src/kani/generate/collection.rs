@@ -6,7 +6,7 @@
 
 use quire_contract_model::{
     ApplicationOperator, CheckedCollectionKind, CheckedMemberType, CheckedNodeId, CheckedNodeTag,
-    CheckedPackageV2, CheckedSemanticId, CheckedSemanticNodeV2, CheckedTerm, LiteralKind,
+    CheckedPackageV2, CheckedSemanticNodeV2, CheckedTerm, ContractSourceV1, LiteralKind,
     StateClauseKind,
 };
 use std::{borrow::Borrow, collections::BTreeMap};
@@ -92,8 +92,7 @@ pub(crate) enum CollectionDomainRefusal {
 /// A completely checked collection claim ready for deterministic rendering.
 pub(super) struct LoweredCollectionClaim {
     pub(super) dependencies: Vec<ProofDependencyEdge>,
-    pub(super) package: CheckedSemanticId,
-    pub(super) package_digest: String,
+    pub(super) package: ContractSourceV1,
     pub(super) field: CollectionFieldDomain,
 }
 
@@ -231,8 +230,10 @@ pub(super) fn lower_collection_claim(
     )?;
     Ok(LoweredCollectionClaim {
         dependencies: Vec::new(),
-        package: graph.package.package_id().clone(),
-        package_digest: graph.package.package_id().digest.to_string(),
+        package: ContractSourceV1 {
+            name: graph.package.name().into(),
+            lock: graph.package.lock().clone(),
+        },
         field,
     })
 }
@@ -268,8 +269,10 @@ pub(super) fn lower_collection_precondition(
     )?;
     Ok(LoweredCollectionClaim {
         dependencies: Vec::new(),
-        package: graph.package.package_id().clone(),
-        package_digest: graph.package.package_id().digest.to_string(),
+        package: ContractSourceV1 {
+            name: graph.package.name().into(),
+            lock: graph.package.lock().clone(),
+        },
         field,
     })
 }
@@ -373,12 +376,12 @@ fn prepare_collection(
     };
     let symbol_material = serde_json::to_vec(&(
         (
-            lowered.package_digest.as_str(),
+            &lowered.package,
             request.subject_path,
-            &field.function,
-            &field.quantifier,
-            &field.projection,
-            &field.declaration,
+            super::outcome::node_label(&field.function).to_string(),
+            super::outcome::node_label(&field.quantifier).to_string(),
+            super::outcome::node_label(&field.projection).to_string(),
+            super::outcome::node_label(&field.declaration).to_string(),
             &field.field_name,
             minimum_length,
             maximum_length,
@@ -386,9 +389,9 @@ fn prepare_collection(
         ),
         (
             &element_domain,
-            &field.element_type,
+            super::outcome::node_label(&field.element_type).to_string(),
             &field.quantifier_operation,
-            &field.predicate_id,
+            super::outcome::node_label(&field.predicate_id).to_string(),
             &field.predicate,
             KaniSolver::Cadical,
             request.unwind,
@@ -412,7 +415,7 @@ fn prepare_collection(
     let length_name = format!("{item_name}_len");
     let identity = CollectionObligationIdentity {
         ceilings: request.ceilings,
-        package_digest: lowered.package_digest.clone(),
+        package: lowered.package.clone(),
         subject_path: request.subject_path.to_owned(),
         function_id: field.function.clone(),
         quantifier_id: field.quantifier.clone(),
@@ -1357,7 +1360,7 @@ pub(crate) mod tests {
         let checked_node = |digit: &str| -> CheckedSemanticNodeV2 {
             let id = |digit: &str| {
                 serde_json::json!({
-                    "domain": "quire.checked-semantic-node/v1", "digest": digit.repeat(64),
+                    "package": "collection-test", "path": [digit], "ordinal": 0,
                 })
             };
             serde_json::from_value(serde_json::json!({
@@ -1443,20 +1446,39 @@ pub(crate) mod tests {
 
     fn node(label: &str) -> CheckedNodeId {
         CheckedNodeId {
-            domain: "ix://test/domain".into(),
-            digest: label.into(),
+            package: "collection-test".into(),
+            path: vec![quire_contract_model::CheckedNodePathSegment::Name(
+                label.into(),
+            )],
+            ordinal: 0,
+        }
+    }
+
+    fn package(name: &str) -> ContractSourceV1 {
+        ContractSourceV1 {
+            name: name.into(),
+            lock: quire_contract_model::CheckedPackageLockV2 {
+                sources: Vec::new(),
+                edition: quire_contract_model::CheckedSelection {
+                    role: quire_contract_model::CheckedSelectionRole::Edition,
+                    definition: quire_contract_model::CheckedArtifactRef {
+                        authority: "test".into(),
+                        identity: "edition".into(),
+                    },
+                },
+                profile_selections: Vec::new(),
+                definition_selections: Vec::new(),
+                required_features: Vec::new(),
+                dependency_selections: Vec::new(),
+                refinement_internals: None,
+            },
         }
     }
 
     fn base_claim() -> LoweredCollectionClaim {
         LoweredCollectionClaim {
             dependencies: Vec::new(),
-            package: CheckedSemanticId {
-                domain: "test".into(),
-                algorithm: "sha256".into(),
-                digest: "package-a".into(),
-            },
-            package_digest: "package-a".to_owned(),
+            package: package("package-a"),
             field: CollectionFieldDomain {
                 function: node("function"),
                 quantifier: node("quantifier"),
@@ -1517,8 +1539,8 @@ pub(crate) mod tests {
 
     /// Every component of a collection's semantic identity changes the rendered Rust path, so two
     /// claims that differ only in one component never share a harness. Each variant below
-    /// differs from the base in exactly one field of the digest preimage, holding the package
-    /// digest, ids and ceilings constant where the field is not the one varied: a field dropped
+    /// differs from the base in exactly one field of the identity preimage, holding the package,
+    /// ids and ceilings constant where the field is not the one varied: a field dropped
     /// from the preimage makes its row fail.
     #[trace("FR-015-AC-100", "TC-025")]
     #[test]
@@ -1537,8 +1559,11 @@ pub(crate) mod tests {
             "the path is deterministic"
         );
         type Change = fn(&mut LoweredCollectionClaim);
-        let claim_changes: [(&str, Change); 14] = [
-            ("package digest", |c| c.package_digest = "package-b".into()),
+        let claim_changes: [(&str, Change); 15] = [
+            ("package name", |c| c.package.name = "package-b".into()),
+            ("package lock", |c| {
+                c.package.lock.edition.definition.identity = "other-edition".into()
+            }),
             ("function", |c| c.field.function = node("other-function")),
             ("quantifier", |c| {
                 c.field.quantifier = node("other-quantifier")

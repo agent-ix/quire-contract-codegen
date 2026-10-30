@@ -74,7 +74,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use quire_contract_model::{
     CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticNodeV2, CheckedSourceMapEntry,
-    CheckedTerm, ContractPackageV1, StateClauseKind,
+    CheckedTerm, ContractPackageV1, ContractSourceV1, StateClauseKind,
 };
 
 use crate::{
@@ -462,23 +462,23 @@ struct ItemState {
 #[derive(Clone, Eq, PartialEq)]
 enum ItemIdentity {
     Node {
-        package: String,
+        package: ContractSourceV1,
         node: CheckedNodeId,
         result_selection: ContractDriverResultSelection,
     },
     /// One role of one state clause. `DuplicateItem` spans this arm and one role only.
     StateFrame {
-        package: String,
+        package: ContractSourceV1,
         clause: CheckedNodeId,
         role: StateFrameRole,
     },
     Collection {
-        package: String,
+        package: ContractSourceV1,
         function: CheckedNodeId,
         quantifier: CheckedNodeId,
     },
     V2Clause {
-        package: String,
+        package: ContractSourceV1,
         clause: CheckedNodeId,
     },
 }
@@ -712,7 +712,10 @@ fn classify_v2_clause<'a>(
             source_map: lookup.occurrences(clause),
         },
         identity: Some(ItemIdentity::V2Clause {
-            package: package.package_id().digest.to_string(),
+            package: ContractSourceV1 {
+                name: package.name().into(),
+                lock: package.lock().clone(),
+            },
             clause: clause.clone(),
         }),
         outcome,
@@ -767,7 +770,10 @@ fn classify_collection<'a>(
             source_map: lookup.occurrences(node_id),
         },
         identity: Some(ItemIdentity::Collection {
-            package: package.package_id().digest.to_string(),
+            package: ContractSourceV1 {
+                name: package.name().into(),
+                lock: package.lock().clone(),
+            },
             function: function_id.clone(),
             quantifier: node_id.clone(),
         }),
@@ -827,7 +833,10 @@ fn classify_state_frame<'a>(
             source_map: lookup.occurrences(request.clause),
         },
         identity: Some(ItemIdentity::StateFrame {
-            package: request.package.package_id().digest.to_string(),
+            package: ContractSourceV1 {
+                name: request.package.name().into(),
+                lock: request.package.lock().clone(),
+            },
             clause: request.clause.clone(),
             role,
         }),
@@ -890,11 +899,11 @@ fn classify_node(
         source_map: lookup.occurrences(node_id),
     };
     let identity = Some(ItemIdentity::Node {
-        package: package.identity().digest.to_string(),
+        package: package.wire().package.source.clone(),
         node: node_id.clone(),
         result_selection: result_selection.clone(),
     });
-    let outcome = if claim_map.package_id != package.wire().package.source.package_id {
+    let outcome = if claim_map.source != package.wire().package.source {
         Outcome::Invalid(InvalidObligationItem::PackageMismatch)
     } else {
         match claim_map
@@ -1520,15 +1529,11 @@ mod tests {
         let selection =
             qsl_replay::QualifiedName::new(vec![qsl_replay::Identifier::new("inspect").unwrap()])
                 .unwrap();
+        let package_name = format!("ir276-collection-request-{quantifiers}");
         let located = qsl_replay::call_site(
-            qsl_replay::SourceIdentity::new(
-                "agent-ix",
-                "ir276-collection-request",
-                "git",
-                "fixture",
-            ),
-            "ir276-collection-request".to_owned(),
-            "ir276-collection-request",
+            qsl_replay::SourceIdentity::new("agent-ix", package_name.as_str(), "git", "fixture"),
+            package_name.clone(),
+            package_name.as_str(),
             source.as_bytes(),
             [domain.as_slice()],
             &qsl_replay::DependencyInput::default(),
@@ -1552,7 +1557,10 @@ mod tests {
             .graph()
             .nodes
             .iter()
-            .find(|node| node.node_id.digest.as_ref() == located.site.function.to_string())
+            .find(|node| {
+                crate::core::ir::node_key::checked_node_key(&node.node_id).as_ref()
+                    == Some(&located.site.function)
+            })
             .unwrap()
             .node_id
             .clone();
@@ -1691,7 +1699,7 @@ mod tests {
         use crate::kani::generate::collection::take_collection_graph_builds;
         let (left, left_function, left_nodes) = admitted_collection_request_fixture(8);
         let (right, right_function, right_nodes) = admitted_collection_request_fixture(16);
-        assert_ne!(left.package_id(), right.package_id());
+        assert!(left.name() != right.name() || left.lock() != right.lock());
         let items = [
             ObligationItem::CollectionClaim {
                 package: &left,
