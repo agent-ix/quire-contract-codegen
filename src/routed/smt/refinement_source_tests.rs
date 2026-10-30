@@ -11,9 +11,9 @@ use std::{
 
 use ix_trace_rs::trace;
 use qsl_replay::{
-    acquire_checked_closure, encode_refinement_query, refinement_step_sources, DependencyInput,
-    DocumentRef, NodeKey, RefinementQueryKind, RefinementQueryRequest, RefinementQuerySubject,
-    RefinementUniverse, ReplayLimits, ScalarLimits, SourceIdentity, StageLimits,
+    acquire_checked_closure, encode_refinement_query, DependencyInput, DocumentRef, NodeKey,
+    RefinementQueryKind, RefinementQueryRequest, RefinementQuerySubject, RefinementUniverse,
+    ReplayLimits, ScalarLimits, SourceIdentity, StageLimits,
 };
 use quire_exact::Cancel;
 use serde_json::{json, Value};
@@ -177,7 +177,7 @@ fn authored_unit(abstract_digest: &str, concrete_digest: &str, reverse: bool) ->
 type Expected = RefinementExpected<NodeKey, [String; 2]>;
 type Run = RefinementRun<NodeKey, [String; 2]>;
 
-fn source_records(reverse: bool) -> (Vec<u64>, Vec<Expected>, Vec<Run>) {
+fn source_records(reverse: bool) -> (Vec<Expected>, Vec<Run>) {
     let (abstract_bytes, abstract_digest, abstract_hex) = model(ABSTRACT, &[]);
     let names: Vec<_> = (0..7).map(|index| format!("op{index}")).collect();
     let names: Vec<_> = names.iter().map(String::as_str).collect();
@@ -234,11 +234,6 @@ fn source_records(reverse: bool) -> (Vec<u64>, Vec<Expected>, Vec<Run>) {
         subject(CONCRETE, concrete_initial),
         subject(ABSTRACT, abstract_initial),
     );
-    let sources = refinement_step_sources(&request).expect("canonical source row mapping");
-    assert_eq!(sources.len(), 7);
-    let mut sorted = sources.clone();
-    sorted.sort_unstable();
-    assert_eq!(sorted, (0..7).collect::<Vec<_>>());
     let mut expected = Vec::new();
     let mut records = Vec::new();
     for role in
@@ -291,20 +286,17 @@ fn source_records(reverse: bool) -> (Vec<u64>, Vec<Expected>, Vec<Run>) {
         });
         records.push(Run::from_execution(subjects, execution));
     }
-    (sources, expected, records)
+    (expected, records)
 }
 
-/// The source row's written position must never replace its canonical Step ordinal.
+/// A named step row carries its query bytes to its new declaration-order position.
 #[trace("TC-059", "FR-045-AC-4")]
 #[test]
-fn source_row_permutation_keeps_canonical_refinement_query_bindings() {
-    let (first_sources, first_expected, first_records) = source_records(false);
-    let (reordered_sources, reordered_expected, mut reordered_records) = source_records(true);
-    assert_ne!(first_sources, reordered_sources);
-    for row in 0..7 {
-        assert_eq!(reordered_sources[row], 6 - first_sources[row]);
-    }
+fn source_row_permutation_moves_refinement_query_bindings_with_named_rows() {
+    let (first_expected, first_records) = source_records(false);
+    let (reordered_expected, mut reordered_records) = source_records(true);
     assert_eq!(first_expected.len(), 8);
+    assert_eq!(reordered_expected.len(), 8);
     for left in 1..8 {
         for right in left + 1..8 {
             assert_ne!(
@@ -316,42 +308,50 @@ fn source_row_permutation_keeps_canonical_refinement_query_bindings() {
             );
         }
     }
-    for (before, after) in first_expected.iter().zip(&reordered_expected) {
+    for source_row in 0..7 {
+        let before = &first_expected[source_row + 1];
+        let after = &reordered_expected[7 - source_row];
+        assert_eq!(before.role, RefinementRole::Step { row: source_row });
+        assert_eq!(
+            after.role,
+            RefinementRole::Step {
+                row: 6 - source_row
+            }
+        );
         assert_eq!(before.item, after.item);
         assert_eq!(before.subjects, after.subjects);
-        assert_eq!(before.role, after.role);
-        assert_eq!(before.query_bytes, after.query_bytes);
+        assert_eq!(
+            before.query_bytes, after.query_bytes,
+            "op{source_row} query moves with its row"
+        );
         assert_ne!(before.attempt, after.attempt);
     }
+    assert_eq!(first_expected[0].role, RefinementRole::Base);
+    assert_eq!(reordered_expected[0].role, RefinementRole::Base);
+    assert_eq!(
+        first_expected[0].query_bytes,
+        reordered_expected[0].query_bytes
+    );
     assert!(refinement_handoff(7, &first_expected, &first_records).is_ok());
     reordered_records.reverse();
     assert!(refinement_handoff(7, &reordered_expected, &reordered_records).is_ok());
-    let row = first_sources
+    let first = reordered_records
         .iter()
-        .position(|&source| source == 0)
-        .expect("op0 is the first authored step");
-    assert_ne!(
-        u64::try_from(row).expect("seven rows fit u64"),
-        reordered_sources[row]
-    );
-    assert_eq!(
-        reordered_sources[row], 6,
-        "op0 moves to the last source row"
-    );
-    let source_position = usize::try_from(reordered_sources[row]).expect("source position");
-    let index = reordered_records
+        .position(|record| record.role == RefinementRole::Step { row: 0 })
+        .expect("op6 at row zero");
+    let last = reordered_records
         .iter()
-        .position(|record| record.role == RefinementRole::Step { row })
-        .expect("selected canonical row");
-    reordered_records[index].role = RefinementRole::Step {
-        row: source_position,
-    };
+        .position(|record| record.role == RefinementRole::Step { row: 6 })
+        .expect("op0 at row six");
+    reordered_records[first].role = RefinementRole::Step { row: 6 };
+    reordered_records[last].role = RefinementRole::Step { row: 0 };
     assert_eq!(
         refinement_handoff(7, &reordered_expected, &reordered_records),
-        Err(RefinementHandoffError::Shape)
+        Err(RefinementHandoffError::Association)
     );
-    reordered_records[index].role = RefinementRole::Step { row };
-    reordered_records[index]
+    reordered_records[first].role = RefinementRole::Step { row: 0 };
+    reordered_records[last].role = RefinementRole::Step { row: 6 };
+    reordered_records[last]
         .query_bytes
         .as_mut()
         .expect("query present")[0] ^= 1;
@@ -359,7 +359,7 @@ fn source_row_permutation_keeps_canonical_refinement_query_bindings() {
         refinement_handoff(7, &reordered_expected, &reordered_records),
         Err(RefinementHandoffError::Association)
     );
-    reordered_records[index]
+    reordered_records[last]
         .query_bytes
         .as_mut()
         .expect("query present")[0] ^= 1;
@@ -367,8 +367,8 @@ fn source_row_permutation_keeps_canonical_refinement_query_bindings() {
         .iter()
         .position(|record| record.role == RefinementRole::Base)
         .expect("base record");
-    reordered_records[base].role = RefinementRole::Step { row };
-    reordered_records[index].role = RefinementRole::Base;
+    reordered_records[base].role = RefinementRole::Step { row: 6 };
+    reordered_records[last].role = RefinementRole::Base;
     assert_eq!(
         refinement_handoff(7, &reordered_expected, &reordered_records),
         Err(RefinementHandoffError::Association)
