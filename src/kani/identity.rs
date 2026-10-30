@@ -214,9 +214,12 @@ pub struct CollectionPreconditionIdentity {
 }
 
 pub(crate) fn collection_source_digest(source: &str) -> String {
-    use sha2::Digest;
-    let digest = sha2::Sha256::digest(source.as_bytes());
-    digest.iter().map(|byte| format!("{byte:02x}")).collect()
+    let digest = qsl_replay::ByteDigest::of(source.as_bytes());
+    digest
+        .as_bytes()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 /// Exact generated assertion bound to a collection precondition's Kani check location.

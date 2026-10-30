@@ -15,7 +15,8 @@ use qsl_replay::{
     SourceIdentity, StateEnvironment, WitnessValue,
 };
 use quire_contract_codegen::{
-    classify_kani_run, execute_kani_obligation, negotiate_kani_obligations, select_counterexample,
+    classify_kani_run, execute_kani_obligation, negotiate_kani_obligations, run_terminal_value,
+    select_counterexample, settle_v2_collection_precondition_falsification,
     CollectionElementIdentity, CollectionKindIdentity, CollectionPredicateIdentity,
     InvalidObligationItem, KaniCollectionObligationHarness, KaniExecutableHarness,
     KaniExecutionRequest, KaniInstallation, KaniObligationOutcome, KaniObligationRequest,
@@ -2367,7 +2368,7 @@ fn real_kani_collection_precondition_distinguishes_totality_from_satisfiability(
             4,
         )
         .expect("Kani's bound totality assertion has one concrete playback");
-        let decoded = quire_contract_codegen::decode_v2_clause_falsification(
+        let (decoded, settlement) = settle_v2_collection_precondition_falsification(
             &harness,
             &playback,
             quire_contract_codegen::WitnessDecodeLimits {
@@ -2385,6 +2386,42 @@ fn real_kani_collection_precondition_distinguishes_totality_from_satisfiability(
             .iter()
             .all(|item| matches!(item, WitnessValue::Integer(0..=3))));
         assert_ne!(items[0], items[1]);
+        let mut evidence = healthy.clone();
+        evidence.outcome = classified.outcome.clone();
+        evidence.success_checks = classified.success_checks;
+        evidence.checks = classified.checks.clone();
+        assert_eq!(
+            run_terminal_value(&evidence, Some(settlement)).expect("typed settlement maps"),
+            qsl_replay::TerminalValue::Failed,
+            "{variant}: a totality mutant is a CG defect, not a contract refutation"
+        );
+        let wrong_assertion = counterexample.replacen(
+            "the selected precondition completes a Boolean",
+            "a different assertion",
+            1,
+        );
+        assert_ne!(wrong_assertion, counterexample.as_str());
+        let wrong_playback = quire_contract_codegen::parse_assertion_playback(
+            &wrong_assertion,
+            "collection precondition",
+            variant,
+            64 * 1024,
+            4,
+        )
+        .expect("mutated assertion text remains a valid playback");
+        assert_eq!(
+            settle_v2_collection_precondition_falsification(
+                &harness,
+                &wrong_playback,
+                quire_contract_codegen::WitnessDecodeLimits {
+                    bytes: 64 * 1024,
+                    values: 4,
+                },
+            )
+            .unwrap_err()
+            .code,
+            "cg_witness_assertion_mismatch"
+        );
     }
 }
 

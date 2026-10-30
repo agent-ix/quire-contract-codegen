@@ -39,8 +39,10 @@ use crate::kani::{
     identity::{
         CollectionElementIdentity, CollectionKindIdentity, CollectionObligationIdentity,
         KaniV2ClauseObligationHarness, ObligationBinding,
+        COLLECTION_PRECONDITION_TOTALITY_ASSERTION,
     },
     output::playback::{Playback, PlaybackRefusal, WitnessDecodeLimits},
+    terminal::ReplaySettlement,
 };
 
 /// Why a persisted argument schema could not type a Kani playback.
@@ -183,6 +185,19 @@ pub fn decode_v2_clause_falsification(
         ));
     }
     if let Some(marker) = &identity.collection_precondition {
+        // A falsification of a different assertion is not evidence about totality.
+        // The source digest and line are checked before launch; the playback must also name
+        // the generated assertion's message before its values can be settled.
+        let message = "the selected precondition completes a Boolean";
+        if !COLLECTION_PRECONDITION_TOTALITY_ASSERTION.contains(message)
+            || !playback.matches_generated_assertion_message(message)
+        {
+            return Err(DecodeFailure::new(
+                "cg_witness_assertion_mismatch",
+                identity.harness_symbol.as_str(),
+                playback.check_clause,
+            ));
+        }
         return decode_collection_precondition(&marker.collection, playback, limits);
     }
     let bindings = identity
@@ -220,6 +235,30 @@ pub fn decode_v2_clause_falsification(
         }
     }
     Ok(decoded)
+}
+
+/// Type a collection precondition's totality counterexample and settle the CG-owned
+/// falsification. Until an independent native clause evaluation exists, a totality failure
+/// cannot be called a contract refutation: it is a CG defect and maps to `Failed`.
+///
+/// # Errors
+///
+/// Returns [`DecodeFailure`] if this is not a collection precondition or its playback does not
+/// match the bound totality assertion and the admitted collection domain.
+pub fn settle_v2_collection_precondition_falsification(
+    harness: &KaniV2ClauseObligationHarness,
+    playback: &Playback<'_>,
+    limits: WitnessDecodeLimits,
+) -> Result<(Vec<(String, WitnessValue)>, ReplaySettlement<'static>), DecodeFailure> {
+    if harness.identity.collection_precondition.is_none() {
+        return Err(DecodeFailure::new(
+            "cg_witness_not_collection_precondition",
+            harness.identity.harness_symbol.as_str(),
+            harness.identity.module_symbol.as_str(),
+        ));
+    }
+    let witness = decode_v2_clause_falsification(harness, playback, limits)?;
+    Ok((witness, ReplaySettlement::CgDefect))
 }
 
 /// Decode the receiver's collection from Kani's length draw followed by one draw per
