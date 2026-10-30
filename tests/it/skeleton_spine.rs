@@ -94,6 +94,7 @@ fn locked(identity: &str, bytes: &[u8]) -> LockedSource {
 fn inputs(source: &str, dependencies: Vec<DependencyLock>) -> ReplayInputs {
     ReplayInputs {
         decode_limits: FUNCTION_PLAYBACK_LIMITS,
+        package_name: "skeleton-spine".to_owned(),
         source: locked(IDENTITY, source.as_bytes()),
         dependencies,
         accounting_limits: UNLIMITED,

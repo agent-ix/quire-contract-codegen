@@ -362,6 +362,8 @@ pub struct DependencyLock {
 pub struct ReplayInputs {
     /// Required limits for decoding the retained Kani witness.
     pub decode_limits: WitnessDecodeLimits,
+    /// The originating checked package's manifest library name.
+    pub package_name: String,
     /// The proved unit's source.
     pub source: LockedSource,
     /// The proved package lock's dependency selections, each with its own source.
@@ -621,6 +623,7 @@ impl ReplayPackage {
         let source = &inputs.source;
         let site = call_site(
             source.source_identity(),
+            inputs.package_name.clone(),
             &source.identity,
             &source.bytes,
             [],
@@ -1110,6 +1113,7 @@ fn compile_corpus_qsl_package(
             &dependency_source.namespace,
             &dependency_source.revision,
         ),
+        dependency_source.identity.clone(),
         &dependency_source.identity,
         &dependency_source.bytes,
         [],
@@ -1121,6 +1125,7 @@ fn compile_corpus_qsl_package(
     ReplayPackage::new(
         ReplayInputs {
             decode_limits,
+            package_name: "ir-453-corpus".to_owned(),
             source: LockedSource {
                 authority: "agent-ix".to_owned(),
                 identity: case.artifacts.qsl_source.path.clone(),
@@ -1544,6 +1549,7 @@ mod tests {
                 bytes: 1_048_576,
                 values: 1024,
             },
+            package_name: "fixture".to_owned(),
             source: LockedSource {
                 authority: "agent-ix".to_owned(),
                 identity: "unit".to_owned(),

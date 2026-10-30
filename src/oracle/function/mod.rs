@@ -3664,8 +3664,8 @@ mod tests {
     #[test]
     fn selected_imported_call_is_ineligible_for_temporal_body_guard() -> Result<(), String> {
         use qsl_replay::{
-            compile_package, DependencyInput, ReplayLimits, SourceIdentity, StageLimits,
-            SuppliedLibrary,
+            compile_package, CompileUnit, DependencyInput, ReplayLimits, SourceIdentity,
+            StageLimits, SuppliedLibrary,
         };
         use quire_contract_model::{
             CheckedPackageEvidence, CheckedPackageV2ReadResult, ContractDependencyInput,
@@ -3675,9 +3675,12 @@ mod tests {
             profile v = \"quire.value.complete/v1\";\n\
             function f using v(a: Int[0, 9]): Boolean pure { a < 5 }\n";
         let library_compiled = compile_package(
-            SourceIdentity::new("test", "selected-library", "git", "fixture"),
-            "selected-library.native",
-            library_source.as_bytes(),
+            CompileUnit {
+                source: SourceIdentity::new("test", "selected-library", "git", "fixture"),
+                package_name: "selected-library".to_owned(),
+                path: "selected-library.native",
+                bytes: library_source.as_bytes(),
+            },
             [],
             &DependencyInput::default(),
             StageLimits::default(),
@@ -3706,9 +3709,12 @@ mod tests {
         }])
         .expect("one selected library");
         let compiled = compile_package(
-            SourceIdentity::new("test", "selected-program", "git", "fixture"),
-            "selected-program.native",
-            source.as_bytes(),
+            CompileUnit {
+                source: SourceIdentity::new("test", "selected-program", "git", "fixture"),
+                package_name: "selected-program".to_owned(),
+                path: "selected-program.native",
+                bytes: source.as_bytes(),
+            },
             [],
             &dependencies,
             StageLimits::default(),
