@@ -5,14 +5,16 @@ use qsl_replay::{
     replay_composite_parity, settle_verified_shadow, Certification, CompositeEvidence,
     CompositeIdentity, CompositeParityClaim, CompositeParityResult, DigestDomain, DigestRecord,
     EqualityOperator, EqualityOutcome, FalsifiedParity, Identifier, InconclusiveCause, Integer,
-    NativeParityObservation, ObligationIdentity, OccurrenceKey, Origin, ProofBasis, Refinement,
-    ReplayLimits, ReplayRefusal, ReplayRequest, ReplayRequestRefusal, ReplayRequestWire,
-    ReplaySource, RequestTargetWire, Role, ScalarLimits, StateEnvironment, TerminalValue,
-    VerifiedShadow, VerifiedShadowResult, WireNodeId, WitnessValue,
+    NativeParityObservation, NodeKey, ObligationIdentity, OccurrenceKey, Origin, ProofBasis,
+    Refinement, ReplayLimits, ReplayRefusal, ReplayRequest, ReplayRequestRefusal,
+    ReplayRequestWire, ReplaySource, RequestTargetWire, Role, ScalarLimits, StateEnvironment,
+    TerminalValue, VerifiedShadow, VerifiedShadowResult, WitnessValue,
 };
 use quire_contract_codegen::{
     composite_parity_terminal_value, verified_shadow_terminal_value, CompositeReportError,
 };
+use quire_contract_model::{CheckedNodeId, CheckedNodePathSegment};
+use quire_exact::PathSegment;
 
 fn limits() -> ScalarLimits {
     ScalarLimits {
@@ -32,6 +34,18 @@ fn limits() -> ScalarLimits {
 struct PublicCompositeFixture {
     wire: ReplayRequestWire,
     claim: CompositeParityClaim,
+}
+
+fn node_key(id: &CheckedNodeId) -> NodeKey {
+    let path = id
+        .path
+        .iter()
+        .map(|segment| match segment {
+            CheckedNodePathSegment::Name(name) => PathSegment::Text(name.to_string()),
+            CheckedNodePathSegment::Node(child) => PathSegment::Node(node_key(child)),
+        })
+        .collect();
+    NodeKey::new(id.package.to_string(), path, id.ordinal).expect("admitted structural node")
 }
 
 fn sequence_value(value: i64) -> WitnessValue {
@@ -58,7 +72,7 @@ fn public_report(
     replay_limits: ReplayLimits,
 ) -> (CompositeIdentity, qsl_replay::CompositeParityReport) {
     let sent = CompositeIdentity::new(
-        ObligationIdentity::from_digest(wire.obligation_identity),
+        wire.obligation_identity.clone(),
         &claim,
         CompositeEvidence::Falsified(Box::new(evidence.clone())),
     );
@@ -68,9 +82,9 @@ fn public_report(
 
 fn public_composite_fixture() -> PublicCompositeFixture {
     use qsl_replay::{
-        compile_package, parity_obligation, BoundEntries, ByteDigest, DependencyInput, Domain,
-        DomainKey, DomainKind, FiniteBound, OperandIdentity, ParityArgument, ParityPreimage,
-        ProofBound, SourceIdentity, StageLimits,
+        compile_package, parity_obligation, BoundEntries, DependencyInput, Domain, DomainKey,
+        DomainKind, FiniteBound, OperandIdentity, ParityArgument, ParityPreimage, ProofBound,
+        SourceIdentity, StageLimits,
     };
     use quire_contract_model::{
         CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2,
@@ -126,7 +140,10 @@ fn public_composite_fixture() -> PublicCompositeFixture {
         .as_array()
         .unwrap()
         .iter()
-        .map(|entry| WireNodeId::from_hex(entry["target"]["digest"].as_str().unwrap()).unwrap())
+        .map(|entry| {
+            let id: CheckedNodeId = serde_json::from_value(entry["target"].clone()).unwrap();
+            node_key(&id)
+        })
         .collect::<Vec<_>>();
     assert_eq!(parameters.len(), 2);
     let application = nodes
@@ -137,7 +154,7 @@ fn public_composite_fixture() -> PublicCompositeFixture {
                     if operation.identity() == Some("quire.op.structural.eq"))
         })
         .expect("compiled structural equality");
-    let node = WireNodeId::from_hex(&application.node_id.digest).unwrap();
+    let node = node_key(&application.node_id);
     let occurrence = &application.occurrences[0];
     let origin = Origin::new(Role::new("expression"), occurrence.ordinal);
     let bounds = parameters
@@ -146,7 +163,7 @@ fn public_composite_fixture() -> PublicCompositeFixture {
             [
                 ProofBound::new(
                     DomainKey::Node {
-                        node: *parameter,
+                        node: parameter.clone(),
                         path: Vec::new(),
                     },
                     Some(DomainKind::Collection),
@@ -155,7 +172,7 @@ fn public_composite_fixture() -> PublicCompositeFixture {
                 .expect("sequence cardinality pairs with collection"),
                 ProofBound::new(
                     DomainKey::Node {
-                        node: *parameter,
+                        node: parameter.clone(),
                         path: vec![0],
                     },
                     Some(DomainKind::Integer),
@@ -171,7 +188,7 @@ fn public_composite_fixture() -> PublicCompositeFixture {
             && pair[1].kind() == Some(DomainKind::Integer)
     }));
     let claim = CompositeParityClaim {
-        node,
+        node: node.clone(),
         occurrence: origin.clone(),
         operator: EqualityOperator::Equal,
         obligation_kind: "bounded_shadow".to_owned(),
@@ -180,7 +197,7 @@ fn public_composite_fixture() -> PublicCompositeFixture {
         content_identity: DigestRecord::mint(DigestDomain::Sha256Jcs, [3; 32]),
     };
     let preimage = ParityPreimage {
-        node,
+        node: node.clone(),
         occurrence: origin,
         obligation_kind: claim.obligation_kind.clone(),
         arguments: parameters
@@ -194,38 +211,29 @@ fn public_composite_fixture() -> PublicCompositeFixture {
                     .cloned()
                     .collect();
                 ParityArgument {
-                    identity: OperandIdentity::GraphChild(*parameter),
+                    identity: OperandIdentity::GraphChild(parameter.clone()),
                     domain: Domain::Bounds(BoundEntries::new(parameter_bounds).unwrap()),
                 }
             })
             .collect(),
     };
     let obligation = parity_obligation(&preimage).expect("the public preimage encodes");
-    let digest = DigestRecord::mint(
-        DigestDomain::SourceBytesV1,
-        ByteDigest::of(source).as_bytes(),
-    );
     let wire = ReplayRequestWire {
+        package_name: "ir666".to_owned(),
         profile_selections: Vec::new(),
-        package_id: (
-            Some(compiled.package_id().domain().as_str().to_owned()),
-            compiled.package_id().hex(),
-        ),
-        source_digests: vec![(
+        sources: vec![(
             "test".to_owned(),
             "ir666".to_owned(),
             "git".to_owned(),
             "r1".to_owned(),
-            Some(digest.domain().as_str().to_owned()),
-            digest.hex(),
         )],
         dependencies: Vec::new(),
         replay_target: RequestTargetWire::function(
             qsl_replay::QualifiedName::new(vec![Identifier::new("f").unwrap()]).unwrap(),
-            OccurrenceKey::new(preimage.node, preimage.occurrence.clone()),
+            OccurrenceKey::new(preimage.node.clone(), preimage.occurrence.clone()),
         ),
         source: ReplaySource::Input(Vec::new()),
-        obligation_identity: *obligation.as_bytes(),
+        obligation_identity: obligation,
         backend: "test-backend".to_owned(),
         state_environment: StateEnvironment::new(Vec::new()),
         accounting_limits: limits(),
@@ -233,11 +241,8 @@ fn public_composite_fixture() -> PublicCompositeFixture {
         supplied_limits: None,
         object_environment: None,
         declared_domains: Vec::new(),
-        byte_provision: vec![(
-            Some(digest.domain().as_str().to_owned()),
-            digest.hex(),
-            source.to_vec(),
-        )],
+        byte_provision: vec![("test".to_owned(), "ir666".to_owned(), source.to_vec())],
+        documents: Vec::new(),
     };
     PublicCompositeFixture { wire, claim }
 }
@@ -513,7 +518,7 @@ fn tc_048_verified_public_rows_keep_their_qsl_terminal_values() {
         ),
     ] {
         let sent = CompositeIdentity::new(
-            ObligationIdentity::from_digest(fixture.wire.obligation_identity),
+            fixture.wire.obligation_identity.clone(),
             &fixture.claim,
             CompositeEvidence::Verified(verified),
         );
@@ -561,7 +566,7 @@ fn tc_041_bound_prepare_refusal_precedes_disagreed() {
     let mut evidence = falsified_evidence();
     evidence.refinement = Refinement::Disagreed;
     let sent = CompositeIdentity::new(
-        ObligationIdentity::from_digest(wire.obligation_identity),
+        wire.obligation_identity.clone(),
         &claim,
         CompositeEvidence::Falsified(Box::new(evidence.clone())),
     );
@@ -596,7 +601,7 @@ fn tc_048_falsified_report_requires_every_sent_identity_member() {
     let claim = fixture.claim;
     let evidence = falsified_evidence();
     let sent = CompositeIdentity::new(
-        ObligationIdentity::from_digest(wire.obligation_identity),
+        wire.obligation_identity.clone(),
         &claim,
         CompositeEvidence::Falsified(Box::new(evidence.clone())),
     );
@@ -617,10 +622,10 @@ fn tc_048_falsified_report_requires_every_sent_identity_member() {
 
     let mut changed = Vec::new();
     let mut other = sent.clone();
-    other.obligation = ObligationIdentity::from_digest([8; 32]);
+    other.obligation = ObligationIdentity::new(other.node.clone(), None, 1);
     changed.push(other);
     let mut other = sent.clone();
-    other.node = WireNodeId::from_digest([8; 32]);
+    other.node = NodeKey::new("ir666", vec![PathSegment::Text("other".to_owned())], 0).unwrap();
     changed.push(other);
     let mut other = sent.clone();
     other.occurrence = Origin::new(Role::new("expression"), 1);
@@ -727,13 +732,13 @@ fn tc_048_changed_request_binds_to_its_actual_sent_identity() {
     let mut claim = fixture.claim;
     let evidence = falsified_evidence();
     let unsent = CompositeIdentity::new(
-        ObligationIdentity::from_digest(wire.obligation_identity),
+        wire.obligation_identity.clone(),
         &claim,
         CompositeEvidence::Falsified(Box::new(evidence.clone())),
     );
     claim.limits.work_units += 1;
     let sent = CompositeIdentity::new(
-        ObligationIdentity::from_digest(wire.obligation_identity),
+        wire.obligation_identity.clone(),
         &claim,
         CompositeEvidence::Falsified(Box::new(evidence.clone())),
     );
@@ -761,7 +766,7 @@ fn tc_048_native_cause_is_part_of_the_bound_observation() {
         "actual native stop".to_owned(),
     ));
     let sent = CompositeIdentity::new(
-        ObligationIdentity::from_digest(wire.obligation_identity),
+        wire.obligation_identity.clone(),
         &claim,
         CompositeEvidence::Falsified(Box::new(evidence.clone())),
     );
@@ -849,7 +854,7 @@ fn tc_048_verified_report_requires_success_count_and_refinement() {
         refinement: Refinement::Exhausted,
     };
     let sent = CompositeIdentity::new(
-        ObligationIdentity::from_digest(wire.obligation_identity),
+        wire.obligation_identity.clone(),
         &claim,
         CompositeEvidence::Verified(verified),
     );
@@ -905,7 +910,7 @@ fn tc_048_verified_prepare_refusal_passes_through() {
         refinement: Refinement::Disagreed,
     };
     let sent = CompositeIdentity::new(
-        ObligationIdentity::from_digest(fixture.wire.obligation_identity),
+        fixture.wire.obligation_identity.clone(),
         &fixture.claim,
         CompositeEvidence::Verified(verified),
     );
