@@ -30,8 +30,9 @@ pub(crate) fn named_state_frame_harness(
 ) -> StateFrameHarness {
     let id = |digit: &str| -> quire_contract_model::CheckedNodeId {
         serde_json::from_value(serde_json::json!({
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": digit.repeat(64),
+            "package": "test-kani-harness",
+            "path": [digit],
+            "ordinal": 0,
         }))
         .expect("a node id")
     };
@@ -40,6 +41,18 @@ pub(crate) fn named_state_frame_harness(
             ceilings: crate::kani::test_support::proof_ceilings::proof_ceilings_with_wall_clock(
                 std::time::Duration::from_secs(30),
             ),
+            package: serde_json::from_value(serde_json::json!({
+                "name": "test-kani-harness",
+                "lock": {
+                    "sources": [],
+                    "edition": {"role": "edition", "definition": {"authority": "test", "identity": "edition"}},
+                    "profile_selections": [],
+                    "definition_selections": [],
+                    "required_features": [],
+                    "dependency_selections": []
+                }
+            }))
+            .expect("test package source"),
             clause: id("1"),
             scope: StateFrameScope {
                 operation: "deposit".to_owned(),
