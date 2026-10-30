@@ -57,10 +57,10 @@ finite-cardinality field whose element type is unbounded `Integer`; require IR
 For each supported function-body and invariant collection claim, inspect the
 generated `kani::any()` draws and assumptions. Check both cardinality endpoints and every intervening
 length, both inclusive `IntRange` endpoints and intervening values, both
-Boolean values, and preservation of declared order and uniqueness. Replay the
-same authored function with `qsl_replay::replay` as the independent native
-oracle and compare its result with the generated claim's assertion for the
-same input. Seed a claim or subject defect and require installed Kani to report
+Boolean values, and preservation of declared order and uniqueness. For a function-body control, replay the same authored function with
+`qsl_replay::replay` as the independent native oracle and compare its result
+with the generated claim's assertion for the same input. For a falsified
+invariant, use `qsl_replay::replay_state_clause` with a snapshot observation. Seed a claim or subject defect and require installed Kani to report
 `Falsified` with an in-domain playback; the healthy direct-assertion case must
 be `Verified` with its final cover satisfied. Refuse an unbounded cardinality, unbounded
 element type, unsupported collection form or unsupported `forall`/`exists`
@@ -72,16 +72,25 @@ For FR-015-AC-96/99 (IR-1091), author precondition and postcondition
 collection clauses over the same QSL-emitted, IR-admitted OrderedSet field as a
 function-body and invariant control. Submit one item per clause through the
 public V2 request. Require the same inclusive cardinality, element, order and
-uniqueness assumptions for every kind, with no duplicate standalone proof.
-The precondition harness checks totality and satisfiability through a cover;
-a false precondition is not a universal-assertion failure, and an impossible
-precondition reports `CoverUnsatisfied`. The postcondition harness draws the
-pre-state and operation parameters, assumes only supported sibling
-preconditions, calls the subject, checks produced post-state domains and the
-authored postcondition, and covers non-vacuity. The invariant keeps a direct
-assertion. Replay a concrete clause witness through `qsl_replay::replay_state_clause`
-with its operation context. A healthy postcondition verifies; an authored
-postcondition or subject mutant falsifies with an in-domain playback. These
+uniqueness assumptions for every drawn input kind, with no duplicate standalone
+proof. The precondition harness asserts that every drawn evaluation completes
+a Boolean, permitting both true and false, and separately covers a true case;
+an impossible but total precondition reports `CoverUnsatisfied`. Seed a
+precondition oracle mutant that yields `Undefined`, `Refused` or `Incomplete`
+on an in-domain draw and require a falsified totality assertion, never an
+assumption. Compare its native result with QSL's public clause-evaluation
+facade once available; a false precondition is not a replayable violation.
+The postcondition harness draws the pre-state and operation parameters, assumes
+every supported sibling precondition and refuses if any sibling is unsupported,
+then calls the subject. It asserts produced post-state cardinality, element
+domain, order and uniqueness, as well as the authored postcondition, and covers
+non-vacuity. Seed subjects that produce a duplicate, misordered, over-cardinality
+or out-of-range collection; each must falsify with in-domain pre-state playback
+and none may be assumed away. The invariant keeps a direct assertion. Replay
+a falsified invariant through `qsl_replay::replay_state_clause` with a snapshot
+observation, and a falsified postcondition with an invocation plus pre/post
+snapshots. A healthy postcondition verifies; an authored postcondition or
+subject mutant falsifies with an in-domain playback. These
 pre/post controls are planned and receive no current proof credit.
 
 For FR-015-AC-128 (IR-1091), author a QSL invariant and a constraint clause
@@ -308,10 +317,11 @@ Four distinct harnesses carry their bounds; no assumption
 excludes an undefined, refused or incomplete outcome; the unbounded, the
 unsatisfiable and the caller-declared obligations are refused with no harness.
 For collection claims, the function-body and invariant direct harnesses
-assert their authored bodies over the full symbolic domain. The precondition
-uses a totality/satisfiability cover and does not assert universal truth; the
-postcondition uses an operation call with supported sibling preconditions and
-asserts produced post-state domains and its authored clause. These pre/post
+assert their authored bodies over the full symbolic domain. The precondition asserts Boolean completion on every draw and separately
+covers a true case; it does not assert universal truth. The postcondition calls
+the subject after all supported sibling preconditions (refusing unsupported
+siblings) and asserts produced post-state cardinality, element domain, order
+and uniqueness as well as its authored clause. These pre/post
 results remain planned under IR-1091 and are not credited by the current
 function-body evidence.
 For the collection claim, lower `0` with no finite upper bound is admitted by
