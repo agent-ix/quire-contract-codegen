@@ -289,6 +289,12 @@ struct SourceMap<'a> {
 }
 
 fn component(source: &str) -> String {
+    // The constructive core emits a standalone file header. The combined runner has its own
+    // header, and map lines must address the component body rather than that inner header.
+    let source = source
+        .strip_prefix("// SPDX-License-Identifier: MIT OR Apache-2.0\n")
+        .and_then(|rest| rest.split_once("\n\n").map(|(_, body)| body))
+        .unwrap_or(source);
     source
         .lines()
         .filter(|line| !line.starts_with("#!["))
