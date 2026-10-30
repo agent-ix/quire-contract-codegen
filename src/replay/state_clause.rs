@@ -600,6 +600,7 @@ impl StateClauseReplay {
         let (run, dependencies) = run.admit().map_err(StateClauseReplayError::Dependencies)?;
         let located = call_site(
             run.source.source_identity(),
+            package.name().to_owned(),
             &run.source.identity,
             &run.source.bytes,
             packages.iter().map(|package| package.bytes.as_slice()),

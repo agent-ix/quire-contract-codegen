@@ -581,6 +581,7 @@ impl FrameReplay {
         let replay_limits = run.replay_limits;
         let located = call_site(
             run.source.source_identity(),
+            run.package_name.clone(),
             &run.source.identity,
             &run.source.bytes,
             packages.iter().map(|package| package.bytes.as_slice()),
