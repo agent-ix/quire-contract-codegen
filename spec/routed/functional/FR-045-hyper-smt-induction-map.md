@@ -211,7 +211,9 @@ base/step evidence classifier exist in `src/routed/smt/`; QSL exports the
 hyper query encoder and outcome types, but their CG integration remains
 planned. The refinement Base/Step record collection, validation, cvc5 proof
 framing, and deterministic FR-314 handoff are partial after CG #630 and the
-subsequent IR-1120 implementation. Live canonical source-row permutation and
-cvc5 output through the QSL reader remain open in TC-059 steps 5-8. CG SHALL
+subsequent IR-1120 implementation. The live seven-row source permutation now
+checks QSL's canonical row mapping and exact emitted query bytes against CG's
+invocation and handoff records. cvc5 output through the QSL reader remains open
+in TC-059 step 6. CG SHALL
 pass the exact extracted interior bytes through the QSL reader before claiming
 AC-5 or TC-059 step 6 covered.
