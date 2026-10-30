@@ -29,7 +29,7 @@ fn request<'a>(
             minimum_rejected_cases: 0,
             maximum_discarded_cases: 0,
         },
-        process_package_id: None,
+        process_source: None,
     }
 }
 
@@ -42,27 +42,35 @@ fn v2_numeric_bundle_keeps_selected_identity_and_runs_both_modes() {
         .expect("selected V2 numeric runner");
     let repeated = generate_v2_numeric_strategy(&request(&package, &clause, &claim))
         .expect("same selected claim");
-    assert_eq!(
-        generated.identity.requirement,
-        format!("qocc2_{}_5_636c61696d_{}", clause.digest, claim.ordinal)
-    );
-    let package_id = package.package_id();
-    let hex = |text: &str| {
-        text.as_bytes()
+    let hex = |bytes: &[u8]| {
+        bytes
             .iter()
             .map(|byte| format!("{byte:02x}"))
             .collect::<String>()
     };
+    let canonical = |value: serde_json::Value| {
+        quire_canonical::to_vec(&value, quire_canonical::Limits::new(1 << 20))
+            .expect("canonical identity")
+    };
+    let node_bytes = canonical(serde_json::to_value(&clause).expect("typed clause JSON"));
+    assert_eq!(
+        generated.identity.requirement,
+        format!(
+            "qocc2_{}_{}_5_636c61696d_{}",
+            node_bytes.len(),
+            hex(&node_bytes),
+            claim.ordinal
+        )
+    );
+    let lock_bytes = canonical(serde_json::to_value(package.lock()).expect("typed lock JSON"));
     assert_eq!(
         generated.identity.revision,
         format!(
-            "qpkg2_{}_{}_{}_{}_{}_{}",
-            package_id.domain.len(),
-            hex(&package_id.domain),
-            package_id.algorithm.len(),
-            hex(&package_id.algorithm),
-            package_id.digest.len(),
-            hex(&package_id.digest),
+            "qpkg2_{}_{}_{}_{}",
+            package.name().len(),
+            hex(package.name().as_bytes()),
+            lock_bytes.len(),
+            hex(&lock_bytes),
         )
     );
     assert_eq!(
@@ -91,11 +99,15 @@ fn v2_numeric_bundle_keeps_selected_identity_and_runs_both_modes() {
         .find(|artifact| artifact.path.ends_with(".json"))
         .expect("generated map");
     let parsed: serde_json::Value = serde_json::from_str(&map.contents).expect("source map JSON");
-    assert_eq!(parsed["identity"]["clause"]["digest"], &*clause.digest);
-    assert_eq!(parsed["identity"]["occurrence"]["role"], "claim");
     assert_eq!(
-        parsed["identity"]["packageId"]["digest"],
-        &*package.package_id().digest
+        parsed["identity"]["clause"],
+        serde_json::to_value(&clause).expect("node")
+    );
+    assert_eq!(parsed["identity"]["occurrence"]["role"], "claim");
+    assert_eq!(parsed["identity"]["source"]["name"], package.name());
+    assert_eq!(
+        parsed["identity"]["source"]["lock"],
+        serde_json::to_value(package.lock()).expect("lock")
     );
     assert_eq!(
         parsed["identity"]["requirement"],
@@ -103,8 +115,8 @@ fn v2_numeric_bundle_keeps_selected_identity_and_runs_both_modes() {
     );
     assert_eq!(parsed["identity"]["revision"], generated.identity.revision);
     assert_eq!(
-        parsed["comparison"]["digest"],
-        &*generated.comparison.comparison.digest
+        parsed["comparison"],
+        serde_json::to_value(&generated.comparison.comparison).expect("comparison")
     );
     let lines: Vec<_> = source.contents.lines().collect();
     for (field, marker) in [
@@ -318,7 +330,7 @@ fn v2_numeric_refusals_keep_first_typed_cause() {
         ordinal: claim.ordinal,
     };
     let mut wrong = request(&package, &clause, &wrong_role);
-    wrong.process_package_id = None;
+    wrong.process_source = None;
     let diagnostic = generate_v2_numeric_strategy(&wrong).expect_err("wrong claim role");
     assert_eq!(diagnostic.code, V2NumericErrorCode::MissingClaimOccurrence);
     assert_eq!(diagnostic.clause, clause);
@@ -354,13 +366,17 @@ fn v2_numeric_refusals_keep_first_typed_cause() {
 
     let (foreign_package, _, _) = admitted("self.balance > pre(self.balance)");
     let mut mismatched_owner = request(&package, &clause, &claim);
-    mismatched_owner.process_package_id = Some(foreign_package.package_id());
+    let foreign_source = quire_contract_model::ContractSourceV1 {
+        name: foreign_package.name().into(),
+        lock: foreign_package.lock().clone(),
+    };
+    mismatched_owner.process_source = Some(&foreign_source);
     let diagnostic = generate_v2_numeric_strategy(&mismatched_owner)
         .expect_err("process owner identity mismatch");
     assert_eq!(diagnostic.code, V2NumericErrorCode::OwnerIdentityMismatch);
     assert!(diagnostic.comparison.is_none());
     assert!(diagnostic.point.is_none());
-    assert_eq!(diagnostic.path, "request.package_id");
+    assert_eq!(diagnostic.path, "request.process_source");
 
     let overlapping = V2NumericRequest {
         key: V2SelectedClaimKey {
@@ -368,7 +384,7 @@ fn v2_numeric_refusals_keep_first_typed_cause() {
             claim_owner: &clause,
             occurrence: &wrong_role,
         },
-        process_package_id: Some(foreign_package.package_id()),
+        process_source: Some(&foreign_source),
         ..request(&package, &clause, &claim)
     };
     let diagnostic = generate_v2_numeric_strategy(&overlapping)
@@ -377,7 +393,7 @@ fn v2_numeric_refusals_keep_first_typed_cause() {
     assert!(generate_v2_numeric_strategy(&request(&package, &clause, &claim)).is_ok());
 
     let (other_package, absent_clause, _) = admitted("self.balance < pre(self.balance)");
-    assert_ne!(package.package_id(), other_package.package_id());
+    assert_ne!(package.lock(), other_package.lock());
     let absent = V2NumericRequest {
         key: V2SelectedClaimKey {
             clause: &absent_clause,

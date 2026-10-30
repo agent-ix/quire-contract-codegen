@@ -6,7 +6,7 @@
 use quire_contract_model::{
     CheckedClauseComparison, CheckedComparisonRefusal, CheckedExecutionPointError,
     CheckedExecutionPointRefusal, CheckedNodeId, CheckedOccurrence, CheckedPackageV2,
-    CheckedSemanticId, ExecutionPoint,
+    ContractSourceV1, ExecutionPoint,
 };
 use serde::Serialize;
 
@@ -47,7 +47,7 @@ pub struct V2NumericRequest<'a> {
     pub policy: V2NumericPolicy,
     /// Separately read FR-331 process request owner, if this is a process request.
     /// Linked requests have no second owner field.
-    pub process_package_id: Option<&'a CheckedSemanticId>,
+    pub process_source: Option<&'a ContractSourceV1>,
 }
 
 /// Exact selected identity published in the source and map.
@@ -61,7 +61,7 @@ pub struct V2NumericIdentity {
     /// Authentic claim occurrence.
     pub occurrence: CheckedOccurrence,
     /// Same-owner admitted package identity.
-    pub package_id: CheckedSemanticId,
+    pub source: ContractSourceV1,
     /// Canonical qocc2 rendering used as runtime requirement identity.
     pub requirement: String,
     /// Canonical qpkg2 rendering used as runtime revision identity.
@@ -235,35 +235,38 @@ fn map_population(
     result
 }
 
-fn hex_bytes(value: &str) -> String {
-    value
-        .as_bytes()
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
+fn hex_bytes(value: &[u8]) -> String {
+    value.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
-fn counted_hex(value: &str) -> String {
+fn counted_hex(value: &[u8]) -> String {
     format!("{}_{}", value.len(), hex_bytes(value))
 }
 
-fn render_requirement(key: V2SelectedClaimKey<'_>) -> String {
+fn render_requirement(
+    key: V2SelectedClaimKey<'_>,
+) -> Result<String, crate::core::canonical::DigestError> {
     // The only admitted role is Claim; the typed accessor refuses every other role.
-    format!(
+    let node = crate::core::canonical::preimage_value(key.clause)?;
+    let node = crate::core::canonical::content_bytes(&node)?;
+    Ok(format!(
         "qocc2_{}_{}_{}",
-        key.clause.digest,
-        counted_hex("claim"),
+        counted_hex(&node),
+        counted_hex(b"claim"),
         key.occurrence.ordinal
-    )
+    ))
 }
 
-fn render_revision(package_id: &CheckedSemanticId) -> String {
-    format!(
-        "qpkg2_{}_{}_{}",
-        counted_hex(&package_id.domain),
-        counted_hex(&package_id.algorithm),
-        counted_hex(&package_id.digest)
-    )
+fn render_revision(
+    package: &CheckedPackageV2,
+) -> Result<String, crate::core::canonical::DigestError> {
+    let lock = crate::core::canonical::preimage_value(package.lock())?;
+    let lock = crate::core::canonical::content_bytes(&lock)?;
+    Ok(format!(
+        "qpkg2_{}_{}",
+        counted_hex(package.name().as_bytes()),
+        counted_hex(&lock),
+    ))
 }
 
 fn render_execution_point(point: &ExecutionPoint) -> String {
@@ -335,14 +338,13 @@ fn generate_with_control(
     .map_err(|diagnostic| map_point(key, diagnostic.refusal))?;
     let population = prepare_v2_numeric_population(&admitted, request.population)
         .map_err(|cause| map_population(key, *cause))?;
-    if request
-        .process_package_id
-        .is_some_and(|id| id != request.package.package_id())
-    {
+    if request.process_source.is_some_and(|source| {
+        source.name.as_ref() != request.package.name() || source.lock != *request.package.lock()
+    }) {
         return Err(V2NumericDiagnostic::new(
             key,
             V2NumericErrorCode::OwnerIdentityMismatch,
-            "request.package_id",
+            "request.process_source",
         ));
     }
     let expected_point = render_execution_point(&point);
@@ -354,13 +356,29 @@ fn generate_with_control(
             "generated.execution_point",
         ));
     }
-    let requirement = render_requirement(key);
-    let revision = render_revision(request.package.package_id());
+    let requirement = render_requirement(key).map_err(|_| {
+        V2NumericDiagnostic::new(
+            key,
+            V2NumericErrorCode::ResourceLimitExceeded,
+            "identity.requirement",
+        )
+    })?;
+    let revision = render_revision(request.package).map_err(|_| {
+        V2NumericDiagnostic::new(
+            key,
+            V2NumericErrorCode::ResourceLimitExceeded,
+            "identity.revision",
+        )
+    })?;
+    let source = ContractSourceV1 {
+        name: request.package.name().into(),
+        lock: request.package.lock().clone(),
+    };
     let identity = V2NumericIdentity {
         clause: key.clause.clone(),
         claim_owner: key.claim_owner.clone(),
         occurrence: key.occurrence.clone(),
-        package_id: request.package.package_id().clone(),
+        source,
         symbol_suffix: format!("cg_{requirement}_{revision}"),
         requirement,
         revision,
@@ -374,7 +392,7 @@ fn generate_with_control(
          // Symbol: {}\n\
          #![deny(missing_docs)]\n\
          //! Selected V2 numeric oracle-conformance campaign.\n\n",
-        identity.requirement, identity.revision, identity.clause.digest, identity.symbol_suffix,
+        identity.requirement, identity.revision, identity.requirement, identity.symbol_suffix,
     );
     let oracle_line = source.lines().count() + 1;
     source.push_str(&admitted.oracle.source);
@@ -713,7 +731,7 @@ pub fn run_v2_numeric_census(
 "#,
         requirement = identity.requirement,
         revision = identity.revision,
-        clause = identity.clause.digest,
+        clause = identity.requirement,
         point = identity.execution_point,
     )
 }
@@ -779,7 +797,7 @@ mod tests {
                 minimum_rejected_cases: 0,
                 maximum_discarded_cases: 0,
             },
-            process_package_id: None,
+            process_source: None,
         };
         for (control, expected, expected_path) in [
             (
