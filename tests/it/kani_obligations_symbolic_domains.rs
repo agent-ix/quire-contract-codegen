@@ -559,6 +559,7 @@ fn replay_collection_function(
     let selection = QualifiedName::new(vec![Identifier::new("inspect").unwrap()]).unwrap();
     let site = call_site(
         source_identity,
+        "ir268-symbolic".to_owned(),
         "ir268-symbolic.native",
         fixture.source.as_bytes(),
         [fixture.model_bytes.as_slice()],
@@ -754,6 +755,7 @@ fn try_emitted_from_document_and_body(document: Value, body: &str) -> Result<Emi
         .expect("qualified function name");
     let site = call_site(
         SourceIdentity::new("agent-ix", "ir268-symbolic.native", "git", "fixture"),
+        "ir268-symbolic".to_owned(),
         "ir268-symbolic.native",
         unit.as_bytes(),
         [document_bytes.as_slice()],
@@ -787,6 +789,7 @@ fn try_emitted_from_document_and_clause(
     let unit = source_unit_with_clause(&model_digest, declaration, body);
     let site = call_site(
         SourceIdentity::new("agent-ix", "ir1091-clause.native", "git", "fixture"),
+        "ir1091-clause".to_owned(),
         "ir1091-clause.native",
         unit.as_bytes(),
         [document_bytes.as_slice()],
