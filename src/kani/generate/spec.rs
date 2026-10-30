@@ -328,7 +328,10 @@ pub(super) enum HarnessShape {
         proof: ProofKind,
         body: Vec<Statement>,
     },
-    Collection(CollectionSpec),
+    Collection {
+        collection: CollectionSpec,
+        precondition: bool,
+    },
     Frame(FrameSpec),
 }
 fn identifier_identity(identifier: &syn::Ident) -> String {
@@ -586,12 +589,31 @@ impl HarnessSpec {
         };
         Ok(Self {
             path,
-            shape: HarnessShape::Collection(collection),
+            shape: HarnessShape::Collection {
+                collection,
+                precondition: false,
+            },
             cover,
             unwind,
             solver,
             options,
         })
+    }
+    pub(super) fn new_collection_precondition(
+        path: HarnessPath,
+        collection: CollectionSpec,
+        unwind: u32,
+        solver: KaniSolver,
+    ) -> Result<Self, HarnessSpecError> {
+        let mut spec = Self::new_collection(path, collection, unwind, solver)?;
+        if let HarnessShape::Collection { precondition, .. } = &mut spec.shape {
+            *precondition = true;
+        }
+        spec.cover = Cover {
+            condition: ExprText::new("matches!(outcome, ClauseEvaluation::Completed(true))")?,
+            message: "the selected precondition is satisfiable in its admitted domain".to_owned(),
+        };
+        Ok(spec)
     }
     pub(super) fn shape(&self) -> &HarnessShape {
         &self.shape

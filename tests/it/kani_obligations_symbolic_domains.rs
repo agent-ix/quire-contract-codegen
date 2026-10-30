@@ -15,11 +15,11 @@ use qsl_replay::{
     SourceIdentity, StateEnvironment, WitnessValue,
 };
 use quire_contract_codegen::{
-    execute_kani_obligation, negotiate_kani_obligations, CollectionElementIdentity,
-    CollectionKindIdentity, CollectionPredicateIdentity, KaniCollectionObligationHarness,
-    KaniExecutableHarness, KaniExecutionRequest, KaniInstallation, KaniObligationOutcome,
-    KaniObligationRequest, KaniRunOutcome, ObligationDisposition, ObligationItem, ProofCeilings,
-    UnsupportedObligation,
+    classify_kani_run, execute_kani_obligation, negotiate_kani_obligations, select_counterexample,
+    CollectionElementIdentity, CollectionKindIdentity, CollectionPredicateIdentity,
+    KaniCollectionObligationHarness, KaniExecutableHarness, KaniExecutionRequest, KaniInstallation,
+    KaniObligationOutcome, KaniObligationRequest, KaniRunOutcome, KaniV2ClauseObligationHarness,
+    ObligationDisposition, ObligationItem, ProofCeilings, UnsupportedObligation,
 };
 use quire_contract_model::{
     CheckedMemberType, CheckedModelObjectFields, CheckedNodeId, CheckedPackageEvidence,
@@ -29,7 +29,7 @@ use quire_contract_model::{
 use quire_exact::CollectionKind;
 use quire_semantic_value::catalog::Category;
 use serde_json::{json, Value};
-use std::{collections::BTreeMap, env, fs, path::PathBuf, time::Duration};
+use std::{collections::BTreeMap, env, fs, path::PathBuf, process::Command, time::Duration};
 
 const NODE_ID: &str = "ix://ir268.test/domain/Node";
 const SMALL_ID: &str = "ix://ir268.test/domain/SmallInt";
@@ -1825,6 +1825,295 @@ fn ordered_set_document() -> Value {
         .unwrap();
     items["multiplicity"]["unique"] = json!(true);
     document
+}
+
+fn precondition_collection_fixture(body: &str) -> Emitted {
+    let mut document = model_document_with_step();
+    let node = document["types"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|ty| ty.get("identity").and_then(Value::as_str) == Some(NODE_ID))
+        .unwrap();
+    let items = node["fields"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|field| field.get("name").and_then(Value::as_str) == Some("items"))
+        .unwrap();
+    items["multiplicity"]["unique"] = json!(true);
+    items["multiplicity"]["lower"] = json!(2);
+    try_emitted_from_document_and_clause(
+        document,
+        "pre CollectionReady using v on M::Node::step",
+        body,
+    )
+    .expect("QSL emits and IR admits the authored precondition")
+}
+
+fn precondition_collection_harness(fixture: &Emitted) -> KaniV2ClauseObligationHarness {
+    let clause = fixture
+        .package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| node.node_id.digest.as_ref() == fixture.function_digest)
+        .expect("source-authored clause")
+        .node_id
+        .clone();
+    let item = ObligationItem::V2Clause {
+        package: &fixture.package,
+        clause: &clause,
+        dependencies: None,
+    };
+    let outcome = negotiate_kani_obligations(&KaniObligationRequest {
+        ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(
+            Duration::from_secs(600),
+        ),
+        items: std::slice::from_ref(&item),
+        subject_path: "subject",
+        unwind: 8,
+    })
+    .expect("valid request");
+    let KaniObligationOutcome::Emitted {
+        collection_harnesses,
+        v2_clause_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("the admitted precondition is supported");
+    };
+    assert!(
+        collection_harnesses.is_empty(),
+        "no standalone collection proof"
+    );
+    let [harness] = v2_clause_harnesses.as_slice() else {
+        panic!("one operation-clause harness");
+    };
+    harness.clone()
+}
+
+#[trace(
+    "FR-015-AC-7",
+    "FR-015-AC-53",
+    "FR-015-AC-96",
+    "FR-015-AC-99",
+    "TC-025"
+)]
+#[test]
+fn precondition_collection_source_is_admitted() {
+    let fixture = precondition_collection_fixture("forall(item in self.items: item >= 0)");
+    assert_eq!(
+        fixture
+            .package
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.node_id.digest.as_ref() == fixture.function_digest)
+            .unwrap()
+            .semantic_form
+            .as_ref(),
+        "state_clause"
+    );
+    let clause = fixture
+        .package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| node.node_id.digest.as_ref() == fixture.function_digest)
+        .unwrap()
+        .node_id
+        .clone();
+    let harness = precondition_collection_harness(&fixture);
+    let marker = harness
+        .identity
+        .collection_precondition
+        .as_ref()
+        .expect("typed collection precondition identity");
+    assert_eq!(marker.collection.function_id, clause);
+    assert_eq!(
+        marker.collection.collection_kind,
+        CollectionKindIdentity::OrderedSet
+    );
+    assert!(harness
+        .rust
+        .contents
+        .contains("kani::assume(item != selected_items[prior as usize]);"));
+    assert!(harness
+        .rust
+        .contents
+        .contains("let outcome = oracle_clause(&selected_items, selected_items_len);"));
+    assert!(harness
+        .rust
+        .contents
+        .contains("ClauseEvaluation::Completed(_)"));
+    assert!(!harness.rust.contents.contains("assert!(claim,"));
+    assert_eq!(harness.rust.contents.matches("kani::cover!").count(), 1);
+    assert!(harness
+        .rust
+        .contents
+        .lines()
+        .nth(usize::try_from(marker.totality_assertion_line - 1).unwrap())
+        .unwrap()
+        .contains("assert!(matches!(outcome, ClauseEvaluation::Completed(_))"));
+
+    let quantifier = fixture
+        .package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| application_identity(node) == Some("quire.op.collection.forall"))
+        .unwrap()
+        .node_id
+        .clone();
+    let standalone = ObligationItem::CollectionClaim {
+        package: &fixture.package,
+        function_id: &clause,
+        node_id: &quantifier,
+    };
+    let refused = negotiate_kani_obligations(&KaniObligationRequest {
+        ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(
+            Duration::from_secs(600),
+        ),
+        items: std::slice::from_ref(&standalone),
+        subject_path: "subject",
+        unwind: 8,
+    })
+    .expect("valid request");
+    let KaniObligationOutcome::Emitted {
+        collection_harnesses,
+        records,
+        ..
+    } = refused
+    else {
+        panic!("unsupported collection claim retains its item record");
+    };
+    assert!(collection_harnesses.is_empty());
+    assert!(matches!(
+        records[0].disposition,
+        ObligationDisposition::Unsupported {
+            reason: UnsupportedObligation::CollectionClaimNotRendered { .. }
+        }
+    ));
+}
+
+#[trace(
+    "FR-015-AC-7",
+    "FR-015-AC-53",
+    "FR-015-AC-99",
+    "FR-017-AC-13",
+    "TC-025",
+    "TC-027"
+)]
+#[test]
+#[ignore = "kani lane: run serially through make kani-gate"]
+fn real_kani_collection_precondition_distinguishes_totality_from_satisfiability() {
+    let installation = KaniInstallation::discover().expect("cargo-kani is installed");
+    let run = |body: &str, label: &str| {
+        let fixture = precondition_collection_fixture(body);
+        let harness = precondition_collection_harness(&fixture);
+        let scratch = TemporaryDirectory::new(label);
+        fs::write(scratch.path.join("src/lib.rs"), &harness.rust.contents)
+            .expect("stage the sealed source byte for byte");
+        write_manifest(
+            &scratch.path,
+            &format!(
+                "[package]\nname = \"generated-kani-precondition\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
+                runtime_dependency(&["exact"])
+            ),
+        );
+        fs::write(
+            scratch.path.join("build.rs"),
+            "fn main() { println!(\"cargo:rustc-check-cfg=cfg(kani)\"); }\n",
+        )
+        .expect("allow Kani's generated cfg");
+        let cancel = quire_exact::Cancel::new();
+        execute_kani_obligation(&KaniExecutionRequest {
+            cancel: &cancel,
+            installation: &installation,
+            harness: KaniExecutableHarness::from(&harness),
+            crate_directory: &scratch.path,
+            target_directory: &PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+                .join("kani-collection-precondition"),
+            home_directory: None,
+        })
+        .unwrap_or_else(|refusal| panic!("{label}: {refusal}"))
+    };
+    let healthy = run(
+        "forall(item in self.items: item >= 0)",
+        "kani-collection-precondition-healthy",
+    );
+    assert_eq!(healthy.outcome, KaniRunOutcome::Verified, "{healthy:?}");
+    assert!(healthy.checks.iter().any(|check| {
+        check.status == quire_contract_codegen::KaniCheckStatus::Success
+            && check.class == quire_contract_codegen::KaniCheckClass::from("assertion".to_owned())
+    }));
+
+    let impossible = run(
+        "forall(item in self.items: item = 0)",
+        "kani-collection-precondition-impossible",
+    );
+    assert!(
+        matches!(impossible.outcome, KaniRunOutcome::CoverUnsatisfied { .. }),
+        "{impossible:?}"
+    );
+
+    let fixture = precondition_collection_fixture("forall(item in self.items: item >= 0)");
+    let harness = precondition_collection_harness(&fixture);
+    for variant in ["Undefined", "Refused", "Incomplete"] {
+        let original = "ClauseEvaluation::Completed(claim)";
+        assert_eq!(harness.rust.contents.matches(original).count(), 1);
+        let mutated =
+            harness
+                .rust
+                .contents
+                .replacen(original, &format!("ClauseEvaluation::{variant}"), 1);
+        let scratch = TemporaryDirectory::new(&format!("kani-collection-precondition-{variant}"));
+        fs::write(scratch.path.join("src/lib.rs"), mutated)
+            .expect("stage a single oracle mutation");
+        write_manifest(
+            &scratch.path,
+            &format!(
+                "[package]\nname = \"generated-kani-precondition-mutant\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
+                runtime_dependency(&["exact"])
+            ),
+        );
+        fs::write(
+            scratch.path.join("build.rs"),
+            "fn main() { println!(\"cargo:rustc-check-cfg=cfg(kani)\"); }\n",
+        )
+        .expect("allow Kani's generated cfg");
+        let report_path = scratch.path.join("report.json");
+        let output = Command::new("cargo")
+            .arg("kani")
+            .args(&harness.identity.options)
+            .args(["-Z", "unstable-options", "--export-json"])
+            .arg(&report_path)
+            .env(
+                "CARGO_TARGET_DIR",
+                PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kani-collection-precondition"),
+            )
+            .current_dir(&scratch.path)
+            .output()
+            .expect("installed Kani launches the oracle mutant");
+        let transcript = format!(
+            "{}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let report = fs::read(&report_path).expect("Kani exports the mutant report");
+        let classified = classify_kani_run(
+            output.status.success(),
+            Some(&report),
+            select_counterexample(&transcript, None),
+            Some(quire_contract_codegen::ObligationKind::Precondition),
+        )
+        .unwrap_or_else(|refusal| panic!("{variant}: Kani refused the report: {refusal:?}"));
+        assert!(
+            matches!(classified.outcome, KaniRunOutcome::Falsified { .. }),
+            "{variant}: mutated oracle must falsify totality: {classified:?}\n{transcript}"
+        );
+    }
 }
 
 #[trace("FR-015-AC-96", "FR-015-AC-97", "TC-025")]

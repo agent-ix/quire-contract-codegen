@@ -248,13 +248,13 @@ pub use kani::generate::outcome::{
 };
 pub use kani::identity::{
     CollectionElementIdentity, CollectionKindIdentity, CollectionObligationIdentity,
-    CollectionPredicateIdentity, EmbeddedOracle, KaniCollectionObligationHarness,
-    KaniObligationHarness, KaniObligationIdentity, KaniScalarObligationHarness,
-    KaniV2ClauseObligationHarness, ObligationBinding, ObligationKind, ScalarIntegerRepresentation,
-    ScalarObligationArgument, ScalarObligationIdentity, ScalarOriginalLimitsError, StateComparison,
-    StateFieldDomain, StateFrameHarness, StateFrameIdentity, StateFrameProperty,
-    StateFrameRecordError, StateFrameScope, StateUnrangedField, StateUnrangedReason,
-    V2ClauseObligationIdentity,
+    CollectionPreconditionIdentity, CollectionPredicateIdentity, EmbeddedOracle,
+    KaniCollectionObligationHarness, KaniObligationHarness, KaniObligationIdentity,
+    KaniScalarObligationHarness, KaniV2ClauseObligationHarness, ObligationBinding, ObligationKind,
+    ScalarIntegerRepresentation, ScalarObligationArgument, ScalarObligationIdentity,
+    ScalarOriginalLimitsError, StateComparison, StateFieldDomain, StateFrameHarness,
+    StateFrameIdentity, StateFrameProperty, StateFrameRecordError, StateFrameScope,
+    StateUnrangedField, StateUnrangedReason, V2ClauseObligationIdentity,
 };
 pub use kani::output::playback::{
     parse_assertion_playback, select_counterexample, CounterexamplePlayback, Playback,

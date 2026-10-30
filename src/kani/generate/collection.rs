@@ -6,7 +6,8 @@
 
 use quire_contract_model::{
     ApplicationOperator, CheckedCollectionKind, CheckedMemberType, CheckedNodeId, CheckedNodeTag,
-    CheckedPackageV2, CheckedSemanticNodeV2, CheckedTerm, LiteralKind, StateClauseKind,
+    CheckedPackageV2, CheckedSemanticId, CheckedSemanticNodeV2, CheckedTerm, LiteralKind,
+    StateClauseKind,
 };
 use std::{borrow::Borrow, collections::BTreeMap};
 
@@ -14,6 +15,7 @@ use crate::{
     core::artifact::MAX_GENERATED_SOURCE_BYTES,
     kani::{
         abi::{adapter_options, readable_component, KaniSolver},
+        census::{dependency_readiness, ProofDependencyEdge, ProofExecutionState},
         generate::{
             outcome::{CollectionUnsupportedReason, KaniObligationRequest, UnsupportedObligation},
             record::{harness_path, record},
@@ -25,7 +27,9 @@ use crate::{
         },
         identity::{
             CollectionElementIdentity, CollectionKindIdentity, CollectionObligationIdentity,
-            CollectionPredicateIdentity, KaniCollectionObligationHarness,
+            CollectionPreconditionIdentity, CollectionPredicateIdentity,
+            KaniCollectionObligationHarness, KaniV2ClauseObligationHarness, ObligationKind,
+            ScalarIntegerRepresentation, V2ClauseObligationIdentity,
         },
     },
 };
@@ -87,6 +91,8 @@ pub(crate) enum CollectionDomainRefusal {
 
 /// A completely checked collection claim ready for deterministic rendering.
 pub(super) struct LoweredCollectionClaim {
+    pub(super) dependencies: Vec<ProofDependencyEdge>,
+    pub(super) package: CheckedSemanticId,
     pub(super) package_digest: String,
     pub(super) field: CollectionFieldDomain,
 }
@@ -224,11 +230,62 @@ pub(super) fn lower_collection_claim(
         .index
         .node(quantifier_id)
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
-    let field = resolve_collection_field(graph.package, &graph.index, function_id, quantifier)?;
+    let field = resolve_collection_field(
+        graph.package,
+        &graph.index,
+        function_id,
+        quantifier,
+        CollectionClaimRole::Direct,
+    )?;
     Ok(LoweredCollectionClaim {
+        dependencies: Vec::new(),
+        package: graph.package.package_id().clone(),
         package_digest: graph.package.package_id().digest.to_string(),
         field,
     })
+}
+
+/// Resolve a whole authored precondition quantifier for its operation-clause harness.
+/// A conjunct is never promoted into a separate precondition: the selected quantifier must
+/// be the clause body itself, so the cover keeps the authored clause's complete meaning.
+pub(super) fn lower_collection_precondition(
+    graph: &CollectionGraph<'_>,
+    clause_id: &CheckedNodeId,
+) -> Result<LoweredCollectionClaim, CollectionDomainRefusal> {
+    let claim = graph
+        .index
+        .node(clause_id)
+        .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
+    let (kind, parameters, body) =
+        state_clause_parts(&graph.index, claim).ok_or(CollectionDomainRefusal::UnsupportedShape)?;
+    // The collection renderer currently binds the receiver state alone. Refuse an operation
+    // with additional parameters rather than silently omitting its symbolic arguments.
+    if kind != StateClauseKind::Precondition || parameters.len() != 1 {
+        return Err(CollectionDomainRefusal::UnsupportedShape);
+    }
+    let quantifier = graph
+        .index
+        .node(&body)
+        .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
+    let field = resolve_collection_field(
+        graph.package,
+        &graph.index,
+        clause_id,
+        quantifier,
+        CollectionClaimRole::Precondition,
+    )?;
+    Ok(LoweredCollectionClaim {
+        dependencies: Vec::new(),
+        package: graph.package.package_id().clone(),
+        package_digest: graph.package.package_id().digest.to_string(),
+        field,
+    })
+}
+
+impl LoweredCollectionClaim {
+    pub(super) fn set_dependencies(&mut self, dependencies: Vec<ProofDependencyEdge>) {
+        self.dependencies = dependencies;
+    }
 }
 
 /// Render one supported admitted collection claim as a symbolic Kani harness.
@@ -437,6 +494,114 @@ pub(super) fn render_collection(
     Ok(harness)
 }
 
+/// Render a source-backed collection precondition as its one V2 operation-clause harness.
+/// The direct renderer is used only as an internal domain validator; its universal-assertion
+/// artifact is never returned or exposed as a second obligation.
+pub(super) fn render_collection_precondition(
+    request: &KaniObligationRequest<'_>,
+    lowered: &LoweredCollectionClaim,
+) -> Result<KaniV2ClauseObligationHarness, UnsupportedObligation> {
+    let validated = render_collection(request, lowered)?;
+    let collection = validated.identity;
+    let path = harness_path(
+        &collection.module_symbol.to_string(),
+        &collection.harness_symbol.to_string(),
+    )?;
+    let element = match collection.element {
+        CollectionElementIdentity::Boolean => CollectionElement::Boolean,
+        CollectionElementIdentity::Integer { minimum, maximum } => {
+            CollectionElement::Integer { minimum, maximum }
+        }
+    };
+    let quantifier = match collection.quantifier_operation.as_str() {
+        "quire.op.collection.forall" => CollectionQuantifier::ForAll,
+        "quire.op.collection.exists" => CollectionQuantifier::Exists,
+        _ => return Err(UnsupportedObligation::RenderFailed),
+    };
+    let item_name = format!("selected_{}", readable_component(&collection.field_name));
+    let spec = HarnessSpec::new_collection_precondition(
+        path,
+        CollectionSpec {
+            field_name: collection.field_name.clone(),
+            length_name: format!("{item_name}_len"),
+            item_name,
+            minimum_length: collection.minimum_length,
+            maximum_length: collection.maximum_length,
+            array_len: usize::try_from(collection.maximum_length)
+                .map_err(|_| UnsupportedObligation::RenderFailed)?,
+            kind: collection.collection_kind,
+            element,
+            quantifier,
+            predicate: collection.predicate.clone(),
+        },
+        request.unwind,
+        KaniSolver::Cadical,
+    )?;
+    let rendered = render::render(&spec)?;
+    let subjects = [
+        &collection.function_id,
+        &collection.quantifier_id,
+        &collection.projection_id,
+        &collection.declaration_id,
+        &collection.element_type_id,
+        &collection.predicate_id,
+    ]
+    .iter()
+    .map(|node| crate::core::provenance::node_subject(node))
+    .collect::<Vec<_>>();
+    let source = crate::core::provenance::with_rust_header(
+        rendered.contents,
+        subjects.iter().map(String::as_str),
+    );
+    if source.len() > MAX_GENERATED_SOURCE_BYTES {
+        return Err(UnsupportedObligation::ResourceLimitExceeded {
+            bytes: source.len(),
+        });
+    }
+    syn::parse_file(&source).map_err(|error| UnsupportedObligation::InvalidGeneratedSyntax {
+        error: error.to_string(),
+    })?;
+    let assertion = crate::kani::identity::COLLECTION_PRECONDITION_TOTALITY_ASSERTION;
+    let lines = source
+        .lines()
+        .enumerate()
+        .filter(|(_, line)| line.trim() == assertion)
+        .map(|(index, _)| u32::try_from(index + 1))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| UnsupportedObligation::RenderFailed)?;
+    let [totality_assertion_line] = lines.as_slice() else {
+        return Err(UnsupportedObligation::RenderFailed);
+    };
+    let rust = crate::core::artifact::Artifact::new(rendered.path, source);
+    let identity = V2ClauseObligationIdentity {
+        dependencies: lowered.dependencies.clone(),
+        readiness: dependency_readiness(&lowered.dependencies),
+        proof_execution_state: ProofExecutionState::NotRun,
+        integer_representation: ScalarIntegerRepresentation::General,
+        native_integer_selection: None,
+        ceilings: request.ceilings,
+        package: lowered.package.clone(),
+        clause: collection.function_id.clone(),
+        collection_precondition: Some(CollectionPreconditionIdentity {
+            collection,
+            totality_assertion_line: *totality_assertion_line,
+        }),
+        kind: ObligationKind::Precondition,
+        oracle_symbol: "oracle_clause".to_owned(),
+        subject_path: request.subject_path.to_owned(),
+        arguments: Vec::new(),
+        module_symbol: spec.path().module.clone(),
+        harness_symbol: spec.path().harness.clone(),
+        solver: spec.solver(),
+        unwind: spec.unwind(),
+        options: spec.options().to_vec(),
+    };
+    let record = record(&spec.path().module.to_string(), &identity, &rust)?;
+    Ok(KaniV2ClauseObligationHarness::generated(
+        identity, rust, record,
+    ))
+}
+
 fn unique_element_capacity(element: CollectionElement) -> u128 {
     match element {
         CollectionElement::Boolean => 2,
@@ -521,12 +686,12 @@ fn finite_element_domain(
     }
 }
 
-/// Invariants assert their body over a drawn state. Other state-clause kinds need the
-/// operation-contract context and cannot be emitted as standalone collection proofs.
-fn invariant_clause_parts<'a>(
+/// Read the admitted state-clause kind, parameters and Boolean body. The direct renderer
+/// admits only invariants; a precondition reaches its operation-clause renderer separately.
+fn state_clause_parts<'a>(
     graph: &'a CollectionNodeIndex<'_>,
     claim: &'a CheckedSemanticNodeV2,
-) -> Option<(&'a [CheckedTerm], CheckedNodeId)> {
+) -> Option<(StateClauseKind, &'a [CheckedTerm], CheckedNodeId)> {
     if CheckedNodeTag::from_wire(&claim.node_tag) != Some(CheckedNodeTag::State)
         || claim.semantic_form.as_ref() != "state_clause"
     {
@@ -541,15 +706,20 @@ fn invariant_clause_parts<'a>(
     else {
         return None;
     };
-    if operation.identity() != Some("quire.op.state.clause")
-        || operation.state_clause_kind().ok()? != Some(StateClauseKind::Invariant)
-    {
+    if operation.identity() != Some("quire.op.state.clause") {
         return None;
     }
+    let kind = operation.state_clause_kind().ok()??;
     let [parameters, _anchor, body] = arguments.as_slice() else {
         return None;
     };
-    Some((aggregate_members(parameters)?, term_target(body)?))
+    Some((kind, aggregate_members(parameters)?, term_target(body)?))
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum CollectionClaimRole {
+    Direct,
+    Precondition,
 }
 
 /// The authored parameters of a function or invariant state clause, in checked graph order.
@@ -569,7 +739,7 @@ fn claim_parameters<'a>(
                 _ => None,
             }),
         CheckedNodeTag::State => {
-            invariant_clause_parts(graph, claim).map(|(parameters, _)| parameters)
+            state_clause_parts(graph, claim).map(|(_, parameters, _)| parameters)
         }
         _ => None,
     }
@@ -586,7 +756,7 @@ fn claim_body(
             .and_then(aggregate_members)
             .and_then(|members| binding(members, "body"))
             .and_then(term_target),
-        CheckedNodeTag::State => invariant_clause_parts(graph, claim).map(|(_, body)| body),
+        CheckedNodeTag::State => state_clause_parts(graph, claim).map(|(_, _, body)| body),
         _ => None,
     }
 }
@@ -600,10 +770,24 @@ fn resolve_collection_field(
     graph: &CollectionNodeIndex<'_>,
     function_id: &CheckedNodeId,
     quantifier: &CheckedSemanticNodeV2,
+    role: CollectionClaimRole,
 ) -> Result<CollectionFieldDomain, CollectionDomainRefusal> {
     let claim = graph
         .node(function_id)
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
+    if CheckedNodeTag::from_wire(&claim.node_tag) == Some(CheckedNodeTag::State) {
+        let (kind, _, _) =
+            state_clause_parts(graph, claim).ok_or(CollectionDomainRefusal::UnsupportedShape)?;
+        let expected = match role {
+            CollectionClaimRole::Direct => StateClauseKind::Invariant,
+            CollectionClaimRole::Precondition => StateClauseKind::Precondition,
+        };
+        if kind != expected {
+            return Err(CollectionDomainRefusal::UnsupportedShape);
+        }
+    } else if role != CollectionClaimRole::Direct {
+        return Err(CollectionDomainRefusal::UnsupportedShape);
+    }
     let body = claim_body(graph, claim).ok_or(CollectionDomainRefusal::UnsupportedShape)?;
     if !is_top_level_conjunct(graph, &body, &quantifier.node_id) {
         return Err(CollectionDomainRefusal::UnsupportedShape);
@@ -1316,6 +1500,12 @@ mod tests {
 
     fn base_claim() -> LoweredCollectionClaim {
         LoweredCollectionClaim {
+            dependencies: Vec::new(),
+            package: CheckedSemanticId {
+                domain: "test".into(),
+                algorithm: "sha256".into(),
+                digest: "package-a".into(),
+            },
             package_digest: "package-a".to_owned(),
             field: CollectionFieldDomain {
                 function: node("function"),

@@ -386,6 +386,7 @@ impl KaniScalarNativeError {
             Self::Kani(refusal) => match refusal {
                 KaniExecutionRefusal::HarnessNotInCrate { .. }
                 | KaniExecutionRefusal::HarnessProvenanceMismatch { .. }
+                | KaniExecutionRefusal::BoundTotalityAssertionMismatch { .. }
                 | KaniExecutionRefusal::OutputOverLimit { .. }
                 | KaniExecutionRefusal::PlaybackForNonMember { .. } => CompletionRefusal,
                 KaniExecutionRefusal::Tool(_)
@@ -2370,6 +2371,7 @@ mod tests {
             KaniExecutionRefusal::BatchMemoryExhausted { .. } => (F, None),
             KaniExecutionRefusal::HarnessNotInCrate { .. } => (R, None),
             KaniExecutionRefusal::HarnessProvenanceMismatch { .. } => (R, None),
+            KaniExecutionRefusal::BoundTotalityAssertionMismatch { .. } => (R, None),
             KaniExecutionRefusal::Report(_) => (F, None),
             KaniExecutionRefusal::OutputOverLimit { .. } => (R, Some("kani_output_over_limit")),
             KaniExecutionRefusal::OutputUnread { .. } => (F, Some("kani_output_unread")),

@@ -178,6 +178,9 @@ pub struct V2ClauseObligationIdentity {
     pub package: CheckedSemanticId,
     /// Selected state-clause node.
     pub clause: CheckedNodeId,
+    /// Exact selected collection and bound totality check for a collection precondition.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub collection_precondition: Option<CollectionPreconditionIdentity>,
     /// Contract role read from the checked node.
     pub kind: ObligationKind,
     /// Embedded oracle symbol.
@@ -197,6 +200,20 @@ pub struct V2ClauseObligationIdentity {
     /// Exact backend options.
     pub options: Vec<String>,
 }
+
+/// The source-backed collection field and assertion that make a precondition proof nonvacuous.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CollectionPreconditionIdentity {
+    /// The admitted collection's complete typed symbolic identity.
+    pub collection: CollectionObligationIdentity,
+    /// Unique one-based line of the Boolean-completion assertion in generated Rust.
+    pub totality_assertion_line: u32,
+}
+
+/// Exact generated assertion bound to a collection precondition's Kani check location.
+pub(crate) const COLLECTION_PRECONDITION_TOTALITY_ASSERTION: &str =
+    "assert!(matches!(outcome, ClauseEvaluation::Completed(_)), \"the selected precondition completes a Boolean\");";
 
 /// Generated V2 clause harness, sealed against caller edits before execution.
 #[derive(Clone, Debug, Eq, PartialEq)]

@@ -31,8 +31,8 @@ use crate::kani::{
         diagnostics::{KaniNoVerdictDiagnostics, KnownDirectories, ProcessOutput},
         playback::{counterexample_from_blocks, playback_blocks, select_counterexample},
         report::{
-            members_in_request_order, KaniCheckResult, KaniFailureCause, KaniHarnessReport,
-            KaniHarnessStatus, KaniReportRefusal,
+            members_in_request_order, KaniCheckClass, KaniCheckResult, KaniCheckStatus,
+            KaniFailureCause, KaniHarnessReport, KaniHarnessStatus, KaniReportRefusal,
         },
     },
     run::{
@@ -112,6 +112,12 @@ pub enum KaniExecutionRefusal {
         /// The generated artifact path.
         harness_path: String,
     },
+    /// The sealed collection-precondition totality assertion or its unique source binding
+    /// disagrees with the crate supplied for execution.
+    BoundTotalityAssertionMismatch {
+        /// The generated artifact path.
+        harness_path: String,
+    },
     /// The run exported a Kani report this crate cannot read exactly. The run proved nothing
     /// and decided nothing; the refusal is never an outcome.
     Report(KaniReportRefusal),
@@ -165,6 +171,7 @@ impl KaniExecutionRefusal {
             | Self::Tool(_)
             | Self::HarnessNotInCrate { .. }
             | Self::HarnessProvenanceMismatch { .. }
+            | Self::BoundTotalityAssertionMismatch { .. }
             | Self::Report(_)
             | Self::BatchTimedOut { .. }
             | Self::MemoryMechanismUnavailable { .. }
@@ -205,6 +212,10 @@ impl fmt::Display for KaniExecutionRefusal {
             Self::HarnessProvenanceMismatch { harness_path } => write!(
                 formatter,
                 "the generated source or identity for {harness_path} changed after generation"
+            ),
+            Self::BoundTotalityAssertionMismatch { harness_path } => write!(
+                formatter,
+                "the bound totality assertion for {harness_path} is inconsistent or duplicated"
             ),
             Self::Report(refusal) => write!(formatter, "{refusal}"),
             Self::OutputOverLimit {
@@ -398,12 +409,39 @@ fn require_in_crate(request: &KaniExecutionRequest<'_>) -> Result<(), KaniExecut
             harness_path: harness.rust.path.clone(),
         }
     })?;
-    if !String::from_utf8_lossy(&library).contains(&harness.rust.contents) {
+    let library = String::from_utf8_lossy(&library);
+    if !library.contains(&harness.rust.contents) {
         return Err(KaniExecutionRefusal::HarnessNotInCrate {
             harness_path: harness.rust.path.clone(),
         });
     }
+    if let Some(line) = request.harness.collection_totality_line() {
+        if bound_totality_line(&library, &harness.rust.contents, line).is_none() {
+            return Err(KaniExecutionRefusal::BoundTotalityAssertionMismatch {
+                harness_path: harness.rust.path.clone(),
+            });
+        }
+    }
     Ok(())
+}
+
+fn bound_totality_line(library: &str, source: &str, artifact_line: u32) -> Option<u32> {
+    let source_line = usize::try_from(artifact_line.checked_sub(1)?).ok()?;
+    if source.lines().nth(source_line)?.trim()
+        != crate::kani::identity::COLLECTION_PRECONDITION_TOTALITY_ASSERTION
+    {
+        return None;
+    }
+    let mut occurrences = library.match_indices(source);
+    let (start, _) = occurrences.next()?;
+    if occurrences.next().is_some() {
+        return None;
+    }
+    let prefix_lines = library[..start]
+        .bytes()
+        .filter(|byte| *byte == b'\n')
+        .count();
+    u32::try_from(prefix_lines).ok()?.checked_add(artifact_line)
 }
 
 /// Starts `command` with the launcher's output captured for `harnesses` harnesses, and maps a
@@ -466,10 +504,26 @@ fn evidence_of(
     harness: &HarnessView<'_>,
     arguments: Vec<String>,
     exit_code: Option<i32>,
-    run: ClassifiedRun,
+    mut run: ClassifiedRun,
     batch: Option<KaniBatchInvocation>,
     record: Record,
 ) -> ReportedExecution {
+    if matches!(run.outcome, KaniRunOutcome::Verified) {
+        if let Some(artifact_line) = request.harness.collection_totality_line() {
+            let actual_line = fs::read_to_string(request.crate_directory.join("src/lib.rs"))
+                .ok()
+                .and_then(|library| {
+                    bound_totality_line(&library, &harness.rust.contents, artifact_line)
+                });
+            let checked =
+                actual_line.is_some_and(|line| totality_check_succeeded(&run.checks, line));
+            if !checked {
+                run.outcome = KaniRunOutcome::Inconclusive {
+                    reason: KaniInconclusiveReason::VacuousProof,
+                };
+            }
+        }
+    }
     ReportedExecution {
         ceilings: harness.ceilings,
         symbolic_arguments: request.harness.symbolic_arguments(),
@@ -487,6 +541,15 @@ fn evidence_of(
         diagnostics: record.diagnostics,
         failure_cause: record.failure_cause,
     }
+}
+
+fn totality_check_succeeded(checks: &[KaniCheckResult], line: u32) -> bool {
+    checks.iter().any(|check| {
+        matches!(&check.class, KaniCheckClass::Other(class) if class.as_str() == "assertion")
+            && check.status == KaniCheckStatus::Success
+            && check.location.file == "src/lib.rs"
+            && check.location.line == Some(line)
+    })
 }
 
 /// What the evidence retains beyond the classified run: the diagnostic record of a `NoVerdict`
@@ -1263,6 +1326,43 @@ mod tests {
             },
         },
     };
+
+    /// FR-017-AC-13 (TC-027): only the unique bound assertion's successful check can turn a
+    /// collection precondition's satisfied cover into proof evidence.
+    #[trace("FR-017-AC-13", "TC-027")]
+    #[test]
+    fn collection_totality_binding_rejects_foreign_or_missing_checks() {
+        let assertion = crate::kani::identity::COLLECTION_PRECONDITION_TOTALITY_ASSERTION;
+        let source = format!("mod proof {{\n    {assertion}\n}}\n");
+        let library = format!("// prefix\n{source}");
+        assert_eq!(bound_totality_line(&library, &source, 2), Some(3));
+        assert_eq!(bound_totality_line(&library, &source, 1), None);
+        assert_eq!(
+            bound_totality_line(&format!("{library}{source}"), &source, 2),
+            None
+        );
+
+        let check = KaniCheckResult {
+            id: 1,
+            class: KaniCheckClass::from("assertion".to_owned()),
+            location: crate::kani::output::report::KaniCheckLocation {
+                file: "src/lib.rs".to_owned(),
+                line: Some(3),
+            },
+            status: KaniCheckStatus::Success,
+        };
+        assert!(totality_check_succeeded(std::slice::from_ref(&check), 3));
+        assert!(!totality_check_succeeded(std::slice::from_ref(&check), 2));
+        let mut cover = check.clone();
+        cover.class = KaniCheckClass::Cover;
+        assert!(!totality_check_succeeded(&[cover], 3));
+        let mut foreign = check.clone();
+        foreign.location.file = "src/other.rs".to_owned();
+        assert!(!totality_check_succeeded(&[foreign], 3));
+        let mut failed = check;
+        failed.status = KaniCheckStatus::Unreachable;
+        assert!(!totality_check_succeeded(&[failed], 3));
+    }
 
     /// A precondition harness asserts nothing; its only property is its cover. The same report
     /// that is a vacuous proof for any other harness therefore decides by the cover alone for a
