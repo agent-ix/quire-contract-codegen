@@ -7,12 +7,12 @@
 use crate::scratch_crate::{runtime_dependency, write_manifest, TemporaryDirectory};
 use ix_trace_rs::trace;
 use qsl_replay::{
-    call_site, object_reference_witness, replay, write_object_environment, ByteDigest, ClauseName,
-    DeclarationKey, DependencyInput, DigestDomain, DigestRecord, DomainPackageRef,
-    EnvironmentLabels, EnvironmentModel, EnvironmentObject, EnvironmentPopulation, EvaluatedValue,
-    Identifier, ModelNormalizationLimits, QualifiedName, ReplayLimits, ReplayRequestWire,
-    ReplayResult, ReplaySource, RequestTargetWire, ScalarLimits, SelectedObject, SnapshotValue,
-    SourceIdentity, StateEnvironment, WitnessValue,
+    call_site, object_reference_witness, replay, write_object_environment, ClauseName,
+    DeclarationKey, DependencyInput, DomainPackageRef, EnvironmentLabels, EnvironmentModel,
+    EnvironmentObject, EnvironmentPopulation, EvaluatedValue, Identifier, ModelNormalizationLimits,
+    ObligationIdentity, QualifiedName, ReplayLimits, ReplayRequestWire, ReplayResult, ReplaySource,
+    RequestTargetWire, ScalarLimits, SelectedObject, SnapshotValue, SourceIdentity,
+    StateEnvironment, WitnessValue,
 };
 use quire_contract_codegen::{
     classify_kani_run, execute_kani_obligation, negotiate_kani_obligations, run_terminal_value,
@@ -279,7 +279,6 @@ struct Emitted {
     object_type: CheckedNodeId,
     fields: CheckedModelObjectFields,
     model_bytes: Vec<u8>,
-    model_digest: [u8; 32],
     source: String,
 }
 
@@ -594,18 +593,14 @@ fn replay_collection_function(
 
     let model = EnvironmentModel {
         identity: "ir268.test/domain".to_owned(),
-        version: "1.0.0".to_owned(),
-        digest: fixture.model_digest,
     };
     let type_identity = DeclarationKey {
         package: model.identity.clone(),
         node: NODE_ID.to_owned(),
     };
-    let packages = BTreeMap::from([(fixture.model_digest, fixture.model_bytes.clone())]);
+    let packages = BTreeMap::from([(model.identity.clone(), fixture.model_bytes.clone())]);
     let model_selections = [DomainPackageRef {
         identity: model.identity.clone(),
-        version: model.version.clone(),
-        digest: fixture.model_digest,
     }];
     let reference = object_reference_witness(
         &model_selections,
@@ -662,32 +657,22 @@ fn replay_collection_function(
     )
     .expect("QSL writes the environment through its authoritative builder");
 
-    let source_digest = DigestRecord::mint(
-        DigestDomain::SourceBytesV1,
-        ByteDigest::of(fixture.source.as_bytes()).as_bytes(),
-    );
-    let model_digest = DigestRecord::mint(DigestDomain::Sha256Jcs, fixture.model_digest);
     let request = ReplayRequestWire {
+        package_name: "ir268-symbolic".to_owned(),
         profile_selections: Vec::new(),
-        package_id: (
-            Some(DigestDomain::PackageSemanticV2.as_str().to_owned()),
-            site.package_id.hex(),
-        ),
-        source_digests: vec![(
+        sources: vec![(
             "agent-ix".to_owned(),
             "ir268-symbolic.native".to_owned(),
             "git".to_owned(),
             "fixture".to_owned(),
-            Some(DigestDomain::SourceBytesV1.as_str().to_owned()),
-            source_digest.hex(),
         )],
         dependencies: Vec::new(),
         replay_target: RequestTargetWire::function(selection, site.site.declaration.clone()),
         source: ReplaySource::Input(vec![qsl_replay::CanonicalAssignment {
-            parameter: site.site.parameters[0].1,
+            parameter: site.site.parameters[0].1.clone(),
             value: reference,
         }]),
-        obligation_identity: [0; 32],
+        obligation_identity: ObligationIdentity::new(site.site.function.clone(), None, 0),
         backend: "kani-backend-1".to_owned(),
         state_environment: StateEnvironment::new(Vec::new()),
         accounting_limits: replay_scalar_limits(),
@@ -695,18 +680,14 @@ fn replay_collection_function(
         supplied_limits: None,
         object_environment: Some(environment.member().clone()),
         declared_domains: Vec::new(),
-        byte_provision: vec![
-            (
-                Some(DigestDomain::SourceBytesV1.as_str().to_owned()),
-                source_digest.hex(),
-                fixture.source.as_bytes().to_vec(),
-            ),
-            (
-                Some(DigestDomain::Sha256Jcs.as_str().to_owned()),
-                model_digest.hex(),
-                fixture.model_bytes.clone(),
-            ),
-            environment.provision_entry(),
+        byte_provision: vec![(
+            "agent-ix".to_owned(),
+            "ir268-symbolic.native".to_owned(),
+            fixture.source.as_bytes().to_vec(),
+        )],
+        documents: vec![
+            fixture.model_bytes.clone(),
+            environment.provision_document(),
         ],
     };
     replay(request, ReplayLimits::default()).expect("QSL admits and executes the native replay")
@@ -773,7 +754,6 @@ fn try_emitted_from_document_and_body(document: Value, body: &str) -> Result<Emi
     let model_digest_value = quire_canonical::sha256(&document, limits)
         .expect("the authored model document has a JCS digest");
     let model_digest = model_digest_value.to_string();
-    let model_digest_bytes = *model_digest_value.as_bytes();
     let unit = source_unit_with_body(&model_digest, body);
     let selection = QualifiedName::new(vec![Identifier::new("inspect").expect("function name")])
         .expect("qualified function name");
@@ -788,14 +768,7 @@ fn try_emitted_from_document_and_body(document: Value, body: &str) -> Result<Emi
     )
     .map_err(|error| format!("{error:?}"))?;
 
-    admit_emitted(
-        document_bytes,
-        model_digest,
-        model_digest_bytes,
-        unit,
-        site.package,
-        site.site.function,
-    )
+    admit_emitted(document_bytes, unit, site.package, site.site.function)
 }
 
 fn try_emitted_from_document_and_clause(
@@ -809,7 +782,6 @@ fn try_emitted_from_document_and_clause(
     let model_digest_value = quire_canonical::sha256(&document, limits)
         .expect("the authored model document has a JCS digest");
     let model_digest = model_digest_value.to_string();
-    let model_digest_bytes = *model_digest_value.as_bytes();
     let unit = source_unit_with_clause(&model_digest, declaration, body);
     let site = call_site(
         SourceIdentity::new("agent-ix", "ir1091-clause.native", "git", "fixture"),
@@ -822,20 +794,11 @@ fn try_emitted_from_document_and_clause(
     )
     .map_err(|error| format!("{error:?}"))?;
 
-    admit_emitted(
-        document_bytes,
-        model_digest,
-        model_digest_bytes,
-        unit,
-        site.package,
-        site.site.node,
-    )
+    admit_emitted(document_bytes, unit, site.package, site.site.node)
 }
 
 fn admit_emitted(
     document_bytes: Vec<u8>,
-    model_digest: String,
-    model_digest_bytes: [u8; 32],
     unit: String,
     package_bytes: Vec<u8>,
     function_key: quire_exact::NodeKey,
@@ -843,7 +806,7 @@ fn admit_emitted(
     let mut evidence = CheckedPackageEvidence::new();
     evidence.support_feature("quire.value.complete/v1");
     evidence
-        .insert_domain_package_document(model_digest.clone(), document_bytes.clone())
+        .insert_domain_package_document("ir268.test/domain", document_bytes.clone())
         .expect("the exact selected model document is admitted as evidence");
     let package = match CheckedPackageV2::read(
         &package_bytes,
@@ -884,7 +847,6 @@ fn admit_emitted(
         object_type: object_type.clone(),
         fields: fields.clone(),
         model_bytes: document_bytes,
-        model_digest: model_digest_bytes,
         source: unit,
     })
 }
