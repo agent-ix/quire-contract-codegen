@@ -68,7 +68,13 @@ body, malformed or absent selected declaration, and an over-ceiling domain.
 Check typed `requires_bound` versus `unsupported`, no emitted harness for each
 refusal, and one disposition per item in a mixed request.
 
-For FR-015-AC-96 (IR-1091), use QSL-emitted,
+For FR-015-AC-96 (IR-1091), select a QSL-emitted constraint clause containing
+a collection quantifier alongside an invariant or operation clause over the same
+field. Confirm that the constraint is an assumption on symbolic input state,
+creates no separate proof obligation and does not enter obligation identity
+(QSL FR-158; ADR-021 SC-2/SC-3). A boundary-state violation remains `Violated`;
+a reached boundary without violation yields `ConstraintReached`/inconclusive,
+never unconditional proof. Then use QSL-emitted,
 IR-admitted unique Boolean and bounded `IntRange` fields after the applicable
 form, empty-domain, representation, unwind and memory checks pass. A feasible
 unique maximum equal to its distinct-value capacity retains both cardinality
