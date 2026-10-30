@@ -37,8 +37,11 @@ const SUBJECT_PATH: &str = "crate::subject::deposit";
 
 fn clause_test_id(number: u8) -> CheckedNodeId {
     CheckedNodeId {
-        domain: "quire.checked-semantic-node/v1".into(),
-        digest: format!("{number:064x}").into(),
+        package: "fixture".into(),
+        path: vec![quire_contract_model::CheckedNodePathSegment::Name(
+            number.to_string().into(),
+        )],
+        ordinal: 0,
     }
 }
 
@@ -53,7 +56,6 @@ fn clause_test_node(number: u8, label: &str) -> CheckedSemanticNodeV2 {
         dependencies: Vec::new(),
         occurrences: Vec::new(),
         recursion_group: None,
-        nominal_identity_preimage: None,
         declaration: None,
         owner: None,
         body: CheckedTerm::literal_text(clause_test_id(0), label),

@@ -268,12 +268,6 @@ fn lowered_node(node: &FixtureNode) -> CompleteContractNodeV2 {
         dependencies: vec![],
         bounds: vec![],
         claims: vec![],
-        ir_id: serde_json::from_value(serde_json::json!({
-            "domain": "quire.contract-ir.semantic/v1",
-            "algorithm": "sha-256",
-            "digest": "f".repeat(64),
-        }))
-        .expect("an ir id"),
     }
 }
 
