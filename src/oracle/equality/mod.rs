@@ -1474,6 +1474,7 @@ fn resolve_scalar<Body: GraphBody>(
             admitted::require_context(admitted, &node.node_id)?,
             closure,
             node,
+            graph.term(&node.node_id),
         ),
         other => Err(CompositeEqualityRefusal::Unsupported {
             unsupported_node_id: type_id.clone(),

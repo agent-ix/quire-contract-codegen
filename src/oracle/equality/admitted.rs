@@ -2,7 +2,7 @@
 
 use super::{CompositeEqualityRefusal, ItemCheckError, OracleGenerationError, TypeClosure};
 use qsl_replay::{AdmittedCompositeForm, AdmittedContext, AdmittedLookupRefusal};
-use quire_contract_model::{CheckedNodeId, CheckedSemanticNodeV2};
+use quire_contract_model::{CheckedNodeId, CheckedSemanticNodeV2, CheckedTerm};
 use quire_exact::{EnumShape, NodeKey, ValueType};
 use quire_semantic_value::enumeration::EnumDeclaration;
 
@@ -51,14 +51,18 @@ pub(super) fn resolve_enum<Body>(
     admitted: &AdmittedContext,
     closure: &mut TypeClosure,
     node: &CheckedSemanticNodeV2<Body>,
+    term: Option<&CheckedTerm>,
 ) -> Result<ValueType, ItemCheckError> {
     let mismatch = || CompositeEqualityRefusal::EnumContextMismatch {
         declaration: node.node_id.clone(),
     };
     let key = crate::core::ir::node_key::checked_node_key(&node.node_id).ok_or_else(mismatch)?;
     let actual = admitted.enum_declaration(&key).map_err(lookup_refusal)?;
-    let expected = node.body.enum_declaration().ok_or_else(mismatch)?;
-    if actual.is_ordered() != expected.ordered()
+    let Some(CheckedTerm::NominalBody(body)) = term else {
+        return Err(mismatch().into());
+    };
+    let (expected_ordered, expected_members) = body.enum_details().ok_or_else(mismatch)?;
+    if actual.is_ordered() != expected_ordered
         || !actual
             .qualified_name()
             .iter()
@@ -74,7 +78,7 @@ pub(super) fn resolve_enum<Body>(
             .cases()
             .iter()
             .map(|case| case.case().as_str())
-            .eq(expected.members().iter().map(|case| case.as_ref()))
+            .eq(expected_members.iter().map(|case| case.as_ref()))
     {
         return Err(mismatch().into());
     }
