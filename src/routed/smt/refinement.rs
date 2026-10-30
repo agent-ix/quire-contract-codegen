@@ -308,6 +308,10 @@ fn role_slot(role: RefinementRole, step_count: usize) -> Result<usize, Refinemen
 }
 
 #[cfg(test)]
+#[path = "refinement_source_tests.rs"]
+mod source_tests;
+
+#[cfg(test)]
 mod tests {
     use std::{
         ffi::OsString,
