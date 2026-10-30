@@ -265,7 +265,9 @@ fn collection_arguments(identity: &CollectionObligationIdentity) -> Vec<Symbolic
     vec![SymbolicArgumentBounds {
         identifier: format!(
             "{}::{}::{}",
-            identity.declaration_id.digest, identity.function_id.digest, identity.field_name
+            crate::core::provenance::node_subject(&identity.declaration_id),
+            crate::core::provenance::node_subject(&identity.function_id),
+            identity.field_name
         ),
         bounds: SymbolicBounds::Sequence {
             minimum_length: identity.minimum_length,
