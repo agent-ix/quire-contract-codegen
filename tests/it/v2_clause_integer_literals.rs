@@ -7,14 +7,14 @@ mod rekey;
 use ix_trace_rs::trace;
 use quire_contract_codegen::generate_v2_clause_oracle;
 use quire_contract_model::{
-    CheckedNodeId, CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2,
-    CheckedPackageV2ReadResult, ContractSourceV1,
+    CheckedNodeId, CheckedNodeOwner, CheckedPackageEvidence, CheckedPackageReadLimits,
+    CheckedPackageV2, CheckedPackageV2ReadResult, ContractSourceV1,
 };
 use serde_json::{json, Value};
 
 use super::kani_obligations_state_frame::native_twin::Twin;
 
-#[trace("TC-024", "FR-014-AC-53")]
+#[trace("TC-024", "FR-014-AC-57")]
 #[test]
 fn public_canonical_i64_literals_choose_the_primitive_constructor() {
     let mut failures = Vec::new();
@@ -47,7 +47,7 @@ fn public_canonical_i64_literals_choose_the_primitive_constructor() {
     );
 }
 
-#[trace("TC-024", "FR-014-AC-53")]
+#[trace("TC-024", "FR-014-AC-57")]
 #[test]
 fn public_large_literals_keep_arbitrary_precision_parse() {
     for spelling in [
@@ -66,7 +66,7 @@ fn public_large_literals_keep_arbitrary_precision_parse() {
     }
 }
 
-#[trace("TC-024", "FR-014-AC-53")]
+#[trace("TC-024", "FR-014-AC-57")]
 #[test]
 fn public_negated_positive_two_to_63_keeps_its_child_and_owner_call() {
     let (package, clause) = Twin::with_balance_condition("self.balance >= -9223372036854775808")
@@ -90,7 +90,6 @@ fn public_negated_positive_two_to_63_keeps_its_child_and_owner_call() {
 // claims for those values and never alter the actual proof fixture.
 fn reader_variant(
     condition: &str,
-    rekey_nodes: bool,
     edit: impl FnOnce(&mut Value),
 ) -> (CheckedPackageV2ReadResult, CheckedNodeId) {
     let twin = Twin::with_balance_condition(condition);
@@ -109,32 +108,26 @@ fn reader_variant(
     let [document] = inputs.packages.as_slice() else {
         panic!("one original model document")
     };
-    let digest = wire["lock"]["model_selections"][0]["digest"]
-        .as_str()
-        .unwrap()
-        .to_owned();
+    let selected_model = package
+        .graph()
+        .nodes
+        .iter()
+        .find_map(|node| match &node.owner {
+            Some(CheckedNodeOwner::ModelRoot { identity }) => Some(identity.to_string()),
+            _ => None,
+        })
+        .expect("the twin selects one model document");
     let mut evidence = CheckedPackageEvidence::new();
     evidence
-        .insert_domain_package_document(digest, document.bytes.clone())
+        .insert_domain_package_document(selected_model, document.bytes.clone())
         .unwrap();
     evidence.support_feature("quire.value.complete/v1");
-    if !rekey_nodes {
-        rekey::refresh_identity(&mut wire);
-        let bytes = serde_json::to_vec(&wire).unwrap();
-        return (
-            CheckedPackageV2::read(&bytes, CheckedPackageReadLimits::bounded(), &evidence),
-            clause,
-        );
-    }
     let resolved = rekey::resolve_wire(&wire, &evidence, CheckedPackageReadLimits::bounded());
     let clause = resolved.ids.resolve(&clause);
     (resolved.outcome, clause)
 }
 
-fn reader_literal_with_identity_policy(
-    spelling: &str,
-    rekey_nodes: bool,
-) -> (CheckedPackageV2ReadResult, CheckedNodeId) {
+fn reader_literal(spelling: &str) -> (CheckedPackageV2ReadResult, CheckedNodeId) {
     fn replace(value: &mut Value, spelling: &str, changed: &mut usize) {
         if value["term"] == "literal" && value["value_kind"] == "integer" && value["value"] == "17"
         {
@@ -156,18 +149,14 @@ fn reader_literal_with_identity_policy(
             }
         }
     }
-    reader_variant("self.balance >= 17", rekey_nodes, |wire| {
+    reader_variant("self.balance >= 17", |wire| {
         let mut changed = 0;
         replace(&mut wire["semantic_graph"], spelling, &mut changed);
         assert_eq!(changed, 1, "one literal control");
     })
 }
 
-fn reader_literal(spelling: &str) -> (CheckedPackageV2ReadResult, CheckedNodeId) {
-    reader_literal_with_identity_policy(spelling, true)
-}
-
-#[trace("TC-024", "FR-014-AC-53")]
+#[trace("TC-024", "FR-014-AC-57")]
 #[test]
 fn reader_admitted_signed_i64_leaves_choose_exact_construction() {
     let mut failures = Vec::new();
@@ -197,7 +186,7 @@ fn reader_admitted_signed_i64_leaves_choose_exact_construction() {
     );
 }
 
-#[trace("TC-024", "FR-014-AC-53")]
+#[trace("TC-024", "FR-014-AC-57")]
 #[test]
 fn reader_admitted_large_values_keep_general_parse_without_narrowing() {
     for spelling in [
@@ -220,35 +209,47 @@ fn reader_admitted_large_values_keep_general_parse_without_narrowing() {
     }
 }
 
-#[trace("TC-024", "FR-014-AC-53")]
+#[trace("TC-024", "FR-014-AC-57")]
 #[test]
 fn noncanonical_literal_admission_and_runtime_fallback_remain_distinct() {
+    let (original, original_clause) =
+        Twin::with_balance_condition("self.balance >= 17").emitted_package("BalanceNeverDrops");
     for spelling in ["+1", "01", "-0", " 1", "1 ", "1a", "", "--1"] {
-        let (stale, _) = reader_literal_with_identity_policy(spelling, false);
-        let CheckedPackageV2ReadResult::Refused(refusal) = stale else {
-            panic!("a changed literal under its old identity must refuse")
-        };
-        assert_eq!(
-            refusal.cause,
-            Some(quire_contract_model::CheckedPackageRefusalCause::StaleNodeKey)
-        );
         let (result, clause) = reader_literal(spelling);
         let CheckedPackageV2ReadResult::Admitted(package) = result else {
-            panic!("the existing general literal reader admits this rekeyed spelling: {spelling:?}")
+            panic!("the general literal reader admits this spelling: {spelling:?}")
         };
+        assert_eq!(
+            clause, original_clause,
+            "the structural clause key is preserved"
+        );
+        assert_eq!(original.graph().nodes.len(), package.graph().nodes.len());
+        let changed_bodies = original
+            .graph()
+            .nodes
+            .iter()
+            .zip(&package.graph().nodes)
+            .filter(|(before, after)| {
+                assert_eq!(before.node_id, after.node_id);
+                before.body != after.body
+            })
+            .count();
+        assert_eq!(
+            changed_bodies, 1,
+            "the changed body is not the original fixture"
+        );
         let generated = generate_v2_clause_oracle(&package, &clause).unwrap();
         assert!(generated.source.contains(&format!(
             "\"{spelling}\".parse().map_err(|_| ClauseStop::InvalidConstant)"
         )));
         assert!(!generated.source.contains("Integer::from("));
-        eprintln!("literal-reader {spelling:?}: stale identity -> StaleNodeKey; owner-rekeyed -> Admitted; generated -> original parse/InvalidConstant fallback");
     }
 }
 
 // This is a separately labelled IR-reader control, not a QSL-emitted bounded
 // arithmetic claim. Its result type is an existing checked integer range.
 fn bounded_addition_reader_attempt(coherent: bool) -> (CheckedPackageV2ReadResult, CheckedNodeId) {
-    let (result, clause) = reader_variant("(self.balance + 1) > 1000", true, |wire| {
+    let (result, clause) = reader_variant("(self.balance + 1) > 1000", |wire| {
         let nodes = wire["semantic_graph"]["nodes"].as_array_mut().unwrap();
         let bound = nodes
             .iter()
@@ -272,7 +273,7 @@ fn bounded_addition_reader_attempt(coherent: bool) -> (CheckedPackageV2ReadResul
     (result, clause)
 }
 
-#[trace("TC-024", "FR-014-AC-53")]
+#[trace("TC-024", "FR-014-AC-57")]
 #[test]
 fn incoherent_arithmetic_result_types_keep_the_owner_type_refusal() {
     let (result, _) = bounded_addition_reader_attempt(false);
@@ -290,7 +291,7 @@ fn incoherent_arithmetic_result_types_keep_the_owner_type_refusal() {
     eprintln!("incoherent result-type control: public owner-candidate/reader -> IllTyped/TypeMismatch; coherent result types are tested separately");
 }
 
-#[trace("TC-024", "FR-014-AC-53")]
+#[trace("TC-024", "FR-014-AC-57")]
 #[test]
 fn original_parameter_precondition_regenerates_with_unchanged_proof_semantics() {
     use quire_contract_codegen::{
@@ -365,7 +366,7 @@ fn original_parameter_precondition_regenerates_with_unchanged_proof_semantics() 
     );
 }
 
-#[trace("TC-024", "FR-014-AC-53")]
+#[trace("TC-024", "FR-014-AC-57")]
 #[test]
 fn coherent_bounded_arithmetic_control_is_decided_by_the_owner_reader() {
     let (result, clause) = bounded_addition_reader_attempt(true);
@@ -386,7 +387,7 @@ fn coherent_bounded_arithmetic_control_is_decided_by_the_owner_reader() {
     eprintln!("coherent bounded-result fixture: node.semantic_type AND body.result_type use originalInt[0,1000]; owner-candidate/rekey/read Admitted; public bound oracle generated; native refusal assertion pending");
 }
 
-#[trace("TC-024", "FR-014-AC-53")]
+#[trace("TC-024", "FR-014-AC-57")]
 #[test]
 fn reader_admitted_literal_fallbacks_and_bounded_stops_preserve_native_accounting() {
     use std::{fmt::Write as _, fs, process::Command};
@@ -460,7 +461,7 @@ fn reader_admitted_literal_fallbacks_and_bounded_stops_preserve_native_accountin
         writeln!(
             source,
             r#"
-#[ix_trace_rs::trace("TC-024", "FR-014-AC-53")]
+#[ix_trace_rs::trace("TC-024", "FR-014-AC-57")]
 #[test]
 fn controlled_{index}() {{
     let expression = c("ge", input(), lit({spelling:?}));
@@ -487,7 +488,7 @@ fn controlled_{index}() {{
     writeln!(
         source,
         r#"
-#[ix_trace_rs::trace("TC-024", "FR-014-AC-53")]
+#[ix_trace_rs::trace("TC-024", "FR-014-AC-57")]
 #[test]
 fn controlled_{index}() {{
     let expression = c("gt", ab("add", input(), lit("1"), "0", "1000"), lit("1000"));
