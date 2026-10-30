@@ -300,10 +300,12 @@ while preserving the cover: an unchanged seal gives `HarnessNotInCrate` for
 zero byte-identical occurrences; a mutated retained seal gives
 `HarnessProvenanceMismatch`. Embed the intact artifact twice and require
 `BoundTotalityAssertionMismatch`. Through the in-crate generated-harness seam,
-construct a valid seal and one byte-identical crate occurrence but bind the
-wrong assertion line or digest; every entry returns `BoundTotalityAssertionMismatch`
-before launch. Exercise these refusals through the single-run, readonly and
-batch entries; the batch refuses the whole call. With intact source, compute the
+construct two valid-seal cases with one byte-identical crate occurrence:
+one binds the wrong source digest while retaining the right assertion line,
+and the other binds the wrong assertion line while retaining the right digest.
+Each case returns `BoundTotalityAssertionMismatch` before launch. Exercise all
+these refusals through the single-run, readonly and batch entries before
+launch; the batch refuses the whole call. With intact source, compute the
 line offset of its sole occurrence in `src/lib.rs`. A satisfied cover and zero
 successful class-`assertion` checks at the converted `{ file: src/lib.rs, line }`
 is inconclusive with the vacuous-proof reason. An unrelated successful assertion
