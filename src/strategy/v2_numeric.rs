@@ -719,7 +719,9 @@ mod native_twin;
 #[cfg(test)]
 mod tests {
 
-    use quire_contract_model::{CheckedOccurrenceRole, CheckedPackageV2};
+    use quire_contract_model::{
+        CheckedOccurrenceRole, CheckedPackageV2, ExecutionPoint, ExecutionPointName,
+    };
 
     use super::{
         generate_with_control, native_twin, RenderControl, V2NumericErrorCode, V2NumericPolicy,
@@ -728,7 +730,15 @@ mod tests {
     use crate::strategy::bound::population::Population;
 
     fn fixture() -> (CheckedPackageV2, quire_contract_model::CheckedNodeId) {
-        native_twin::Twin::new().emitted_package("BalanceNeverDrops")
+        let (package, clauses) =
+            native_twin::Twin::new().emitted_package_with_execution_points(&[(
+                "BalanceNeverDrops",
+                ExecutionPoint::Post {
+                    operation: ExecutionPointName::new("deposit").expect("authored operation"),
+                },
+            )]);
+        let clause = clauses.into_iter().next().expect("pointed clause");
+        (package, clause)
     }
 
     /// Trace: TC-020, FR-011-AC-17
