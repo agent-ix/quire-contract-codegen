@@ -151,7 +151,9 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
 - Planned (IR-815): if a V2 harness identity text comparison boundary receives malformed or
   noncanonical `qocc2_` or `qpkg2_` text, then the harness generator shall return
   `HarnessErrorCode::InvalidIdentityRendering` before publication or report mutation and shall not
-  normalize the text.
+  normalize the text. A different but canonical occurrence returns
+  `HarnessErrorCode::MissingClaimOccurrence`; a different but canonical package name or lock
+  returns `HarnessErrorCode::OwnerIdentityMismatch`, with the same no-publication guarantee.
 - Planned (IR-815): the V2 harness generator shall validate each selected clause id's existence,
   expected kind, and distinctness under FR-002-AC-10 before checking its claim occurrence under
   FR-002-AC-20; an unknown clause id or wrong kind retains AC-10's typed, located diagnostic.
@@ -210,7 +212,7 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
 | FR-002-AC-23 | RETIRED, replaced by FR-002-AC-26; the former digest-shaped text control is obsolete and earns no implementation credit. | Inspection |
 | FR-002-AC-24 | PLANNED (IR-364). With a supplied runtime report whose snapshot is `at_limit` before a seeded non-completed V2 oracle case, `V2HarnessCampaignResult::NonCompleted` retains that case and a summary with `non_completed == 1` and exact `attempted == None`; it does not infer an exact prior count from the saturated report. The report's existing counters and `at_limit` signal remain unchanged, and no runtime verdict is constructed or recorded for the stopped case. | Test (TC-004) |
 | FR-002-AC-25 | PLANNED (IR-815; replaces AC-21). The V2 harness header, `RequirementId`, `RevisionId`, source map and symbols carry FR-011's canonical structural `qocc2_`/`qpkg2_` renderings of each driver's selected claim's complete node, role and ordinal and the same admitted package's name and complete lock. Changing any one structural identity component changes its rendered text. An unchanged node and lock identity never excuses a changed admitted body from the existing body comparison. | Test (TC-004) |
-| FR-002-AC-26 | PLANNED (IR-815; replaces AC-23). At a V2 harness identity text comparison boundary, malformed, truncated, case-folded or otherwise noncanonical structural `qocc2_`/`qpkg2_` text, including a wrong nested path, name, lock member or byte count, returns `HarnessErrorCode::InvalidIdentityRendering` before publication and without normalizing or mutating a report; exact typed and canonical-text comparisons agree on the accepted selection. | Test (TC-004) |
+| FR-002-AC-26 | PLANNED (IR-815; replaces AC-23). At a V2 harness identity text comparison boundary, malformed, truncated, case-folded or otherwise noncanonical structural `qocc2_`/`qpkg2_` text, including an invalid byte count or malformed nested path or lock encoding, returns `HarnessErrorCode::InvalidIdentityRendering` before publication and without normalizing or mutating a report. A different but canonical occurrence returns `MissingClaimOccurrence`; a different but canonical package name or lock returns `OwnerIdentityMismatch`, likewise before publication. Exact typed and canonical-text comparisons agree on the accepted selection. | Test (TC-004) |
 
 ## Open Questions
 

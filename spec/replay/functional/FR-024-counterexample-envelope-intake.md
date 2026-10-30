@@ -118,13 +118,14 @@ module and does not edit `src/replay/frame.rs`. Whichever of the frame-envelope 
 state-clause code lands second extracts the shared packet-assembly piece, in its own change; the
 one that lands first leaves it local.
 
-The frame path's obligation identity, witness and pre-state tie are specified by FR-024-AC-47 to
-FR-024-AC-30 (IR-459). That slice is the single-`self` frame harness only: its only symbolic
-quantities are fields of the one state struct and it has no parameters, so the `arguments` of its
-identity are empty, and its `declared_domains` stay empty (FR-024-AC-29). The postcondition state-clause path's
-caller-supplied `obligation_identity` is outside that slice; the one identity function accepts a
-`postcondition` harness's `StateFrameIdentity` only once its field list is settled (Open
-questions, Q-1).
+The frame path's structural obligation identity is specified by FR-024-AC-47 through AC-51;
+its witness and pre-state tie remain under AC-25 through AC-30 (IR-459). This slice is the
+single-`self` frame harness: its symbolic quantities are fields of one state struct, and it has
+no parameters. Its QSL producer-issued `ObligationIdentity` contains only the frame node,
+optional owning model and producer-assigned ordinal. The separate obligation record has empty
+`arguments` and `declared_domains` (AC-29); its field and range values are checked against the
+selected claim and replay context. The postcondition state-clause path's caller-supplied
+`obligation_identity` remains outside the frame slice (Open questions, Q-1).
 
 The state-clause path supports an operation that declares no parameter and no result, the shape
 of the single-`self` operation-contract harness. An operation that declares either is refused up

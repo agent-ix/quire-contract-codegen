@@ -260,7 +260,11 @@ these same strings; generated symbol identity suffixes shall be
 Comparisons shall use exact typed fields before rendering or exact canonical strings after
 rendering. If an identity text comparison boundary receives malformed or noncanonical text, then
 CG shall return `StrategyErrorCode::InvalidIdentityRendering` before bundle publication,
-verdict construction, or report mutation; CG shall not normalize it. This rendering does not authenticate the same-run
+verdict construction, or report mutation; CG shall not normalize it. A well-formed canonical
+occurrence for a different node, role or ordinal returns `MissingClaimOccurrence`; a well-formed
+canonical package name or lock different from the admitted owner returns
+`OwnerIdentityMismatch`. Both precede publication, verdict construction and report mutation.
+This rendering does not authenticate the same-run
 producer and artifact association required by FR-004.
 
 ## Acceptance Criteria
@@ -287,7 +291,7 @@ producer and artifact association required by FR-004.
 | FR-011-AC-18 | PLANNED (IR-1124; FR-004 live binding remains separate). A campaign run from the emitted V2 runner retains the selected claim and package identity with its own source/map and result for same-invocation producer binding. Published bytes or a detached/copied result alone yield no authenticated campaign, measured coverage or proof credit. A refused selection yields no campaign evidence, including when another claim of the same package succeeds. | Test |
 | FR-011-AC-19 | PLANNED (IR-1079; replaces AC-8). The numeric runner's `RequirementId`, `RevisionId`, generated header, source map and symbol suffix retain the selected driver-bound FR-331 claim's complete structural node, role and ordinal and the same-owner admitted package's complete name and lock through the canonical `qocc2_`/`qpkg2_` renderings. Changing any one admitted identity component changes the corresponding text; a body-only edit retaining the same structural node and lock leaves that identity text unchanged and is still compared through the admitted body. | Test (TC-020) |
 | FR-011-AC-20 | PLANNED (IR-1079; replaces AC-9). For a process request, a FR-331 request whose package name or complete lock differs from the separately admitted package returns `StrategyErrorCode::OwnerIdentityMismatch` before any bundle, verdict or report mutation, while a matched sibling retains its disposition. A package-byte/lock mismatch stays the FR-331 reader's typed refusal. For a linked request, E4/E5 package disagreement stays the driver's handoff refusal; CG checks the selected claim against the one held E5-admitted package without a second owner field. | Test (TC-020) |
-| FR-011-AC-21 | PLANNED (IR-1079; replaces AC-11). Malformed, truncated, case-folded or otherwise noncanonical structural `qocc2_`/`qpkg2_` text, including a wrong byte count, nested node path or lock member, yields `StrategyErrorCode::InvalidIdentityRendering` before bundle publication or verdict/report mutation, without normalization; exact typed and canonical-text comparisons agree on the accepted pair. | Test (TC-020) |
+| FR-011-AC-21 | PLANNED (IR-1079; replaces AC-11). Malformed, truncated, case-folded or otherwise noncanonical structural `qocc2_`/`qpkg2_` text, including a wrong byte count or malformed nested path or lock encoding, yields `StrategyErrorCode::InvalidIdentityRendering` before bundle publication or verdict/report mutation, without normalization. A different but canonical node, role or ordinal yields `MissingClaimOccurrence`; a different but canonical package name or lock yields `OwnerIdentityMismatch`, at the same no-publication boundary. Exact typed and canonical-text comparisons agree on the accepted pair. | Test (TC-020) |
 
 ## Open Questions
 

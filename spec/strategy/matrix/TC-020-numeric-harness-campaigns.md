@@ -72,8 +72,7 @@ exact rates.
     absent from the admitted V2 relation. Inspect refusal, artifact output, verdict construction,
     and report counters; keep a matched sibling selection in the batch. Verify separately that QSL
     keeps `UnknownItem`, `Unbound`, and `Fault` export refusals on the driver side.
-11. At each generated identity text comparison boundary, corrupt one structural `qocc2_` or `qpkg2_` field, including a nested path, name or lock member, truncate it, uppercase hex, or add a leading-zero count. Compare against the exact typed pair
-    and inspect any artifact, verdict, or report mutation.
+11. At each generated identity text comparison boundary, make a malformed nested path or lock encoding, truncate a field, uppercase hex, or add a leading-zero count; require `InvalidIdentityRendering`. Separately supply a different but canonical occurrence node, role or ordinal and require `MissingClaimOccurrence`, then a different but canonical package name or lock and require `OwnerIdentityMismatch`. Compare the accepted canonical text with the exact typed pair and inspect every case for zero artifact, verdict or report mutation on refusal.
 12. Independently of runner generation, call the public V2 selected-claim entry with one admitted
     package containing two distinct checked state clauses, each with an authentic `claim`
     occurrence and a different accepted point. Supply each complete typed key in turn: checked
@@ -135,16 +134,14 @@ exact rates.
   publication and produces no artifact. Clause kind supplies no default point (FR-011-AC-15).
 - Step 9 yields byte-identical output for unchanged inputs (FR-011-AC-12) and exact, lossless
   canonical text in every named location; changing one typed field changes its rendered identity
-  (FR-011-AC-8).
+  (FR-011-AC-19).
 - Step 10 returns `StrategyErrorCode::OwnerIdentityMismatch` for each unequal process FR-331/IR
   owner; upstream process and linked handoff mismatches retain their own refusals. The foreign
   linked claim and other out-of-driver cases return `StrategyErrorCode::MissingClaimOccurrence` for an absent or non-claim occurrence, and
   `StrategyErrorCode::UnboundModelElement` naming the absent referenced element. Each refused
   selection produces no bundle, verdict, or report mutation while the matched sibling retains its disposition. QSL
-  export refusals never enter CG (FR-011-AC-9 and AC-10).
-- Step 11 returns `StrategyErrorCode::InvalidIdentityRendering` before bundle publication or
-  verdict/report mutation without normalizing malformed or noncanonical text; canonical text and typed identity agree
-  (FR-011-AC-11).
+  export refusals never enter CG (FR-011-AC-20 and AC-10).
+- Step 11 returns `StrategyErrorCode::InvalidIdentityRendering` for malformed/noncanonical text, `MissingClaimOccurrence` for a different canonical occurrence and `OwnerIdentityMismatch` for a different canonical package, each before bundle publication or verdict/report mutation. Accepted canonical text and typed identity agree (FR-011-AC-21).
 - Step 12 selects each matching claim's exact `ExecutionPoint`, never the other clause's different
   point. The wrong role, absent ordinal, and wrong owner each return a distinct typed V2 diagnostic
   retaining `CheckedExecutionPointRefusal::MissingClaimOccurrence`, the supplied clause, owner and

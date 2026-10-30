@@ -62,9 +62,10 @@ decisions the original checked graph or detached lowering records would make.
    reached claim, bound and dependency keys, and any declaration
    closure, with Contract IR's authoritative traversal of that admitted graph.
    Repeat one requested node in two independently lowered, admitted packages
-   whose source package names or locks differ. Assert that the two claim-identity pairs
-   differ despite the equal node IDs; assert that the two nodes in the first
-   package also have different pairs despite the equal package identity.
+   with the same source package name and node ID but different immutable locks. Assert that the
+   two claim-identity pairs differ despite equal node IDs. Independently change the package
+   name with a correspondingly changed structural node ID, and assert a different pair; the
+   two nodes in the first package also have different pairs despite equal package identity.
    Preserve repeated request positions without treating index as identity.
 6. At the Contract IR lowering and strict-reader boundary, exercise inputs
    with an unresolved required root, bound or selected dependency. Assert that
@@ -107,8 +108,7 @@ schema, second parser or original-graph fallback decides an item.
 Generated scalar, equality and function claim maps serialize the admitted
 structural package name and lock plus requested structural node ID as the public claim identity, retain
 the originating checked-package ID and their existing source/provenance fields,
-and omit `ir_id`. The same-node/different-package and
-different-node/same-package controls both change the identity pair. Reached
+and omit `ir_id`. The same-node/different-lock and different-node/same-package controls both change the identity pair. Reached
 keys agree with Contract IR's total traversal of admitted lowered items;
 unresolved required references never reach CG as lowered items, and reader
 refusals stop the request.
