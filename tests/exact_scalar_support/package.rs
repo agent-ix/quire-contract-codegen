@@ -192,12 +192,22 @@ fn authored_key(prefix: &str, selector: &Value) -> String {
 }
 
 fn fixture_label(id: &CheckedNodeId) -> String {
-    let path = serde_json::to_value(&id.path).expect("fixture path serializes");
-    let [prefix, label] = path.as_array().expect("fixture path").as_slice() else {
-        panic!("fixture node has no direct authored label: {id:?}");
-    };
-    assert_eq!(prefix, "fixture", "fixture node path prefix");
-    label.as_str().expect("fixture label").to_owned()
+    assert_eq!(id.package.as_ref(), BASE_PACKAGE_NAME);
+    let path = id
+        .path
+        .iter()
+        .map(|segment| match segment {
+            quire_contract_model::CheckedNodePathSegment::Name(name) => name.as_ref(),
+            quire_contract_model::CheckedNodePathSegment::Node(_) => {
+                panic!("fixture node has a nested path: {id:?}")
+            }
+        })
+        .collect::<Vec<_>>();
+    if let ["fixture", label] = path.as_slice() {
+        return (*label).to_owned();
+    }
+    assert_eq!(path.first().copied(), Some("Example"), "fixture node path");
+    path.join("/")
 }
 
 pub fn reference(digest: &str) -> Value {
@@ -4557,18 +4567,70 @@ mod bound_tests {
 mod fixture_identity_tests {
     use super::*;
     use ix_trace_rs::trace;
+    use quire_contract_model::CheckedTerm;
 
-    #[trace("FR-037-AC-1", "FR-037-AC-3", "FR-037-AC-4", "TC-052")]
+    #[trace("FR-037-AC-6", "FR-037-AC-8", "TC-052")]
     #[test]
     fn source_assigned_application_and_enum_member_ids_survive_admission() {
-        let builder = bounded_increment_package();
+        const DEPENDENT: u32 = 99_001;
+        let mut builder = PackageBuilder::default();
+        builder.code(
+            T_INTEGER,
+            "scalar_type",
+            "integer",
+            &key(T_INTEGER),
+            json!({"term": "aggregate", "members": []}),
+        );
+        builder.code(
+            V_PARAM_X,
+            "value",
+            "literal",
+            &key(T_INTEGER),
+            literal("integer", "3"),
+        );
+        builder.application_bounded(
+            BOUNDED_INCREMENT,
+            "expression",
+            "binary",
+            &key(T_INTEGER),
+            application(
+                "binary",
+                op("quire.op.integer.add"),
+                &key(T_INTEGER),
+                vec![reference(&key(V_PARAM_X)), literal("integer", "1")],
+            ),
+            &[],
+        );
+        builder.application_bounded(
+            DEPENDENT,
+            "expression",
+            "binary",
+            &key(T_INTEGER),
+            application(
+                "binary",
+                op("quire.op.integer.add"),
+                &key(T_INTEGER),
+                vec![reference(&key(BOUNDED_INCREMENT)), literal("integer", "2")],
+            ),
+            &[],
+        );
         let raw = builder.raw_wire();
         let provisional = code_id(BOUNDED_INCREMENT);
-        assert!(raw["semantic_graph"]["nodes"]
+        let raw_nodes = raw["semantic_graph"]["nodes"]
             .as_array()
-            .expect("raw nodes")
+            .expect("raw nodes");
+        assert!(raw_nodes
             .iter()
             .any(|node| node["node_id"] == json!(provisional)));
+        let dependent = code_id(DEPENDENT);
+        let dependent_raw = raw_nodes
+            .iter()
+            .find(|node| node["node_id"] == json!(dependent))
+            .expect("dependent application");
+        assert_eq!(
+            dependent_raw["body"]["arguments"][0],
+            reference(&key(BOUNDED_INCREMENT)),
+        );
 
         let (admitted, ids) = builder.admit_resolved();
         let admitted_id = ids.resolve(&provisional);
@@ -4579,6 +4641,18 @@ mod fixture_identity_tests {
             .find(|node| node.node_id == admitted_id)
             .expect("admitted increment");
         assert_eq!(checked.node_id, provisional);
+        let dependent_checked = admitted
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.node_id == dependent)
+            .expect("admitted dependent application");
+        let CheckedTerm::Application { arguments, .. } = &dependent_checked.body else {
+            panic!("dependent body is an application");
+        };
+        assert!(
+            matches!(&arguments[0], CheckedTerm::Reference { target } if target == &provisional)
+        );
 
         let enum_id = id(&base_node_ids().enum_member);
         assert!(admitted
@@ -4588,6 +4662,35 @@ mod fixture_identity_tests {
             .any(|node| node.node_id == enum_id));
         assert_eq!(enum_id, id("Example/Phase/OPEN"));
         assert_ne!(enum_id, id("Example/Phase/SHUT"));
+
+        let mut changed_case = PackageBuilder::default();
+        let shut = base_node_ref("Example/Phase/SHUT");
+        let nodes = changed_case.value["semantic_graph"]["nodes"]
+            .as_array_mut()
+            .expect("producer nodes");
+        let member = nodes
+            .iter_mut()
+            .find(|node| node["node_id"] == base_node_ref("Example/Phase/OPEN"))
+            .expect("producer enum member");
+        member["node_id"] = shut.clone();
+        member["body"]["value"] = json!("SHUT");
+        let source_map = changed_case.value["source_map"]
+            .as_array_mut()
+            .expect("producer source map");
+        let member_source = source_map
+            .iter_mut()
+            .find(|entry| entry["node_id"] == base_node_ref("Example/Phase/OPEN"))
+            .expect("producer enum source mapping");
+        member_source["node_id"] = shut;
+        let (changed_admitted, _) = changed_case.admit_resolved();
+        let changed_member = changed_admitted
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.node_id == id("Example/Phase/SHUT"))
+            .expect("admitted changed enum member");
+        assert_eq!(changed_member.semantic_type, id("Example/Phase"));
+        assert!(matches!(&changed_member.body, CheckedTerm::Literal { .. }));
     }
 }
 

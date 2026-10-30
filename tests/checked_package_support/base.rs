@@ -39,24 +39,16 @@ fn base_package() -> serde_json::Value {
     const GRAPH: &str = "quire.checked-semantic-graph/v2";
     let ids = base_node_ids();
     let node_ref = |digest: &str| base_node_ref(digest);
-    // A definition is named by `{authority, identity}` alone; a raw source by
-    // `{authority, identity, digest_domain, digest}` (IR `CheckedArtifactRef`, `CheckedSourceRef`).
+    // Definitions and source documents have their own closed identity types.
     let definition =
         |identity: &str| serde_json::json!({"authority": "agent-ix", "identity": identity});
-    let source_ref = |identity: &str, digest: char| {
-        serde_json::json!({
-            "authority": "agent-ix",
-            "identity": identity,
-            "digest_domain": "quire.source.bytes/v1",
-            "digest": digest.to_string().repeat(64),
-        })
-    };
+    let source_ref = |identity: &str| definition(identity);
     let edition = serde_json::json!({
         "role": "edition",
         "definition": definition("quire-edition"),
     });
     let model = definition("example-model");
-    let source = source_ref("example", '2');
+    let source = source_ref("example");
     let declared = serde_json::json!([{"role": "declaration", "ordinal": 0}]);
 
     let nodes = vec![
@@ -113,11 +105,10 @@ fn base_package() -> serde_json::Value {
         "contract_version": "quire.checked-package/v2",
         "name": BASE_PACKAGE_NAME,
         "lock": {
-            "sources": [source, source_ref("example-units", '6')],
+            "sources": [source, source_ref("example-units")],
             "edition": edition,
             "profile_selections": [],
             "definition_selections": [model],
-            "model_selections": [],
             "required_features": ["quire.value.complete/v1"],
             "dependency_selections": [],
         },
