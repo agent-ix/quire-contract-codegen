@@ -1202,7 +1202,7 @@ fn classify_claim(lookup: &ContractLookup<'_>, claim: &ExactScalarClaim) -> Outc
 }
 
 fn reject_duplicates_and_mixtures(states: &mut [ItemState]) {
-    let mut first_state_package: Option<String> = None;
+    let mut first_state_package: Option<ContractSourceV1> = None;
     for index in 0..states.len() {
         let Some(identity) = states[index].identity.clone() else {
             continue;
