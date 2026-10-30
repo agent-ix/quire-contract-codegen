@@ -181,7 +181,7 @@ preserve these distinctions; it must never yield `Reproduced`, `Refuted` or `Ver
 
 ## Scalar Obligation Identity
 
-CG obtains the scalar claim identity from the admitted IR reader's FR-322 structural `NodeKey`/`CheckedNodeId` for the original application and retains the exact checked claim body and positional operand metadata from that read. The identity is compared as an exact string or structural value; CG does not derive an obligation hash or encode a parity preimage. QSL-1293 owns removal of the old shared mint and digest check. A different package, path, or producer ordinal yields a different structural identity; a body-only change under the same identity is refused by the retained-body comparison.
+CG obtains the scalar claim identity from the admitted IR reader's FR-322 structural `NodeKey`/`CheckedNodeId` for the original application and retains the authentic expression occurrence from that read. CG typed generation supplies the scalar kind and positional operand identities, ranges and provenance; CG retains their complete checked claim body for comparison. The identity is compared as an exact string or structural value; CG does not derive an obligation hash or encode a parity preimage. QSL-1293 owns removal of the old shared mint and digest check. A different package, path, or producer ordinal yields a different structural identity; a body-only change under the same identity is refused by the retained-body comparison.
 `operator_parity.rs` recompiles the original context, checks the application node/operator and
 selected enclosing-function membership, authenticates the occurrence and positional operands,
 then compares the claimed structural identity and complete retained claim body before scalar comparison. A mismatched identity or body refuses with the owning typed stale-dependency/revision-mismatch result; there are no claimed or recomputed digests. This is source inspection, not a passing-test claim. Actual
@@ -203,7 +203,7 @@ separately. Current CG has no typed scalar-kind source. Until generation impleme
 this allocation, the route returns the named unavailable-capability refusal without minting an
 identity.
 
-**Scalar identity conformance.** For an admitted current-run scalar claim, the replacement AC-15/AC-16 checks use the authoritative IR-read application identity, expression occurrence, scalar kind and ordered operand identities and ranges, then require the actual QSL operator route to accept the matching structural claim. The adverse controls change one included member at a time, retain
+**Scalar identity conformance.** For an admitted current-run scalar claim, the replacement AC-15/AC-16 checks use the authoritative IR-read application identity and expression occurrence together with the CG-generated and retained scalar kind and ordered operand identities and ranges, then require the actual QSL operator route to accept the matching structural claim. The adverse controls change one included member at a time, retain
 repeated operand positions and refuse invented occurrence or operand membership. A synthetic
 encoding example alone is not evidence of authoritative membership, generated metadata retention
 or passing routed replay.
@@ -240,8 +240,9 @@ shall not pick the first or lowest ordinal. Replay of multi-occurrence nodes is 
 an owning generation change that selects and retains the proved item's occurrence. A node's
 having several valid QSL occurrences alone supplies no selection provenance.
 
-CG shall take the application identity from the same admitted IR reader result used to retain
-its checked claim and proving metadata. The closed claim members are the application `node`,
+CG shall take the application identity and authentic occurrence from the admitted IR reader.
+CG typed generation shall supply and retain the scalar kind, positional operand identities,
+ranges and proving metadata for the complete checked claim body. The closed claim members are the application `node`,
 authentic `occurrence_key`, typed `obligation_kind` and ordered `arguments`; each argument
 retains its position, tagged operand identity and actual harness range. A graph operand uses
 its checked graph-child node; an inline literal uses the application, occurrence and position,
@@ -345,10 +346,10 @@ Cross-binding converter failures return no settlement rather than settling anoth
 | FR-032-AC-12 | PLANNED (IR-631) / CODE-GATED (typed scalar-family/metadata retention and actual CG/QSL route). When a structurally self-consistent claim invents an application occurrence or operand child, or misstates an inline literal's value/singleton range, the consumer observes the corresponding merged typed membership refusal before structural claim comparison; a self-consistent string cannot admit invented metadata. | Test |
 | FR-032-AC-13 | ~~Retired preimage-encoder failure criterion.~~ Missing or malformed authoritative identity/body refusal with no fabricated identity is carried by FR-032-AC-18. | Inspection |
 | FR-032-AC-14 | PLANNED (IR-631) / CODE-GATED (actual CG scalar builder/converter). Adding the scalar builder/converter preserves existing function/clause carry-only behavior and function/frame identity encoding; none is redirected through scalar parity or changed by its positional argument rule. | Test |
-| FR-032-AC-15 | PLANNED / CODE-GATED. The admitted IR reader supplies the original application structural identity and authentic expression occurrence, scalar kind, and one argument for each operand position in actual draw order, with typed graph-child or inline-literal provenance and the harness range. Two draws of one parameter remain two entries. Changing a package, path or producer ordinal changes the structural identity; changing an included body member while the identity stays equal is caught by complete retained-body comparison and refuses. A source-span or native-outcome change alone does not alter the claim identity. Missing or ambiguous occurrence, operand provenance or scalar-kind retention refuses before replay; no identifier sort, node deduplication, invented ordinal or unrelated enclosing parameter passes. | Test |
+| FR-032-AC-15 | PLANNED / CODE-GATED. The admitted IR reader supplies the original application structural identity and authentic expression occurrence. CG typed generation supplies and retains the scalar kind and one argument for each operand position in actual draw order, with typed graph-child or inline-literal provenance and the harness range. Two draws of one parameter remain two entries. Changing a package, path or producer ordinal changes the structural identity; changing an included body member while the identity stays equal is caught by complete retained-body comparison and refuses. A source-span or native-outcome change alone does not alter the claim identity. Missing or ambiguous occurrence, operand provenance or scalar-kind retention refuses before replay; no identifier sort, node deduplication, invented ordinal or unrelated enclosing parameter passes. | Test |
 | FR-032-AC-16 | PLANNED / CODE-GATED. An independent fixture obtains the same application `NodeKey`/`CheckedNodeId` from IR admission and CG retention, checks the exact structural identity and complete positional body, and the actual QSL operator route accepts the matching claim. No CG-local identity derivation, copied encoder, stand-in verifier or synthetic acceptance passes. | Test |
 | FR-032-AC-17 | PLANNED / CODE-GATED. With a valid original claim retained, altering only the claimed package, path or producer ordinal, or changing one otherwise membership-valid retained body member while reusing the old structural identity, produces a typed stale-dependency/revision-mismatch refusal before scalar comparison. A body-only edit cannot pass because the node identity is equal. No claimed or recomputed digest is required. | Test |
-| FR-032-AC-18 | PLANNED / CODE-GATED. If the admitted IR read does not supply a valid application identity, authentic occurrence or required retained body member, the CG builder returns typed setup refusal without replay or fabricated identity. A caller string or usable sentinel cannot replace the absent authority. | Test |
+| FR-032-AC-18 | PLANNED / CODE-GATED. If the admitted IR read lacks a valid application identity or authentic occurrence, or CG typed generation lacks a required retained body member, the CG builder returns typed setup refusal without replay or fabricated identity. A caller string or usable sentinel cannot replace the absent authority. | Test |
 
 ## Intent and Existing Coverage
 
@@ -408,8 +409,8 @@ The positive operator-level route has these explicit **CODE gates**:
 2. CG generation must retain the authoritative scalar metadata needed by the positional
    checked claim body and original renderer-limit/proving record. Unique authentic occurrence, typed positional operand identity/range/provenance access
    (IR-648) and the typed scalar-family implementation/retention remain explicit gates.
-   CG must take the structural application identity and checked claim body from the IR reader,
-   compare the complete body even when the node identity is unchanged, and prove matching-claim
+   CG must take the structural application identity and authentic occurrence from the IR reader,
+   retain the typed scalar kind and positional body from CG generation, and compare the complete body even when the node identity is unchanged, and prove matching-claim
    acceptance and mismatch refusal with actual QSL. CG must validate retained graph-child ranges
    against the proving schema.
 

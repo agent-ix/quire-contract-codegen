@@ -249,9 +249,9 @@ authored).
   proof credit. The existing V1 clause identity rule above does not define
   this per-step record shape; FR-015-AC-120 through AC-122 own its tests.
 - E-1 scalar allocation (PLANNED/CODE-GATED, IR-631; replacement for the retired parity
-  preimage). CG takes the original application `NodeKey`/`CheckedNodeId` from the admitted IR
-  reader and retains its checked claim body: authentic `expression` occurrence, typed scalar
-  kind and one argument per operand position in original draw order. Every argument retains
+  preimage). CG takes the original application `NodeKey`/`CheckedNodeId` and authentic `expression`
+  occurrence from the admitted IR reader. CG typed generation supplies and retains the scalar
+  kind and one argument per operand position in original draw order as the checked claim body. Every argument retains
   its position, typed `GraphChild` or `InlineLiteral` identity and actual harness range.
   An inline literal uses the application node/occurrence/position and its singleton range;
   an existing literal node is a graph child. Two independent draws of one parameter remain
