@@ -1125,10 +1125,32 @@ pub fn read_mutated_wire(mut wire: Value) -> CheckedPackageV2ReadResult {
     CheckedPackageV2::read(&bytes, CheckedPackageReadLimits::bounded(), &evidence())
 }
 
-/// Retain selected producer nodes and their exact checked dependencies. Scalar
-/// controls use this to read one bounded cohort instead of the complete corpus,
-/// whose structural IDs now exceed the reader's package byte ceiling.
+/// Retain selected producer nodes, their checked dependencies and the local
+/// type nodes named by their bodies. Literal type and application result-type
+/// references are deliberately absent from the dependency join, but the reader
+/// still needs those typed nodes to validate the retained body. Scalar controls
+/// use this to read one bounded cohort below the reader's package byte ceiling.
 pub fn focused_wire(mut wire: Value, subjects: &[CheckedNodeId]) -> Value {
+    fn authored_body_ids(value: &Value, nodes: &[Value], pending: &mut Vec<Value>) {
+        if let Value::Object(object) = value {
+            if object.contains_key("package") && object.contains_key("path") {
+                if serde_json::from_value::<CheckedNodeId>(value.clone()).is_ok()
+                    && nodes.iter().any(|node| &node["node_id"] == value)
+                {
+                    pending.push(value.clone());
+                }
+                return;
+            }
+            for member in object.values() {
+                authored_body_ids(member, nodes, pending);
+            }
+        } else if let Value::Array(items) = value {
+            for item in items {
+                authored_body_ids(item, nodes, pending);
+            }
+        }
+    }
+
     let nodes = wire["semantic_graph"]["nodes"]
         .as_array()
         .expect("fixture nodes")
@@ -1138,6 +1160,9 @@ pub fn focused_wire(mut wire: Value, subjects: &[CheckedNodeId]) -> Value {
         .iter()
         .map(|id| serde_json::to_value(id).expect("subject ID"))
         .collect::<Vec<_>>();
+    // The lock's selected domain model is represented by its root node even
+    // when a scalar request reaches only one model-owned relation declaration.
+    pending.push(node_ref(&key(SELECTED_MODEL_ROOT)));
     while let Some(next) = pending.pop() {
         let key = serde_json::to_string(&next).expect("node ID");
         if !retained.insert(key) {
@@ -1158,6 +1183,7 @@ pub fn focused_wire(mut wire: Value, subjects: &[CheckedNodeId]) -> Value {
         if semantic_type != &next {
             pending.push(semantic_type.clone());
         }
+        authored_body_ids(&node["body"], &nodes, &mut pending);
     }
     let keep = |id: &Value| retained.contains(&serde_json::to_string(id).expect("node ID"));
     wire["semantic_graph"]["nodes"] = Value::Array(
@@ -3004,7 +3030,7 @@ fn corpus_package_with_expression_operand() -> PackageBuilder {
         let int_key = builder.bound(&INT);
         builder.dedicated_operand("integer", &[int_key])
     };
-    builder.application_bounded(
+    builder.application_bounded_anchored(
         CALLS_FUNCTION,
         "expression",
         "binary",
@@ -3036,6 +3062,7 @@ fn corpus_package_with_expression_operand() -> PackageBuilder {
             ],
         ),
         &[INT],
+        Some(&calls_function_anchor),
     );
     let wrong_body_anchor = {
         let int_key = builder.bound(&INT);
@@ -4530,21 +4557,42 @@ pub fn golden_items() -> Vec<ExactScalarItem> {
 pub fn corpus_cohorts() -> Vec<(CheckedPackageV2, Vec<ExactScalarItem>)> {
     let wire = corpus_package().wire();
     let items = golden_items();
-    items
-        .chunks(8)
+    let mut requests = Vec::<Vec<ExactScalarItem>>::new();
+    for item in items {
+        let split = requests.last().is_none_or(|cohort| {
+            cohort.len() >= 8
+                && cohort
+                    .last()
+                    .is_some_and(|last| last.node_id != item.node_id)
+        });
+        if split {
+            requests.push(Vec::new());
+        }
+        requests.last_mut().expect("cohort opened").push(item);
+    }
+    requests
+        .into_iter()
         .map(|items| {
-            let cohort_wire = focused_wire(
-                wire.clone(),
-                &items
-                    .iter()
-                    .map(|item| item.node_id.clone())
-                    .collect::<Vec<_>>(),
-            );
+            let authored_nodes = wire["semantic_graph"]["nodes"]
+                .as_array()
+                .expect("authored corpus nodes");
+            // MISSING is an intentional request with no producer node. It
+            // remains in the cohort request while the retained graph contains
+            // only the producer's actual node closure.
+            let subjects = items
+                .iter()
+                .map(|item| item.node_id.clone())
+                .filter(|id| {
+                    let id = serde_json::to_value(id).expect("subject ID");
+                    authored_nodes.iter().any(|node| node["node_id"] == id)
+                })
+                .collect::<Vec<_>>();
+            let cohort_wire = focused_wire(wire.clone(), &subjects);
             let result = read_mutated_wire(cohort_wire);
             let CheckedPackageV2ReadResult::Admitted(package) = result else {
                 panic!("bounded scalar corpus cohort must admit: {result:?}");
             };
-            (*package, items.to_vec())
+            (*package, items)
         })
         .collect()
 }
@@ -4672,11 +4720,12 @@ mod fixture_identity_tests {
             .iter()
             .flat_map(|(package, items)| {
                 items.iter().map(move |item| {
-                    assert!(package
+                    let present = package
                         .graph()
                         .nodes
                         .iter()
-                        .any(|node| node.node_id == item.node_id));
+                        .any(|node| node.node_id == item.node_id);
+                    assert_eq!(present, item.node_id != code_id(MISSING));
                     item.node_id.clone()
                 })
             })

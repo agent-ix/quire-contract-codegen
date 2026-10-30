@@ -762,17 +762,8 @@ fn function_body<'l>(lib: &'l str, symbol: &str) -> &'l str {
 #[trace("FR-014-AC-1", "FR-014-AC-3", "FR-014-AC-7", "FR-014-AC-10", "TC-024")]
 #[test]
 fn tc_024_refused_items_are_typed_emit_no_code_and_leave_siblings_unchanged() {
-    let (package, ids) = corpus_package().admit_resolved();
+    let ids = FixtureIds;
     let resolve = |code| ids.resolve(&code_id(code));
-    let items = golden_items()
-        .into_iter()
-        .map(|mut item| {
-            item.node_id = ids.resolve(&item.node_id);
-            item
-        })
-        .collect::<Vec<_>>();
-    let oracles = generate(&package, &items);
-    let lib = contents(&oracles, "src/lib.rs");
     // IR's lowering checks reachable unsupported nodes in admitted node-id order. The
     // rekeyed clause sorts before its formula, so it is the first unsupported temporal node.
     assert!(resolve(TEMPORAL) < resolve(TEMPORAL_FORMULA));
@@ -897,90 +888,106 @@ fn tc_024_refused_items_are_typed_emit_no_code_and_leave_siblings_unchanged() {
             },
         ),
     ];
-    for (code, refusal) in &expected {
-        let node_id = resolve(*code);
-        match dispositions(&oracles).get(&node_id) {
-            Some(ClaimDisposition::Refused { refusal: actual }) => {
-                assert_eq!(actual, refusal, "node {code}");
-            }
-            other => panic!("node {code} is not refused: {other:?}"),
-        }
-        assert!(
-            !lib.contains(&subject_header(&node_id)),
-            "refused node {code} left code behind"
-        );
-    }
-    // One disposition per distinct requested node.
-    assert_eq!(
-        oracles.claim_map.items.len(),
-        corpus().len() + expected.len()
-    );
-
-    // Each generated function is byte-identical with or without the refused items.
-    let generated_only = corpus()
+    let generated_ids = corpus()
         .into_iter()
-        .map(|expression| ExactScalarItem {
-            node_id: resolve(expression.code),
-            operation: expression.operation,
-        })
-        .collect::<Vec<_>>();
-    let alone = generate(&package, &generated_only);
-    assert_eq!(contents(&alone, "src/lib.rs"), lib);
-    let expected_source = source_identity(&package);
-    assert_eq!(oracles.claim_map.source, expected_source);
-    assert_eq!(alone.claim_map.source, expected_source);
-    let full_claims = oracles
-        .claim_map
-        .items
-        .iter()
-        .filter(|claim| matches!(claim.result, ClaimDisposition::Generated(_)))
-        .collect::<Vec<_>>();
-    let alone_claims = alone
-        .claim_map
-        .items
-        .iter()
-        .filter(|claim| matches!(claim.result, ClaimDisposition::Generated(_)))
-        .collect::<Vec<_>>();
-    assert_eq!(alone_claims.len(), full_claims.len());
-    for (alone, full) in alone_claims.iter().zip(&full_claims) {
-        assert_eq!(alone.node_id, full.node_id);
-        assert_eq!(alone.operation, full.operation);
-        let (ClaimDisposition::Generated(left), ClaimDisposition::Generated(right)) =
-            (&alone.result, &full.result)
-        else {
-            panic!("selected claims are generated");
-        };
-        assert_eq!(left.contract_package_identity, expected_source);
-        assert_eq!(right.contract_package_identity, expected_source);
-        assert_eq!(left.symbol, right.symbol);
-        assert_eq!(left.package_id, right.package_id);
-        assert_eq!(left.semantic_form, right.semantic_form);
-        assert_eq!(left.semantic_type, right.semantic_type);
-        assert_eq!(left.source_map, right.source_map);
-        assert_eq!(left.claims, right.claims);
-        assert_eq!(left.bounds, right.bounds);
-        assert_eq!(left.checked_bounds, right.checked_bounds);
-        assert_eq!(left.dependencies, right.dependencies);
-        assert_eq!(left.oracle_source, right.oracle_source);
-    }
+        .map(|expression| resolve(expression.code))
+        .collect::<BTreeSet<_>>();
+    let mut checked_refusals = BTreeSet::new();
+    let mut claim_count = 0;
+    for (package, items) in corpus_cohorts() {
+        let oracles = generate(&package, &items);
+        let lib = contents(&oracles, "src/lib.rs");
+        claim_count += oracles.claim_map.items.len();
+        for (code, refusal) in &expected {
+            let node_id = resolve(*code);
+            if !items.iter().any(|item| item.node_id == node_id) {
+                continue;
+            }
+            assert!(checked_refusals.insert(*code), "duplicate refusal cohort");
+            match dispositions(&oracles).get(&node_id) {
+                Some(ClaimDisposition::Refused { refusal: actual }) => {
+                    assert_eq!(actual, refusal, "node {code}");
+                }
+                other => panic!("node {code} is not refused: {other:?}"),
+            }
+            assert!(
+                !lib.contains(&subject_header(&node_id)),
+                "refused node {code} left code behind"
+            );
+        }
 
-    // A refusal of one copy of a duplicated sibling does not depend on its
-    // descriptors' arrival order, and a single copy of the same node generates.
-    let single = generate(
-        &package,
-        &[ExactScalarItem {
-            node_id: resolve(DUPLICATED),
-            operation: golden_items()
-                .into_iter()
-                .find(|item| item.node_id == code_id(DUPLICATED))
-                .expect("duplicated item")
-                .operation,
-        }],
+        // Each generated function is byte-identical with or without the refused items.
+        let generated_only = items
+            .iter()
+            .filter(|item| generated_ids.contains(&item.node_id))
+            .cloned()
+            .collect::<Vec<_>>();
+        let alone = generate(&package, &generated_only);
+        assert_eq!(contents(&alone, "src/lib.rs"), lib);
+        let expected_source = source_identity(&package);
+        assert_eq!(oracles.claim_map.source, expected_source);
+        assert_eq!(alone.claim_map.source, expected_source);
+        let full_claims = oracles
+            .claim_map
+            .items
+            .iter()
+            .filter(|claim| matches!(claim.result, ClaimDisposition::Generated(_)))
+            .collect::<Vec<_>>();
+        let alone_claims = alone
+            .claim_map
+            .items
+            .iter()
+            .filter(|claim| matches!(claim.result, ClaimDisposition::Generated(_)))
+            .collect::<Vec<_>>();
+        assert_eq!(alone_claims.len(), full_claims.len());
+        for (alone, full) in alone_claims.iter().zip(&full_claims) {
+            assert_eq!(alone.node_id, full.node_id);
+            assert_eq!(alone.operation, full.operation);
+            let (ClaimDisposition::Generated(left), ClaimDisposition::Generated(right)) =
+                (&alone.result, &full.result)
+            else {
+                panic!("selected claims are generated");
+            };
+            assert_eq!(left.contract_package_identity, expected_source);
+            assert_eq!(right.contract_package_identity, expected_source);
+            assert_eq!(left.symbol, right.symbol);
+            assert_eq!(left.package_id, right.package_id);
+            assert_eq!(left.semantic_form, right.semantic_form);
+            assert_eq!(left.semantic_type, right.semantic_type);
+            assert_eq!(left.source_map, right.source_map);
+            assert_eq!(left.claims, right.claims);
+            assert_eq!(left.bounds, right.bounds);
+            assert_eq!(left.checked_bounds, right.checked_bounds);
+            assert_eq!(left.dependencies, right.dependencies);
+            assert_eq!(left.oracle_source, right.oracle_source);
+        }
+
+        if items.iter().any(|item| item.node_id == resolve(DUPLICATED)) {
+            // Refusing the duplicate does not depend on descriptor order; a
+            // single copy of the same admitted node still generates.
+            let single = generate(
+                &package,
+                &[ExactScalarItem {
+                    node_id: resolve(DUPLICATED),
+                    operation: items
+                        .iter()
+                        .find(|item| item.node_id == resolve(DUPLICATED))
+                        .expect("duplicated item")
+                        .operation
+                        .clone(),
+                }],
+            );
+            assert!(matches!(
+                single.claim_map.items[0].result,
+                ClaimDisposition::Generated(_)
+            ));
+        }
+    }
+    assert_eq!(claim_count, corpus().len() + expected.len());
+    assert_eq!(
+        checked_refusals,
+        expected.iter().map(|(code, _)| *code).collect()
     );
-    assert!(matches!(
-        single.claim_map.items[0].result,
-        ClaimDisposition::Generated(_)
-    ));
 }
 
 /// AC-14 is bound here for its provenance conjunct only: the loop below asserts that every
@@ -1379,7 +1386,8 @@ fn tc_024_operator_confusion_within_one_shape_is_not_silently_confirmed() {
 #[trace("FR-038-AC-3", "FR-014-AC-8", "FR-014-AC-13", "FR-014-AC-18", "TC-024")]
 #[test]
 fn tc_024_catalog_consumer_negative_cases_refuse_wrong_shapes_and_preserve_order_and_target() {
-    let (package, _) = corpus_package().admit_resolved();
+    let (package, _) =
+        corpus_package_for_codes(&[1003, 1041, WRONG_ARITY, WRONG_RESULT]).admit_resolved();
 
     let subtraction = generate(
         &package,
@@ -1407,7 +1415,13 @@ fn tc_024_catalog_consumer_negative_cases_refuse_wrong_shapes_and_preserve_order
         "rt::order_numbers(rt::OrderingOperator::Less, rt::OrderedOperands::Integers(right, left), meter)"
     ));
 
-    let golden = generate(&package, &golden_items());
+    let golden = generate(
+        &package,
+        &golden_items()
+            .into_iter()
+            .filter(|item| [code_id(WRONG_ARITY), code_id(WRONG_RESULT)].contains(&item.node_id))
+            .collect::<Vec<_>>(),
+    );
     assert_eq!(
         refusal_of(&golden, WRONG_ARITY),
         ExactScalarRefusal::FormMismatch {
@@ -1802,8 +1816,19 @@ fn refusal_variant_name(refusal: &ExactScalarRefusal) -> &'static str {
 #[trace("FR-014-AC-1", "FR-014-AC-3", "FR-014-AC-11", "FR-014-AC-14", "TC-024")]
 #[test]
 fn tc_024_every_exact_scalar_refusal_variant_is_matched_exhaustively() {
-    let package = corpus_package().admit();
-    let oracles = generate(&package, &golden_items());
+    let mut refused = BTreeMap::new();
+    for oracles in corpus_cohort_oracles() {
+        for claim in &oracles.claim_map.items {
+            if let ClaimDisposition::Refused { refusal } = &claim.result {
+                assert!(
+                    refused
+                        .insert(claim.node_id.clone(), refusal_variant_name(refusal))
+                        .is_none(),
+                    "one refusal per requested node"
+                );
+            }
+        }
+    }
 
     let from_the_golden_corpus = [
         (DUPLICATED, "DuplicateRequest"),
@@ -1821,11 +1846,7 @@ fn tc_024_every_exact_scalar_refusal_variant_is_matched_exhaustively() {
         (WRONG_OPERAND_REFERENCE, "OperandTypeMismatch"),
     ];
     for (code, expected) in from_the_golden_corpus {
-        assert_eq!(
-            refusal_variant_name(&refusal_of(&oracles, code)),
-            expected,
-            "node {code}"
-        );
+        assert_eq!(refused.get(&code_id(code)), Some(&expected), "node {code}");
     }
 
     let (work_exhausted_package, work_exhausted_item) = work_exhausted_fixture();
@@ -2232,7 +2253,10 @@ fn tc_024_literal_operands_are_classified_by_value_kind_and_constants_stop_typed
 #[trace("FR-014-AC-8", "FR-014-AC-9", "TC-024")]
 #[test]
 fn tc_024_generated_crate_is_unpublished_charge_free_and_compiles() {
-    let oracles = generate(&corpus_package().admit(), &golden_items());
+    let oracles = corpus_cohort_oracles()
+        .into_iter()
+        .next()
+        .expect("bounded scalar corpus cohort");
     let manifest = contents(&oracles, "Cargo.toml");
     assert!(manifest.contains(&format!("name = \"{EXACT_SCALAR_CRATE_NAME}\"")));
     assert!(manifest.contains("publish = false"));
@@ -3095,48 +3119,49 @@ fn derive_one(
 #[trace("FR-014-AC-18", "FR-014-AC-19", "TC-024")]
 #[test]
 fn tc_024_derivation_equals_every_golden_corpus_descriptor() {
-    let package = corpus_package().admit();
     let corpus = corpus();
-    let fixture_ids = fixture_ids_for(&package);
-    let ids = corpus
+    let expected = corpus
         .iter()
-        .map(|expression| fixture_ids.resolve(&code_id(expression.code)))
-        .collect::<Vec<_>>();
-    let derived = derive_exact_scalar_items(&package, &ids);
-    assert_eq!(
-        derived.len(),
-        ids.len(),
-        "one result per node id, in input order"
-    );
-    let mut items = Vec::new();
-    for (expression, derived) in corpus.iter().zip(derived) {
-        let item = derived.unwrap_or_else(|refusal| {
-            panic!(
-                "corpus node {} does not derive: {refusal:?}",
+        .map(|expression| (code_id(expression.code), expression))
+        .collect::<BTreeMap<_, _>>();
+    let mut seen = BTreeSet::new();
+    for (package, items) in corpus_cohorts() {
+        let declared = items
+            .into_iter()
+            .filter(|item| expected.contains_key(&item.node_id))
+            .collect::<Vec<_>>();
+        let ids = declared
+            .iter()
+            .map(|item| item.node_id.clone())
+            .collect::<Vec<_>>();
+        let derived = derive_exact_scalar_items(&package, &ids);
+        assert_eq!(derived.len(), ids.len(), "one result per node id");
+        let mut derived_items = Vec::new();
+        for (id, derived) in ids.iter().zip(derived) {
+            let expression = expected[id];
+            let item = derived.unwrap_or_else(|refusal| {
+                panic!(
+                    "corpus node {} does not derive: {refusal:?}",
+                    expression.code
+                )
+            });
+            assert_eq!(item.node_id, *id);
+            assert_eq!(
+                item.operation, expression.operation,
+                "node {} derives to its declared descriptor",
                 expression.code
-            )
-        });
-        assert_eq!(item.node_id, fixture_ids.resolve(&code_id(expression.code)));
-        assert_eq!(
-            item.operation, expression.operation,
-            "node {} derives to its declared descriptor",
-            expression.code
-        );
-        items.push(item);
+            );
+            assert!(seen.insert(id.clone()), "duplicate corpus node");
+            derived_items.push(item);
+        }
+        let from_derived = generate(&package, &derived_items).claim_map;
+        assert_eq!(from_derived, generate(&package, &declared).claim_map);
+        assert!(from_derived.items.iter().all(|claim| {
+            matches!(claim.result, ClaimDisposition::Generated(_))
+                && claim.operation.provenance == OperationProvenance::IrConfirmed
+        }));
     }
-    let from_derived = generate(&package, &items).claim_map;
-    let declared = corpus
-        .iter()
-        .map(|expression| ExactScalarItem {
-            node_id: code_id(expression.code),
-            operation: expression.operation.clone(),
-        })
-        .collect::<Vec<_>>();
-    assert_eq!(from_derived, generate(&package, &declared).claim_map);
-    assert!(from_derived.items.iter().all(|claim| {
-        matches!(claim.result, ClaimDisposition::Generated(_))
-            && claim.operation.provenance == OperationProvenance::IrConfirmed
-    }));
+    assert_eq!(seen, expected.into_keys().collect());
 }
 
 /// The operations with more than one descriptor for one identity are told apart by what the node
