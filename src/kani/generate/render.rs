@@ -9,7 +9,10 @@ use super::{
 };
 use crate::{
     core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES},
-    kani::abi::{i64_literal, KaniPrimitiveType},
+    kani::{
+        abi::{i64_literal, KaniPrimitiveType},
+        identity::CollectionKindIdentity,
+    },
 };
 
 fn line(source: &mut String, text: &str) {
@@ -277,6 +280,14 @@ fn render_collection(
     let minimum_length = collection.minimum_length;
     let maximum_length = collection.maximum_length;
     let array_len = collection.array_len;
+    let uniqueness_assumption = match collection.kind {
+        CollectionKindIdentity::Sequence => String::new(),
+        CollectionKindIdentity::OrderedSet => format!(
+            "                for prior in 0..index {{\n\
+                     kani::assume(item != {item_name}[prior as usize]);\n\
+                     }}\n"
+        ),
+    };
     let (element_type, element_assumption) = match collection.element {
         CollectionElement::Boolean => ("bool", String::new()),
         CollectionElement::Integer { minimum, maximum } => (
@@ -298,12 +309,13 @@ fn render_collection(
                  for index in 0..{length_name} {{\n\
                      let item = {item_name}[index as usize];\n\
 {element_assumption}\
+{uniqueness_assumption}\
                  }}\n\
                  let claim = (0..{length_name}).{collection_call}(|index| {{\n\
                      let item = {item_name}[index as usize];\n\
                      {predicate}\n\
                  }});\n\
-                 assert!(claim, \"the symbolic sequence satisfies the selected QSL {quantifier} body\");\n\
+                 assert!(claim, \"the symbolic collection satisfies the selected QSL {quantifier} body\");\n\
                  kani::cover!({}, \"{}\");\n\
              }}\n\
          }}\n",

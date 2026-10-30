@@ -26,6 +26,7 @@ use quire_contract_model::{
     CheckedPackageReadLimits, CheckedPackageV2, CheckedPackageV2ReadResult, CheckedSemanticNodeV2,
     CheckedTerm,
 };
+use quire_exact::CollectionKind;
 use quire_semantic_value::catalog::Category;
 use serde_json::{json, Value};
 use std::{collections::BTreeMap, env, fs, path::PathBuf, time::Duration};
@@ -326,10 +327,14 @@ fn collection_harness_with_ceilings(
     else {
         panic!("the source-authored collection claim has a supported disposition");
     };
-    assert!(matches!(
-        records[0].disposition,
-        ObligationDisposition::Supported { .. }
-    ));
+    assert!(
+        matches!(
+            records[0].disposition,
+            ObligationDisposition::Supported { .. }
+        ),
+        "collection disposition: {:#?}",
+        records[0]
+    );
     collection_harnesses.into_iter().next().unwrap()
 }
 
@@ -502,7 +507,11 @@ fn collection_playback_values(counterexample: &str) -> Vec<i64> {
 
 /// Replay the same source function used by the collection harness against an
 /// object environment whose `items` field is the supplied concrete collection.
-fn replay_collection_function(fixture: &Emitted, values: &[i64]) -> ReplayResult {
+fn replay_collection_function(
+    fixture: &Emitted,
+    values: &[i64],
+    kind: CollectionKind,
+) -> ReplayResult {
     const OBJECT_KEY: &str = "collection-subject";
     let source_identity =
         SourceIdentity::new("agent-ix", "ir268-symbolic.native", "git", "fixture");
@@ -563,7 +572,8 @@ fn replay_collection_function(fixture: &Emitted, values: &[i64]) -> ReplayResult
                 fields: vec![
                     (
                         "items".to_owned(),
-                        SnapshotValue::sequence(
+                        SnapshotValue::collection(
+                            kind,
                             values
                                 .iter()
                                 .map(|value| SnapshotValue::integer(value.to_string()))
@@ -636,8 +646,13 @@ fn replay_collection_function(fixture: &Emitted, values: &[i64]) -> ReplayResult
     replay(request, ReplayLimits::default()).expect("QSL admits and executes the native replay")
 }
 
-fn assert_native_collection_result(fixture: &Emitted, values: &[i64], expected: bool) {
-    let replayed = replay_collection_function(fixture, values);
+fn assert_native_collection_result(
+    fixture: &Emitted,
+    values: &[i64],
+    kind: CollectionKind,
+    expected: bool,
+) {
+    let replayed = replay_collection_function(fixture, values, kind);
     assert_eq!(
         replayed.category(),
         if expected {
@@ -1544,9 +1559,7 @@ fn collection_run_evidence_preserves_every_ordered_identity_option() {
     assert_eq!(evidence.exit_code, Some(1));
 }
 
-#[trace("FR-015-AC-97", "FR-015-AC-102", "TC-025")]
-#[test]
-fn ordered_set_shape_is_refused_without_erasing_its_uniqueness_semantics() {
+fn ordered_set_document() -> Value {
     let mut document = model_document();
     let node = document["types"]
         .as_array_mut()
@@ -1561,10 +1574,197 @@ fn ordered_set_shape_is_refused_without_erasing_its_uniqueness_semantics() {
         .find(|field| field.get("name").and_then(Value::as_str) == Some("items"))
         .unwrap();
     items["multiplicity"]["unique"] = json!(true);
+    document
+}
+
+#[trace("FR-015-AC-96", "TC-025")]
+#[test]
+fn feasible_ordered_set_emits_symbolic_ordered_unique_slots() {
+    let fixture = emitted_from_document_and_body(
+        ordered_set_document(),
+        "forall(item in deref(input).items: item >= 0)",
+    );
+    let harness = collection_harness(&fixture, "quire.op.collection.forall");
+    assert_eq!(
+        harness.identity.collection_kind,
+        CollectionKindIdentity::OrderedSet
+    );
+    assert_eq!(
+        (
+            harness.identity.minimum_length,
+            harness.identity.maximum_length
+        ),
+        (0, 3)
+    );
+    assert_eq!(
+        harness.identity.element,
+        CollectionElementIdentity::Integer {
+            minimum: 0,
+            maximum: 3,
+        }
+    );
+    let source = &harness.rust.contents;
+    assert!(source.contains("let selected_items_len: i64 = kani::any();"));
+    assert!(source.contains("let selected_items: [i64; 3] = kani::any();"));
+    assert!(source.contains("selected_items_len >= 0 && selected_items_len <= 3"));
+    assert!(source.contains("item >= 0 && item <= 3"));
+    assert!(source.contains("for prior in 0..index"));
+    assert!(source.contains("kani::assume(item != selected_items[prior as usize]);"));
+    assert!(source.contains("selected_items[index as usize]"));
+    assert!(source.contains("(0..selected_items_len).all(|index|"));
+
+    let sequence = emitted_from_document_and_body(
+        model_document(),
+        "forall(item in deref(input).items: item >= 0)",
+    );
+    let sequence_harness = collection_harness(&sequence, "quire.op.collection.forall");
+    assert_eq!(
+        sequence_harness.identity.collection_kind,
+        CollectionKindIdentity::Sequence
+    );
+    assert_ne!(harness.identity, sequence_harness.identity);
+    assert!(!sequence_harness
+        .rust
+        .contents
+        .contains("for prior in 0..index"));
+}
+
+#[trace("FR-015-AC-96", "TC-025")]
+#[test]
+fn boolean_ordered_set_keeps_both_values_and_distinct_active_slots() {
+    let mut document = model_document();
+    let node = document["types"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|ty| ty.get("identity").and_then(Value::as_str) == Some(NODE_ID))
+        .unwrap();
+    let flags = node["fields"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|field| field.get("name").and_then(Value::as_str) == Some("flags"))
+        .unwrap();
+    flags["multiplicity"]["unique"] = json!(true);
+    let fixture = emitted_from_document_and_body(
+        document,
+        "forall(flag in deref(input).flags: flag != false)",
+    );
+    let harness = collection_harness(&fixture, "quire.op.collection.forall");
+    assert_eq!(
+        harness.identity.collection_kind,
+        CollectionKindIdentity::OrderedSet
+    );
+    assert_eq!(harness.identity.maximum_length, 2);
+    assert_eq!(harness.identity.element, CollectionElementIdentity::Boolean);
+    let source = &harness.rust.contents;
+    assert!(source.contains("let selected_flags: [bool; 2] = kani::any();"));
+    assert!(source.contains("kani::assume(item != selected_flags[prior as usize]);"));
+    assert!(source.contains("let item = selected_flags[index as usize];"));
+}
+
+#[trace("FR-015-AC-96", "TC-025")]
+#[test]
+fn integer_ordered_set_at_distinct_capacity_keeps_its_declared_maximum() {
+    let mut document = ordered_set_document();
+    let node = document["types"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|ty| ty.get("identity").and_then(Value::as_str) == Some(NODE_ID))
+        .unwrap();
+    let items = node["fields"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|field| field.get("name").and_then(Value::as_str) == Some("items"))
+        .unwrap();
+    items["multiplicity"]["upper"] = json!(4);
     let fixture =
         emitted_from_document_and_body(document, "forall(item in deref(input).items: item >= 0)");
+    let harness = collection_harness(&fixture, "quire.op.collection.forall");
+    assert_eq!(harness.identity.maximum_length, 4);
+    assert!(harness
+        .rust
+        .contents
+        .contains("let selected_items: [i64; 4] = kani::any();"));
+    assert!(harness
+        .rust
+        .contents
+        .contains("kani::assume(item != selected_items[prior as usize]);"));
+}
+
+#[trace("FR-015-AC-96", "TC-025")]
+#[test]
+fn ordered_set_over_capacity_names_the_exact_capacity_without_a_harness() {
+    let mut document = model_document();
+    let node = document["types"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|ty| ty.get("identity").and_then(Value::as_str) == Some(NODE_ID))
+        .unwrap();
+    let items = node["fields"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|field| field.get("name").and_then(Value::as_str) == Some("items"))
+        .unwrap();
+    items["multiplicity"]["unique"] = json!(true);
+    let element = document["types"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|ty| ty.get("identity").and_then(Value::as_str) == Some(SMALL_ID))
+        .unwrap();
+    element["constraints"][1]["operands"]["value"] = json!("1");
+    assert_ordered_set_capacity_refusal(
+        document,
+        "items",
+        "forall(item in deref(input).items: item >= 0)",
+        2,
+        3,
+    );
+}
+
+#[trace("FR-015-AC-96", "TC-025")]
+#[test]
+fn boolean_ordered_set_minimum_above_capacity_is_refused() {
+    let mut document = model_document();
+    let node = document["types"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|ty| ty.get("identity").and_then(Value::as_str) == Some(NODE_ID))
+        .unwrap();
+    let flags = node["fields"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|field| field.get("name").and_then(Value::as_str) == Some("flags"))
+        .unwrap();
+    flags["multiplicity"]["unique"] = json!(true);
+    flags["multiplicity"]["lower"] = json!(3);
+    flags["multiplicity"]["upper"] = json!(3);
+    assert_ordered_set_capacity_refusal(
+        document,
+        "flags",
+        "forall(flag in deref(input).flags: flag != false)",
+        2,
+        3,
+    );
+}
+
+fn assert_ordered_set_capacity_refusal(
+    document: Value,
+    field_name: &str,
+    body: &str,
+    capacity: u64,
+    declared_maximum: u64,
+) {
+    let fixture = emitted_from_document_and_body(document, body);
     assert!(matches!(
-        fixture.fields.field("items").unwrap().member_type(),
+        fixture.fields.field(field_name).unwrap().member_type(),
         Some(CheckedMemberType::Collection {
             kind: quire_contract_model::CheckedCollectionKind::OrderedSet,
             ..
@@ -1602,21 +1802,25 @@ fn ordered_set_shape_is_refused_without_erasing_its_uniqueness_semantics() {
             Duration::from_secs(600),
         ),
         items: std::slice::from_ref(&item),
-        subject_path: "crate::ordered_set",
+        subject_path: "crate::ordered_set_capacity",
         unwind: 8,
     })
     .unwrap()
     else {
         panic!("the unsupported collection shape settles per item");
     };
+    assert_eq!(records.len(), 1);
     assert!(matches!(
-        records[0].disposition,
+        &records[0].disposition,
         ObligationDisposition::Unsupported {
             reason: UnsupportedObligation::CollectionClaimNotRendered {
-                reason: quire_contract_codegen::CollectionUnsupportedReason::UnsupportedFieldType,
+                reason: quire_contract_codegen::CollectionUnsupportedReason::UniqueElementCapacityExceeded {
+                    capacity: actual_capacity,
+                    declared_maximum: actual_maximum,
+                },
                 ..
             }
-        }
+        } if *actual_capacity == capacity && *actual_maximum == declared_maximum
     ));
     assert!(collection_harnesses.is_empty());
 }
@@ -2121,8 +2325,14 @@ fn native_collection_replay_evaluates_the_authored_healthy_and_mutated_functions
         model_document(),
         "forall(item in deref(input).items: item >= 1)",
     );
-    assert_native_collection_result(&healthy, &[1, 2], true);
-    assert_native_collection_result(&mutated, &[0], false);
+    assert_native_collection_result(&healthy, &[1, 2], CollectionKind::Sequence, true);
+    assert_native_collection_result(&mutated, &[0], CollectionKind::Sequence, false);
+
+    let ordered_set = emitted_from_document_and_body(
+        ordered_set_document(),
+        "forall(item in deref(input).items: item >= 0)",
+    );
+    assert_native_collection_result(&ordered_set, &[0, 1], CollectionKind::OrderedSet, true);
 }
 
 #[trace("FR-015-AC-99", "TC-025")]
@@ -2140,7 +2350,7 @@ fn tc_025_real_kani_collection_claim_verifies_and_mutated_claim_falsifies() {
     assert_eq!(healthy_evidence.exit_code, Some(0));
     assert_eq!(healthy_evidence.unwind, 8);
     assert_eq!(healthy_evidence.solver, healthy_harness.identity.solver);
-    assert_native_collection_result(&healthy, &[1, 2], true);
+    assert_native_collection_result(&healthy, &[1, 2], CollectionKind::Sequence, true);
 
     // This is a source-authored claim mutation, recompiled and admitted by QSL, then passed
     // through the same generator. Its counterexample uses the selected field's in-domain 0.
@@ -2159,8 +2369,126 @@ fn tc_025_real_kani_collection_claim_verifies_and_mutated_claim_falsifies() {
     let values = collection_playback_values(counterexample);
     assert!(values.iter().all(|value| (0..=3).contains(value)));
     assert!(values.iter().any(|value| *value < 1));
-    assert_native_collection_result(&mutated, &values, false);
+    assert_native_collection_result(&mutated, &values, CollectionKind::Sequence, false);
     assert_ne!(mutated_evidence.exit_code, Some(0));
+}
+
+#[trace("FR-015-AC-96", "FR-015-AC-99", "TC-025")]
+#[test]
+#[ignore = "kani lane: run serially through make kani-gate"]
+fn tc_025_real_kani_ordered_set_claim_and_mutant_keep_distinct_active_values() {
+    let installation = KaniInstallation::discover().expect("cargo-kani is installed");
+    let mut document = ordered_set_document();
+    let node = document["types"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|ty| ty.get("identity").and_then(Value::as_str) == Some(NODE_ID))
+        .unwrap();
+    let items = node["fields"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|field| field.get("name").and_then(Value::as_str) == Some("items"))
+        .unwrap();
+    items["multiplicity"]["lower"] = json!(2);
+    let healthy = emitted_from_document_and_body(
+        document.clone(),
+        "forall(item in deref(input).items: item >= 0)",
+    );
+    let healthy_harness = collection_harness(&healthy, "quire.op.collection.forall");
+    assert_eq!(
+        run_collection_kani(&installation, &healthy_harness, "ordered-set-healthy").outcome,
+        KaniRunOutcome::Verified
+    );
+    assert_native_collection_result(&healthy, &[0, 1], CollectionKind::OrderedSet, true);
+    let mutant =
+        emitted_from_document_and_body(document, "forall(item in deref(input).items: item >= 1)");
+    let mutant_harness = collection_harness(&mutant, "quire.op.collection.forall");
+    let evidence = run_collection_kani(&installation, &mutant_harness, "ordered-set-mutant");
+    let KaniRunOutcome::Falsified { counterexample } = evidence.outcome else {
+        panic!("the ordered-set mutant must falsify: {evidence:?}");
+    };
+    let values = collection_playback_values(&counterexample);
+    assert!((2..=3).contains(&values.len()));
+    assert!(values.contains(&0));
+    for (index, value) in values.iter().enumerate() {
+        assert!(
+            !values[..index].contains(value),
+            "the backend admitted duplicate active values"
+        );
+    }
+    assert_native_collection_result(&mutant, &values, CollectionKind::OrderedSet, false);
+}
+
+#[trace("FR-015-AC-96", "TC-025")]
+#[test]
+#[ignore = "kani lane: run serially through make kani-gate"]
+fn tc_025_real_kani_ordered_set_uniqueness_changes_the_verdict() {
+    let installation = KaniInstallation::discover().expect("cargo-kani is installed");
+    let mut document = model_document();
+    let node = document["types"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|ty| ty.get("identity").and_then(Value::as_str) == Some(NODE_ID))
+        .unwrap();
+    let flags = node["fields"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|field| field.get("name").and_then(Value::as_str) == Some("flags"))
+        .unwrap();
+    flags["multiplicity"]["lower"] = json!(2);
+    flags["multiplicity"]["unique"] = json!(true);
+    let claim = "exists(flag in deref(input).flags: flag != false)";
+    let ordered_set = emitted_from_document_and_body(document.clone(), claim);
+    let ordered_harness = collection_harness(&ordered_set, "quire.op.collection.exists");
+    assert_eq!(
+        ordered_harness.identity.collection_kind,
+        CollectionKindIdentity::OrderedSet
+    );
+    assert_eq!(ordered_harness.identity.minimum_length, 2);
+    assert_eq!(ordered_harness.identity.maximum_length, 2);
+    let ordered_evidence = run_collection_kani(
+        &installation,
+        &ordered_harness,
+        "ordered-set-unique-healthy",
+    );
+    assert_eq!(ordered_evidence.outcome, KaniRunOutcome::Verified);
+
+    // With the same authored length and predicate, Sequence admits [false, false].
+    document["types"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|ty| ty.get("identity").and_then(Value::as_str) == Some(NODE_ID))
+        .unwrap()["fields"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|field| field.get("name").and_then(Value::as_str) == Some("flags"))
+        .unwrap()["multiplicity"]["unique"] = json!(false);
+    let sequence = emitted_from_document_and_body(document, claim);
+    let sequence_harness = collection_harness(&sequence, "quire.op.collection.exists");
+    assert_eq!(
+        sequence_harness.identity.collection_kind,
+        CollectionKindIdentity::Sequence
+    );
+    assert_ne!(ordered_harness.identity, sequence_harness.identity);
+    let sequence_evidence = run_collection_kani(
+        &installation,
+        &sequence_harness,
+        "sequence-duplicate-mutant",
+    );
+    let KaniRunOutcome::Falsified { counterexample } = sequence_evidence.outcome else {
+        panic!("the sequence must admit duplicate false values: {sequence_evidence:?}");
+    };
+    assert!(counterexample.contains(sequence_harness.identity.harness_symbol.as_str()));
+    assert_eq!(
+        collection_playback_byte_vectors(&counterexample),
+        vec![i64_playback_bytes(2), vec![0], vec![0]]
+    );
 }
 
 #[trace("FR-015-AC-97", "FR-015-AC-102", "TC-025")]

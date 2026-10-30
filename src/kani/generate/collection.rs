@@ -39,7 +39,7 @@ pub(crate) enum CollectionElementDomain {
     Integer { minimum: i128, maximum: i128 },
 }
 
-/// The admitted selected model field and its inclusive sequence bounds.
+/// The admitted selected model field and its inclusive collection bounds.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct CollectionFieldDomain {
     /// Selected function whose body contains the quantifier.
@@ -56,9 +56,11 @@ pub(crate) struct CollectionFieldDomain {
     pub(crate) minimum_length: u64,
     /// Inclusive collection cardinality bounds.
     pub(crate) maximum_length: u64,
+    /// Authored ordering and uniqueness rule.
+    pub(crate) kind: CollectionKindIdentity,
     /// Domain of every element.
     pub(crate) element: CollectionElementDomain,
-    /// Exact element type node reached through the admitted sequence type.
+    /// Exact element type node reached through the admitted collection type.
     pub(crate) element_type: CheckedNodeId,
     /// Exact QSL quantifier operation.
     pub(crate) quantifier_operation: String,
@@ -77,7 +79,7 @@ pub(crate) enum CollectionDomainRefusal {
     RequiresBound { unbounded_type: CheckedNodeId },
     /// The exact declaration/member pair does not resolve in the retained model field table.
     FieldNotAdmitted,
-    /// The retained field form is not an ordered sequence with supported primitive elements.
+    /// The retained field form has no supported symbolic layout.
     UnsupportedFieldType,
     /// The checked range has no inhabitants.
     UnsatisfiableElementDomain,
@@ -283,6 +285,17 @@ pub(super) fn render_collection(
             },
         });
     }
+    if field.kind == CollectionKindIdentity::OrderedSet {
+        if let Some(capacity) = unique_capacity_exceeded(element, field.maximum_length) {
+            return Err(UnsupportedObligation::CollectionClaimNotRendered {
+                node_id: field.quantifier.clone(),
+                reason: CollectionUnsupportedReason::UniqueElementCapacityExceeded {
+                    capacity,
+                    declared_maximum: field.maximum_length,
+                },
+            });
+        }
+    }
     let quantifier = match field.quantifier_operation.as_str() {
         "quire.op.collection.forall" => CollectionQuantifier::ForAll,
         "quire.op.collection.exists" => CollectionQuantifier::Exists,
@@ -304,6 +317,7 @@ pub(super) fn render_collection(
             &field.field_name,
             minimum_length,
             maximum_length,
+            field.kind,
         ),
         (
             &element_domain,
@@ -340,7 +354,7 @@ pub(super) fn render_collection(
         projection_id: field.projection.clone(),
         declaration_id: field.declaration.clone(),
         field_name: field.field_name.clone(),
-        collection_kind: CollectionKindIdentity::Sequence,
+        collection_kind: field.kind,
         minimum_length,
         maximum_length,
         element: element_domain,
@@ -363,6 +377,7 @@ pub(super) fn render_collection(
             minimum_length,
             maximum_length,
             array_len,
+            kind: field.kind,
             element,
             quantifier,
             predicate: field.predicate.clone(),
@@ -420,6 +435,23 @@ pub(super) fn render_collection(
         return Err(UnsupportedObligation::RenderFailed);
     }
     Ok(harness)
+}
+
+fn unique_element_capacity(element: CollectionElement) -> u128 {
+    match element {
+        CollectionElement::Boolean => 2,
+        CollectionElement::Integer { minimum, maximum } => {
+            // Renderable i64 endpoints have a nonempty span of at most 2^64 values.
+            u128::try_from(i128::from(maximum) - i128::from(minimum) + 1)
+                .expect("admitted IntRange has nonempty representable endpoints")
+        }
+    }
+}
+
+fn unique_capacity_exceeded(element: CollectionElement, declared_maximum: u64) -> Option<u64> {
+    let capacity = unique_element_capacity(element);
+    (u128::from(declared_maximum) > capacity)
+        .then(|| u64::try_from(capacity).expect("refused capacity is below a u64 maximum"))
 }
 
 fn collection_i64(value: i128, node_id: &CheckedNodeId) -> Result<i64, UnsupportedObligation> {
@@ -538,14 +570,21 @@ fn resolve_collection_field(
     let fields = package.model_object_fields(&declaration);
     let field = declared_field(fields.as_ref(), |fields| fields.field(&field_name))?;
     let Some(CheckedMemberType::Collection {
-        kind: CheckedCollectionKind::Sequence,
+        kind,
         element,
         bounds,
     }) = field.member_type()
     else {
         return Err(CollectionDomainRefusal::UnsupportedFieldType);
     };
-    let element_type = sequence_element_type(graph, collection)?;
+    let kind = match kind {
+        CheckedCollectionKind::Sequence => CollectionKindIdentity::Sequence,
+        CheckedCollectionKind::OrderedSet => CollectionKindIdentity::OrderedSet,
+        CheckedCollectionKind::Set | CheckedCollectionKind::Bag => {
+            return Err(CollectionDomainRefusal::UnsupportedFieldType);
+        }
+    };
+    let element_type = collection_element_type(graph, collection, kind)?;
     let element = match element.as_ref() {
         CheckedMemberType::Boolean => CollectionElementDomain::Boolean,
         CheckedMemberType::IntRange { lower, upper } if lower <= upper => {
@@ -603,6 +642,7 @@ fn resolve_collection_field(
         projection: collection.node_id.clone(),
         minimum_length: *minimum_length,
         maximum_length: *maximum_length,
+        kind,
         element,
         element_type,
         quantifier_operation,
@@ -696,23 +736,28 @@ fn resolve_predicate(
     }
 }
 
-fn sequence_element_type(
+fn collection_element_type(
     graph: &CollectionNodeIndex<'_>,
     collection: &CheckedSemanticNodeV2,
+    kind: CollectionKindIdentity,
 ) -> Result<CheckedNodeId, CollectionDomainRefusal> {
+    let expected_form = match kind {
+        CollectionKindIdentity::Sequence => "sequence",
+        CollectionKindIdentity::OrderedSet => "ordered_set",
+    };
     let type_node = graph
         .node(&collection.semantic_type)
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
-    let sequence = match type_node.semantic_form.as_ref() {
+    let collection_type = match type_node.semantic_form.as_ref() {
         "collection_bounds" => graph
             .node(&type_node.semantic_type)
-            .filter(|node| node.semantic_form.as_ref() == "sequence"),
-        "sequence" => Some(type_node),
+            .filter(|node| node.semantic_form.as_ref() == expected_form),
+        form if form == expected_form => Some(type_node),
         _ => None,
     }
     .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
     let members = graph
-        .term(sequence)
+        .term(collection_type)
         .and_then(aggregate_members)
         .filter(|members| members.len() == 1)
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
@@ -955,9 +1000,89 @@ fn term_target(term: &CheckedTerm) -> Option<CheckedNodeId> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use ix_trace_rs::trace;
+    use proptest::{prelude::*, prop_assert_eq, proptest};
     use quire_contract_model::ApplicationOperator;
     use std::{cell::Cell, cmp::Ordering, rc::Rc};
+
+    proptest! {
+        #[test]
+        #[trace("FR-015-AC-96", "TC-025")]
+        fn unique_capacity_matches_independent_wide_oracle(
+            first in any::<i64>(), second in any::<i64>(), declared_maximum in any::<u64>()
+        ) {
+            let minimum = first.min(second);
+            let maximum = first.max(second);
+            let capacity = unique_element_capacity(CollectionElement::Integer { minimum, maximum });
+            let ordered_minimum = u128::from((minimum as u64) ^ (1u64 << 63));
+            let ordered_maximum = u128::from((maximum as u64) ^ (1u64 << 63));
+            let expected = ordered_maximum - ordered_minimum + 1;
+            prop_assert_eq!(capacity, expected);
+            prop_assert_eq!(
+                unique_capacity_exceeded(CollectionElement::Integer { minimum, maximum }, declared_maximum),
+                (u128::from(declared_maximum) > expected).then(|| u64::try_from(expected).unwrap())
+            );
+        }
+    }
+
+    #[trace("FR-015-AC-96", "TC-025")]
+    #[test]
+    fn unique_capacity_includes_the_full_i64_interval() {
+        assert_eq!(unique_element_capacity(CollectionElement::Boolean), 2);
+        assert_eq!(
+            unique_element_capacity(CollectionElement::Integer {
+                minimum: i64::MIN,
+                maximum: i64::MAX,
+            }),
+            1u128 << 64
+        );
+    }
+
+    #[trace("FR-015-AC-96", "FR-015-AC-101", "TC-025")]
+    #[test]
+    fn capacity_refusal_follows_existing_representation_unwind_and_memory_refusals() {
+        let mut claim = base_claim();
+        claim.field.kind = CollectionKindIdentity::OrderedSet;
+        claim.field.element = CollectionElementDomain::Integer {
+            minimum: 0,
+            maximum: 1,
+        };
+        let request = |unwind, memory_bytes| KaniObligationRequest {
+            ceilings: crate::kani::identity::ProofCeilings {
+                memory_bytes: std::num::NonZeroU64::new(memory_bytes).unwrap(),
+                wall_clock: std::time::Duration::from_secs(60),
+            },
+            items: &[],
+            subject_path: "crate::capacity_precedence",
+            unwind,
+        };
+        assert!(matches!(
+            render_collection(&request(2, 1 << 20), &claim),
+            Err(UnsupportedObligation::CollectionClaimNotRendered {
+                reason: CollectionUnsupportedReason::UnwindBelowCollectionBound { .. },
+                ..
+            })
+        ));
+        assert!(matches!(
+            render_collection(&request(8, 16), &claim),
+            Err(UnsupportedObligation::CollectionClaimNotRendered {
+                reason: CollectionUnsupportedReason::SymbolicDomainExceedsMemoryCeiling { .. },
+                ..
+            })
+        ));
+        claim.field.element = CollectionElementDomain::Integer {
+            minimum: 0,
+            maximum: i128::from(i64::MAX) + 1,
+        };
+        assert!(matches!(
+            render_collection(&request(8, 1 << 20), &claim),
+            Err(UnsupportedObligation::CollectionClaimNotRendered {
+                reason: CollectionUnsupportedReason::DomainNotRepresentableInI64,
+                ..
+            })
+        ));
+    }
 
     #[derive(Clone)]
     struct CountedKey {
@@ -1117,6 +1242,7 @@ mod tests {
                 projection: node("projection"),
                 minimum_length: 0,
                 maximum_length: 3,
+                kind: CollectionKindIdentity::Sequence,
                 element: CollectionElementDomain::Integer {
                     minimum: 0,
                     maximum: 9,
@@ -1173,7 +1299,7 @@ mod tests {
             "the path is deterministic"
         );
         type Change = fn(&mut LoweredCollectionClaim);
-        let claim_changes: [(&str, Change); 13] = [
+        let claim_changes: [(&str, Change); 14] = [
             ("package digest", |c| c.package_digest = "package-b".into()),
             ("function", |c| c.field.function = node("other-function")),
             ("quantifier", |c| {
@@ -1188,6 +1314,9 @@ mod tests {
             }),
             ("minimum length", |c| c.field.minimum_length = 1),
             ("maximum length", |c| c.field.maximum_length = 4),
+            ("collection kind", |c| {
+                c.field.kind = CollectionKindIdentity::OrderedSet
+            }),
             ("element domain", |c| {
                 c.field.element = CollectionElementDomain::Integer {
                     minimum: 0,

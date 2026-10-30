@@ -360,6 +360,8 @@ pub enum CollectionElementIdentity {
 pub enum CollectionKindIdentity {
     /// Ordered values with repeats permitted.
     Sequence,
+    /// Ordered values whose active slots are pairwise distinct.
+    OrderedSet,
 }
 
 /// The exact selected V2 collection claim and execution configuration of one generated harness.
