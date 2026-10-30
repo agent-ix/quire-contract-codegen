@@ -32,3 +32,11 @@ scope:
   - {id: FR-045-AC-4, path: "spec/routed/functional/FR-045-hyper-smt-induction-map.md", role: examined, excerpt: "a record bound to the wrong row refuses handoff"}
   - {id: src/routed/smt/refinement.rs, path: "src/routed/smt/refinement.rs", role: examined, excerpt: "/// A query's position in the recompiled refinement's canonical steps array."}
 ```
+
+## Dispositions
+
+Round 1, head a9ba1d012345b250793b0b66678c04d4be184157.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | deferred | Spec-only PR; a9ba1d01 changes no code. The rustdoc belongs to CG #643, which is open and edits src/routed/smt/refinement.rs. Its head aeabca3f still says canonical there, so #643 must carry the fix. |

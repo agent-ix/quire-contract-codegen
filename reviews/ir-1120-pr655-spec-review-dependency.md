@@ -40,3 +40,12 @@ scope:
   - {id: QSpec-FR-375, path: "quire-specification spec/functional/analysis/FR-375-declare-model-refinement.md", role: examined, excerpt: "The `steps` array is in **declaration order**: the order in which the declaration lists its step rows, for a model subject and a protocol subject alike."}
   - {id: QSL-FR-314, path: "quire-spec-language spec/functional/FR-314-check-an-smt-proof-certificate.md", role: context_only, excerpt: "number of step rows of the recompiled refinement's `steps` array."}
 ```
+
+## Dispositions
+
+Round 1, head a9ba1d012345b250793b0b66678c04d4be184157.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | At a9ba1d01: which follows the authored declaration order under QSpec FR-375-AC-22, for every `r` in `0..N`. |
+| FND-002 | deferred | QSL-owned. QSL #1864 at 634d6f0d corrects FR-315, but it is unmerged, so QSL main still says sorted by node key until QSL-1265 lands. It does not block #655: FR-045 now cites merged QSpec FR-375-AC-22, and FR-315 defines row as the position in the steps array under either wording. |

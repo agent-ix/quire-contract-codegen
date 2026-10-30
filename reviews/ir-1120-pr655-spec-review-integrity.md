@@ -36,3 +36,12 @@ scope:
   - {id: FR-015-AC-122, path: "spec/kani/functional/FR-015-bounded-kani-obligations.md", role: examined, excerpt: "Two step rows tied on node-key digest and member name use the FR-375-AC-19 alias-free class spelling order, unchanged by source permutation."}
   - {id: AD-003, path: "spec/assurance/AD-003-evidence-chain.md", role: examined, excerpt: "The index is in QSpec FR-375's total `steps` order; ties on node-key digest and member name are broken by alias-free class spelling in UTF-8 byte order (FR-375-AC-19). CG does not derive that order from source positions."}
 ```
+
+## Dispositions
+
+Round 1, head a9ba1d012345b250793b0b66678c04d4be184157.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | At a9ba1d01: Two step rows tied on node-key digest and member name retain their authored declaration positions under FR-375-AC-22; permuting those source rows correspondingly permutes their `Step { row: i }` labels and generated occurrence ordinals, with each record still bound to its own row. |
+| FND-002 | fixed | At a9ba1d01: QSpec FR-375-AC-22 owns the declaration order of the recompiled refinement's `steps` array and its response to source-row permutation. |

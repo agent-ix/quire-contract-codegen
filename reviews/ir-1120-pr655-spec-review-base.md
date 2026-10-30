@@ -40,3 +40,11 @@ scope:
   - {id: FR-045-AC-5, path: "spec/routed/functional/FR-045-hyper-smt-induction-map.md", role: context_only, excerpt: "CG emits one deterministic handoff sequence in `Base`, `Step { row: 0 }` through `Step { row: 6 }` order for either input permutation."}
   - {id: FR-045-AC-6, path: "spec/routed/functional/FR-045-hyper-smt-induction-map.md", role: context_only, excerpt: "swapping row 3's record with row 4's while retaining the old row labels, yields a typed association refusal and no handoff."}
 ```
+
+## Dispositions
+
+Round 1, head a9ba1d012345b250793b0b66678c04d4be184157.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | At a9ba1d01: For each named row, independently compare the FR-315 query bytes obtained before and after permutation and assert equality, then compare the bytes sent on stdin and retained in that row's newly labelled record with those same bytes. |
