@@ -714,8 +714,8 @@ impl PackageBuilder {
     }
 
     /// As [`Self::boolean_equality_chain`], numbering the chain from `base` and starting it from
-    /// the Boolean literal `seed`. Two chains in one package need different seeds: a node's id is
-    /// derived from its body, and two first nodes over one literal would share an id.
+    /// the Boolean literal `seed`. Distinct seeds make each body's expected meaning inspectable;
+    /// every node keeps its producer-assigned structural ID independently of that body.
     pub fn boolean_equality_chain_from(&mut self, base: u32, count: u32, seed: &str) -> &mut Self {
         let equality = |operand: Value| {
             application(
@@ -813,12 +813,12 @@ impl PackageBuilder {
         )
     }
 
-    /// The wire document with its identity projection and package id refreshed.
+    /// The producer's wire document, submitted unchanged for reader admission.
     pub fn wire(&self) -> Value {
         self.resolved_wire(CheckedPackageReadLimits::bounded()).wire
     }
 
-    /// The authored wire before fixture IDs are repaired, for direct reader negatives.
+    /// The authored wire for direct reader negatives.
     pub fn raw_wire(&self) -> Value {
         self.value.clone()
     }
@@ -1909,37 +1909,45 @@ pub fn golden_items() -> Vec<CompositeEqualityItem> {
 #[cfg(test)]
 mod fixture_identity_tests {
     use ix_trace_rs::trace;
+    use quire_contract_model::{CheckedPackageLimit, CheckedPackageRefusalCode, CheckedTerm};
 
     use super::*;
 
-    #[trace("FR-037-AC-1", "FR-037-AC-4", "TC-052")]
-    #[test]
-    fn composite_application_keeps_producer_assigned_node_id() {
-        let builder = byte_ceiling_package();
-        let raw = builder.raw_wire();
-        let provisional = code_id(BYTE_CHAIN_BASE);
-        assert!(raw["semantic_graph"]["nodes"]
+    fn node<'a>(wire: &'a Value, id: &CheckedNodeId) -> &'a Value {
+        wire["semantic_graph"]["nodes"]
             .as_array()
-            .expect("raw nodes")
+            .expect("fixture nodes")
             .iter()
-            .any(|node| node["node_id"] == json!(provisional)));
-
-        let (admitted, ids) = builder.admit_resolved();
-        let admitted_id = ids.resolve(&provisional);
-        let checked = admitted
-            .graph()
-            .nodes
-            .iter()
-            .find(|node| node.node_id == admitted_id)
-            .expect("admitted equality");
-        assert_eq!(checked.node_id, provisional);
+            .find(|node| node["node_id"] == json!(id))
+            .expect("producer-assigned node")
     }
 
-    #[trace("FR-037-AC-2", "TC-052")]
+    fn replace_node_id(wire: &mut Value, old: &Value, replacement: &Value) {
+        if wire == old {
+            *wire = replacement.clone();
+            return;
+        }
+        match wire {
+            Value::Array(items) => {
+                for item in items {
+                    replace_node_id(item, old, replacement);
+                }
+            }
+            Value::Object(members) => {
+                for member in members.values_mut() {
+                    replace_node_id(member, old, replacement);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    #[trace("FR-037-AC-6", "TC-052")]
     #[test]
-    fn grouped_application_keeps_producer_assigned_node_id() {
+    fn composite_application_keeps_producer_assigned_node_id() {
         let mut builder = byte_ceiling_package();
-        let predecessor = key(BYTE_CHAIN_BASE);
+        let producer_id = code_id(BYTE_CHAIN_BASE);
+        let dependent_id = code_id(BYTE_CHAIN_BASE + 1);
         builder.application_code(
             BYTE_CHAIN_BASE + 1,
             "binary",
@@ -1947,27 +1955,294 @@ mod fixture_identity_tests {
                 "binary",
                 equality_operation("boolean"),
                 T_BOOLEAN,
-                vec![reference_to(&predecessor), reference_to(&predecessor)],
+                vec![reference_to(&key(BYTE_CHAIN_BASE)); 2],
             ),
         );
+        let raw = builder.raw_wire();
+        assert_eq!(node(&raw, &producer_id)["node_id"], json!(producer_id));
+        assert_eq!(
+            node(&raw, &dependent_id)["dependencies"],
+            json!([producer_id])
+        );
+        assert_eq!(
+            node(&raw, &dependent_id)["body"]["arguments"][0]["target"],
+            json!(producer_id)
+        );
+
+        let (admitted, ids) = builder.admit_resolved();
+        let admitted_id = ids.resolve(&producer_id);
+        let checked = admitted
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.node_id == admitted_id)
+            .expect("admitted equality");
+        assert_eq!(checked.node_id, producer_id);
+        let dependent = admitted
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.node_id == dependent_id)
+            .expect("admitted dependent equality");
+        assert_eq!(dependent.dependencies, vec![producer_id.clone()]);
+        let CheckedTerm::Application { arguments, .. } = &dependent.body else {
+            panic!("dependent body is not an application")
+        };
+        assert!(
+            matches!(arguments.first(), Some(CheckedTerm::Reference { target }) if target == &producer_id)
+        );
+    }
+
+    fn grouped_applications() -> (PackageBuilder, CheckedNodeId, CheckedNodeId) {
+        let mut builder = byte_ceiling_package();
+        let first = code_id(BYTE_CHAIN_BASE);
+        let old_second = code_id(BYTE_CHAIN_BASE + 1);
+        let mut second = first.clone();
+        second.ordinal = 3;
+        // An unrelated application separates the group members in wire order.
+        builder.application_code(
+            BYTE_CHAIN_BASE + 11,
+            "binary",
+            binary_body(T_BOOLEAN, T_BOOLEAN),
+        );
+        builder.application_code(
+            BYTE_CHAIN_BASE + 1,
+            "binary",
+            application(
+                "binary",
+                equality_operation("boolean"),
+                T_BOOLEAN,
+                vec![reference_to(&key(BYTE_CHAIN_BASE)); 2],
+            ),
+        );
+        builder.set_body(
+            BYTE_CHAIN_BASE,
+            application(
+                "binary",
+                equality_operation("boolean"),
+                T_BOOLEAN,
+                vec![reference_to(&key(BYTE_CHAIN_BASE + 1)); 2],
+            ),
+        );
+        let first_node = builder.value["semantic_graph"]["nodes"]
+            .as_array_mut()
+            .expect("fixture nodes")
+            .iter_mut()
+            .find(|node| node["node_id"] == json!(first))
+            .expect("first group member");
+        first_node["dependencies"] = json!([old_second.clone()]);
+        replace_node_id(&mut builder.value, &json!(old_second), &json!(second));
         for node in builder.value["semantic_graph"]["nodes"]
             .as_array_mut()
             .expect("fixture nodes")
         {
-            if node["node_id"] == node_ref(&predecessor)
-                || node["node_id"] == node_ref(&key(BYTE_CHAIN_BASE + 1))
-            {
+            if node["node_id"] == json!(first) || node["node_id"] == json!(second) {
                 node["recursion_group"] = json!("draft");
             }
         }
-        let (admitted, ids) = builder.admit_resolved();
-        let grouped = ids.resolve(&code_id(BYTE_CHAIN_BASE + 1));
-        let nodes = &admitted.graph().nodes;
-        let checked = nodes
+        (builder, first, second)
+    }
+
+    #[trace("FR-037-AC-7", "FR-037-AC-9", "TC-052")]
+    #[test]
+    fn grouped_application_keeps_each_structural_member_and_refuses_broken_inputs() {
+        let (builder, first, second) = grouped_applications();
+        let raw = builder.raw_wire();
+        let nodes = raw["semantic_graph"]["nodes"].as_array().expect("nodes");
+        let first_position = nodes
             .iter()
-            .find(|node| node.node_id == grouped)
-            .expect("admitted grouped application");
-        assert!(checked.recursion_group.is_some());
-        assert_eq!(checked.node_id, grouped);
+            .position(|node| node["node_id"] == json!(first))
+            .unwrap();
+        let second_position = nodes
+            .iter()
+            .position(|node| node["node_id"] == json!(second))
+            .unwrap();
+        assert!(
+            second_position > first_position + 1,
+            "group members need not be adjacent"
+        );
+        assert_eq!(first.path, second.path);
+        assert_eq!((first.ordinal, second.ordinal), (0, 3));
+        assert_eq!(node(&raw, &first)["dependencies"], json!([second]));
+        assert_eq!(node(&raw, &second)["dependencies"], json!([first]));
+        assert_eq!(
+            node(&raw, &first)["body"]["arguments"][0]["target"],
+            json!(second)
+        );
+        assert_eq!(
+            node(&raw, &second)["body"]["arguments"][0]["target"],
+            json!(first)
+        );
+
+        let (admitted, ids) = builder.admit_resolved();
+        assert_eq!(ids.resolve(&second), second);
+        let nodes = &admitted.graph().nodes;
+        for (id, target) in [(&first, &second), (&second, &first)] {
+            let checked = nodes
+                .iter()
+                .find(|node| &node.node_id == id)
+                .expect("group member");
+            assert_eq!(checked.recursion_group.as_deref(), Some("draft"));
+            assert_eq!(checked.dependencies, vec![(*target).clone()]);
+            let CheckedTerm::Application { arguments, .. } = &checked.body else {
+                panic!("group member is not an application")
+            };
+            assert!(
+                matches!(arguments.first(), Some(CheckedTerm::Reference { target: actual }) if actual == target)
+            );
+        }
+
+        let mut missing = raw.clone();
+        missing["semantic_graph"]["nodes"]
+            .as_array_mut()
+            .unwrap()
+            .retain(|node| node["node_id"] != json!(first));
+        missing["source_map"]
+            .as_array_mut()
+            .unwrap()
+            .retain(|entry| entry["node_id"] != json!(first));
+        let CheckedPackageV2ReadResult::Refused(refusal) = read_mutated_wire(missing) else {
+            panic!("a missing group member must not be admitted")
+        };
+        assert_eq!(
+            refusal.code,
+            CheckedPackageRefusalCode::InvalidSemanticGraph
+        );
+
+        let mut mismatched = raw.clone();
+        let enum_type = enum_type_id();
+        let declaration = mismatched["semantic_graph"]["nodes"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|node| node["node_id"] == json!(enum_type))
+            .expect("enum declaration");
+        declaration["declaration"]["qualified_name"][1] = json!("Other");
+        let CheckedPackageV2ReadResult::Refused(refusal) = read_mutated_wire(mismatched) else {
+            panic!("a declaration path mismatch must not be admitted")
+        };
+        assert_eq!(refusal.code, CheckedPackageRefusalCode::InvalidPackage);
+
+        let bytes = serde_json::to_vec(&raw).expect("grouped wire");
+        let limits = CheckedPackageReadLimits {
+            bytes: u64::try_from(bytes.len()).unwrap() - 1,
+            ..CheckedPackageReadLimits::bounded()
+        };
+        let CheckedPackageV2ReadResult::Incomplete(incomplete) =
+            builder.resolved_wire(limits).outcome
+        else {
+            panic!("the complete group exceeds the byte ceiling")
+        };
+        assert_eq!(incomplete.limit_kind, CheckedPackageLimit::Bytes);
+    }
+
+    #[trace("FR-037-AC-8", "TC-052")]
+    #[test]
+    fn enum_member_case_uses_the_producers_structural_id() {
+        let builder = byte_ceiling_package();
+        let open = id(&base_node_ids().enum_member);
+        let (admitted, _) = builder.admit_resolved();
+        let member = admitted
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.node_id == open)
+            .expect("admitted OPEN member");
+        assert_eq!(member.node_id, open);
+        assert_eq!(
+            serde_json::to_value(&member.body).unwrap()["value"],
+            json!("OPEN")
+        );
+
+        let mut shut = open.clone();
+        shut.path
+            .last_mut()
+            .expect("member case path")
+            .clone_from(&CheckedNodePathSegment::Name("SHUT".into()));
+        let mut wire = builder.raw_wire();
+        replace_node_id(&mut wire, &json!(open), &json!(shut));
+        let changed = wire["semantic_graph"]["nodes"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|node| node["node_id"] == json!(shut))
+            .expect("SHUT member");
+        changed["body"]["value"] = json!("SHUT");
+        let CheckedPackageV2ReadResult::Admitted(admitted) = read_mutated_wire(wire) else {
+            panic!("the producer's SHUT member should admit")
+        };
+        let changed = admitted
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.node_id == shut)
+            .expect("admitted SHUT member");
+        assert_eq!(changed.node_id, shut);
+        assert_eq!(
+            serde_json::to_value(&changed.body).unwrap()["value"],
+            json!("SHUT")
+        );
+        assert!(admitted
+            .graph()
+            .nodes
+            .iter()
+            .all(|node| node.node_id != open));
+    }
+
+    #[trace("FR-037-AC-9", "TC-052")]
+    #[test]
+    fn changed_body_and_unused_ordinal_are_measured_separately_from_identity() {
+        let builder = byte_ceiling_package();
+        let (admitted, _) = builder.admit_resolved();
+        let parameter = code_id(parameter_code(T_BOOLEAN));
+        let expected = admitted
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.node_id == parameter)
+            .expect("admitted parameter")
+            .body
+            .clone();
+        let mut changed_body = builder.raw_wire();
+        let node = changed_body["semantic_graph"]["nodes"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|node| node["node_id"] == json!(parameter))
+            .expect("parameter");
+        node["body"] = parameter_body("renamed");
+        let CheckedPackageV2ReadResult::Admitted(changed) = read_mutated_wire(changed_body) else {
+            panic!("a valid body change under the same structural key should admit")
+        };
+        let actual = changed
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.node_id == parameter)
+            .expect("same structural parameter");
+        assert_ne!(
+            actual.body, expected,
+            "a changed admitted body is not the original source body"
+        );
+
+        let unused = code_id(T_TEXT);
+        let mut alternate = unused.clone();
+        alternate.ordinal = 4;
+        let mut changed_ordinal = builder.raw_wire();
+        replace_node_id(&mut changed_ordinal, &json!(unused), &json!(alternate));
+        let CheckedPackageV2ReadResult::Admitted(changed) = read_mutated_wire(changed_ordinal)
+        else {
+            panic!("a consistent unused ordinal does not cause a reader refusal")
+        };
+        assert!(changed
+            .graph()
+            .nodes
+            .iter()
+            .any(|node| node.node_id == alternate));
+        assert!(changed
+            .graph()
+            .nodes
+            .iter()
+            .all(|node| node.node_id != unused));
     }
 }
