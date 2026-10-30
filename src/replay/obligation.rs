@@ -15,8 +15,6 @@ use crate::kani::{
 /// Why a function-contract identity could not be built.
 #[derive(Debug)]
 pub enum ObligationIdentityError {
-    /// QSL has not supplied the producer-assigned identity for this selected claim.
-    ProducerIdentityUnavailable,
     /// A harness argument names no parameter of the function.
     UnboundArgument {
         /// The harness argument's identifier.
@@ -46,9 +44,6 @@ pub enum ObligationIdentityError {
 impl fmt::Display for ObligationIdentityError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::ProducerIdentityUnavailable => {
-                f.write_str("QSL did not supply this claim's obligation identity")
-            }
             Self::UnboundArgument { argument } => {
                 write!(
                     f,
@@ -168,7 +163,7 @@ pub(crate) fn contract_arguments(
     }
 }
 
-/// The structural obligation identity for QSL's selected claim.
+/// The producer-issued structural obligation identity for QSL's selected claim.
 ///
 /// A frame has no parameters, so its `function` is the frame node, its `declaration` is the
 /// frame's own occurrence and its `arguments` are empty ([`frame_identity`]).
@@ -177,18 +172,16 @@ pub(crate) fn contract_arguments(
 ///
 /// # Errors
 ///
-/// [`ObligationIdentityError::OrdinalTooLarge`] for an occurrence beyond `u32`, or
-/// [`ObligationIdentityError::ProducerIdentityUnavailable`] until QSL exposes the producer's
-/// exact identity on the selected site.
+/// [`ObligationIdentityError::OrdinalTooLarge`] for an occurrence beyond `u32`.
 pub(crate) fn function_contract_identity(
-    _function: NodeKey,
+    producer: &ObligationIdentity,
     declaration: &OccurrenceKey,
     _kind: ObligationKind,
     _arguments: &[ContractArgument],
 ) -> Result<ObligationIdentity, ObligationIdentityError> {
     let _ordinal = u32::try_from(declaration.origin().ordinal())
         .map_err(|_| ObligationIdentityError::OrdinalTooLarge(declaration.origin().ordinal()))?;
-    Err(ObligationIdentityError::ProducerIdentityUnavailable)
+    Ok(producer.clone())
 }
 
 /// The kind of the obligation a state-frame harness proves, read from its `property` and from
@@ -200,18 +193,21 @@ pub(crate) fn frame_kind(property: &StateFrameProperty) -> Option<ObligationKind
     }
 }
 
-/// The frame obligation of the operation `site` names. The exact producer identity must come
-/// from QSL's selected operation site; this adapter refuses while that accessor is absent.
+/// The frame obligation of the operation `site` names, issued by QSL's selected operation site.
 ///
 /// # Errors
 ///
-/// [`ObligationIdentityError::OrdinalTooLarge`] for an occurrence beyond `u32`, or
-/// [`ObligationIdentityError::ProducerIdentityUnavailable`] while QSL has no accessor.
+/// [`ObligationIdentityError::OrdinalTooLarge`] for an occurrence beyond `u32`.
 pub(crate) fn frame_identity(
     site: &OperationSite,
     kind: ObligationKind,
 ) -> Result<ObligationIdentity, ObligationIdentityError> {
-    function_contract_identity(site.frame.clone(), &site.frame_occurrence, kind, &[])
+    function_contract_identity(
+        site.obligation_identity(),
+        &site.frame_occurrence,
+        kind,
+        &[],
+    )
 }
 
 #[cfg(test)]
@@ -229,13 +225,14 @@ mod tests {
         OccurrenceKey::new(node, Origin::new(Role::new("declaration"), ordinal))
     }
 
-    #[trace("FR-016-AC-21", "TC-026")]
+    #[trace("FR-016-AC-26", "TC-026")]
     #[test]
     fn ordinal_outside_structural_identity_range_is_refused() {
         let function = node("function");
         let declaration = occurrence(function.clone(), u64::from(u32::MAX) + 1);
+        let producer = ObligationIdentity::new(function, None, 0);
         assert!(matches!(
-            function_contract_identity(function, &declaration, ObligationKind::Postcondition, &[]),
+            function_contract_identity(&producer, &declaration, ObligationKind::Postcondition, &[]),
             Err(ObligationIdentityError::OrdinalTooLarge(_))
         ));
     }

@@ -7,8 +7,7 @@
 //! its `occurrence_key` are all QSL's own answer for the operation. The envelope names the
 //! payload's frame node and frame occurrence, the pair `replay_frame` requires it to agree with.
 //!
-//! The obligation identity must come from QSL's selected producer claim. Until QSL exposes that
-//! identity, replay refuses it with `ProducerIdentityUnavailable`. The witness is the real playback:
+//! The obligation identity comes from QSL's selected producer claim. The witness is the real playback:
 //! decoded against the harness's `state_fields` by the one decoder and rendered by the one adapter
 //! rendering function. The harness is tied to the replay by checks, not by the identity: the
 //! property is a frame over exactly the state fields, the scope names the operation, anchor and

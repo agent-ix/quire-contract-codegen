@@ -977,7 +977,7 @@ impl ReplayPackage {
     ) -> Result<ObligationIdentity, ObligationIdentityError> {
         let arguments = contract_arguments(&self.site.site.parameters, bindings)?;
         function_contract_identity(
-            self.site.site.function.clone(),
+            self.site.site.obligation_identity(),
             &self.site.site.declaration,
             kind,
             &arguments,
@@ -1849,9 +1849,9 @@ mod tests {
         }
     }
 
-    /// With the function, declaration, kind and arguments fixed, reordering `FunctionSite.parameters`
-    /// leaves the identity unchanged, and a perturbed `function` or `declaration` changes it.
-    #[trace("FR-016-AC-23", "TC-026")]
+    /// The request carries the QSL-issued identity unchanged when parameter bindings are
+    /// provided in either order.
+    #[trace("FR-016-AC-26", "TC-026")]
     #[test]
     fn tc_026_the_identity_ignores_the_declared_order_of_the_site_parameters() {
         use crate::kani::identity::ObligationKind;
@@ -1862,7 +1862,7 @@ mod tests {
         };
         let identity = |package: &ReplayPackage, arguments: &[_]| {
             function_contract_identity(
-                package.site.site.function.clone(),
+                package.site.site.obligation_identity(),
                 &package.site.site.declaration,
                 ObligationKind::Postcondition,
                 arguments,
@@ -1871,6 +1871,7 @@ mod tests {
         };
         let original = package();
         let baseline = identity(&original, &arguments_of(&original));
+        assert_eq!(&baseline, original.site.site.obligation_identity());
 
         let mut reordered = original.clone();
         reordered.site.site.parameters.reverse();
@@ -1882,22 +1883,6 @@ mod tests {
         let mut harness_order = arguments_of(&original);
         harness_order.reverse();
         assert_eq!(baseline, identity(&original, &harness_order));
-
-        let mut other_function = original.clone();
-        other_function.site.site.function = fixture_node("other-function");
-        assert_ne!(
-            baseline,
-            identity(&other_function, &arguments_of(&other_function))
-        );
-        let mut other_declaration = original.clone();
-        other_declaration.site.site.declaration = OccurrenceKey::new(
-            original.site.site.function.clone(),
-            qsl_replay::Origin::new(qsl_replay::Role::new("declaration"), 1),
-        );
-        assert_ne!(
-            baseline,
-            identity(&other_declaration, &arguments_of(&other_declaration))
-        );
     }
 
     /// A reproduced settlement in any category other than `violation` is not a reproduced
