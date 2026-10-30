@@ -11,14 +11,14 @@ use std::{
 use super::{captured_alethe_proof, SolverExecution, SolverStatus};
 use crate::kani::run::process::{ProcessOutcome, ProcessRun};
 
-/// A query's position in the recompiled refinement's canonical steps array.
+/// A query's position in the recompiled refinement's declaration-order steps array.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RefinementRole {
     /// FR-315's Initial query.
     Base,
-    /// FR-315's Step query at the canonical array position.
+    /// FR-315's Step query at the declaration-order array position.
     Step {
-        /// Zero-based position in the recompiled canonical steps array.
+        /// Zero-based position in the recompiled declaration-order steps array.
         row: usize,
     },
 }
@@ -30,7 +30,7 @@ pub struct RefinementExpected<Item, Subjects> {
     pub item: Item,
     /// Concrete and abstract subjects in their selected order.
     pub subjects: Subjects,
-    /// Initial or canonically indexed step query.
+    /// Initial or declaration-order indexed step query.
     pub role: RefinementRole,
     /// The distinct CG invocation identity.
     pub attempt: NonZeroU64,
@@ -45,7 +45,7 @@ pub struct RefinementRun<Item, Subjects> {
     item: Item,
     /// Concrete and abstract subjects in their selected order.
     subjects: Subjects,
-    /// Initial or canonically indexed step query.
+    /// Initial or declaration-order indexed step query.
     role: RefinementRole,
     /// The distinct CG invocation identity.
     attempt: NonZeroU64,
@@ -117,7 +117,7 @@ impl<Item, Subjects> RefinementRun<Item, Subjects> {
         &self.subjects
     }
 
-    /// Return the query's canonical refinement role and row.
+    /// Return the query's typed refinement role and declaration-order row.
     #[must_use]
     pub fn role(&self) -> RefinementRole {
         self.role
@@ -174,7 +174,7 @@ pub enum RefinementHandoffError {
 /// Validate run records and serialize the proof-bearing QSL adapter handoff.
 ///
 /// Expected entries must come from the recompiled refinement and FR-315 output, indexed by
-/// canonical step position. Proof bytes must match the same completed invocation's stdout.
+/// declaration-order step position. Proof bytes must match the same completed invocation's stdout.
 pub fn refinement_handoff<Item: Eq, Subjects: Eq>(
     step_count: usize,
     expected: &[RefinementExpected<Item, Subjects>],
