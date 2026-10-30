@@ -81,19 +81,37 @@ on an in-domain draw and require a falsified totality assertion, never an
 assumption. Compare its native result with QSL's public clause-evaluation
 facade once available; counterexample replay alone cannot classify true, false and incomplete
 evaluation across the admitted domain.
-The postcondition harness draws the pre-state and operation parameters, assumes
-every supported sibling precondition and refuses if any sibling is unsupported,
-then calls the subject. It asserts produced post-state cardinality, element
-domain, order and uniqueness, as well as the authored postcondition, and covers
-non-vacuity. Seed subjects that produce a duplicate, misordered, below-minimum or
-over-maximum cardinality, or out-of-range collection; each must falsify with
-in-domain pre-state playback
-and none may be assumed away. The invariant keeps a direct assertion. Replay
-a falsified invariant through `qsl_replay::replay_state_clause` with a snapshot
-observation, and a falsified postcondition with an invocation plus pre/post
-snapshots. A healthy postcondition verifies; an authored postcondition or
-subject mutant falsifies with an in-domain playback. These
-pre/post controls are planned and receive no current proof credit.
+For the collection postcondition, read the selected field's exact
+`CollectionType` and typed inclusive cardinality and element domain from the
+admitted package. Construct each symbolic prestate as exact
+`Value::Collection` through the FR-392 checked builder with a
+caller-authenticated schema-aware element authority. Check both cardinality
+endpoints, inclusive Boolean/IntRange element endpoints, declared order and
+uniqueness in the drawn state. Feed that same typed prestate and operation
+parameters to the customer-produced subject through its declared invocation
+ABI. If the builder, authority, selected field domain or subject invocation ABI
+is unavailable, require a typed item refusal with no harness, proof record or
+CG-local `Vec`/array fallback.
+
+The postcondition harness assumes every supported sibling precondition on the
+same prestate and operation parameters, and refuses before invocation if any
+sibling is unsupported. Then it calls the subject. Inspect the
+subject-produced `Value::Collection` with FR-392 using the selected field type
+and authenticated schema-aware authority. Assert successful inspection and
+the produced post-state cardinality, element domain, order and uniqueness,
+as well as the authored postcondition, then cover non-vacuity. Seed subjects
+that produce a duplicate, misordered, below-minimum or over-maximum count,
+out-of-range element, forged nested element or wrong exact collection type;
+each must falsify the poststate-domain assertion with in-domain prestate
+playback, without an assumption hiding it. The invariant keeps a direct
+assertion. Replay a falsified invariant through
+`qsl_replay::replay_state_clause` with a snapshot observation, and a
+falsified postcondition with an invocation plus pre/post snapshots. A healthy
+postcondition verifies; an authored postcondition or subject mutant falsifies
+with in-domain playback. These pre/post controls are planned and receive no
+current proof credit. FR-392 defines the value form and checked boundary;
+this procedure does not assign a generated subject function signature to
+exact or claim QSL emission of one.
 
 For FR-015-AC-128 (IR-1091), author a QSL invariant and a constraint clause
 with collection quantifiers over the same bounded field, emit the package through
