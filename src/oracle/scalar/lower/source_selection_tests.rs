@@ -9,7 +9,9 @@ use crate::core::contract_package::{
     routed_contract_lowering_profile, ContractDriverResultSelection, ContractRequestPosition,
 };
 use crate::oracle::claim::ClaimDisposition;
-use qsl_replay::{compile_package, DependencyInput, ReplayLimits, SourceIdentity, StageLimits};
+use qsl_replay::{
+    compile_package, CompileUnit, DependencyInput, ReplayLimits, SourceIdentity, StageLimits,
+};
 use quire_contract_model::{
     CheckedNodeId, CheckedOccurrenceRole, CheckedPackageEvidence, CheckedPackageReadLimits,
     CheckedPackageV2, CheckedPackageV2ReadResult, CheckedSemanticNodeV2, CheckedTerm,
@@ -36,9 +38,12 @@ fn first_reference(node: &CheckedSemanticNodeV2) -> Option<&CheckedNodeId> {
 
 fn admitted_source(source: &str) -> CheckedPackageV2 {
     let compiled = compile_package(
-        SourceIdentity::new("test", "package-items.native", "git", "fixture"),
-        "package-items.native",
-        source.as_bytes(),
+        CompileUnit {
+            source: SourceIdentity::new("test", "package-items.native", "git", "fixture"),
+            package_name: "package-items".to_owned(),
+            path: "package-items.native",
+            bytes: source.as_bytes(),
+        },
         [],
         &DependencyInput::default(),
         StageLimits::default(),

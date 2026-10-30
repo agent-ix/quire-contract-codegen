@@ -718,6 +718,7 @@ fn repeated_identity_refusal() -> ReplayPackageError {
     };
     let inputs = ReplayInputs {
         decode_limits: crate::unbounded_decode_limits(),
+        package_name: "terminal-map".to_owned(),
         source: locked("unit"),
         dependencies: vec![dependency("lib-one"), dependency("lib-two")],
         accounting_limits: unlimited,

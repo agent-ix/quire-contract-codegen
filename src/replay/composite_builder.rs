@@ -11,7 +11,7 @@ use std::fmt;
 
 use qsl_replay::{
     compile_admitted, parity_obligation, settle_verified_shadow, AdmittedCompilation,
-    AdmittedContext, AdmittedRefusal, BoundEntries, ByteDigest, CompositeEvidence,
+    AdmittedContext, AdmittedRefusal, BoundEntries, ByteDigest, CompileUnit, CompositeEvidence,
     CompositeIdentity, CompositeParityClaim, DependencyInput, DigestDomain, DigestRecord, Domain,
     DomainKey, EnvelopeSource, EqualityOperator, Identifier, IdentityEncodeError, NoPayload,
     OccurrenceKey, OperandIdentity, Origin, ParityArgument, ParityPreimage, ProofBound,
@@ -520,9 +520,12 @@ impl OriginalCompositeEqContext {
         let request = ReplayRequest::decode(wire.clone(), self.inputs.replay_limits)
             .map_err(|cause| CompositeBuildError::RequestDecode(Box::new(cause)))?;
         let compiled = compile_admitted(
-            self.inputs.source.source_identity(),
-            &self.inputs.source.identity,
-            &self.inputs.source.bytes,
+            CompileUnit {
+                source: self.inputs.source.source_identity(),
+                package_name: self.original.name().to_owned(),
+                path: &self.inputs.source.identity,
+                bytes: &self.inputs.source.bytes,
+            },
             [],
             &self.dependencies,
             request.stage_limits().clone(),
@@ -586,9 +589,12 @@ mod admitted_failure_tests {
     #[test]
     fn boundary_mapping_retains_a_genuine_malformed_source_package_refusal() {
         let cause = compile_admitted(
-            qsl_replay::SourceIdentity::new("test", "invalid.native", "git", "fixture"),
-            "invalid.native",
-            b"language \"ix:native\" edition \"1-draft\"; record { ",
+            CompileUnit {
+                source: qsl_replay::SourceIdentity::new("test", "invalid.native", "git", "fixture"),
+                package_name: "invalid".to_owned(),
+                path: "invalid.native",
+                bytes: b"language \"ix:native\" edition \"1-draft\"; record { ",
+            },
             [],
             &DependencyInput::default(),
             qsl_replay::StageLimits::default(),

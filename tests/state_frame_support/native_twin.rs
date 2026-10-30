@@ -1164,6 +1164,7 @@ impl Twin {
     fn run(&self) -> ReplayInputs {
         ReplayInputs {
             decode_limits: unbounded_decode_limits(),
+            package_name: "state-frame-twin".to_owned(),
             source: LockedSource {
                 authority: AUTHORITY.to_owned(),
                 identity: IDENTITY.to_owned(),

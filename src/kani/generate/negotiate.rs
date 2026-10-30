@@ -1381,6 +1381,7 @@ mod tests {
             }
             let located = qsl_replay::call_site(
                 qsl_replay::SourceIdentity::new("agent-ix", "test:state-frame-twin", "git", "1"),
+                "state-frame-twin".to_owned(),
                 "test:state-frame-twin",
                 source.as_bytes(),
                 [twin.domain.as_slice()],
@@ -1523,6 +1524,7 @@ mod tests {
                 "git",
                 "fixture",
             ),
+            "ir276-collection-request".to_owned(),
             "ir276-collection-request",
             source.as_bytes(),
             [domain.as_slice()],
