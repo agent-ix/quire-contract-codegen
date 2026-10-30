@@ -184,11 +184,7 @@ fn scalar_package_with_occurrences(
         builder.expression_occurrences();
         let (_, ids) = builder.admit_resolved();
         let unsatisfiable = builder.bound(&Bound::Integer(5, -5));
-        builder.narrow(
-            49_301,
-            ids.resolve(&code_id(UNSATISFIABLE)).digest.as_ref(),
-            &unsatisfiable,
-        );
+        builder.narrow(49_301, &key(UNSATISFIABLE), &unsatisfiable);
         builder.expression_occurrences();
     }
     let (package, ids) = builder.admit_resolved();
@@ -629,12 +625,27 @@ fn tc_025_scalar_harness_asserts_the_native_arithmetic_relation() {
     let (_, scalar_harnesses) =
         emitted_scalar(negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap());
     let source = &scalar_harnesses[0].rust.contents;
+    let node_path = node_1001
+        .path
+        .iter()
+        .map(|segment| match segment {
+            quire_contract_model::CheckedNodePathSegment::Name(name) => {
+                quire_exact::PathSegment::Text(name.to_string())
+            }
+            quire_contract_model::CheckedNodePathSegment::Node(_) => {
+                panic!("the scalar fixture has a direct authored path")
+            }
+        })
+        .collect();
+    let node_key =
+        quire_exact::NodeKey::new(node_1001.package.to_string(), node_path, node_1001.ordinal)
+            .expect("admitted structural node key");
     crate::generated_headers::assert_header(
         &scalar_harnesses[0].rust.path,
         source,
         &[&format!(
-            "// Obligation: exact-scalar {}/{} `quire.op.integer.add`",
-            node_1001.domain, node_1001.digest
+            "// Obligation: exact-scalar {} `quire.op.integer.add`",
+            node_key
         )],
     );
     assert!(
