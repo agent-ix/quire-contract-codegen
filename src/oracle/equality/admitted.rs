@@ -1,8 +1,8 @@
 //! Consume the public replay facade's checker-issued nominal identities.
 
 use super::{CompositeEqualityRefusal, ItemCheckError, OracleGenerationError, TypeClosure};
-use qsl_replay::{AdmittedCompositeForm, AdmittedContext, AdmittedLookupRefusal, WireNodeId};
-use quire_contract_model::{CheckedNodeId, CheckedSemanticNodeV2, NominalIdentityPreimage};
+use qsl_replay::{AdmittedCompositeForm, AdmittedContext, AdmittedLookupRefusal};
+use quire_contract_model::{CheckedNodeId, CheckedSemanticNodeV2};
 use quire_exact::{EnumShape, NodeKey, ValueType};
 use quire_semantic_value::enumeration::EnumDeclaration;
 
@@ -31,14 +31,10 @@ pub(super) fn lookup_refusal(cause: AdmittedLookupRefusal) -> CompositeEqualityR
         AdmittedLookupRefusal::Foreign {
             declaration,
             package,
-        } => {
-            let package = package.record();
-            CompositeEqualityRefusal::ForeignEnum {
-                declaration: declaration.to_string(),
-                package_domain: package.domain().as_str().to_owned(),
-                package_digest: package.hex(),
-            }
-        }
+        } => CompositeEqualityRefusal::ForeignEnum {
+            declaration: declaration.to_string(),
+            package_name: package.to_string(),
+        },
     }
 }
 
@@ -59,31 +55,31 @@ pub(super) fn resolve_enum<Body>(
     let mismatch = || CompositeEqualityRefusal::EnumContextMismatch {
         declaration: node.node_id.clone(),
     };
-    let wire = WireNodeId::from_hex(&node.node_id.digest).ok_or_else(mismatch)?;
-    let actual = admitted.enum_declaration(wire).map_err(lookup_refusal)?;
-    let Some(NominalIdentityPreimage::EnumDeclaration(expected)) = &node.nominal_identity_preimage
-    else {
-        return Err(mismatch().into());
-    };
-    if actual.is_ordered() != expected.ordered
+    let key = crate::core::ir::node_key::checked_node_key(&node.node_id).ok_or_else(mismatch)?;
+    let actual = admitted.enum_declaration(&key).map_err(lookup_refusal)?;
+    let expected = node.body.enum_declaration().ok_or_else(mismatch)?;
+    if actual.is_ordered() != expected.ordered()
         || !actual
             .qualified_name()
             .iter()
             .map(|part| part.as_str())
-            .eq(expected
-                .qualified_declaration
+            .eq(node
+                .declaration
+                .as_ref()
+                .ok_or_else(mismatch)?
+                .qualified_name
                 .iter()
                 .map(|part| part.as_ref()))
         || !actual
             .cases()
             .iter()
             .map(|case| case.case().as_str())
-            .eq(expected.members.iter().map(|case| case.as_ref()))
+            .eq(expected.members().iter().map(|case| case.as_ref()))
     {
         return Err(mismatch().into());
     }
     let declaration = EnumDeclaration::new(
-        actual.key(),
+        actual.key().clone(),
         actual.is_ordered(),
         actual
             .cases()
@@ -95,10 +91,10 @@ pub(super) fn resolve_enum<Body>(
     let mut variants = Vec::with_capacity(actual.cases().len());
     for case in actual.cases() {
         let selected = admitted
-            .enum_case(wire, case.case())
+            .enum_case(&key, case.case())
             .map_err(lookup_refusal)?;
         let value = declaration
-            .member(selected.case().as_str(), selected.key())
+            .member(selected.case().as_str(), selected.key().clone())
             .map_err(OracleGenerationError::EnumReconstruction)?;
         variants.push(value.variant());
         closure.enum_members.record(value);
@@ -143,14 +139,10 @@ pub(super) fn composite_lookup_refusal(cause: AdmittedLookupRefusal) -> Composit
         AdmittedLookupRefusal::Foreign {
             declaration,
             package,
-        } => {
-            let package = package.record();
-            CompositeEqualityRefusal::ForeignComposite {
-                declaration: declaration.to_string(),
-                package_domain: package.domain().as_str().to_owned(),
-                package_digest: package.hex(),
-            }
-        }
+        } => CompositeEqualityRefusal::ForeignComposite {
+            declaration: declaration.to_string(),
+            package_name: package.to_string(),
+        },
         AdmittedLookupRefusal::WrongKind { declaration } => {
             CompositeEqualityRefusal::WrongAdmittedKind {
                 declaration: declaration.to_string(),
@@ -167,9 +159,9 @@ pub(super) fn resolve_composite<Body>(
     let mismatch = || CompositeEqualityRefusal::CompositeContextMismatch {
         declaration: node.node_id.clone(),
     };
-    let wire = WireNodeId::from_hex(&node.node_id.digest).ok_or_else(mismatch)?;
+    let key = crate::core::ir::node_key::checked_node_key(&node.node_id).ok_or_else(mismatch)?;
     let actual = admitted
-        .composite_declaration(wire)
+        .composite_declaration(&key)
         .map_err(composite_lookup_refusal)?;
     let expected_form = match node.semantic_form.as_ref() {
         "record" => AdmittedCompositeForm::Record,
@@ -178,7 +170,7 @@ pub(super) fn resolve_composite<Body>(
         _ => return Err(mismatch()),
     };
     let expected_name = node.declaration.as_ref().ok_or_else(mismatch)?;
-    if actual.node().to_string() != node.node_id.digest.as_ref()
+    if actual.node() != &key
         || actual.form() != expected_form
         || !actual
             .qualified_name()
@@ -193,7 +185,7 @@ pub(super) fn resolve_composite<Body>(
     }
     closure
         .composite_bindings
-        .entry(actual.key())
+        .entry(actual.key().clone())
         .or_insert_with(|| CompositeBinding {
             node: node.node_id.clone(),
             form: actual.form(),
@@ -204,7 +196,7 @@ pub(super) fn resolve_composite<Body>(
                 .map(|part| part.as_str().to_owned())
                 .collect(),
         });
-    Ok(actual.key())
+    Ok(actual.key().clone())
 }
 
 #[cfg(test)]
@@ -224,9 +216,9 @@ mod tests {
             let (compiled, libraries) = super::composite_fixture::imported(transitive);
             let context = compiled.context();
             let marker = context.enums().next().expect("real own enum");
-            let wrong = WireNodeId::from_digest(*marker.key().as_bytes());
+            let wrong = marker.key().clone();
             let cause = context
-                .composite_declaration(wrong)
+                .composite_declaration(&wrong)
                 .expect_err("own enum is wrong kind");
             assert_eq!(
                 composite_lookup_refusal(cause),
@@ -234,9 +226,14 @@ mod tests {
                     declaration: wrong.to_string(),
                 }
             );
-            let unknown = WireNodeId::from_digest([7; 32]);
+            let unknown = NodeKey::new(
+                "test/unknown",
+                vec![quire_exact::PathSegment::Text("missing".to_owned())],
+                0,
+            )
+            .expect("structural unknown key");
             let cause = context
-                .composite_declaration(unknown)
+                .composite_declaration(&unknown)
                 .expect_err("not an admitted declaration");
             assert_eq!(
                 composite_lookup_refusal(cause),
@@ -249,18 +246,17 @@ mod tests {
                 .find(|(identity, _)| identity == "test/composites")
                 .expect("original library")
                 .1;
-            let owner = leaf.context().package_id().record();
+            let owner = leaf.context().package_name().to_string();
             for actual in leaf.context().composites() {
-                let wire = WireNodeId::from_digest(*actual.node().as_bytes());
+                let wire = actual.node().clone();
                 let cause = context
-                    .composite_declaration(wire)
+                    .composite_declaration(&wire)
                     .expect_err("foreign closure declaration");
                 assert_eq!(
                     composite_lookup_refusal(cause),
                     CompositeEqualityRefusal::ForeignComposite {
                         declaration: wire.to_string(),
-                        package_domain: owner.domain().as_str().to_owned(),
-                        package_digest: owner.hex(),
+                        package_name: owner.clone(),
                     }
                 );
             }
