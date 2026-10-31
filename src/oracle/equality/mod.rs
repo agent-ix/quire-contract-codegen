@@ -3778,7 +3778,7 @@ mod tests {
 
     #[trace("FR-018-AC-28", "FR-018-AC-30", "TC-029")]
     #[test]
-    #[ignore = "deep fixture lacks its generated claim subject after 50,000-record intake; IR-1079"]
+    #[ignore = "50,000-record intake and generated crate compile pass; runtime deep.rs:33 ContextPackageContentMismatch in deep genuine prepared environment, then deep.rs:58 512 KiB stack join panic; IR-1079"]
     fn deep_acyclic_closure_generates_flat_compilable_source_on_a_small_stack() {
         const RECORDS: usize = 50_000;
         let (original_source, original, context, ids, leaf) = admitted_record_chain(RECORDS, true);
@@ -3899,7 +3899,7 @@ mod tests {
                 assert!(exact.iter().any(|artifact| artifact.path != "src/lib.rs"));
                 let claim = format!(
                     "// Subject: {}",
-                    crate::core::provenance::node_subject(&node_id('9'))
+                    crate::core::provenance::node_subject(&node_id('9')).escape_debug()
                 );
                 for module in exact
                     .iter()
@@ -3929,7 +3929,7 @@ mod tests {
                     .expect("an extra module reconstructs the genuine root declaration");
                 let root_subject = format!(
                     "// Subject: {}",
-                    crate::core::provenance::node_subject(&root)
+                    crate::core::provenance::node_subject(&root).escape_debug()
                 );
                 assert!(
                     root_module
@@ -3966,8 +3966,13 @@ include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/lib.rs"));
 fn deep_matches_shallow() {
     let source = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/deep.native"));
     let admitted = qsl_replay::compile_admitted(
-        qsl_replay::SourceIdentity::new("test", "deep.native", "git", "fixture"),
-        "deep.native", source, [], &qsl_replay::DependencyInput::default(),
+        qsl_replay::CompileUnit {
+            source: qsl_replay::SourceIdentity::new("test", "deep.native", "git", "fixture"),
+            package_name: "deep".to_owned(),
+            path: "deep.native",
+            bytes: source,
+        },
+        [], &qsl_replay::DependencyInput::default(),
         {
             let bytes = u64::try_from(source.len()).expect("finite retained source bytes");
             let tokens = bytes.checked_add(1).expect("finite byte-derived token allowance plus EOF");
