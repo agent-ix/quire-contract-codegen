@@ -12,6 +12,7 @@ use quire_exact::{
     ChargePoint, Incomplete, Integer, IntegerInterval, LimitKind, Outcome, Refusal, ScalarLimits,
     Undefined,
 };
+use semver::Version;
 
 use crate::{
     core::{
@@ -249,9 +250,9 @@ pub enum KaniScalarNativeError {
     NativeLaunch(String),
     /// A staged lock lacks an owning dependency or disagrees with the other staged lock.
     DependencyLock {
-        /// The required owning source or the other staged lock's source identity.
+        /// The required owning package, repository and version, when known.
         expected: String,
-        /// The staged source identity when present.
+        /// The other staged package, repository and version when present and valid.
         actual: Option<String>,
     },
     /// The native helper returned malformed or unsupported structured output.
@@ -1142,53 +1143,59 @@ fn staged_sources(root: &Path) -> Result<[String; 2], KaniScalarNativeError> {
             }
         }
     })?;
-    let source = |(package, repository): (&str, &str)| {
-        lock_source_identity(&lock, package, repository).ok_or_else(|| {
+    let version = |(package, repository): (&str, &str)| {
+        lock_owning_version(&lock, package, repository).ok_or_else(|| {
             KaniScalarNativeError::DependencyLock {
-                expected: format!("{package} from {repository}"),
+                expected: format!("one {package} from {repository} with a valid version"),
                 actual: None,
             }
         })
     };
     let [runtime, exact] = LOCKED_DEPENDENCIES;
-    Ok([source(runtime)?, source(exact)?])
+    Ok([version(runtime)?, version(exact)?])
 }
 
 fn verify_staged_locks(root: &Path) -> Result<(), KaniScalarNativeError> {
     let package = staged_sources(root)?;
     let observer = staged_sources(&root.join("observer"))?;
-    for (expected, actual) in package.into_iter().zip(observer) {
+    for ((name, repository), (expected, actual)) in LOCKED_DEPENDENCIES
+        .into_iter()
+        .zip(package.into_iter().zip(observer))
+    {
         if expected != actual {
             return Err(KaniScalarNativeError::DependencyLock {
-                expected,
-                actual: Some(actual),
+                expected: format!("{name} from {repository} version {expected}"),
+                actual: Some(format!("{name} from {repository} version {actual}")),
             });
         }
     }
     Ok(())
 }
 
-fn lock_source_identity(lock: &str, package: &str, repository: &str) -> Option<String> {
-    let name = format!("name = \"{package}\"");
-    let mut entries = lock
+fn lock_owning_version(lock: &str, package: &str, repository: &str) -> Option<String> {
+    let mut matches = lock
         .split("[[package]]")
         .skip(1)
-        .filter(|entry| entry.lines().any(|line| line.trim() == name));
-    let entry = entries.next()?;
-    if entries.next().is_some() {
+        .filter(|entry| lock_field(entry, "name") == Some(package));
+    let entry = matches.next()?;
+    if matches.next().is_some() {
         return None;
     }
-    let mut sources = entry
+    let source = lock_field(entry, "source")?.strip_prefix("git+")?;
+    let source_repository = source.split(['?', '#']).next()?;
+    (source_repository == repository).then_some(())?;
+    let version = lock_field(entry, "version")?;
+    Version::parse(version).ok()?;
+    Some(version.to_owned())
+}
+
+fn lock_field<'a>(entry: &'a str, key: &str) -> Option<&'a str> {
+    let prefix = format!("{key} = \"");
+    let mut values = entry
         .lines()
-        .filter_map(|line| line.trim().strip_prefix("source = \"")?.strip_suffix('"'));
-    let source = sources.next()?;
-    if sources.next().is_some() {
-        return None;
-    }
-    let prefix = format!("git+{repository}?");
-    let (_, revision) = source.strip_prefix(&prefix)?.rsplit_once('#')?;
-    (revision.len() == 40 && revision.bytes().all(|byte| byte.is_ascii_hexdigit()))
-        .then(|| source.to_owned())
+        .filter_map(|line| line.trim().strip_prefix(&prefix)?.strip_suffix('"'));
+    let value = values.next()?;
+    values.next().is_none().then_some(value)
 }
 
 struct PrivateSnapshot(PathBuf);
@@ -1610,7 +1617,14 @@ mod tests {
         );
     }
 
-    #[trace("FR-014-AC-8", "FR-017-AC-27", "FR-017-AC-30", "TC-024", "TC-027")]
+    #[trace(
+        "FR-014-AC-8",
+        "FR-017-AC-27",
+        "FR-017-AC-30",
+        "FR-017-AC-62",
+        "TC-024",
+        "TC-027"
+    )]
     #[test]
     fn tc_027_staged_native_observer_compiles_with_locked_kernel_and_charge_log() {
         let snapshot = PrivateSnapshot::create().unwrap();
@@ -1663,10 +1677,10 @@ mod tests {
                 ("quire-exact", "https://github.com/agent-ix/quire-exact"),
             ] {
                 let staged_lock = fs::read_to_string(directory.join("Cargo.lock")).unwrap();
-                let source = lock_source_identity(&staged_lock, package, repository)
-                    .expect("the independently resolved lock names the owning source");
+                let version = lock_owning_version(&staged_lock, package, repository)
+                    .expect("the independently resolved lock names the owning package and version");
                 eprintln!(
-                    "independent lock {}: {package} {repository} {source}",
+                    "independent lock {}: {package} {repository} {version}",
                     directory.display()
                 );
             }
@@ -1694,6 +1708,38 @@ mod tests {
                 ],
             );
             let metadata: serde_json::Value = serde_json::from_slice(&metadata.stdout).unwrap();
+            let lock = fs::read_to_string(root.join(manifest).parent().unwrap().join("Cargo.lock"))
+                .unwrap();
+            for (name, repository) in [
+                (
+                    "quire-contract-runtime",
+                    "https://github.com/agent-ix/quire-contract-runtime",
+                ),
+                ("quire-exact", "https://github.com/agent-ix/quire-exact"),
+            ] {
+                let mut matches = metadata["packages"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .filter(|package| package["name"] == name);
+                let owning = matches.next().expect("owning package in Cargo metadata");
+                assert!(matches.next().is_none(), "one owning {name} package");
+                let source = owning["source"].as_str().unwrap();
+                assert_eq!(
+                    source
+                        .strip_prefix("git+")
+                        .unwrap()
+                        .split(['?', '#'])
+                        .next(),
+                    Some(repository)
+                );
+                let version = owning["version"].as_str().unwrap();
+                Version::parse(version).unwrap();
+                assert_eq!(
+                    lock_owning_version(&lock, name, repository).as_deref(),
+                    Some(version)
+                );
+            }
             let package = metadata["packages"]
                 .as_array()
                 .unwrap()
@@ -1999,21 +2045,23 @@ mod tests {
         ));
     }
 
-    #[trace("FR-017-AC-42", "FR-017-AC-44")]
+    #[trace("FR-017-AC-42", "FR-017-AC-44", "FR-017-AC-62", "TC-027")]
     #[test]
-    fn lock_failures_refuse_missing_unexpected_unreadable_and_cross_lock_sources() {
+    fn staged_locks_match_owning_repositories_and_versions() {
         let snapshot = PrivateSnapshot::create().unwrap();
         let root = snapshot.path();
         fs::create_dir(root.join("observer")).unwrap();
-        let runtime = "[[package]]\nname = \"quire-contract-runtime\"\nsource = \"git+https://github.com/agent-ix/quire-contract-runtime?branch=main#";
-        let exact = "[[package]]\nname = \"quire-exact\"\nsource = \"git+https://github.com/agent-ix/quire-exact?branch=main#";
-        let complete = format!(
-            "{runtime}{}\"\n{exact}{}\"\n",
-            "a".repeat(40),
-            "b".repeat(40)
-        );
+        let runtime = "[[package]]\nname = \"quire-contract-runtime\"\nversion = \"0.1.0\"\nsource = \"git+https://github.com/agent-ix/quire-contract-runtime?branch=main#";
+        let exact = "[[package]]\nname = \"quire-exact\"\nversion = \"0.2.0\"\nsource = \"git+https://github.com/agent-ix/quire-exact?branch=main#";
+        let complete = format!("{runtime}one\"\n{exact}two\"\n");
         fs::write(root.join("Cargo.lock"), &complete).unwrap();
         fs::write(root.join("observer/Cargo.lock"), &complete).unwrap();
+        assert!(verify_staged_locks(root).is_ok());
+        let different_source_suffix = complete
+            .replace("?branch=main#", "?branch=other#")
+            .replace("#one", "#another")
+            .replace("#two", "#different");
+        fs::write(root.join("observer/Cargo.lock"), different_source_suffix).unwrap();
         assert!(verify_staged_locks(root).is_ok());
 
         for invalid in [
@@ -2022,6 +2070,13 @@ mod tests {
                 "https://github.com/agent-ix/quire-exact",
                 "https://example.org/quire-exact",
             ),
+            complete.replace(
+                "source = \"git+https://github.com/agent-ix/quire-exact?branch=main#two\"\n",
+                "",
+            ),
+            format!("{complete}{exact}two\"\n"),
+            complete.replace("version = \"0.2.0\"", "version = \"not-a-version\""),
+            complete.replace("version = \"0.2.0\"\n", ""),
         ] {
             fs::write(root.join("observer/Cargo.lock"), invalid).unwrap();
             let error = verify_staged_locks(root).unwrap_err();
@@ -2042,17 +2097,8 @@ mod tests {
             verify_staged_locks(root),
             Err(KaniScalarNativeError::Snapshot(io)) if io.kind() == std::io::ErrorKind::InvalidData
         ));
-        let other = complete.replacen(&"b".repeat(40), &"c".repeat(40), 1);
+        let other = complete.replacen("version = \"0.2.0\"", "version = \"0.3.0\"", 1);
         fs::write(root.join("observer/Cargo.lock"), other).unwrap();
-        assert!(matches!(
-            verify_staged_locks(root),
-            Err(KaniScalarNativeError::DependencyLock {
-                actual: Some(_),
-                ..
-            })
-        ));
-        let other_selector = complete.replacen("?branch=main#", "?rev=stable#", 1);
-        fs::write(root.join("observer/Cargo.lock"), other_selector).unwrap();
         assert!(matches!(
             verify_staged_locks(root),
             Err(KaniScalarNativeError::DependencyLock {
