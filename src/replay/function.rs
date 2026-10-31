@@ -667,7 +667,7 @@ impl ReplayPackage {
     ///
     /// # Errors
     ///
-    /// [`DependencySelectionMismatch`] at the first missing, extra, reordered or unequal entry.
+    /// Returns a dependency selection mismatch at the first missing, extra, reordered, or unequal entry.
     pub fn check_dependency_selection(
         &self,
         request: &ReplayRequestWire,
