@@ -1180,7 +1180,7 @@ fn original_imported_context_refuses_before_invocation() {
     assert!(matches!(
         OriginalCompositeEqContext::new(
             package,
-            &inputs(SOURCE).source,
+            &inputs(&source).source,
             retained,
             "f",
             CheckedPackageReadLimits::bounded(),
