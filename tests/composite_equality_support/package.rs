@@ -102,13 +102,26 @@ pub fn code_id(code: u32) -> CheckedNodeId {
     id(&key(code))
 }
 
+/// Give numeric fixture codes source-name segments accepted by IR's identifier grammar.
+fn authored_path(path: &str) -> Vec<String> {
+    path.split('/')
+        .map(|segment| {
+            if segment.bytes().all(|byte| byte.is_ascii_digit()) {
+                format!("n{segment}")
+            } else {
+                segment.to_owned()
+            }
+        })
+        .collect()
+}
+
 fn node_ref(path: &str) -> Value {
     if path == key(REFERENCE_MODEL_ROOT) {
         json!({"package": REFERENCE_MODEL, "path": ["model", "model_root", REFERENCE_MODEL], "ordinal": 0})
     } else if path == key(REFERENCE_OBJECT_TYPE) {
         json!({"package": REFERENCE_MODEL, "path": ["model", "object_type", REFERENCE_OBJECT], "ordinal": 0})
     } else {
-        json!({"package": BASE_PACKAGE_NAME, "path": path.split('/').collect::<Vec<_>>(), "ordinal": 0})
+        json!({"package": BASE_PACKAGE_NAME, "path": authored_path(path), "ordinal": 0})
     }
 }
 
@@ -399,7 +412,7 @@ fn declaration_for(tag: &str, form: &str, path: &str) -> Option<Value> {
     if forbidden {
         None
     } else {
-        Some(json!({"qualified_name": path.split('/').collect::<Vec<_>>()}))
+        Some(json!({"qualified_name": authored_path(path)}))
     }
 }
 
