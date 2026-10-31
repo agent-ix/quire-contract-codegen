@@ -590,9 +590,32 @@ fn tc_041_bound_prepare_refusal_precedes_disagreed() {
     assert_eq!(bound.terminal_value(), report.terminal_value());
 }
 
+/// A changed claim body keeps its structural obligation but QSL refuses the wrong operation.
+#[trace("FR-033-AC-18", "TC-048")]
+#[test]
+fn structural_obligation_does_not_admit_a_changed_operator_body() {
+    let fixture = public_composite_fixture();
+    let wire = fixture.wire;
+    let mut claim = fixture.claim;
+    assert_eq!(wire.obligation_identity.node(), &claim.node);
+    assert_eq!(wire.obligation_identity.model(), None);
+    assert_eq!(
+        wire.obligation_identity.ordinal(),
+        u32::try_from(claim.occurrence.ordinal()).expect("admitted occurrence ordinal fits")
+    );
+    claim.operator = EqualityOperator::NotEqual;
+    let (sent, report) = public_report(wire, claim, falsified_evidence(), ReplayLimits::default());
+    let bound = composite_parity_terminal_value(&sent, Some(&report)).unwrap();
+    assert!(matches!(
+        bound.result(),
+        CompositeParityResult::Refused(refusal)
+            if matches!(&**refusal, ReplayRefusal::ScalarIdentity(_))
+    ));
+}
+
 /// Each retained identity member is checked against the real QSL report, including the native
 /// cause and refinement. A missing report has no terminal value.
-#[trace("TC-048")]
+#[trace("FR-033-AC-18", "TC-048")]
 #[test]
 fn tc_048_falsified_report_requires_every_sent_identity_member() {
     let fixture = public_composite_fixture();
@@ -631,6 +654,7 @@ fn tc_048_falsified_report_requires_every_sent_identity_member() {
     changed.push(other);
     let mut other = sent.clone();
     other.operator = EqualityOperator::NotEqual;
+    assert_eq!(other.obligation, sent.obligation);
     changed.push(other);
     let mut other = sent.clone();
     other.obligation_kind = "other".to_owned();
