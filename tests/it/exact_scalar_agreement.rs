@@ -107,7 +107,10 @@ fn run_agreement_cases_with_expectation<'a>(
         manifest = composite_manifest_for_shared_target(&manifest, package_name);
         scratch.join("composite-equality-agreement-target")
     } else {
-        root.join("target")
+        // Keep each generated crate's own target across repeated runs. The crate
+        // directory is cleared to replace its artifacts, but rebuilding every
+        // dependency from scratch masks the generated agreement result.
+        scratch.join(format!("{label}-target"))
     };
     write!(
         manifest,
