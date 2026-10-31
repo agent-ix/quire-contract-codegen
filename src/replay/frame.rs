@@ -540,8 +540,8 @@ fn pre_fields(
         pre,
     } = serde_json::from_slice(bytes).map_err(|_| PreStateFault::InvocationUnreadable)?;
     let reference = pre.reference();
-    let snapshot = provided(documents, &reference)
-        .ok_or_else(|| PreStateFault::PreNotProvided { reference })?;
+    let snapshot =
+        provided(documents, &reference).ok_or(PreStateFault::PreNotProvided { reference })?;
     let SnapshotRead { populations } =
         serde_json::from_slice(snapshot).map_err(|_| PreStateFault::PreUnreadable)?;
     populations
