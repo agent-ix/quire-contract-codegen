@@ -538,7 +538,6 @@ pub(super) fn render_collection_precondition(
         clause: collection.function_id.clone(),
         collection_precondition: Some(CollectionPreconditionIdentity {
             collection,
-            source_digest: crate::kani::identity::collection_source_digest(&rust.contents),
             totality_assertion_line: *totality_assertion_line,
         }),
         kind: ObligationKind::Precondition,

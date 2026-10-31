@@ -207,19 +207,8 @@ pub struct V2ClauseObligationIdentity {
 pub struct CollectionPreconditionIdentity {
     /// The admitted collection's complete typed symbolic identity.
     pub collection: CollectionObligationIdentity,
-    /// SHA-256 of the exact generated Rust artifact, before it is staged in a crate.
-    pub source_digest: String,
     /// Unique one-based line of the Boolean-completion assertion in generated Rust.
     pub totality_assertion_line: u32,
-}
-
-pub(crate) fn collection_source_digest(source: &str) -> String {
-    let digest = qsl_replay::ByteDigest::of(source.as_bytes());
-    digest
-        .as_bytes()
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
 }
 
 /// The one message identifying a collection precondition's totality assertion in Kani output.
