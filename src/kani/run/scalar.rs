@@ -1173,33 +1173,27 @@ fn verify_staged_locks(root: &Path) -> Result<(), KaniScalarNativeError> {
 }
 
 fn lock_owning_version(lock: &str, package: &str, repository: &str) -> Option<Version> {
-    let mut matches = lock.split("[[package]]").skip(1).filter_map(|entry| {
-        let field = |key: &str| {
-            let prefix = format!("{key} = \"");
-            let mut values = entry
-                .lines()
-                .filter_map(|line| line.trim().strip_prefix(&prefix)?.strip_suffix('"'));
-            let value = values.next()?;
-            values.next().is_none().then_some(value)
-        };
-        (field("name") == Some(package)).then_some(entry)
-    });
+    let mut matches = lock
+        .split("[[package]]")
+        .skip(1)
+        .filter_map(|entry| (lock_field(entry, "name") == Some(package)).then_some(entry));
     let entry = matches.next()?;
     if matches.next().is_some() {
         return None;
     }
-    let field = |key: &str| {
-        let prefix = format!("{key} = \"");
-        let mut values = entry
-            .lines()
-            .filter_map(|line| line.trim().strip_prefix(&prefix)?.strip_suffix('"'));
-        let value = values.next()?;
-        values.next().is_none().then_some(value)
-    };
-    let source = field("source")?.strip_prefix("git+")?;
+    let source = lock_field(entry, "source")?.strip_prefix("git+")?;
     let source_repository = source.split(['?', '#']).next()?;
     (source_repository == repository).then_some(())?;
-    Version::parse(field("version")?).ok()
+    Version::parse(lock_field(entry, "version")?).ok()
+}
+
+fn lock_field<'a>(entry: &'a str, key: &str) -> Option<&'a str> {
+    let prefix = format!("{key} = \"");
+    let mut values = entry
+        .lines()
+        .filter_map(|line| line.trim().strip_prefix(&prefix)?.strip_suffix('"'));
+    let value = values.next()?;
+    values.next().is_none().then_some(value)
 }
 
 struct PrivateSnapshot(PathBuf);
@@ -1621,7 +1615,14 @@ mod tests {
         );
     }
 
-    #[trace("FR-014-AC-8", "FR-017-AC-27", "FR-017-AC-30", "TC-024", "TC-027")]
+    #[trace(
+        "FR-014-AC-8",
+        "FR-017-AC-27",
+        "FR-017-AC-30",
+        "FR-017-AC-62",
+        "TC-024",
+        "TC-027"
+    )]
     #[test]
     fn tc_027_staged_native_observer_compiles_with_locked_kernel_and_charge_log() {
         let snapshot = PrivateSnapshot::create().unwrap();
@@ -1705,6 +1706,34 @@ mod tests {
                 ],
             );
             let metadata: serde_json::Value = serde_json::from_slice(&metadata.stdout).unwrap();
+            let lock = fs::read_to_string(root.join(manifest).parent().unwrap().join("Cargo.lock"))
+                .unwrap();
+            for (name, repository) in [
+                (
+                    "quire-contract-runtime",
+                    "https://github.com/agent-ix/quire-contract-runtime",
+                ),
+                ("quire-exact", "https://github.com/agent-ix/quire-exact"),
+            ] {
+                let mut matches = metadata["packages"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .filter(|package| package["name"] == name);
+                let owning = matches.next().expect("owning package in Cargo metadata");
+                assert!(matches.next().is_none(), "one owning {name} package");
+                let source = owning["source"].as_str().unwrap();
+                assert_eq!(
+                    source
+                        .strip_prefix("git+")
+                        .unwrap()
+                        .split(['?', '#'])
+                        .next(),
+                    Some(repository)
+                );
+                let version = Version::parse(owning["version"].as_str().unwrap()).unwrap();
+                assert_eq!(lock_owning_version(&lock, name, repository), Some(version));
+            }
             let package = metadata["packages"]
                 .as_array()
                 .unwrap()
