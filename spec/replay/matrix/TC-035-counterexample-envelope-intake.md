@@ -66,11 +66,22 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     each selection and identity with the `ClauseSite` that `qsl_replay::call_site` validates for
     that clause name. Confirm both other target members are absent and the request carries no
     `arguments` or `occurrence_key`. Request an undeclared clause name.
-11. Read the invocation document and its pre and post snapshots and their digests; change one
-    playback value and one post-state value and read the digests again.
-12. Build the document vector of FR-024-AC-14 (unsorted members, escaped characters, a large
-    integer, a fractional number and an exponent form) through the builder and through
-    `core::canonical`, and read the source of the new module and `Cargo.toml`.
+11. Read the invocation document and its pre and post snapshots from the raw entries of
+    `ReplayRequestWire.documents`. Confirm the `identity` member of each document has four labels
+    and the two-label source `byte_provision` has no state document. Replay `BalanceNeverDrops`
+    with pre balance 10 and post balance 9. Keeping all labels fixed, change only the playback's
+    pre balance to 9, then restore it and change only the caller's post balance to 10; replay each
+    variant and read the selected document values, evaluation and settlement. Omit a referenced
+    snapshot, supply it under different labels, and supply two documents with the same four labels,
+    first with equal bytes and then with different bytes. Record the typed outcomes and whether
+    the CG request builder or QSL replay was called.
+12. Build the document value of FR-024-AC-53 (unsorted members, escaped characters, a large
+    integer, a fractional number and an exponent form) through the state-clause builder and
+    `core::canonical`; compare the exact encoded bytes. Separately, take those builder bytes,
+    change only JSON member order and whitespace, and supply the raw variant directly to QSL's
+    `ReplayRequestWire.documents` under the unchanged self-declared identity. Then change one
+    value in the raw variant. Read QSL's admitted typed values and the source of the state-clause
+    module and `Cargo.toml`.
 13. Submit a playback, and a post state, that binds no value for one declared state field, one
     that binds an undeclared name, and one that binds a field twice.
 14. Replay the mutated subject's counterexample and the unmutated subject's run over the same pre
@@ -199,11 +210,21 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     identities equal that clause's `ClauseSite` node and occurrence, and the undeclared name returns
     `StateClauseReplayError::CallSite` with the executor not called (FR-024-AC-12).
 11. The pre snapshot holds the playback's values and the post snapshot the supplied post-state
-    values, and the invocation document holds the stated members with its two digests; each
-    changed value changes its snapshot's digest (FR-024-AC-13).
-12. The builder's bytes and digest equal `core::canonical`'s, and the module names no encoder
-    function of `quire_canonical`, no `sha2`, no `ByteDigest::of`, no member sort or hand-written
-    escaping, and `sha2` is not in `[dependencies]` (FR-024-AC-14).
+    values; each self-declares four labels in `ReplayRequestWire.documents`, the invocation names
+    those labels, and its model names the admitted package identity. QSL evaluates `false` and
+    settles a reproduced violation for pre 10/post 9; it evaluates `true` and settles
+    inconclusive with cause `Verdicts` for pre 9/post 9 and pre 10/post 10. Every replay selects
+    the document whose labels the invocation names. Missing or differently labelled documents
+    do not select another snapshot. Either duplicate-label pair returns
+    `DuplicateDocumentIdentity` before request construction and replay; the source byte provision
+    contains no state document. No document digest is computed or compared (FR-024-AC-52;
+    replaces retired AC-13).
+12. The builder's encoded bytes equal `core::canonical`'s exactly. Raw member-order and whitespace
+    variants sent directly to QSL admit the same typed value; a raw value edit changes that value.
+    The builder is never asked to emit noncanonical bytes. The module names no encoder function of
+    `quire_canonical`, no `sha2`, no `ByteDigest::of`, no document-member sort or hand-written
+    escaping; it computes no document digest, and `sha2` is absent from
+    `[dependencies]` (FR-024-AC-53; replaces retired AC-14).
 13. `StateClauseReplayError::MissingField` names the field, the executor is not called and no
     snapshot holds a default; a name the object does not declare and a field bound twice return
     `UndeclaredField` and `DuplicateField` (FR-024-AC-15).
@@ -315,9 +336,11 @@ values (`src/replay/function.rs`, TC-026, now through `render_witness`), which i
 checks, but it builds no envelope. Step 8 holds for the decode path: `src/replay/witness.rs` uses
 no Contract IR witness type. The bounded-Kani corpus retains no counterexample packet, so step 5
 (FR-024-AC-5) is retired, as is the `Input`-arm reduction (FR-024-AC-9) in step 7.
-Steps 9 and 11 to 17 (FR-024-AC-11 and FR-024-AC-13 to FR-024-AC-19, IR-460) are
+Steps 9 and 13 to 17 (FR-024-AC-11 and FR-024-AC-15 to FR-024-AC-19, IR-460) are
 implemented by `src/replay/state_clause.rs` and the tests of
-`tests/it/kani_obligations_state_clause_replay.rs`, plus the `src` unit tests of step 12. Step 16
+`tests/it/kani_obligations_state_clause_replay.rs`. Steps 11 and 12 now verify planned
+FR-024-AC-52 and FR-024-AC-53; the former digest tests of retired AC-13 and AC-14 do not
+back these replacement criteria. Step 16
 is a real-Kani test in the module `kani_obligations_state_clause_replay`, run through the
 `kani_obligations` filter of `make kani`; its subject debits within the declared range, because a
 debit past the floor runs to a post state QSL's snapshot admission refuses.

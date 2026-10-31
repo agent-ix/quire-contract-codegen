@@ -1,0 +1,49 @@
+---
+id: SR-2026103023
+title: spec-review/base of IR-1133 PR 661
+type: SpecReview
+analysis: base
+scope: agent-ix/quire-contract-codegen; spec/replay/functional/FR-024-counterexample-envelope-intake.md,
+  spec/replay/matrix/TC-035-counterexample-envelope-intake.md
+review_set: subset
+---
+
+## Summary
+
+Independent spec-review/base of IR-1133, PR #661 at 419b7c4857bd6a5aa72ade0aa559cc5ed67b29ed. Examined: FR-024-AC-13, FR-024-AC-14, FR-024-AC-52, FR-024-AC-53, TC-035-step-11, TC-035-step-12.
+
+## Verdict
+
+**CONDITIONAL** — 2 finding(s) require author disposition.
+
+## Findings
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-001 | medium | AC-52 and TC-035 do not require replay to show that changed snapshot values affect evaluation; decoded-byte checks alone can pass while QSL ignores the changed state. | spec/replay/functional/FR-024-counterexample-envelope-intake.md:507 |
+| FND-002 | medium | AC-53 and TC-035 do not say whether member-order and whitespace mutations are supplied to the canonical builder or to QSL as raw documents; the builder cannot emit noncanonical whitespace, leaving this test branch ambiguous. | spec/replay/functional/FR-024-counterexample-envelope-intake.md:508 |
+
+## Examined scope
+
+- **FR-024-AC-13** (spec/replay/functional/FR-024-counterexample-envelope-intake.md): RETIRED, replaced by FR-024-AC-52; the former document-digest address and changed-digest checks are obsolete and earn no implementation credit.
+- **FR-024-AC-14** (spec/replay/functional/FR-024-counterexample-envelope-intake.md): RETIRED, replaced by FR-024-AC-53; the former document-digest equality check is obsolete and earns no implementation credit.
+- **FR-024-AC-52** (spec/replay/functional/FR-024-counterexample-envelope-intake.md): PLANNED (IR-1133; replaces AC-13). The pre snapshot holds, for every declared field of the state object, the integer Kani playback bound to that field, and the post snapshot holds the integer post-state value the caller supplied for it; each has one `complete` population with one object and no defaulted field. The invocation document holds every member stated in Behavior, with `model` naming the admitted owner by identity only, `parameters` empty, `result` null, `created` and `deleted` empty, and `pre` and `post` each naming the respective snapshot by its four identity labels alone. Each snaps
+- **FR-024-AC-53** (spec/replay/functional/FR-024-counterexample-envelope-intake.md): PLANNED (IR-1133; replaces AC-14). For a document vector with members in non-sorted source order, text containing a quote, backslash, control character and non-ASCII letter, and numeric members containing a large integer, a fractional number and an exponent form, the state-clause builder's provided bytes equal `core::canonical`'s bytes for the same value exactly. Reordering object members or changing JSON whitespace in an otherwise equal admitted document does not change its decoded value; changing one value does. The state-clause module uses that one encoder and names none of `quire_canonical
+- **TC-035-step-11** (spec/replay/matrix/TC-035-counterexample-envelope-intake.md): 11. Read the invocation document and its pre and post snapshots and the bytes provided under
+    their four identity labels. Change one playback value while retaining all labels, then
+    change one post-state value while retaining all labels; read the provided bytes and decoded
+    values after each change. Omit a referenced snapshot, supply it under different labels,
+    and supply two documents with the same four labels, first with equal bytes and then with
+    different bytes. Record the typed refusal and whether replay was called.
+- **TC-035-step-12** (spec/replay/matrix/TC-035-counterexample-envelope-intake.md): 12. Build the document vector of FR-024-AC-53 (unsorted members, escaped characters, a large
+    integer, a fractional number and an exponent form) through the builder and through
+    `core::canonical`. Reorder members and whitespace without changing values, then change one
+    value. Compare the exact provided bytes and decoded values. Read the source of the state-clause
+    module and `Cargo.toml`.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | AC-52 now names a false-to-true BalanceNeverDrops pair, two one-value changes, exact QSL evaluations, and distinct settlements; TC-035 step 11 repeats the oracle. |
+| FND-002 | fixed | AC-53 now separates canonical builder output from raw JSON variants supplied directly to QSL; TC-035 step 12 names both routes. |

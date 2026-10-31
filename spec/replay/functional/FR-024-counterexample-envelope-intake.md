@@ -162,8 +162,9 @@ members against the operation's declaration in the domain package.
   claim context for input-arm parity, which belong to the replay request and not to the envelope:
   the dependency entries (QSL ADR-015 D-4), the state environment, the accounting limits, the S1 to
   S4 stage limits and the byte provision.
-- For a postcondition state-clause counterexample, the proving run's byte provision is the
-  caller's domain package documents (as `FrameReplayInputs::packages`) and nothing else. The
+- For a postcondition state-clause counterexample, the request's `documents` vector starts with
+  the caller's domain package documents (as `FrameReplayInputs::packages`) and contains no
+  state document from the proving run. The two-label source `byte_provision` remains separate. The
   invocation and snapshot documents are not supplied as bytes; the generator builds them from:
   - the decoded playback of the falsified operation-contract run: one `i64` per state field, the
     symbolic pre state the harness drew;
@@ -260,8 +261,8 @@ members against the operation's declaration in the domain package.
 - The generator shall build the replay request from the admitted envelope and the request-only
   members of the proving run or original checked parity claim context, and shall invent no
   request member. The state-clause path's invocation and
-  snapshot documents are the one addition to the byte provision, built as the state-clause
-  bullets below state, and no other document is added.
+  snapshot documents are the one addition to `ReplayRequestWire.documents` as raw bytes, built
+  as the state-clause bullets below state, and no other document is added.
 - When a function-contract or parity replay is requested, the generator shall
   require the producer's completed `WitnessPacket<NoPayload>` at the intake
   boundary, admit it through `WitnessEnvelope::reconstruct`, and pass the
@@ -369,22 +370,27 @@ members against the operation's declaration in the domain package.
 - The generator shall build the invocation document with `format` `quire.state.invocation/v1`,
   the caller's identity label, the model header of the supplied domain package, `context` the
   object type, `operation` the operation's name, `self` the object's population and key, `pre` and
-  `post` each the snapshot's identity and `sha256-jcs` digest, `parameters` empty, `result` null
+  `post` each the snapshot's four identity labels (authority, identity, revision namespace and
+  revision), `parameters` empty, `result` null
   and `created` and `deleted` empty. `parameters` and `result` are empty and null because the
   supported operation shape declares neither (the Scope paragraph); `created` and `deleted` are
   empty because the frame of a supported clause creates and deletes nothing (FR-015-AC-29).
 - If the operation the clause anchors declares a parameter or a result, then the generator shall
   return `StateClauseReplayError::UnsupportedOperationShape` carrying the operation and what it
   declares, before it builds any document. The shape is read from the caller's admitted package,
-  while QSL's admission reads the documents provided in the byte provision.
+  while QSL's admission reads the documents in `ReplayRequestWire.documents`.
 - If the generator returns `StateClauseReplayError::UnsupportedOperationShape`, then it shall not
   call `replay_state_clause`.
-- The generator shall encode each document and compute its `sha256-jcs` digest only through
-  `core::canonical` (AD-004), the one RFC 8785 encoder, which gains the function that returns the
-  encoded bytes beside `content_digest`.
+- The generator shall encode each document only through `core::canonical` (AD-004), the one
+  RFC 8785 encoder, and shall append the resulting bytes to `ReplayRequestWire.documents`. Each
+  state document declares its own four identity labels; QSL reads those labels from the document
+  bytes. The generator shall not compute a document digest or use one to address a document.
+- If two documents in `ReplayRequestWire.documents` declare the same four identity labels, then the
+  generator shall return `StateClauseReplayError::DuplicateDocumentIdentity` naming those labels
+  even if their bytes are equal, and shall not build a request or call replay. A single
+  document with those labels remains selected by the invocation or observation reference.
 - The generator shall add no second encoder, no hand-written key sorting or string escaping and no
-  hashing outside `core::canonical` to the state-clause module, and no hashing dependency to
-  `[dependencies]`.
+  hashing to the state-clause module, and no hashing dependency to `[dependencies]`.
 - The generator shall take the state fields in input order and validate each against the
   selected model declaration's accessor. It shall refuse an object the accessor rejects,
   including a non-model object or an admitted unselected model/object_type with a nonempty
@@ -417,11 +423,13 @@ members against the operation's declaration in the domain package.
   each naming the field.
 - If the generator returns `StateClauseReplayError::MissingField`, `UndeclaredField` or
   `DuplicateField`, then it shall not call `replay_state_clause`.
-- The generator shall take the model header from the one supplied domain package whose identity
-  owns the state object's type address (`ix://<identity>/<name>`) and which is addressed by a
-  `sha256-jcs` digest, and shall return `StateClauseReplayError::Document` with a distinct
-  `ModelError` for an unreadable package, a package under another digest domain, a type that is
-  no address, a type no package owns and a type more than one package owns.
+- The generator shall take the model identity in the document header from the one supplied domain
+  package whose identity owns the state object's type address (`ix://<identity>/<name>`); the
+  state document shall not copy the package version or carry a package digest. It shall return
+  `StateClauseReplayError::Document` with a distinct `ModelError` for an unreadable package, a
+  supplied document that is not a domain package, a type that is no address, a type no package
+  owns and a type more than one package owns. The owner choice and each refusal are based on the
+  admitted package content and declared identity, never a document digest.
 - When the generator returns a state-clause replay result or error, the Kani adapter shall read
   it as FR-029-AC-16 states.
 - Where the generator derives reduced candidates from a `Witness`-arm counterexample, it shall
@@ -459,13 +467,13 @@ members against the operation's declaration in the domain package.
 | FR-024-AC-10 | No type named `Witness`, `ReplaySource`, `WitnessEnvelope`, `TerminalRecord` or `ObligationIdentity` is defined under `src/`, and no source file under `src/` imports any of them from `quire_contract_ir`. | Test (TC-035) |
 | FR-024-AC-11 | `StateClauseReplay::replay` returns exactly the `StateClauseReplayResult` that `qsl_replay::replay_state_clause` returns when a test calls it directly with the same request and envelope, for a violating run and for a respecting run, and the two results differ from each other. `StateClauseReplay::replay_through` hands the executor the request and envelope it built and returns the executor's value as it is: an executor returning a sentinel result changes the returned result to that sentinel. | Test (TC-035) |
 | FR-024-AC-12 | The state-clause envelope's `clause_node` equals the `ClauseSite` node, and its `occurrence_key` the `ClauseSite` occurrence, that `qsl_replay::call_site` returns for the clause name. Its packet and request carry `state_clause` as that clause's declared `QualifiedName`, with neither other replay target; its payload has no `clause` selection and its `observation` is the `Invocation` arm. For a unit with two postcondition clauses, each clause's envelope carries its own node, occurrence and declared name. A clause name the unit does not declare returns `StateClauseReplayError::CallSite` holding the call site's refusal when the request is built, and the executor is not called. | Test (TC-035) |
-| FR-024-AC-13 | The pre snapshot holds, for every declared field of the state object, the value the Kani playback bound to that field, and the post snapshot holds the post-state value the caller supplied for it; each is one `complete` population holding one object with each field as an integer. The invocation document holds the members the Behavior bullets state, with `parameters` empty, `result` null and `created` and `deleted` empty, and its `pre` and `post` carry each snapshot's identity and `sha256-jcs` digest. Changing one playback value changes the pre snapshot's bytes and digest, and changing one post-state value changes the post snapshot's. | Test (TC-035) |
-| FR-024-AC-14 | For a document vector whose members are in non-sorted source order, whose text holds characters JSON escapes (a quote, a backslash, a control character, a non-ASCII letter) and whose numeric members include a large integer, a number with a fractional part and an exponent form, the bytes and the digest the state-clause builder returns equal what `core::canonical`'s bytes and digest functions return for the same value. The source of the new state-clause module names none of `quire_canonical`'s encoder functions, `sha2`, `ByteDigest::of`, a `sort` call over document members or a hand-written string-escaping routine, and `sha2` stays out of `[dependencies]`. | Test (TC-035) |
+| FR-024-AC-13 | RETIRED, replaced by FR-024-AC-52; the former document-digest address and changed-digest checks are obsolete and earn no implementation credit. | Inspection |
+| FR-024-AC-14 | RETIRED, replaced by FR-024-AC-53; the former document-digest equality check is obsolete and earns no implementation credit. | Inspection |
 | FR-024-AC-15 | A playback that binds no value for a declared state field returns `StateClauseReplayError::MissingField` naming that field, the executor is not called, and no snapshot holds a default for it. A playback or post-state name outside the path's declared field list returns `StateClauseReplayError::UndeclaredField` and a field bound twice returns `DuplicateField`, each naming the field, in the playback and in the post state alike. | Test (TC-035) |
 | FR-024-AC-16 | For a subject mutated to violate the postcondition, the replay settles `reproduced-with-evaluated-witness` with category `violation` and an evaluated `false`. For the unmutated subject's run over the same pre state it settles `inconclusive` with cause `Verdicts` (`violation` proved, `success` replayed). The envelope is on the `Witness` arm with a payload `witness` of none in both cases. | Test (TC-035) |
 | FR-024-AC-17 | A state field value outside its declared integer range returns `StateClauseReplayError::OutOfDomain` naming the field and the executor is not called. The range's two endpoints are admitted and the values one below and one above are not. | Test (TC-035) |
 | FR-024-AC-18 | With the installed backend, the falsified operation-contract harness of a postcondition state clause over a subject mutated to debit is replayed from its real Kani playback through `replay_state_clause` and settles `reproduced-with-evaluated-witness`, `violation`. The test is `tc_035_real_kani_state_clause_counterexample_replays_through_qsl` in the module `kani_obligations_state_clause_replay`, so the `kani_obligations` filter of `make kani` selects it. | Test (TC-035) |
-| FR-024-AC-19 | An operation that declares a parameter, and one that declares a result, each return `StateClauseReplayError::UnsupportedOperationShape` carrying the operation and the declaration (its parameters and result), build no document, and do not call the executor; an operation that declares neither is not refused for its shape. The shape check reads the admitted package the caller supplies, and QSL's admission reads the documents provided in the byte provision; where the two disagree, the disagreement surfaces as a QSL refusal and not as this error. The error is not read as a QSL refusal: FR-029-AC-16 maps it to `Failed`. | Test (TC-035) |
+| FR-024-AC-19 | An operation that declares a parameter, and one that declares a result, each return `StateClauseReplayError::UnsupportedOperationShape` carrying the operation and the declaration (its parameters and result), build no document, and do not call the executor; an operation that declares neither is not refused for its shape. The shape check reads the admitted package the caller supplies, and QSL's admission reads the documents in `ReplayRequestWire.documents`; where the two disagree, the disagreement surfaces as a QSL refusal and not as this error. The error is not read as a QSL refusal: FR-029-AC-16 maps it to `Failed`. | Test (TC-035) |
 | FR-024-AC-20 | RETIRED, replaced by FR-024-AC-48; the former four-member O-09 preimage and encoder are obsolete and earn no implementation credit. | Inspection |
 | FR-024-AC-21 | RETIRED, replaced by FR-024-AC-49; the former kind/occurrence-inside-digest control is obsolete and earns no implementation credit. | Inspection |
 | FR-024-AC-22 | RETIRED, replaced by FR-024-AC-50; the former frame preimage member rule is obsolete and earns no implementation credit. | Inspection |
@@ -498,6 +506,8 @@ members against the operation's declaration in the domain package.
 | FR-024-AC-49 | PLANNED (IR-1079; replaces AC-21). Structural identity changes for a different frame node, owning model or assigned ordinal and remains equal for unchanged components across comments, blank lines, source-span, symbols, solver, options and state-field display changes. A change of frame grant that rekeys its producer node changes identity; if the node remains unchanged, full grant and field comparison detects a changed body. A changed kind or occurrence under held identity refuses before replay. Distinct postcondition claims of one operation retain their own complete occurrences even if they share one frame obligation. | Test (TC-035) |
 | FR-024-AC-50 | PLANNED (IR-1079; replaces AC-22). A frame record and envelope carry the exact `OperationSite` frame node and frame occurrence; the obligation identity carries that node, the producer-supplied optional model and producer-assigned ordinal. The record kind is `frame` and its arguments are empty. A postcondition property returns `FrameReplayError::NotAFrame`; a frame whose granted and checked fields differ from its state fields returns `FrameReplayError::FieldSetMismatch`; neither calls `call_site` or `replay_frame`. Field and range controls remain checked outside structural identity. | Test (TC-035) |
 | FR-024-AC-51 | PLANNED (IR-1079; replaces AC-24). `FrameReplayInputs` has no `obligation_identity` member. The frame request and envelope carry the same producer-issued typed identity from the selected frame claim; no caller stand-in, CG mint or hash reaches either. A changed grant that rekeys the producer frame node changes both identities; a grant/body mismatch under a held node is refused by the full record comparison. The state-clause path remains outside this criterion. | Test (TC-035) |
+| FR-024-AC-52 | PLANNED (IR-1133; replaces AC-13). The pre snapshot holds, for every declared field of the state object, the integer Kani playback bound to that field, and the post snapshot holds the integer post-state value the caller supplied for it; each has one `complete` population with one object and no defaulted field. The invocation document holds every member stated in Behavior, with `model` naming the admitted owner by identity only, `parameters` empty, `result` null, `created` and `deleted` empty, and `pre` and `post` each naming the respective snapshot by its four identity labels alone. CG appends the three encoded documents as raw byte entries to `ReplayRequestWire.documents`; QSL obtains each reference from the document's own `identity` member. CG puts no state document in the two-label source `byte_provision`. Changing one playback value while keeping labels fixed changes the pre snapshot's document bytes and decoded value; changing one post-state value does the same for the post snapshot. For the selected `BalanceNeverDrops` postcondition, a pre balance of 10 and post balance of 9 evaluates `false`; changing only the pre balance to 9 or only the post balance to 10, while retaining every identity label, evaluates `true` under QSL replay. The first run settles as a reproduced violation and each changed-value run as inconclusive with cause `Verdicts`, with no substitute document selected. An absent referenced document or one supplied under different labels does not select another snapshot. Two supplied documents with the same four labels, whether equal or different bytes, return `DuplicateDocumentIdentity` naming the labels before request construction or replay. No document address, equality check or request member uses a content digest. | Test (TC-035) |
+| FR-024-AC-53 | PLANNED (IR-1133; replaces AC-14). For a document value with members in non-sorted source order, text containing a quote, backslash, control character and non-ASCII letter, and numeric members containing a large integer, a fractional number and an exponent form, the state-clause builder's encoded bytes equal `core::canonical`'s bytes for that value exactly. Separately, take the valid builder output, change only JSON object-member order and whitespace, and supply those raw bytes directly to QSL's `ReplayRequestWire.documents` with the same self-declared identity: QSL admits the same typed document value. A raw-document edit to one value changes the admitted typed value. The builder is never asked to emit noncanonical whitespace or member order. The state-clause module uses the one encoder and names none of `quire_canonical`'s encoder functions, `sha2`, `ByteDigest::of`, a document-member `sort` call or hand-written string escaping; it has no document-digest calculation, and `sha2` is absent from `[dependencies]`. | Test, Inspection (TC-035) |
 
 ### Mutations FR-024-AC-31 to FR-024-AC-35 detect
 
@@ -522,7 +532,9 @@ frame domain-endpoint tests, the missing-packet-member test in
 FR-024-AC-8 remain planned. FR-024-AC-5 and FR-024-AC-9 are retired (IR-890);
 their IDs are not reused.
 FR-024-AC-10 has a source-scan test over `src/`;
-FR-024-AC-11 and FR-024-AC-13 to FR-024-AC-29 have implemented slices described below.
+FR-024-AC-11, FR-024-AC-15 to FR-024-AC-19 and FR-024-AC-25 to FR-024-AC-29 have
+implemented slices described below. FR-024-AC-13 and FR-024-AC-14 are retired with replacement
+by Planned FR-024-AC-52 and FR-024-AC-53; their former digest tests earn no replacement credit.
 FR-024-AC-12 remains planned under IR-965. FR-024-AC-30's typed frame intake is implemented under
 IR-1086; its QSL-emitted harness without `Twin::aligned` remains planned under IR-624:
 
@@ -534,7 +546,7 @@ IR-1086; its QSL-emitted harness without `Twin::aligned` remains planned under I
   FR-024-AC-5 and FR-024-AC-9 are retired without replacement.
 - A postcondition state-clause counterexample is replayed (IR-460): `src/replay/state_clause.rs`
   builds the invocation and snapshot documents through `core::canonical` and replays through
-  `qsl_replay::replay_state_clause`, so FR-024-AC-11 and FR-024-AC-13 to FR-024-AC-19 are backed by tagged tests
+  `qsl_replay::replay_state_clause`, so FR-024-AC-11 and FR-024-AC-15 to FR-024-AC-19 are backed by tagged tests
   (FR-024-AC-18 in the `kani` lane; its test uses the fixture subject that debits to the floor of
   the range, `deposit_debiting_within_range`).
 - Declared-domain key divergence, open: `src/replay/state_clause.rs` keys each state field's
