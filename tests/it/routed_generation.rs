@@ -61,24 +61,25 @@ const RENDERED: [&str; 3] = [
 fn routed_scalar_source_ceiling_is_publicly_matchable() {
     fn source_ceiling(error: &RoutedGenerationError) -> Option<(usize, usize, &'static str)> {
         match error {
-            RoutedGenerationError::ContractScalar(ContractScalarError::Oracle(
-                OracleGenerationError::SourceTooLarge {
+            RoutedGenerationError::ContractScalar(error) => match error.as_ref() {
+                ContractScalarError::Oracle(OracleGenerationError::SourceTooLarge {
                     bytes,
                     limit,
                     setting,
-                },
-            )) => Some((*bytes, *limit, setting)),
+                }) => Some((*bytes, *limit, setting)),
+                _ => None,
+            },
             _ => None,
         }
     }
 
-    let error = RoutedGenerationError::ContractScalar(ContractScalarError::Oracle(
+    let error = RoutedGenerationError::ContractScalar(Box::new(ContractScalarError::Oracle(
         OracleGenerationError::SourceTooLarge {
             bytes: 1025,
             limit: 1024,
             setting: "cg.scalar.source_bytes",
         },
-    ));
+    )));
     assert_eq!(
         source_ceiling(&error),
         Some((1025, 1024, "cg.scalar.source_bytes"))

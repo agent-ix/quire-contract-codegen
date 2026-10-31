@@ -216,7 +216,7 @@ pub enum RoutedGenerationError {
     /// Request positions or keys disagree with admitted FR-330 accounting.
     Package(PackageRequestError),
     /// Direct generation from the admitted package failed as a whole.
-    ContractScalar(ContractScalarError),
+    ContractScalar(Box<ContractScalarError>),
     /// The routed kind is not the kind the backend's identity converts to.
     BackendKindDisagrees {
         /// The item's request index.
@@ -561,7 +561,7 @@ fn generate_kani(
             .map(|item| item.request_index)
             .collect::<Vec<_>>(),
     )
-    .map_err(RoutedGenerationError::ContractScalar)?;
+    .map_err(|error| RoutedGenerationError::ContractScalar(Box::new(error)))?;
     let driver_selections = positions
         .iter()
         .filter_map(|position| match position {
@@ -580,11 +580,11 @@ fn generate_kani(
                 .get(item.request_index)
                 .copied()
                 .flatten()
-                .ok_or(RoutedGenerationError::ContractScalar(
+                .ok_or(RoutedGenerationError::ContractScalar(Box::new(
                     ContractScalarError::Request(PackageRequestError::Position {
                         request_index: item.request_index,
                     }),
-                ))?;
+                )))?;
             Ok(ObligationItem::ScalarClaim {
                 package,
                 claim_map: &claim_map,
@@ -641,7 +641,9 @@ fn generate_kani(
                     &selections,
                 )
                 .map_err(|error| {
-                    RoutedGenerationError::ContractScalar(ContractScalarError::Oracle(error))
+                    RoutedGenerationError::ContractScalar(Box::new(ContractScalarError::Oracle(
+                        error,
+                    )))
                 })?;
             }
             (records, index_harnesses(scalar_harnesses)?, false)

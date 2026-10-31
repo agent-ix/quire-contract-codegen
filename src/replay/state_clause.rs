@@ -605,7 +605,7 @@ impl StateClauseReplay {
         )
         .map_err(StateClauseReplayError::CallSite)?;
         let site = located.site;
-        if checked_node_key(&clause_node).as_ref() != Some(&site.node) {
+        if checked_node_key(clause_node).as_ref() != Some(&site.node) {
             return Err(StateClauseReplayError::ClauseSelectionMismatch);
         }
 
