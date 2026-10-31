@@ -2219,14 +2219,10 @@ fn minted(twin: &Twin, operation: &str, run: &Run) -> ObligationIdentity {
         .obligation_identity
 }
 
-/// The frame node and its declaration occurrence form the structural producer identity.
-fn hand_written_identity(site: &OperationSite) -> ObligationIdentity {
+/// The identity issued with QSL's selected operation-frame claim.
+fn producer_frame_identity(site: &OperationSite) -> ObligationIdentity {
     assert_eq!(site.frame_occurrence.node(), &site.frame);
-    ObligationIdentity::new(
-        site.frame.clone(),
-        None,
-        u32::try_from(site.frame_occurrence.origin().ordinal()).expect("frame ordinal fits"),
-    )
+    site.obligation_identity().clone()
 }
 
 /// The state-clause and frame-effect harness sources, for the cover-last guard (FR-015-AC-58).
@@ -3877,17 +3873,25 @@ fn replay_of(twin: &Twin, operation: &str, run: &Run) -> Result<FrameReplay, Fra
 /// The request's and the envelope's obligation identity equal the structural identity of the
 /// site `qsl_replay::call_site` returns for the operation, and the envelope's
 /// `clause_node` and `occurrence_key` are the same `function` and `declaration` members.
-#[trace("FR-024-AC-22", "FR-024-AC-24", "TC-035")]
+#[trace(
+    "FR-024-AC-47",
+    "FR-024-AC-48",
+    "FR-024-AC-50",
+    "FR-024-AC-51",
+    "TC-035"
+)]
 #[test]
-fn tc_035_the_request_and_the_envelope_carry_the_identity_minted_from_the_site() {
+fn tc_035_the_request_and_envelope_carry_the_producer_frame_claim() {
     let twin = Twin::new();
     let site = twin
         .operation_site("deposit")
         .expect("the operation is located");
     let replay = replay_of(&twin, "deposit", &forbidden_run(&twin)).expect("builds");
-    let expected = hand_written_identity(&site);
+    let expected = producer_frame_identity(&site);
     assert_eq!(replay.wire.obligation_identity, expected);
     assert_eq!(replay.packet.obligation_identity, Some(expected.clone()));
+    assert_eq!(expected.model(), site.obligation_identity().model());
+    assert_eq!(expected.ordinal(), site.obligation_identity().ordinal());
     assert_eq!(replay.packet.clause_node, Some(site.frame.clone()));
     assert_eq!(
         replay.packet.occurrence_key.as_ref(),
@@ -3898,12 +3902,71 @@ fn tc_035_the_request_and_the_envelope_carry_the_identity_minted_from_the_site()
         &site.frame,
         "no stand-in node reaches the request"
     );
+    assert!(
+        !replay.wire.replay_target.arguments,
+        "a frame has no arguments"
+    );
+    assert!(replay.wire.replay_target.occurrence_key.is_none());
+    let payload = replay
+        .packet
+        .family_payload
+        .as_ref()
+        .expect("frame payload");
+    assert_eq!(payload.frame, site.frame);
+    assert_eq!(payload.occurrence, site.frame_occurrence);
+    replay.replay().expect("equal producer claim replays");
+}
+
+/// A packet cannot replace the selected frame claim's QSL identity while the request keeps it.
+/// This checks the actual replay entry, after the unmodified pair has settled successfully.
+#[trace("FR-024-AC-47", "FR-024-AC-51", "TC-035")]
+#[test]
+fn tc_035_a_changed_envelope_identity_refuses_before_frame_replay() {
+    let twin = Twin::new();
+    let run = forbidden_run(&twin);
+    let baseline = replay_of(&twin, "deposit", &run).expect("frame replay builds");
+    baseline.replay().expect("the matching claim settles");
+
+    let mut changed = replay_of(&twin, "deposit", &run).expect("frame replay builds");
+    let original = changed.wire.obligation_identity.clone();
+    changed.packet.obligation_identity = Some(ObligationIdentity::new(
+        original.node().clone(),
+        original.model().cloned(),
+        original.ordinal() + 1,
+    ));
+    assert_ne!(changed.packet.obligation_identity, Some(original));
+    assert!(
+        matches!(changed.replay(), Err(FrameReplayError::Refused { .. })),
+        "a changed envelope identity must refuse before frame execution"
+    );
+}
+
+/// A held frame node is insufficient if its harness changes which state field it grants.
+/// Both field lists still cover the same state fields, so the full selected-claim comparison is
+/// required after the cheap field-set check.
+#[trace("FR-024-AC-49", "FR-024-AC-51", "TC-035")]
+#[test]
+fn tc_035_a_held_frame_node_rejects_changed_grants() {
+    let twin = Twin::new();
+    let baseline = frame_harness(&twin);
+    let mut changed = baseline.clone();
+    changed.property = StateFrameProperty::Frame {
+        granted: vec!["audit".to_owned()],
+        checked: vec!["balance".to_owned()],
+    };
+    assert_ne!(changed.property, baseline.property);
+    assert_eq!(changed.scope.frame, baseline.scope.frame);
+    let error = refused(replay_of(&twin, "deposit", &run_of(&changed, [5, 0])));
+    assert!(
+        matches!(error, FrameReplayError::FieldSetMismatch { .. }),
+        "a changed grant under the held frame node must refuse: {error}"
+    );
 }
 
 /// A harness whose frame grants nothing, replayed over a unit whose frame grants nothing, gives
 /// a different identity in the request and in the envelope; each is the minted identity of its
 /// own site.
-#[trace("FR-024-AC-24", "TC-035")]
+#[trace("FR-024-AC-49", "FR-024-AC-51", "TC-035")]
 #[test]
 fn tc_035_a_changed_grant_changes_the_identity_in_the_request_and_the_envelope() {
     let twin = Twin::new();
@@ -3934,7 +3997,7 @@ fn tc_035_a_changed_grant_changes_the_identity_in_the_request_and_the_envelope()
         .expect("the operation is located");
     assert_eq!(
         changed.wire.obligation_identity,
-        hand_written_identity(&site)
+        producer_frame_identity(&site)
     );
     assert_eq!(
         changed.packet.obligation_identity,
@@ -3945,11 +4008,11 @@ fn tc_035_a_changed_grant_changes_the_identity_in_the_request_and_the_envelope()
 /// The identity is measured through `qsl_replay::call_site`: it changes with the frame's grants
 /// and between two operations of one object whose frames are equal text, and it does not change
 /// when the unit is shifted by blank lines or when a second clause names the same operation.
-#[trace("FR-024-AC-21", "TC-035")]
+#[trace("FR-024-AC-47", "FR-024-AC-49", "TC-035")]
 #[test]
 fn tc_035_the_frame_identity_follows_what_call_site_names() {
     let identity = |twin: &Twin, operation: &str| {
-        hand_written_identity(&twin.operation_site(operation).expect("operation site"))
+        producer_frame_identity(&twin.operation_site(operation).expect("operation site"))
     };
     let twin = Twin::new();
     let base = identity(&twin, "deposit");
@@ -3995,11 +4058,11 @@ fn tc_035_the_frame_identity_follows_what_call_site_names() {
 /// unit's clauses name, so a clause added on an operation that sorts earlier moves this
 /// operation's frame occurrence. The identity of `transfer` is read before and after a clause on
 /// `deposit` is added, and it differs.
-#[trace("FR-024-AC-21", "TC-035")]
+#[trace("FR-024-AC-49", "TC-035")]
 #[test]
 fn tc_035_a_clause_on_an_earlier_sorting_operation_moves_the_frame_occurrence() {
     let identity = |twin: &Twin| {
-        hand_written_identity(&twin.operation_site("transfer").expect("operation site"))
+        producer_frame_identity(&twin.operation_site("transfer").expect("operation site"))
     };
     let transfer = ("TransferKeepsBalance", "transfer", "balance");
     let alone = Twin::build(&model::GRANTED, &[transfer], 0);
@@ -4012,7 +4075,7 @@ fn tc_035_a_clause_on_an_earlier_sorting_operation_moves_the_frame_occurrence() 
 /// ranges of its fields or the order of its state fields. The solver is not edited: `KaniSolver`
 /// has one variant (`Cadical`), so no other solver can be built, and the identity function takes
 /// no solver.
-#[trace("FR-024-AC-21", "TC-035")]
+#[trace("FR-024-AC-47", "FR-024-AC-49", "TC-035")]
 #[test]
 fn tc_035_the_frame_identity_names_none_of_the_harness_members() {
     let twin = Twin::new();
@@ -4079,7 +4142,7 @@ fn tc_035_the_frame_identity_names_none_of_the_harness_members() {
 /// neither granted nor checked, granted and checked, or no state field at all. Each is refused
 /// before the call site: the operation the unit does not name would otherwise be a
 /// `CallSite` refusal, as it is for the harness that passes the checks.
-#[trace("FR-024-AC-22", "TC-035")]
+#[trace("FR-024-AC-50", "TC-035")]
 #[test]
 fn tc_035_a_non_frame_and_a_mismatched_field_set_are_refused_before_the_call_site() {
     let twin = Twin::new();
