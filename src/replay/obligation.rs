@@ -37,8 +37,6 @@ pub enum ObligationIdentityError {
         /// The harness argument's identifier.
         argument: String,
     },
-    /// The QSL occurrence ordinal cannot fit the structural identity.
-    OrdinalTooLarge(u64),
 }
 
 impl fmt::Display for ObligationIdentityError {
@@ -61,9 +59,6 @@ impl fmt::Display for ObligationIdentityError {
                     f,
                     "the Boolean harness argument `{argument}` carries integer bounds"
                 )
-            }
-            Self::OrdinalTooLarge(ordinal) => {
-                write!(f, "the occurrence ordinal {ordinal} exceeds u32")
             }
         }
     }
@@ -170,17 +165,12 @@ pub(crate) fn contract_arguments(
 ///
 /// The caller separately compares kind and argument domains with its retained claim record.
 ///
-/// # Errors
-///
-/// [`ObligationIdentityError::OrdinalTooLarge`] for an occurrence beyond `u32`.
 pub(crate) fn function_contract_identity(
     producer: &ObligationIdentity,
-    declaration: &OccurrenceKey,
+    _declaration: &OccurrenceKey,
     _kind: ObligationKind,
     _arguments: &[ContractArgument],
 ) -> Result<ObligationIdentity, ObligationIdentityError> {
-    let _ordinal = u32::try_from(declaration.origin().ordinal())
-        .map_err(|_| ObligationIdentityError::OrdinalTooLarge(declaration.origin().ordinal()))?;
     Ok(producer.clone())
 }
 
@@ -195,9 +185,6 @@ pub(crate) fn frame_kind(property: &StateFrameProperty) -> Option<ObligationKind
 
 /// The frame obligation of the operation `site` names, issued by QSL's selected operation site.
 ///
-/// # Errors
-///
-/// [`ObligationIdentityError::OrdinalTooLarge`] for an occurrence beyond `u32`.
 pub(crate) fn frame_identity(
     site: &OperationSite,
     kind: ObligationKind,
@@ -227,14 +214,15 @@ mod tests {
 
     #[trace("FR-016-AC-26", "TC-026")]
     #[test]
-    fn ordinal_outside_structural_identity_range_is_refused() {
+    fn large_declaration_ordinal_preserves_producer_identity() {
         let function = node("function");
         let declaration = occurrence(function.clone(), u64::from(u32::MAX) + 1);
         let producer = ObligationIdentity::new(function, None, 0);
-        assert!(matches!(
-            function_contract_identity(&producer, &declaration, ObligationKind::Postcondition, &[]),
-            Err(ObligationIdentityError::OrdinalTooLarge(_))
-        ));
+        assert_eq!(
+            function_contract_identity(&producer, &declaration, ObligationKind::Postcondition, &[])
+                .expect("the occurrence does not narrow the producer identity"),
+            producer
+        );
     }
 
     #[trace("FR-024-AC-22", "TC-035")]

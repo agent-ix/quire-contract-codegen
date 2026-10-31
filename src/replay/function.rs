@@ -1564,7 +1564,7 @@ mod tests {
         }
     }
 
-    fn package() -> ReplayPackage {
+    fn package_from_source(source: &str, function: &str) -> ReplayPackage {
         let limits = unlimited();
         let inputs = ReplayInputs {
             decode_limits: WitnessDecodeLimits {
@@ -1577,7 +1577,7 @@ mod tests {
                 identity: "unit".to_owned(),
                 namespace: "git".to_owned(),
                 revision: "r1".to_owned(),
-                bytes: UNIT.as_bytes().to_vec(),
+                bytes: source.as_bytes().to_vec(),
             },
             dependencies: Vec::new(),
             accounting_limits: limits,
@@ -1585,7 +1585,12 @@ mod tests {
             declared_domains: Vec::new(),
             replay_limits: ReplayLimits::default(),
         };
-        ReplayPackage::new(inputs, "f").expect("the unit compiles and declares `f`")
+        ReplayPackage::new(inputs, function)
+            .unwrap_or_else(|cause| panic!("the unit must declare `{function}`: {cause}"))
+    }
+
+    fn package() -> ReplayPackage {
+        package_from_source(UNIT, "f")
     }
 
     fn binding(identifier: &str) -> ObligationBinding {
@@ -1627,7 +1632,7 @@ mod tests {
 
     /// A producer packet is admitted and bound to the independent function claim before
     /// request construction. Shape-valid packets for another source, package or subject refuse.
-    #[trace("FR-024-AC-43", "FR-024-AC-46", "TC-035")]
+    #[trace("FR-016-AC-28", "FR-024-AC-43", "FR-024-AC-46", "TC-035")]
     #[test]
     fn tc_035_function_request_requires_its_producer_packet() {
         let package = package();
@@ -1704,6 +1709,19 @@ mod tests {
         ));
         assert!(matches!(
             package.request_from_packet(wrong_obligation, obligation.clone()),
+            Err(FunctionPacketError::ClaimMismatch(
+                PacketClaimMember::Obligation
+            ))
+        ));
+
+        let mut wrong_ordinal = producer_packet(&package, obligation.clone());
+        wrong_ordinal.obligation_identity = Some(ObligationIdentity::new(
+            package.site.site.function.clone(),
+            None,
+            1,
+        ));
+        assert!(matches!(
+            package.request_from_packet(wrong_ordinal, obligation.clone()),
             Err(FunctionPacketError::ClaimMismatch(
                 PacketClaimMember::Obligation
             ))
@@ -1851,7 +1869,7 @@ mod tests {
 
     /// The request carries the QSL-issued identity unchanged when parameter bindings are
     /// provided in either order.
-    #[trace("FR-016-AC-26", "TC-026")]
+    #[trace("FR-016-AC-26", "FR-016-AC-28", "TC-026")]
     #[test]
     fn tc_026_the_identity_ignores_the_declared_order_of_the_site_parameters() {
         use crate::kani::identity::ObligationKind;
@@ -1883,6 +1901,52 @@ mod tests {
         let mut harness_order = arguments_of(&original);
         harness_order.reverse();
         assert_eq!(baseline, identity(&original, &harness_order));
+
+        let reordered_source = UNIT.replace(
+            "(a: Int[0, 9], b: Int[0, 9])",
+            "(b: Int[0, 9], a: Int[0, 9])",
+        );
+        assert_ne!(reordered_source, UNIT);
+        let source_reordered = package_from_source(&reordered_source, "f");
+        assert_ne!(
+            source_reordered.site.site.parameters,
+            original.site.site.parameters
+        );
+        assert_eq!(
+            baseline,
+            source_reordered
+                .obligation_identity_for(ObligationKind::Postcondition, &arguments)
+                .expect("the reordered source still binds both arguments")
+        );
+    }
+
+    /// QSL's selected function node, rather than parameter text or source position, supplies
+    /// the identity. A second function with the same parameters has another producer identity;
+    /// adding a blank line and an unrelated declaration leaves the selected one unchanged.
+    #[trace("FR-016-AC-27", "FR-016-AC-28", "TC-026")]
+    #[test]
+    fn tc_026_producer_identity_tracks_the_selected_function_node() {
+        let source = format!(
+            "{UNIT}function g using v(a: Int[0, 9], b: Int[0, 9]): Boolean pure {{ a <= b }}\n"
+        );
+        let first = package_from_source(&source, "f");
+        let second = package_from_source(&source, "g");
+        assert_ne!(first.site.site.function, second.site.site.function);
+        assert_ne!(
+            first.site.site.obligation_identity(),
+            second.site.site.obligation_identity()
+        );
+
+        let edited = source.replace("function f", "// identity-neutral comment\n\nfunction f");
+        let edited = format!(
+            "{edited}function unrelated using v(x: Int[0, 9]): Boolean pure {{ x <= 9 }}\n"
+        );
+        let selected_after_edit = package_from_source(&edited, "f");
+        assert_eq!(
+            first.site.site.obligation_identity(),
+            selected_after_edit.site.site.obligation_identity(),
+            "source position and an unrelated declaration do not rekey the selected function"
+        );
     }
 
     /// A reproduced settlement in any category other than `violation` is not a reproduced

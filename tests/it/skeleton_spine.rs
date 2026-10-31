@@ -18,11 +18,11 @@ use qsl_replay::{
 use qsl_replay::{Witness, WitnessValue};
 use quire_contract_codegen::{
     parse_assertion_playback, replay_counterexample, replay_counterexample_through,
-    replay_falsification, DependencyLock, DependencyLockError, EvidenceFailureCause, HarnessSymbol,
-    KaniBindingRole, KaniIntegerBounds, KaniObligationIdentity, KaniPrimitiveType, KaniSolver,
-    LockedSource, ModuleSymbol, ObligationBinding, ObligationKind, Playback, ReplayInputs,
-    ReplayPackage, ReplayPackageError, ReplayParameter, ReplayVerdict, SpineReplayError,
-    WitnessDecodeLimits,
+    replay_falsification, DependencyLock, DependencyLockError, EvidenceFailureCause,
+    FunctionPacketError, HarnessSymbol, KaniBindingRole, KaniIntegerBounds, KaniObligationIdentity,
+    KaniPrimitiveType, KaniSolver, LockedSource, ModuleSymbol, ObligationBinding, ObligationKind,
+    Playback, ReplayInputs, ReplayPackage, ReplayPackageError, ReplayParameter, ReplayVerdict,
+    SpineReplayError, WitnessDecodeLimits,
 };
 use quire_contract_model::{
     ClauseId, ClauseRef, IntegerDomain, OverflowPolicy, RequirementRef, SourceSpan,
@@ -685,6 +685,55 @@ fn tc_026_a_changed_dependency_selection_is_refused_before_replay() {
         matches!(control, Err(SpineReplayError::Refused(_))),
         "the injected executor fault must remain typed: {control:?}"
     );
+}
+
+/// Kind and argument domains remain on the retained proving-run record. They do not rekey QSL's
+/// producer identity, so a packet cannot use that same identity to change either claim member.
+#[trace("FR-016-AC-27", "FR-016-AC-28", "TC-026")]
+#[test]
+fn tc_026_a_held_producer_identity_rejects_changed_claim_members() {
+    let package = compile_native_twin(&native_source(VIOLATING_TWIN), FUNCTION);
+    let original = spine_identity();
+    let witness = Witness::parse("<<<assertion|h|c|>>>").expect("the fixture witness parses");
+    let packet = package
+        .backend_witness_packet(&original, witness)
+        .expect("the original claim binds to the selected function");
+    let control = package
+        .request(&original, packet.clone())
+        .expect("the matching claim admits its packet");
+    assert_eq!(
+        control.obligation_identity,
+        package
+            .obligation_identity(&original)
+            .expect("QSL issued the selected identity")
+    );
+
+    let mut changed_kind = original.clone();
+    changed_kind.kind = ObligationKind::Precondition;
+    let mut changed_domain = original.clone();
+    changed_domain.arguments[0]
+        .integer_bounds
+        .as_mut()
+        .expect("the fixture argument is bounded")
+        .maximum -= 1;
+    for (name, changed) in [("kind", changed_kind), ("domain", changed_domain)] {
+        assert_eq!(
+            package
+                .obligation_identity(&changed)
+                .expect("the binding remains finite"),
+            package
+                .obligation_identity(&original)
+                .expect("QSL issued the identity"),
+            "{name} is a record member, not an identity component"
+        );
+        assert!(
+            matches!(
+                package.request(&changed, packet.clone()),
+                Err(FunctionPacketError::ProvingRunMismatch)
+            ),
+            "{name} must refuse before a replay request exists"
+        );
+    }
 }
 
 /// A lock selecting a library the unit does not import compiles, but QSL refuses the request
