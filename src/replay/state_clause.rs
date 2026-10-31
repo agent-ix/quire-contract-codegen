@@ -67,8 +67,7 @@ pub struct StateObjectAddress {
     pub object_type: String,
 }
 
-/// The identity label of one document: its authority, identity and revision. Its digest is
-/// computed from the document's bytes, not supplied.
+/// The identity label of one document: its authority, identity and revision.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DocumentLabel {
     /// The document's authority.

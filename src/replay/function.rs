@@ -5,17 +5,17 @@
 //! typed values [`decode_falsification`]
 //! returns, binds each value to its parameter by
 //! the parameter's node id, and calls [`qsl_replay::replay`]. The executor recompiles the
-//! request's digest-addressed source and evaluates the selected function itself, so the verdict
+//! request's identity-labelled source and evaluates the selected function itself, so the verdict
 //! is QSL's, not a value this crate supplies.
 
 use std::{collections::BTreeMap, fmt};
 
 use qsl_replay::{
     call_site, replay, CallSite, CallSiteRefusal, DeclaredDomain, DependencyEntryWire,
-    DependencyInput, DependencyInputRefusal, DigestRecord, DisagreementCause, EnvelopeSource,
-    FunctionSite, Identifier, MalformedTranscript, NoPayload, NodeKey, ObligationIdentity,
-    OccurrenceKey, QualifiedName, ReplayLimits, ReplayRefusal, ReplayRequestWire, ReplayResult,
-    ReplaySource, ReplayTarget, RequestTargetWire, ScalarLimits, SourceIdentity, StateEnvironment,
+    DependencyInput, DependencyInputRefusal, DisagreementCause, EnvelopeSource, FunctionSite,
+    Identifier, MalformedTranscript, NoPayload, NodeKey, ObligationIdentity, OccurrenceKey,
+    QualifiedName, ReplayLimits, ReplayRefusal, ReplayRequestWire, ReplayResult, ReplaySource,
+    ReplayTarget, RequestTargetWire, ScalarLimits, SourceIdentity, StateEnvironment,
     SuppliedLibrary, Witness, WitnessArmResult, WitnessEnvelope, WitnessPacket, WitnessRefusal,
     WitnessSettlement, WitnessValue,
 };
