@@ -2070,6 +2070,10 @@ mod tests {
                 "https://github.com/agent-ix/quire-exact",
                 "https://example.org/quire-exact",
             ),
+            complete.replace(
+                "source = \"git+https://github.com/agent-ix/quire-exact?branch=main#two\"\n",
+                "",
+            ),
             format!("{complete}{exact}two\"\n"),
             complete.replace("version = \"0.2.0\"", "version = \"not-a-version\""),
             complete.replace("version = \"0.2.0\"\n", ""),
