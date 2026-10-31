@@ -29,7 +29,7 @@ use crate::core::ir::{frame::application_identity, node_key::checked_node_key};
 
 use super::{
     composite::{verified_shadow_terminal_value, CompositeReportError, VerifiedShadowSettlement},
-    function::{DependencyLockError, ReplayInputs},
+    function::{DependencyLockError, LockedSource, ReplayInputs},
 };
 
 const PARITY_PRODUCER: &str = "quire-contract-codegen";
@@ -171,8 +171,8 @@ impl std::error::Error for CompositeBuildError {}
 
 /// Immutable original proving context for admitted graph-child structural equality routes.
 ///
-/// The caller supplies the original admitted package and retained source, dependencies and limits.
-/// No native/falsified production route is exposed here.
+/// The caller supplies the original admitted package and independently retained source, along with
+/// the request inputs, dependencies and limits. No native/falsified production route is exposed here.
 #[derive(Debug)]
 pub struct OriginalCompositeEqContext {
     original: CheckedPackageV2,
@@ -190,7 +190,8 @@ struct SelectedParityClaim {
 }
 
 impl OriginalCompositeEqContext {
-    /// Retain the original context and require its exact unit source reference and bytes.
+    /// Retain the original context and compare the request source against the independently
+    /// retained original source, including its full identity and bytes.
     ///
     /// [`Self::request_from_packet`] recompiles using the constructed request's admitted stage limits and
     /// requires the complete original package/context before returning a request for invocation.
@@ -205,6 +206,7 @@ impl OriginalCompositeEqContext {
     #[allow(clippy::result_large_err)]
     pub fn new(
         original: CheckedPackageV2,
+        original_source: &LockedSource,
         inputs: ReplayInputs,
         function: &str,
         read_limits: CheckedPackageReadLimits,
@@ -214,6 +216,9 @@ impl OriginalCompositeEqContext {
         let selection = QualifiedName::new(vec![identifier])
             .map_err(|_| CompositeBuildError::InvalidFunction)?;
         let source = &inputs.source;
+        if source != original_source {
+            return Err(CompositeBuildError::SourceMismatch);
+        }
         let source_ref = CheckedSourceRef {
             authority: source.authority.clone().into_boxed_str(),
             identity: source.identity.clone().into_boxed_str(),

@@ -150,6 +150,7 @@ fn checked_with_extra_source(
 fn context(package: CheckedPackageV2, function: &str) -> OriginalCompositeEqContext {
     OriginalCompositeEqContext::new(
         package,
+        &inputs(SOURCE).source,
         inputs(SOURCE),
         function,
         CheckedPackageReadLimits::bounded(),
@@ -623,37 +624,46 @@ fn self_comparison_keeps_two_positional_arguments() {
     ));
 }
 
-/// Changed source bytes and another original package refuse after context reconstruction.
+/// Changed source bytes refuse before recompilation, including semantically equivalent edits.
 #[trace("FR-033-AC-1", "TC-048")]
 #[test]
 fn wrong_source_refuses_before_invocation() {
     let original = checked(SOURCE);
-    let (node, occurrence) = application(&original, "f");
     let mut wrong_source = inputs(SOURCE);
     wrong_source.source.bytes.push(b'\n');
-    let context = OriginalCompositeEqContext::new(
-        original,
-        wrong_source,
-        "f",
-        CheckedPackageReadLimits::bounded(),
-    )
-    .expect("source labels match before byte comparison");
     assert!(matches!(
-        context.request(&node, &occurrence, EqualityOperator::Equal, &[], 100_000),
-        Err(CompositeBuildError::ContextMismatch)
+        OriginalCompositeEqContext::new(
+            original,
+            &inputs(SOURCE).source,
+            wrong_source,
+            "f",
+            CheckedPackageReadLimits::bounded(),
+        ),
+        Err(CompositeBuildError::SourceMismatch)
     ));
-    let another_package = checked(&SOURCE.replace("Int[0, 9]", "Int[0, 8]"));
-    let (node, occurrence) = application(&another_package, "f");
-    let context = OriginalCompositeEqContext::new(
-        another_package,
-        inputs(SOURCE),
-        "f",
-        CheckedPackageReadLimits::bounded(),
-    )
-    .expect("source labels match before package comparison");
+    let mut wrong_revision = inputs(SOURCE);
+    wrong_revision.source.revision.push_str("-changed");
     assert!(matches!(
-        context.request(&node, &occurrence, EqualityOperator::Equal, &[], 100_000),
-        Err(CompositeBuildError::ContextMismatch)
+        OriginalCompositeEqContext::new(
+            checked(SOURCE),
+            &inputs(SOURCE).source,
+            wrong_revision,
+            "f",
+            CheckedPackageReadLimits::bounded(),
+        ),
+        Err(CompositeBuildError::SourceMismatch)
+    ));
+    let changed_source = SOURCE.replace("Int[0, 9]", "Int[0, 8]");
+    let another_package = checked(&changed_source);
+    assert!(matches!(
+        OriginalCompositeEqContext::new(
+            another_package,
+            &inputs(&changed_source).source,
+            inputs(SOURCE),
+            "f",
+            CheckedPackageReadLimits::bounded(),
+        ),
+        Err(CompositeBuildError::SourceMismatch)
     ));
 }
 
@@ -686,6 +696,7 @@ fn retained_selection_and_recompiled_context_mismatch_refuse() {
     assert!(matches!(
         OriginalCompositeEqContext::new(
             package,
+            &inputs(SOURCE).source,
             retained,
             "f",
             CheckedPackageReadLimits::bounded()
@@ -906,6 +917,7 @@ fn tc_035_original_composite_packets_bind_distinct_real_occurrences() {
     assert_ne!(second.ordinal, 0);
     let context = OriginalCompositeEqContext::new(
         package,
+        &inputs(REPEATED_SOURCE).source,
         inputs(REPEATED_SOURCE),
         "repeated",
         CheckedPackageReadLimits::bounded(),
@@ -1074,6 +1086,7 @@ fn original_stage_limit_stops_recompile_before_invocation() {
     retained.stage_limits.insert("s1.input_bytes".to_owned(), 1);
     let context = OriginalCompositeEqContext::new(
         package,
+        &inputs(SOURCE).source,
         retained,
         "f",
         CheckedPackageReadLimits::bounded(),
@@ -1167,6 +1180,7 @@ fn original_imported_context_refuses_before_invocation() {
     assert!(matches!(
         OriginalCompositeEqContext::new(
             package,
+            &inputs(SOURCE).source,
             retained,
             "f",
             CheckedPackageReadLimits::bounded(),
@@ -1199,8 +1213,14 @@ fn original_request_preserves_the_owning_reader_limit() {
     let (node, occurrence) = application(&package, "f");
     let mut read_limits = CheckedPackageReadLimits::bounded();
     read_limits.bytes = 1;
-    let original = OriginalCompositeEqContext::new(package, inputs(SOURCE), "f", read_limits)
-        .expect("retaining already-admitted inputs does not re-read them");
+    let original = OriginalCompositeEqContext::new(
+        package,
+        &inputs(SOURCE).source,
+        inputs(SOURCE),
+        "f",
+        read_limits,
+    )
+    .expect("retaining already-admitted inputs does not re-read them");
     assert!(matches!(
         original.request(&node, &occurrence, EqualityOperator::Equal, &[], 100_000),
         Err(CompositeBuildError::PackageReadLimit(_))
@@ -1219,6 +1239,7 @@ fn original_request_preserves_the_above_reader_resource_refusal() {
         .insert("s1.input_bytes".to_owned(), u64::MAX);
     let original = OriginalCompositeEqContext::new(
         package,
+        &inputs(SOURCE).source,
         retained,
         "f",
         CheckedPackageReadLimits::bounded(),
@@ -1253,6 +1274,7 @@ fn retained_context_kr_families_preserve_complete_request_outputs_and_refused_si
                 application_with_operator(&package, "n", "quire.op.structural.ne");
             let retained = OriginalCompositeEqContext::new(
                 package,
+                &inputs(&source).source,
                 inputs(&source),
                 "f",
                 CheckedPackageReadLimits::bounded(),
