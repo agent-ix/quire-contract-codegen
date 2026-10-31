@@ -45,7 +45,7 @@ pub(in crate::kani::generate) struct LoweredV2Clause {
 
 /// Encode the complete structural key for a generated message. Escaping `%` keeps
 /// this reversible even when a source name itself contains an escape-looking span.
-fn message_safe_node_label(node: &CheckedNodeId) -> String {
+pub(in crate::kani::generate) fn message_safe_node_label(node: &CheckedNodeId) -> String {
     escape_message_label(&node_label(node).to_string())
 }
 
