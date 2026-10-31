@@ -2036,14 +2036,14 @@ fn generated_from_twin(
 }
 
 /// The healthy twin's frame identity from QSL's emitted checked package.
-fn frame_harness(twin: &Twin) -> StateFrameIdentity {
+pub(crate) fn frame_harness(twin: &Twin) -> StateFrameIdentity {
     generated_from_twin(twin, "BalanceNeverDrops", &STATE_FIELDS, SUBJECT_PATH)
         .frame
         .identity
 }
 
 /// The run of `harness` whose playback binds `values`, in the harness's draw order.
-fn run_of(harness: &StateFrameIdentity, values: [i64; 2]) -> Run {
+pub(crate) fn run_of(harness: &StateFrameIdentity, values: [i64; 2]) -> Run {
     Run {
         playback: playback_text(harness, FORBIDDEN_CHECK, &values),
         harness: harness.clone(),
@@ -3865,7 +3865,11 @@ fn refused(result: Result<FrameReplay, FrameReplayError>) -> FrameReplayError {
 }
 
 /// The frame replay of `operation` over `run` at the pre state `(5, 0)`.
-fn replay_of(twin: &Twin, operation: &str, run: &Run) -> Result<FrameReplay, FrameReplayError> {
+pub(crate) fn replay_of(
+    twin: &Twin,
+    operation: &str,
+    run: &Run,
+) -> Result<FrameReplay, FrameReplayError> {
     let invocation = twin.invocation("account", (5, 0), (6, 1));
     twin.try_frame_replay(operation, &invocation, "account", "audit", run)
 }
@@ -3972,70 +3976,6 @@ fn tc_035_a_changed_envelope_identity_refuses_before_frame_replay() {
             quire_contract_codegen::FrameClaimMember::EnvelopeOccurrence
         ))
     ));
-}
-
-/// A held frame node is insufficient if its harness changes which state field it grants.
-/// Both field lists still cover the same state fields, so the full selected-claim comparison is
-/// required after the cheap field-set check.
-#[trace("TC-035")]
-#[test]
-#[ignore = "QSL-1336: OperationSite lacks selected frame-grant body (FR-024-AC-49/51)"]
-fn tc_035_a_held_frame_node_rejects_changed_grants() {
-    let twin = Twin::new();
-    let baseline = frame_harness(&twin);
-    let mut changed = baseline.clone();
-    changed.property = StateFrameProperty::Frame {
-        granted: vec!["audit".to_owned()],
-        checked: vec!["balance".to_owned()],
-    };
-    assert_ne!(changed.property, baseline.property);
-    assert_eq!(changed.scope.frame, baseline.scope.frame);
-    let error = refused(replay_of(&twin, "deposit", &run_of(&changed, [5, 0])));
-    assert!(
-        matches!(error, FrameReplayError::FieldSetMismatch { .. }),
-        "a changed grant under the held frame node must refuse: {error}"
-    );
-}
-
-/// A grant change must rekey the producer frame claim in both replay carriers.
-#[trace("TC-035")]
-#[test]
-#[ignore = "QSL-1336: producer frame node does not rekey for a changed grant"]
-fn tc_035_a_changed_grant_changes_the_identity_in_the_request_and_the_envelope() {
-    let twin = Twin::new();
-    let base = replay_of(&twin, "deposit", &forbidden_run(&twin)).expect("builds");
-
-    let granting_nothing = Twin::build(&[], &CLAUSES, 0);
-    let harness = generated_from_twin(
-        &granting_nothing,
-        "BalanceNeverDrops",
-        &STATE_FIELDS,
-        SUBJECT_PATH,
-    )
-    .frame
-    .identity;
-    let changed =
-        replay_of(&granting_nothing, "deposit", &run_of(&harness, [5, 0])).expect("builds");
-
-    assert_ne!(
-        changed.wire.obligation_identity,
-        base.wire.obligation_identity
-    );
-    assert_ne!(
-        changed.packet.obligation_identity,
-        base.packet.obligation_identity
-    );
-    let site = granting_nothing
-        .operation_site("deposit")
-        .expect("the operation is located");
-    assert_eq!(
-        changed.wire.obligation_identity,
-        producer_frame_identity(&site)
-    );
-    assert_eq!(
-        changed.packet.obligation_identity,
-        Some(changed.wire.obligation_identity.clone())
-    );
 }
 
 /// The identity is measured through `qsl_replay::call_site`: distinct frame occurrences differ,
