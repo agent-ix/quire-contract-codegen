@@ -4,8 +4,10 @@
 //! Original-package construction of verified structural equality requests (FR-033).
 //!
 //! This boundary authenticates the retained source and checked package and constructs positional
-//! O-09 arguments. It does not authenticate a generated artifact, run a native observation, or
-//! establish a backend proof strength.
+//! parity arguments. QSL mints the obligation identity from the checked application node and
+//! occurrence; the operand and domain body is retained separately for claim binding. This
+//! boundary does not authenticate a generated artifact, run a native observation, or establish a
+//! backend proof strength.
 
 use std::fmt;
 
@@ -76,7 +78,7 @@ pub enum CompositeBuildError {
     UnsupportedNodeOperation,
     /// The accessor returned a shape outside this graph-child constructor.
     OperandShape,
-    /// The owning O-09 encoder refused the preimage.
+    /// The owning parity identity or bound construction refused the claim.
     Identity(IdentityEncodeError),
     /// QSL refused the producer packet before request construction.
     PacketAdmission(Box<WitnessRefusal>),
@@ -261,20 +263,20 @@ impl OriginalCompositeEqContext {
         })
     }
 
-    /// Build O-09 from the original Eq or Ne application's two authentic positional operands.
+    /// Build the retained body from the original Eq or Ne application's two positional operands.
     ///
     /// Parameter positions retain only their Node bounds. Population metadata is excluded from
     /// this request. Literal graph children retain empty Bounds and hence singleton source values;
     /// QSL derives their values and domains from the original source and owns selected-function
     /// body and occurrence membership at invocation, returning a binding-checked refusal report.
-    /// Projection/encoder refusals precede recompilation: public QSL stage-limit decoding requires
-    /// the genuine O-09 wire, so this boundary does not authenticate context before projection.
+    /// Projection and identity refusals precede recompilation: public QSL stage-limit decoding
+    /// requires the genuine parity request, so this boundary authenticates context after projection.
     /// The supplied work ceiling
     /// bounds the IR operand projection. A requested operator absent from the original node,
     /// unsupported operations and inline operands refuse.
     ///
     /// # Errors
-    /// Returns a typed original node/occurrence, operand, encoder, request decode, recompile or
+    /// Returns a typed original node/occurrence, operand, identity, request decode, recompile or
     /// original-context refusal, with no report.
     // The 192-byte refusal is retained inline to preserve the public PackageRead payload.
     #[allow(clippy::result_large_err)]
@@ -328,6 +330,8 @@ impl OriginalCompositeEqContext {
             obligation_kind: "bounded_shadow".to_owned(),
             arguments,
         };
+        // QSL owns the structural NodeKey/model/ordinal mint. Operand and domain changes do not
+        // change this identity; the full claim remains available for report binding.
         let obligation = parity_obligation(&preimage).map_err(CompositeBuildError::Identity)?;
         let claim = CompositeParityClaim {
             node,
@@ -622,7 +626,7 @@ impl OriginalCompositeEqRequest {
         &self.operands
     }
 
-    /// The actual typed positional O-09 preimage passed to the owning encoder.
+    /// The retained positional operand and domain body passed to QSL's identity owner.
     pub fn preimage(&self) -> &ParityPreimage {
         &self.preimage
     }

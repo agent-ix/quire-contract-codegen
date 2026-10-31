@@ -294,7 +294,7 @@ fn parameter_bounds(
 
 /// Original parameter/parameter construction reaches a genuine QSL verified report and converter.
 /// This is a constructor control with supplied verified evidence, not a generated-family proof.
-#[trace("FR-033-AC-1", "FR-033-AC-11", "TC-048")]
+#[trace("FR-033-AC-1", "FR-033-AC-18", "TC-048")]
 #[test]
 fn original_parameter_operands_build_positional_identity_and_public_verified_report() {
     let package = checked(SOURCE);
@@ -341,6 +341,17 @@ fn original_parameter_operands_build_positional_identity_and_public_verified_rep
         assert!(entries.entries().iter().all(|entry| matches!(entry.domain(), DomainKey::Node { node, .. } if *node == node_key(child))));
     }
     let obligation = parity_obligation(request.preimage()).unwrap();
+    assert_eq!(
+        obligation,
+        qsl_replay::ObligationIdentity::new(
+            node_key(&node),
+            None,
+            u32::try_from(occurrence.ordinal).expect("admitted occurrence ordinal fits"),
+        )
+    );
+    let mut changed_body = request.preimage().clone();
+    changed_body.obligation_kind = "other_kind".to_owned();
+    assert_eq!(parity_obligation(&changed_body).unwrap(), obligation);
     let verified = VerifiedShadow {
         success_checks: 1,
         refinement: Refinement::NotExhausted,
