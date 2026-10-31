@@ -268,7 +268,7 @@ pub use replay::composite_builder::{
     OriginalCompositeEqReport, OriginalCompositeEqRequest,
 };
 pub use replay::frame::{
-    FrameReplay, FrameReplayError, FrameReplayInputs, PreStateFault, ScopeMember,
+    FrameClaimMember, FrameReplay, FrameReplayError, FrameReplayInputs, PreStateFault, ScopeMember,
 };
 pub use replay::function::{
     replay_counterexample, replay_counterexample_through, replay_falsification, DependencyLock,
