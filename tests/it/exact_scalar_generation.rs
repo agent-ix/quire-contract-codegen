@@ -3477,12 +3477,7 @@ fn tc_024_boolean_oracle_source_map_probes_the_entry_and_implication_consequent(
             .iter()
             .filter(|region| region["nodeId"] == node)
             .collect::<Vec<_>>();
-        assert_eq!(
-            own_entries.len(),
-            1,
-            "one entry for {}",
-            format!("{:?}", claim.node_id)
-        );
+        assert_eq!(own_entries.len(), 1, "one entry for {:?}", claim.node_id);
         let entry = own_entries[0];
         let ClaimDisposition::Generated(generated) = &claim.result else {
             unreachable!("generated claims were selected above")
@@ -3508,14 +3503,14 @@ fn tc_024_boolean_oracle_source_map_probes_the_entry_and_implication_consequent(
                 .as_u64()
                 .expect("declared consequent count") as usize,
             expected_consequents,
-            "the admitted node fixes the consequent count for {}",
-            format!("{:?}", claim.node_id)
+            "the admitted node fixes the consequent count for {:?}",
+            claim.node_id
         );
         assert_eq!(
             claim_regions.len(),
             expected_consequents,
-            "no consequent region is dropped or duplicated for {}",
-            format!("{:?}", claim.node_id)
+            "no consequent region is dropped or duplicated for {:?}",
+            claim.node_id
         );
         for region in claim_regions {
             assert_eq!(probe_token(all_source, region), "right");
