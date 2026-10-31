@@ -229,24 +229,37 @@ mod tests {
     use super::*;
     use ix_trace_rs::trace;
 
-    /// These are private owner-refusal mapping checks, not a forged public package admission.
-    #[trace("FR-018-AC-8", "FR-018-AC-39", "TC-029")]
+    fn wire(key: &NodeKey) -> CheckedNodeId {
+        CheckedNodeId {
+            package: key.package().into(),
+            path: key
+                .path()
+                .into_iter()
+                .map(|segment| match segment {
+                    quire_exact::PathSegment::Text(name) => {
+                        quire_contract_model::CheckedNodePathSegment::Name(name.into())
+                    }
+                    quire_exact::PathSegment::Node(child) => {
+                        quire_contract_model::CheckedNodePathSegment::Node(Box::new(wire(&child)))
+                    }
+                })
+                .collect(),
+            ordinal: key.ordinal(),
+        }
+    }
+
+    /// Authentic owner lookups retain wrong-kind, unknown, foreign and malformed refusals.
+    #[trace("FR-018-AC-8", "FR-018-AC-39", "FR-018-AC-46", "TC-029")]
     #[test]
     fn actual_composite_lookup_refusals_preserve_kind_identity_and_foreign_owner() {
-        let requested = CheckedNodeId {
-            package: "test/unknown".into(),
-            path: vec![quire_contract_model::CheckedNodePathSegment::Name(
-                "missing".into(),
-            )],
-            ordinal: 0,
-        };
         for transitive in [false, true] {
             let (compiled, libraries) = super::composite_fixture::imported(transitive);
             let context = compiled.context();
             let marker = context.enums().next().expect("real own enum");
             let wrong = marker.key().clone();
+            let requested = wire(&wrong);
             let cause = context
-                .composite_declaration(&wrong)
+                .composite_declaration_by_wire(&requested)
                 .expect_err("own enum is wrong kind");
             assert_eq!(
                 composite_lookup_refusal(cause, &requested),
@@ -261,7 +274,7 @@ mod tests {
             )
             .expect("structural unknown key");
             let cause = context
-                .composite_declaration(&unknown)
+                .composite_declaration_by_wire(&wire(&unknown))
                 .expect_err("not an admitted declaration");
             assert_eq!(
                 composite_lookup_refusal(cause, &requested),
@@ -276,18 +289,33 @@ mod tests {
                 .1;
             let owner = leaf.context().package_name().to_string();
             for actual in leaf.context().composites() {
-                let wire = actual.node().clone();
+                let key = actual.node().clone();
+                let requested = wire(&key);
                 let cause = context
-                    .composite_declaration(&wire)
+                    .composite_declaration_by_wire(&requested)
                     .expect_err("foreign closure declaration");
                 assert_eq!(
                     composite_lookup_refusal(cause, &requested),
                     CompositeEqualityRefusal::ForeignComposite {
-                        declaration: wire.to_string(),
+                        declaration: key.to_string(),
                         package_name: owner.clone(),
                     }
                 );
             }
+            let malformed = CheckedNodeId {
+                package: "admitted-composites".into(),
+                path: Vec::new(),
+                ordinal: 0,
+            };
+            let cause = context
+                .composite_declaration_by_wire(&malformed)
+                .expect_err("empty wire path is malformed");
+            assert_eq!(
+                composite_lookup_refusal(cause, &malformed),
+                CompositeEqualityRefusal::MalformedAdmittedWire {
+                    declaration: malformed
+                }
+            );
         }
     }
 }

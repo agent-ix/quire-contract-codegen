@@ -1534,36 +1534,36 @@ fn resolve_scalar<Body: GraphBody>(
 }
 
 fn render_wire_node_id(key: &CheckedNodeId) -> Result<String, RenderError> {
-    enum Step {
-        Visit(CheckedNodeId, bool),
-        Text(String),
+    enum Step<'a> {
+        Visit(&'a CheckedNodeId, bool),
+        Text(&'a str),
         Finish {
-            package: String,
+            package: &'a str,
             ordinal: u64,
             len: usize,
             root: bool,
         },
     }
 
-    let mut pending = vec![Step::Visit(key.clone(), true)];
+    let mut pending = vec![Step::Visit(key, true)];
     let mut rendered = Vec::new();
     while let Some(step) = pending.pop() {
         match step {
             Step::Visit(key, root) => {
-                let segments = key.path;
+                let segments = &key.path;
                 pending.push(Step::Finish {
-                    package: key.package.into_string(),
+                    package: &key.package,
                     ordinal: key.ordinal,
                     len: segments.len(),
                     root,
                 });
-                for segment in segments.into_iter().rev() {
+                for segment in segments.iter().rev() {
                     match segment {
                         quire_contract_model::CheckedNodePathSegment::Name(text) => {
-                            pending.push(Step::Text(text.into_string()))
+                            pending.push(Step::Text(text))
                         }
                         quire_contract_model::CheckedNodePathSegment::Node(child) => {
-                            pending.push(Step::Visit(*child, false))
+                            pending.push(Step::Visit(child, false))
                         }
                     }
                 }
