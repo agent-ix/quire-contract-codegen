@@ -3899,7 +3899,7 @@ mod tests {
                 assert!(exact.iter().any(|artifact| artifact.path != "src/lib.rs"));
                 let claim = format!(
                     "// Subject: {}",
-                    crate::core::provenance::node_subject(&node_id('9'))
+                    crate::core::provenance::node_subject(&node_id('9')).escape_debug()
                 );
                 for module in exact
                     .iter()
@@ -3929,7 +3929,7 @@ mod tests {
                     .expect("an extra module reconstructs the genuine root declaration");
                 let root_subject = format!(
                     "// Subject: {}",
-                    crate::core::provenance::node_subject(&root)
+                    crate::core::provenance::node_subject(&root).escape_debug()
                 );
                 assert!(
                     root_module
@@ -3966,8 +3966,13 @@ include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/lib.rs"));
 fn deep_matches_shallow() {
     let source = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/deep.native"));
     let admitted = qsl_replay::compile_admitted(
-        qsl_replay::SourceIdentity::new("test", "deep.native", "git", "fixture"),
-        "deep.native", source, [], &qsl_replay::DependencyInput::default(),
+        qsl_replay::CompileUnit {
+            source: qsl_replay::SourceIdentity::new("test", "deep.native", "git", "fixture"),
+            package_name: "deep".to_owned(),
+            path: "deep.native",
+            bytes: source,
+        },
+        [], &qsl_replay::DependencyInput::default(),
         {
             let bytes = u64::try_from(source.len()).expect("finite retained source bytes");
             let tokens = bytes.checked_add(1).expect("finite byte-derived token allowance plus EOF");
