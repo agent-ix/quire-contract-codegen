@@ -8,6 +8,19 @@ mod generated {
     include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/lib.rs"));
     include!(concat!(env!("CARGO_MANIFEST_DIR"), "/names.rs"));
 
+    fn wire(key: &exact::NodeKey) -> quire_contract_model::CheckedNodeId {
+        quire_contract_model::CheckedNodeId {
+            package: key.package().into(),
+            path: key.path().into_iter().map(|segment| match segment {
+                exact::PathSegment::Text(name) =>
+                    quire_contract_model::CheckedNodePathSegment::Name(name.into()),
+                exact::PathSegment::Node(child) =>
+                    quire_contract_model::CheckedNodePathSegment::Node(Box::new(wire(&child))),
+            }).collect(),
+            ordinal: key.ordinal(),
+        }
+    }
+
     #[ix_trace_rs::trace("FR-018-AC-35", "TC-029")]
     #[test]
     fn emitted_lookup_retains_direct_or_transitive_original_foreign_package() {
@@ -24,30 +37,30 @@ mod generated {
             .enums()
             .next()
             .expect("genuine foreign enum");
-        let wire = shade.key().clone();
+        let key = shade.key().clone();
         let expected = shades.1.context().package_name().clone();
         let mut members = prepared.enum_members.clone();
         let result = rebuild_enum(
             prepared.context,
             &mut members,
-            wire.clone(),
+            wire(&key),
             &["Shade"],
             false,
         );
         assert!(
             matches!(result, Err(EnvironmentError::Lookup(qsl_replay::AdmittedLookupRefusal::Foreign {
             declaration, package,
-        })) if declaration == wire && package == expected)
+        })) if declaration == key && package == expected)
         );
         let result = lookup_enum_case(
             prepared.context,
-            &wire,
+            &wire(&key),
             &exact::Identifier::new("DARK").expect("identifier"),
         );
         assert!(
             matches!(result, Err(EnvironmentError::Lookup(qsl_replay::AdmittedLookupRefusal::Foreign {
             declaration, package,
-        })) if declaration == wire && package == expected)
+        })) if declaration == key && package == expected)
         );
     }
 
@@ -72,7 +85,7 @@ mod generated {
         let result = rebuild_enum(
             prepared.context,
             &mut members,
-            unknown.clone(),
+            wire(&unknown),
             &["Ordered"],
             true,
         );
@@ -92,13 +105,13 @@ mod generated {
                     .eq(["Ordered"])
             })
             .expect("real ordered enum");
-        let wire = ordered.key().clone();
+        let key = ordered.key().clone();
         let absent = exact::Identifier::new("ABSENT").expect("identifier");
-        let result = lookup_enum_case(prepared.context, &wire, &absent);
+        let result = lookup_enum_case(prepared.context, &wire(&key), &absent);
         assert!(
             matches!(result, Err(EnvironmentError::Lookup(qsl_replay::AdmittedLookupRefusal::Unknown {
             declaration, case: Some(case),
-        })) if declaration == wire && case == absent)
+        })) if declaration == key && case == absent)
         );
     }
 
@@ -118,7 +131,7 @@ mod generated {
             .expect("actual nominal declaration");
         let expected = ordered.key().clone();
         assert!(matches!(environment_ordered_same(None),
-            Err(EnvironmentError::MissingAdmittedContext { declaration }) if declaration == expected));
+            Err(EnvironmentError::MissingAdmittedContext { declaration }) if declaration == wire(&expected)));
         let values = super::native_values::enum_data(compiled.context(), "Ordered");
         let other = super::fixture::compile(&format!(
             "{}enum Extra {{ X, Y }}\n",
