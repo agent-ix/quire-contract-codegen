@@ -878,8 +878,9 @@ mod native_probe_tests {
     fn bounded_add_feeding_multiply_uses_the_typed_completed_interval() {
         let node_id: quire_contract_model::CheckedNodeId =
             serde_json::from_value(serde_json::json!({
-                "domain": "quire.checked-semantic-node/v1",
-                "digest": "2".repeat(64),
+                "package": "kani-clause-v2-test",
+                "path": ["bounded-add"],
+                "ordinal": 0,
             }))
             .expect("checked clause key");
         let interval = |lower: i128, upper: i128| Interval {

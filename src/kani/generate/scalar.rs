@@ -383,8 +383,9 @@ mod native_selection_tests {
     fn lowered(operation: ScalarOperation, operands: Vec<(i64, i64)>) -> LoweredScalarClaim {
         LoweredScalarClaim {
             node_id: serde_json::from_value(serde_json::json!({
-                "domain": "quire.checked-semantic-node/v1",
-                "digest": "2".repeat(64),
+                "package": "kani-native-selection-test",
+                "path": ["operation"],
+                "ordinal": 0,
             }))
             .expect("checked node identity"),
             operation_identity: match operation {
@@ -1038,11 +1039,11 @@ mod tests {
     ) -> (CheckedSemanticNodeV2, CheckedTerm) {
         let term = CheckedTerm::Aggregate { members };
         let node = serde_json::from_value(json!({
-            "node_id": {"domain": "quire.checked-semantic-node/v1", "digest": "0".repeat(64)},
+            "node_id": checked_node_id("0"),
             "schema_version": "quire.checked-semantic-graph/v2",
             "node_tag": "bounded_domain",
             "semantic_form": form,
-            "semantic_type": {"domain": "quire.checked-semantic-node/v1", "digest": "1".repeat(64)},
+            "semantic_type": checked_node_id("1"),
             "dependencies": [],
             "occurrences": [],
             "body": &term,
@@ -1170,16 +1171,9 @@ mod tests {
     // `NoRenderer` refusal (NFR-005-AC-2, the `tc_042_ac2_*` tests below).
     #[test]
     fn a_domain_outside_i64_is_a_typed_refusal_not_a_panic() {
-        let node_id = |digest: &str| -> CheckedNodeId {
-            serde_json::from_value(serde_json::json!({
-                "domain": "quire.checked-semantic-node/v1",
-                "digest": digest.repeat(64),
-            }))
-            .expect("node id")
-        };
-        let bound = node_id("7");
+        let bound = checked_node_id("7");
         let claim = ExactScalarClaim {
-            node_id: node_id("2"),
+            node_id: checked_node_id("2"),
             operation: OperationClaim {
                 identity: "quire.op.integer.add".to_owned(),
                 provenance: OperationProvenance::IrConfirmed,
@@ -1192,7 +1186,7 @@ mod tests {
                     "digest": "3".repeat(64),
                 }))
                 .expect("contract package identity"),
-                node_id: node_id("2"),
+                node_id: checked_node_id("2"),
                 package_id: serde_json::from_value(serde_json::json!({
                     "domain": "quire.checked-package.semantic/v2",
                     "algorithm": "sha256",
@@ -1200,7 +1194,7 @@ mod tests {
                 }))
                 .expect("source package identity"),
                 semantic_form: "expression".to_owned(),
-                semantic_type: node_id("4"),
+                semantic_type: checked_node_id("4"),
                 quantity_conversion_target: None,
                 source_map: Vec::new(),
                 claims: Vec::new(),
@@ -1241,8 +1235,9 @@ mod tests {
 
     fn checked_node_id(digit: &str) -> CheckedNodeId {
         serde_json::from_value(json!({
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": digit.repeat(64),
+            "package": "kani-scalar-test",
+            "path": [digit],
+            "ordinal": 0,
         }))
         .expect("node id")
     }
