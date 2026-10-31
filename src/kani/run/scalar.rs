@@ -1132,7 +1132,7 @@ fn generate_lockfile(
     Ok(())
 }
 
-fn staged_sources(root: &Path) -> Result<[Version; 2], KaniScalarNativeError> {
+fn staged_sources(root: &Path) -> Result<[String; 2], KaniScalarNativeError> {
     let lock = fs::read_to_string(root.join("Cargo.lock")).map_err(|error| {
         if error.kind() == std::io::ErrorKind::InvalidData {
             KaniScalarNativeError::Snapshot(error)
@@ -1172,7 +1172,7 @@ fn verify_staged_locks(root: &Path) -> Result<(), KaniScalarNativeError> {
     Ok(())
 }
 
-fn lock_owning_version(lock: &str, package: &str, repository: &str) -> Option<Version> {
+fn lock_owning_version(lock: &str, package: &str, repository: &str) -> Option<String> {
     let mut matches = lock
         .split("[[package]]")
         .skip(1)
@@ -1184,7 +1184,9 @@ fn lock_owning_version(lock: &str, package: &str, repository: &str) -> Option<Ve
     let source = lock_field(entry, "source")?.strip_prefix("git+")?;
     let source_repository = source.split(['?', '#']).next()?;
     (source_repository == repository).then_some(())?;
-    Version::parse(lock_field(entry, "version")?).ok()
+    let version = lock_field(entry, "version")?;
+    Version::parse(version).ok()?;
+    Some(version.to_owned())
 }
 
 fn lock_field<'a>(entry: &'a str, key: &str) -> Option<&'a str> {
@@ -1731,8 +1733,12 @@ mod tests {
                         .next(),
                     Some(repository)
                 );
-                let version = Version::parse(owning["version"].as_str().unwrap()).unwrap();
-                assert_eq!(lock_owning_version(&lock, name, repository), Some(version));
+                let version = owning["version"].as_str().unwrap();
+                Version::parse(version).unwrap();
+                assert_eq!(
+                    lock_owning_version(&lock, name, repository).as_deref(),
+                    Some(version)
+                );
             }
             let package = metadata["packages"]
                 .as_array()
@@ -2047,18 +2053,14 @@ mod tests {
         fs::create_dir(root.join("observer")).unwrap();
         let runtime = "[[package]]\nname = \"quire-contract-runtime\"\nversion = \"0.1.0\"\nsource = \"git+https://github.com/agent-ix/quire-contract-runtime?branch=main#";
         let exact = "[[package]]\nname = \"quire-exact\"\nversion = \"0.2.0\"\nsource = \"git+https://github.com/agent-ix/quire-exact?branch=main#";
-        let complete = format!(
-            "{runtime}{}\"\n{exact}{}\"\n",
-            "a".repeat(40),
-            "b".repeat(40)
-        );
+        let complete = format!("{runtime}one\"\n{exact}two\"\n");
         fs::write(root.join("Cargo.lock"), &complete).unwrap();
         fs::write(root.join("observer/Cargo.lock"), &complete).unwrap();
         assert!(verify_staged_locks(root).is_ok());
         let different_source_suffix = complete
             .replace("?branch=main#", "?branch=other#")
-            .replace(&"a".repeat(40), &"c".repeat(40))
-            .replace(&"b".repeat(40), &"d".repeat(40));
+            .replace("#one", "#another")
+            .replace("#two", "#different");
         fs::write(root.join("observer/Cargo.lock"), different_source_suffix).unwrap();
         assert!(verify_staged_locks(root).is_ok());
 
@@ -2068,7 +2070,7 @@ mod tests {
                 "https://github.com/agent-ix/quire-exact",
                 "https://example.org/quire-exact",
             ),
-            format!("{complete}{exact}{}\"\n", "b".repeat(40)),
+            format!("{complete}{exact}two\"\n"),
             complete.replace("version = \"0.2.0\"", "version = \"not-a-version\""),
             complete.replace("version = \"0.2.0\"\n", ""),
         ] {
