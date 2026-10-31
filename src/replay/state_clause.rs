@@ -8,8 +8,8 @@
 //! neither identity (QSL FR-122).
 //!
 //! The invocation document and the two snapshot documents the replay reads are built here from the
-//! decoded playback and the caller's post-state values. Each is a typed record whose bytes and
-//! `sha256-jcs` digest come from [`crate::core::canonical`] and nowhere else (AD-004): this module
+//! decoded playback and the caller's post-state values. Each is a typed record whose bytes
+//! come from [`crate::core::canonical`] and nowhere else (AD-004): this module
 //! orders no member and rewrites no string.
 //!
 //! The package is read by the harness generator's own reader (`kani::generate::frame`): the
@@ -25,12 +25,11 @@ use std::{collections::BTreeMap, fmt};
 
 use qsl_replay::{
     call_site, replay_state_clause, CallSiteRefusal, ClauseName, ClauseSelectionInput,
-    DeclaredDomain, DigestDomain, DigestRecord, DocumentRef, DomainKey, DomainKind,
-    EmptyQualifiedName, EnvelopeSource, FiniteBound, Integer, MalformedTranscript, OperationName,
-    ProofBound, ProofBoundRefusal, QualifiedName, ReplayRefusal, ReplayRequestWire, ReplayResult,
-    ReplaySource, ReplayTargetMembers, RequestTargetWire, StateClauseCounterexample,
-    StateClauseReplayResult, WitnessEnvelope, WitnessPacket, WitnessRefusal, WitnessSettlement,
-    WitnessValue,
+    DeclaredDomain, DocumentRef, DomainKey, DomainKind, EmptyQualifiedName, EnvelopeSource,
+    FiniteBound, Integer, MalformedTranscript, OperationName, ProofBound, ProofBoundRefusal,
+    QualifiedName, ReplayRefusal, ReplayRequestWire, ReplayResult, ReplaySource,
+    ReplayTargetMembers, RequestTargetWire, StateClauseCounterexample, StateClauseReplayResult,
+    WitnessEnvelope, WitnessPacket, WitnessRefusal, WitnessSettlement, WitnessValue,
 };
 use quire_canonical::{Encode, FixedShape};
 use quire_contract_model::{CheckedModelFieldsError, CheckedNodeId, CheckedPackageV2};
@@ -38,7 +37,7 @@ use quire_semantic_value::catalog::Category;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    core::canonical::{content_bytes, content_digest, DigestError},
+    core::canonical::{content_bytes, DigestError},
     core::ir::{clause::ClauseGraphView, node_key::checked_node_key},
     kani::{
         abi::{KaniBindingRole, KaniPrimitiveType},
@@ -150,9 +149,6 @@ pub enum ModelError {
     },
     /// A supplied package is not a package document: it has no `package` identity and version.
     Unreadable,
-    /// A supplied package is addressed by a digest that is not `sha256-jcs`, the domain a model
-    /// header names its package by.
-    WrongDigestDomain,
     /// No supplied package has an identity that owns the object type.
     NoOwner {
         /// The object type.
@@ -175,9 +171,6 @@ impl fmt::Display for ModelError {
                 )
             }
             Self::Unreadable => f.write_str("a supplied package is not a package document"),
-            Self::WrongDigestDomain => {
-                f.write_str("a supplied package is not addressed by a `sha256-jcs` digest")
-            }
             Self::NoOwner { object_type } => {
                 write!(f, "no supplied package owns `{object_type}`")
             }
@@ -278,6 +271,11 @@ pub enum StateClauseReplayError {
     Envelope(WitnessRefusal),
     /// A document could not be built.
     Document(DocumentError),
+    /// Two supplied documents declare the same four identity labels.
+    DuplicateDocumentIdentity {
+        /// The repeated labels.
+        identity: DocumentRef,
+    },
     /// A declared integer domain could not be paired with its finite range.
     ProofBound(ProofBoundRefusal),
     /// The framed model declaration does not provide the requested field list.
@@ -336,6 +334,9 @@ impl fmt::Display for StateClauseReplayError {
             Self::Transcript(cause) => write!(f, "the witness transcript is not admitted: {cause}"),
             Self::Envelope(cause) => write!(f, "the envelope is not admitted: {cause}"),
             Self::Document(cause) => write!(f, "a document was not built: {cause}"),
+            Self::DuplicateDocumentIdentity { identity } => {
+                write!(f, "two documents declare the same identity: {identity:?}")
+            }
             Self::ProofBound(cause) => write!(f, "a proof bound was not built: {cause}"),
             Self::ModelFields { object, cause } => {
                 write!(f, "model fields of {object:?} are unavailable: {cause:?}")
@@ -387,6 +388,7 @@ impl<'a> From<&'a StateClauseReplayError> for ReplaySettlement<'a> {
             | StateClauseReplayError::Transcript(_)
             | StateClauseReplayError::Envelope(_)
             | StateClauseReplayError::Document(_)
+            | StateClauseReplayError::DuplicateDocumentIdentity { .. }
             | StateClauseReplayError::ProofBound(_)
             | StateClauseReplayError::ModelFields { .. }
             | StateClauseReplayError::MissingField { .. }
@@ -665,20 +667,16 @@ impl StateClauseReplay {
             witness: None,
         };
         let state_documents = [
-            (&invocation_encoded.digest, &invocation_encoded.bytes),
-            (&pre_snapshot.digest, &pre_snapshot.bytes),
-            (&post_snapshot.digest, &post_snapshot.bytes),
-        ]
-        .map(|(digest, bytes)| (DigestRecord::mint(DigestDomain::Sha256Jcs, *digest), bytes));
+            &invocation_encoded.bytes,
+            &pre_snapshot.bytes,
+            &post_snapshot.bytes,
+        ];
         let documents = packages
             .iter()
-            .map(|document| (document.digest, document.bytes.as_slice()))
-            .chain(
-                state_documents
-                    .iter()
-                    .map(|(digest, bytes)| (*digest, bytes.as_slice())),
-            )
+            .map(|document| document.bytes.as_slice())
+            .chain(state_documents.iter().map(|bytes| bytes.as_slice()))
             .collect::<Vec<_>>();
+        ensure_unique_documents(&documents)?;
         let wire = run.wire(
             RequestTargetWire::state_clause(selected.clone()),
             ReplaySource::Witness(witness.clone()),
@@ -741,16 +739,14 @@ impl StateClauseReplay {
 // Documents
 // ---------------------------------------------------------------------------
 
-/// A document's canonical bytes and the digest of those bytes, both from [`crate::core::canonical`].
+/// A document's canonical bytes from [`crate::core::canonical`].
 #[derive(Debug, Eq, PartialEq)]
 pub(crate) struct EncodedDocument {
     /// The RFC 8785 bytes.
     pub(crate) bytes: Vec<u8>,
-    /// The digest `sha256-jcs` addresses the document by.
-    pub(crate) digest: [u8; 32],
 }
 
-/// Encodes `document` and computes its digest, each only through [`crate::core::canonical`].
+/// Encodes `document` only through [`crate::core::canonical`].
 ///
 /// # Errors
 ///
@@ -760,7 +756,6 @@ pub(crate) fn encode_document<T: Encode + ?Sized>(
 ) -> Result<EncodedDocument, DigestError> {
     Ok(EncodedDocument {
         bytes: content_bytes(document)?,
-        digest: content_digest(document)?,
     })
 }
 
@@ -773,6 +768,35 @@ impl DocumentLabel {
             revision: self.revision.clone(),
         }
     }
+}
+
+/// The self-declared identity of a state document. QSL validates the full document shape.
+fn document_identity(bytes: &[u8]) -> Option<DocumentRef> {
+    #[derive(Deserialize)]
+    struct IdentityRead {
+        identity: IdentityMember,
+    }
+    let identity = serde_json::from_slice::<IdentityRead>(bytes).ok()?.identity;
+    Some(DocumentRef {
+        authority: identity.authority,
+        identity: identity.identity,
+        revision_namespace: identity.revision_namespace,
+        revision: identity.revision,
+    })
+}
+
+/// Reject repeated declared labels before request construction, regardless of document bytes.
+fn ensure_unique_documents(documents: &[&[u8]]) -> Result<(), StateClauseReplayError> {
+    let mut seen = Vec::new();
+    for bytes in documents {
+        if let Some(identity) = document_identity(bytes) {
+            if seen.contains(&identity) {
+                return Err(StateClauseReplayError::DuplicateDocumentIdentity { identity });
+            }
+            seen.push(identity);
+        }
+    }
+    Ok(())
 }
 
 /// A document's identity member.
@@ -799,8 +823,6 @@ impl From<&DocumentLabel> for IdentityMember {
 #[derive(Clone, Serialize, FixedShape)]
 struct ModelHeader {
     identity: String,
-    version: String,
-    digest: String,
 }
 
 /// An integer value as the snapshot grammar spells it: a decimal string.
@@ -844,11 +866,21 @@ pub(crate) struct ObjectRef {
     pub(crate) key: String,
 }
 
-/// A snapshot as the invocation names it: its identity and `sha256-jcs` digest.
+/// A snapshot as the invocation names it, by its four identity labels.
 #[derive(Deserialize, Serialize, FixedShape)]
 pub(crate) struct SnapshotLink {
     identity: IdentityMember,
-    pub(crate) digest: String,
+}
+
+impl SnapshotLink {
+    pub(crate) fn reference(&self) -> DocumentRef {
+        DocumentRef {
+            authority: self.identity.authority.clone(),
+            identity: self.identity.identity.clone(),
+            revision_namespace: self.identity.revision_namespace.clone(),
+            revision: self.identity.revision.clone(),
+        }
+    }
 }
 
 #[derive(Serialize, FixedShape)]
@@ -871,21 +903,14 @@ struct InvocationDocument {
 /// An encoded snapshot.
 struct Snapshot {
     bytes: Vec<u8>,
-    digest: [u8; 32],
 }
 
 impl Snapshot {
     fn link(&self, label: &DocumentLabel) -> SnapshotLink {
         SnapshotLink {
             identity: label.into(),
-            digest: digest_text(&DigestRecord::mint(DigestDomain::Sha256Jcs, self.digest)),
         }
     }
-}
-
-/// A digest as a document member spells it: `<domain>:<64 hex digits>`.
-fn digest_text(record: &DigestRecord) -> String {
-    format!("{}:{}", record.domain().as_str(), record.hex())
 }
 
 /// The snapshot of `object` with `values` in `observation`'s role: one `complete` population
@@ -922,9 +947,8 @@ fn snapshot(
             }],
         }],
     };
-    let EncodedDocument { bytes, digest } =
-        encode_document(&document).map_err(DocumentError::Encode)?;
-    Ok(Snapshot { bytes, digest })
+    let EncodedDocument { bytes } = encode_document(&document).map_err(DocumentError::Encode)?;
+    Ok(Snapshot { bytes })
 }
 
 /// The members of a domain package document this module reads: the `package` identity and version
@@ -937,12 +961,12 @@ struct DomainPackageHeader {
 #[derive(Deserialize)]
 struct DomainPackageIdentity {
     identity: String,
-    version: String,
+    #[serde(rename = "version")]
+    _version: String,
 }
 
 /// The model header of the one supplied package whose identity owns `object_type`
-/// (`ix://<identity>/<name>`). Every supplied package must be a package document addressed by a
-/// `sha256-jcs` digest, the domain a model header names its package by.
+/// (`ix://<identity>/<name>`). Every supplied package must declare a package identity and version.
 fn model_header(
     packages: &[ProvidedDocument],
     object_type: &str,
@@ -954,9 +978,6 @@ fn model_header(
         })?;
     let mut owners = Vec::new();
     for package in packages {
-        if package.digest.domain() != DigestDomain::Sha256Jcs {
-            return Err(ModelError::WrongDigestDomain);
-        }
         let header = serde_json::from_slice::<DomainPackageHeader>(&package.bytes)
             .map_err(|_| ModelError::Unreadable)?;
         let identity = header.package.identity;
@@ -964,11 +985,7 @@ fn model_header(
             .strip_prefix(identity.as_str())
             .is_some_and(|rest| rest.starts_with('/'))
         {
-            owners.push(ModelHeader {
-                identity,
-                version: header.package.version,
-                digest: digest_text(&package.digest),
-            });
+            owners.push(ModelHeader { identity });
         }
     }
     let mut owners = owners.into_iter();
@@ -1197,43 +1214,38 @@ mod tests {
         }
     }
 
-    /// FR-024-AC-14: the builder returns the bytes and digest `core::canonical` returns, and the
+    /// FR-024-AC-53: the builder returns the bytes `core::canonical` returns, and the
     /// bytes are RFC 8785's: members by UTF-16 code unit, JSON escapes, ES6 number spellings.
-    #[trace("FR-024-AC-14", "TC-035")]
+    #[trace("FR-024-AC-53", "TC-035")]
     #[test]
     fn tc_035_the_builder_returns_what_core_canonical_returns_for_the_vector() {
         let document = vector();
         let built = encode_document(&document).expect("the vector encodes");
         assert_eq!(built.bytes, content_bytes(&document).expect("bytes"));
-        assert_eq!(built.digest, content_digest(&document).expect("digest"));
         let expected = "{\"alpha\":\"first\",\"exponent\":1e+21,\"fraction\":0.25,\
             \"large\":9007199254740991,\"middle\":null,\
             \"zebra\":\"quote \\\" backslash \\\\ control \\u0001 letter \u{e9}\"}";
         assert_eq!(String::from_utf8(built.bytes).expect("UTF-8"), expected);
     }
 
-    fn package(bytes: &[u8], domain: DigestDomain) -> ProvidedDocument {
+    fn package(bytes: &[u8]) -> ProvidedDocument {
         ProvidedDocument {
-            digest: DigestRecord::mint(domain, [7; 32]),
             bytes: bytes.to_vec(),
         }
     }
 
     const BANK: &[u8] = br#"{"package":{"identity":"test/bank","version":"1.0.0"}}"#;
 
-    /// The model header names the one package that owns the object type, by its `sha256-jcs`
-    /// digest; an unreadable package, a package under another digest domain, a type nobody owns,
+    /// The model header names the one package that owns the object type; an unreadable package, a type nobody owns,
     /// a type that is no address, a package whose identity only shares a prefix, and two owners
     /// are each their own error.
-    #[trace("FR-024-AC-13", "TC-035")]
+    #[trace("FR-024-AC-52", "TC-035")]
     #[test]
     fn tc_035_the_model_header_is_the_one_owner_or_a_distinct_error() {
-        let bank = package(BANK, DigestDomain::Sha256Jcs);
+        let bank = package(BANK);
         let header = model_header(std::slice::from_ref(&bank), "ix://test/bank/Account")
             .expect("one package owns the type");
         assert_eq!(header.identity, "test/bank");
-        assert_eq!(header.version, "1.0.0");
-        assert_eq!(header.digest, format!("sha256-jcs:{}", "07".repeat(32)));
 
         let error = |packages: &[ProvidedDocument], object_type: &str| {
             model_header(packages, object_type)
@@ -1242,12 +1254,8 @@ mod tests {
         };
         let owned = "ix://test/bank/Account";
         assert_eq!(
-            error(&[package(b"not json", DigestDomain::Sha256Jcs)], owned),
+            error(&[package(b"not json")], owned),
             ModelError::Unreadable
-        );
-        assert_eq!(
-            error(&[package(BANK, DigestDomain::IrCanonical)], owned),
-            ModelError::WrongDigestDomain
         );
         assert_eq!(
             error(std::slice::from_ref(&bank), "ix://other/Thing"),
@@ -1261,10 +1269,7 @@ mod tests {
                 object_type: "test/bank/Account".to_owned()
             }
         );
-        let prefix = package(
-            br#"{"package":{"identity":"test/ban","version":"1.0.0"}}"#,
-            DigestDomain::Sha256Jcs,
-        );
+        let prefix = package(br#"{"package":{"identity":"test/ban","version":"1.0.0"}}"#);
         assert_eq!(
             error(&[prefix], owned),
             ModelError::NoOwner {
@@ -1279,11 +1284,28 @@ mod tests {
         );
     }
 
-    /// FR-024-AC-14: the production source of this module holds no encoder, no hashing, no member
-    /// sort and no escaping routine of its own, and `sha2` is not a dependency.
-    #[trace("FR-024-AC-14", "TC-035")]
+    /// Equal or different document bytes with identical declared labels are both refused.
+    #[trace("FR-024-AC-52", "TC-035")]
     #[test]
-    fn tc_035_the_module_encodes_and_hashes_only_through_core_canonical() {
+    fn tc_035_duplicate_document_labels_refuse_before_request() {
+        let first = br#"{"identity":{"authority":"a","identity":"i","revision_namespace":"n","revision":"r"},"value":1}"#;
+        let changed = br#"{"identity":{"authority":"a","identity":"i","revision_namespace":"n","revision":"r"},"value":2}"#;
+        for second in [first.as_slice(), changed.as_slice()] {
+            let error = ensure_unique_documents(&[first.as_slice(), second])
+                .expect_err("repeated labels refuse regardless of bytes");
+            assert!(
+                matches!(error, StateClauseReplayError::DuplicateDocumentIdentity { identity }
+                if identity.authority == "a" && identity.identity == "i"
+                    && identity.revision_namespace == "n" && identity.revision == "r")
+            );
+        }
+    }
+
+    /// FR-024-AC-53: the production source of this module holds no encoder, no hashing, no member
+    /// sort and no escaping routine of its own, and `sha2` is not a dependency.
+    #[trace("FR-024-AC-53", "TC-035")]
+    #[test]
+    fn tc_035_the_module_encodes_only_through_core_canonical() {
         let source = include_str!("state_clause.rs");
         let production = source
             .split("#[cfg(test)]")
