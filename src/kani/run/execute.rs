@@ -1347,9 +1347,9 @@ mod tests {
         },
     };
 
-    /// FR-017-AC-13 (TC-027): only the unique bound assertion's successful check can turn a
+    /// FR-017-AC-61 (TC-027): only the unique bound assertion's successful check can turn a
     /// collection precondition's satisfied cover into proof evidence.
-    #[trace("FR-017-AC-13", "TC-027")]
+    #[trace("FR-017-AC-61", "TC-027")]
     #[test]
     fn collection_totality_binding_rejects_foreign_or_missing_checks() {
         let assertion = crate::kani::identity::collection_precondition_totality_assertion();
@@ -1386,7 +1386,7 @@ mod tests {
 
     /// A parameter precondition harness has only its cover. This classifier decides it by the
     /// cover; collection preconditions additionally pass the bound totality check in `evidence_of`.
-    #[trace("FR-017-AC-13", "TC-027")]
+    #[trace("FR-017-AC-61", "TC-027")]
     #[test]
     fn a_precondition_harness_with_no_checks_is_decided_by_its_cover_not_the_zero_checks_rule() {
         let run = |kind: Option<ObligationKind>, checks: &[(&str, &str)]| {
@@ -2318,7 +2318,7 @@ exit 0
     }
 
     #[cfg(target_os = "linux")]
-    #[trace("FR-017-AC-13", "TC-027")]
+    #[trace("FR-017-AC-61", "TC-027")]
     #[test]
     fn collection_totality_controls_single_readonly_and_batch_evidence() {
         use crate::kani::generate::collection::tests::runner_precondition_fixture;

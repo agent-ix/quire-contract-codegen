@@ -2299,7 +2299,7 @@ fn precondition_collection_source_refusals_emit_no_harness() {
     "FR-015-AC-7",
     "FR-015-AC-53",
     "FR-015-AC-99",
-    "FR-017-AC-13",
+    "FR-017-AC-61",
     "FR-029-AC-11",
     "TC-025",
     "TC-027",

@@ -415,7 +415,7 @@ mod synthetic {
 
     /// A report listing no successful check is inconclusive under `VacuousProof`, never verified,
     /// even with every cover satisfied.
-    #[trace("FR-017-AC-13", "TC-027")]
+    #[trace("FR-017-AC-61", "TC-027")]
     #[test]
     fn a_report_with_no_successful_check_is_inconclusive_not_verified_even_with_every_cover_satisfied(
     ) {
@@ -622,7 +622,7 @@ mod real_capture {
 
     /// Kani reports a harness whose every check is unreachable as a success with zero successful
     /// checks, so it is vacuous before its cover is consulted.
-    #[trace("FR-017-AC-12", "FR-017-AC-13", "TC-027")]
+    #[trace("FR-017-AC-12", "FR-017-AC-61", "TC-027")]
     #[test]
     fn tc_027_real_kani_a_run_with_no_successful_check_is_a_vacuous_proof() {
         let capture = capture!("vacuous-cover");
