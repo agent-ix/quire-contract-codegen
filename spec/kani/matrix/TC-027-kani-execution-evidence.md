@@ -451,7 +451,8 @@ the FR-017 table. Produce real errors by the runner for a request mismatch, an o
 produce a real single run cancelled by its retained source and a real single run stopped by its
 wall-clock timeout (launcher stand-ins), each `ProofNotVerified`, and require `EnvironmentFault`
 with the evidence outcome unchanged; through an in-crate seam make one staged lock unreadable, omit
-or duplicate an owning package, change its repository, remove or corrupt its version, and give the
+or duplicate an owning package, remove its repository field, change its repository, remove or
+corrupt its version, and give the
 two staged locks different owning package versions while retaining the same package name and
 repository. Require `DependencyLock` / `EnvironmentFault` and no receipt for every adverse case;
 inject a changed staged byte, a native launch failure and malformed helper output, and require
