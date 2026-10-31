@@ -5,17 +5,17 @@
 //! typed values [`decode_falsification`]
 //! returns, binds each value to its parameter by
 //! the parameter's node id, and calls [`qsl_replay::replay`]. The executor recompiles the
-//! request's digest-addressed source and evaluates the selected function itself, so the verdict
+//! request's identity-labelled source and evaluates the selected function itself, so the verdict
 //! is QSL's, not a value this crate supplies.
 
 use std::{collections::BTreeMap, fmt};
 
 use qsl_replay::{
     call_site, replay, CallSite, CallSiteRefusal, DeclaredDomain, DependencyEntryWire,
-    DependencyInput, DependencyInputRefusal, DigestRecord, DisagreementCause, EnvelopeSource,
-    FunctionSite, Identifier, MalformedTranscript, NoPayload, NodeKey, ObligationIdentity,
-    OccurrenceKey, QualifiedName, ReplayLimits, ReplayRefusal, ReplayRequestWire, ReplayResult,
-    ReplaySource, ReplayTarget, RequestTargetWire, ScalarLimits, SourceIdentity, StateEnvironment,
+    DependencyInput, DependencyInputRefusal, DisagreementCause, EnvelopeSource, FunctionSite,
+    Identifier, MalformedTranscript, NoPayload, NodeKey, ObligationIdentity, OccurrenceKey,
+    QualifiedName, ReplayLimits, ReplayRefusal, ReplayRequestWire, ReplayResult, ReplaySource,
+    ReplayTarget, RequestTargetWire, ScalarLimits, SourceIdentity, StateEnvironment,
     SuppliedLibrary, Witness, WitnessArmResult, WitnessEnvelope, WitnessPacket, WitnessRefusal,
     WitnessSettlement, WitnessValue,
 };
@@ -291,12 +291,9 @@ fn replay_falsification_through(
     }
 }
 
-/// One document the replay reads from the request's byte provision, with the digest the request
-/// addresses it by. The frame and state-clause replays both take their documents this way.
+/// One raw document supplied to frame or state-clause replay. Its identity is declared in its bytes.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProvidedDocument {
-    /// The document's digest record: `sha256-jcs` for a domain package or a state document.
-    pub digest: DigestRecord,
     /// The document's bytes.
     pub bytes: Vec<u8>,
 }
@@ -456,7 +453,7 @@ impl ReplayInputs {
         replay_target: RequestTargetWire,
         source: ReplaySource,
         obligation_identity: ObligationIdentity,
-        documents: &[(DigestRecord, &[u8])],
+        documents: &[&[u8]],
     ) -> ReplayRequestWire {
         let dependencies = self
             .dependencies
@@ -497,7 +494,7 @@ impl ReplayInputs {
             supplied_limits: None,
             declared_domains: self.declared_domains.clone(),
             byte_provision,
-            documents: documents.iter().map(|(_, bytes)| bytes.to_vec()).collect(),
+            documents: documents.iter().map(|bytes| bytes.to_vec()).collect(),
             // No Reference parameter is replayed on this path, so no object environment is supplied.
             object_environment: None,
         }

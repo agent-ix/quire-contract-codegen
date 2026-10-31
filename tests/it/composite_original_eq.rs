@@ -7,10 +7,10 @@ use std::collections::BTreeMap;
 
 use ix_trace_rs::trace;
 use qsl_replay::{
-    compile_package, parity_obligation, DependencyInput, DigestDomain, DigestRecord, Domain,
-    DomainKey, DomainKind, EqualityOperator, FiniteBound, InconclusiveCause, Integer, NodeKey,
-    OperandIdentity, ParityBoundRefusal, ProofBound, Refinement, ReplayLimits, ReplayRefusal,
-    ReplayRequest, ReplayTarget, ScalarIdentityMismatch, ScalarLimits, SourceIdentity, StageLimits,
+    compile_package, parity_obligation, DependencyInput, Domain, DomainKey, DomainKind,
+    EqualityOperator, FiniteBound, InconclusiveCause, Integer, NodeKey, OperandIdentity,
+    ParityBoundRefusal, ProofBound, Refinement, ReplayLimits, ReplayRefusal, ReplayRequest,
+    ReplayTarget, ScalarIdentityMismatch, ScalarLimits, SourceIdentity, StageLimits,
     SuppliedLibrary, TerminalValue, VerifiedShadow, VerifiedShadowResult,
 };
 use quire_contract_codegen::{
@@ -147,20 +147,12 @@ fn checked_with_extra_source(
     read_checked(&bytes, &evidence())
 }
 
-fn content_identity() -> DigestRecord {
-    // A canonical fixture binding input. It establishes no generated-artifact authentication.
-    let digest =
-        quire_canonical::sha256(&"constructor-fixture", quire_canonical::Limits::new(1_000))
-            .unwrap();
-    DigestRecord::mint(DigestDomain::Sha256Jcs, *digest.as_bytes())
-}
-
 fn context(package: CheckedPackageV2, function: &str) -> OriginalCompositeEqContext {
     OriginalCompositeEqContext::new(
         package,
+        &inputs(SOURCE).source,
         inputs(SOURCE),
         function,
-        content_identity(),
         CheckedPackageReadLimits::bounded(),
     )
     .unwrap()
@@ -302,7 +294,7 @@ fn parameter_bounds(
 
 /// Original parameter/parameter construction reaches a genuine QSL verified report and converter.
 /// This is a constructor control with supplied verified evidence, not a generated-family proof.
-#[trace("FR-033-AC-1", "FR-033-AC-9", "FR-033-AC-11", "TC-048")]
+#[trace("FR-033-AC-1", "FR-033-AC-11", "TC-048")]
 #[test]
 fn original_parameter_operands_build_positional_identity_and_public_verified_report() {
     let package = checked(SOURCE);
@@ -357,7 +349,6 @@ fn original_parameter_operands_build_positional_identity_and_public_verified_rep
     assert_eq!(report.sent().obligation, obligation);
     assert_eq!(report.sent().harness_bounds, bounds);
     assert_eq!(report.sent().limits, limits());
-    assert_eq!(report.sent().content_identity, content_identity());
     assert_eq!(report.report().claim(), report.sent());
     let settlement = report.settlement().unwrap();
     assert!(matches!(settlement.result(), VerifiedShadowResult::Tested));
@@ -633,30 +624,44 @@ fn self_comparison_keeps_two_positional_arguments() {
     ));
 }
 
-/// Changed bytes and another source lock refuse before any report can be created.
-#[trace("FR-033-AC-1", "FR-033-AC-9", "TC-048")]
+/// Changed source bytes refuse before recompilation, including semantically equivalent edits.
+#[trace("FR-033-AC-1", "TC-048")]
 #[test]
 fn wrong_source_refuses_before_invocation() {
+    let original = checked(SOURCE);
     let mut wrong_source = inputs(SOURCE);
     wrong_source.source.bytes.push(b'\n');
     assert!(matches!(
         OriginalCompositeEqContext::new(
-            checked(SOURCE),
+            original,
+            &inputs(SOURCE).source,
             wrong_source,
             "f",
-            content_identity(),
-            CheckedPackageReadLimits::bounded()
+            CheckedPackageReadLimits::bounded(),
         ),
         Err(CompositeBuildError::SourceMismatch)
     ));
-    let another_package = checked(&SOURCE.replace("Int[0, 9]", "Int[0, 8]"));
+    let mut wrong_revision = inputs(SOURCE);
+    wrong_revision.source.revision.push_str("-changed");
+    assert!(matches!(
+        OriginalCompositeEqContext::new(
+            checked(SOURCE),
+            &inputs(SOURCE).source,
+            wrong_revision,
+            "f",
+            CheckedPackageReadLimits::bounded(),
+        ),
+        Err(CompositeBuildError::SourceMismatch)
+    ));
+    let changed_source = SOURCE.replace("Int[0, 9]", "Int[0, 8]");
+    let another_package = checked(&changed_source);
     assert!(matches!(
         OriginalCompositeEqContext::new(
             another_package,
+            &inputs(&changed_source).source,
             inputs(SOURCE),
             "f",
-            content_identity(),
-            CheckedPackageReadLimits::bounded()
+            CheckedPackageReadLimits::bounded(),
         ),
         Err(CompositeBuildError::SourceMismatch)
     ));
@@ -664,7 +669,7 @@ fn wrong_source_refuses_before_invocation() {
 
 /// A genuinely different admitted graph retains the supplied source in its lock but refuses recompilation.
 /// Malformed package IDs cannot be constructed through IR admission and are not coverage claims.
-#[trace("FR-033-AC-1", "FR-033-AC-9", "TC-048")]
+#[trace("FR-033-AC-1", "TC-048")]
 #[test]
 fn different_semantic_package_refuses_before_invocation() {
     let original = checked(SOURCE);
@@ -674,12 +679,12 @@ fn different_semantic_package_refuses_before_invocation() {
     let (node, occurrence) = application(&changed, "f");
     assert!(matches!(
         context(changed, "f").request(&node, &occurrence, EqualityOperator::Equal, &[], 100_000),
-        Err(CompositeBuildError::PackageMismatch)
+        Err(CompositeBuildError::ContextMismatch)
     ));
 }
 
 /// Extra retained dependency selection and altered admitted source-lock context refuse distinctly.
-#[trace("FR-033-AC-1", "FR-033-AC-9", "TC-048")]
+#[trace("FR-033-AC-1", "TC-048")]
 #[test]
 fn retained_selection_and_recompiled_context_mismatch_refuse() {
     let package = checked(SOURCE);
@@ -691,9 +696,9 @@ fn retained_selection_and_recompiled_context_mismatch_refuse() {
     assert!(matches!(
         OriginalCompositeEqContext::new(
             package,
+            &inputs(SOURCE).source,
             retained,
             "f",
-            content_identity(),
             CheckedPackageReadLimits::bounded()
         ),
         Err(CompositeBuildError::ContextMismatch)
@@ -709,7 +714,7 @@ fn retained_selection_and_recompiled_context_mismatch_refuse() {
 }
 
 /// Absent nodes/occurrences refuse structurally before evidence is accepted; no disagreement is supplied.
-#[trace("FR-033-AC-1", "FR-033-AC-9", "TC-048")]
+#[trace("FR-033-AC-1", "TC-048")]
 #[test]
 fn wrong_node_and_occurrence_refuse_before_invocation() {
     let package = checked(SOURCE);
@@ -912,9 +917,9 @@ fn tc_035_original_composite_packets_bind_distinct_real_occurrences() {
     assert_ne!(second.ordinal, 0);
     let context = OriginalCompositeEqContext::new(
         package,
+        &inputs(REPEATED_SOURCE).source,
         inputs(REPEATED_SOURCE),
         "repeated",
-        content_identity(),
         CheckedPackageReadLimits::bounded(),
     )
     .expect("the repeated source selects one checked function");
@@ -961,7 +966,7 @@ fn tc_035_original_composite_packets_bind_distinct_real_occurrences() {
 }
 
 /// QSL owns body membership and refuses an admitted node from another function before Disagreed.
-#[trace("FR-033-AC-1", "FR-033-AC-9", "FR-033-AC-12", "TC-048")]
+#[trace("FR-033-AC-1", "FR-033-AC-12", "TC-048")]
 #[test]
 fn another_functions_node_reaches_binding_checked_qsl_refusal() {
     let package = checked(SOURCE);
@@ -992,7 +997,7 @@ fn another_functions_node_reaches_binding_checked_qsl_refusal() {
 }
 
 /// An actual nonoperand Node bound survives CG's filter and QSL refuses it before Disagreed.
-#[trace("FR-033-AC-9", "FR-033-AC-11", "FR-033-AC-12", "TC-048")]
+#[trace("FR-033-AC-11", "FR-033-AC-12", "TC-048")]
 #[test]
 fn unrelated_node_bound_reaches_binding_checked_qsl_refusal() {
     let package = checked(SOURCE);
@@ -1072,7 +1077,7 @@ fn original_operand_projection_obeys_work_ceiling() {
 }
 
 /// Original non-default stage limits reach QSL recompilation without substituting defaults.
-#[trace("FR-033-AC-1", "FR-033-AC-9", "TC-048")]
+#[trace("FR-033-AC-1", "TC-048")]
 #[test]
 fn original_stage_limit_stops_recompile_before_invocation() {
     let package = checked(SOURCE);
@@ -1081,9 +1086,9 @@ fn original_stage_limit_stops_recompile_before_invocation() {
     retained.stage_limits.insert("s1.input_bytes".to_owned(), 1);
     let context = OriginalCompositeEqContext::new(
         package,
+        &inputs(SOURCE).source,
         retained,
         "f",
-        content_identity(),
         CheckedPackageReadLimits::bounded(),
     )
     .unwrap();
@@ -1115,7 +1120,7 @@ fn duplicate_positional_bound_refuses_without_an_obligation() {
 }
 
 /// An authentic imported root refuses until its original admitted dependencies can be retained.
-#[trace("FR-033-AC-1", "FR-033-AC-9", "TC-048")]
+#[trace("FR-033-AC-1", "TC-048")]
 #[test]
 fn original_imported_context_refuses_before_invocation() {
     let source = SOURCE.replace("record Q", "import \"test/eq-library\" as d;\nrecord Q");
@@ -1175,9 +1180,9 @@ fn original_imported_context_refuses_before_invocation() {
     assert!(matches!(
         OriginalCompositeEqContext::new(
             package,
+            &inputs(&source).source,
             retained,
             "f",
-            content_identity(),
             CheckedPackageReadLimits::bounded(),
         ),
         Err(CompositeBuildError::ImportedContextUnsupported)
@@ -1210,9 +1215,9 @@ fn original_request_preserves_the_owning_reader_limit() {
     read_limits.bytes = 1;
     let original = OriginalCompositeEqContext::new(
         package,
+        &inputs(SOURCE).source,
         inputs(SOURCE),
         "f",
-        content_identity(),
         read_limits,
     )
     .expect("retaining already-admitted inputs does not re-read them");
@@ -1234,9 +1239,9 @@ fn original_request_preserves_the_above_reader_resource_refusal() {
         .insert("s1.input_bytes".to_owned(), u64::MAX);
     let original = OriginalCompositeEqContext::new(
         package,
+        &inputs(SOURCE).source,
         retained,
         "f",
-        content_identity(),
         CheckedPackageReadLimits::bounded(),
     )
     .expect("retain authentic source before request-stage validation");
@@ -1269,9 +1274,9 @@ fn retained_context_kr_families_preserve_complete_request_outputs_and_refused_si
                 application_with_operator(&package, "n", "quire.op.structural.ne");
             let retained = OriginalCompositeEqContext::new(
                 package,
+                &inputs(&source).source,
                 inputs(&source),
                 "f",
-                content_identity(),
                 CheckedPackageReadLimits::bounded(),
             )
             .expect("authentic source supplies one retained context");

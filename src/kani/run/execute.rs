@@ -419,14 +419,6 @@ fn require_in_crate(
         });
     }
     let totality_line = if let Some(marker) = request.harness.collection_precondition() {
-        let digest_matches =
-            crate::kani::identity::collection_source_digest(&harness.rust.contents)
-                == marker.source_digest;
-        if !digest_matches {
-            return Err(KaniExecutionRefusal::BoundTotalityAssertionMismatch {
-                harness_path: harness.rust.path.clone(),
-            });
-        }
         Some(
             bound_totality_line(
                 &library,
@@ -1355,9 +1347,9 @@ mod tests {
         },
     };
 
-    /// FR-017-AC-13 (TC-027): only the unique bound assertion's successful check can turn a
+    /// FR-017-AC-61 (TC-027): only the unique bound assertion's successful check can turn a
     /// collection precondition's satisfied cover into proof evidence.
-    #[trace("FR-017-AC-13", "TC-027")]
+    #[trace("FR-017-AC-61", "TC-027")]
     #[test]
     fn collection_totality_binding_rejects_foreign_or_missing_checks() {
         let assertion = crate::kani::identity::collection_precondition_totality_assertion();
@@ -1394,7 +1386,7 @@ mod tests {
 
     /// A parameter precondition harness has only its cover. This classifier decides it by the
     /// cover; collection preconditions additionally pass the bound totality check in `evidence_of`.
-    #[trace("FR-017-AC-13", "TC-027")]
+    #[trace("FR-017-AC-61", "TC-027")]
     #[test]
     fn a_precondition_harness_with_no_checks_is_decided_by_its_cover_not_the_zero_checks_rule() {
         let run = |kind: Option<ObligationKind>, checks: &[(&str, &str)]| {
@@ -2326,7 +2318,7 @@ exit 0
     }
 
     #[cfg(target_os = "linux")]
-    #[trace("FR-017-AC-13", "TC-027")]
+    #[trace("FR-017-AC-61", "TC-027")]
     #[test]
     fn collection_totality_controls_single_readonly_and_batch_evidence() {
         use crate::kani::generate::collection::tests::runner_precondition_fixture;
@@ -2336,10 +2328,16 @@ exit 0
         let harness = runner_precondition_fixture("quire.op.collection.forall");
         let marker = harness.identity.collection_precondition.as_ref().unwrap();
         assert_eq!(
-            marker.source_digest,
-            crate::kani::identity::collection_source_digest(&harness.rust.contents)
+            harness
+                .rust
+                .contents
+                .lines()
+                .nth(usize::try_from(marker.totality_assertion_line - 1).unwrap())
+                .expect("the marked assertion line exists")
+                .trim(),
+            crate::kani::identity::collection_precondition_totality_assertion()
         );
-        assert!(harness.record.contents.contains(&marker.source_digest));
+        assert!(!harness.record.contents.contains("sourceDigest"));
         let path = format!(
             "{}::{}",
             harness.identity.module_symbol, harness.identity.harness_symbol
@@ -2460,18 +2458,14 @@ exit 0
             Err(KaniExecutionRefusal::BoundTotalityAssertionMismatch { .. })
         ));
 
-        let mut bad_identity = harness.identity.clone();
-        bad_identity
-            .collection_precondition
-            .as_mut()
-            .unwrap()
-            .source_digest = "0".repeat(64);
+        let mut shifted_source = harness.rust.clone();
+        shifted_source.contents.insert(0, '\n');
         let bad = KaniV2ClauseObligationHarness::generated(
-            bad_identity,
-            harness.rust.clone(),
+            harness.identity.clone(),
+            shifted_source,
             harness.record.clone(),
         );
-        let stand_in = StandIn::scaffold("collection-wrong-digest-valid-seal");
+        let stand_in = StandIn::scaffold("collection-shifted-source-valid-seal");
         fs::write(
             stand_in.crate_directory.join("src/lib.rs"),
             &bad.rust.contents,
@@ -2552,13 +2546,37 @@ exit 0
             Err(KaniExecutionRefusal::HarnessNotInCrate { .. })
         ));
 
+        let stand_in = StandIn::scaffold("collection-changed-crate-source");
+        let assertion = crate::kani::identity::collection_precondition_totality_assertion();
+        let changed = harness
+            .rust
+            .contents
+            .replacen(&assertion, "assert!(false);", 1);
+        assert_ne!(changed, harness.rust.contents);
+        fs::write(stand_in.crate_directory.join("src/lib.rs"), changed).unwrap();
+        let request = KaniExecutionRequest {
+            cancel: &stand_in.cancel,
+            installation: &stand_in.installation,
+            harness: (&harness).into(),
+            crate_directory: &stand_in.crate_directory,
+            target_directory: &stand_in.target_directory,
+            home_directory: None,
+        };
+        assert!(matches!(
+            execute_kani_obligation(&request),
+            Err(KaniExecutionRefusal::HarnessNotInCrate { .. })
+        ));
+        assert!(matches!(
+            execute_kani_obligation_readonly(&request, &stand_in.crate_directory),
+            Err(KaniExecutionRefusal::HarnessNotInCrate { .. })
+        ));
+        assert!(matches!(
+            execute_kani_obligations(&[request]),
+            Err(KaniExecutionRefusal::HarnessNotInCrate { .. })
+        ));
+
         let mut unsealed = harness.clone();
-        unsealed
-            .identity
-            .collection_precondition
-            .as_mut()
-            .unwrap()
-            .source_digest = "0".repeat(64);
+        unsealed.rust.contents.insert(0, '\n');
         let stand_in = StandIn::scaffold("collection-unsealed-source");
         fs::write(
             stand_in.crate_directory.join("src/lib.rs"),

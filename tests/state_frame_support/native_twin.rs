@@ -14,10 +14,9 @@ use super::model;
 
 use qsl_replay::{
     call_site, compile_package_with_execution_points, CallSiteRefusal, ClaimedChange, ClauseName,
-    ClauseSite, DependencyInput, DigestDomain, DigestRecord, DocumentRef, FrameReplayResult,
-    Identifier, OccurrenceKey, OperationName, OperationSite, ReplayLimits, ReplayRefusal,
-    ScalarLimits, SelectedObject, SourceIdentity, StageLimits, WitnessEnvelope,
-    DEFAULT_REPLAY_INPUT_BYTES,
+    ClauseSite, DependencyInput, DocumentRef, FrameReplayResult, Identifier, OccurrenceKey,
+    OperationName, OperationSite, ReplayLimits, ReplayRefusal, ScalarLimits, SelectedObject,
+    SourceIdentity, StageLimits, WitnessEnvelope, DEFAULT_REPLAY_INPUT_BYTES,
 };
 use quire_contract_codegen::{
     parse_assertion_playback, DependencyLock, DocumentLabel, FrameReplay, FrameReplayError,
@@ -29,7 +28,6 @@ use quire_contract_model::{
     CheckedPackageReadLimits, CheckedPackageV2, CheckedPackageV2ReadResult, ExecutionPoint,
 };
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 
 const AUTHORITY: &str = "agent-ix";
 const IDENTITY: &str = "test:state-frame-twin";
@@ -84,36 +82,6 @@ fn population() -> String {
 /// The value type of a field: one per field, each with the range `model` gives it.
 fn range_type(field: &str) -> String {
     format!("ix://{PACKAGE}/{field}_range")
-}
-
-/// RFC 8785 text of `value`. The documents here hold only strings, integers and booleans, so
-/// sorted members and serde's compact escapes are the canonical form.
-fn canonical(value: &Value) -> String {
-    match value {
-        Value::Object(members) => {
-            let mut ordered = members.iter().collect::<Vec<_>>();
-            ordered.sort_by(|a, b| a.0.cmp(b.0));
-            let members = ordered
-                .iter()
-                .map(|(name, member)| format!("{}:{}", json!(name), canonical(member)))
-                .collect::<Vec<_>>();
-            format!("{{{}}}", members.join(","))
-        }
-        Value::Array(items) => {
-            let items = items.iter().map(canonical).collect::<Vec<_>>();
-            format!("[{}]", items.join(","))
-        }
-        scalar => scalar.to_string(),
-    }
-}
-
-fn jcs_digest(bytes: &[u8]) -> [u8; 32] {
-    let value: Value = serde_json::from_slice(bytes).expect("the document is JSON");
-    Sha256::digest(canonical(&value).as_bytes()).into()
-}
-
-fn hex(bytes: &[u8; 32]) -> String {
-    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 fn generated(identity: &str) -> Value {
@@ -336,7 +304,7 @@ pub struct Twin {
 /// One invocation of `deposit` on account `account`, with its pre and post snapshots.
 pub struct Invocation {
     reference: DocumentRef,
-    documents: Vec<(DocumentRef, [u8; 32], Vec<u8>)>,
+    documents: Vec<(DocumentRef, Vec<u8>)>,
 }
 
 /// The position of the invocation document in [`Invocation`]'s documents.
@@ -345,36 +313,23 @@ pub const INVOCATION_DOCUMENT: usize = 0;
 pub const PRE_DOCUMENT: usize = 1;
 
 impl Invocation {
-    /// This invocation with the document at `index` edited as JSON and addressed by the digest
-    /// of its new bytes. An edited pre snapshot is re-linked from the invocation, which is
-    /// re-digested in turn, so every provided document still hashes to its digest and the
-    /// edit is what the replay reads.
+    /// This invocation with the document at `index` edited as JSON, retaining its identity.
     pub fn edited(&self, index: usize, edit: impl FnOnce(&mut Value)) -> Self {
         let mut documents = self.documents.clone();
         let mut value: Value =
-            serde_json::from_slice(&documents[index].2).expect("a JSON document");
+            serde_json::from_slice(&documents[index].1).expect("a JSON document");
         edit(&mut value);
-        documents[index].2 = value.to_string().into_bytes();
-        documents[index].1 = jcs_digest(&documents[index].2);
-        if index == PRE_DOCUMENT {
-            let mut invocation: Value =
-                serde_json::from_slice(&documents[INVOCATION_DOCUMENT].2).expect("JSON");
-            invocation["pre"]["digest"] =
-                json!(format!("sha256-jcs:{}", hex(&documents[PRE_DOCUMENT].1)));
-            documents[INVOCATION_DOCUMENT].2 = invocation.to_string().into_bytes();
-            documents[INVOCATION_DOCUMENT].1 = jcs_digest(&documents[INVOCATION_DOCUMENT].2);
-        }
+        documents[index].1 = value.to_string().into_bytes();
         Self {
             reference: documents[INVOCATION_DOCUMENT].0.clone(),
             documents,
         }
     }
 
-    /// This invocation with the bytes of the document at `index` replaced and its digest left
-    /// as it was: a provided document whose bytes do not match the digest it is addressed by.
+    /// This invocation with the bytes of the document at `index` replaced under its identity.
     pub fn replaced(&self, index: usize, bytes: &[u8]) -> Self {
         let mut documents = self.documents.clone();
-        documents[index].2 = bytes.to_vec();
+        documents[index].1 = bytes.to_vec();
         Self {
             reference: self.reference.clone(),
             documents,
@@ -407,9 +362,8 @@ fn limits(seed: u64) -> ScalarLimits {
     }
 }
 
-fn document(digest: [u8; 32], bytes: &[u8]) -> ProvidedDocument {
+fn document(bytes: &[u8]) -> ProvidedDocument {
     ProvidedDocument {
-        digest: DigestRecord::mint(DigestDomain::Sha256Jcs, digest),
         bytes: bytes.to_vec(),
     }
 }
@@ -999,8 +953,7 @@ impl Twin {
 
     /// The invocation of `deposit` on `account` from `pre` to `post`, each `(balance, audit)`.
     pub fn invocation(&self, account: &str, pre: (i64, i64), post: (i64, i64)) -> Invocation {
-        let model = format!("sha256-jcs:{}", hex(&jcs_digest(&self.domain)));
-        let model_header = json!({"identity": PACKAGE, "version": "1.0.0", "digest": model});
+        let model_header = json!({"identity": PACKAGE});
         let snapshot = |name: &str, observation: &str, (balance, audit): (i64, i64)| {
             let label = label(name);
             let bytes = json!({
@@ -1023,8 +976,8 @@ impl Twin {
             .into_bytes();
             stamped(label, bytes)
         };
-        let (pre_ref, pre_digest, pre_bytes) = snapshot("twin-pre", "pre", pre);
-        let (post_ref, post_digest, post_bytes) = snapshot("twin-post", "post", post);
+        let (pre_ref, pre_bytes) = snapshot("twin-pre", "pre", pre);
+        let (post_ref, post_bytes) = snapshot("twin-post", "post", post);
         let invocation_label = label("twin-invocation");
         let invocation_bytes = json!({
             "format": "quire.state.invocation/v1",
@@ -1033,14 +986,8 @@ impl Twin {
             "context": account_type(),
             "operation": "deposit",
             "self": {"population": population(), "key": account},
-            "pre": {
-                "identity": identity_json(&pre_ref),
-                "digest": format!("sha256-jcs:{}", hex(&pre_digest)),
-            },
-            "post": {
-                "identity": identity_json(&post_ref),
-                "digest": format!("sha256-jcs:{}", hex(&post_digest)),
-            },
+            "pre": {"identity": identity_json(&pre_ref)},
+            "post": {"identity": identity_json(&post_ref)},
             "parameters": {},
             "result": null,
             "created": [],
@@ -1048,12 +995,12 @@ impl Twin {
         })
         .to_string()
         .into_bytes();
-        let (reference, digest, bytes) = stamped(invocation_label, invocation_bytes);
+        let (reference, bytes) = stamped(invocation_label, invocation_bytes);
         Invocation {
             documents: vec![
-                (reference.clone(), digest, bytes),
-                (pre_ref, pre_digest, pre_bytes),
-                (post_ref, post_digest, post_bytes),
+                (reference.clone(), bytes),
+                (pre_ref, pre_bytes),
+                (post_ref, post_bytes),
             ],
             reference,
         }
@@ -1143,7 +1090,7 @@ impl Twin {
             state_documents: invocation
                 .documents
                 .iter()
-                .map(|(_, digest, bytes)| document(*digest, bytes))
+                .map(|(_, bytes)| document(bytes))
                 .collect(),
             operation: self.operation(operation),
             invocation: invocation.reference.clone(),
@@ -1183,10 +1130,9 @@ impl Twin {
         }
     }
 
-    /// The domain package, provided by its `sha256-jcs` digest.
+    /// The domain package, provided by its declared identity and version.
     fn packages(&self) -> Vec<ProvidedDocument> {
         vec![ProvidedDocument {
-            digest: DigestRecord::mint(DigestDomain::Sha256Jcs, jcs_digest(&self.domain)),
             bytes: self.domain.clone(),
         }]
     }
@@ -1330,7 +1276,6 @@ fn identity_json(reference: &DocumentRef) -> Value {
     })
 }
 
-fn stamped(label: DocumentRef, bytes: Vec<u8>) -> (DocumentRef, [u8; 32], Vec<u8>) {
-    let digest = jcs_digest(&bytes);
-    (label, digest, bytes)
+fn stamped(label: DocumentRef, bytes: Vec<u8>) -> (DocumentRef, Vec<u8>) {
+    (label, bytes)
 }

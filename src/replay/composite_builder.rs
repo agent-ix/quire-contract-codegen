@@ -4,20 +4,19 @@
 //! Original-package construction of verified structural equality requests (FR-033).
 //!
 //! This boundary authenticates the retained source and checked package and constructs positional
-//! O-09 arguments. It binds the caller's retained proof-content identity; it does not authenticate
-//! a generated artifact, run a native observation, or establish a backend proof strength.
+//! O-09 arguments. It does not authenticate a generated artifact, run a native observation, or
+//! establish a backend proof strength.
 
 use std::fmt;
 
 use qsl_replay::{
     compile_admitted, parity_obligation, settle_verified_shadow, AdmittedCompilation,
     AdmittedContext, AdmittedRefusal, BoundEntries, CompileUnit, CompositeEvidence,
-    CompositeIdentity, CompositeParityClaim, DependencyInput, DigestRecord, Domain, DomainKey,
-    EnvelopeSource, EqualityOperator, Identifier, IdentityEncodeError, NoPayload, OccurrenceKey,
-    OperandIdentity, Origin, ParityArgument, ParityPreimage, ProofBound, QualifiedName,
-    ReplayRequest, ReplayRequestRefusal, ReplayRequestWire, ReplayTarget, ReplayTargetMembers,
-    RequestTargetWire, Role, VerifiedShadow, VerifiedShadowReport, WitnessEnvelope, WitnessPacket,
-    WitnessRefusal,
+    CompositeIdentity, CompositeParityClaim, DependencyInput, Domain, DomainKey, EnvelopeSource,
+    EqualityOperator, Identifier, IdentityEncodeError, NoPayload, OccurrenceKey, OperandIdentity,
+    Origin, ParityArgument, ParityPreimage, ProofBound, QualifiedName, ReplayRequest,
+    ReplayRequestRefusal, ReplayRequestWire, ReplayTarget, ReplayTargetMembers, RequestTargetWire,
+    Role, VerifiedShadow, VerifiedShadowReport, WitnessEnvelope, WitnessPacket, WitnessRefusal,
 };
 use quire_contract_model::{
     CheckedCompositeOperandDomain, CheckedCompositeOperandError, CheckedCompositeOperands,
@@ -30,7 +29,7 @@ use crate::core::ir::{frame::application_identity, node_key::checked_node_key};
 
 use super::{
     composite::{verified_shadow_terminal_value, CompositeReportError, VerifiedShadowSettlement},
-    function::{DependencyLockError, ReplayInputs},
+    function::{DependencyLockError, LockedSource, ReplayInputs},
 };
 
 const PARITY_PRODUCER: &str = "quire-contract-codegen";
@@ -172,16 +171,14 @@ impl std::error::Error for CompositeBuildError {}
 
 /// Immutable original proving context for admitted graph-child structural equality routes.
 ///
-/// The caller supplies the original admitted package and retained source, dependencies, limits
-/// and canonical proof-content identity. The content identity is a binding input, not independent
-/// authentication of a generated artifact. No native/falsified production route is exposed here.
+/// The caller supplies the original admitted package and independently retained source, along with
+/// the request inputs, dependencies and limits. No native/falsified production route is exposed here.
 #[derive(Debug)]
 pub struct OriginalCompositeEqContext {
     original: CheckedPackageV2,
     inputs: ReplayInputs,
     dependencies: DependencyInput,
     selection: QualifiedName,
-    content_identity: DigestRecord,
     read_limits: CheckedPackageReadLimits,
 }
 
@@ -193,7 +190,8 @@ struct SelectedParityClaim {
 }
 
 impl OriginalCompositeEqContext {
-    /// Retain the original context and require its exact unit source reference and bytes.
+    /// Retain the original context and compare the request source against the independently
+    /// retained original source, including its full identity and bytes.
     ///
     /// [`Self::request_from_packet`] recompiles using the constructed request's admitted stage limits and
     /// requires the complete original package/context before returning a request for invocation.
@@ -208,9 +206,9 @@ impl OriginalCompositeEqContext {
     #[allow(clippy::result_large_err)]
     pub fn new(
         original: CheckedPackageV2,
+        original_source: &LockedSource,
         inputs: ReplayInputs,
         function: &str,
-        content_identity: DigestRecord,
         read_limits: CheckedPackageReadLimits,
     ) -> Result<Self, CompositeBuildError> {
         let identifier =
@@ -218,6 +216,9 @@ impl OriginalCompositeEqContext {
         let selection = QualifiedName::new(vec![identifier])
             .map_err(|_| CompositeBuildError::InvalidFunction)?;
         let source = &inputs.source;
+        if source != original_source {
+            return Err(CompositeBuildError::SourceMismatch);
+        }
         let source_ref = CheckedSourceRef {
             authority: source.authority.clone().into_boxed_str(),
             identity: source.identity.clone().into_boxed_str(),
@@ -256,7 +257,6 @@ impl OriginalCompositeEqContext {
             inputs,
             dependencies,
             selection,
-            content_identity,
             read_limits,
         })
     }
@@ -340,7 +340,6 @@ impl OriginalCompositeEqContext {
                 .cloned()
                 .collect(),
             limits: self.inputs.accounting_limits,
-            content_identity: self.content_identity,
         };
         Ok(SelectedParityClaim {
             operands,

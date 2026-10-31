@@ -1451,8 +1451,6 @@ fn tc_031_ac23_small_shared_chain_lowers_with_complete_closures() {
     };
     use quire_contract_model::CompleteLoweringRecordV2;
 
-    use sha2::{Digest, Sha256};
-
     let builder = byte_ceiling_package_with_shape(16, 15);
     let (source, sites) = byte_ceiling_source(16, 15);
     let raw = builder.raw_wire();
@@ -1462,10 +1460,6 @@ fn tc_031_ac23_small_shared_chain_lowers_with_complete_closures() {
         .iter()
         .find(|source| source["identity"] == "ir764-ac23-source")
         .expect("authored source is locked");
-    assert_eq!(
-        source_ref["digest"],
-        format!("{:x}", Sha256::digest(source.as_bytes()))
-    );
     for (code, spans) in &sites {
         let entries = raw["source_map"]
             .as_array()

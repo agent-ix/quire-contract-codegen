@@ -4849,8 +4849,7 @@ fn tc_035_the_invocation_of_the_playbacks_own_pre_state_replays_and_another_is_r
 
 /// An invocation or pre snapshot that is not provided, is not of the shape `state_clause`
 /// writes, lacks the object, or lacks a field or holds a non-integer for it is refused naming what
-/// is missing. Every provided document here hashes to its digest (`Invocation::edited`
-/// re-addresses it), so these refusals are the tie's own.
+/// is missing. Each edited document retains its identity, so these refusals are the tie's own.
 #[trace("FR-024-AC-27", "TC-035")]
 #[test]
 fn tc_035_a_pre_state_that_cannot_be_read_from_the_invocation_is_refused_by_name() {
@@ -4920,9 +4919,8 @@ fn tc_035_a_pre_state_that_cannot_be_read_from_the_invocation_is_refused_by_name
     );
 }
 
-/// Replacing the invocation bytes leaves no document with the requested identity. Replacing the
-/// pre snapshot bytes leaves an addressed but unreadable document. The pre-state tie distinguishes
-/// those faults without computing a replacement digest (FR-024-AC-27).
+/// Replacing invocation or pre snapshot bytes leaves no document with the requested identity.
+/// The pre-state tie distinguishes the missing reference without computing a digest (FR-024-AC-27).
 #[trace("FR-024-AC-27", "TC-035")]
 #[test]
 fn tc_035_unrelated_document_bytes_leave_the_pre_state_absent() {
@@ -4941,7 +4939,7 @@ fn tc_035_unrelated_document_bytes_leave_the_pre_state_absent() {
             matches!(
                 (index, fault),
                 (INVOCATION_DOCUMENT, PreStateFault::InvocationNotProvided)
-                    | (PRE_DOCUMENT, PreStateFault::PreUnreadable)
+                    | (PRE_DOCUMENT, PreStateFault::PreNotProvided { .. })
             ),
             "{index}: the pre-state tie must distinguish the missing document: {observed}"
         );
