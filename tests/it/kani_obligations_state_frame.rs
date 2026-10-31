@@ -4055,10 +4055,14 @@ fn tc_035_the_frame_identity_follows_what_call_site_names() {
         &[CLAUSES[0], ("TransferKeepsBalance", "transfer", "balance")],
         0,
     );
+    let deposit = identity(&two_operations, "deposit");
+    let transfer = identity(&two_operations, "transfer");
+    assert_eq!(deposit.node(), transfer.node(), "equal frame body");
+    assert_eq!(deposit.model(), transfer.model(), "one owning model");
     assert_ne!(
-        identity(&two_operations, "deposit"),
-        identity(&two_operations, "transfer"),
-        "operations with equal frame text"
+        deposit.ordinal(),
+        transfer.ordinal(),
+        "distinct frame claims"
     );
 
     // The same operation in a unit shifted by blank lines.
@@ -4089,16 +4093,21 @@ fn tc_035_the_frame_identity_follows_what_call_site_names() {
 /// unit's clauses name, so a clause added on an operation that sorts earlier moves this
 /// operation's frame occurrence. The identity of `transfer` is read before and after a clause on
 /// `deposit` is added, and it differs.
-#[trace("TC-035")]
+#[trace("FR-024-AC-47", "TC-035")]
 #[test]
 fn tc_035_a_clause_on_an_earlier_sorting_operation_moves_the_frame_occurrence() {
-    let identity = |twin: &Twin| {
-        producer_frame_identity(&twin.operation_site("transfer").expect("operation site"))
-    };
     let transfer = ("TransferKeepsBalance", "transfer", "balance");
     let alone = Twin::build(&model::GRANTED, &[transfer], 0);
     let after = Twin::build(&model::GRANTED, &[CLAUSES[0], transfer], 0);
-    assert_ne!(identity(&alone), identity(&after));
+    let before = producer_frame_identity(&alone.operation_site("transfer").expect("frame site"));
+    let shifted = producer_frame_identity(&after.operation_site("transfer").expect("frame site"));
+    assert_eq!(before.node(), shifted.node(), "same selected frame body");
+    assert_eq!(before.model(), shifted.model(), "same owning model");
+    assert_ne!(
+        before.ordinal(),
+        shifted.ordinal(),
+        "producer occurrence moved"
+    );
 }
 
 /// The identity does not change when any one of the harness's own members changes: its clause
