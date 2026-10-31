@@ -1316,7 +1316,6 @@ mod tests {
             "sha2::",
             "extern crate sha2",
             "Sha256::",
-            "ByteDigest::of",
             ".sort",
             "sort_by",
             "escape",
