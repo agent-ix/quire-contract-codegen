@@ -250,9 +250,9 @@ pub enum KaniScalarNativeError {
     NativeLaunch(String),
     /// A staged lock lacks an owning dependency or disagrees with the other staged lock.
     DependencyLock {
-        /// The required owning source or the other staged lock's source identity.
+        /// The required owning package, repository and version, when known.
         expected: String,
-        /// The staged source identity when present.
+        /// The other staged package, repository and version when present and valid.
         actual: Option<String>,
     },
     /// The native helper returned malformed or unsupported structured output.
