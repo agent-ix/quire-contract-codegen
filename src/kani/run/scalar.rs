@@ -1549,8 +1549,9 @@ mod tests {
         assert!(!source.contains("generated::OracleStop::IllTyped(_)"));
         syn::parse_file(&source).expect("the native observer is valid Rust syntax");
         let node_id = serde_json::from_value(serde_json::json!({
-            "domain": "quire.checked-semantic-node/v1",
-            "digest": "2".repeat(64),
+            "package": "kani-native-observer-test",
+            "path": ["operation"],
+            "ordinal": 0,
         }))
         .expect("checked source key");
         let (oracle, _) = crate::oracle::scalar::native::select(

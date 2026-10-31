@@ -448,8 +448,9 @@ fn tc_042_ac2_a_claim_map_this_generator_did_not_produce_is_operation_not_render
         .map(|claim| claim.node_id.clone())
         .expect("the corpus generates an integer.add claim");
     let absent: CheckedNodeId = serde_json::from_value(serde_json::json!({
-        "domain": "quire.checked-semantic-node/v1",
-        "digest": "9".repeat(64),
+        "package": "kani-no-generation-test",
+        "path": ["absent-bound"],
+        "ordinal": 0,
     }))
     .expect("a node id");
 
