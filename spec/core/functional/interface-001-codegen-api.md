@@ -164,9 +164,9 @@ operations:
     output: CompositeParitySettlement | CompositeReportError (MissingReport | ClaimMismatch)
     semantics: compare the full report.claim() with the retained sent identity before reading its typed result; a missing or different report has no terminal value; the private settlement stores QSL's CompositeParityResult and derives terminal_value() from that result, preserving QSL's F-row order, cause and code (FR-033 AC-9, FR-029 AC-28)
   - name: OriginalCompositeEqContext::new
-    inputs: [original admitted CheckedPackageV2, retained ReplayInputs, selected function identifier, retained canonical proof-content DigestRecord, CheckedPackageReadLimits]
+    inputs: [original admitted CheckedPackageV2, original LockedSource reference, retained ReplayInputs, selected function identifier, CheckedPackageReadLimits]
     output: OriginalCompositeEqContext | CompositeBuildError
-    semantics: retain immutable original inputs and require the exact source owner and source-byte binding in the package lock; content identity remains a caller-retained binding input and does not authenticate a generated artifact; construction does not compile or authenticate an AdmittedContext
+    semantics: retain immutable original inputs; require the retained ReplayInputs source to equal the original LockedSource in full and its source owner and identity to occur in the original package lock; construction does not compile or authenticate an AdmittedContext
   - name: OriginalCompositeEqContext::request
     inputs: [original CheckedNodeId, original CheckedOccurrence, EqualityOperator (Equal or NotEqual), harness ProofBound list, IR operand-projection work ceiling]
     output: immutable OriginalCompositeEqRequest | CompositeBuildError
