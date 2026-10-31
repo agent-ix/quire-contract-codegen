@@ -181,7 +181,7 @@ same CG type, and assigns the value directly to `quire_exact::ScalarLimits`. Req
 identity without conversion, wrapper or compatibility shim; a source import alone is insufficient.
 Current-main delivery is not credited by the specification amendment.
 
-Private native observer custody (FR-017-AC-46/48/49/52/53), **Planned / UNRUN**:
+Private native observer custody (FR-017-AC-46/48/49/52/62), **Planned / UNRUN**:
 construct the isolated resolver-2 observer package inside the private snapshot, with the example
 root at `../src/bin/ir791_native.rs`. Verify that this is the single canonical adapter, loading
 `../lib.rs`, with no wrapper, copy or symlink. Compare all four original emitted artifacts
@@ -192,11 +192,12 @@ both observer dev crates use their owning source spellings. Compile the required
 production library/proof targets, independently freshly resolve and compile the observer example,
 and remove its dev feature in a negative control that must fail to compile. Do not use a copied
 parent lock or cached resolution in place of the fresh resolver regression. Independently assert
-both literal `quire-contract-runtime` and `quire-exact` names and authoritative repository sources
-in each staged lock, and compare each owning package's resolved source identity between the two
-freshly resolved locks; do not derive both package expectations from the renderer's list or read
-codegen's build lock for an expected revision. Report a fresh dependency-resolution or cross-lock
-consistency failure as a failure, without a downgrade or forced build revision.
+both literal `quire-contract-runtime` and `quire-exact` names, authoritative repository names and
+valid Cargo package versions in each staged lock. Compare each owning package's repository and
+version between the two freshly resolved locks; do not derive the expected package names or
+repositories from the renderer's list or codegen's build lock. A different source URL suffix with
+the same package name, repository and version is an admitted cross-lock control. Report a fresh
+dependency-resolution or cross-lock consistency failure as a failure, without a downgrade.
 
 Run the actual bounded native command with `--manifest-path observer/Cargo.toml --example
 ir791_native` from the sealed root and its target outside that root. Verify actual nonzero ordered
@@ -449,10 +450,10 @@ reason, `Cancelled`, `Verified` (an internal inconsistency, requiring `Environme
 the FR-017 table. Produce real errors by the runner for a request mismatch, an oracle stop and a falsified proof, and require `CompletionRefusal`;
 produce a real single run cancelled by its retained source and a real single run stopped by its
 wall-clock timeout (launcher stand-ins), each `ProofNotVerified`, and require `EnvironmentFault`
-with the evidence outcome unchanged; through an in-crate seam run each of four separate staged-lock
-failure cases: make one staged lock unreadable, omit an owning package, change its repository source,
-and give the two staged locks different owning package source identities. Require `DependencyLock` /
-`EnvironmentFault` and no receipt for every case;
+with the evidence outcome unchanged; through an in-crate seam make one staged lock unreadable, omit
+or duplicate an owning package, change its repository, remove or corrupt its version, and give the
+two staged locks different owning package versions while retaining the same package name and
+repository. Require `DependencyLock` / `EnvironmentFault` and no receipt for every adverse case;
 inject a changed staged byte, a native launch failure and malformed helper output, and require
 `EnvironmentFault`. (3) Feed malformed helper output and require `NativeResult` / `native_result` /
 `EnvironmentFault`, with no receipt. (4) Keep a frozen list of all variants and codes and of the mapping to class: one class for a fixed
